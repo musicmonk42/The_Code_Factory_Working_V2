@@ -1,0 +1,10 @@
+[
+  {
+    "arbiter_id": 1,
+    "status": "error",
+    "task": {
+      "task": 1
+    },
+    "error": "Task error"
+  }
+]

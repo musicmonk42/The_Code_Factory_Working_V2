@@ -1,0 +1,42 @@
+{# 
+  Advanced Documentation Format Question Template
+  Features:
+    - Contextual intro based on cycle count or project phase
+    - Dynamic suggestions and previous answers
+    - Custom focus and debug mode support
+    - Strict JSON output instruction
+    - Localization support
+#}
+
+{% if cycle_count is defined and cycle_count == 1 %}
+Welcome! Before we proceed, let's make sure we understand your documentation needs.
+{% else %}
+Cycle {{ cycle_count | default("N/A") }}: Documentation Format Preferences
+{% endif %}
+
+{% if prev_doc_formats is defined and prev_doc_formats %}
+Previously, you selected the following documentation formats:
+{% for fmt in prev_doc_formats %}
+- {{ fmt }}
+{% endfor %}
+{% endif %}
+
+What documentation formats do you require for this project?
+- Common options: **Sphinx**, **Markdown**, **OpenAPI**, **PDF**, **HTML**, **Jupyter Notebook**
+- You may specify others as needed.
+
+{% if recommended_formats is defined and recommended_formats %}
+Recommended for your project type:
+{% for rec in recommended_formats %}
+- {{ rec }}
+{% endfor %}
+{% endif %}
+
+{% if custom_focus is defined and custom_focus %}
+Special focus for this cycle: {{ custom_focus }}
+{% endif %}
+
+IMPORTANT:  
+Return your answer as a **single, valid JSON array** of strings, e.g.:
+```json
+["Markdown", "OpenAPI", "PDF"]

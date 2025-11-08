@@ -1,0 +1,63 @@
+{
+  "name": "self_fixing_engineer_plugin",
+  "version": "1.0.0",
+  "description": "Adds autonomous self-healing and continuous verification to supported platforms, using AI-driven testing, error correction, and secure audit logging. Intended for robust, production-scale automation pipelines where downtime and silent failure must be eliminated.",
+  "entrypoint": "main.py",
+  "type": "python",
+  "author": "Unexpected Innovations Inc",
+  "homepage": "https://github.com/musicmonk42/self_fixing_engineer_plugin",
+  "documentation_url": "https://github.com/musicmonk42/self_fixing_engineer_plugin/wiki",
+  "support_url": "https://github.com/musicmonk42/self_fixing_engineer_plugin/issues",
+  "api_version": "v1",
+  "manifest_version": 2.0,
+  "min_core_version": "1.1.0",
+  "max_core_version": "3.0.0",
+  "capabilities": [
+    "self_healing",
+    "continuous_verification",
+    "secure_audit_log"
+  ],
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "dependencies": [
+    "requests>=2.31.0,<3.0"
+  ],
+  "health_check": "main:plugin_health",
+  "tags": [
+    "ai",
+    "automation",
+    "self-fixing",
+    "security",
+    "continuous-integration"
+  ],
+  "sandbox": {
+    "enabled": true,
+    "isolation": "process",
+    "resource_limits": {
+      "cpu": 1,
+      "memory": 536870912
+    },
+    "network": true,
+    "enforce_strict": true,
+    "mount_mode": "read-only",
+    "allowed_paths": [
+      "./logs",
+      "./config",
+      "/tmp"
+    ]
+  },
+  "audit": {
+    "signed": true,
+    "provenance": true,
+    "integrity": "sha256:41e46d156b2f2d1950b231ea22454e56115319b5f1d2d917158672e7e58efc25",
+    "provenance_chain_url": "https://audit.example.com/api/v1/logs"
+  },
+  "enforcement": {
+    "runtime_validation_enabled": true,
+    "continuous_health_check_interval_seconds": 300,
+    "on_failure": "disable_and_alert"
+  },
+  "operator_documentation_url": "https://github.com/musicmonk42/self_fixing_engineer_plugin/wiki/Operator-Manifest-Enforcement"
+}

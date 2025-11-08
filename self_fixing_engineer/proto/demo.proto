@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package demo.v1; // Versioning: MANDATORY: All messages, enums, and services must use explicit versioning.
+
+// ============================================================================
+//  DemoService API (Gold Bar Standard Proto v1)
+// ----------------------------------------------------------------------------
+//  - Versioned package for evolution and compatibility
+//  - Multi-language options for Go, Java, C#
+//  - API documentation for every service, method, and field
+//  - Explicit reserved fields and message numbers for future growth
+//  - UTF-8 and JSON conventions documented
+//  - Suitable for public cloud, CI, and secure enterprise environments
+// ============================================================================
+
+option go_package = "github.com/yourorg/yourrepo/pkg/demo/v1;demo";
+option java_multiple_files = true;
+option java_package = "com.example.demo.v1";
+option java_outer_classname = "DemoProto";
+option csharp_namespace = "Demo.V1";
+
+// DemoService exposes general demo operations using JSON-over-gRPC.
+// All payloads are expected to be valid UTF-8 JSON strings.
+// This service is designed for flexible integration and rapid prototyping.
+service DemoService {
+  // SayHello returns a human-friendly greeting.
+  //
+  // The request json_data should contain a JSON object with a "name" property:
+  //   { "name": "Alice" }
+  // The reply message will be a greeting, for example: "Hello, Alice!"
+  //
+  // Authentication & Security: BLOCKER: No production gRPC service should be deployed without mutual TLS (mTLS) and authentication.
+  // Require and document per-RPC auth expectations (e.g., JWT token in metadata).
+  // Input Validation: REQUIRED: Services must validate message contents server-side.
+  // Rate Limits and Resource Controls: REQUIRED: Production servers must rate-limit gRPC methods.
+  // Audit Logging: MANDATORY: All service calls (and errors) must be audit-logged.
+  rpc SayHello (DataRequest) returns (HelloReply) {}
+
+  // ProcessData takes an arbitrary JSON string and returns a processed JSON result.
+  //
+  // The exact transformation is application-specific.
+  // Authentication & Security: BLOCKER: This method also requires mTLS and authentication.
+  // Input Validation: REQUIRED: Services must validate message contents server-side.
+  // Rate Limits and Resource Controls: REQUIRED: Rate-limit this method.
+  // Audit Logging: MANDATORY: All service calls (and errors) must be audit-logged.
+  rpc ProcessData (DataRequest) returns (DataReply) {}
+}
+
+// DataRequest is the standard request type for JSON-based APIs.
+//
+// All content must be a valid UTF-8 encoded JSON string.
+message DataRequest {
+  // json_data is a required field containing the input as a JSON string.
+  // Input Validation: REQUIRED: All string/bytes fields must be length-checked and validated (e.g., max length, valid JSON structure).
+  string json_data = 1;
+  // Reserved Fields/Tags: MANDATORY: Reserve all deprecated/removed field numbers and names.
+  reserved 100 to 199;
+}
+
+// HelloReply is the response for SayHello.
+message HelloReply {
+  // message contains the greeting returned to the caller.
+  // Field Optionality and Defaults: REQUIRED: Use optional for all non-mandatory fields.
+  // Avoid relying on proto3 “default zero values” for business logic—explicit is better.
+  // Error Handling: MANDATORY: All APIs must return meaningful, standardized errors using gRPC status codes and error detail messages.
+  // For complex errors, consider using `google.rpc.Status` message.
+  string message = 1;
+  // Reserved Fields/Tags: MANDATORY: Reserve all deprecated/removed field numbers and names.
+  reserved 100 to 199;
+}
+
+// DataReply is the response for ProcessData.
+message DataReply {
+  // json_result is a required field containing the result as a JSON string.
+  // Input Validation: REQUIRED: All string/bytes fields must be length-checked and validated.
+  string json_result = 1;
+  // Reserved Fields/Tags: MANDATORY: Reserve all deprecated/removed field numbers and names.
+  reserved 100 to 199;
+}
+
+// ============================================================================
+//  Notes for Integrators and Code Generators
+// ----------------------------------------------------------------------------
+//  - The package is versioned (demo.v1) for safe evolution.
+//  - Reserved ranges prevent breaking changes.
+//  - Set your import paths to match your organization and repo.
+//  - For public cloud: this proto is ready for use in Google Cloud Endpoints,
+//    AWS App Mesh, and Azure API Management as a gRPC API contract.
+//  - Deprecation Policy: Clearly document and reserve tags/names for any field/service you plan to deprecate.
+//    Mark deprecated fields as such, but never reuse.
+//  - Documentation: REQUIRED: Every service, method, and message must be documented in the proto file.
+//    Generate and provide public documentation for client and operator use.
+//  - CI/CD Proto Validation: MANDATORY: CI must block deploy if:
+//    Protos do not compile.
+//    Tags are reused.
+//    Fields have changed type since last release.
+//    Lint/format rules fail (use buf lint or equivalent).
+//  - Field Tag Consistency: BLOCKER: All fields must have stable, non-overlapping tag numbers.
+//    Never change the meaning/type of a field tag in a released proto.
+//  - Field Optionality and Defaults: REQUIRED: Use optional for all non-mandatory fields.
+//    Avoid relying on proto3 “default zero values” for business logic—explicit is better.
+// ============================================================================

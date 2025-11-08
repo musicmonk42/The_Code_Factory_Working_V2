@@ -1,0 +1,62 @@
+# intent_parser.yaml
+#
+# Intent Parser Configuration File
+# This file defines how the IntentParser processes documents,
+# extracts information, and interacts with external services.
+
+schema_version: 1.1 # Added for configuration schema versioning.
+# Increment this version if the structure of this YAML file changes in a non-backward compatible way.
+
+format: auto # Can be 'auto', 'markdown', 'rst', 'plaintext', 'yaml', 'pdf'.
+# 'auto' attempts to detect the format from the file extension.
+
+# Global extraction patterns used by RegexExtractor if no language-specific patterns override.
+extraction_patterns:
+  features: '-\s*(.+)' # Matches bullet points as features.
+  constraints: 'Constraint:\s*(.+)' # Matches lines starting with 'Constraint:'.
+
+llm_config:
+  provider: openai # e.g., 'openai', 'grok', 'anthropic', 'local'.
+  model: gpt-4o # Specific model name for the chosen provider.
+  api_key_env_var: OPENAI_API_KEY # Environment variable holding the API key.
+  temperature: 0.1 # LLM creativity (0.0-1.0). Lower for more deterministic outputs.
+  seed: 42 # LLM generation seed for reproducibility.
+  max_tokens_summary: 1000 # Maximum tokens for LLM summarization output.
+
+feedback_file: feedback.json # Path to the JSON file storing user feedback.
+cache_dir: parser_cache # Directory for caching LLM responses and other temporary files.
+
+multi_language_support:
+  enabled: true # Enable/disable multi-language processing.
+  default_lang: en # Default language if detection fails or is disabled.
+  # Language-specific extraction patterns, overriding global patterns for detected languages.
+  language_patterns:
+    es: # Spanish patterns
+      features: '- *(rasgo|característica):\s*(.+)' # Matches " - rasgo: Feature" or " - característica: Feature".
+      constraints: 'Restricción:\s*(.+)' # Matches "Restricción: Constraint".
+    fr: # French patterns
+      features: '- *(fonctionnalité|caractéristique):\s*(.+)' # Matches " - fonctionnalité: Feature" or " - caractéristique: Feature".
+      constraints: 'Contrainte:\s*(.+)' # Matches "Contrainte: Constraint".
+
+# Extensibility: Allow custom patterns and extraction logic per repo/project/user.
+# These can be dynamically loaded or managed by a separate service.
+custom_extraction_configs:
+  project_x:
+    # Per-project overrides for extraction patterns or even LLM prompts.
+    # This section can define a path to a custom Python module or a set of patterns.
+    # Example: custom_patterns_file: "projects/project_x_patterns.yaml"
+    # Example: custom_extractor_module: "my_custom_extractors.ProjectXExtractor"
+    enabled: false # Enable/disable custom configurations.
+    patterns_override: # Patterns specific to 'project_x', will merge/override top-level patterns.
+      features: 'PROJECTX_FEAT:\s*(.+)' # Unique pattern for Project X features.
+    llm_prompt_templates_dir: "projects/project_x_prompts" # Custom Jinja2 templates for this project.
+
+# Security: Add fields for secret/PII pattern overrides or custom redaction rules.
+security_config:
+  enable_custom_redaction: false # Enable/disable custom redaction patterns.
+  # This can point to an external file or list inline patterns.
+  custom_redaction_patterns: # Regex patterns for PII/secret redaction.
+    - 'secret_key_v\d+:\s*([A-Za-z0-9_]{32,})' # Example: specific secret key format.
+    - 'SSN:\s*(\d{3}-\d{2}-\d{4})' # Example: Social Security Number.
+  pii_detection_sensitivity: medium # 'low', 'medium', 'high' - influences ML-powered PII detection.
+  # This might correspond to confidence thresholds in `utils.detect_pii`.

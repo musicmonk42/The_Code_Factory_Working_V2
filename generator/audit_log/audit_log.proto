@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package audit_log;
+
+// Audit Log Protocol Definition
+//
+// This protocol defines a service for logging actions in a secure, tamper-evident manner.
+// It supports both single-entry (transactional) and streaming ingestion for high-throughput scenarios.
+//
+// Extensibility:
+// - Reserved fields are included in each message for future schema evolution without breaking compatibility.
+// - Use protobuf's oneof or extensions for further customization if needed.
+//
+// Security:
+// - Messages should be encrypted in transit using TLS 1.3+.
+// - For integrity, sign the serialized message with a private key (e.g., using RSA or Ed25519) and include the signature in a wrapper message or metadata.
+// - Verification: On receipt, verify the signature against a trusted public key before processing.
+// - To prevent tampering, store logs in an append-only ledger (e.g., blockchain or immutable database) with hash chaining.
+//
+// Observability:
+// - trace_id and span_id fields are included for distributed tracing compatibility (e.g., OpenTelemetry).
+// - Use these to correlate logs across services.
+//
+// Compliance:
+// - compliance_tags field allows marking actions with relevant regulations (e.g., GDPR, CCPA, HIPAA).
+// - Use this to filter/query logs for audits.
+//
+// Versioning:
+// - Use semantic versioning for the proto file.
+// - For Go: option go_package = "x.ai/audit_log";
+// - For Java: option java_package = "ai.x.audit_log";
+// - For Python: Use package name directly.
+
+option go_package = "x.ai/audit_log";
+option java_package = "ai.x.audit_log";
+
+// The AuditService provides methods for logging actions to a secure,
+// tamper-evident audit trail. It supports both single-entry and streaming ingestion.
+service AuditService {
+  // Logs a single action. This is a unary RPC for individual, transactional events.
+  rpc LogAction(LogActionRequest) returns (LogActionResponse) {}
+
+  // Logs a stream of actions for high-throughput, bulk data processing
+  // or continuous event streaming from another service.
+  rpc LogStream(stream LogActionRequest) returns (LogActionResponse) {}
+}
+
+// The request message for logging an action. This structure is used for both
+// unary and streaming RPCs.
+message LogActionRequest {
+  // The name of the action being logged (e.g., "user_login", "file_access", "config_change").
+  // This should be a concise, machine-readable identifier.
+  // Example: "document_update"
+  string action = 1;
+
+  // A JSON string containing detailed, structured information about the action.
+  // Using a JSON string provides flexibility for the details payload.
+  // Example: '{"user_id": "123", "document_id": "abc", "changes": ["title updated"]}'
+  string details_json = 2;
+
+  // (Optional) The unique identifier for a requirement this action relates to.
+  // This is crucial for traceability back to business or system requirements.
+  // Example: "REQ-456" (links to a specific system requirement)
+  optional string requirement_id = 3;
+
+  // (Optional) A unique identifier for the user session, allowing for the correlation
+  // of all actions taken within a single session.
+  // Example: "session-7890abc"
+  optional string session_id = 4;
+
+  // Trace ID for distributed tracing (e.g., OpenTelemetry compatible).
+  // This allows correlating logs across microservices.
+  // Example: "4bf92f3577b34da6a3ce929d0e0e4736"
+  optional string trace_id = 5;
+
+  // Span ID for distributed tracing.
+  // Example: "00f067aa0ba902b7"
+  optional string span_id = 6;
+
+  // Actor performing the action (e.g., user ID, service account).
+  // Example: "user-123" or "system-service"
+  optional string actor = 7;
+
+  // IP address of the actor for geolocation and security analysis.
+  // Example: "192.168.1.1"
+  optional string ip_address = 8;
+
+  // Geolocation data (country, city) derived from IP (optional for privacy).
+  // Example: '{"country": "US", "city": "New York"}'
+  optional string geolocation = 9;
+
+  // Compliance tags for regulations (e.g., GDPR, CCPA, HIPAA).
+  // Repeated for multiple tags.
+  // Example: ["GDPR", "HIPAA"]
+  repeated string compliance_tags = 10;
+
+  reserved 11 to 20;  // Reserved for future extensions (e.g., additional metadata).
+}
+
+// The response message for a log action, confirming receipt and status.
+message LogActionResponse {
+  // The status of the log operation. Can be "success", "failed", or "partial_success" for streams.
+  // Example: "success"
+  string status = 1;
+
+  // (Optional) Error or tamper alert message if status is not "success".
+  // Example: "Invalid signature detected - possible tampering"
+  optional string error_message = 2;
+
+  reserved 3 to 10;  // Reserved for future extensions (e.g., receipt ID, timestamp).
+}

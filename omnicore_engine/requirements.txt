@@ -1,0 +1,65 @@
+# =========================
+# OmniCore Engine - Requirements
+# =========================
+# Core runtime dependencies
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+
+# Database / ORM
+sqlalchemy[asyncio]>=2.0.0
+aiosqlite>=0.17.0
+# Use psycopg2-binary for dev/testing only; replace with psycopg2 in production
+psycopg2-binary>=2.9.0
+
+# Metrics / Observability
+prometheus-client>=0.17.0
+influxdb-client>=1.36.0
+
+# Security / Sanitization
+bleach>=6.0.0,<7.0.0
+cryptography>=41.0.0
+
+# Logging / Config
+structlog>=23.0.0
+pydantic>=2.0.0,<3.0.0
+pydantic-settings>=2.0.0,<3.0.0
+python-dateutil>=2.8.0
+
+# Networking / Async
+aiohttp>=3.8.0
+
+# Messaging / Caching
+# kafka-python is legacy; consider confluent-kafka if you need production Kafka
+kafka-python>=2.0.0
+redis>=5.0.0
+
+# Resilience / Utilities
+tenacity>=8.2.0
+watchdog>=3.0.0
+
+# Numerical
+numpy>=1.26.0
+
+# -----------------------------
+# Testing
+# -----------------------------
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+
+# =====================================================
+# OPTIONAL BACKENDS / LARGE EXTRAS
+# =====================================================
+# GPU Arrays (requires CUDA toolchain)
+# cupy-cuda12x>=12.0.0
+# PyTorch
+# torch>=2.0.0
+# Distributed computing
+# dask[distributed]>=2023.0.0
+# Quantum computing
+# qiskit>=1.0.0
+# Neuromorphic computing
+# nengo-loihi>=1.0.0
+# RL environments
+# gymnasium>=0.29.0

@@ -1,0 +1,382 @@
+version: 10.0.0
+id: self_fixing_engineer_crew
+name: Self-Fixing Engineer Universal Crew
+description: |
+  The next-evolution, runtime-driven, infinitely extensible crew of AI, human, and plugin agents for self-healing, refactoring, testing, simulation, and governance.
+  Agent definitions are schema-driven, escalation, integration, and skills are resolvable at runtime using distributed config, policy, and provenance.
+$schema: https://json-schema.org/draft/2020-12/schema
+required: [version, id, name, agents, compliance_controls, policy, access_policy, defaults, tags]
+
+policy:
+  can_scale: true
+  can_reload: true
+
+access_policy:
+  read: [admin, operator, monitor] # Defines roles that can read this config
+  write: [admin] # Defines roles that can modify this config
+
+agent_schema:
+  type: object
+  required: [id, name, manifest, entrypoint, agent_type]
+  properties:
+    id: {type: string}
+    name: {type: string}
+    manifest: {type: string}
+    entrypoint: {type: string}
+    agent_type: {type: string, enum: [ai, human, plugin, oracle]}
+    role_ref: {type: string, description: "External reference for agent role/mission", pattern: "^(configdb|service|https?):"} # Enforce specific URI schemes
+    skills_ref: {type: string, description: "External reference for agent skills", pattern: "^(configdb|service|https?):"}
+    enabled: {type: boolean, default: true}
+    # Compliance attributes for agents
+    compliance_controls: # List of controls this agent's operation directly relates to
+      type: array
+      items:
+        type: object
+        required: [id, status]
+        properties:
+          id: {type: string, description: "Reference to a compliance control ID defined globally"}
+          status: {type: string, enum: [enforced, logged, not_implemented, partially_enforced, exempt], description: "Status of this agent's adherence to the control"}
+          notes: {type: string, description: "Additional notes on this agent's role in compliance"}
+
+# NEW SECTION: Define Compliance Controls and their global status
+compliance_controls:
+  # NIST 800-53 Control Examples
+  # Access Control (AC)
+  AC-1:
+    name: Access Control Policy and Procedures
+    description: Establishes policies and procedures for managing system and information access.
+    status: enforced
+    required: true
+  AC-2:
+    name: Account Management
+    description: Manages information system accounts, including establishment, activation, modification, disabling, and removal.
+    status: enforced
+    required: true
+  AC-3:
+    name: Access Enforcement
+    description: Enforces approved authorizations for logical and physical access to information and system resources.
+    status: enforced
+    required: true
+  AC-4:
+    name: Information Flow Enforcement
+    description: Regulates the flow of information within the system and between interconnected systems.
+    status: enforced
+    required: true
+  AC-5:
+    name: Separation of Duties
+    description: Ensures individuals are assigned separate duties to prevent single points of failure and reduce fraud potential.
+    status: enforced
+    required: true
+  AC-6:
+    name: Least Privilege
+    description: Enforces the principle of least privilege, allowing users and processes only the necessary access.
+    status: enforced
+    required: true
+  # Audit and Accountability (AU)
+  AU-2:
+    name: Audit Events
+    description: Determines, documents, and disseminates audit events requiring logging.
+    status: enforced
+    required: true
+  AU-6:
+    name: Audit Review, Analysis, and Reporting
+    description: Reviews and analyzes information system audit records.
+    status: enforced
+    required: true
+  # Configuration Management (CM)
+  CM-2:
+    name: Baseline Configuration
+    description: Establishes and maintains baseline configurations and inventories of information system components.
+    status: enforced
+    required: true
+  # Incident Response (IR)
+  IR-4:
+    name: Incident Handling
+    description: Implements an incident handling capability for systems and information.
+    status: enforced
+    required: true
+  # Identity and Authentication (IA)
+  IA-5:
+    name: Authenticator Management
+    description: Manages information system authenticators (e.g., passwords, tokens).
+    status: enforced
+    required: true
+  # System and Communications Protection (SC)
+  SC-7:
+    name: Boundary Protection
+    description: Monitors and controls communications at the external boundaries of the information system.
+    status: logged
+    required: false
+  # Planning (PL)
+  PL-2:
+    name: System Security Plan
+    description: Develops, disseminates, and updates a system security plan.
+    status: enforced
+    required: true
+  # Risk Assessment (RA)
+  RA-5:
+    name: Vulnerability Scanning
+    description: Scans for vulnerabilities in information systems and applications.
+    status: implemented
+    required: true
+
+agents:
+  # Each agent references its role and skills via an external config/database for runtime dynamism
+  - id: refactor
+    name: refactor_agent
+    manifest: plugins/refactor/manifest.json
+    entrypoint: plugins/refactor/smart_refactor_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/refactor
+    skills_ref: configdb://skills/refactor
+    compliance_controls:
+      - id: AC-6
+        status: enforced
+      - id: CM-2
+        status: enforced
+
+  - id: judge
+    name: judge_agent
+    manifest: plugins/judge/manifest.json
+    entrypoint: plugins/judge/judge_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/judge
+    skills_ref: configdb://skills/judge
+    compliance_controls:
+      - id: AC-3
+        status: enforced
+      - id: AU-6
+        status: enforced
+
+  - id: healer
+    name: healer_agent
+    manifest: plugins/healer/manifest.json
+    entrypoint: plugins/healer/healer_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/healer
+    skills_ref: configdb://skills/healer
+    compliance_controls:
+      - id: IR-4
+        status: enforced
+      - id: AC-6
+        status: enforced
+
+  - id: ethics
+    name: ethics_sentinel
+    manifest: plugins/ethics/manifest.json
+    entrypoint: plugins/ethics/ethics_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/ethics
+    skills_ref: configdb://skills/ethics
+    compliance_controls:
+      - id: AC-1
+        status: enforced
+      - id: AU-2
+        status: enforced
+
+  - id: simulation
+    name: simulation_orchestrator
+    manifest: plugins/simulation/manifest.json
+    entrypoint: plugins/simulation/simulation_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/simulation
+    skills_ref: configdb://skills/simulation
+    compliance_controls:
+      - id: RA-5
+        status: implemented
+      - id: CM-2
+        status: enforced
+
+  - id: ci_cd
+    name: ci_cd_trigger
+    manifest: plugins/ci_cd/manifest.json
+    entrypoint: plugins/ci_cd/ci_cd_agent.py
+    agent_type: plugin
+    role_ref: configdb://roles/ci_cd
+    skills_ref: configdb://skills/ci_cd
+    compliance_controls:
+      - id: CM-2
+        status: enforced
+      - id: AC-3
+        status: enforced
+
+  - id: human
+    name: human_escalation_node
+    manifest: plugins/human/manifest.yaml
+    entrypoint: plugins/human/human_in_the_loop.py
+    agent_type: human
+    role_ref: configdb://roles/human
+    skills_ref: configdb://skills/human
+    compliance_controls:
+      - id: AC-5
+        status: enforced
+      - id: AU-2
+        status: enforced
+      - id: AC-2
+        status: enforced
+
+  - id: oracle
+    name: oracle_agent
+    manifest: plugins/oracle/manifest.json
+    entrypoint: plugins/oracle/oracle_agent.py
+    agent_type: oracle
+    role_ref: configdb://roles/oracle
+    skills_ref: configdb://skills/oracle
+    compliance_controls:
+      - id: AC-4
+        status: enforced
+      - id: AU-2
+        status: logged
+
+  - id: ingest1
+    name: ingest_agent
+    manifest: plugins/ingest/manifest.json
+    entrypoint: plugins/ingest/ingest_agent.py
+    agent_type: plugin
+    role_ref: configdb://roles/ingest
+    skills_ref: configdb://skills/ingest
+    compliance_controls:
+      - id: AU-2
+        status: enforced
+      - id: SC-7
+        status: enforced
+  
+  - id: workerA
+    name: worker_agent_a
+    manifest: plugins/worker/manifest.json
+    entrypoint: plugins/worker/worker_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/worker
+    skills_ref: configdb://skills/worker
+    compliance_controls:
+      - id: AC-6
+        status: enforced
+      - id: CM-2
+        status: enforced
+
+escalation_paths:
+  type: dynamic
+  resolver: service://escalation-policy/v1/paths
+  description: |
+    Escalation paths are not static. They are dynamically learned and updated at runtime based on agent performance, incident analytics, and live monitoring.
+    The escalation resolver is an online service (could be AI/ML-driven) that provides optimal escalation flows for each event type.
+  compliance_controls:
+    - id: IR-4
+      status: enforced
+    - id: AC-3
+      status: enforced
+
+integration:
+  artifact_store: s3://universal-engineer-artifacts/
+  provenance_log: s3://universal-engineer-provenance/audit_trail.log
+  plugin_registry: s3://universal-engineer-plugins/
+  dashboard: https://dashboard.universal-engineer.cloud/
+  event_bus: nats://nats.universal-engineer.cloud/
+  swarm_knowledge_base: gs://universal-engineer-swarm/knowledge.json
+  audit_trail: azure://universal-engineer-audit/audit_trail.log
+  cross_repo_mesh: https://mesh.universal-engineer.cloud/cross_repo
+  oracle_feed: https://mesh.universal-engineer.cloud/oracle_feed
+  compliance_controls:
+    - id: AU-2
+      status: enforced
+    - id: SC-7
+      status: logged
+
+event_hooks:
+  on_agent_failure: service://automation/escalate_and_log
+  compliance_controls:
+    - id: IR-4
+      status: enforced
+    - id: AU-2
+      status: enforced
+  on_artifact_created: service://provenance/update
+  compliance_controls:
+    - id: AU-2
+      status: enforced
+    - id: CM-2
+      status: enforced
+  on_score_below_threshold: service://workflow/trigger_human_review
+  compliance_controls:
+    - id: AC-5
+      status: enforced
+    - id: IA-5
+      status: enforced
+  on_pipeline_blocked: service://automation/escalate_to_human
+  compliance_controls:
+    - id: IR-4
+      status: enforced
+    - id: AC-5
+      status: enforced
+  on_swarm_disagreement: service://swarm/trigger_consensus
+  compliance_controls:
+    - id: PL-2
+      status: logged
+    - id: AU-2
+      status: enforced
+  on_learning_opportunity: service://swarm/update_knowledge
+  compliance_controls:
+    - id: CM-2
+      status: logged
+    - id: AU-2
+      status: enforced
+  on_world_event: service://oracle/notify
+  compliance_controls:
+    - id: AC-4
+      status: logged
+    - id: AU-2
+      status: enforced
+
+defaults:
+  model: gpt-4o
+  provider: openai
+  temperature: 0.01
+  explainability: true
+  provenance: true
+  rollback_enabled: true
+  continuous_learning: true
+  plugin_autoload: true
+  swarm_mode: true
+  oracle_enabled: true
+  cross_repo_refactor: true
+  multi_modal_support: true
+
+environment_overrides:
+  MODEL: model # E.g., MODEL=groq will override defaults.model
+  API_KEY_SECRET: openai.api_key # This is an encrypted value to be injected
+  PROVENANCE_LOG_BUCKET: integration.provenance_log
+
+tags:
+  - swarm
+  - ai
+  - automation
+  - explainable
+  - self-healing
+  - plugin
+  - provenance
+  - cross-repo
+  - continuous-learning
+  - multi-modal
+  - oracle
+  - world-aware
+  - future-proof
+  - human-in-the-loop
+  - dynamic
+  - runtime-config
+  - zero-trust
+  - cloud-native
+
+metadata:
+  created: 2025-07-19T02:52:31Z
+  updated: 2025-07-19T02:52:31Z
+  authors:
+    - musicmonk42
+    - Infinite Open Source Collective
+    - Universal AI Swarm
+    - The Oracle Consortium
+  homepage: https://github.com/musicmonk42/self_fixing_engineer
+  license: MIT
+  version_history: crew/VERSION_HISTORY.md
+  icon: crew/icon.svg
+  checksum: "sha256:abc1234567890abcdef" # Added for integrity verification
+
+# End of file: Dynamic, runtime, globally orchestrated AI+human+plugin crew. Schema-driven, policy-adaptive, and cloud-mesh native.

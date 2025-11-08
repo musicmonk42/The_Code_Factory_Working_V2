@@ -1,0 +1,232 @@
+version: 10.0.0
+id: self_fixing_engineer_crew
+name: Self-Fixing Engineer: Universal Crew ∞
+description: |
+  The next-evolution, runtime-driven, infinitely extensible crew of AI, human, and plugin agents for self-healing, refactoring, testing, simulation, and governance.
+  Agent definitions are schema-driven, escalation, integration, and skills are resolvable at runtime using distributed config, policy, and provenance.
+
+plugin_api_version: 1.0.0
+
+# Agents definitions. Each agent's manifest and entrypoint paths should be validated against whitelisted_paths.
+agents:
+  - id: refactor
+    name: Refactor Agent ∞
+    manifest: plugins/refactor/manifest.json
+    entrypoint: plugins/refactor/smart_refactor_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/refactor
+    skills_ref: configdb://skills/refactor
+    criticality: high
+    allow_destructive_actions: true # Example: Refactor agent needs this explicitly
+    whitelisted_paths: ["^\\./src/codebase/.*$", "^\\./tests/.*$"] # Example: Can only operate within src/codebase and tests
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$", "^git$", "^pytest(-cov)?$", "^ruff$"] # Example: Allowed commands with regex
+    is_dev_mode_agent: false
+
+  - id: judge
+    name: Judge Agent ∞
+    manifest: plugins/judge/manifest.json
+    entrypoint: plugins/judge/judge_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/judge
+    skills_ref: configdb://skills/judge
+    criticality: high
+    allow_destructive_actions: false
+    whitelisted_paths: ["^\\./reports/.*$"] # Can only read reports
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$"]
+    is_dev_mode_agent: false
+
+  - id: healer
+    name: Healer Agent ∞
+    manifest: plugins/healer/manifest.json
+    entrypoint: plugins/healer/healer_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/healer
+    skills_ref: configdb://skills/healer
+    criticality: mission-critical
+    allow_destructive_actions: true # Healer agent needs this explicitly
+    whitelisted_paths: ["^\\./src/codebase/.*$", "^\\./tests/.*$", "^\\./config/auto_fixes/.*$"]
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$", "^git$", "^pip$", "^ruff$", "^black$", "^mypy$", "^bandit$", "^pytest$"]
+    is_dev_mode_agent: false
+
+  - id: ethics
+    name: Ethics Sentinel ∞
+    manifest: plugins/ethics/manifest.json
+    entrypoint: plugins/ethics/ethics_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/ethics
+    skills_ref: configdb://skills/ethics
+    criticality: medium
+    allow_destructive_actions: false
+    whitelisted_paths: ["^\\./policies/.*$", "^\\./audit_logs/.*$"]
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$"]
+    is_dev_mode_agent: false
+
+  - id: simulation
+    name: Simulation Orchestrator ∞
+    manifest: plugins/simulation/manifest.json
+    entrypoint: plugins/simulation/simulation_agent.py
+    agent_type: ai
+    role_ref: configdb://roles/simulation
+    skills_ref: configdb://skills/simulation
+    criticality: low
+    allow_destructive_actions: false
+    whitelisted_paths: ["^\\./simulations/.*$", "^\\./data/.*$"]
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$"]
+    is_dev_mode_agent: false
+
+  - id: ci_cd
+    name: CI/CD Trigger ∞
+    manifest: plugins/ci_cd/manifest.json
+    entrypoint: plugins/ci_cd/ci_cd_agent.py
+    agent_type: plugin
+    role_ref: configdb://roles/ci_cd
+    skills_ref: configdb://skills/ci_cd
+    criticality: high
+    allow_destructive_actions: true # CI/CD agent can trigger pipelines
+    whitelisted_paths: ["^\\./ci_cd_configs/.*$"]
+    whitelisted_commands: ["^kubectl$", "^aws$", "^gcloud$", "^az$", "^jenkins-cli$"]
+    is_dev_mode_agent: false
+
+  - id: human
+    name: Human Escalation Node ∞
+    manifest: plugins/human/manifest.yaml
+    entrypoint: plugins/human/human_in_the_loop.py
+    agent_type: human
+    role_ref: configdb://roles/human
+    skills_ref: configdb://skills/human
+    criticality: mission-critical
+    allow_destructive_actions: false
+    whitelisted_paths: ["^\\./escalations/.*$"]
+    whitelisted_commands: []
+    is_dev_mode_agent: false
+
+  - id: oracle
+    name: Oracle Agent ∞
+    manifest: plugins/oracle/manifest.json
+    entrypoint: plugins/oracle/oracle_agent.py
+    agent_type: oracle
+    role_ref: configdb://roles/oracle
+    skills_ref: configdb://skills/oracle
+    criticality: medium
+    allow_destructive_actions: false
+    whitelisted_paths: [] # Oracle might not need filesystem access
+    whitelisted_commands: []
+    is_dev_mode_agent: false
+
+# Escalation paths are dynamically learned and updated at runtime.
+escalation_paths:
+  type: dynamic
+  resolver: service://escalation-policy/v1/paths
+  description: |
+    Escalation paths are not static. They are dynamically learned and updated at runtime based on agent performance, incident analytics, and live monitoring.
+    The escalation resolver is an online service (could be AI/ML-driven) that provides optimal escalation flows for each event type.
+
+# Integration endpoints for various services.
+integration:
+  artifact_store: s3://universal-engineer-artifacts/
+  provenance_log: s3://universal-engineer-provenance/audit_trail.log
+  plugin_registry: s3://universal-engineer-plugins/
+  dashboard: https://dashboard.universal-engineer.cloud/
+  event_bus: nats://nats.universal-engineer.cloud/
+  swarm_knowledge_base: gs://universal-engineer-swarm/knowledge.json
+  audit_trail: splunk://universal-engineer-audit/audit_trail.log
+  cross_repo_mesh: https://mesh.universal-engineer.cloud/cross_repo
+  oracle_feed: https://mesh.universal-engineer.cloud/oracle_feed
+
+event_hooks:
+  on_agent_failure: service://automation/escalate_and_log
+  on_artifact_created: service://provenance/update
+  on_score_below_threshold: service://workflow/trigger_human_review
+  on_pipeline_blocked: service://automation/escalate_to_human
+  on_swarm_disagreement: service://swarm/trigger_consensus
+  on_learning_opportunity: service://swarm/update_knowledge
+  on_world_event: service://oracle/notify
+
+observability:
+  enable_prometheus: true
+  enable_opentelemetry: true
+  metrics_report_path: metrics/
+  logs_report_path: logs/
+
+security_policy: SECURITY.md
+
+secrets:
+  allowed_envs:
+    - SFE_AGENT_LLM_API_KEY_SECRET_ID
+    - SFE_AGENT_DB_CONN_STRING_SECRET_ID
+    - SFE_AGENT_AWS_ACCESS_KEY_ID_SECRET_ID
+    - SFE_AGENT_AWS_SECRET_ACCESS_KEY_SECRET_ID
+    - SFE_AGENT_AZURE_CLIENT_SECRET_SECRET_ID
+    - SFE_AGENT_GCP_SA_KEY_SECRET_ID
+  vault_config:
+    provider: azure_key_vault
+    vault_url: vault://my-sfe-vault.vault.azure.net/
+    vault_keys:
+      - vault://my-sfe-vault.vault.azure.net/secrets/llm_api_key
+      - vault://my-sfe-vault.vault.azure.net/secrets/db_conn_string
+      - vault://my-sfe-vault.vault.azure.net/secrets/aws_access_key
+      - vault://my-sfe-vault.vault.azure.net/secrets/azure_client_secret
+
+self_test_hooks:
+  on_bootstrap: run_self_tests
+  on_pre_merge: verify_code_coverage
+  on_release: trigger_e2e_suite
+
+analytics:
+  enabled: false
+  collection_url: ""
+  allow_anonymous_stats: false
+
+swarm_knowledge_lineage:
+  last_update: runtime://swarm/timestamp
+  contributing_agents: runtime://swarm/agent_list
+  knowledge_hash: runtime://swarm/knowledge_hash
+
+defaults:
+  model: gpt-4o
+  provider: openai
+  temperature: 0.01
+  explainability: true
+  provenance: true
+  rollback_enabled: true
+  continuous_learning: true
+  plugin_autoload: true
+  swarm_mode: true
+  oracle_enabled: true
+  cross_repo_refactor: true
+  multi_modal_support: true
+  is_dev_mode_default: false
+
+tags:
+  - swarm
+  - ai
+  - automation
+  - explainable
+  - self-healing
+  - plugin
+  - provenance
+  - cross-repo
+  - continuous-learning
+  - multi-modal
+  - oracle
+  - world-aware
+  - future-proof
+  - human-in-the-loop
+  - dynamic
+  - runtime-config
+  - zero-trust
+  - cloud-native
+
+metadata:
+  created: 2025-08-04T02:52:31Z
+  updated: 2025-08-04T02:52:31Z
+  authors:
+    - xAI
+    - Grok Team
+    - The Oracle Consortium
+  homepage: https://github.com/musicmonk42/self_fixing_engineer
+  license: MIT
+  version_history: crew/VERSION_HISTORY.md
+  icon: crew/icon.svg
+  compliance_framework: NIST-800-53
+  trust_framework: OpenCRE

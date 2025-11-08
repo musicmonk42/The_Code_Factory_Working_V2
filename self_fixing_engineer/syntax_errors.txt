@@ -1,0 +1,4 @@
+  File "./.venv/Lib/site-packages/aenum/_py2.py", line 5
+    raise exc, None, tb
+             ^
+SyntaxError: invalid syntax

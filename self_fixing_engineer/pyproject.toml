@@ -1,0 +1,178 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "self_fixing_engineer"
+version = "0.1.0"
+description = "A robust, production-ready Python package for enterprise use, featuring simulation tools, plugin architecture, and advanced monitoring."
+# The 'packages' line has been REMOVED from this section
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["simulation", "ai", "plugins", "monitoring", "kubernetes"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Testing",
+    "Framework :: Pytest"
+]
+dependencies = [
+    # Core Application & Web Framework
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings",
+    "uvicorn",
+    "python-multipart",
+    "werkzeug",
+    "flask",
+    "streamlit",
+    # AI & Machine Learning
+    "langchain>=0.1.0",
+    "langchain-openai>=0.1.0",
+    "transformers>=4.30.0",
+    "sentence-transformers",
+    "torch",
+    "scikit-learn",
+    "openai",
+    "google-generativeai",
+    # Data & Storage
+    "etcd3-py",
+    "SQLAlchemy>=2.0,<3.0",
+    "psycopg2-binary",
+    "aiosqlite",
+    "redis",
+    "aiofiles",
+    "aioredis",
+    # Cloud & Infrastructure
+    "boto3",
+    "aioboto3",
+    "google-cloud-secret-manager",
+    "google-cloud-pubsub",
+    "google-cloud-storage",
+    "docker",
+    "kubernetes",
+    "azure-core",
+    "azure-identity",
+    # Observability (Pinned to a consistent, stable version set)
+    "prometheus-client==0.20.0",
+    "opentelemetry-api==1.25.0",
+    "opentelemetry-sdk==1.25.0",
+    "opentelemetry-exporter-otlp-proto-grpc==1.25.0",
+    "opentelemetry-exporter-otlp-proto-http==1.25.0",
+    "grpcio==1.62.2",
+    "grpcio-health-checking==1.62.2",
+    "protobuf==4.25.3",
+    # Utilities
+    "pyyaml",
+    "python-dotenv",
+    "circuitbreaker",
+    "pybreaker",
+    "opencv-python",
+    "pyjwt",
+    "toml",
+    "tomli_w",
+    "watchdog",
+    "aiokafka",
+    "aiosmtplib",
+    "portalocker",
+    "nltk",
+    "psutil",
+    "cerberus",
+    "jsonschema",
+    "structlog",
+    "termcolor",
+    "graphviz",
+    "pydub",
+    "sentry-sdk",
+    "aiolimiter",
+    "typer",
+    "rich"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "playwright",
+    "grpcio-tools==1.62.2",
+    "black",
+    "ruff",
+    "isort",
+    "mypy",
+    "aioresponses",
+    "wexpect; sys_platform == 'win32'",
+    "pexpect; sys_platform != 'win32'"
+]
+docs = [
+    "sphinx>=7.4.0",
+    "sphinx-rtd-theme>=2.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/self_fixing_engineer"
+Repository = "https://github.com/your-org/self_fixing_engineer"
+Issues = "https://github.com/your-org/self_fixing_engineer/issues"
+Documentation = "https://your-org.github.io/self_fixing_engineer/"
+
+# The conflicting section has been removed from here.
+
+# This NEW section tells setuptools how to find your packages
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["arbiter*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '.pyi?$'
+exclude = '''
+/(
+    .git
+  | .hg
+  | .mypy_cache
+  | .tox
+  | .venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+exclude = [".git", "__pycache__", "build", "dist", ".venv"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+# This now points to the correct test directory
+addopts = "-ra -q --cov=arbiter --cov-report=html"
+testpaths = [
+    "arbiter/bug_manager/tests"
+]

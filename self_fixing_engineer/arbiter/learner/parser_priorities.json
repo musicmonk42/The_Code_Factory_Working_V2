@@ -1,0 +1,241 @@
+{
+  "configuration_version": "1.0.0",
+  "last_updated": "2025-01-01T00:00:00Z",
+  "description": "Parser priority configuration for the Arbiter Learning System fuzzy parser pipeline",
+  
+  "default_settings": {
+    "timeout_seconds": 10.0,
+    "max_concurrent": 10,
+    "retry_attempts": 3,
+    "fallback_priority": 0
+  },
+  
+  "parser_priorities": {
+    "SecurityEventParser": {
+      "priority": 1000,
+      "description": "Highest priority for security-related events and anomalies",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": true
+    },
+    
+    "ComplianceDataParser": {
+      "priority": 900,
+      "description": "Regulatory compliance data extraction (GDPR, HIPAA, SOX)",
+      "enabled": true,
+      "timeout_override": 8.0,
+      "critical": true
+    },
+    
+    "FinancialTransactionParser": {
+      "priority": 850,
+      "description": "Financial transaction and monetary data extraction",
+      "enabled": true,
+      "timeout_override": 7.0,
+      "critical": true
+    },
+    
+    "PersonalIdentifiableInformationParser": {
+      "priority": 800,
+      "description": "PII detection and extraction with encryption requirements",
+      "enabled": true,
+      "timeout_override": 6.0,
+      "critical": true
+    },
+    
+    "HealthRecordParser": {
+      "priority": 750,
+      "description": "Medical and health record data extraction",
+      "enabled": true,
+      "timeout_override": 8.0,
+      "critical": true
+    },
+    
+    "LegalDocumentParser": {
+      "priority": 700,
+      "description": "Legal document and contract information extraction",
+      "enabled": true,
+      "timeout_override": 10.0,
+      "critical": false
+    },
+    
+    "CustomerDataParser": {
+      "priority": 650,
+      "description": "Customer relationship and interaction data",
+      "enabled": true,
+      "timeout_override": 10.0,
+      "critical": false
+    },
+    
+    "EmailParser": {
+      "priority": 500,
+      "description": "Email content and metadata extraction",
+      "enabled": true,
+      "timeout_override": 10.0,
+      "critical": false
+    },
+    
+    "LogFileParser": {
+      "priority": 450,
+      "description": "System and application log parsing",
+      "enabled": true,
+      "timeout_override": 15.0,
+      "critical": false
+    },
+    
+    "JSONParser": {
+      "priority": 400,
+      "description": "Structured JSON data extraction",
+      "enabled": true,
+      "timeout_override": 10.0,
+      "critical": false
+    },
+    
+    "XMLParser": {
+      "priority": 380,
+      "description": "XML document parsing and extraction",
+      "enabled": true,
+      "timeout_override": 10.0,
+      "critical": false
+    },
+    
+    "CSVParser": {
+      "priority": 350,
+      "description": "CSV and tabular data extraction",
+      "enabled": true,
+      "timeout_override": 12.0,
+      "critical": false
+    },
+    
+    "NaturalLanguageParser": {
+      "priority": 300,
+      "description": "Natural language understanding and entity extraction",
+      "enabled": true,
+      "timeout_override": 20.0,
+      "critical": false
+    },
+    
+    "DateTimeParser": {
+      "priority": 250,
+      "description": "Temporal information and date/time extraction",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": false
+    },
+    
+    "URLParser": {
+      "priority": 200,
+      "description": "URL and web link extraction and validation",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": false
+    },
+    
+    "PhoneNumberParser": {
+      "priority": 150,
+      "description": "Phone number extraction and formatting",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": false
+    },
+    
+    "AddressParser": {
+      "priority": 140,
+      "description": "Physical address extraction and geocoding",
+      "enabled": true,
+      "timeout_override": 8.0,
+      "critical": false
+    },
+    
+    "CreditCardParser": {
+      "priority": 130,
+      "description": "Credit card number detection (PCI compliance)",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": true
+    },
+    
+    "SocialSecurityNumberParser": {
+      "priority": 120,
+      "description": "SSN detection and masking",
+      "enabled": true,
+      "timeout_override": 5.0,
+      "critical": true
+    },
+    
+    "GenericTextParser": {
+      "priority": 10,
+      "description": "Fallback parser for unstructured text",
+      "enabled": true,
+      "timeout_override": 30.0,
+      "critical": false
+    }
+  },
+  
+  "domain_specific_overrides": {
+    "FinancialData": {
+      "FinancialTransactionParser": 1000,
+      "CreditCardParser": 950,
+      "SecurityEventParser": 900
+    },
+    "PersonalData": {
+      "PersonalIdentifiableInformationParser": 1000,
+      "SocialSecurityNumberParser": 950,
+      "CreditCardParser": 900,
+      "AddressParser": 850
+    },
+    "HealthcareData": {
+      "HealthRecordParser": 1000,
+      "PersonalIdentifiableInformationParser": 950,
+      "ComplianceDataParser": 900
+    },
+    "SecurityLogs": {
+      "SecurityEventParser": 1000,
+      "LogFileParser": 900,
+      "DateTimeParser": 800
+    }
+  },
+  
+  "parser_chains": {
+    "comprehensive_analysis": [
+      "SecurityEventParser",
+      "ComplianceDataParser",
+      "PersonalIdentifiableInformationParser",
+      "NaturalLanguageParser"
+    ],
+    "quick_scan": [
+      "SecurityEventParser",
+      "EmailParser",
+      "URLParser"
+    ],
+    "financial_audit": [
+      "FinancialTransactionParser",
+      "CreditCardParser",
+      "ComplianceDataParser",
+      "DateTimeParser"
+    ],
+    "pii_detection": [
+      "PersonalIdentifiableInformationParser",
+      "SocialSecurityNumberParser",
+      "CreditCardParser",
+      "EmailParser",
+      "PhoneNumberParser",
+      "AddressParser"
+    ]
+  },
+  
+  "performance_thresholds": {
+    "max_total_parsing_time_ms": 5000,
+    "max_single_parser_time_ms": 2000,
+    "min_success_rate_percent": 95,
+    "max_memory_usage_mb": 512
+  },
+  
+  "monitoring": {
+    "metrics_enabled": true,
+    "detailed_logging": true,
+    "performance_tracking": true,
+    "error_alerting": true,
+    "alert_channels": ["slack", "email", "pagerduty"]
+  }
+}

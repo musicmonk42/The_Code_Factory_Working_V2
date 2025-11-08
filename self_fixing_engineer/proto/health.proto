@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package grpc.health.v1;
+
+// ============================================================================
+//  gRPC Health Checking Service (Gold Bar Standard Proto v1)
+// ----------------------------------------------------------------------------
+//  - Versioned package: grpc.health.v1
+//  - Follows official gRPC health-checking specification
+//  - Comprehensive method and field documentation
+//  - Explicit enum for serving status
+//  - Future-proofed for cross-language, CI, and cloud use
+//  - Suitable for infrastructure, production, and public cloud APIs
+//  - See: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+// ============================================================================
+
+option go_package = "google.golang.org/grpc/health/grpc_health_v1;grpc_health_v1";
+option java_multiple_files = true;
+option java_package = "io.grpc.health.v1";
+option java_outer_classname = "HealthProto";
+option csharp_namespace = "Grpc.Health.V1";
+
+// Health provides standard health-checking APIs for gRPC servers.
+// Used by load balancers, orchestrators, and monitoring systems.
+service Health {
+  // Check returns the serving status of the requested service.
+  //
+  // If the response status is SERVING, the service is healthy.
+  // If the response is an error, the service is not healthy or does not implement health checking.
+  //
+  // Authentication & Security: BLOCKER: No production gRPC service should be deployed without mutual TLS (mTLS) and authentication.
+  // This method is typically public for health checks, but for internal/sensitive services, mTLS and auth should apply.
+  // Audit Logging: MANDATORY: All service calls (and errors) must be audit-logged with user, time, method, and summary of request (but scrub secrets).
+  // Rate Limits and Resource Controls: REQUIRED: Production servers must rate-limit gRPC methods to avoid abuse.
+  //
+  // See: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Watch provides a stream of serving status updates for the requested service.
+  // The first response is the current status. Subsequent responses indicate changes.
+  // If Watch is not supported, the call will fail with UNIMPLEMENTED.
+  //
+  // Used for real-time health monitoring.
+  // Authentication & Security: BLOCKER: This method also requires mTLS and authentication in production.
+  // Audit Logging: MANDATORY: All service calls (and errors) must be audit-logged.
+  // Rate Limits and Resource Controls: REQUIRED: Rate-limit this method to prevent abuse.
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+}
+
+// HealthCheckRequest is sent to request the health status of a service.
+message HealthCheckRequest {
+  // The name of the service to check.
+  // If empty, checks the health of the entire server.
+  // Input Validation: REQUIRED: Service name should be validated server-side (e.g., against a whitelist of known services).
+  // All string/bytes fields must be length-checked and validated.
+  string service = 1;
+  // Reserved Fields/Tags: MANDATORY: Reserve all deprecated/removed field numbers and names.
+  reserved 100 to 199;
+}
+
+// HealthCheckResponse is returned by Check and Watch to report health status.
+message HealthCheckResponse {
+  // ServingStatus represents the health of a gRPC service.
+  enum ServingStatus {
+    // UNKNOWN indicates the serving status is not known.
+    UNKNOWN = 0;
+    // SERVING indicates the service is healthy and ready.
+    SERVING = 1;
+    // NOT_SERVING indicates the service is not healthy.
+    NOT_SERVING = 2;
+    // SERVICE_UNKNOWN is used only by Watch to indicate the service is unknown.
+    SERVICE_UNKNOWN = 3;
+    // Deprecation Policy: Clearly document and reserve tags/names for any field/service you plan to deprecate.
+    // Mark deprecated fields as such, but never reuse.
+    // DEPRECATED_STATUS = 4; // Example of a deprecated status, reserved
+  }
+  // The serving status of the service.
+  // Field Optionality and Defaults: REQUIRED: Use optional for all non-mandatory fields.
+  // Avoid relying on proto3 “default zero values” for business logic—explicit is better.
+  // For enums, the default is 0 (UNKNOWN), which is acceptable here.
+  ServingStatus status = 1;
+  // Error Handling: MANDATORY: All APIs must return meaningful, standardized errors using gRPC status codes and error detail messages.
+  // No “OK” with error-in-payload anti-patterns.
+  // For complex errors, consider using `google.rpc.Status` message.
+  //
+  // Field Tag Consistency: BLOCKER: All fields must have stable, non-overlapping tag numbers.
+  // Never change the meaning/type of a field tag in a released proto.
+  //
+  // Reserved for future fields.
+  reserved 100 to 199;
+}
+
+// ============================================================================
+//  Integration Notes
+// ----------------------------------------------------------------------------
+//  - This proto is the gold bar standard for gRPC health checking.
+//  - Supported in all major languages, cloud providers, and mesh environments.
+//  - Place in proto/health/v1/health.proto and generate code with protoc.
+//  - Do not change fields or enums; follow compatibility guidelines.
+// ============================================================================

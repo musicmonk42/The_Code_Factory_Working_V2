@@ -1,0 +1,85 @@
+{
+  "core_service": {
+    "feedback_manager": {
+      "name": "feedback_manager",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1762004864.0613556,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    },
+    "human_in_loop": {
+      "name": "human_in_loop",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1762004864.1248956,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  },
+  "analytics": {
+    "codebase_analyzer": {
+      "name": "codebase_analyzer",
+      "kind": "analytics",
+      "version": "1.0.3",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1762004864.2118998,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  },
+  "growth_manager": {
+    "arbiter_growth": {
+      "name": "arbiter_growth",
+      "kind": "growth_manager",
+      "version": "1.0.0",
+      "author": null,
+      "description": null,
+      "tags": [],
+      "loaded_at": 1762242668.2837803,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  },
+  "ai_assistant": {
+    "explainable_reasoner": {
+      "name": "explainable_reasoner",
+      "kind": "ai_assistant",
+      "version": "1.0.0",
+      "author": null,
+      "description": null,
+      "tags": [],
+      "loaded_at": 1762242668.2857797,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  }
+}

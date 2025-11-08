@@ -1,0 +1,41 @@
+{# 
+  Advanced Feedback Prompt Template
+  Features:
+    - Contextual intro based on cycle count
+    - Dynamic previous issues/comments section
+    - Optional comments, rationale, and debug mode
+    - Strict output format instruction
+    - Localization support
+#}
+
+{% if cycle_count is defined and cycle_count == 1 %}
+Welcome to your first feedback cycle! Your input will help us improve the generated requirements and documentation.
+{% else %}
+Cycle {{ cycle_count | default("N/A") }} Feedback:
+{% endif %}
+
+{% if prev_issues is defined and prev_issues %}
+Previously, you noted these issues:
+{% for issue in prev_issues %}
+- {{ issue }}
+{% endfor %}
+{% endif %}
+
+Please rate the **clarity** and **coverage** of the most recent generated requirements and documentation.
+
+- Provide a **score between 0 (poor) and 1 (excellent)**.
+- {{ "Comments are optional." if allow_comments else "No additional comments required." }}
+
+{% if custom_focus is defined and custom_focus %}
+Special focus for this cycle: {{ custom_focus }}
+{% endif %}
+
+IMPORTANT:  
+Return your feedback as a **single, valid JSON object** with these keys:
+```json
+{
+  "score": <float, 0 to 1>,
+  {% if allow_comments %}"comments": "<your comments here>",{% endif %}
+  {% if ask_rationale %}"rationale": "<brief explanation of your score>",{% endif %}
+  "improvement_suggestions": "<optional: how could the requirements/docs be better?>"
+}

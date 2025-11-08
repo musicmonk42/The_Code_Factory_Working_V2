@@ -1,0 +1,47 @@
+app:
+  name: simulation
+  env: test
+
+paths:
+  results_dir: "simulation/results"
+  artifacts_dir: "simulation/results/artifacts"
+
+object_storage:
+  endpoint: "localhost:9000"
+  bucket: "test-bucket"
+  secure: false
+
+runners:
+  enabled: ["python_script", "container"]
+
+logging:
+  level: "INFO"
+
+# ✅ Add this so NotificationManager doesn't get None
+notifications: {}
+
+audit:
+  enabled: false
+
+plugins:
+  enable_optional: false
+
+dlt:
+  enabled_clients: []
+
+jobs:
+  - id: smoke_echo
+    name: smoke_echo
+    description: "Disabled noop job for import-time validation"
+    enabled: false
+    schedule: "@once"
+    agent_type: python_script
+    agent_config:
+      entrypoint: python
+      args:
+        - -c
+        - "print('ok')"
+      env: {}
+    resources:
+      cpu: "0.1"
+      memory: "64Mi"

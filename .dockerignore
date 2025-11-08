@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.build/
+dist/
+.venv/
+venv/
+env/
+
+# Repo and tooling noise
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+
+# Caches and outputs
+*.log
+.cache/
+pip-log.txt
+demo_output/

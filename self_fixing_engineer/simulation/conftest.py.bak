@@ -1,0 +1,16 @@
+import pytest
+from unittest.mock import MagicMock
+
+# Existing conftest.py content...
+
+@pytest.fixture(autouse=True)
+def mock_secrets_manager(monkeypatch):
+    """Mock SecretsManager to avoid sys.exit during tests."""
+    from simulation.dlt_base import SecretsManager  # Adjust import based on actual source
+    mock_secrets = MagicMock()
+    mock_secrets.get_secret.side_effect = lambda key, default=None, required=False: {
+        "MINIO_ACCESS_KEY": "dummy-access-key",
+        "MINIO_SECRET_KEY": "dummy-secret-key",
+        "AGENTIC_AUDIT_HMAC_KEY_ENV": "dummy-hmac-key"
+    }.get(key, default if not required else pytest.fail(f"Missing required secret: {key}"))
+    monkeypatch.setattr("simulation.agentic.SECRETS_MANAGER", mock_secrets)

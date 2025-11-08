@@ -1,0 +1,51 @@
+{
+  "core_service": {
+    "feedback_manager": {
+      "name": "feedback_manager",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1758085959.7034574,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    },
+    "human_in_loop": {
+      "name": "human_in_loop",
+      "kind": "core_service",
+      "version": "1.0.0",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1758085963.613697,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  },
+  "analytics": {
+    "codebase_analyzer": {
+      "name": "codebase_analyzer",
+      "kind": "analytics",
+      "version": "1.0.3",
+      "author": "Arbiter Team",
+      "description": null,
+      "tags": [],
+      "loaded_at": 1758085971.236226,
+      "plugin_type": "instance",
+      "dependencies": [],
+      "rbac_roles": [],
+      "signature": null,
+      "is_quarantined": false,
+      "health": null
+    }
+  }
+}

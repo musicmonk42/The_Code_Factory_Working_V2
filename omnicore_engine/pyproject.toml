@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnicore-engine"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["omnicore_engine*"]
+
+# FIX: Added Pytest configuration to suppress Pydantic and other warnings.
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Ignore Pydantic V1 -> V2 Deprecation Warnings (PydanticDeprecatedSince20)
+    "ignore:.*PydanticDeprecatedSince20.*:DeprecationWarning",
+    # Ignore the Pydantic V1 style validators warning
+    "ignore:Pydantic V1 style `@validator` validators are deprecated:DeprecationWarning",
+    # Ignore SQLAlchemy 1.x style warnings (like declarative_base)
+    "ignore:The ``declarative_base\\(\\)`` function is now available as sqlalchemy\\.orm\\.declarative_base\\(\\).:DeprecationWarning",
+    # Ignore general Deprecation Warnings from specific modules/packages (if too broad, use more specific filters)
+    "ignore::DeprecationWarning",
+]

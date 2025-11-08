@@ -1,0 +1,86 @@
+# Unified configuration for AI README-to-App Generator
+# This config file is validated on load against a Pydantic schema.
+# Invalid configs will raise errors with details.
+# Supports dynamic reload via API/CLI for live changes.
+# Use YAML anchors (&) and aliases (*) for DRY (Don't Repeat Yourself) configurations.
+
+version: &default_version 3  # Version of the config schema. Increment for breaking changes.
+
+backend: docker  # Backend for execution isolation (docker, kubernetes, vm, local).
+framework: pytest  # Test framework (pytest, unittest, behave, robot, jest, mocha, go test, junit, gradle, selenium, auto).
+parallel_workers: 2  # Number of parallel test workers.
+timeout: 300  # Default execution timeout in seconds.
+mutation: false  # Enable mutation testing (requires runner/mutation.py).
+fuzz: false  # Enable fuzz testing (requires runner/mutation.py and Hypothesis).
+distributed: false  # Enable distributed task execution.
+resources:  # Resource limits per task.
+  cpu: "2"  # CPU cores.
+  memory: "4g"  # Memory allocation.
+  gpu: "none"  # GPU requirements (none, 1, nvidia.com/gpu:1).
+log_sinks:  # List of log sinks (stream, file, cloud).
+  - type: stream
+    config: {}  # Sink-specific config (e.g., file: path=/logs/runner.log).
+network:
+  allow_internet: true  # Allow internet access in sandbox.
+security:
+  enable_audit: true  # Enable audit logging for all actions.
+  audit_log_path: "audit.log"  # Path for audit logs.
+  redact_secrets: true  # Redact sensitive data in logs.
+  key_management: "env"  # Key management (env, vault, kms).
+commercial:
+  enable_premium: false  # Enable premium features (e.g., advanced analytics).
+doc_framework: sphinx  # Documentation framework (sphinx, mkdocs, javadoc, jsdoc, go_doc, auto).
+doc_gen_config:
+  format: html  # Output format (html, pdf, markdown).
+deployment:
+  target: "local"  # Deployment target (local, aws, gcp, azure).
+  docker:  # Docker-specific config.
+    image: "ai-readme-app:latest"
+    ports: [8000]
+
+# Allowed environment variables to pass to sandbox.
+allowed_envs:
+  - "PYTHONPATH"
+  - "NODE_ENV"
+
+# Feature flags for experimental/toggleable features.
+feature_flags:
+  mutation: false
+  fuzz: false
+  distributed: false
+  auto_framework_detection: true
+
+# Plugin directories for hot-reloadable extensions.
+plugin_dirs:
+  backends: "runner/backends/plugins"
+  parsers: "runner/parsers/plugins"
+  mutation_strategies: "runner/mutation/plugins"
+
+# Cloud deployment configs (example for AWS).
+cloud:
+  aws:
+    region: "us-west-2"
+    ec2_instance_type: "t3.micro"
+    s3_bucket: "ai-generator-artifacts"
+
+# Tracing configs (OpenTelemetry).
+tracing:
+  enabled: true
+  exporter: "console"  # console, otlp, jaeger.
+  otlp_endpoint: "http://localhost:4317"
+
+# YAML anchors for multi-env configs (e.g., dev, prod).
+dev: &dev_env
+  parallel_workers: 1
+  resources:
+    cpu: "1"
+    memory: "2g"
+
+prod: &prod_env
+  parallel_workers: 4
+  resources:
+    cpu: "4"
+    memory: "8g"
+
+# Example usage: Override for prod env.
+# <<: *prod_env

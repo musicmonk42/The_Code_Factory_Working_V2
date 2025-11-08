@@ -1,0 +1,54 @@
+{# 
+  Advanced Clarification Prompt Template
+  Features:
+    - Contextual intro (customizable)
+    - Prior cycle summary or custom context
+    - Dynamic ambiguity listing with optional scores or metadata
+    - Custom batch or focus instructions
+    - Strict output format instruction (JSON)
+    - Localization support
+    - Optional debug mode for extra verbosity and validation
+#}
+
+{% if context_intro is defined and context_intro %}
+{{ context_intro }}
+{% elif cycle_count is defined and cycle_count == 1 %}
+Welcome! Let's clarify your requirements to ensure we deliver exactly what you need.
+{% else %}
+Cycle {{ cycle_count | default('N/A') }}: Requirement Clarification
+{% endif %}
+
+{% if prev_clarifications is defined and prev_clarifications %}
+Previously, you provided these clarifications:
+{% for prev in prev_clarifications %}
+- {{ prev }}
+{% endfor %}
+{% endif %}
+
+{% if custom_focus is defined and custom_focus %}
+Special focus for this cycle: {{ custom_focus }}
+{% endif %}
+
+The following ambiguities were detected in your requirements:
+{% for amb in ambiguities %}
+- {{ amb }}
+{% if ambiguity_scores is defined and ambiguity_scores[loop.index0] is defined %}
+  (Impact Score: {{ ambiguity_scores[loop.index0] }})
+{% endif %}
+{% endfor %}
+
+Please clarify **each** ambiguity in your own words.
+
+{% if clarification_guidelines is defined %}
+Guidelines:
+{{ clarification_guidelines }}
+{% endif %}
+
+IMPORTANT:  
+Return your clarifications as a **single, valid JSON object** where each key is the ambiguity text and each value is your clarification.  
+Example:
+```json
+{
+  "Ambiguity 1": "Your clarification for Ambiguity 1.",
+  "Ambiguity 2": "Your clarification for Ambiguity 2."
+}

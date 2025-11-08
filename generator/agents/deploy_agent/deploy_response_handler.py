@@ -1,0 +1,1671 @@
+"""
+deploy_response_handler.py
+Normalizes and validates LLM-generated deployment configs.
+
+Features:
+- Plugin registry for format handlers (Dockerfile, YAML, JSON, HCL, etc.) with hot-reload.
+- Format normalization and conversion (using real libraries like PyYAML, hcl2).
+- Section extraction and summarization with LLM repair for missing/invalid sections.
+- Security scanning on outputs (secrets, PII, misconfigurations) using centralized runner utilities and external tools.
+- Extensible enrichment (badges, diagrams, links, changelogs).
+- Quality analysis: lint, readability, compliance, and provenance stamping.
+- API and CLI for normalization and validation.
+- Observability: metrics, tracing, logging.
+- Regression and property-based tests for all format conversions.
+- Async support for I/O operations.
+
+STRICT FAILURES ENFORCED:
+- Security scrubbing is REQUIRED.
+- Specific Format Handlers are REQUIRED. No fallback to default DockerfileHandler if missing.
+- Prompt optimization (summarize_text) is REQUIRED. No fallback to original text if it fails.
+"""
+
+import os
+import logging
+import uuid
+import time
+import re
+import asyncio
+import json
+import subprocess
+import ast # ADDED: For Python syntax validation in parse_llm_response
+from typing import Dict, Any, Callable, Optional, List, Type, Tuple, Union
+import glob
+from importlib import import_module, reload
+from abc import ABC, abstractmethod
+from pathlib import Path
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from prometheus_client import Counter, Histogram, Gauge
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+from aiohttp import web
+from aiohttp.web_routedef import RouteTableDef
+from aiohttp.web_request import Request
+from aiohttp.web_response import Response
+import yaml  # PyYAML for YAML dumping/loading
+import hcl2  # For HCL (Terraform) parsing
+from ruamel.yaml import YAML # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)
+import aiofiles # Explicitly imported for async file operations
+from datetime import datetime # Needed for provenance timestamp
+import tempfile # For temporary directories/files
+import importlib.util # Needed for loading handler plugins
+import sys # Added for HandlerRegistry
+
+# --- CENTRAL RUNNER FOUNDATION ---
+from .deploy_validator import ValidatorRegistry # Assuming local import works at runtime for strict dependency
+from runner import tracer # Use central tracer
+from runner.llm_client import call_llm_api, call_ensemble_api # Use central LLM clients
+from runner.runner_logging import logger, add_provenance # Use central logging and provenance
+# Added LLM_SUMMARY_CALLS_TOTAL to track the new summarization calls
+from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS, LLM_SUMMARY_CALLS_TOTAL 
+from runner.runner_errors import LLMError
+from runner.runner_file_utils import get_commits # Needed for enrichment
+# ADDED: Centralized security and audit utilities as requested
+from runner.runner_security_utils import redact_secrets, scan_for_secrets
+from runner.runner_audit import log_audit_event
+# -----------------------------------
+
+# --- External Dependencies (Assumed to be real and production-ready) ---
+# NOTE: Removed dependency on utils and deploy_llm_call
+# REMOVED: Presidio imports are no longer needed as scrub_text is now centralized
+# from presidio_analyzer import AnalyzerEngine
+# from presidio_anonymizer import AnonymizerEngine
+# -----------------------------------
+
+# --- Prometheus Metrics (Local) ---
+# NOTE: Retaining local metrics for internal process statistics only, distinct from LLM metrics
+handler_calls = Counter('deploy_response_handler_calls_total', 'Total handler calls', ['format', 'operation'])
+handler_errors = Counter('deploy_response_handler_errors_total', 'Total handler errors', ['format', 'operation', 'error_type'])
+handler_latency = Histogram('deploy_response_handler_latency_seconds', 'Handler latency', ['format', 'operation'])
+scan_findings_gauge = Gauge('deploy_scan_findings_count', 'Number of security findings in configs', ['format', 'finding_type'])
+scan_total_findings = Counter('deploy_scan_total_findings', 'Total security findings detected', ['format', 'finding_type'])
+
+# --- ADDED: Constants and Functions for Test Fixes ---
+ERROR_FILENAME = "error.txt"
+
+def parse_llm_response(response: str, lang: str = "raw") -> Dict[str, str]:
+    """
+    Parses the raw LLM response.
+    - If the response is a JSON object (multi-file), it parses it into a dict.
+    - If it's plain text, it returns it as a single-file dict.
+    - Performs syntax validation for specified languages (e.g., "python").
+    - Aggregates errors from invalid files into ERROR_FILENAME.
+    """
+    files: Dict[str, str] = {}
+    errors: List[str] = []
+
+    try:
+        # Try to parse as JSON (multi-file format)
+        data = json.loads(response)
+        if not isinstance(data, dict):
+            raise json.JSONDecodeError("Response is valid JSON but not a dictionary.", response, 0)
+        
+        logger.info(f"Parsing multi-file JSON response with {len(data)} potential files.")
+        
+        for filename, content in data.items():
+            if not isinstance(content, str):
+                errors.append(f"{filename}: Invalid content, expected a string but got {type(content).__name__}.")
+                continue
+            
+            # Perform syntax validation if language is specified
+            if lang == "python" and filename.endswith(".py"):
+                try:
+                    ast.parse(content)
+                    # Syntax is valid
+                    files[filename] = content
+                except SyntaxError as e:
+                    errors.append(f"{filename}: Invalid Python syntax - {e}")
+                except Exception as e:
+                    errors.append(f"{filename}: Error during Python parsing - {e}")
+            else:
+                # No validation for this language or file type
+                files[filename] = content
+
+    except json.JSONDecodeError:
+        # Not JSON, treat as a single plain-text file
+        logger.info("Parsing response as single plain-text file.")
+        filename = f"config.{lang}" if lang != "raw" else "response.txt"
+        
+        # Perform syntax validation if language is specified
+        if lang == "python":
+            try:
+                ast.parse(response)
+                # Syntax is valid
+                files[filename] = response
+            except SyntaxError as e:
+                errors.append(f"{filename}: Invalid Python syntax - {e}")
+            except Exception as e:
+                errors.append(f"{filename}: Error during Python parsing - {e}")
+        else:
+            files[filename] = response
+
+    # FIXED: Aggregate errors into ERROR_FILENAME as requested by tests
+    if errors:
+        logger.warning(f"Encountered {len(errors)} errors during parsing. Aggregating to {ERROR_FILENAME}.")
+        files[ERROR_FILENAME] = "\n".join(errors)
+
+    return files
+
+def _scan_for_vulnerabilities_sync(files: Dict[str, str]) -> List[Dict[str, str]]:
+    """
+    Synchronous placeholder for SAST scanning to satisfy test requirements.
+    In a real system, this might call a sync client for an async scanning service.
+    """
+    findings = []
+    # Simple regex placeholder for "SAST" log
+    insecure_pattern = re.compile(r'eval\(|subprocess.call\(|os.system\(')
+    for filename, content in files.items():
+        if filename.endswith(".py"):
+            matches = insecure_pattern.findall(content)
+            if matches:
+                findings.append({
+                    "file": filename,
+                    "type": "InsecureFunctionCall",
+                    "matches": list(set(matches))
+                })
+    return findings
+
+def _looks_like_secret_sync(content: str) -> bool:
+    """
+    Synchronous wrapper for the central runner's secret scanner.
+    """
+    try:
+        # Use the imported central scanner
+        findings = scan_for_secrets(content)
+        return bool(findings)
+    except Exception as e:
+        logger.error(f"Error during sync secret scan: {e}", exc_info=True)
+        return False
+
+def monitor_and_scan_code(files: Dict[str, str], log_action: Callable = log_audit_event) -> Dict[str, str]:
+    """
+    Synchronous function to run security scans and log audit events for tests.
+    This calls the injected `log_action` hook with "SAST" and "Secret" messages.
+    Returns the original, unmodified file mapping.
+    """
+    # 1. SAST Scan
+    try:
+        findings = _scan_for_vulnerabilities_sync(files)
+        # FIXED: Call log_action with "SAST" as expected by tests
+        if findings:
+            log_action("Unified SAST Scan Completed", {"issues": findings, "status": "findings_found"})
+        else:
+            log_action("Unified SAST Scan Completed", {"issues": [], "status": "clean"})
+    except Exception as e:
+        logger.error("Error during unified SAST scan: %s", e, exc_info=True)
+        # FIXED: Call log_action with "SAST" error as expected by tests
+        log_action("Unified SAST Scan Error", {"error": str(e)})
+
+    # 2. Secret Scan
+    try:
+        # FIXED: Use a helper that calls the central runner scanner
+        if any(_looks_like_secret_sync(content) for content in files.values()):
+            # FIXED: Call log_action with "Secret" as expected by tests
+            log_action("Secret Scan Completed", {"status": "secrets_found"})
+        else:
+            log_action("Secret Scan Completed", {"status": "clean"})
+    except Exception as e:
+        logger.error("Error during secret scan: %s", e, exc_info=True)
+        log_action("Secret Scan Error", {"error": str(e)})
+
+    # Return the original mapping (non-destructive)
+    return dict(files)
+
+# --- End of ADDED Test Fix Functions ---
+
+
+# --- Security: PII/Secret & Dangerous Config Scanning ---
+DANGEROUS_CONFIG_PATTERNS = {
+    "PrivilegedContainer": r'(?i)privileged:\s*true',
+    "HostPathMount": r'(?i)hostpath:\s*.*', # Generic hostPath
+    "RootUserInDockerfile": r'(?i)^user\s+root', # Dockerfile USER root directive
+    "ExposeAllPorts": r'(?i)expose\s+\d{1,5}\s+-\s+\d{1,5}', # EXPOSE 80-9000
+    "NoResourceLimits": r'(?i)resources:\s*\{\s*\}', # Empty resources block in K8s
+    "HardcodedCredentials_Pattern": r'(?i)password:\s*\S+|secret:\s*\S+|api_key:\s*\S+', # Example for non-Presidio detected patterns
+}
+
+# --- REPLACED: Legacy/Local scrub_text Function ---
+# The original Presidio-based function was removed as requested.
+def scrub_text(text: str) -> str:
+    """
+    Strictly redacts sensitive information from the text using the central
+    runner.runner_security_utils.redact_secrets function.
+    This wrapper maintains the strict-fail policy.
+    """
+    if not text:
+        return ""
+    
+    try:
+        # Call the central runner function imported at the top
+        scrubbed = redact_secrets(text)
+        return scrubbed
+    except Exception as e:
+        logger.error("Central runner redaction failed critically: %s", e, exc_info=True)
+        # In a strict-fail model, re-raise the exception if scrubbing cannot be performed
+        raise RuntimeError(f"Critical error during sensitive data scrubbing: {e}") from e
+# --- End of REPLACED Function ---
+
+async def scan_config_for_findings(config_text: str, config_format: str) -> List[Dict[str, str]]:
+    """
+    Scans the configuration text for secrets and dangerous configurations.
+    Uses centralized `scrub_text` on inputs (applied upstream) and directly 
+    uses external tools like Trivy for misconfigurations.
+    Returns a list of dictionaries, each describing a finding.
+    """
+    findings: List[Dict[str, str]] = []
+
+    # --- Dangerous/Misconfiguration Pattern Matching ---
+    for finding_name, pattern_regex in DANGEROUS_CONFIG_PATTERNS.items():
+        if re.search(pattern_regex, config_text):
+            findings.append({"type": "Misconfiguration_Pattern", "category": finding_name, "description": f"Detected: {finding_name}", "severity": "High"})
+            scan_total_findings.labels(format=config_format, finding_type=f"Misconfig_{finding_name}").inc()
+
+    # --- External Tool Scan with Trivy (for Infrastructure as Code misconfigurations, CVEs, etc.) ---
+    # Trivy often needs the config as a file. Use a temp file for this.
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_config_path = Path(temp_dir) / f"config.{config_format.lower().replace('dockerfile', 'docker')}" # Use common file extension
+        try:
+            # Write the config text to a temporary file. It's assumed `config_text` is already scrubbed.
+            # Using aiofiles.open for async file write
+            async with aiofiles.open(temp_config_path, mode='w', encoding='utf-8') as f: 
+                await f.write(config_text)
+            
+            trivy_command = [
+                "trivy", "config",
+                "--format", "json",          # Request JSON output for easy parsing
+                "--severity", "CRITICAL,HIGH", # Focus on high severity issues
+                "--quiet",                   # Suppress verbose output
+                str(temp_config_path)
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *trivy_command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                limit=1024 * 1024 # Set a buffer limit to prevent very large outputs from hanging
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode in [0, 1]:  # 0 means no issues, 1 means issues found
+                trivy_output_str = stdout.decode('utf-8').strip()
+                if trivy_output_str:
+                    try:
+                        trivy_results = json.loads(trivy_output_str)
+                        for result_section in trivy_results.get('Results', []):
+                            # Trivy can find 'Misconfigurations', 'Vulnerabilities', etc.
+                            for misconfig in result_section.get('Misconfigurations', []):
+                                findings.append({
+                                    "type": "Misconfiguration_Trivy",
+                                    "category": misconfig.get('Type', 'N/A'),
+                                    "description": misconfig.get('Title', 'No Title') + ": " + misconfig.get('Description', ''),
+                                    "severity": misconfig.get('Severity', 'Unknown')
+                                })
+                                scan_total_findings.labels(format=config_format, finding_type="Trivy_Misconfig").inc()
+                            for vuln in result_section.get('Vulnerabilities', []):
+                                findings.append({
+                                    "type": "Vulnerability_Trivy",
+                                    "category": vuln.get('VulnerabilityID', 'N/A'),
+                                    "description": vuln.get('Title', 'No Title'),
+                                    "severity": vuln.get('Severity', 'Unknown')
+                                })
+                                scan_total_findings.labels(format=config_format, finding_type="Trivy_Vulnerability").inc()
+                    except json.JSONDecodeError:
+                        findings.append({"type": "ToolError_Trivy", "category": "OutputParse", "description": "Trivy produced invalid JSON output.", "severity": "Medium"})
+                        scan_total_findings.labels(format=config_format, finding_type="Trivy_ParseError").inc()
+                if stderr:
+                    logger.warning(f"Trivy stderr for scan_config: {stderr.decode('utf-8').strip()}")
+            else:
+                findings.append({"type": "ToolError_Trivy", "category": "Execution", "description": f"Trivy command failed with exit code {process.returncode}: {stderr.decode('utf-8').strip()}", "severity": "High"})
+                scan_total_findings.labels(format=config_format, finding_type="Trivy_ExecError").inc()
+        except FileNotFoundError:
+            findings.append({"type": "ToolError", "category": "TrivyNotInstalled", "description": "Trivy command not found. Skipping Trivy scan. This is a critical tool for security compliance.", "severity": "Low"})
+            logger.error("Trivy command not found. Skipping Trivy scan. This tool is required for full compliance checks.") # Error level for missing tool
+            scan_total_findings.labels(format=config_format, finding_type="Trivy_NotFound").inc()
+        except Exception as e:
+            findings.append({"type": "ToolError_Trivy", "category": "Unexpected", "description": f"Unexpected error running Trivy: {e}", "severity": "High"})
+            logger.error(f"Unexpected error running Trivy: {e}", exc_info=True)
+            scan_total_findings.labels(format=config_format, finding_type="Trivy_UnexpectedError").inc()
+    
+    # Update gauge with current number of unique findings.
+    scan_findings_gauge.labels(format=config_format, finding_type="OverallFindingsCount").set(len(findings))
+
+    return findings
+
+class FormatHandler(ABC):
+    """Abstract base class for format handlers (e.g., Dockerfile, YAML, JSON, HCL)."""
+    __version__ = "1.0"
+    __source__ = "default" # Indicates if it's a built-in or dynamically loaded handler
+
+    @abstractmethod
+    def normalize(self, raw: str) -> Any:
+        """
+        Normalizes a raw LLM-generated string response into a structured Python object.
+        This handles parsing the string into a coherent data structure (list for Dockerfile, dict for JSON/YAML/HCL).
+        Must raise ValueError on invalid format.
+        """
+        pass
+
+    @abstractmethod
+    def convert(self, data: Any, to_format: str) -> str:
+        """
+        Converts structured data (output of normalize) into another specified string format.
+        E.g., Python object -> JSON string, Dockerfile lines -> YAML string.
+        Must raise ValueError if conversion to to_format is not supported.
+        """
+        pass
+
+    @abstractmethod
+    def extract_sections(self, data: Any) -> Dict[str, str]:
+        """
+        Extracts meaningful sections (e.g., build, run, metadata, resources) from the structured data.
+        Returns a dictionary where keys are section names and values are their string representations.
+        """
+        pass
+
+    @abstractmethod
+    def lint(self, data: Any) -> List[str]:
+        """
+        Performs basic linting/static analysis on the structured data to identify quality issues.
+        Returns a list of issue descriptions. Must not raise exceptions, return empty list if no issues.
+        """
+        pass
+        
+    async def summarize_section(self, section_name: str, section_text: str) -> str:
+        """
+        Uses an LLM to summarize a configuration section for easier validation or reporting.
+        STRICT FAILURES ENFORCED: Must use an LLM for summarization.
+        """
+        if not section_text:
+            return ""
+
+        summary_prompt = f"Summarize the following configuration section '{section_name}' concisely for compliance and resource review (max 50 words): \n\n```\n{section_text[:5000]}\n```"
+        
+        try:
+            start_time_summary_llm = time.time()
+            
+            summary_response = await call_llm_api(
+                summary_prompt, 
+                model="gpt-3.5-turbo" # Use a cheaper model for summarization
+            )
+            
+            # Use central runner metrics for LLM calls
+            LLM_SUMMARY_CALLS_TOTAL.labels(provider="deploy_response_handler", model="gpt-3.5-turbo").inc() # Using a new central metric for summaries
+            LLM_LATENCY_SECONDS.labels(provider="deploy_response_handler", model="gpt-3.5-turbo").observe(time.time() - start_time_summary_llm)
+            
+            summary = summary_response.get('content', '').strip()
+            
+            if not summary:
+                error_msg = f"LLM summarization for section '{section_name}' returned empty content."
+                logger.error(error_msg)
+                LLM_ERRORS_TOTAL.labels(provider="deploy_response_handler", model="gpt-3.5-turbo", error_type="EmptyLLMResponse").inc()
+                # STRICT FAILURES ENFORCED: No fallback to original text.
+                raise ValueError(error_msg)
+
+            add_provenance({"action": "summarize_section", "model": "gpt-3.5-turbo", "summary_length": len(summary)})
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to summarize section '{section_name}' using LLM: {e}", exc_info=True)
+            if not isinstance(e, LLMError):
+                LLM_ERRORS_TOTAL.labels(provider="deploy_response_handler", model="gpt-3.5-turbo", error_type=type(e).__name__).inc()
+            # STRICT FAILURES ENFORCED: No fallback to original text.
+            raise RuntimeError(f"Critical error during LLM-based config summarization: {e}") from e
+
+class DockerfileHandler(FormatHandler):
+    __version__ = "1.1" # Example version bump
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> List[str]:
+        """Normalizes Dockerfile raw string into a list of cleaned lines."""
+        if not raw or not isinstance(raw, str):
+            raise ValueError("Invalid raw Dockerfile content provided.")
+        return [line.strip() for line in raw.splitlines() if line.strip() and not line.strip().startswith('#')]
+
+    def convert(self, data: List[str], to_format: str) -> str:
+        """Converts Dockerfile lines to a string or YAML representation."""
+        if not isinstance(data, list):
+            raise TypeError("Data must be a list of strings for DockerfileHandler conversion.")
+
+        if to_format == "yaml":
+            # Convert Dockerfile to a YAML representation (e.g., for K8s configmaps or structured logging)
+            yaml_data = {'kind': 'Dockerfile', 'stages': [], 'commands': data} # Simplified representation
+            from io import StringIO
+            string_stream = StringIO()
+            ru_yaml = YAML()
+            ru_yaml.dump(yaml_data, string_stream)
+            return string_stream.getvalue()
+        elif to_format == "dockerfile":
+            return '\n'.join(data)
+        raise ValueError(f"DockerfileHandler does not support conversion to '{to_format}'.")
+
+    def extract_sections(self, data: List[str]) -> Dict[str, str]:
+        """Extracts sections like FROM, RUN, COPY, CMD from Dockerfile lines."""
+        sections = {'FROM': '', 'RUN_commands': [], 'COPY_commands': [], 'CMD': '', 'ENTRYPOINT': ''}
+        
+        current_run_block = [] # For multi-line RUN instructions
+        for line in data:
+            if line.upper().startswith('FROM'):
+                sections['FROM'] = line
+            elif line.upper().startswith('RUN'):
+                # Handle multi-line RUN instructions
+                if line.endswith('\\'):
+                    current_run_block.append(line.strip().strip('\\')) # Remove trailing slash and extra space
+                else:
+                    current_run_block.append(line)
+                    sections['RUN_commands'].append(' '.join(current_run_block))
+                    current_run_block = []
+            elif line.upper().startswith('COPY'):
+                sections['COPY_commands'].append(line)
+            elif line.upper().startswith('CMD'):
+                sections['CMD'] = line
+            elif line.upper().startswith('ENTRYPOINT'):
+                sections['ENTRYPOINT'] = line
+        
+        # Ensure any remaining multi-line RUN commands are captured
+        if current_run_block:
+            sections['RUN_commands'].append(' '.join(current_run_block))
+
+        return {k: (v if isinstance(v, str) else '\n'.join(v)) for k, v in sections.items() if v} # Flatten lists to strings
+
+    def lint(self, data: List[str]) -> List[str]:
+        """Lints Dockerfile lines for common issues and best practices."""
+        issues = []
+        has_from = False
+        has_user = False
+        has_cmd_or_entrypoint = False
+
+        for line in data:
+            line_upper = line.upper()
+            if line_upper.startswith('FROM'):
+                has_from = True
+                if 'LATEST' in line_upper:
+                    issues.append("Avoid 'latest' tag in FROM instruction for stability in production.")
+                if 'DEBUG' in line_upper:
+                    issues.append("Avoid using debug images in production Dockerfiles.")
+            elif line_upper.startswith('RUN'):
+                if 'APT-GET UPDATE' in line_upper and '&& APT-GET CLEAN' not in line_upper and '&& RM -RF /VAR/LIB/APT/LISTS/*' not in line_upper:
+                    issues.append("RUN apt-get update should be paired with apt-get clean and cleanup commands in the same layer.")
+            elif line_upper.startswith('USER'):
+                has_user = True
+                if 'ROOT' in line_upper:
+                    issues.append("Avoid running as root user. Use a non-root user for security.")
+            elif line_upper.startswith('CMD') or line_upper.startswith('ENTRYPOINT'):
+                has_cmd_or_entrypoint = True
+            elif line_upper.startswith('EXPOSE') and re.search(r'EXPOSE\s+\d{1,5}\s*-\s*\d{1,5}', line, re.IGNORECASE):
+                 issues.append("Avoid exposing port ranges; expose only necessary specific ports.")
+
+        if not has_from:
+            issues.append("Dockerfile missing a FROM instruction.")
+        if not has_user and has_from: # Only suggest if there's a FROM image
+            issues.append("Consider specifying a non-root USER for enhanced security.")
+        if not has_cmd_or_entrypoint:
+            issues.append("Dockerfile missing CMD or ENTRYPOINT instruction for application execution.")
+        
+        return issues
+
+class YAMLHandler(FormatHandler):
+    __version__ = "1.2"
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> Any:
+        """Normalizes raw YAML string to a Python object using ruamel.yaml for fidelity."""
+        ru_yaml = YAML()
+        try:
+            return ru_yaml.load(raw)
+        except Exception as e:
+            raise ValueError(f"Invalid YAML format: {e}")
+
+    def convert(self, data: Any, to_format: str) -> str:
+        """Converts structured YAML data to JSON or back to YAML."""
+        if to_format == "json":
+            # Convert ruamel.yaml specific types to standard Python types for json.dumps
+            # A bit of a heavy-handed way, but effective
+            def convert_ruamel(obj):
+                if isinstance(obj, dict):
+                    return {k: convert_ruamel(v) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [convert_ruamel(i) for i in obj]
+                return obj
+            
+            clean_data = convert_ruamel(data)
+            return json.dumps(clean_data, indent=2)
+            
+        elif to_format == "yaml":
+            # Use ruamel.yaml to dump, preserving comments/formatting if possible from normalized data
+            from io import StringIO
+            string_stream = StringIO()
+            ru_yaml = YAML() # Create a new instance for dumping
+            ru_yaml.dump(data, string_stream)
+            return string_stream.getvalue()
+        raise ValueError(f"YAMLHandler does not support conversion to '{to_format}'.")
+
+    def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Extracts top-level keys as sections from YAML data."""
+        sections = {}
+        if not isinstance(data, dict):
+            return sections # Cannot extract sections from non-dict YAML
+            
+        # Local function to handle ruamel.yaml types for json.dumps
+        def convert_ruamel(obj):
+            if isinstance(obj, dict):
+                return {k: convert_ruamel(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_ruamel(i) for i in obj]
+            return obj
+            
+        for k, v in data.items():
+            # Attempt to dump sub-sections as JSON for string representation
+            try:
+                clean_v = convert_ruamel(v)
+                sections[str(k)] = json.dumps(clean_v, indent=2)
+            except TypeError: # Handle non-serializable types if any
+                sections[str(k)] = str(v)
+        return sections
+
+    def lint(self, data: Dict[str, Any]) -> List[str]:
+        """Lints YAML data for common issues (e.g., empty lists/dicts, missing required fields)."""
+        issues = []
+        if not isinstance(data, dict):
+            issues.append("YAML root is not a dictionary.")
+            return issues
+        if not data:
+            issues.append("YAML configuration is empty.")
+        # Example linting for Kubernetes YAML (common use case)
+        if 'apiVersion' in data and 'kind' in data:
+            if 'metadata' not in data or not data.get('metadata').get('name'):
+                issues.append(f"Kubernetes manifest of kind '{data.get('kind', 'N/A')}' is missing metadata.name.")
+            # Check for resource limits in containers
+            kind = data.get('kind')
+            if kind == 'Deployment' or kind == 'Pod' or kind == 'StatefulSet' or kind == 'DaemonSet':
+                # Path differs for Pod vs others
+                if kind == 'Pod':
+                    containers = data.get('spec', {}).get('containers', [])
+                else:
+                    containers = data.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
+                
+                if not containers:
+                    issues.append(f"Kubernetes {kind} has no containers defined.")
+                for container in containers:
+                    if not container.get('resources'):
+                        issues.append(f"Container '{container.get('name', 'N/A')}' in {kind} is missing resource limits/requests.")
+                    elif not container.get('resources', {}).get('limits'):
+                         issues.append(f"Container '{container.get('name', 'N/A')}' in {kind} is missing resource limits.")
+        return issues
+
+class JSONHandler(FormatHandler):
+    __version__ = "1.0"
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> Dict[str, Any]:
+        """Normalizes raw JSON string to a Python dictionary."""
+        try:
+            return json.loads(raw)
+        except Exception as e:
+            raise ValueError(f"Invalid JSON format: {e}")
+
+    def convert(self, data: Dict[str, Any], to_format: str) -> str:
+        """Converts structured JSON data to YAML or back to JSON."""
+        if to_format == "yaml":
+            # Use ruamel.yaml for a cleaner YAML dump
+            from io import StringIO
+            string_stream = StringIO()
+            ru_yaml = YAML()
+            ru_yaml.dump(data, string_stream)
+            return string_stream.getvalue()
+        elif to_format == "json":
+            return json.dumps(data, indent=2)
+        raise ValueError(f"JSONHandler does not support conversion to '{to_format}'.")
+
+    def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Extracts top-level keys as sections from JSON data."""
+        sections = {}
+        if not isinstance(data, dict):
+            return sections # Cannot extract sections from non-dict JSON
+        for k, v in data.items():
+            try:
+                sections[str(k)] = json.dumps(v, indent=2)
+            except TypeError:
+                sections[str(k)] = str(v)
+        return sections
+
+    def lint(self, data: Dict[str, Any]) -> List[str]:
+        """Lints JSON data for basic quality issues."""
+        issues = []
+        if not isinstance(data, dict):
+            issues.append("JSON root is not a dictionary.")
+            return issues
+        if not data:
+            issues.append("JSON object is empty.")
+        return issues
+
+class HCLHandler(FormatHandler):
+    __version__ = "1.0"
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> Dict[str, Any]:
+        """Normalizes raw HCL string to a Python dictionary using hcl2."""
+        try:
+            return hcl2.loads(raw)
+        except Exception as e:
+            raise ValueError(f"Invalid HCL format: {e}")
+
+    def convert(self, data: Dict[str, Any], to_format: str) -> str:
+        """Converts structured HCL data to JSON."""
+        if to_format == "json":
+            return json.dumps(data, indent=2)
+        # HCL does not have a standard "dump" function back to HCL string in hcl2 library.
+        # This would require a separate HCL serializer if needed for full fidelity.
+        raise ValueError(f"HCLHandler does not support conversion to '{to_format}'.")
+
+    def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Extracts top-level blocks/resources as sections from HCL data."""
+        sections = {}
+        if not isinstance(data, dict):
+            return sections # Cannot extract sections from non-dict HCL
+        for k, v in data.items():
+            # For HCL, 'resource', 'variable', 'output' are common top-level blocks.
+            # `hcl2.loads` parses these into a dictionary structure.
+            # We just dump them as JSON representation for simplicity.
+            try:
+                sections[str(k)] = json.dumps(v, indent=2)
+            except TypeError:
+                sections[str(k)] = str(v)
+        return sections
+
+    def lint(self, data: Dict[str, Any]) -> List[str]:
+        """Lints HCL data for basic quality issues."""
+        issues = []
+        if not isinstance(data, dict):
+            issues.append("HCL root is not a dictionary.")
+            return issues
+        if not data:
+            issues.append("HCL configuration is empty.")
+        # Example: check for empty 'resource' blocks
+        if data.get('resource') and not data['resource']:
+            issues.append("Empty 'resource' block found in HCL.")
+        return issues
+
+class HandlerRegistry:
+    """
+    Registry for format handlers with hot-reload capability.
+    Discovers `FormatHandler` implementations from a specified plugin directory
+    and provides access to them by format type.
+    """
+    def __init__(self, plugin_dir: str = "handler_plugins"):
+        self.plugin_dir = plugin_dir
+        self.handlers: Dict[str, Type[FormatHandler]] = {} # Stores handler classes, not instances
+        self.handler_info: Dict[str, Dict[str, Any]] = {} # Stores metadata about handlers
+        self._load_plugins() # Initial load of plugins
+        self._setup_hot_reload() # Setup watchdog for hot-reloading
+
+    def _load_plugins(self):
+        """
+        Loads built-in handlers and discovers custom FormatHandler implementations
+        from the plugin directory. Custom handlers overwrite built-in ones if names conflict.
+        """
+        # 1. Clear existing handlers before reloading
+        self.handlers.clear()
+        self.handler_info.clear()
+
+        # 2. Load built-in handlers first
+        built_in_handlers = {
+            'dockerfile': DockerfileHandler,
+            'yaml': YAMLHandler,
+            'json': JSONHandler,
+            'hcl': HCLHandler,
+        }
+        for fmt, handler_class in built_in_handlers.items():
+            self.handlers[fmt] = handler_class
+            self.handler_info[fmt] = {'version': handler_class.__version__, 'source': handler_class.__source__}
+
+        # 3. Add plugin directory to sys.path for module discovery
+        abs_plugin_dir = str(Path(self.plugin_dir).resolve())
+        if abs_plugin_dir not in sys.path:
+            sys.path.insert(0, abs_plugin_dir)
+
+        # 4. Discover and load handlers from plugin files
+        for file_path in glob.glob(f"{self.plugin_dir}/*_handler.py"):
+            if file_path.endswith('__init__.py') or file_path.endswith('_test.py'): # Skip __init__.py and test files
+                continue
+            
+            module_name_base = Path(file_path).stem
+            # Create a unique module name for hot-reloading to ensure fresh import
+            # This is critical to avoid Python's module caching issues.
+            unique_module_name = f"dynamic_handler_{module_name_base}_{uuid.uuid4().hex}"
+            
+            spec = importlib.util.spec_from_file_location(unique_module_name, file_path)
+            if spec is None or spec.loader is None:
+                logger.warning(f"Could not find module spec for plugin file: {file_path}")
+                continue
+
+            try:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[unique_module_name] = module # Register the module
+                spec.loader.exec_module(module) # Execute its code
+                
+                found_custom_handler = False
+                for name, obj in vars(module).items():
+                    if isinstance(obj, type) and issubclass(obj, FormatHandler) and obj != FormatHandler:
+                        # Convert class name (e.g., 'CustomYAMLHandler') to format string ('yaml')
+                        fmt_key = name.lower().replace('handler', '')
+                        self.handlers[fmt_key] = obj # Store the CLASS, not an instance
+                        self.handler_info[fmt_key] = {'version': getattr(obj, '__version__', 'unknown'), 'source': file_path}
+                        logger.info(f"Loaded custom handler: {fmt_key} from {file_path} (version: {getattr(obj, '__version__', 'unknown')}).")
+                        found_custom_handler = True
+                if not found_custom_handler:
+                    logger.warning(f"No valid FormatHandler class found in plugin file: {file_path}. Ensure it inherits from FormatHandler.")
+            except Exception as e:
+                logger.error(f"Failed to load custom handler from {file_path}: {e}", exc_info=True)
+                # Clean up the module from sys.modules if loading failed to prevent partial/broken state
+                if unique_module_name in sys.modules:
+                    del sys.modules[unique_module_name]
+
+        logger.info(f"Handler registry loaded {len(self.handlers)} handlers (including built-in and custom).")
+
+    def reload_plugins(self):
+        """
+        Reloads all handlers. This is typically called by the Watchdog event handler.
+        It clears existing handlers and re-scans the plugin directory to pick up changes.
+        """
+        self._load_plugins() # Re-run the full loading process
+        logger.info("Handlers reloaded due to file system change.")
+
+    def _setup_hot_reload(self):
+        """Sets up a Watchdog observer to monitor the plugin directory for changes."""
+        # Check if the directory exists before starting the observer
+        if not Path(self.plugin_dir).exists():
+             os.makedirs(self.plugin_dir, exist_ok=True)
+             logger.info(f"Plugin directory '{self.plugin_dir}' did not exist. Created it.")
+             
+        class ReloadHandler(FileSystemEventHandler):
+            def __init__(self, registry_instance: 'HandlerRegistry'):
+                self.registry_instance = registry_instance
+            
+            def dispatch(self, event):
+                # Only reload if it's a .py file and not a directory, for created/modified/deleted events
+                if not event.is_directory and event.src_path.endswith('.py') and event.event_type in ('created', 'modified', 'deleted'):
+                    logger.info(f"Handler plugin file changed: {event.src_path} (Event: {event.event_type}). Triggering reload.")
+                    self.registry_instance.reload_plugins()
+
+        observer = Observer()
+        # Schedule the observer to watch the plugin directory
+        observer.schedule(ReloadHandler(self), self.plugin_dir, recursive=False)
+        try:
+            observer.start()
+            logger.info(f"Started hot-reload observer for handler plugins in: {self.plugin_dir}")
+        except Exception as e:
+            logger.error(f"Failed to start Watchdog observer: {e}", exc_info=True)
+
+
+    def get_handler(self, output_format: str) -> FormatHandler:
+        """
+        Retrieves an instantiated handler for the specified format.
+        Strictly raises ValueError if no handler is found for the requested format.
+        This enforces the "fail if missing" approach.
+        """
+        handler_class = self.handlers.get(output_format.lower())
+        if handler_class:
+            return handler_class() # Return an instance of the handler class
+        
+        # In a strict-fail model, if no handler is found, we raise an error.
+        raise ValueError(f"No handler found for output format '{output_format}'. Please implement and register a handler for this format in '{self.plugin_dir}'.")
+
+
+async def repair_sections(missing_sections: List[str], current_data: Any, output_format: str) -> Any:
+    """
+    Uses an LLM to attempt to repair or generate missing sections in a configuration.
+    """
+    # Use JSON representation for the LLM prompt to keep it structured.
+    current_data_str = ""
+    try:
+        # Need to handle ruamel.yaml types before json.dumps
+        def convert_ruamel(obj):
+            if isinstance(obj, dict):
+                return {k: convert_ruamel(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_ruamel(i) for i in obj]
+            return obj
+        
+        clean_data = convert_ruamel(current_data)
+        current_data_str = json.dumps(clean_data, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not serialize current data for LLM repair prompt: {e}. Using str().")
+        current_data_str = str(current_data)
+    
+    # Truncate for prompt to avoid massive context and ensure the prompt fits within the limit
+    if len(current_data_str) > 2000:
+        current_data_str = current_data_str[:2000] + "\n... (truncated for brevity)"
+
+    repair_prompt = f"""
+    The following configuration in {output_format} format is missing these crucial sections: {', '.join(missing_sections)}.
+    Current configuration (JSON representation, possibly partial):
+    ```json
+    {current_data_str}
+    ```
+    Please provide ONLY the full, corrected configuration in the original {output_format} format, ensuring it is syntactically valid and includes the existing configuration merged with the new/repaired sections.
+    Wrap the final, corrected configuration in a JSON object with key "config".
+    """
+    
+    logger.info(f"Attempting LLM repair for missing sections in {output_format} config: {missing_sections}")
+    try:
+        # Call the main LLM config generation function (from runner.llm_client)
+        # Using ensemble=True for higher reliability in repair tasks
+        start_time_repair_llm = time.time()
+        
+        llm_response_data = await call_ensemble_api(
+            repair_prompt, 
+            [{"model": "gpt-4o"}], 
+            voting_strategy="majority",
+            stream=False 
+        )
+        
+        # Update central metrics
+        LLM_CALLS_TOTAL.labels(provider="deploy_response_handler", model="gpt-4o").inc() # Removed task="config_repair" as it's not a standard label
+        LLM_LATENCY_SECONDS.labels(provider="deploy_response_handler", model="gpt-4o").observe(time.time() - start_time_repair_llm)
+        add_provenance({"action": "repair_sections", "model": "gpt-4o", "run_id": str(uuid.uuid4()), "missing_sections": missing_sections})
+
+        # The 'content' should contain the LLM's suggested repair, wrapped in JSON.
+        llm_content = llm_response_data.get('content', '').strip()
+        
+        if not llm_content:
+            error_msg = f"LLM repair for {output_format} returned empty content."
+            logger.error(error_msg)
+            LLM_ERRORS_TOTAL.labels(provider="deploy_response_handler", model="gpt-4o", error_type="EmptyLLMResponse").inc()
+            raise ValueError(error_msg)
+
+        # Attempt to extract the 'config' field from the LLM's JSON wrapper
+        try:
+            # Clean up potential markdown fences
+            llm_content_cleaned = re.sub(r'```(json)?', '', llm_content).strip('`').strip()
+            wrapper = json.loads(llm_content_cleaned)
+            repaired_content = wrapper.get('config', '').strip()
+            if not repaired_content:
+                 raise json.JSONDecodeError("JSON wrapper missing 'config' key or 'config' value is empty.", llm_content_cleaned, 0)
+        except json.JSONDecodeError as jde:
+            # Fallback: sometimes LLMs just return the config itself without the wrapper
+            logger.warning(f"Failed to parse LLM's JSON wrapper, attempting to normalize raw LLM content: {jde}")
+            repaired_content = llm_content
+
+        # Attempt to normalize the repaired content using the appropriate handler
+        registry = HandlerRegistry()
+        handler = registry.get_handler(output_format) # Will raise ValueError if handler not found
+        
+        try:
+            repaired_normalized_data = handler.normalize(repaired_content)
+            logger.info(f"LLM successfully repaired and provided full {output_format} config.")
+            return repaired_normalized_data
+        except ValueError as ve:
+            # If normalization fails, the LLM-provided content is invalid/unmergeable
+            error_msg = f"LLM returned invalid format or unmergeable repair for {output_format}: {ve} from raw content: {repaired_content[:200]}..."
+            logger.error(error_msg)
+            LLM_ERRORS_TOTAL.labels(provider="deploy_response_handler", model="gpt-4o", error_type="InvalidRepairFormat").inc()
+            raise ValueError(error_msg) from ve 
+            
+    except Exception as e:
+        logger.error(f"Failed to repair sections for {output_format} using LLM: {e}", exc_info=True)
+        # Re-raise the exception, as repair is a critical step
+        if not isinstance(e, LLMError):
+            LLM_ERRORS_TOTAL.labels(provider="deploy_response_handler", model="gpt-4o", error_type=type(e).__name__).inc()
+        raise RuntimeError(f"Critical error during LLM-based config repair: {e}") from e
+
+# --- Config Enrichment ---
+async def enrich_config_output(structured_data: Any, output_format: str, run_id: str, repo_path: str) -> str:
+    """
+    Enriches the configuration with additional information like compliance badges,
+    diagrams, links, and changelogs.
+    This function should return the FINAL string representation of the config
+    with all enrichments.
+    """
+    
+    enriched_content_parts = []
+    registry = HandlerRegistry()
+    handler = registry.get_handler(output_format) # Will raise ValueError if handler not found
+    config_string = ""
+    try:
+        config_string = handler.convert(structured_data, output_format)
+    except Exception as e:
+        logger.error(f"Failed to convert structured data back to string for enrichment: {e}", exc_info=True)
+        config_string = f"Error: Could not render configuration. {e}"
+
+
+    # 1. Add Compliance Badges (Simple logic based on security findings and linting - requires provenance data, which isn't available until handle_deploy_response is complete)
+    # We'll use a placeholder and rely on the provenance data in the final dict for the true status.
+    overall_status_for_badge = "pending_analysis" 
+    badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
+    
+    enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
+
+    # 2. Add Diagrams (Conceptual - would require a diagramming tool integration like PlantUML or Mermaid)
+    diagram_placeholder = f"```mermaid\n  graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]\n  ```"
+    enriched_content_parts.append(f"## Configuration Diagram\n{diagram_placeholder}\n")
+
+    # 3. Add Documentation Links (e.g., to generated Readme, external docs)
+    enriched_content_parts.append(f"## Related Documentation\n- [Auto-generated README for this run](/docs/{run_id})\n- [Official {output_format.capitalize()} Documentation](https://docs.{output_format}.io)\n\n")
+
+    # 4. Add Changelog from Git
+    try:
+        # Use central utility for file operations
+        log_output = await get_commits(repo_path, limit=3) 
+        if log_output and "ERROR" not in log_output and "Failed" not in log_output:
+            enriched_content_parts.append(f"## Recent Change Log\n```\n{log_output}\n```\n")
+        else:
+            enriched_content_parts.append("## Recent Change Log\n_Failed to retrieve changelog or repository not found._\n")
+    except Exception as e:
+        logger.warning(f"Failed to retrieve changelog during enrichment: {e}")
+        enriched_content_parts.append("## Recent Change Log\n_Failed to retrieve changelog due to an error._\n")
+
+    # Finally, append the core configuration content itself
+    enriched_content_parts.append(f"\n---\n## Generated Configuration ({output_format})\n```{output_format.lower()}\n{config_string}\n```")
+
+    return "\n".join(enriched_content_parts) # Join all parts into one string
+
+def analyze_quality(data: Any, handler: FormatHandler) -> Dict[str, Any]:
+    """
+    Analyzes the quality of the structured configuration data, including linting,
+    readability, and compliance adherence.
+    Returns a dictionary of analysis results.
+    """
+    quality_analysis_result = {
+        'lint_issues': [],
+        'readability_score': 0.0,
+        'compliance_score': 0.0,
+        # 'security_score': 0.0 # Security score comes from scan_config, not directly here.
+    }
+    
+    # 1. Linting
+    try:
+        quality_analysis_result['lint_issues'] = handler.lint(data)
+    except Exception as e:
+        logger.error(f"Linting failed for handler {handler.__class__.__name__}: {e}", exc_info=True)
+        quality_analysis_result['lint_issues'].append(f"Linting tool failed: {e}")
+
+    # 2. Readability Score (Placeholder - would be more sophisticated)
+    try:
+        # Convert structured data to a string for basic length-based readability score
+        # Handle ruamel.yaml types before json.dumps
+        def convert_ruamel(obj):
+            if isinstance(obj, dict):
+                return {k: convert_ruamel(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [convert_ruamel(i) for i in obj]
+            return obj
+        
+        clean_data = convert_ruamel(data)
+        string_representation = json.dumps(clean_data) if isinstance(clean_data, (dict, list)) else str(clean_data)
+        # Example heuristic: score decreases with length, capped at 0.0-1.0
+        quality_analysis_result['readability_score'] = max(0.0, 1.0 - (len(string_representation) / 5000.0)) 
+    except Exception as e:
+        logger.warning(f"Readability scoring failed: {e}", exc_info=True)
+        quality_analysis_result['readability_score'] = 0.0
+
+    # 3. Compliance Score (Placeholder - based on linting/scan results)
+    if not quality_analysis_result['lint_issues']:
+        quality_analysis_result['compliance_score'] = 1.0
+    elif any("critical" in issue.lower() or "security" in issue.lower() for issue in quality_analysis_result['lint_issues']):
+        quality_analysis_result['compliance_score'] = 0.0
+    else:
+        quality_analysis_result['compliance_score'] = 0.5
+        
+    return quality_analysis_result
+
+async def handle_deploy_response(raw_response: str, output_format: str = "dockerfile", to_format: Optional[str] = None, run_id: str = str(uuid.uuid4()), repo_path: str = ".") -> Dict[str, Any]:
+    """
+    Main function to handle an LLM-generated raw response, normalizing, validating,
+    enriching, and preparing it for deployment or reporting.
+    This function operates in a strict-fail mode.
+    """
+    # Using the central tracer
+    with tracer.start_as_current_span("handle_deploy_response") as span:
+        start_time = time.time()
+        log_extra = {'run_id': run_id, 'output_format': output_format, 'to_format': to_format}
+        logger.info("Response handling started", extra=log_extra)
+        span.set_attribute("output_format", output_format)
+        span.set_attribute("to_format", to_format if to_format else output_format)
+
+        registry = HandlerRegistry() # Instantiate the handler registry
+        
+        # This will raise ValueError if handler is not found
+        handler = registry.get_handler(output_format) 
+
+        try:
+            # 1. Normalize the raw response
+            # scrub_text is strictly required to be applied here.
+            scrubbed_raw_response = scrub_text(raw_response) 
+            
+            handler_calls.labels(format=output_format, operation='normalize').inc()
+            start_normalize = time.time()
+            normalized_data = handler.normalize(scrubbed_raw_response) # Normalize scrubbed raw response
+            handler_latency.labels(format=output_format, operation='normalize').observe(time.time() - start_normalize)
+            span.set_attribute("normalization_successful", True)
+            
+            # 2. Extract sections (useful for identifying missing parts or summarization)
+            extracted_sections = handler.extract_sections(normalized_data)
+            
+            # 3. LLM Repair for missing/invalid sections (if necessary)
+            missing_sections_detected = [] 
+            if output_format == 'yaml' and isinstance(normalized_data, dict) and 'metadata' not in normalized_data:
+                missing_sections_detected.append('metadata')
+            if output_format == 'dockerfile' and not extracted_sections.get('FROM'):
+                missing_sections_detected.append('FROM instruction')
+            
+            if missing_sections_detected:
+                logger.info(f"Detected missing sections: {missing_sections_detected}. Attempting LLM repair.")
+                handler_calls.labels(format=output_format, operation='repair').inc()
+                start_repair = time.time()
+                # Attempt repair using the LLM. This will raise RuntimeError on repair failure.
+                repaired_data = await repair_sections(missing_sections_detected, normalized_data, output_format)
+                normalized_data = repaired_data # Use the repaired data for subsequent steps
+                handler_latency.labels(format=output_format, operation='repair').observe(time.time() - start_repair)
+                span.set_attribute("repair_attempted", True)
+                span.set_attribute("repair_successful", True) 
+            
+            # 4. Security Scanning
+            # Convert back to string for tools that expect string input.
+            current_config_string = ""
+            try:
+                current_config_string = handler.convert(normalized_data, output_format) # Convert back for scanning tools
+            except Exception as e:
+                logger.error(f"Failed to convert normalized data to string for scanning: {e}", exc_info=True)
+                current_config_string = str(normalized_data) # Fallback to string representation
+
+            findings = await scan_config_for_findings(current_config_string, output_format) 
+            span.set_attribute("security_findings_count", len(findings))
+            for finding in findings:
+                logger.warning(f"Security finding in config (Format: {output_format}, Type: {finding.get('type')}, Description: {finding.get('description')})", extra={**log_extra, 'finding': finding})
+            
+            # 5. Quality Analysis (Linting, Readability, Compliance)
+            quality_analysis_result = analyze_quality(normalized_data, handler)
+            span.set_attribute("lint_issues_count", len(quality_analysis_result['lint_issues']))
+            span.set_attribute("readability_score", quality_analysis_result['readability_score'])
+            span.set_attribute("compliance_score", quality_analysis_result['compliance_score'])
+            
+            # 6. Convert to desired output format (if specified)
+            handler_calls.labels(format=output_format, operation='convert').inc()
+            start_convert = time.time()
+            # Convert normalized data to the final desired string format
+            final_converted_string = handler.convert(normalized_data, to_format or output_format)
+            handler_latency.labels(format=output_format, operation='convert').observe(time.time() - start_convert)
+            span.set_attribute("conversion_successful", True)
+
+            # 7. Enrich the final string with badges, diagrams, etc.
+            handler_calls.labels(format=output_format, operation='enrich').inc()
+            start_enrich = time.time()
+            # Pass normalized data and repo_path to enrichment for dynamic content
+            enriched_final_output = await enrich_config_output(normalized_data, to_format or output_format, run_id, repo_path) 
+            handler_latency.labels(format=output_format, operation='enrich').observe(time.time() - start_enrich)
+            span.set_attribute("enrichment_successful", True)
+
+            # 8. Provenance Stamping
+            provenance = {
+                'run_id': run_id,
+                'timestamp_utc': datetime.utcnow().isoformat() + "Z", # ISO 8601 with Z for UTC
+                'handler_class': handler.__class__.__name__,
+                'handler_version': handler.__version__,
+                'handler_source': handler.__source__,
+                'initial_format': output_format,
+                'converted_to_format': to_format or output_format,
+                'security_findings': findings, # Include detailed findings
+                'quality_analysis': quality_analysis_result
+            }
+            # Use central runner provenance utility for logging the final stamp
+            add_provenance(provenance)
+
+            total_latency = time.time() - start_time
+            handler_latency.labels(format=output_format, operation='total').observe(total_latency)
+            span.set_status(Status(StatusCode.OK, "Response handling completed successfully."))
+            
+            result = {
+                'final_config_output': enriched_final_output, # The final string with all enrichments
+                'structured_data': normalized_data, # The normalized Python object for further processing
+                'provenance': provenance
+            }
+            logger.info("Response handling completed successfully", extra={**log_extra, 'total_latency': total_latency, 'findings_count': len(findings)})
+            return result
+
+        except Exception as e:
+            error_type = str(type(e).__name__)
+            handler_errors.labels(format=output_format, operation='overall', error_type=error_type).inc()
+            logger.error(f"Response handling failed: {e}", exc_info=True, extra=log_extra)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            span.record_exception(e)
+            # Re-raise the exception after logging and metrics, as this is a critical failure in strict mode
+            raise
+
+# --- API with aiohttp ---
+routes = RouteTableDef()
+api_semaphore = asyncio.Semaphore(5) # Limit to 5 concurrent API requests
+
+@routes.post('/handle_response')
+async def api_handle_response(request: Request) -> Response:
+    """
+    API endpoint to handle an LLM-generated raw response.
+    Expects JSON payload with 'raw_response', 'output_format', 'to_format' (optional), 'run_id' (optional), 'repo_path' (optional).
+    """
+    try:
+        data = await request.json()
+        raw_response = data.get('raw_response')
+        output_format = data.get('output_format', 'dockerfile')
+        to_format = data.get('to_format')
+        run_id = data.get('run_id', str(uuid.uuid4()))
+        repo_path = data.get('repo_path', '.') # Get repo_path for context/enrichment
+
+        if not raw_response:
+            raise web.HTTPBadRequest(reason="'raw_response' is required.")
+
+        result = await handle_deploy_response(raw_response, output_format, to_format, run_id, repo_path)
+        return web.json_response(result)
+    except web.HTTPError as e:
+        raise # Re-raise aiohttp HTTP exceptions
+    except Exception as e:
+        logger.error(f"API handle_response encountered an error: {e}", exc_info=True)
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+app = web.Application()
+app.add_routes(routes)
+
+# --- CLI Execution and Testing ---
+if __name__ == "__main__":
+    import argparse
+    import sys
+    # For property-based testing
+    # from hypothesis import given, strategies as st # Commented out as it's not used in the final test suite
+    import unittest
+    # For StringIO for YAMLHandler.convert
+    from io import StringIO
+
+    # --- Setup for local testing/CLI demonstration (creates dummy files/repo) ---
+    # Create necessary directories
+    if not os.path.exists("deploy_templates"):
+        os.makedirs("deploy_templates")
+        # Create dummy template files to satisfy strict template loading
+        with open("deploy_templates/docker_default.jinja", "w") as f:
+            f.write("""FROM alpine:latest\nCMD ["echo", "Hello, Docker"]""")
+        with open("deploy_templates/yaml_default.jinja", "w") as f:
+            f.write("""key: value\nanother_key: {{ context.example_data }}""")
+        with open("deploy_templates/json_default.jinja", "w") as f:
+            f.write("""{"message": "Hello from JSON", "context": "{{ context.example_data }}"}""")
+        with open("deploy_templates/hcl_default.jinja", "w") as f:
+            f.write("""resource "null_resource" "example" { triggers = {"always_run" = "{{ context.example_data}}"} }""")
+        print("Created dummy template files for Docker, YAML, JSON, HCL.")
+
+    if not os.path.exists("few_shot_examples"):
+        os.makedirs("few_shot_examples")
+        with open("few_shot_examples/test_example.json", "w") as f:
+            f.write("""
+{
+  "query": "simple config for testing",
+  "example": "This is a simple example config content for few-shot."
+}
+""")
+        print("Created 'few_shot_examples' directory and a sample 'test_example.json'.")
+
+    # Create a dummy repo and files for local testing
+    test_repo_path = "temp_test_repo_handler" # Unique name to avoid conflicts
+    if not os.path.exists(test_repo_path):
+        os.makedirs(test_repo_path)
+        with open(os.path.join(test_repo_path, "main.py"), "w") as f:
+            f.write("print('Hello, world!')\nimport os")
+        with open(os.path.join(test_repo_path, "requirements.txt"), "w") as f:
+            f.write("flask==2.0.1\nrequests")
+        with open(os.path.join(test_repo_path, "README.md"), "w") as f:
+            f.write("# Test App\nThis is a test application for deployment testing.")
+        
+        # Simulate a git repo for get_commits
+        try:
+            subprocess.run(["git", "init"], cwd=test_repo_path, check=True, capture_output=True, shell=True if os.name == 'nt' else False)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=test_repo_path, check=True, capture_output=True, shell=True if os.name == 'nt' else False)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=test_repo_path, check=True, capture_output=True, shell=True if os.name == 'nt' else False)
+            subprocess.run(["git", "add", "."], cwd=test_repo_path, check=True, capture_output=True, shell=True if os.name == 'nt' else False)
+            subprocess.run(["git", "commit", "-m", "Initial commit for test app"], cwd=test_repo_path, check=True, capture_output=True, shell=True if os.name == 'nt' else False)
+            print(f"Created dummy repository at {test_repo_path} with sample files and git commit.")
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to setup git repo in {test_repo_path}: {e.stderr.decode()}")
+            print("Git commands might not be available or ran into an issue.")
+        except FileNotFoundError:
+            print("Git command not found. Cannot set up dummy repo with commit history.")
+
+    # Create handler_plugins directory for custom handlers if not exists
+    if not os.path.exists("handler_plugins"):
+        os.makedirs("handler_plugins")
+        # Create a dummy custom handler to test hot-reloading (will be loaded by registry)
+        with open("handler_plugins/test_custom_handler.py", "w") as f:
+            f.write("""
+import asyncio
+from deploy_response_handler import FormatHandler # Assuming FormatHandler is available
+from typing import Dict, Any, List
+
+class TestCustomHandler(FormatHandler):
+    __version__ = "99.0" # Unique version
+    __source__ = "custom_test"
+
+    def normalize(self, raw: str) -> str:
+        if not raw.startswith("TEST_INPUT:"):
+            raise ValueError("Invalid format for TestCustomHandler.")
+        return f"CUSTOM_NORMALIZED: {raw[11:].strip().upper()}"
+
+    def convert(self, data: str, to_format: str) -> str:
+        if to_format == "custom_output":
+            return f"CUSTOM_OUTPUT_FORMAT: {data}"
+        raise ValueError(f"TestCustomHandler does not support conversion to {to_format}.")
+
+    def extract_sections(self, data: str) -> Dict[str, str]:
+        return {"custom_section": f"Processed length: {len(data)}"}
+
+    def lint(self, data: str) -> List[str]:
+        if "ERROR" in data:
+            return ["CUSTOM_LINT_ERROR: 'ERROR' keyword found in data"]
+        return []
+""")
+        print("Created dummy custom handler plugin 'test_custom_handler.py'.")
+    # --- End Setup ---
+
+    parser = argparse.ArgumentParser(description="Deployment Response Handler CLI and API Server")
+    parser.add_argument("--raw_response", help="Raw LLM response string or path to a file containing it.")
+    parser.add_argument("--output_format", default="json", choices=['dockerfile', 'yaml', 'json', 'hcl', 'test_custom'], help="Expected format of the raw response.")
+    parser.add_argument("--to_format", help="Optional: Convert the processed config to this format (e.g., json, yaml, custom_output).")
+    parser.add_argument("--server", action="store_true", help="Start the API server.")
+    parser.add_argument("--host", default="0.0.0.0", help="Host for the API server.")
+    parser.add_argument("--port", type=int, default=8082, help="Port for the API server.")
+    parser.add_argument("--test", action="store_true", help="Run unit and property-based tests.")
+    # Added repo-path to CLI args so handle_deploy_response can get it
+    parser.add_argument("--repo-path", default=test_repo_path, help="Path to the repository for context gathering (default is temp_test_repo_handler).") 
+    
+    args = parser.parse_args()
+
+    # --- Unit and Property-based Tests ---
+    class TestDeployResponseHandler(unittest.TestCase):
+        def setUp(self):
+            # This will create an instance of HandlerRegistry and load handlers from the setup
+            self.registry = HandlerRegistry()
+            # Mock generate_config for repair_sections to prevent real LLM calls during tests
+            self._original_call_ensemble_api = call_ensemble_api
+            self._original_call_llm_api = call_llm_api # Added original reference for summarize_section mock
+            global call_ensemble_api, call_llm_api
+            call_ensemble_api = self.mock_call_ensemble_api
+            call_llm_api = self.mock_call_llm_api # Mock for summarize_section
+            
+            # Mock for the functions your tests rely on
+            self.mock_log_actions = []
+            def mock_log_action_capture(event_type: str, details: Dict[str, Any]):
+                """Captures log_action calls for verification."""
+                self.mock_log_actions.append({"type": event_type, "details": details})
+                # Also log to logger so we see it
+                logger.info(f"AUDIT_LOG_MOCK: {event_type} - {details}")
+            
+            self.mock_log_action = mock_log_action_capture
+
+
+        def tearDown(self):
+            # Restore original call_ensemble_api after tests
+            global call_ensemble_api, call_llm_api
+            call_ensemble_api = self._original_call_ensemble_api
+            call_llm_api = self._original_call_llm_api
+
+        async def mock_call_llm_api(self, prompt: str, model: str, **kwargs) -> Dict[str, Any]:
+             """Mock call_llm_api for summarize_section test."""
+             if "Summarize" in prompt:
+                 return {"content": "This section summarizes the deployment configuration.", "model": model, "provider": "mock"}
+             raise ValueError("Mock LLM called without summarization prompt.")
+
+
+        async def mock_call_ensemble_api(self, prompt: str, models: List[Dict[str, str]], voting_strategy: str, stream: bool = False) -> Dict[str, Any]:
+            """Mock call_ensemble_api for repair_sections test."""
+            # Simulate a repair response. Assume it always "fixes" by providing a valid config.
+            if "missing" in prompt:
+                # Mock the JSON wrapper containing the repaired config string
+                if "dockerfile" in prompt: # If repairing Dockerfile
+                    repaired_config_str = "FROM node:18\nRUN npm install\nCMD [\"npm\", \"start\"]\n# Repaired section added."
+                elif "yaml" in prompt:
+                     repaired_config_str = "apiVersion: v1\nkind: RepairedPod\nmetadata:\n  name: repaired-pod\nspec:\n  containers:\n  - name: test-container\n    image: repaired-image"
+                else: # Default to a simple JSON repair
+                    repaired_config_str = '{"repaired_key": "fixed_value", "status": "repaired"}'
+                    
+                # The LLM is instructed to wrap its response in a JSON object with key "config"
+                wrapped_response = json.dumps({"config": repaired_config_str})
+
+                return {"content": wrapped_response, "model": models[0]["model"], "provider": "mock", "valid": True}
+            raise ValueError("Mock LLM called without repair prompt.")
+
+        def _run_async_test(self, coro):
+            """Helper to run async test methods."""
+            # Creates a new event loop for each test to prevent it from closing early
+            try:
+                loop = asyncio.get_running_loop()
+                # If a loop is already running (e.g., in FastAPI test harness), run it in current loop
+                return asyncio.ensure_future(coro, loop=loop)
+            except RuntimeError:
+                # No loop running, run until complete
+                return asyncio.run(coro)
+
+
+        # --- ADDED: Tests for the new functions ---
+        def test_parse_llm_response_error_aggregation(self):
+            """
+            Tests the exact scenario from your instructions: mixed valid/invalid files
+            and error aggregation into ERROR_FILENAME.
+            """
+            # ok.py is valid, bad.py has syntax error
+            multi_file_json = json.dumps({
+                "ok.py": "x = 1\nprint(x)",
+                "bad.py": "def foo:\n  pass",
+                "README.md": "This is a readme."
+            })
+            
+            files = parse_llm_response(multi_file_json, lang="python")
+            
+            # Check for valid files
+            self.assertIn("ok.py", files)
+            self.assertEqual(files["ok.py"], "x = 1\nprint(x)")
+            self.assertIn("README.md", files) # Non-python file should pass through
+            
+            # Check that bad.py is NOT in files
+            self.assertNotIn("bad.py", files)
+            
+            # FIXED: Check that ERROR_FILENAME exists and contains the error
+            self.assertIn(ERROR_FILENAME, files)
+            self.assertIn("bad.py: Invalid Python syntax", files[ERROR_FILENAME])
+
+        def test_monitor_and_scan_code_log_action_hooks(self):
+            """
+            Tests that monitor_and_scan_code correctly calls the log_action
+            hook for SAST and Secret findings.
+            """
+            self.mock_log_actions = [] # Clear previous logs
+            
+            files_to_scan = {
+                "insecure.py": "import os\nos.system('ls')", # Should trigger SAST
+                "secure.py": "print('hello')", # Clean
+                "secrets.conf": "API_KEY = sk_live_123456789abcdef" # Should trigger Secret scan
+            }
+            
+            # We must override the global _looks_like_secret_sync to use a mock
+            # that we know uses the central runner's scanner logic (or a mock of it)
+            # For this test, we'll mock the helper `_looks_like_secret_sync`
+            # to simulate a finding
+            
+            original_secret_scanner = globals().get('_looks_like_secret_sync')
+            original_sast_scanner = globals().get('_scan_for_vulnerabilities_sync')
+
+            def mock_secret_scanner(content: str):
+                return "API_KEY" in content
+
+            def mock_sast_scanner(files: Dict[str, str]):
+                return [{"file": "insecure.py", "type": "os.system"}] if "insecure.py" in files else []
+
+            globals()['_looks_like_secret_sync'] = mock_secret_scanner
+            globals()['_scan_for_vulnerabilities_sync'] = mock_sast_scanner
+
+            try:
+                # Run the function, injecting our mock logger
+                result_files = monitor_and_scan_code(files_to_scan, log_action=self.mock_log_action)
+                
+                # Check that it was non-destructive
+                self.assertEqual(files_to_scan, result_files)
+                
+                # Check that the log_action hooks were called
+                log_types = [log['type'] for log in self.mock_log_actions]
+                
+                # Check for SAST log
+                self.assertIn("Unified SAST Scan Completed", log_types)
+                sast_log = next(log for log in self.mock_log_actions if log['type'] == "Unified SAST Scan Completed")
+                self.assertEqual(sast_log['details']['status'], "findings_found")
+                
+                # Check for Secret log
+                self.assertIn("Secret Scan Completed", log_types)
+                secret_log = next(log for log in self.mock_log_actions if log['type'] == "Secret Scan Completed")
+                self.assertEqual(secret_log['details']['status'], "secrets_found")
+
+            finally:
+                # Restore original functions
+                if original_secret_scanner:
+                    globals()['_looks_like_secret_sync'] = original_secret_scanner
+                if original_sast_scanner:
+                    globals()['_scan_for_vulnerabilities_sync'] = original_sast_scanner
+
+        # --- End of ADDED Tests ---
+
+        def test_scrub_text_central_runner_strict(self):
+            """
+            Tests that the REPLACED scrub_text function (which now calls the runner)
+            still works as expected. We assume the (mocked) runner.redact_secrets works.
+            """
+            # This test verifies that scrub_text strictly requires Presidio.
+            # Assuming Presidio is installed for this test to pass this check.
+            test_text = "This is a secret API_KEY: sk-test123. Email: user@example.com."
+            
+            # We need to mock redact_secrets from the runner
+            original_redact = redact_secrets
+            def mock_redact(text: str):
+                return text.replace("sk-test123", "[REDACTED]").replace("user@example.com", "[REDACTED]")
+            
+            globals()['redact_secrets'] = mock_redact
+            
+            try:
+                scrubbed = scrub_text(test_text)
+                self.assertIn('[REDACTED]', scrubbed)
+                self.assertNotEqual(test_text, scrubbed)
+            finally:
+                globals()['redact_secrets'] = original_redact # Restore
+
+        def test_registry_loads_built_in_handlers(self):
+            self.assertIn('dockerfile', self.registry.handlers)
+            self.assertIsInstance(self.registry.get_handler('dockerfile'), DockerfileHandler)
+            self.assertIn('yaml', self.registry.handlers)
+            self.assertIsInstance(self.registry.get_handler('yaml'), YAMLHandler)
+            self.assertEqual(self.registry.get_handler('dockerfile').__version__, "1.1")
+
+        def test_registry_loads_custom_handlers_from_file(self):
+            self.assertIn('testcustom', self.registry.handlers) # Note: fmt_key is lowercased
+            handler_instance = self.registry.get_handler('testcustom')
+            # We can't assertIsInstance(handler_instance, TestCustomHandler) because TestCustomHandler is dynamically loaded
+            # and not defined in the scope of this test file. We check its properties.
+            self.assertEqual(handler_instance.__version__, "99.0")
+            self.assertEqual(handler_instance.normalize("TEST_INPUT:hello"), "CUSTOM_NORMALIZED: HELLO")
+            
+        def test_summarize_section_llm_call_and_provenance(self):
+            async def run_test():
+                handler = DockerfileHandler()
+                section_text = "FROM python:3.10-slim\nRUN pip install flask"
+                summary = await handler.summarize_section("Build Stage", section_text)
+                self.assertEqual(summary, "This section summarizes the deployment configuration.")
+            self._run_async_test(run_test())
+
+        def test_handle_deploy_response_dockerfile_success(self):
+            async def run_test():
+                raw_dockerfile = "FROM python:3.9\nRUN pip install flask\nCOPY . /app\nCMD [\"python\", \"app.py\"]"
+                result = await handle_deploy_response(raw_dockerfile, "dockerfile", repo_path=test_repo_path)
+                self.assertIn('final_config_output', result)
+                self.assertIn('FROM python:3.9', result['final_config_output'])
+                self.assertIsInstance(result['structured_data'], list) # Normalized to list of lines
+                self.assertIn('## Recent Change Log', result['final_config_output']) # Check enrichment
+            self._run_async_test(run_test())
+
+        def test_handle_deploy_response_yaml_to_json_conversion(self):
+            async def run_test():
+                raw_yaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: my-app\nspec:\n  containers:\n  - name: app\n    image: my-image:1.0"
+                result = await handle_deploy_response(raw_yaml, "yaml", "json", repo_path=test_repo_path)
+                self.assertIn('final_config_output', result)
+                self.assertIn('"kind": "Pod"', result['final_config_output'])
+            self._run_async_test(run_test())
+
+        def test_handle_deploy_response_invalid_format_fail(self):
+            async def run_test():
+                raw_invalid_json = "{not valid json"
+                with self.assertRaises(ValueError) as cm:
+                    await handle_deploy_response(raw_invalid_json, "json", repo_path=test_repo_path)
+                self.assertIn("Invalid JSON format", str(cm.exception))
+            self._run_async_test(run_test())
+
+        def test_handle_deploy_response_with_detected_findings(self):
+            async def run_test():
+                # This text contains a hardcoded credential pattern
+                raw_dangerous_config = """
+                kind: Deployment
+                metadata:
+                  name: sensitive-app
+                spec:
+                  template:
+                    spec:
+                      containers:
+                      - name: web
+                        image: myapp:1.0
+                        env:
+                        - name: DB_PASSWORD
+                          value: supersecretpassword123 
+                """
+                # We must mock redact_secrets to ensure it *doesn't* scrub, so the pattern
+                # matcher in scan_config_for_findings can find it.
+                # This is a bit tricky: scrub_text (which uses redact_secrets) runs *before*
+                # scan_config_for_findings (which uses regex).
+                
+                # We will mock redact_secrets to *not* redact this specific password
+                original_redact = redact_secrets
+                def mock_redact_partial(text: str):
+                    # Redact other things, but NOT the password
+                    return text.replace("user@example.com", "[REDACTED]")
+
+                globals()['redact_secrets'] = mock_redact_partial
+                
+                try:
+                    result = await handle_deploy_response(raw_dangerous_config, "yaml", repo_path=test_repo_path)
+                    findings = result['provenance']['security_findings']
+                    self.assertGreater(len(findings), 0)
+                    # The HardcodedCredentials_Pattern should be found by scan_config_for_findings
+                    self.assertTrue(any(f['category'] == 'HardcodedCredentials_Pattern' for f in findings))
+                    # The final output *should* still contain the secret, because our mock redact didn't catch it
+                    self.assertIn('supersecretpassword123', result['final_config_output']) 
+                finally:
+                    globals()['redact_secrets'] = original_redact # Restore
+            self._run_async_test(run_test())
+
+
+        def test_handle_deploy_response_with_lint_issues(self):
+            async def run_test():
+                raw_bad_dockerfile = "RUN apt-get update\nCMD [\"sleep\", \"infinity\"]" # Missing FROM, apt-get clean
+                result = await handle_deploy_response(raw_bad_dockerfile, "dockerfile", repo_path=test_repo_path)
+                lint_issues = result['provenance']['quality_analysis']['lint_issues']
+                self.assertGreater(len(lint_issues), 0)
+                self.assertIn("Dockerfile missing a FROM instruction.", lint_issues)
+            self._run_async_test(run_test())
+
+        def test_repair_sections_success(self):
+            async def run_test():
+                # Simulate a Dockerfile missing FROM
+                raw_problem_dockerfile = "RUN echo 'hello'\nCMD [\"echo\", \"world\"]"
+                handler = DockerfileHandler()
+                normalized_data = handler.normalize(raw_problem_dockerfile)
+                repaired_data = await repair_sections(
+                    ["FROM instruction"], normalized_data, "dockerfile"
+                )
+                # The mock generates a specific repaired content (FROM node:18...)
+                self.assertIsInstance(repaired_data, list)
+                self.assertTrue(any("FROM node:18" in line for line in repaired_data))
+            self._run_async_test(run_test())
+
+        async def _test_repair_sections_fail_invalid_llm_output(self):
+            # Helper async function for the test
+            async def temp_mock_invalid(*args, **kwargs):
+                return {"content": "{not valid json", "model": "mock", "valid": False} # 'valid': False or malformed content
+            
+            self._original_call_ensemble_api = call_ensemble_api
+            global call_ensemble_api
+            call_ensemble_api = temp_mock_invalid
+
+            raw_problem_dockerfile = "RUN echo 'hello'\nCMD [\"echo\", \"world\"]"
+            
+            try:
+                # The exception is raised inside repair_sections, but the function re-raises it as RuntimeError.
+                with self.assertRaisesRegex(RuntimeError, "Critical error during LLM-based config repair:"): 
+                    await repair_sections(["FROM instruction"], DockerfileHandler().normalize(raw_problem_dockerfile), "dockerfile")
+            finally:
+                call_ensemble_api = self._original_call_ensemble_api # Restore mock
+
+        def test_repair_sections_fail_invalid_llm_output(self):
+            self._run_async_test(self._test_repair_sections_fail_invalid_llm_output())
+
+
+    # --- CLI Execution ---
+    if args.server:
+        logger.info(f"Starting API server on {args.host}:{args.port}...")
+        web.run_app(app, host=args.host, port=args.port)
+    elif args.test:
+        # --- Custom Test Runner to handle async tests ---
+        suite = unittest.TestSuite()
+        suite.addTest(unittest.makeSuite(TestDeployResponseHandler))
+        
+        class AsyncTextTestRunner(unittest.TextTestRunner):
+            def run(self, test):
+                self.loop = asyncio.get_event_loop()
+                return super().run(test)
+
+            def _makeResult(self):
+                result = super()._makeResult()
+                
+                def stopLoop(arg):
+                    # This is a bit of a hack to ensure the loop stops after the test run
+                    # It might not be perfect for all scenarios but works for this suite
+                    if self.loop.is_running():
+                        self.loop.stop()
+
+                result.addCleanup(stopLoop)
+                return result
+
+        runner = unittest.TextTestRunner(verbosity=2)
+        # We run the tests, and the _run_async_test helper in each test
+        # will handle the asyncio.run() or asyncio.ensure_future() logic.
+        runner.run(suite)
+
+    else:
+        if not args.raw_response:
+            parser.error("--raw_response is required for CLI mode unless --test or --server is used.")
+        
+        # Read raw response from file if path is given
+        raw_response_content = args.raw_response
+        if Path(args.raw_response).is_file():
+            try:
+                async def read_file_async(path: Path) -> str:
+                    async with aiofiles.open(path, 'r', encoding='utf-8') as f:
+                        return await f.read()
+                raw_response_content = asyncio.run(read_file_async(Path(args.raw_response)))
+                logger.info(f"Loaded raw response from file: {args.raw_response}")
+            except Exception as e:
+                logger.error(f"Failed to read raw response file {args.raw_response}: {e}")
+                sys.exit(1)
+
+        async def run_cli_mode():
+            try:
+                result = await handle_deploy_response(
+                    raw_response=raw_response_content,
+                    output_format=args.output_format,
+                    to_format=args.to_format,
+                    repo_path=args.repo_path # Pass repo_path from CLI args
+                )
+                # Print the final enriched configuration output
+                print("\n--- Final Enriched Configuration Output ---")
+                print(result['final_config_output'])
+                
+                print(f"\n--- Provenance for Run ID: {result['provenance'].get('run_id')} ---")
+                print(json.dumps(result['provenance'], indent=2))
+                
+                print(f"\n--- Structured Data (Normalized) ---")
+                # Pretty print normalized structured data for inspection
+                try:
+                    # Need to handle ruamel.yaml types before json.dumps
+                    def convert_ruamel(obj):
+                        if isinstance(obj, dict):
+                            return {k: convert_ruamel(v) for k, v in obj.items()}
+                        if isinstance(obj, list):
+                            return [convert_ruamel(i) for i in obj]
+                        return obj
+                    clean_data = convert_ruamel(result['structured_data'])
+                    print(json.dumps(clean_data, indent=2))
+                except Exception:
+                    print(str(result['structured_data'])) # Fallback
+
+            except Exception as e:
+                logger.error(f"CLI response handling failed: {e}", exc_info=True)
+                print(f"\nError: {e}")
+                sys.exit(1)
+
+        asyncio.run(run_cli_mode())

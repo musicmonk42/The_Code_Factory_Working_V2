@@ -1,0 +1,274 @@
+/*=====================================================================
+  AI Generator TUI – Industry-Grade Textual Styles
+  =====================================================================
+  This stylesheet provides a polished, accessible, and responsive UI
+  for the MainApp TUI. All colors, spacing, and typography follow
+  Textual’s best practices and are fully theme-aware (dark/light).
+  =====================================================================*/
+
+@use "sass:meta";
+
+/* ------------------------------------------------------------------
+   Global App & Screen
+   ------------------------------------------------------------------ */
+Screen {
+    background: $background;
+    color: $text;
+    font-family: $font-family;
+    font-size: 14px;
+}
+
+/* Dark / Light mode toggle – Textual will swap $panel-dark / $panel */
+Screen.-dark-mode {
+    background: $panel-dark;
+    color: $text;
+}
+
+/* ------------------------------------------------------------------
+   Layout Containers
+   ------------------------------------------------------------------ */
+#runner_container,
+#parser_container,
+#clarifier_container,
+#metrics_container {
+    layout: vertical;
+    margin: 1 2;
+    padding: 1;
+    border: tall $primary;
+    background: $panel;
+    width: 100%;
+    min-height: 12;
+}
+
+/* TabbedContent – consistent tab styling */
+TabbedContent {
+    border: tall $primary;
+    background: $panel;
+    margin: 1 0;
+}
+
+TabbedContent > TabbedContent__tab-bar {
+    background: $panel;
+    border-bottom: solid $primary;
+    padding: 0 1;
+}
+
+TabbedContent > TabbedContent__tab-bar > Button {
+    color: $text-muted;
+    background: transparent;
+    border: none;
+    margin: 0 1;
+    padding: 0 1;
+    text-style: bold;
+}
+
+TabbedContent > TabbedContent__tab-bar > Button.-active {
+    color: $accent;
+    background: $panel;
+    border-bottom: solid $accent 2;
+    text-style: bold;
+}
+
+/* ------------------------------------------------------------------
+   Header & Footer
+   ------------------------------------------------------------------ */
+Header {
+    background: $primary;
+    color: $text;
+    dock: top;
+    height: 3;
+    padding: 0 2;
+    text-align: center;
+    text-style: bold;
+}
+
+Footer {
+    background: $primary;
+    color: $text;
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+    text-style: italic;
+}
+
+/* ------------------------------------------------------------------
+   Input Fields
+   ------------------------------------------------------------------ */
+Input {
+    border: round $primary;
+    background: $surface;
+    color: $text;
+    padding: 0 1;
+    margin: 1 0;
+    width: 100%;
+    height: 3;
+}
+
+Input:focus {
+    border: round $accent;
+    background: $surface;
+    box-shadow: inset 0 0 0 1 $accent;
+}
+
+/* ------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------ */
+Button {
+    background: $primary;
+    color: $text;
+    border: round $primary;
+    margin: 1 0;
+    height: 3;
+    width: 20;
+    text-style: bold;
+}
+
+Button:hover {
+    background: $primary-foreground;
+}
+
+Button.-active,
+Button:focus {
+    background: $accent;
+    border: round $accent;
+}
+
+/* ------------------------------------------------------------------
+   Labels (Errors, Status)
+   ------------------------------------------------------------------ */
+Label {
+    margin: 0 0 1 0;
+    height: 1;
+    color: $text;
+}
+
+#runner_error,
+#parser_error,
+#clarifier_error,
+#metrics_error {
+    color: $error;
+    text-style: italic;
+}
+
+/* ------------------------------------------------------------------
+   RichLog – Console Output
+   ------------------------------------------------------------------ */
+#log_output {
+    height: 12;
+    border: tall $primary;
+    background: $panel;
+    margin: 1 0;
+    padding: 1;
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
+}
+
+/* Syntax highlighting in logs (optional but production-grade) */
+#log_output .log-level-DEBUG    { color: $text-muted; }
+#log_output .log-level-INFO     { color: $success; }
+#log_output .log-level-WARNING  { color: $warning; }
+#log_output .log-level-ERROR    { color: $error; }
+#log_output .log-level-CRITICAL { color: $error; text-style: bold; }
+
+/* ------------------------------------------------------------------
+   ProgressBar
+   ------------------------------------------------------------------ */
+ProgressBar {
+    height: 1;
+    margin: 1 0;
+    background: $surface;
+    color: $accent;
+}
+
+#runner_progress {
+    height: 1;
+    margin: 1 0;
+    background: $surface;
+    color: $accent;
+}
+
+/* ------------------------------------------------------------------
+   DataTable (Clarifier)
+   ------------------------------------------------------------------ */
+#clarifier_table {
+    border: tall $primary;
+    background: $panel;
+    margin: 1 0;
+    height: 8;
+    header-background: $primary;
+    header-color: $text;
+    row-hover-background: $surface;
+}
+
+/* ------------------------------------------------------------------
+   Select (Metrics Interval)
+   ------------------------------------------------------------------ */
+Select {
+    border: round $primary;
+    background: $surface;
+    color: $text;
+    margin: 1 0;
+    width: 20;
+    height: 3;
+}
+
+Select:focus {
+    border: round $accent;
+}
+
+/* ------------------------------------------------------------------
+   Static (Metrics Display)
+   ------------------------------------------------------------------ */
+#metrics_display {
+    background: $panel;
+    border: tall $primary;
+    padding: 1;
+    margin: 1 0;
+    height: 10;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+/* ------------------------------------------------------------------
+   Markdown (Help Screen)
+   ------------------------------------------------------------------ */
+Markdown {
+    padding: 1 2;
+    background: $panel;
+    border: tall $primary;
+    margin: 1;
+    color: $text;
+    link-color: $accent;
+    link-hover-color: $accent-foreground;
+}
+
+/* ------------------------------------------------------------------
+   Focus & Accessibility
+   ------------------------------------------------------------------ */
+*:focus {
+    outline: 1 solid $accent;
+}
+
+/* High-contrast mode support */
+.-high-contrast {
+    $primary: #00ff00;
+    $accent: #ffff00;
+    $error: #ff0000;
+    $warning: #ffaa00;
+    $success: #00ff00;
+}
+
+/* ------------------------------------------------------------------
+   Responsive Breakpoints (Textual 0.50+)
+   ------------------------------------------------------------------ */
+@media (width <= 80) {
+    #runner_container,
+    #parser_container,
+    #clarifier_container,
+    #metrics_container {
+        margin: 1;
+    }
+    Button {
+        width: 100%;
+    }
+}

@@ -1,0 +1,15 @@
+backend_configs:
+  aws_batch_job_definition: your-aws-batch-job-definition
+  aws_batch_job_queue: your-aws-batch-queue
+  aws_batch_s3_bucket: your-s3-results-bucket
+  kubernetes_image: your-k8s-sim-image:latest
+  kubernetes_namespace: default
+default_backend: local_asyncio
+max_local_workers: null
+rl_tuner:
+  checkpoint_dir: rl_tuner_checkpoint
+  enabled: false
+  heartbeat_timeout_seconds: 120
+  max_concurrency_limit: 100
+  reward_log: rl_rewards.log
+  training_interval_seconds: 30

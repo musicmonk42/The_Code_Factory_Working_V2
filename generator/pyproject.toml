@@ -1,0 +1,25 @@
+[tool.pytest.ini_options]
+pythonpath = [".", "main", "runner", "intent_parser"]
+asyncio_mode = "auto"
+testpaths = ["main/tests", "runner/tests", "intent_parser/tests"]  # Add if subdir tests exist
+python_files = ["test_*.py"]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "generator"
+version = "0.1.0"
+
+[tool.setuptools]
+packages = [
+    "agents",
+    "audit_log",
+    "clarifier",
+    "intent_parser",
+    "main",
+    "providers",
+    "runner",
+    "utils"
+]

@@ -1,0 +1,7 @@
+roles:
+  - name: admin
+    permissions:
+      - action: "run:agent"
+        resource: "*"
+user_roles:
+  thego: ["admin"]

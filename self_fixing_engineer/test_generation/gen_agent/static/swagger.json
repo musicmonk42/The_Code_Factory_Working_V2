@@ -1,0 +1,157 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Test Generation API",
+    "version": "3.0"
+  },
+  "paths": {
+    "/generate-tests": {
+      "post": {
+        "summary": "Generate tests from spec",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "spec": {
+                    "type": "string"
+                  },
+                  "session": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "language": {
+                    "enum": [
+                      "Python",
+                      "JavaScript",
+                      "TypeScript",
+                      "Java",
+                      "Rust"
+                    ]
+                  },
+                  "framework": {
+                    "enum": [
+                      "pytest",
+                      "jest",
+                      "junit",
+                      "cargo",
+                      "unittest",
+                      "go test"
+                    ]
+                  },
+                  "spec_format": {
+                    "enum": [
+                      "gherkin",
+                      "openapi",
+                      "user_story"
+                    ]
+                  }
+                },
+                "required": [
+                  "spec",
+                  "language",
+                  "framework",
+                  "spec_format"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "tests": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "metrics": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Health status"
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "summary": "System status",
+        "responses": {
+          "200": {
+            "description": "Status and version"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus metrics",
+        "responses": {
+          "200": {
+            "description": "Metrics"
+          }
+        }
+      }
+    }
+  }
+}
