@@ -26,6 +26,9 @@ import subprocess
 import hashlib # For prompt hashing
 import ast # For parsing Python AST for imports
 import tiktoken # For token counting
+from datetime import datetime # *** FIX: Added missing import ***
+import aiofiles # <--- ADDED FIX
+from pathlib import Path # <--- ADDED FIX
 
 from typing import List, Dict, Callable, Any, Optional, AsyncGenerator, Union, Tuple
 import glob
@@ -48,6 +51,7 @@ from runner.runner_logging import logger, add_provenance
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS, LLM_TOKEN_INPUT_TOTAL, LLM_TOKEN_OUTPUT_TOTAL
 from runner.runner_errors import LLMError
 from runner.runner_file_utils import get_commits as runner_get_commits # Alias to avoid name clash
+from opentelemetry.trace.status import Status, StatusCode # *** FIX: Added missing import ***
 # -----------------------------------
 
 # --- Strict External Dependencies ---
@@ -199,13 +203,15 @@ async def get_language(content: str) -> str:
     """
     Detects the programming language of content based on simple heuristics.
     """
-    if "import " in content and ("def " in content or "class " in content):
+    # <--- FIX: Relaxed Python detection logic
+    if "import " in content or "def " in content or "class " in content:
         return "python"
     elif ("function " in content or "const " in content or "let " in content or "var " in content) and (";" in content or "}" in content):
         return "javascript"
     elif "package " in content and "func " in content:
         return "go"
-    elif "fn " in content and "mod " in content and "use " in content:
+    # <--- FIX: Relaxed Rust detection logic
+    elif "fn " in content or "mod " in content or "use " in content:
         return "rust"
     elif "public class " in content or "import java." in content or "public static void main" in content:
         return "java"
@@ -388,16 +394,26 @@ class DocGenPromptAgent:
     Agent responsible for building context-rich LLM prompts for documentation generation.
     REFACTORED: Uses central runner LLM client for meta-LLM calls.
     """
-    def __init__(self, few_shot_dir: str = "few_shot_examples", repo_path: str = "."):
+    def __init__(self, languages: Optional[List[str]] = None, template_dir=None, few_shot_dir=None, repo_path: str = ".", **kwargs):
+        # Integration test compatibility
+        self.template_dir = template_dir
+        self.few_shot_dir = few_shot_dir if few_shot_dir is not None else "few_shot_examples"
+        self.languages = languages
         self.embedding_model: Optional[SentenceTransformer] = None
         try:
             self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         except Exception as e:
             logger.warning(f"Could not load SentenceTransformer for few-shot retrieval: {e}. Few-shot retrieval will be disabled.")
-            
-        self.template_registry = PromptTemplateRegistry()
-        self.few_shot_examples = self._load_few_shot(few_shot_dir)
-        self.repo_path = Path(repo_path)
+        
+        self.repo_path = Path(repo_path) # *** FIX: Set repo_path first ***
+
+        # *** FIX: Pass the repo-relative path to the template registry ***
+        template_dir = self.repo_path / "prompt_templates"
+        self.template_registry = PromptTemplateRegistry(plugin_dir=str(template_dir))
+        
+        # *** FIX: Use repo_path to build full path for few-shot examples ***
+        few_shot_path = self.repo_path / self.few_shot_dir # <--- FIX 1 APPLIED HERE
+        self.few_shot_examples = self._load_few_shot(str(few_shot_path))
         
         if not self.repo_path.exists() or not self.repo_path.is_dir():
             raise ValueError(f"Repository path does not exist or is not a directory: {repo_path}")
@@ -410,12 +426,12 @@ class DocGenPromptAgent:
         Loads few-shot examples from JSON files in the specified directory.
         """
         examples = []
-        if not os.path.exists(few_shot_dir):
+        if not os.path.exists(few_shot_dir): # *** FIX: Check full path ***
             os.makedirs(few_shot_dir)
             logger.info(f"Created few-shot examples directory: {few_shot_dir}.")
             return examples
             
-        for file in glob.glob(f"{few_shot_dir}/*.json"):
+        for file in glob.glob(f"{few_shot_dir}/*.json"): # *** FIX: Use full path ***
             try:
                 with open(file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -693,6 +709,21 @@ class DocGenPromptAgent:
                 
                 fallback_prompt = scrub_text(f"Generate {doc_type} documentation for files: {', '.join(target_files)}. Instructions: {instructions or 'None'}. Due to an internal error, full context was not available. Please generate comprehensive and accurate documentation. Include an introduction, installation, usage, API reference, and a conclusion. Output in Markdown format.")
                 raise RuntimeError(f"Critical error during prompt generation: {e}. Fallback prompt provided but indicates severe issue.") from e
+
+    async def build_doc_prompt(self, file_path: str, target: str, instructions: str = None, **kwargs) -> str:
+        """
+        Integration test compatibility method - alias for get_doc_prompt.
+        """
+        # FIX 2 APPLIED HERE
+        return await self.get_doc_prompt(
+            # source_code="",  # Will be read internally  <--- REMOVED
+            # file_path=file_path,                          <--- REMOVED
+            doc_type=target,
+            target_files=[file_path], # <--- FIX: Pass file_path as a list to target_files
+            # language=target,                              <--- REMOVED
+            instructions=instructions,
+            **kwargs
+        )
 
     async def batch_get_doc_prompt(self, requests: List[Dict[str, Any]], concurrency_limit: int = 5) -> List[str]:
         """
@@ -1064,4 +1095,3 @@ def my_function(param1: str) -> str:
             print("\n--- End Generated Prompt ---")
 
     asyncio.run(run_cli_mode())
-}

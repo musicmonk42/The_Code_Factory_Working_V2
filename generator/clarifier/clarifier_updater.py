@@ -112,7 +112,7 @@ try:
     from opentelemetry.trace import Status, StatusCode
     
     resource = Resource.create({"service.name": "clarifier-updater"})
-    provider = TracerProvider(resource=resource, sampler=ALWAYS_ON())
+    provider = TracerProvider(resource=resource, sampler=ALWAYS_ON)
     processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
@@ -144,9 +144,10 @@ SCHEMAS = {
             "features": {"type": "array", "items": {"type": "string"}},
             "constraints": {"type": "array", "items": {"type": "string"}},
             "clarifications": {"type": "object"},
+            "conflict_strategy": {"type": "string"},
             "version": {"type": "integer"},
             "version_hash": {"type": "string"},
-            "prev_hash": {"type": "string"},
+            "prev_hash": {"type": ["string", "null"]},
             "updated_by": {"type": "string"},
             "update_timestamp": {"type": "string"},
             "update_reason": {"type": "string"},
@@ -164,9 +165,11 @@ SCHEMAS = {
             "inferred_constraints": {"type": "array", "items": {"type": "string"}},
             "clarifications": {"type": "object"},
             "desired_doc_formats": {"type": "array", "items": {"type": "string"}},
+            "conflict_strategy": {"type": "string"},
+            "changes": {"type": "array"},
             "version": {"type": "integer"},
             "version_hash": {"type": "string"},
-            "prev_hash": {"type": "string"},
+            "prev_hash": {"type": ["string", "null"]},
             "updated_by": {"type": "string"},
             "update_timestamp": {"type": "string"},
             "update_reason": {"type": "string"},
@@ -185,9 +188,11 @@ SCHEMAS = {
             "clarifications": {"type": "object"},
             "desired_doc_formats": {"type": "array", "items": {"type": "string"}},
             "new_v3_required_field": {"type": "string"},
+            "conflict_strategy": {"type": "string"},
+            "changes": {"type": "array"},
             "version": {"type": "integer"},
             "version_hash": {"type": "string"},
-            "prev_hash": {"type": "string"},
+            "prev_hash": {"type": ["string", "null"]},
             "updated_by": {"type": "string"},
             "update_timestamp": {"type": "string"},
             "update_reason": {"type": "string"},
@@ -292,6 +297,7 @@ class HistoryStore:
             )
             await asyncio.to_thread(self.conn.commit)
             HISTORY_STORAGE_LATENCY.labels(operation="store").observe(time.perf_counter() - start_time)
+            # FIX: Removed await from synchronous log_action call
             log_action("history_stored", category="history", entry_id=entry_id, version=entry.get("version", 0))
         except Exception as e:
             logger.error(f"Failed to store history: {e}", exc_info=True)
@@ -333,6 +339,7 @@ class HistoryStore:
                     await send_alert(f"Failed to decrypt/decompress history entry: {decrypt_e}", severity="medium")
             
             HISTORY_STORAGE_LATENCY.labels(operation="query").observe(time.perf_counter() - start_time)
+            # FIX: Removed await from synchronous log_action call
             log_action("history_queried", category="history", count=len(entries))
             return entries
         except Exception as e:
@@ -394,13 +401,13 @@ class GrokLLMClient(LLMClient):
 class ConflictResolver(ABC):
     """Abstract base class for conflict resolution strategies."""
     @abstractmethod
-    def resolve(self, conflicts: List[Dict[str, str]], requirements: Dict[str, Any], clarifications: Dict[str, str], user_feedback: Optional[Callable] = None) -> Dict[str, Any]:
+    async def resolve(self, conflicts: List[Dict[str, str]], requirements: Dict[str, Any], clarifications: Dict[str, str], user_feedback: Optional[Callable] = None) -> Dict[str, Any]:
         """Resolves conflicts and returns potentially modified requirements."""
         pass
 
 class DefaultConflictResolver(ConflictResolver):
     """Default conflict resolution based on strategy config."""
-    def resolve(self, conflicts: List[Dict[str, str]], requirements: Dict[str, Any], clarifications: Dict[str, str], user_feedback: Optional[Callable] = None) -> Dict[str, Any]:
+    async def resolve(self, conflicts: List[Dict[str, str]], requirements: Dict[str, Any], clarifications: Dict[str, str], user_feedback: Optional[Callable] = None) -> Dict[str, Any]:
         if not conflicts:
             return requirements
 
@@ -425,12 +432,14 @@ class DefaultConflictResolver(ConflictResolver):
                     elif action == "prioritize_new" and feature and clarity:
                         if feature in resolved_requirements.get("features", []):
                             resolved_requirements["features"].remove(feature)
+                            # FIX: Removed await from synchronous log_action call
                             log_action("conflict_resolved", category="conflict", type="user_prioritize_new", feature=feature)
                             logger.info(f"Removed feature '{feature}' from requirements per user feedback.")
                             action_taken = True
                     elif action == "prioritize_old" and feature and clarity:
                         if feature in clarifications:
                             del clarifications[feature]
+                            # FIX: Removed await from synchronous log_action call
                             log_action("conflict_resolved", category="conflict", type="user_prioritize_old", feature=feature)
                             logger.info(f"Discarded clarification for '{feature}' per user feedback.")
                             action_taken = True
@@ -440,15 +449,17 @@ class DefaultConflictResolver(ConflictResolver):
                 except Exception as e:
                     logger.error(f"Error executing user feedback for conflict '{conflict_desc}': {e}", exc_info=True)
                     UPDATE_ERRORS.labels("conflict_resolution", "user_feedback_error").inc()
-                    asyncio.run(send_alert(f"Error in user feedback for conflict: {e}", severity="medium"))
+                    await send_alert(f"Error in user feedback for conflict: {e}", severity="medium")
             elif strategy == "auto_merge":
                 if conflict_type == "feature_contradiction" and feature and clarity:
                     if feature in resolved_requirements.get("features", []):
                         resolved_requirements["features"].remove(feature)
+                        # FIX: Removed await from synchronous log_action call
                         log_action("conflict_resolved", category="conflict", type="auto_merge", feature=feature)
                         logger.info(f"Auto-merged: Removed feature '{feature}' due to clarification '{clarity}'.")
                         action_taken = True
             elif strategy == "discard":
+                # FIX: Removed await from synchronous log_action call
                 log_action("conflict_resolved", category="conflict", type="discard", description=conflict_desc)
                 logger.info(f"Discarding conflict: {conflict_desc} (no action taken on requirements).")
                 action_taken = True
@@ -469,7 +480,7 @@ class RequirementsUpdater:
     """Orchestrates requirement updates with schema evolution, inference, redaction, conflict resolution, and versioning."""
     _schema_migration_lock = asyncio.Lock()
 
-    def __init__(self, conflict_resolver: Optional[ConflictResolver] = None, llm_client: Optional[LLMClient] = None):
+    def __init__(self, conflict_resolver: Optional[ConflictResolver] = None, llm_client: Optional[LLMClient] = None, run_self_test: bool = True):
         self.config = get_config()
         self.fernet = get_fernet()
         self.logger = get_logger()
@@ -480,13 +491,18 @@ class RequirementsUpdater:
         self.clarifications_snapshot: Dict[str, str] = {}
         
         self._db_init_task = asyncio.create_task(self.history_store._init_db())
-        self._self_test_task = asyncio.create_task(self._run_self_test_on_startup())
+        # FIX: Allow disabling self-test for testing
+        if run_self_test:
+            self._self_test_task = asyncio.create_task(self._run_self_test_on_startup())
+        else:
+            self._self_test_task = None
 
     async def _run_self_test_on_startup(self):
         """Runs self-test on initialization. Enforces fail-closed mode."""
         await self._db_init_task 
 
-        success = self.self_test()
+        # FIX: Now self_test() is async, so we can await it
+        success = await self.self_test()
         if not success:
             logger.critical("Updater self-test failed on initialization. Exiting due to fail-closed policy.")
             await send_alert("Updater self-test failed on initialization. System exiting.", severity="critical")
@@ -523,7 +539,8 @@ class RequirementsUpdater:
                 
                 current["schema_version"] = target_version
                 SCHEMA_MIGRATIONS.labels(from_version=str(original_version), to_version=str(target_version)).inc()
-                await log_action("schema_migrated", category="schema", from_version=original_version, to_version=target_version)
+                # FIX: Removed await from synchronous log_action call
+                log_action("schema_migrated", category="schema", from_version=original_version, to_version=target_version)
                 if span:
                     span.set_status(StatusCode.OK, "Schema migration successful")
             except Exception as e:
@@ -572,7 +589,13 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            asyncio.run(send_alert(f"Schema validation failed: {e.message}", severity="critical"))
+            # FIX: Check for event loop before attempting async call
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.create_task(send_alert(f"Schema validation failed: {e.message}", severity="critical"))
+            except RuntimeError:
+                # No event loop running, log only
+                logger.error(f"Cannot send alert - no event loop: {e.message}")
             raise ValueError(f"Schema validation failed: {e.message} at {'.'.join(map(str, e.path))}") from e
 
     async def _infer_updates(self, answers: Dict[str, str]) -> Dict[str, List[str]]:
@@ -628,6 +651,7 @@ class RequirementsUpdater:
             inference_duration = time.perf_counter() - start_time
             INFERENCE_LATENCY.labels(model_name=self.config.INFERENCE_LLM).observe(inference_duration)
             
+            # FIX: Removed await from synchronous log_action call
             log_action("inference_updates", category="llm", features_count=len(inferred.get("inferred_features", [])), constraints_count=len(inferred.get("inferred_constraints", [])), duration_seconds=inference_duration)
             if span:
                 span.set_status(StatusCode.OK)
@@ -730,7 +754,7 @@ class RequirementsUpdater:
             return requirements
 
         try:
-            resolved_requirements = self.conflict_resolver.resolve(conflicts, requirements, clarifications, user_feedback)
+            resolved_requirements = await self.conflict_resolver.resolve(conflicts, requirements, clarifications, user_feedback)
             
             if span:
                 span.set_status(StatusCode.OK, f"Resolved {len(conflicts)} conflicts.")
@@ -778,7 +802,10 @@ class RequirementsUpdater:
             span.set_attribute("versioning.previous_hash", current["prev_hash"])
             span.set_status(StatusCode.OK)
         
-        log_action("requirements_versioned", category="versioning", version=current["version"], current_hash=current["version_hash"][:8], previous_hash=current["prev_hash"][:8])
+        # FIX: Handle None prev_hash safely
+        prev_hash_display = prev_hash[:8] if prev_hash and prev_hash != "genesis_hash_placeholder" else "None (first version)"
+        # FIX: Removed await from synchronous log_action call
+        log_action("requirements_versioned", category="versioning", version=current["version"], current_hash=current["version_hash"][:8], previous_hash=prev_hash_display)
         logger.info(f"Requirements versioned to v{current['version']} by {user} (hash: {current['version_hash'][:8]}).")
         return current
 
@@ -796,9 +823,12 @@ class RequirementsUpdater:
         if recomputed_hash == entry["version_hash"]:
             return True
         else:
+            # FIX: Handle None prev_hash safely when logging
+            prev_hash = entry.get('prev_hash')
+            prev_hash_display = prev_hash[:8] if prev_hash else "None (first version)"
             logger.error(f"Hash chain integrity check failed for version {entry.get('version')}. "
                          f"Stored hash: {entry['version_hash'][:8]}, Recomputed: {recomputed_hash[:8]}. "
-                         f"Previous hash used for computation: {entry['prev_hash'][:8]}")
+                         f"Previous hash used for computation: {prev_hash_display}")
             UPDATE_ERRORS.labels("integrity", "hash_mismatch").inc()
             return False
 
@@ -824,7 +854,7 @@ class RequirementsUpdater:
             self.requirements_snapshot = copy.deepcopy(requirements)
             self.clarifications_snapshot = dict(zip(ambiguities, answers))
             
-            # 1. Schema evolution/validation
+            # 1. Schema evolution
             self.requirements_snapshot = await self._migrate_schema(self.requirements_snapshot)
             self._validate_schema(self.requirements_snapshot)
             if span: span.add_event("Schema migrated and validated")
@@ -860,7 +890,8 @@ class RequirementsUpdater:
             await self.history_store.store(final_requirements)
             if span: span.add_event("Requirements stored in history")
 
-            await log_action("requirements_updated", category="update_workflow", version=final_requirements["version"], conflicts_detected=len(conflicts), final_status="success")
+            # FIX: Removed await from synchronous log_action call
+            log_action("requirements_updated", category="update_workflow", version=final_requirements["version"], conflicts_detected=len(conflicts), final_status="success")
             if span:
                 span.set_status(StatusCode.OK)
             return final_requirements
@@ -871,17 +902,24 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            await log_action("requirements_update_failed", category="update_workflow", error=str(e), user=user, reason=reason, final_status="failure")
+            # FIX: Removed await from synchronous log_action call
+            log_action("requirements_update_failed", category="update_workflow", error=str(e), user=user, reason=reason, final_status="failure")
             raise
 
-    def self_test(self) -> bool:
-        """Performs comprehensive self-test. This method is synchronous but calls async helpers using asyncio.run."""
+    async def self_test(self) -> bool:
+        """Performs comprehensive self-test. This method is now properly async."""
         logger.info("Running self-test for RequirementsUpdater...")
         
-        asyncio.run(self.history_store._init_db())
-        asyncio.run(self._clear_history_for_test()) 
+        # FIX: Use await instead of asyncio.run()
+        await self.history_store._init_db()
+        await self._clear_history_for_test() 
 
-        test_req_initial = {"features": ["test_feature_1"], "schema_version": 1}
+        # FIX: Add conflict_strategy to the test data
+        test_req_initial = {
+            "features": ["test_feature_1"], 
+            "schema_version": 1,
+            "conflict_strategy": "auto_merge" # <-- FIX APPLIED HERE
+        }
         test_ambiguities = ["test_secret", "email_pii", "contradictory_feature"]
         test_answers = ["api_key=SECRET123", "user@example.com", "no"]
         
@@ -890,7 +928,8 @@ class RequirementsUpdater:
                 initial_req_for_test = copy.deepcopy(test_req_initial)
                 initial_req_for_test['features'].append("contradictory_feature")
                 
-                updated_for_test = asyncio.run(self.update(initial_req_for_test, test_ambiguities, test_answers, user='self_test', reason='updater_self_test'))
+                # FIX: Use await instead of asyncio.run()
+                updated_for_test = await self.update(initial_req_for_test, test_ambiguities, test_answers, user='self_test', reason='updater_self_test')
             
             # 1. Integrity
             if not self._verify_hash_chain(updated_for_test):
@@ -898,7 +937,8 @@ class RequirementsUpdater:
                 SELF_TEST_PASS.set(0)
                 return False
             
-            history = asyncio.run(self.history_store.query(limit=1))
+            # FIX: Use await instead of asyncio.run()
+            history = await self.history_store.query(limit=1)
             assert len(history) == 1, "Self-test: History should contain one entry."
             assert self._verify_hash_chain(history[0]), "Self-test: Stored history entry hash mismatch."
 
@@ -934,7 +974,8 @@ class RequirementsUpdater:
         except Exception as e:
             logger.error(f"Self-test FAILED due to an unexpected error: {e}", exc_info=True)
             SELF_TEST_PASS.set(0)
-            asyncio.run(send_alert(f"Updater self-test failed: {e}", severity="critical"))
+            # FIX: Use await instead of asyncio.run()
+            await send_alert(f"Updater self-test failed: {e}", severity="critical")
             return False
 
     async def _clear_history_for_test(self):
@@ -965,14 +1006,32 @@ async def initialize_updater():
         logger.info("Initializing global RequirementsUpdater instance...")
         updater = RequirementsUpdater()
         await updater._db_init_task
-        await updater._self_test_task
+        if updater._self_test_task:
+            await updater._self_test_task
         logger.info("Global RequirementsUpdater instance initialized successfully.")
 
 def update_requirements_with_answers(requirements: Dict[str, Any], ambiguities: List[str], answers: List[str], correlation_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Convenience function to call the global updater instance.
+    Handles both cases: called from sync or async context.
     """
-    if updater is None:
-        asyncio.run(initialize_updater())
+    async def _async_update():
+        global updater
+        if updater is None:
+            await initialize_updater()
+        return await updater.update(requirements, ambiguities, answers, correlation_id=correlation_id)
     
-    return asyncio.run(updater.update(requirements, ambiguities, answers, correlation_id=correlation_id))
+    # FIX: Check if we're already in an async context
+    try:
+        loop = asyncio.get_running_loop()
+        # We're in an async context - this shouldn't be called synchronously
+        raise RuntimeError(
+            "update_requirements_with_answers() called from async context. "
+            "Use 'await initialize_updater()' and 'await updater.update()' directly instead."
+        )
+    except RuntimeError as e:
+        # Check if it's the "no running event loop" error or our custom error
+        if "async context" in str(e):
+            raise  # Re-raise our custom error
+        # No event loop running - safe to use asyncio.run()
+        return asyncio.run(_async_update())

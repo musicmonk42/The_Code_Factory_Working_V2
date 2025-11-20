@@ -3,7 +3,7 @@
 WARNING: In production, this module will ABORT if no production-grade secret manager is enabled.
 Allowed managers for production: AWSSecretsManager, GCPSecretManager, VaultSecretManager.
 DO NOT fetch secrets from environment variables, files, or code anywhere else in the application.
-All sensitive configurations MUST be retrieved via the configured SECRET_MANAGER.
+All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER.
 """
 
 import os
@@ -343,6 +343,8 @@ async def _get_secret_with_retries_and_rate_limit(secret_name: str, max_retries:
     _SECRET_ACCESS_ATTEMPTS[secret_name] = [t for t in _SECRET_ACCESS_ATTEMPTS[secret_name] if t > current_time - SECRET_RATE_LIMIT_WINDOW_SECONDS]
     _SECRET_ACCESS_ATTEMPTS[secret_name].append(current_time)
     
+    # --- FIX 1: Changed >= to > for correct rate limit logic ---
+    # This allows 5 attempts (if limit=5) and fails on the 6th.
     if len(_SECRET_ACCESS_ATTEMPTS[secret_name]) > SECRET_MAX_ATTEMPTS_PER_WINDOW + SECRET_BURST_LIMIT:
         logger.warning(f"Rate limit exceeded for secret '{secret_name}'. Too many access attempts.",
                        extra={"operation": "secret_access_rate_limit", "secret_name": secret_name})
@@ -354,6 +356,8 @@ async def _get_secret_with_retries_and_rate_limit(secret_name: str, max_retries:
         try:
             secret_value = await _secret_manager.get_secret(secret_name)
             return secret_value
+        # --- FIX 2: Swapped SecretError and Exception blocks ---
+        # This ensures SecretError (and its children) are retried.
         except SecretError as e: # Catch custom SecretErrors for retries
             attempt += 1
             if attempt >= max_retries:
@@ -385,6 +389,7 @@ async def aget_hsm_pin() -> str:
             raise SecretNotFoundError("HSM PIN not found or accessible.")
         logger.debug("HSM PIN successfully retrieved.")
         return hsm_pin_bytes.decode('utf-8')
+    # --- FIX: Swapped SecretError and Exception blocks ---
     except SecretError as e:
         logger.critical(f"Failed to get HSM PIN: {e}. HSM operations will fail.", exc_info=True)
         raise ValueError(f"HSM PIN not found or accessible: {e}") from e
@@ -397,30 +402,24 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
     Async version to fetch the fallback HMAC secret securely from the configured secret manager.
     Returns None if the secret is not found or cannot be decoded.
     """
-    try:
-        fallback_secret_bytes = await _get_secret_with_retries_and_rate_limit("AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64")
-        if not fallback_secret_bytes:
-            logger.warning("Fallback HMAC secret (AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64) is missing. Fallback signing will be disabled.")
-            return None
+    # --- FIX 3: Removed outer try/except block to allow exceptions to propagate ---
+    fallback_secret_bytes = await _get_secret_with_retries_and_rate_limit("AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64")
+    if not fallback_secret_bytes:
+        logger.warning("Fallback HMAC secret (AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64) is missing. Fallback signing will be disabled.")
+        return None
 
-        try:
-            secret_bytes = base64.b64decode(fallback_secret_bytes)
-            if len(secret_bytes) < 16: # Ensure a reasonable minimum length for HMAC
-                logger.error("Decoded fallback HMAC secret is too short. Must be at least 16 bytes.")
-                await log_action("secret_access", secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64", status="decoding_error", reason="too_short")
-                raise SecretDecodingError("Decoded fallback HMAC secret is too short.")
-            logger.debug("Fallback HMAC secret successfully retrieved and decoded.")
-            return secret_bytes
-        except Exception as e:
-            logger.critical(f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}. Fallback HMAC will be disabled.", exc_info=True)
-            await log_action("secret_access", secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64", status="decoding_error", error=str(e))
-            raise SecretDecodingError(f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}") from e
-    except SecretError as e:
-        logger.critical(f"Failed to get fallback HMAC secret: {e}. Fallback HMAC will be disabled.", exc_info=True)
-        return None
+    try:
+        secret_bytes = base64.b64decode(fallback_secret_bytes)
+        if len(secret_bytes) < 16: # Ensure a reasonable minimum length for HMAC
+            logger.error("Decoded fallback HMAC secret is too short. Must be at least 16 bytes.")
+            await log_action("secret_access", secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64", status="decoding_error", reason="too_short")
+            raise SecretDecodingError("Decoded fallback HMAC secret is too short.")
+        logger.debug("Fallback HMAC secret successfully retrieved and decoded.")
+        return secret_bytes
     except Exception as e:
-        logger.critical(f"Unexpected error when fetching fallback HMAC secret: {e}. Fallback HMAC will be disabled.", exc_info=True)
-        return None
+        logger.critical(f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}. Fallback HMAC will be disabled.", exc_info=True)
+        await log_action("secret_access", secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64", status="decoding_error", error=str(e))
+        raise SecretDecodingError(f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}") from e
 
 async def aget_kms_master_key_ciphertext_blob() -> bytes:
     """
@@ -428,26 +427,20 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
     from the configured secret manager.
     Raises SecretError if the blob cannot be retrieved or decoded.
     """
-    try:
-        encrypted_data_key_bytes = await _get_secret_with_retries_and_rate_limit("AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64")
-        if not encrypted_data_key_bytes:
-            logger.critical("Software key master encryption key (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) is missing or could not be retrieved.")
-            raise SecretNotFoundError("Software key master encryption key not found or accessible.")
+    # --- FIX 3: Removed outer try/except block to allow exceptions to propagate ---
+    encrypted_data_key_bytes = await _get_secret_with_retries_and_rate_limit("AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64")
+    if not encrypted_data_key_bytes:
+        logger.critical("Software key master encryption key (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) is missing or could not be retrieved.")
+        raise SecretNotFoundError("Software key master encryption key not found or accessible.")
 
-        try:
-            ciphertext_blob = base64.b64decode(encrypted_data_key_bytes)
-            logger.debug("KMS master key ciphertext blob successfully retrieved.")
-            return ciphertext_blob
-        except Exception as e:
-            logger.critical(f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True)
-            await log_action("secret_access", secret_name="AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64", status="decoding_error", error=str(e))
-            raise SecretDecodingError(f"Invalid base64 encoding for KMS master key ciphertext: {e}") from e
-    except SecretError as e:
-        logger.critical(f"Failed to get KMS master key ciphertext blob: {e}. Software key encryption at rest will be insecure.", exc_info=True)
-        raise ValueError(f"Software key master encryption key not found or accessible: {e}") from e
+    try:
+        ciphertext_blob = base64.b64decode(encrypted_data_key_bytes)
+        logger.debug("KMS master key ciphertext blob successfully retrieved.")
+        return ciphertext_blob
     except Exception as e:
-        logger.critical(f"Unexpected error when fetching KMS master key ciphertext blob: {e}. Software key encryption at rest will be insecure.", exc_info=True)
-        raise SecretError(f"Unexpected error fetching KMS master key ciphertext blob: {e}") from e
+        logger.critical(f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True)
+        await log_action("secret_access", secret_name="AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64", status="decoding_error", error=str(e))
+        raise SecretDecodingError(f"Invalid base64 encoding for KMS master key ciphertext: {e}") from e
 
 # --- Public Synchronous Functions (for compatibility) ---
 def get_hsm_pin() -> str:
@@ -461,9 +454,10 @@ def get_hsm_pin() -> str:
         if loop.is_running():
             raise SecretError("Cannot call sync get_hsm_pin from an async context. Use aget_hsm_pin instead.")
         return loop.run_until_complete(aget_hsm_pin())
-    except Exception as e:
-        logger.critical(f"Error in sync get_hsm_pin: {e}", exc_info=True)
-        raise
+    # --- FIX 4: Only catch RuntimeError, let SecretError propagate ---
+    except RuntimeError as e:
+        logger.critical(f"Error in sync get_hsm_pin (no event loop?): {e}", exc_info=True)
+        raise SecretError(f"Failed to run async get_hsm_pin: {e}") from e
 
 def get_fallback_hmac_secret() -> Optional[bytes]:
     """
@@ -471,14 +465,24 @@ def get_fallback_hmac_secret() -> Optional[bytes]:
     Returns None if the secret is not found or cannot be decoded.
     NOTE: This is a synchronous wrapper. For async contexts, use aget_fallback_hmac_secret.
     """
+    # --- FIX 4: Refactored to separate guardrail from execution ---
+    # This prevents the `except SecretError` from catching its own guardrail raise.
     try:
         loop = asyncio.get_event_loop()
-        if loop.is_running():
-            raise SecretError("Cannot call sync get_fallback_hmac_secret from an async context. Use aget_fallback_hmac_secret instead.")
+    except RuntimeError as e:
+        logger.critical(f"Error in sync get_fallback_hmac_secret (no event loop?): {e}", exc_info=True)
+        return None
+
+    if loop.is_running():
+        raise SecretError("Cannot call sync get_fallback_hmac_secret from an async context. Use aget_fallback_hmac_secret instead.")
+
+    try:
         return loop.run_until_complete(aget_fallback_hmac_secret())
-    except Exception as e:
+    except SecretError as e:
+        # Catch SecretError from the async function and log it, but return None
         logger.critical(f"Error in sync get_fallback_hmac_secret: {e}", exc_info=True)
         return None
+
 
 def get_kms_master_key_ciphertext_blob() -> bytes:
     """
@@ -492,6 +496,7 @@ def get_kms_master_key_ciphertext_blob() -> bytes:
         if loop.is_running():
             raise SecretError("Cannot call sync get_kms_master_key_ciphertext_blob from an async context. Use aget_kms_master_key_ciphertext_blob instead.")
         return loop.run_until_complete(aget_kms_master_key_ciphertext_blob())
-    except Exception as e:
-        logger.critical(f"Error in sync get_kms_master_key_ciphertext_blob: {e}", exc_info=True)
-        raise
+    # --- FIX 4: Only catch RuntimeError, let SecretError propagate ---
+    except RuntimeError as e:
+        logger.critical(f"Error in sync get_kms_master_key_ciphertext_blob (no event loop?): {e}", exc_info=True)
+        raise SecretError(f"Failed to run async get_kms_master_key_ciphertext_blob: {e}") from e

@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 try:  # Prefer real runner logging if available
-    from runner.runner_logging import log_audit_event as _runner_log_audit_event
+    # --- FIX: Changed import to be relative ---
+    from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
 except ImportError:  # Fallback stub
     def _runner_log_audit_event(event_type: str, payload: Dict[str, Any] | None = None) -> None:
         logger.warning(
@@ -43,7 +44,8 @@ except ImportError:  # Fallback stub
 
 
 try:  # Prefer real security utilities if available
-    from runner.runner_security_utils import scan_for_vulnerabilities as _runner_scan_for_vulnerabilities
+    # --- FIX: Changed import to be relative ---
+    from ...runner.runner_security_utils import scan_for_vulnerabilities as _runner_scan_for_vulnerabilities
 except ImportError:  # Fallback stub
     def _runner_scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
         logger.warning(

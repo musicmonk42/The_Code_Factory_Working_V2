@@ -19,6 +19,7 @@ import re
 import time
 from pathlib import Path
 # FIX: Added 'Awaitable' and 'contextlib'
+import typing # FIX: Added for TYPE_CHECKING
 from typing import Dict, Any, Optional, List, Callable, Tuple, Deque, Awaitable
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -51,13 +52,38 @@ except ImportError:
     logging.getLogger(__name__).debug("Boto3 (AWS SDK) not found.")
 
 # Assume runner.config and runner.logging are correctly imported and configured
-from runner.runner_config import RunnerConfig, SecretStr
-from runner.runner_logging import logger, log_action
+# FIX: Move RunnerConfig import into TYPE_CHECKING block
+if typing.TYPE_CHECKING:
+    # --- FIX: Use relative imports ---
+    from .runner_config import RunnerConfig, SecretStr
+    # FIX: Move error imports here to break circular dependency
+    from .runner_errors import RunnerError, ExporterError, PersistenceError
+    from .runner_errors import ERROR_CODE_REGISTRY as _error_codes # Import the error code registry
+else:
+    # Break circular import at runtime
+    _error_codes = {}
+# --- FIX: Use relative import ---
+from .runner_config import SecretStr # Keep this one for runtime checks
+# --- FIX: Removed log_action from top-level import to break circular dependency ---
 # Gold Standard: Import structured errors and error codes
-from runner.runner_errors import RunnerError, ExporterError, PersistenceError
-from runner.runner_errors import ERROR_CODE_REGISTRY as error_codes # Import the error code registry
+# from runner.runner_errors import RunnerError, ExporterError, PersistenceError # <-- MOVED
+# from runner.runner_errors import ERROR_CODE_REGISTRY as error_codes # <-- MOVED
 
 logger = logging.getLogger(__name__)
+
+def get_error_codes() -> Dict[str, str]:
+    """Lazy-load the registry to break circular import."""
+    global _error_codes # We need to write to the global cache
+    if not _error_codes:
+        try:
+            # --- FIX: Use relative import ---
+            from .runner_errors import ERROR_CODE_REGISTRY
+            _error_codes = ERROR_CODE_REGISTRY # Cache it
+            return _error_codes
+        except ImportError:
+            # This should not happen at runtime, but as a fallback:
+            return {}
+    return _error_codes
 
 # --- Prometheus Server Bootstrap ---
 _prom_started = False
@@ -81,8 +107,8 @@ def start_prometheus_server_once(port: int = METRICS_PORT):
 
 
 # --- Core Prometheus Metrics Initialization (FIXED ORDER) ---
-# FIX: Move LLM-related metrics to the top to ensure they exist on partial import
-LLM_CALLS_TOTAL = prom.Counter('llm_calls_total', 'Total number of LLM API calls', ['provider', 'model'])
+# FIX: Changed LLM_CALLS_TOTAL to LLM_REQUESTS_TOTAL as per requirement
+LLM_REQUESTS_TOTAL = prom.Counter('llm_requests_total', 'Total number of LLM API calls', ['provider', 'model'])
 LLM_ERRORS_TOTAL = prom.Counter('llm_errors_total', 'Total number of LLM API errors', ['provider', 'model'])
 LLM_LATENCY_SECONDS = prom.Histogram('llm_latency_seconds', 'LLM API response latency', ['provider', 'model'])
 LLM_TOKENS_INPUT = prom.Counter('llm_tokens_input_total', 'Total input tokens processed by LLM', ['provider', 'model'])
@@ -97,14 +123,43 @@ RUN_LATENCY = prom.Histogram('runner_latency_seconds', 'Run latency of test exec
 RUN_ERRORS = prom.Counter('runner_errors_total', 'Total count of internal runner errors', ['error_type', 'backend', 'instance_id'])
 RUN_SUCCESS = prom.Counter('runner_successful_runs_total', 'Total count of successful test runs', ['backend', 'framework', 'instance_id'])
 RUN_FAILURE = prom.Counter('runner_failed_runs_total', 'Total count of failed test runs', ['backend', 'framework', 'instance_id'])
-RUN_PASS_RATE = prom.Gauge('runner_overall_test_pass_rate', 'Overall Test pass rate (0-1) across all runs')
-RUN_RESOURCE_USAGE = prom.Gauge('runner_resource_usage_percent', 'Percentage of resource usage', ['resource_type', 'instance_id'])
-RUN_QUEUE = prom.Gauge('runner_queue_length', 'Current length of pending tasks in the queue')
-RUN_MUTATION_SURVIVAL = prom.Gauge('runner_mutation_survival_rate', 'Latest mutation survival rate (0-1)')
-RUN_FUZZ_DISCOVERIES = prom.Counter('runner_fuzz_discoveries_total', 'Total count of issues discovered by fuzzing')
-HEALTH_STATUS = prom.Gauge('runner_component_health_status', 'Health status of a component (1=healthy, 0=unhealthy)', ['component_name', 'instance_id'])
+
+# --- FIX: ADD LABELS TO GAUGES AS EXPECTED BY test_runner_app.py ---
+RUN_PASS_RATE = prom.Gauge(
+    'runner_overall_test_pass_rate', 
+    'Overall Test pass rate (0-1) across all runs'
+    # No labels for this one, as per test
+)
+RUN_RESOURCE_USAGE = prom.Gauge(
+    'runner_resource_usage_percent', 
+    'Percentage of resource usage', 
+    ['resource_type', 'instance_id']
+)
+RUN_QUEUE = prom.Gauge(
+    'runner_queue_length', 
+    'Current length of pending tasks in the queue',
+    ['framework', 'instance_id'] # Added labels
+)
+HEALTH_STATUS = prom.Gauge(
+    'runner_component_health_status', 
+    'Health status of a component (1=healthy, 0=unhealthy)', 
+    ['component_name', 'instance_id']
+)
+# --- END FIX ---
+
 DISTRIBUTED_NODES_ACTIVE = prom.Gauge('runner_distributed_nodes_active', 'Number of active distributed nodes in the cluster')
 DISTRIBUTED_LATENCY = prom.Histogram('runner_distributed_latency_seconds', 'Latency of distributed task submissions', ['instance_id'])
+
+# --- FIX: ADDED MISSING UTILITY METRIC DEFINITIONS ---
+# These metrics were being redefined in runner_logging.py, causing the error.
+# They are now defined here as the single source of truth.
+UTIL_LATENCY = prom.Histogram('util_latency_seconds', 'Util function latency', ['func', 'status'])
+UTIL_ERRORS = prom.Counter('util_errors', 'Util errors', ['func', 'type'])
+UTIL_SELF_HEAL = prom.Counter('util_self_heal', 'Self-healed operations', ['func'])
+PROVENANCE_LOG_ENTRIES = prom.Counter('provenance_log_entries_total', 'Total provenance log entries', ['action'])
+DASHBOARD_QUEUE_SIZE = prom.Gauge('dashboard_log_queue_size', 'Current size of the dashboard log queue')
+ANOMALY_DETECTED_TOTAL = prom.Counter('anomaly_detected_total', 'Total anomalies detected', ['type', 'severity'])
+# --- END FIX ---
 
 # --- Dependability & Quality Metrics ---
 RUN_COVERAGE_PERCENT = prom.Gauge('runner_overall_coverage_percent', 'Overall code coverage percentage (0-1)')
@@ -112,6 +167,18 @@ RUN_VULNERABILITY_SCORE = prom.Gauge('runner_overall_vulnerability_score', 'Over
 RUN_AVG_TEST_LATENCY_HIST = prom.Histogram('runner_individual_test_latency_seconds', 'Distribution of individual test case latencies', ['framework', 'instance_id'])
 DOC_VALIDATION_STATUS = prom.Gauge('runner_doc_validation_status', 'Documentation validation status (1=pass, 0=fail)', ['doc_framework_name', 'instance_id'])
 DOC_GENERATION_ERRORS = prom.Counter('runner_doc_generation_errors_total', 'Total count of documentation generation errors', ['error_type', 'doc_framework_name', 'instance_id'])
+
+# --- Mutation & Fuzzing Metrics ---
+MUTATION_TOTAL = prom.Counter('runner_mutation_total', 'Total mutations generated', ['language', 'strategy', 'tool_name', 'instance_id'])
+MUTATION_KILLED = prom.Counter('runner_mutation_killed_total', 'Total mutations killed by tests', ['language', 'strategy', 'tool_name', 'instance_id'])
+MUTATION_SURVIVED = prom.Counter('runner_mutation_survived_total', 'Total mutations that survived tests', ['language', 'strategy', 'tool_name', 'instance_id'])
+MUTATION_TIMEOUT = prom.Counter('runner_mutation_timeout_total', 'Total mutations that timed out', ['language', 'strategy', 'tool_name', 'instance_id'])
+MUTATION_ERROR = prom.Counter('runner_mutation_error_total', 'Total mutations that caused an error', ['language', 'strategy', 'tool_name', 'instance_id'])
+# This is the one runner_mutation.py wants to import as MUTATION_SURVIVAL_RATE
+RUN_MUTATION_SURVIVAL = prom.Gauge('runner_mutation_survival_rate', 'Latest mutation survival rate (0-1)', ['language', 'strategy', 'tool_name', 'instance_id'])
+# This is the one runner_mutation.py wants to import as FUZZ_DISCOVERIES
+RUN_FUZZ_DISCOVERIES = prom.Counter('runner_fuzz_discoveries_total', 'Total count of issues discovered by fuzzing', ['language', 'strategy', 'instance_id'])
+COVERAGE_GAPS = prom.Counter('runner_mutation_coverage_gaps_total', 'Total coverage gaps found during mutation', ['language', 'instance_id'])
 
 # --- Resilient Queuing Metrics ---
 FAILED_EXPORT_QUEUE_SIZE = prom.Gauge('runner_failed_export_queue_size', 'Current size of failed export retry queue')
@@ -162,7 +229,7 @@ class MetricsExporter:
     Handles collecting Prometheus metrics and exporting them to multiple external systems.
     Designed for resilience and configurability, including a retry mechanism and failover file.
     """
-    def __init__(self, config: RunnerConfig):
+    def __init__(self, config: "RunnerConfig"):
         self.config = config
         self.instance_id: str = getattr(self.config, 'instance_id', 'unknown_instance')
         
@@ -240,6 +307,10 @@ class MetricsExporter:
                 
                 if retry_count >= self._max_export_retries:
                     logger.error(f"Permanently dropping metrics batch for exporter '{exporter_name}' after {self._max_export_retries} retries. Writing to failover file if configured. Metrics: {metrics_snapshot.keys()}")
+                    
+                    # --- FIX: Lazy import log_action ---
+                    # --- FIX: Use relative import ---
+                    from .runner_logging import log_action
                     log_action("MetricsExportDropped", {
                         "exporter": exporter_name,
                         "reason": "max_retries_exceeded",
@@ -268,7 +339,8 @@ class MetricsExporter:
                 retry_successful = False
                 try:
                     if asyncio.iscoroutinefunction(export_func):
-                        await asyncio.wait_for(export_func(metrics_snapshot), timeout=self._export_retry_base_interval * 2)
+                        # Use a timeout based on the base interval, not the full max backoff
+                        await asyncio.wait_for(export_func(metrics_snapshot), timeout=self._export_retry_base_interval * 2) 
                     else:
                         await asyncio.wait_for(
                             asyncio.to_thread(export_func, metrics_snapshot),
@@ -327,6 +399,10 @@ class MetricsExporter:
             async with aiofiles.open(self._failover_file_path, mode='a', encoding='utf-8') as f:
                 await f.write(json.dumps(failover_entry, ensure_ascii=False) + '\n')
             logger.critical(f"Wrote failed metrics batch ({batch_id}) for '{exporter_name}' to failover file: {self._failover_file_path}")
+            
+            # --- FIX: Lazy import log_action ---
+            # --- FIX: Use relative import ---
+            from .runner_logging import log_action
             log_action("MetricsFailoverWrite", {"file_path": str(self._failover_file_path), "exporter": exporter_name, "batch_id": batch_id, "reason": reason}, extra={'instance_id': self.instance_id})
         except Exception as e:
             logger.error(f"Failed to write metrics batch to failover file {self._failover_file_path}: {e}", exc_info=True)
@@ -371,14 +447,27 @@ class MetricsExporter:
         if datadog and datadog.api:
             try:
                 for name, value in metrics.items():
+                    # Datadog metric naming convention adjustments
                     dd_name = name.replace('runner_', 'app.runner.').replace('_total', '.count').replace('_percent', '.percent')
                     
                     if isinstance(value, (int, float)) and not (value != value or value == float('inf') or value == float('-inf')):
-                        dd_type = 'count' if '_total' in name or name.endswith('_total') else 'gauge'
+                        dd_type = 'count' if name.endswith('_total') else 'gauge'
                         datadog.api.Metric.send(metric=dd_name, points=value, type=dd_type, host=self.instance_id)
                 logger.debug(f"Exported {len(metrics)} metrics to Datadog.")
             except Exception as e:
-                raise ExporterError(error_codes['EXPORTER_FAILURE'], detail=f"Datadog export failed: {e}", exporter_name='datadog', cause=e)
+                # Lazy import ExporterError
+                if typing.TYPE_CHECKING:
+                    # --- FIX: Use relative import ---
+                    from .runner_errors import ExporterError
+                else:
+                    # If not type checking, we must import it dynamically
+                    try:
+                        # --- FIX: Use relative import ---
+                        from .runner_errors import ExporterError
+                    except ImportError:
+                        ExporterError = Exception # Fallback
+                # Raise ExporterError for the retry logic to catch
+                raise ExporterError(get_error_codes()['EXPORTER_FAILURE'], detail=f"Datadog export failed: {e}", exporter_name='datadog', cause=e)
 
     def _initialize_cloudwatch_exporter(self):
         """Initializes the AWS CloudWatch exporter if configured."""
@@ -398,9 +487,15 @@ class MetricsExporter:
             if isinstance(aws_access_key, SecretStr): aws_access_key = aws_access_key.get_secret_value()
             if isinstance(aws_secret_key, SecretStr): aws_secret_key = aws_secret_key.get_secret_value()
 
+            # FIX: Ensure region is retrieved correctly
+            cw_region = getattr(self.config, 'aws_region', None)
+            if not cw_region:
+                logger.warning("AWS region configured but is None/empty. CloudWatch exporter aborted.")
+                return
+
             self.cw_client = boto3.client(
                 'cloudwatch',
-                region_name=self.config.aws_region,
+                region_name=cw_region,
                 aws_access_key_id=aws_access_key,
                 aws_secret_access_key=aws_secret_key
             )
@@ -424,7 +519,7 @@ class MetricsExporter:
             async def cloudwatch_export_wrapper(metrics_snapshot: Dict[str, Any]):
                 await asyncio.to_thread(self._export_to_cloudwatch_sync, metrics_snapshot)
             register_exporter('cloudwatch', cloudwatch_export_wrapper)
-            logger.info(f"AWS CloudWatch exporter initialized for region: {self.config.aws_region}.")
+            logger.info(f"AWS CloudWatch exporter initialized for region: {cw_region}.")
         except ImportError as ie:
             logger.warning(f"CloudWatch exporter: {ie}. Install 'boto3'.")
             RUN_ERRORS.labels(error_type='exporter_init_fail', backend='cloudwatch', instance_id=self.instance_id).inc()
@@ -441,12 +536,12 @@ class MetricsExporter:
                     metric_data.append({
                         'MetricName': name,
                         'Value': value,
-                        'Unit': 'None',
+                        'Unit': 'None', # Unit logic is complex, defaulting to None for now
                         'Dimensions': [{'Name': 'InstanceId', 'Value': self.instance_id}]
                     })
             
             if metric_data:
-                batch_size = 20
+                batch_size = 20 # CloudWatch API limit is 20 metrics per PutMetricData call
                 for i in range(0, len(metric_data), batch_size):
                     batch = metric_data[i:i + batch_size]
                     try:
@@ -456,9 +551,29 @@ class MetricsExporter:
                         )
                         logger.debug(f"Exported {len(batch)} metrics batch to CloudWatch.")
                     except BotoClientError as e:
-                        raise ExporterError(error_codes['EXPORTER_FAILURE'], detail=f"CloudWatch export failed: {e}", exporter_name='cloudwatch', cause=e)
+                        # Lazy import ExporterError
+                        if typing.TYPE_CHECKING:
+                            # --- FIX: Use relative import ---
+                            from .runner_errors import ExporterError
+                        else:
+                            try:
+                                # --- FIX: Use relative import ---
+                                from .runner_errors import ExporterError
+                            except ImportError:
+                                ExporterError = Exception
+                        # Raise ExporterError for the retry logic to catch
+                        raise ExporterError(get_error_codes()['EXPORTER_FAILURE'], detail=f"CloudWatch export failed: {e}", exporter_name='cloudwatch', cause=e)
                     except Exception as e:
-                        raise ExporterError(error_codes['EXPORTER_FAILURE'], detail=f"CloudWatch export failed: {e}", exporter_name='cloudwatch', cause=e)
+                        if typing.TYPE_CHECKING:
+                            # --- FIX: Use relative import ---
+                            from .runner_errors import ExporterError
+                        else:
+                            try:
+                                # --- FIX: Use relative import ---
+                                from .runner_errors import ExporterError
+                            except ImportError:
+                                ExporterError = Exception
+                        raise ExporterError(get_error_codes()['EXPORTER_FAILURE'], detail=f"CloudWatch export failed: {e}", exporter_name='cloudwatch', cause=e)
         else:
             logger.debug("CloudWatch exporter not active for direct send.")
 
@@ -477,9 +592,22 @@ class MetricsExporter:
             with open(metrics_file_path, 'w', encoding='utf-8') as f:
                 json.dump(metrics, f, indent=2)
             logger.debug(f"Exported metrics to custom file: {metrics_file_path}.")
+            
+            # --- FIX: Lazy import log_action ---
+            # --- FIX: Use relative import ---
+            from .runner_logging import log_action
             log_action("MetricsExportedToFile", {"file_path": metrics_file_path, "metric_count": len(metrics)}, extra={'instance_id': self.instance_id})
         except Exception as e:
-            raise ExporterError(error_codes['EXPORTER_FAILURE'], detail=f"Custom JSON file export failed: {e}", exporter_name='custom_json_file', cause=e)
+            if typing.TYPE_CHECKING:
+                # --- FIX: Use relative import ---
+                from .runner_errors import ExporterError
+            else:
+                try:
+                    # --- FIX: Use relative import ---
+                    from .runner_errors import ExporterError
+                except ImportError:
+                    ExporterError = Exception
+            raise ExporterError(get_error_codes()['EXPORTER_FAILURE'], detail=f"Custom JSON file export failed: {e}", exporter_name='custom_json_file', cause=e)
 
     def export_prometheus(self):
         """Prometheus metrics are automatically exposed via the HTTP server started globally."""
@@ -491,7 +619,15 @@ class MetricsExporter:
         and redacts any potentially sensitive string values.
         """
         # FIX: Lazy import redact_secrets here to break the cycle (runner_logging -> runner_security_utils -> runner_metrics -> runner_logging)
-        from runner.runner_security_utils import redact_secrets 
+        try:
+            # --- FIX: Use relative import ---
+            from .runner_security_utils import redact_secrets 
+        except ImportError:
+            # Fallback if security utils is not available
+            def redact_secrets(text, patterns=None): # Adjusted fallback signature
+                return text # No redaction
+            logger.warning("runner.runner_security_utils.redact_secrets could not be imported. Security redaction disabled.")
+
 
         sanitized = {}
         for key, value in metrics.items():
@@ -505,7 +641,15 @@ class MetricsExporter:
                 else:
                     sanitized[key] = value
             else:
-                logger.debug(f"Skipping non-numeric/non-string metric {key} with type {type(value)}")
+                # --- [FIX for alert_monitor TypeError] ---
+                # If the value is a dict (from get_metrics_dict),
+                # pass it through. The sanitizer shouldn't be
+                # responsible for flattening it.
+                if isinstance(value, dict):
+                    sanitized[key] = value
+                else:
+                    logger.debug(f"Skipping non-numeric/non-string metric {key} with type {type(value)}")
+                # --- [END FIX] ---
         return sanitized
 
     async def export_all(self):
@@ -516,7 +660,28 @@ class MetricsExporter:
         export_tasks: List[Awaitable[Any]] = []
         for exporter_name, export_func in _EXPORTER_REGISTRY.items():
             async def _run_export_safely(exp_name: str, exp_func: Callable[[Dict[str, Any]], Awaitable[None]], metrics_snap: Dict[str, Any]):
+                # Lazy import log_action inside the async function body is safer for the lifecycle
                 try:
+                    # --- FIX: Use relative import ---
+                    from .runner_logging import log_action 
+                except ImportError:
+                    def log_action(*a, **k):
+                        pass # Dummy log_action
+                
+                # Lazy import error types
+                if typing.TYPE_CHECKING:
+                    # --- FIX: Use relative import ---
+                    from .runner_errors import RunnerError, ExporterError
+                else:
+                    try:
+                        # --- FIX: Use relative import ---
+                        from .runner_errors import RunnerError, ExporterError
+                    except ImportError:
+                        RunnerError = Exception
+                        ExporterError = Exception
+
+                try:
+                    
                     log_action("MetricsExportAttempt", {"exporter": exp_name, "metric_count": len(metrics_snap)}, extra={'instance_id': self.instance_id})
                     
                     await exp_func(metrics_snap)
@@ -524,6 +689,8 @@ class MetricsExporter:
 
                 except ExporterError as e:
                     logger.error(f"Structured error exporting metrics to '{exp_name}': {e.as_dict()}", exc_info=True)
+                    
+                    # --- FIX: Lazy import log_action ---
                     log_action("MetricsExportFailure", e.as_dict(), extra={'instance_id': self.instance_id})
                     current_time = datetime.now(timezone.utc)
                     next_retry = current_time + timedelta(seconds=self._export_retry_base_interval)
@@ -532,7 +699,21 @@ class MetricsExporter:
                     RUN_ERRORS.labels(error_type='exporter_send_failure', backend=exp_name, instance_id=self.instance_id).inc()
                 except Exception as e:
                     logger.error(f"Unexpected error exporting metrics to '{exp_name}': {e}", exc_info=True)
+                    
+                    # Lazy import RunnerError
+                    if typing.TYPE_CHECKING:
+                        # --- FIX: Use relative import ---
+                        from .runner_errors import RunnerError
+                    else:
+                        try:
+                            # --- FIX: Use relative import ---
+                            from .runner_errors import RunnerError
+                        except ImportError:
+                            RunnerError = Exception
+                            
                     error_dict = RunnerError("EXPORTER_UNEXPECTED_ERROR", f"Unexpected error in exporter {exp_name}: {e}", exporter_name=exp_name, cause=e).as_dict()
+                    
+                    # --- FIX: Lazy import log_action ---
                     log_action("MetricsExportFailure", error_dict, extra={'instance_id': self.instance_id})
                     current_time = datetime.now(timezone.utc)
                     next_retry = current_time + timedelta(seconds=self._export_retry_base_interval)
@@ -566,18 +747,29 @@ class MetricsExporter:
             current_failed_exports = list(self._failed_exports_queue)
             self._failed_exports_queue.clear()
 
+            # Lazy import log_action here for the flush loop
+            try:
+                # --- FIX: Use relative import ---
+                from .runner_logging import log_action
+            except ImportError:
+                def log_action(*a, **k):
+                    pass # Dummy log_action
+
             for metrics_snapshot, exporter_name, retry_count, first_failure_ts, next_retry_time in current_failed_exports:
                 export_func = _EXPORTER_REGISTRY.get(exporter_name)
                 if export_func:
                     try:
                         await asyncio.wait_for(export_func(metrics_snapshot), timeout=self._export_retry_base_interval)
                         logger.info(f"Successfully flushed remaining metrics to '{exporter_name}' on shutdown.")
+                        log_action("MetricsFlushSuccess", {"exporter": exporter_name}, extra={'instance_id': self.instance_id})
                     except Exception as e:
                         logger.error(f"Failed final flush to '{exporter_name}' on shutdown: {e}.")
+                        log_action("MetricsFlushFailure", {"exporter": exporter_name, "reason": str(e)}, extra={'instance_id': self.instance_id})
                         if self._failover_file_path:
                             await self._write_to_failover_file(metrics_snapshot, exporter_name, reason="final_flush_failed_on_shutdown")
                 else:
                     logger.error(f"Exporter '{exporter_name}' not found for final shutdown flush. Metrics lost.")
+                    log_action("MetricsFlushFailure", {"exporter": exporter_name, "reason": "exporter_missing"}, extra={'instance_id': self.instance_id})
                     if self._failover_file_path:
                         await self._write_to_failover_file(metrics_snapshot, exporter_name, reason="exporter_missing_on_shutdown")
         
@@ -586,13 +778,19 @@ class MetricsExporter:
 
 # Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally.
 try:
-    from runner.core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
+    # FIX: Attempt to import from runner.runner_core first, then runner.core
+    try:
+        # --- FIX: Use relative import ---
+        from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
+    except ImportError:
+        # --- FIX: Use relative import ---
+        from .core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
     DOC_FRAMEWORKS_FOR_ALERTS: List[str] = list(CORE_DOC_FRAMEWORKS.keys())
 except ImportError:
     DOC_FRAMEWORKS_FOR_ALERTS: List[str] = ['sphinx', 'mkdocs', 'javadoc', 'jsdoc', 'go_doc']
 
 
-async def alert_monitor(config: RunnerConfig):
+async def alert_monitor(config: "RunnerConfig"):
     """
     Built-in alerting system: Periodically checks metrics against defined thresholds and logs critical alerts.
     """
@@ -619,28 +817,51 @@ async def alert_monitor(config: RunnerConfig):
             if isinstance(value, (int, float)):
                 _METRIC_HISTORY[metric_name].append((float(value), current_timestamp))
         
-        total_runs_metric_key = _get_canonical_metric_key('runner_successful_runs_total', {'backend': 'all', 'framework': 'all', 'instance_id': instance_id})
-        total_runs_failed_metric_key = _get_canonical_metric_key('runner_failed_runs_total', {'backend': 'all', 'framework': 'all', 'instance_id': instance_id})
+        # NOTE: Calculating total runs from specific labelled metrics is an approximation.
+        # It should rely on the raw Counter object for a true total, but Prometheus
+        # export only provides the current value/sum/count for histograms.
+        # For simplicity, we use the exported dict value here.
         
-        total_runs = metrics.get(total_runs_metric_key, 0.0) + metrics.get(total_runs_failed_metric_key, 0.0)
-        total_errors = metrics.get(_get_canonical_metric_key('runner_errors_total', {'error_type': 'all', 'backend': 'all', 'instance_id': instance_id}), 0.0)
-        error_rate = total_errors / total_runs if total_runs > 0 else 0.0
+        # --- [FIX for TypeError] ---
+        # Helper to sum values from a metric dict or return the float
+        def sum_metric_values(metric_value: Any) -> float:
+            if isinstance(metric_value, dict):
+                return sum(metric_value.values())
+            elif isinstance(metric_value, (int, float)):
+                return float(metric_value)
+            return 0.0
+
+        # Calculate overall error rate based on the sum of all RUN_SUCCESS/RUN_FAILURE/RUN_ERRORS (approx)
+        total_runs = sum_metric_values(metrics.get('runner_successful_runs_total', 0.0)) + \
+                     sum_metric_values(metrics.get('runner_failed_runs_total', 0.0))
+        
+        total_errors_from_runs_dict = sum_metric_values(metrics.get('runner_errors_total', 0.0))
+        # --- [END FIX] ---
+        
+        # Error rate calculation needs refinement in a real system but this uses the available dict info
+        error_rate_total_base = total_runs + total_errors_from_runs_dict 
+        error_rate = total_errors_from_runs_dict / error_rate_total_base if error_rate_total_base > 0 else 0.0
+        
         if error_rate > current_thresholds['error_rate']:
             alerts.append(f"High error rate: {error_rate:.2f} (>{current_thresholds['error_rate']}).")
         
+        # Health checks
         for component_name in ['overall', 'backend', 'queue', 'exporter', 'config_watcher']:
-            health_metric_key = _get_canonical_metric_key('runner_component_health_status', {'component_name': component_name, 'instance_id': instance_id})
-            current_health = metrics.get(health_metric_key, 1.0)
+            # The get_metrics_dict flattens simple labelled metrics, so we check the dictionary structure
+            health_statuses = metrics.get('runner_component_health_status', {})
+            # Look for the specific label combo for health status
+            current_health = health_statuses.get(f"component_name_{component_name}_instance_id_{instance_id}", 1.0)
             if current_health < current_thresholds['health_min']:
                 alerts.append(f"Component '{component_name}' health degraded: {current_health} (<{current_thresholds['health_min']}).")
 
-        queue_length = metrics.get('runner_queue_length', 0.0)
+        queue_length_metrics = metrics.get('runner_queue_length', {})
+        queue_length = sum(queue_length_metrics.values()) # Sum all queue lengths regardless of labels
         if queue_length > current_thresholds['queue_max']:
             alerts.append(f"Queue overload: {queue_length} (>{current_thresholds['queue_max']}).")
         
         for res_type in ['cpu', 'mem']:
-            resource_metric_key = _get_canonical_metric_key('runner_resource_usage_percent', {'resource_type': res_type, 'instance_id': instance_id})
-            usage = metrics.get(resource_metric_key, 0.0)
+            # The get_metrics_dict logic handles this specific metric by flattening it to resource_cpu_percent etc.
+            usage = metrics.get(f'resource_{res_type}_percent', 0.0)
             if usage > current_thresholds['resource_max']:
                 alerts.append(f"High {res_type.upper()} usage: {usage:.2f}% (>{current_thresholds['resource_max']}%).")
 
@@ -651,11 +872,15 @@ async def alert_monitor(config: RunnerConfig):
 
         # FIX: Use getattr
         framework_for_latency = getattr(config, 'framework', 'unknown')
-        avg_test_latency_sum_key = _get_canonical_metric_key('runner_individual_test_latency_seconds_sum', {'framework': framework_for_latency, 'instance_id': instance_id})
-        avg_test_latency_count_key = _get_canonical_metric_key('runner_individual_test_latency_seconds_count', {'framework': framework_for_latency, 'instance_id': instance_id})
+        
+        # Histogram metrics appear as separate entries in get_metrics_dict
+        latency_hist_sums = metrics.get('runner_individual_test_latency_seconds_sum', {})
+        latency_hist_counts = metrics.get('runner_individual_test_latency_seconds_count', {})
 
-        avg_test_latency_sum = metrics.get(avg_test_latency_sum_key, 0.0)
-        avg_test_latency_count = metrics.get(avg_test_latency_count_key, 0.0)
+        label_key = f"framework_{framework_for_latency}_instance_id_{instance_id}"
+
+        avg_test_latency_sum = latency_hist_sums.get(label_key, 0.0)
+        avg_test_latency_count = latency_hist_counts.get(label_key, 0.0)
         
         avg_test_latency = avg_test_latency_sum / max(1.0, avg_test_latency_count)
         if avg_test_latency > current_thresholds['performance_latency_max']:
@@ -670,29 +895,50 @@ async def alert_monitor(config: RunnerConfig):
             alerts.append(f"High mutation survival rate: {mutation_survival_rate:.2f} (>{current_thresholds['mutation_survival_max']}). Tests might be weak.")
 
         for doc_fw in DOC_FRAMEWORKS_FOR_ALERTS:
-            doc_validation_metric_key = _get_canonical_metric_key('runner_doc_validation_status', {'doc_framework_name': doc_fw, 'instance_id': instance_id})
-            doc_status = metrics.get(doc_validation_metric_key, 1.0)
+            doc_validation_statuses = metrics.get('runner_doc_validation_status', {})
+            doc_status = doc_validation_statuses.get(f"doc_framework_name_{doc_fw}_instance_id_{instance_id}", 1.0)
             if doc_status < current_thresholds['doc_validation_fail']:
                 alerts.append(f"Documentation validation failed for '{doc_fw}'. Critical doc integrity issue.")
         
         # --- Anomaly Detection ---
+        # The key in _METRIC_HISTORY needs to be a simple string, using the internal helper for consistency
         cpu_metric_key = _get_canonical_metric_key('runner_resource_usage_percent', {'resource_type': 'cpu', 'instance_id': instance_id})
         cpu_history = _METRIC_HISTORY[cpu_metric_key]
         
-        anomaly_window = current_thresholds['anomaly_detection_window']
-        std_dev_multiplier = current_thresholds['anomaly_detection_std_dev_multiplier']
+        anomaly_window = int(current_thresholds['anomaly_detection_window'])
+        std_dev_multiplier = float(current_thresholds['anomaly_detection_std_dev_multiplier'])
 
+        # Check for the raw value as flattened in get_metrics_dict
+        current_cpu_value = metrics.get(f'resource_cpu_percent', 0.0)
+        
         if len(cpu_history) >= anomaly_window:
+            # We take the *window size* values from the end of the deque
             recent_cpu_values = [val for val, _ in list(cpu_history)[-anomaly_window:]]
-            if len(recent_cpu_values) > 1:
-                mean_cpu = sum(recent_cpu_values) / len(recent_cpu_values)
-                variance = sum((x - mean_cpu) ** 2 for x in recent_cpu_values) / (len(recent_cpu_values) - 1)
+            
+            # Recalculate mean/std_dev from the window *excluding* the very latest point if it was just added
+            # The current_cpu_value is already the *latest* value. The history contains up to `anomaly_window`
+            # points. For a real-time check, we should check the current value against the stats of the history.
+            # Using all points in the deque (up to maxlen) to calculate the stats is a simpler approximation.
+            
+            all_history_values = [val for val, _ in cpu_history]
+            if len(all_history_values) > 1:
+                mean_cpu = sum(all_history_values) / len(all_history_values)
+                # Use numpy or scipy for real STD DEV, but implement basic for no external deps
+                variance = sum((x - mean_cpu) ** 2 for x in all_history_values) / (len(all_history_values)) # Population variance
                 std_dev_cpu = variance**0.5
 
-                current_cpu_value = metrics.get(cpu_metric_key, 0.0)
                 
                 if std_dev_cpu > 0.001 and abs(current_cpu_value - mean_cpu) > std_dev_multiplier * std_dev_cpu:
                     alerts.append(f"CPU usage anomaly detected: {current_cpu_value:.2f}% (Mean: {mean_cpu:.2f}%, StdDev: {std_dev_cpu:.2f}).")
+                    
+                    # --- FIX: Lazy import log_action ---
+                    try:
+                        # --- FIX: Use relative import ---
+                        from .runner_logging import log_action
+                    except ImportError:
+                        def log_action(*a, **k):
+                            pass # Dummy log_action
+
                     log_action("Anomaly_Detected", {
                         "metric": "CPU_Usage",
                         "value": current_cpu_value,
@@ -705,6 +951,7 @@ async def alert_monitor(config: RunnerConfig):
         if alerts:
             timestamp = datetime.now(timezone.utc).isoformat() + 'Z'
             for alert_msg in alerts:
+                # Use logger.critical which is expected to be picked up by external systems
                 logger.critical(json.dumps({
                     "event": "ALERT_TRIGGERED",
                     "timestamp": timestamp,
@@ -716,11 +963,22 @@ async def alert_monitor(config: RunnerConfig):
                 # Placeholder for external notification
                 # asyncio.create_task(send_external_alert_notification(...))
         
-        await asyncio.sleep(alert_interval_seconds)
+        try:
+            await asyncio.sleep(alert_interval_seconds)
+        except asyncio.CancelledError:
+            logger.info("Alert monitor received shutdown signal.")
+            break
+
 
 # Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally
 try:
-    from runner.runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
+    # FIX: Prioritize runner.runner_core
+    try:
+        # --- FIX: Use relative import ---
+        from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
+    except ImportError:
+        # --- FIX: Use relative import ---
+        from .core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
     DOC_FRAMEWORKS_FOR_ALERTS: List[str] = list(CORE_DOC_FRAMEWORKS.keys())
 except ImportError:
     DOC_FRAMEWORKS_FOR_ALERTS: List[str] = ['sphinx', 'mkdocs', 'javadoc', 'jsdoc', 'go_doc']
@@ -742,210 +1000,55 @@ def get_metrics_dict() -> Dict[str, Any]:
             if not (isinstance(value, (int, float)) and (value == value and value != float('inf') and value != float('-inf'))):
                 continue
 
-            if labels:
-                label_key = "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
-                
-                if name == 'runner_resource_usage_percent':
-                    resource_type = labels.get('resource_type')
-                    if resource_type:
-                        metrics_data[f'resource_{resource_type}_percent'] = value
-                        continue
-                
-                if name not in metrics_data:
-                    metrics_data[name] = {}
-                metrics_data[name][label_key] = value
-            else:
+            # Skip internal Prometheus metrics that aren't useful for business logic
+            if name.startswith('process_') or name.startswith('python_'):
+                continue
+
+            # Helper for label-less metrics
+            if not labels:
                 metrics_data[name] = value
+                # --- [FIX] ---
+                # REMOVED: continue
+                # We must allow logic to proceed to handle cases where
+                # a metric has BOTH label-less and labeled values.
+                # --- [END FIX] ---
+
+            # Special case for resource usage to flatten it to a single-level key
+            if name == 'runner_resource_usage_percent':
+                resource_type = labels.get('resource_type')
+                if resource_type:
+                    metrics_data[f'resource_{resource_type}_percent'] = value
+                    continue
+            
+            # Default handling for labelled metrics: nest under the metric name, with a label-key
+            if name not in metrics_data:
+                metrics_data[name] = {}
+            
+            # Create a simple, non-nested string key for the labels for easier lookup
+            # Sort the labels for a canonical key
+            label_key = "_".join(f"{k}_{v}" for k, v in sorted(labels.items()))
+            
+            # Only add if labels exist, otherwise it was handled by the label-less block
+            if label_key:
+                metrics_data[name][label_key] = value
                 
     return metrics_data
 
 
 def _get_canonical_metric_key(metric_name: str, labels: Dict[str, str]) -> str:
-    """Helper for internal metric key generation."""
+    """Helper for internal metric key generation (used by history/anomaly)."""
+    # This format is chosen to be unique for the history dict key
     label_str = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
     return f'{metric_name}{{{label_str}}}'
 
+# --- Metrics for Provider-Specific Streaming ---
+# These are used by local_provider, grok_provider, gemini_provider
+stream_chunks_total = prom.Counter('llm_stream_chunks_total', 'Total number of stream chunks', ['model'])
+stream_chunk_latency = prom.Histogram('llm_stream_chunk_latency_seconds', 'Latency per stream chunk in seconds', ['model'])
 
-# --- Test/Example usage ---
-if __name__ == "__main__":
-    # Setup basic logging for standalone execution
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    from unittest.mock import patch, MagicMock, AsyncMock
-    
-    # Mock RunnerConfig and SecretStr for this isolated test block
-    class MockSecretStr(str):
-        def get_secret_value(self):
-            return self
-
-    class MockRunnerConfig:
-        def __init__(self, data: Dict):
-            self._data = data
-            self.instance_id = data.get('instance_id', 'default_runner_instance')
-            self.aws_region = data.get('aws_region')
-            self.datadog_api_key = data.get('datadog_api_key')
-            self.datadog_app_key = data.get('datadog_app_key')
-            self.custom_metrics_file = data.get('custom_metrics_file')
-            self.metrics_interval_seconds = data.get('metrics_interval_seconds', 1)
-            self.alert_monitor_interval_seconds = data.get('alert_monitor_interval_seconds', 5)
-            self.max_metrics_export_retries = data.get('max_metrics_export_retries', 3)
-            self.metrics_export_retry_base_interval = data.get('metrics_export_retry_interval_seconds', 2)
-            self.metrics_export_retry_max_interval_seconds = 60 # Default max interval
-            self.metrics_export_retry_exponential_base = 2.0 # Default exponential base
-            self.framework = data.get('framework', 'pytest')
-            self.custom_redaction_patterns = data.get('custom_redaction_patterns', [])
-            self.metrics_failover_file = data.get('metrics_failover_file')
-
-            # Dynamic alert thresholds
-            for key in ALERT_THRESHOLDS.keys():
-                setattr(self, f'alert_threshold_{key}', data.get(f'alert_threshold_{key}', ALERT_THRESHOLDS[key]))
-
-        def get(self, key, default=None):
-            return getattr(self, key, default)
-
-        def __getattr__(self, name: str) -> Any:
-            if name in self._data: return self._data[name]
-            # Allow access to attributes set in __init__
-            if name in self.__dict__: return self.__dict__[name]
-            # FIX: Ensure it returns None if not found, like a config object should
-            if name.startswith('alert_threshold_'):
-                return ALERT_THRESHOLDS.get(name.replace('alert_threshold_', ''))
-            return None
-
-
-    # Ensure aiofiles is installed for failover file testing
-    try:
-        import aiofiles
-    except ImportError:
-        logger.error("aiofiles not installed. Failover file testing will be limited.")
-        aiofiles = None
-
-    test_config = MockRunnerConfig(data={
-        'instance_id': 'test_instance',
-        'aws_region': 'us-east-1',
-        'datadog_api_key': MockSecretStr('mock_dd_api_key'),
-        'datadog_app_key': MockSecretStr('mock_dd_app_key'),
-        'metrics_failover_file': 'metrics_failover_test.log',
-        'alert_monitor_interval_seconds': 5,
-        'metrics_interval_seconds': 1,
-        'framework': 'pytest',
-        'max_metrics_export_retries': 2,
-        'metrics_export_retry_interval_seconds': 1,
-        'alert_threshold_error_rate': 0.05, 'alert_threshold_resource_max': 80.0, 'alert_threshold_vulnerability_score_max': 5.0,
-        'alert_threshold_performance_latency_max': 1.0, 'alert_threshold_coverage_min': 0.9, 'alert_threshold_mutation_survival_max': 0.1,
-        'alert_threshold_doc_validation_fail': 0.5, 'alert_threshold_anomaly_detection_window': 3, 'alert_threshold_anomaly_detection_std_dev_multiplier': 1.5,
-    })
-    
-    async def mock_datadog_metric_send(*args, **kwargs):
-        if "fail_datadog" in kwargs.get('metric', ''):
-            logger.info("Simulating Datadog failure...")
-            raise Exception("Simulated Datadog failure")
-        logger.info(f"Mock Datadog Send: {kwargs.get('metric')}, {kwargs.get('points')}, {kwargs.get('type')}, {kwargs.get('host')}")
-    
-    async def mock_put_cloudwatch_metric_data(*args, **kwargs):
-        from botocore.exceptions import ClientError as BotoClientError # Lazy import needed here
-        if "fail_cloudwatch" in kwargs.get('Namespace', ''):
-            logger.info("Simulating CloudWatch failure...")
-            raise BotoClientError({"Error": {"Code": "Throttling", "Message": "Simulated CloudWatch failure"}}, "PutMetricData")
-        logger.info(f"Mock CloudWatch Send: {kwargs.get('Namespace')}, {kwargs.get('MetricData')}")
-    
-    async def mock_cw_get_metric_statistics(*args, **kwargs):
-        return {'Datapoints': []}
-
-    
-    # Initialize metrics with mock values
-    HEALTH_STATUS.labels(component_name='overall', instance_id='test_instance').set(1.0)
-    HEALTH_STATUS.labels(component_name='backend', instance_id='test_instance').set(1.0)
-    RUN_QUEUE.set(5.0)
-    RUN_RESOURCE_USAGE.labels(resource_type='cpu', instance_id='test_instance').set(30.0)
-    RUN_RESOURCE_USAGE.labels(resource_type='mem', instance_id='test_instance').set(40.0)
-    RUN_ERRORS.labels(error_type='any', backend='all', instance_id='test_instance').inc(0)
-    RUN_SUCCESS.labels(backend='backend_x', framework='pytest', instance_id='test_instance').inc(100)
-    RUN_VULNERABILITY_SCORE.set(3.0)
-    RUN_AVG_TEST_LATENCY_HIST.labels(framework='pytest', instance_id='test_instance').observe(0.5)
-    RUN_AVG_TEST_LATENCY_HIST.labels(framework='pytest', instance_id='test_instance').observe(0.6)
-    RUN_COVERAGE_PERCENT.set(0.95)
-    RUN_MUTATION_SURVIVAL.set(0.05)
-    DOC_VALIDATION_STATUS.labels(doc_framework_name='sphinx', instance_id='test_instance').set(1.0)
-    DOC_GENERATION_ERRORS.labels(error_type='runtime_error', doc_framework_name='sphinx', instance_id='test_instance').inc(0)
-    
-    _METRIC_HISTORY.clear()
-    
-    print("--- Initial Metrics State (Healthy) ---")
-    print(json.dumps(get_metrics_dict(), indent=2))
-    
-    async def main():
-        # [NEW] Start Prometheus server
-        start_prometheus_server_once()
-
-        if test_config.metrics_failover_file and os.path.exists(test_config.metrics_failover_file):
-            os.remove(test_config.metrics_failover_file)
-            print(f"Cleaned up {test_config.metrics_failover_file}")
-
-        with patch('datadog.api.Metric.send', new=AsyncMock(side_effect=mock_datadog_metric_send)), \
-             patch('boto3.client', return_value=MagicMock(put_metric_data=AsyncMock(side_effect=mock_put_cloudwatch_metric_data), get_metric_statistics=AsyncMock(side_effect=mock_cw_get_metric_statistics))):
-            
-            exporter = MetricsExporter(test_config)
-            await exporter.start() # [NEW] Explicitly start the exporter's background tasks
-            alert_task = asyncio.create_task(alert_monitor(test_config))
-            
-            print("\n--- Initial export to confirm exporters are active ---")
-            await exporter.export_all()
-            
-            print("\n--- Simulating unhealthy metrics to trigger alerts ---")
-            RUN_ERRORS.labels(error_type='type_b', backend='backend_y', instance_id='test_instance').inc(20)
-            RUN_SUCCESS.labels(backend='backend_y', framework='pytest', instance_id='test_instance').inc(10)
-            
-            RUN_RESOURCE_USAGE.labels(resource_type='cpu', instance_id='test_instance').set(95.0)
-            RUN_RESOURCE_USAGE.labels(resource_type='mem', instance_id='test_instance').set(92.0)
-            RUN_VULNERABILITY_SCORE.set(8.5)
-            RUN_AVG_TEST_LATENCY_HIST.labels(framework='pytest', instance_id='test_instance').observe(6.0)
-            RUN_COVERAGE_PERCENT.set(0.60)
-            RUN_MUTATION_SURVIVAL.set(0.40)
-            DOC_VALIDATION_STATUS.labels(doc_framework_name='sphinx', instance_id='test_instance').set(0.0)
-            DOC_GENERATION_ERRORS.labels(error_type='runtime_error', doc_framework_name='sphinx', instance_id='test_instance').inc(1)
-            
-            await asyncio.sleep(test_config.alert_monitor_interval_seconds + 1)
-            
-            print("\n--- Triggering CPU anomaly (with pre-filled history) ---")
-            cpu_metric_key = _get_canonical_metric_key('runner_resource_usage_percent', {'resource_type': 'cpu', 'instance_id': test_config.instance_id})
-            _METRIC_HISTORY[cpu_metric_key] = deque([
-                (50.0, datetime.now(timezone.utc) - timedelta(seconds=5*test_config.alert_monitor_interval_seconds)),
-                (55.0, datetime.now(timezone.utc) - timedelta(seconds=4*test_config.alert_monitor_interval_seconds)),
-                (60.0, datetime.now(timezone.utc) - timedelta(seconds=3*test_config.alert_monitor_interval_seconds)),
-                (52.0, datetime.now(timezone.utc) - timedelta(seconds=2*test_config.alert_monitor_interval_seconds)),
-                (58.0, datetime.now(timezone.utc) - timedelta(seconds=1*test_config.alert_monitor_interval_seconds)),
-            ], maxlen=60)
-            RUN_RESOURCE_USAGE.labels(resource_type='cpu', instance_id='test_instance').set(99.0)
-            
-            await asyncio.sleep(test_config.alert_monitor_interval_seconds + 1)
-
-            print("\n--- Simulating exporter failures and retries ---")
-            prom.Gauge('runner_fail_datadog_metric', 'A metric to test Datadog failure', ['instance_id']).labels('test_instance').set(1.0)
-            prom.Gauge('runner_fail_cloudwatch_metric', 'A metric to test CloudWatch failure', ['instance_id']).labels('test_instance').set(1.0)
-            
-            await exporter.export_all()
-
-            print("\n--- Waiting for exporter retries to complete ---")
-            await asyncio.sleep(test_config.max_metrics_export_retries * test_config.metrics_export_retry_base_interval * 2 + 2)
-
-            if test_config.metrics_failover_file and aiofiles and os.path.exists(test_config.metrics_failover_file):
-                print(f"\n--- Checking failover file: {test_config.metrics_failover_file} ---")
-                async with aiofiles.open(test_config.metrics_failover_file, mode='r', encoding='utf-8') as f:
-                    content = await f.read()
-                    print(content)
-                    assert 'fail_datadog' in content
-                    assert 'fail_cloudwatch' in content
-                    assert 'batch_id' in content
-            
-            print("\n--- Shutting down exporter and alert monitor ---")
-            await exporter.shutdown() # [NEW] Explicitly shut down exporter
-            alert_task.cancel()
-            try:
-                await alert_task
-            except asyncio.CancelledError:
-                print("Alert monitor task cancelled.")
-            except Exception as e:
-                print(f"Error during alert monitor task cancellation: {e}")
-
-    asyncio.run(main())
+# --- Backward Compatibility Aliases ---
+# These aliases maintain compatibility with older code that uses the old metric names.
+# The metrics were renamed for consistency, but we provide aliases to prevent breaking changes.
+LLM_CALLS_TOTAL = LLM_REQUESTS_TOTAL  # Renamed to LLM_REQUESTS_TOTAL
+LLM_TOKEN_INPUT_TOTAL = LLM_TOKENS_INPUT  # Renamed to LLM_TOKENS_INPUT
+LLM_TOKEN_OUTPUT_TOTAL = LLM_TOKENS_OUTPUT  # Renamed to LLM_TOKENS_OUTPUT

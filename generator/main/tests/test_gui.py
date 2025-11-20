@@ -1,3 +1,7 @@
+{
+type: uploaded file
+fileName: test_gui.py
+fullContent:
 # test_gui.py
 """
 Comprehensive unit tests for gui.py
@@ -12,6 +16,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock, AsyncMock, call
 import json
 import aiohttp
+import threading
 
 # Set testing environment variables
 os.environ['TESTING'] = 'true'
@@ -65,8 +70,13 @@ class TestTuiLogHandler:
     @pytest.fixture
     def mock_app(self):
         app = MagicMock()
+        # Mock thread ID to simulate running on main thread by default
+        app._thread_id = threading.get_ident()
+        
         # Mock app.call_soon to just call the function
-        app.call_soon = lambda func, *args: func(*args) 
+        app.call_soon = lambda func, *args: func(*args)
+        # Mock app.call_from_thread as well
+        app.call_from_thread = lambda func, *args: func(*args)
         # Mock app.create_task to mirror asyncio.create_task
         app.create_task = lambda coro: asyncio.create_task(coro)
         app._loop = asyncio.get_event_loop()
@@ -107,9 +117,6 @@ class TestTuiLogHandler:
         # Wait for the queue to be processed by the worker
         await handler.queue.join()
         
-        # FIX: DO NOT await the worker task itself, it's an infinite loop.
-        # await asyncio.gather(*pending_tasks)
-
         log_widget.write.assert_called_with("Test log")
         
         handler.close() # This will cancel the worker task
@@ -213,7 +220,9 @@ class TestAPIInteraction:
             mock_session = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session) # Session context returns session
             mock_session.__aexit__ = AsyncMock()
-            mock_session.request = AsyncMock(return_value=mock_request_context) # request returns request context
+            
+            # FIX: session.request must return a context manager, NOT be an AsyncMock itself
+            mock_session.request = MagicMock(return_value=mock_request_context) 
             
             MockSession.return_value = mock_session # This is the key
             
@@ -237,7 +246,9 @@ class TestAPIInteraction:
             mock_session = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock()
-            mock_session.request = AsyncMock(return_value=mock_request_context)
+            
+            # FIX: session.request must be MagicMock
+            mock_session.request = MagicMock(return_value=mock_request_context)
             
             MockSession.return_value = mock_session
             
@@ -264,7 +275,9 @@ class TestAPIInteraction:
             mock_session = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock()
-            mock_session.request = AsyncMock(return_value=mock_request_context) # request returns the faulty context
+            
+            # FIX: session.request must be MagicMock
+            mock_session.request = MagicMock(return_value=mock_request_context) 
             
             MockSession.return_value = mock_session
             
@@ -338,7 +351,7 @@ class TestParserTab:
             app_instance.query_one("#intent_parser_input").value = test_input
             await app_instance.run_intent_parser_from_button()
             
-            mock_api.assert_called_once_with("POST", app_instance.API_ENDPOINTS["parse_text"], json_data={"content": test_input, "format_hint": None, "dry_run": False}, files=None)
+            mock_api.assert_called_once_with("POST", app_instance.API_ENDPOINTS["parse_text"], json_data={"content": test_input, "format_hint": None, "dry_run": False})
 
     
     @pytest.mark.asyncio
@@ -749,3 +762,4 @@ class TestIntegrationWithAPI:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+}

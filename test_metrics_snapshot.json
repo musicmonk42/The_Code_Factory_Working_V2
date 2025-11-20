@@ -1,0 +1,10 @@
+{
+  "runner_overall_test_pass_rate": 0.0,
+  "runner_distributed_nodes_active": 0.0,
+  "dashboard_log_queue_size": 0.0,
+  "runner_overall_coverage_percent": 0.0,
+  "runner_overall_vulnerability_score": 0.0,
+  "runner_failed_export_queue_size": 0.0,
+  "runner_config_reloads_total": 0.0,
+  "runner_config_reloads_created": 1762832423.1822972
+}

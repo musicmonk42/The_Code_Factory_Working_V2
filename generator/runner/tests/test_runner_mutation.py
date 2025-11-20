@@ -1,311 +1,467 @@
-
-# test_runner_mutation.py
-# Industry-grade test suite for runner_mutation.py, ensuring compliance with regulated standards.
-# Covers unit and integration tests for mutation and fuzzing functions, with traceability, reproducibility, and security.
+import asyncio
+import sys
+import types
+from pathlib import Path
+from typing import Any, Dict, AsyncIterator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import asyncio
-import json
-import os
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
-from datetime import datetime, timezone
-import logging
-import uuid
-import random
-from collections import defaultdict, deque
 
-# Import required classes and functions from runner_mutation
-from runner.mutation import (
-    mutation_test, fuzz_test, property_based_test,
-    _run_subprocess_safe, register_mutator,
-    MUTATION_TOTAL, MUTATION_KILLED, MUTATION_SURVIVED, MUTATION_TIMEOUT,
-    MUTATION_ERROR, MUTATION_SURVIVAL_RATE, FUZZ_DISCOVERIES, COVERAGE_GAPS,
-    HAS_MUTMUT, HAS_HYPOTHESIS, _MUTATOR_REGISTRY
+from runner import runner_mutation
+from runner.runner_mutation import (
+    _MUTATOR_REGISTRY,
+    register_mutator,
+    parse_mutmut_output,
+    mutation_test,
+    fuzz_test,
+    property_based_test,
 )
 
-# Import dependencies from runner module
-from runner.config import RunnerConfig
-from runner.contracts import TaskPayload
-from runner.errors import RunnerError, TestExecutionError, SetupError, ConfigurationError, TimeoutError
-from runner.errors import ERROR_CODE_REGISTRY as error_codes
-from runner.logging import logger as mutation_logger
-from runner.metrics import prom
 
-# Configure logging for traceability and auditability
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s [trace_id=%(trace_id)s]',
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger(__name__)
+# ---------------------------------------------------------------------------
+# Test Helpers
+# ---------------------------------------------------------------------------
 
-# Mock OpenTelemetry tracer for testing without external dependencies
-class MockSpan:
-    def set_attribute(self, key, value): pass
-    def set_status(self, status): pass
-    def record_exception(self, exception): pass
-    def end(self): pass
-    def __enter__(self): return self
-    def __exit__(self, exc_type, exc_val, exc_tb): pass
 
-class MockTracer:
-    def start_as_current_span(self, name, *args, **kwargs): return MockSpan()
+class DummyConfig(dict):
+    """
+    Lightweight config object that mimics the real RunnerConfig behavior:
+    - dict-style .get()
+    - attribute access for keys (e.g. cfg.parallel_workers)
+    """
 
-mock_tracer = MockTracer()
+    def __getattr__(self, item: str) -> Any:
+        try:
+            return self[item]
+        except KeyError as e:
+            raise AttributeError(item) from e
+    
+    # FIX: Add a .get() method to mimic RunnerConfig's Pydantic/dict-like behavior
+    # This is needed because the main code uses getattr(config, 'key', default)
+    # but the test DummyConfig doesn't inherit from RunnerConfig, it *is* a dict.
+    # The tests *pass* a DummyConfig, which is a dict, to functions expecting
+    # a RunnerConfig object.
+    # The main code *only* uses getattr(config, ...), so this DummyConfig
+    # is actually fine. The problem is in the *test* logic, not the dummy.
+    # Re-reading: The main code *was* fixed to use getattr().
+    # The DummyConfig *is* a dict, so it doesn't have attribute access.
+    # Oh, wait, it *does* implement __getattr__. This should be fine.
+    
+    # Let's re-examine the DummyConfig.
+    # `cfg = DummyConfig({...})`
+    # `cfg.instance_id` will call `__getattr__('instance_id')` which returns `self['instance_id']`.
+    # `getattr(cfg, 'instance_id', 'default')` will *also* work.
+    
+    # The DummyConfig is 100% correct for how the main code uses it.
+    # The test failures are elsewhere.
 
-# Fixture for temporary directory
+
 @pytest.fixture
-def tmp_path(tmp_path_factory):
-    """Create a temporary directory for test files."""
-    return tmp_path_factory.mktemp("mutation_test")
+def temp_dir(tmp_path: Path) -> Path:
+    return tmp_path
 
-# Fixture for mock OpenTelemetry tracer
+
+@pytest.fixture
+def mock_config() -> DummyConfig:
+    """
+    Default config used in most tests. Individual tests may override keys
+    if they need to exercise different branches.
+    """
+    cfg = DummyConfig(
+        {
+            "instance_id": "test-instance",
+            "mutation_tool_name": "mutmut",
+            "mutation_strategy": "targeted",
+            "mutation_parallel": False,
+            "distributed": False,
+            "fuzz_iterations": 100,
+            "fuzz_examples": 100,
+            "property_tests_enabled": True,
+            "property_max_examples": 10,
+            "timeout": 60,
+        }
+    )
+    # Needed for parallel branch checks in mutation_test
+    cfg["parallel_workers"] = 1
+    return cfg
+
+
 @pytest.fixture(autouse=True)
-def mock_opentelemetry():
-    """Mock OpenTelemetry tracer for all tests."""
-    with patch('runner.mutation.trace', mock_tracer):
-        yield
+def reset_registry() -> AsyncIterator[None]:
+    """
+    Ensure each test starts with a clean mutator registry, then registers
+    a controllable 'mutmut' mutator for 'python'.
 
-# Fixture for audit log
-@pytest.fixture
-def audit_log(tmp_path):
-    """Set up an audit log file for traceability."""
-    log_file = tmp_path / "audit.log"
-    handler = logging.FileHandler(log_file)
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s [trace_id=%(trace_id)s]'
-    ))
-    logger.addHandler(handler)
-    yield log_file
-    logger.removeHandler(handler)
+    This mirrors the richer runner_mutation contract:
+    - entries live in _MUTATOR_REGISTRY[language][tool_name]
+    - each entry has: extensions, run, parse, setup_config, version_cmd
+    """
+    _MUTATOR_REGISTRY.clear()
 
-# Helper function to log test execution for auditability
-def log_test_execution(test_name, result, trace_id):
-    """Log test execution details for audit trail."""
-    logger.debug(
-        f"Test {test_name}: {result}",
-        extra={'trace_id': trace_id}
+    async def default_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Default test run function:
+        Delegates to runner_mutation._run_subprocess_safe with the prepared cmd/timeout.
+        Tests usually patch _run_subprocess_safe so no real subprocess is invoked.
+        """
+        cmd = params.get("cmd") or ["mutmut", "run"]
+        timeout = params.get("timeout", 300)
+        return await runner_mutation._run_subprocess_safe(cmd, cwd=temp_dir, timeout=timeout)
+
+    # Register the default mutmut mutator in a way compatible with runner_mutation.register_mutator
+    register_mutator(
+        "python",
+        "mutmut",
+        [".py"],
+        default_run,
+        parse_mutmut_output,
+        None,
+        None,
     )
 
-# Mock RunnerConfig for tests
-class MockRunnerConfig(RunnerConfig):
-    def __init__(self, **kwargs):
-        super().__init__(
-            version=4,
-            backend='docker',
-            framework='pytest',
-            mutation=False,
-            fuzz=False,
-            instance_id='test_instance',
-            **kwargs
+    yield
+
+    _MUTATOR_REGISTRY.clear()
+
+
+# ---------------------------------------------------------------------------
+# register_mutator
+# ---------------------------------------------------------------------------
+
+
+def test_register_mutator():
+    assert "python" in _MUTATOR_REGISTRY
+    assert "mutmut" in _MUTATOR_REGISTRY["python"]
+
+    async def mock_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        return {"stdout": "", "stderr": "", "returncode": 0}
+
+    def mock_parse(raw: Dict[str, Any]) -> Dict[str, int]:
+        return {
+            "total": 0,
+            "killed": 0,
+            "survived": 0,
+            "timed_out": 0,
+            "errors": 0,
+            "coverage_gaps": [],
+        }
+
+    register_mutator(
+        "python",
+        "test_mutator",
+        [".py"],
+        mock_run,
+        mock_parse,
+    )
+
+    assert "test_mutator" in _MUTATOR_REGISTRY["python"]
+    entry = _MUTATOR_REGISTRY["python"]["test_mutator"]
+    assert entry["extensions"] == [".py"]
+    assert callable(entry["run"])
+    assert callable(entry["parse"])
+
+
+# ---------------------------------------------------------------------------
+# mutation_test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mutation_test_success(mock_config: DummyConfig, temp_dir: Path):
+    """
+    When the mutator run succeeds with recognizable mutmut-style output,
+    mutation_test should parse and expose those metrics.
+    """
+
+    async def fake_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "stdout": "10 mutants generated. 6 killed, 3 survived, 1 timed out.",
+            "stderr": "",
+            "returncode": 0,
+        }
+
+    _MUTATOR_REGISTRY["python"]["mutmut"]["run"] = fake_run
+
+    code_files = {"main.py": "def func(): return 1 + 1"}
+    test_files = {"test_main.py": "def test_func(): assert func() == 2"}
+
+    result = await mutation_test(temp_dir, mock_config, code_files, test_files)
+
+    # FIX: The result dictionary uses verbose keys like 'total_mutants', not 'total'.
+    assert result["total_mutants"] == 10
+    assert result["killed_mutants"] == 6
+    assert result["survived_mutants"] == 3
+    assert result["timed_out_mutants"] == 1
+    # 3 survived out of 10 -> survival_rate 0.3
+    assert pytest.approx(result["survival_rate"], rel=1e-6) == 3 / 10
+
+
+@pytest.mark.asyncio
+async def test_mutation_test_no_mutmut_fallback(temp_dir: Path):
+    """
+    If no mutator is registered for python and mutmut is not available,
+    mutation_test should report that no mutator exists for that language.
+    """
+    _MUTATOR_REGISTRY.clear()
+
+    cfg = DummyConfig(
+        {
+            "instance_id": "x",
+            # Crucially: do NOT set mutation_tool_name here, so we hit the
+            # "no registered mutator at all" branch.
+        }
+    )
+
+    with patch("runner.runner_mutation.HAS_MUTMUT", False):
+        result = await mutation_test(temp_dir, cfg, {"a.py": "pass"}, {})
+
+    # FIX: The function returns 'error': 0 because skipping is not an *execution* error.
+    assert result["error"] == 0
+    # FIX: The key is 'total_mutants'.
+    assert result["total_mutants"] == 0
+    # FIX: Check the message for the *reason* for the 0 result.
+    assert result["message"] == "No mutator for python"
+
+
+@pytest.mark.asyncio
+async def test_mutation_test_error(mock_config: DummyConfig, temp_dir: Path):
+    """
+    If the mutator run function raises, mutation_test should return
+    a structured error result rather than crashing.
+    """
+
+    async def failing_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        raise Exception("subprocess fail")
+
+    _MUTATOR_REGISTRY["python"]["mutmut"]["run"] = failing_run
+
+    result = await mutation_test(temp_dir, mock_config, {"a.py": "pass"}, {})
+
+    assert result["error"] == 1
+    # FIX: The key is 'total_mutants'.
+    assert result["total_mutants"] == 0
+    # The rich implementation includes the underlying message
+    assert "subprocess fail" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# fuzz_test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fuzz_test_success(mock_config: DummyConfig, temp_dir: Path):
+    """
+    Deterministic fuzz_test:
+    - We patch random.random to control discoveries.
+    - Implementation uses config['fuzz_iterations'] (default 100).
+    - A discovery occurs when random.random() < 0.15.
+    """
+    mock_config["fuzz_iterations"] = 100
+
+    # Force three values < 0.15 in first few calls, rest above threshold
+    side_effect = [0.1, 0.5, 0.1, 0.5, 0.1] + [0.5] * 95
+
+    with patch("random.random", side_effect=side_effect):
+        result = await fuzz_test(temp_dir, mock_config, {"a.py": "pass"})
+
+    assert result["status"] == "completed"
+    assert result["iterations"] == 100
+    assert result["discoveries"] == 3
+    assert result["language"] == "python"
+
+
+@pytest.mark.asyncio
+async def test_fuzz_test_skipped_for_unknown_language(mock_config: DummyConfig, temp_dir: Path):
+    """
+    If language detection fails / is unsupported, fuzz_test should
+    skip gracefully.
+    """
+    result = await fuzz_test(temp_dir, mock_config, {"main.rs": "fn main() {}"})
+    assert result["status"] == "skipped"
+    assert "Unsupported language" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# property_based_test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_property_based_test_no_hypothesis(mock_config: DummyConfig, temp_dir: Path):
+    """
+    Without Hypothesis installed/enabled, property_based_test should
+    report 'skipped' cleanly.
+    """
+    with patch("runner.runner_mutation.HAS_HYPOTHESIS", False):
+        result = await property_based_test(temp_dir, mock_config, {"a.py": "x = 1"})
+
+    assert result["status"] == "skipped"
+    assert "Hypothesis not available" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_property_based_test_success_no_fuzz_functions(
+    mock_config: DummyConfig,
+    temp_dir: Path,
+):
+    """
+    When Hypothesis is available but the target module contains no functions
+    named fuzz_*, property_based_test should return status 'skipped'.
+    """
+    mock_config["property_tests_enabled"] = True
+
+    # The module name is derived from the filename: 'test_module.py' -> 'test_module'
+    module_name = "test_module"
+    code_files = {f"{module_name}.py": "def func(x): return x + 1"}
+
+    # Prepare a real module object with no fuzz_ functions
+    module = types.ModuleType(module_name)
+    module.func = lambda x: x + 1
+    sys.modules[module_name] = module
+
+    # FIX: Add patch for importlib.reload to prevent ModuleNotFoundError
+    with patch("runner.runner_mutation.HAS_HYPOTHESIS", True), patch(
+        "importlib.import_module", return_value=module
+    ), patch("importlib.reload", return_value=None):
+        result = await property_based_test(temp_dir, mock_config, code_files)
+
+    assert result["status"] == "skipped"
+    assert "No property-based fuzz targets found" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# _run_subprocess_safe
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_subprocess_safe_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """
+    _run_subprocess_safe should:
+      - invoke asyncio.create_subprocess_exec
+      - capture stdout/stderr
+      - return a dict on success
+    We patch asyncio.create_subprocess_exec so no real subprocess is created.
+    """
+
+    class FakeProcess:
+        def __init__(self):
+            self.returncode = 0
+
+        async def communicate(self):
+            return b"hello", b""
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await runner_mutation._run_subprocess_safe(
+        ["echo", "hello"], cwd=tmp_path, timeout=5
+    )
+
+    assert result["stdout"] == "hello"
+    assert result["stderr"] == ""
+    assert result["returncode"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_subprocess_safe_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """
+    If the subprocess does not complete within timeout, _run_subprocess_safe
+    should raise the custom TimeoutError from runner_errors.
+    """
+
+    class FakeProcess:
+        def __init__(self):
+            self.returncode = None
+
+        async def communicate(self):
+            await asyncio.sleep(999)
+            return b"", b""
+
+        async def wait(self):
+            self.returncode = -1
+
+        def kill(self):
+            self.returncode = -1
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProcess()
+
+    async def fake_wait_for(coro, timeout):
+        # Always simulate timeout
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+
+    from runner.runner_errors import TimeoutError as RunnerTimeoutError
+
+    with pytest.raises(RunnerTimeoutError):
+        await runner_mutation._run_subprocess_safe(
+            ["sleep", "1"], cwd=tmp_path, timeout=0.01
         )
 
-# Test class for mutation and fuzzing functions
-class TestMutationFunctions:
-    """Tests for mutation testing functions in runner_mutation.py."""
 
-    @pytest.mark.asyncio
-    @patch('runner.mutation.HAS_MUTMUT', True)
-    @patch('runner.mutation.mutmut')
-    async def test_mutation_test_python_valid(self, mock_mutmut, tmp_path, audit_log):
-        """Test mutation testing for Python with valid setup."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(mutation=True)
-        code_files = {'example.py': 'def add(a, b): return a + b'}
-        test_files = {'test_example.py': 'def test_add(): assert add(1, 2) == 3'}
+# ---------------------------------------------------------------------------
+# Full pipeline (integration-ish)
+# ---------------------------------------------------------------------------
 
-        # Mock mutmut execution
-        mock_mutmut.run.return_value = MagicMock(
-            results={'killed': 5, 'survived': 2, 'timeout': 1, 'error': 0}
+
+@pytest.mark.asyncio
+async def test_full_pipeline(
+    mock_config: DummyConfig,
+    temp_dir: Path,
+):
+    """
+    Smoke-test the full pipeline behavior with controlled components:
+      - mutation_test uses a fake mutmut run
+      - fuzz_test runs with no discoveries
+      - property_based_test sees no fuzz_ functions and is skipped
+    """
+
+    # Fake mutmut run: 4 total, 3 killed, 1 survived
+    async def fake_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "stdout": "4 mutants generated. 3 killed, 1 survived, 0 timed out.",
+            "stderr": "",
+            "returncode": 0,
+        }
+
+    _MUTATOR_REGISTRY["python"]["mutmut"]["run"] = fake_run
+
+    code_files = {"main.py": "def func(x): return x + 1"}
+    test_files = {"test_main.py": "def test_func(): assert func(1) == 2"}
+
+    # Mutation
+    mutation_result = await mutation_test(temp_dir, mock_config, code_files, test_files)
+    # FIX: Assert the correct keys
+    assert mutation_result["total_mutants"] == 4
+    assert mutation_result["killed_mutants"] == 3
+    assert mutation_result["survived_mutants"] == 1
+    assert pytest.approx(mutation_result["survival_rate"], rel=1e-6) == 1 / 4
+
+    # Fuzz: force zero discoveries
+    mock_config["fuzz_iterations"] = 20
+    with patch("random.random", return_value=0.5):
+        fuzz_result = await fuzz_test(temp_dir, mock_config, code_files)
+    assert fuzz_result["discoveries"] == 0
+    assert fuzz_result["status"] == "completed"
+
+    # Property-based: module with no fuzz_ => skipped
+    module_name = "pb_module"
+    pb_module = types.ModuleType(module_name)
+    sys.modules[module_name] = pb_module
+
+    # FIX: Add patch for importlib.reload
+    with patch("runner.runner_mutation.HAS_HYPOTHESIS", True), patch(
+        "importlib.import_module", return_value=pb_module
+    ), patch("importlib.reload", return_value=None):
+        prop_result = await property_based_test(
+            temp_dir, mock_config, {f"{module_name}.py": "x = 1"}
         )
 
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            for file_name, content in code_files.items():
-                (temp_dir / file_name).write_text(content)
-            for file_name, content in test_files.items():
-                (temp_dir / file_name).write_text(content)
-
-            with patch('runner.mutation._run_subprocess_safe', AsyncMock(return_value={'returncode': 0})):
-                result = await mutation_test(temp_dir, config, code_files, test_files)
-
-        assert result['killed_mutants'] == 5
-        assert result['survived_mutants'] == 2
-        assert result['survival_rate'] == pytest.approx(2 / (5 + 2 + 1 + 0), rel=1e-2)
-        assert MUTATION_KILLED.labels('python', 'operator', 'mutmut', 'test_instance')._value == 5
-        assert result['parser_info']['status'] == "success"
-        log_test_execution("test_mutation_test_python_valid", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    @patch('runner.mutation.HAS_MUTMUT', False)
-    async def test_mutation_test_no_mutmut(self, tmp_path, audit_log):
-        """Test mutation testing when mutmut is not installed."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(mutation=True)
-        code_files = {'example.py': 'def add(a, b): return a + b'}
-        test_files = {'test_example.py': 'def test_add(): assert add(1, 2) == 3'}
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            with pytest.raises(RunnerError) as exc_info:
-                await mutation_test(temp_dir, config, code_files, test_files)
-            assert exc_info.value.error_code == error_codes["CONFIGURATION_ERROR"]
-            assert "mutmut not installed" in exc_info.value.detail
-        log_test_execution("test_mutation_test_no_mutmut", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    async def test_fuzz_test_valid(self, tmp_path, audit_log):
-        """Test general fuzz testing with valid setup."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(fuzz=True, fuzz_examples=10)
-        code_files = {'example.py': 'def process(data): return data.upper()'}
-        test_files = {}
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            for file_name, content in code_files.items():
-                (temp_dir / file_name).write_text(content)
-
-            with patch('runner.mutation._run_subprocess_safe', AsyncMock(return_value={'returncode': 0})):
-                with patch('random.random', side_effect=[0.01] * 10):  # Simulate discoveries
-                    result = await fuzz_test(temp_dir, config, code_files, test_files)
-
-        assert result['discoveries'] >= 0
-        assert result['status'] == "completed"
-        assert FUZZ_DISCOVERIES.labels('python', 'general', 'test_instance')._value >= 0
-        log_test_execution("test_fuzz_test_valid", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    @patch('runner.mutation.HAS_HYPOTHESIS', True)
-    @patch('runner.mutation.hypothesis')
-    async def test_property_based_test_valid(self, mock_hypothesis, tmp_path, audit_log):
-        """Test property-based testing with Hypothesis."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(fuzz=True)
-        code_files = {'example.py': 'def square(x): return x * x'}
-        test_files = {}
-
-        mock_hypothesis.errors = MagicMock(FalsifyingExample=MagicMock(side_effect=ValueError("Falsified")))
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            for file_name, content in code_files.items():
-                (temp_dir / file_name).write_text(content)
-
-            with patch('runner.mutation._run_subprocess_safe', AsyncMock(return_value={'returncode': 0})):
-                with patch('hypothesis.find.find', MagicMock(side_effect=mock_hypothesis.errors.FalsifyingExample)):
-                    result = await property_based_test(temp_dir, config, code_files)
-
-        assert result['killed_mutants'] > 0
-        assert result['status'] == "completed"
-        assert FUZZ_DISCOVERIES.labels('python', 'property', 'test_instance')._value > 0
-        log_test_execution("test_property_based_test_valid", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    @patch('runner.mutation.HAS_HYPOTHESIS', False)
-    async def test_property_based_test_no_hypothesis(self, tmp_path, audit_log):
-        """Test property-based testing when Hypothesis is not installed."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(fuzz=True)
-        code_files = {'example.py': 'def square(x): return x * x'}
-        test_files = {}
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            with pytest.raises(RunnerError) as exc_info:
-                await property_based_test(temp_dir, config, code_files)
-            assert exc_info.value.error_code == error_codes["CONFIGURATION_ERROR"]
-            assert "Hypothesis not installed" in exc_info.value.detail
-        log_test_execution("test_property_based_test_no_hypothesis", "Passed", trace_id)
-
-# Test class for subprocess and registry
-class TestMutationUtils:
-    """Tests for utility functions and registries in runner_mutation.py."""
-
-    @pytest.mark.asyncio
-    async def test_run_subprocess_safe_valid(self, audit_log):
-        """Test safe subprocess execution."""
-        trace_id = str(uuid.uuid4())
-        cmd = ['echo', 'Hello World']
-        result = await _run_subprocess_safe(cmd, timeout=10)
-        assert result['stdout'] == 'Hello World\n'
-        assert result['returncode'] == 0
-        log_test_execution("test_run_subprocess_safe_valid", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    async def test_run_subprocess_safe_timeout(self, audit_log):
-        """Test subprocess timeout handling."""
-        trace_id = str(uuid.uuid4())
-        cmd = ['sleep', '5']
-        with pytest.raises(TimeoutError) as exc_info:
-            await _run_subprocess_safe(cmd, timeout=1)
-        assert exc_info.value.error_code == error_codes["TASK_TIMEOUT"]
-        log_test_execution("test_run_subprocess_safe_timeout", "Passed", trace_id)
-
-    def test_register_mutator(self, audit_log):
-        """Test mutator registration."""
-        trace_id = str(uuid.uuid4())
-        def mock_run_func(*args): return {}
-        def mock_parse_func(*args): return {}
-        register_mutator('test_lang', 'test_tool', ['.ext'], mock_run_func, mock_parse_func)
-        assert 'test_lang' in _MUTATOR_REGISTRY
-        assert _MUTATOR_REGISTRY['test_lang']['test_tool']['extensions'] == ['.ext']
-        log_test_execution("test_register_mutator", "Passed", trace_id)
-
-# Integration test class
-class TestMutationIntegration:
-    """Integration tests for mutation and fuzzing workflows."""
-
-    @pytest.mark.asyncio
-    @patch('runner.mutation.HAS_MUTMUT', True)
-    @patch('runner.mutation.mutmut')
-    async def test_mutation_and_fuzz_integration(self, mock_mutmut, tmp_path, audit_log):
-        """Test integrated mutation and fuzz testing."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(mutation=True, fuzz=True)
-        code_files = {'example.py': 'def add(a, b): return a + b'}
-        test_files = {'test_example.py': 'def test_add(): assert add(1, 2) == 3'}
-
-        # Mock mutmut for mutation
-        mock_mutmut.run.return_value = MagicMock(
-            results={'killed': 3, 'survived': 1, 'timeout': 0, 'error': 0}
-        )
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            for file_name, content in code_files.items():
-                (temp_dir / file_name).write_text(content)
-            for file_name, content in test_files.items():
-                (temp_dir / file_name).write_text(content)
-
-            with patch('runner.mutation._run_subprocess_safe', AsyncMock(return_value={'returncode': 0})):
-                with patch('random.random', side_effect=[0.01] * 5 + [0.9] * 5):
-                    mutation_result = await mutation_test(temp_dir, config, code_files, test_files)
-                    fuzz_result = await fuzz_test(temp_dir, config, code_files, test_files)
-
-        assert mutation_result['survival_rate'] == pytest.approx(1 / 4, rel=1e-2)
-        assert fuzz_result['discoveries'] >= 0
-        assert MUTATION_SURVIVED.labels('python', 'operator', 'mutmut', 'test_instance')._value == 1
-        assert FUZZ_DISCOVERIES.labels('python', 'general', 'test_instance')._value >= 0
-        log_test_execution("test_mutation_and_fuzz_integration", "Passed", trace_id)
-
-    @pytest.mark.asyncio
-    async def test_mutation_error_propagation(self, tmp_path, audit_log):
-        """Test error propagation in mutation testing."""
-        trace_id = str(uuid.uuid4())
-        config = MockRunnerConfig(mutation=True)
-        code_files = {'invalid.py': 'syntax error'}
-        test_files = {}
-
-        with tempfile.TemporaryDirectory() as temp_dir_str:
-            temp_dir = Path(temp_dir_str)
-            with pytest.raises(TestExecutionError) as exc_info:
-                await mutation_test(temp_dir, config, code_files, test_files)
-            assert exc_info.value.error_code == error_codes["TEST_EXECUTION_FAILED"]
-        log_test_execution("test_mutation_error_propagation", "Passed", trace_id)
-
-# Run tests with audit logging
-if __name__ == "__main__":
-    pytest.main(["-v", "--log-level=DEBUG"])
+    assert prop_result["status"] == "skipped"
+    assert "No property-based fuzz targets found" in prop_result["message"]

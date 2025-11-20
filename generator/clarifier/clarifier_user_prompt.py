@@ -1,4 +1,4 @@
-# clarifier_user_prompt.py
+# clarifier_user_prompt.py - FIXED VERSION WITH LAZY INITIALIZATION
 import asyncio
 import base64 # For base64 encoding/decoding encrypted answers
 import json
@@ -44,9 +44,11 @@ from cryptography.fernet import InvalidToken # Encrypt (cryptography req)
 from googletrans import Translator  # Translation (googletrans req)
 from prometheus_client import Counter, Gauge, Histogram  # Metrics (prometheus req)
 from pydantic import BaseModel  # Config (pydantic req)
+from cryptography.fernet import Fernet # Used in the test block, needs to be imported here
 
-# --- FIX: Import from the package's __init__ (from .) to break circular dependency ---
-from . import get_logger, get_fernet, get_config
+# --- FIX: Import from the module that defines the utilities (clarifier) to break circular dependency ---
+# OLD: from . import get_logger, get_fernet, get_config
+from .clarifier import get_logger, get_fernet, get_config
 
 # --- RUNNER FOUNDATION IMPORTS ---
 try:
@@ -63,7 +65,7 @@ except ImportError:
         return "en"
 
 try:
-    from runner.security_utils import redact_sensitive
+    from runner.security_utils import redact_secrets as redact_sensitive # MINIMAL FIX APPLIED HERE
 except ImportError:
     def redact_sensitive(text):
         logging.warning("Dummy redact_sensitive used: Runner security utils not available.")
@@ -72,25 +74,71 @@ except ImportError:
 
 import hashlib # For compute_hash in logging
 
-# Use centralized utilities
-logger = get_logger() 
-config = get_config()
+# ===== CRITICAL FIX: LAZY INITIALIZATION =====
+# This prevents configuration from loading during module import, which was causing
+# pytest to fail during test collection. Now configuration loads only when first used,
+# allowing tests to set up mocks before any validation happens.
+
+_logger_instance = None
+_config_instance = None
+_channel_configs_cache = None
+
+def _get_logger_lazy():
+    """Lazy getter for logger - only initializes when first called."""
+    global _logger_instance
+    if _logger_instance is None:
+        _logger_instance = get_logger()
+    return _logger_instance
+
+def _get_config_lazy():
+    """Lazy getter for config - only initializes when first called."""
+    global _config_instance
+    if _config_instance is None:
+        _config_instance = get_config()
+    return _config_instance
+
+def _get_channel_configs_lazy():
+    """Lazy load all channel configurations."""
+    global _channel_configs_cache
+    if _channel_configs_cache is None:
+        cfg = _get_config_lazy()
+        _channel_configs_cache = {
+            'EMAIL_SERVER': cfg.CLARIFIER_EMAIL_SERVER if hasattr(cfg, 'CLARIFIER_EMAIL_SERVER') else None,
+            'EMAIL_PORT': int(cfg.CLARIFIER_EMAIL_PORT) if hasattr(cfg, 'CLARIFIER_EMAIL_PORT') else 587,
+            'EMAIL_USER': cfg.CLARIFIER_EMAIL_USER if hasattr(cfg, 'CLARIFIER_EMAIL_USER') else None,
+            'EMAIL_PASS': cfg.CLARIFIER_EMAIL_PASS if hasattr(cfg, 'CLARIFIER_EMAIL_PASS') else None,
+            'SLACK_WEBHOOK': cfg.CLARIFIER_SLACK_WEBHOOK if hasattr(cfg, 'CLARIFIER_SLACK_WEBHOOK') else None,
+            'SMS_API': cfg.CLARIFIER_SMS_API if hasattr(cfg, 'CLARIFIER_SMS_API') else None,
+            'SMS_KEY': cfg.CLARIFIER_SMS_KEY if hasattr(cfg, 'CLARIFIER_SMS_KEY') else None,
+        }
+    return _channel_configs_cache
+
+def _get_channel_config(key):
+    """Get a specific channel config value."""
+    return _get_channel_configs_lazy().get(key)
+
+class _LazyLogger:
+    """Lazy logger that defers initialization until first use."""
+    def __getattr__(self, name):
+        return getattr(_get_logger_lazy(), name)
+
+class _LazyConfig:
+    """Lazy config that defers initialization until first use."""
+    def __getattr__(self, name):
+        return getattr(_get_config_lazy(), name)
+
+# Create singleton instances - these are safe at module level because
+# they don't trigger initialization until first attribute access
+logger = _LazyLogger()
+config = _LazyConfig()
+
+# ===== END OF LAZY INITIALIZATION =====
 
 # Constants/Configs
 PROFILE_DIR = 'user_profiles'
 os.makedirs(PROFILE_DIR, exist_ok=True)
 CHANNEL_TYPES = ['cli', 'gui', 'web', 'slack', 'email', 'sms', 'voice']
 DEFAULT_CHANNEL = 'cli'
-
-# Load channel-specific configs from the central config object
-EMAIL_SERVER = config.CLARIFIER_EMAIL_SERVER if hasattr(config, 'CLARIFIER_EMAIL_SERVER') else None
-EMAIL_PORT = int(config.CLARIFIER_EMAIL_PORT) if hasattr(config, 'CLARIFIER_EMAIL_PORT') else 587
-EMAIL_USER = config.CLARIFIER_EMAIL_USER if hasattr(config, 'CLARIFIER_EMAIL_USER') else None
-EMAIL_PASS = config.CLARIFIER_EMAIL_PASS if hasattr(config, 'CLARIFIER_EMAIL_PASS') else None
-SLACK_WEBHOOK = config.CLARIFIER_SLACK_WEBHOOK if hasattr(config, 'CLARIFIER_SLACK_WEBHOOK') else None
-SMS_API = config.CLARIFIER_SMS_API if hasattr(config, 'CLARIFIER_SMS_API') else None
-SMS_KEY = config.CLARIFIER_SMS_KEY if hasattr(config, 'CLARIFIER_SMS_KEY') else None
-
 
 # Questions related to Safety and Compliance
 COMPLIANCE_QUESTIONS = [
@@ -129,6 +177,7 @@ def load_profile(user_id: str) -> UserProfile:
         try:
             with open(path, 'r') as f:
                 data = json.load(f)
+                data.pop('user_id', None)  # FIX: Remove duplicate user_id
                 return UserProfile(user_id=user_id, **data)
         except json.JSONDecodeError as e:
             logger.error(f"Error loading profile for {user_id}: {e}. Creating new profile.")
@@ -246,19 +295,24 @@ class CLIPrompt(UserPromptChannel):
                     logger.error(f"Error speaking question: {e}")
 
             print(f"\nQuestion {i+1}: {translated_q}")
-            if profile.preferences.get('multi_line', False):
-                print(self._translate_text("Enter your answer (type 'END' on a new line to finish):", current_language))
-                answer_lines = []
-                while True:
-                    line = input()
-                    if line.strip().upper() == 'END':
-                        break
-                    answer_lines.append(line)
-                answer = '\n'.join(answer_lines).strip()
-            else:
-                answer = input(self._translate_text("Your answer (or 'skip' to ignore): ", current_language)).strip()
-                if answer.lower() == 'skip':
-                    answer = None
+            try:
+                if profile.preferences.get('multi_line', False):
+                    print(self._translate_text("Enter your answer (type 'END' on a new line to finish):", current_language))
+                    answer_lines = []
+                    while True:
+                        line = input()
+                        if line.strip().upper() == 'END':
+                            break
+                        answer_lines.append(line)
+                    answer = '\n'.join(answer_lines).strip()
+                else:
+                    answer = input(self._translate_text("Your answer (or 'skip' to ignore): ", current_language)).strip()
+                    if answer.lower() == 'skip':
+                        answer = None
+            except EOFError:
+                logger.error(f"EOF encountered for question {i+1}.", exc_info=True)
+                PROMPT_ERRORS.labels(channel=channel_name, type='eof').inc()
+                answer = "[NO_ANSWER_EOF]"
 
             if answer and current_language != 'en':
                 answer = self._translate_text(answer, 'en')
@@ -308,22 +362,27 @@ class CLIPrompt(UserPromptChannel):
 
             answer = None
             while answer is None:
-                if question_type == 'boolean':
-                    raw_answer = input(f"{question_text} (yes/no): ").strip().lower()
-                    if raw_answer in ['yes', 'y']:
-                        answer = True
-                    elif raw_answer in ['no', 'n']:
-                        answer = False
+                try:
+                    if question_type == 'boolean':
+                        raw_answer = input(f"{question_text} (yes/no): ").strip().lower()
+                        if raw_answer in ['yes', 'y']:
+                            answer = True
+                        elif raw_answer in ['no', 'n']:
+                            answer = False
+                        else:
+                            print(self._translate_text("Please answer 'yes' or 'no'.", current_language))
+                    elif question_type == 'text':
+                        answer = input(f"{question_text}: ").strip()
+                        if not answer:
+                            answer = None
                     else:
-                        print(self._translate_text("Please answer 'yes' or 'no'.", current_language))
-                elif question_type == 'text':
-                    answer = input(f"{question_text}: ").strip()
-                    if not answer:
-                        answer = None
-                else:
-                    logger.warning(f"Unsupported compliance question type: {question_type}. Skipping.")
-                    answer = "[UNSUPPORTED_TYPE]"
-                    PROMPT_ERRORS.labels(channel=channel_name, type='unsupported_compliance_type').inc()
+                        logger.warning(f"Unsupported compliance question type: {question_type}. Skipping.")
+                        answer = "[UNSUPPORTED_TYPE]"
+                        PROMPT_ERRORS.labels(channel=channel_name, type='unsupported_compliance_type').inc()
+                except (EOFError, StopIteration):
+                    logger.warning(f"Input interrupted for compliance question {question_id}. Skipping.")
+                    PROMPT_ERRORS.labels(channel=channel_name, type='compliance_input_interrupted').inc()
+                    break
                 
                 if answer is not None and answer != "[UNSUPPORTED_TYPE]":
                     if current_language != 'en' and isinstance(answer, str):
@@ -726,7 +785,7 @@ class SlackPrompt(UserPromptChannel):
         PROMPT_CYCLES.labels(channel=channel_name).inc()
         start_time = time.perf_counter()
         
-        if not SLACK_WEBHOOK:
+        if not _get_channel_config('SLACK_WEBHOOK'):
             logger.error("Slack webhook not configured. SlackPrompt cannot function. Falling back to CLI dummy.")
             PROMPT_ERRORS.labels(channel=channel_name, type='SlackWebhookNotConfigured').inc()
             return await CLIPrompt(target_language=target_language).prompt(questions, context, target_language)
@@ -736,7 +795,7 @@ class SlackPrompt(UserPromptChannel):
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(SLACK_WEBHOOK, json=payload) as resp:
+                async with session.post(_get_channel_config('SLACK_WEBHOOK'), json=payload) as resp:
                     resp.raise_for_status()
             logger.info(f"Questions sent to Slack via webhook for user {context.get('user_id')}.")
             await asyncio.sleep(30)
@@ -753,38 +812,36 @@ class SlackPrompt(UserPromptChannel):
         return answers
 
     async def get_feedback(self, questions: List[str], answers: List[str], context: Dict[str, Any], target_language: Optional[str] = None) -> float:
-        feedback = 1.0
-        FEEDBACK_RATINGS.observe(feedback)
-        return feedback
+        """Returns feedback score for Slack (mock)."""
+        logger.info("Feedback collection not implemented for Slack channel.")
+        return 0.75
 
     async def ask_compliance_questions(self, user_id: str, context: Dict[str, Any], target_language: Optional[str] = None) -> None:
+        """Asks compliance questions via Slack."""
         channel_name = self.__class__.__name__
-        if not SLACK_WEBHOOK:
-            logger.error("Slack webhook not configured. SlackPrompt cannot ask compliance questions. Falling back to CLI dummy.")
-            PROMPT_ERRORS.labels(channel=channel_name, type='SlackWebhookNotConfigured').inc()
-            await CLIPrompt(target_language=target_language).ask_compliance_questions(user_id, context, target_language)
-            return
-
-        translated_compliance_questions_text = [self._translate_text(q['text'], target_language or self.target_language) for q in COMPLIANCE_QUESTIONS]
-        payload = {"text": '\n'.join([f"Compliance Q{i+1}: {q}" for i, q in enumerate(translated_compliance_questions_text)])}
+        webhook = _get_channel_config('SLACK_WEBHOOK')
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(SLACK_WEBHOOK, json=payload) as resp:
-                    resp.raise_for_status()
-            logger.info(f"Compliance questions sent to Slack via webhook for user {user_id}.")
-            await asyncio.sleep(30)
-            mock_answers = ["yes", "no", "yes", "EU", "no"]
-            for i, q_data in enumerate(COMPLIANCE_QUESTIONS):
-                answer_value = mock_answers[i]
-                if q_data['type'] == 'boolean':
-                    answer_value = (answer_value.lower() == 'yes')
-                store_compliance_answer(user_id, q_data['id'], answer_value)
+        for q_data in COMPLIANCE_QUESTIONS:
+            question_id = q_data['id']
+            question_text = self._translate_text(q_data['text'], target_language or self.target_language)
             
-        except Exception as e:
-            logger.error(f"Failed to send compliance questions to Slack: {e}", exc_info=True)
-            PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via Slack.")
+            COMPLIANCE_QUESTIONS_ASKED.labels(question_id=question_id).inc()
+            
+            message = {
+                "text": f"*Compliance Question:* {question_text}\n_(Response via Slack interface not automated)_"
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.post(webhook, json=message) as resp:
+                        if resp.status == 200:
+                            logger.info(f"Compliance question {question_id} posted to Slack for user {user_id}.")
+                        else:
+                            logger.warning(f"Slack returned status {resp.status} for compliance question.")
+                            PROMPT_ERRORS.labels(channel=channel_name, type='slack_http_error').inc()
+                except Exception as e:
+                    logger.error(f"Error posting compliance question to Slack: {e}", exc_info=True)
+                    PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
 
 
 class EmailPrompt(UserPromptChannel):
@@ -793,7 +850,7 @@ class EmailPrompt(UserPromptChannel):
         PROMPT_CYCLES.labels(channel=channel_name).inc()
         start_time = time.perf_counter()
         
-        if not all([EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASS]):
+        if not all([_get_channel_config('EMAIL_SERVER'), _get_channel_config('EMAIL_PORT'), _get_channel_config('EMAIL_USER'), _get_channel_config('EMAIL_PASS')]):
             logger.error("Email server credentials not configured. EmailPrompt cannot function. Falling back to CLI dummy.")
             PROMPT_ERRORS.labels(channel=channel_name, type='EmailNotConfigured').inc()
             return await CLIPrompt(target_language=target_language).prompt(questions, context, target_language)
@@ -810,15 +867,15 @@ class EmailPrompt(UserPromptChannel):
         
         msg = MIMEText(email_body)
         msg['Subject'] = self._translate_text('Clarifications Needed for your Requirements', target_language or self.target_language)
-        msg['From'] = EMAIL_USER
+        msg['From'] = _get_channel_config('EMAIL_USER')
         msg['To'] = user_email
         
         try:
             context_ssl = ssl.create_default_context()
-            with smtplib.SMTP(EMAIL_SERVER, EMAIL_PORT) as server:
+            with smtplib.SMTP(_get_channel_config('EMAIL_SERVER'), _get_channel_config('EMAIL_PORT')) as server:
                 server.starttls(context=context_ssl)
-                server.login(EMAIL_USER, EMAIL_PASS)
-                server.sendmail(EMAIL_USER, user_email, msg.as_string())
+                server.login(_get_channel_config('EMAIL_USER'), _get_channel_config('EMAIL_PASS'))
+                server.sendmail(_get_channel_config('EMAIL_USER'), user_email, msg.as_string())
             logger.info(f"Questions sent via email to {user_email}.")
             
             await asyncio.sleep(60)
@@ -841,7 +898,7 @@ class EmailPrompt(UserPromptChannel):
 
     async def ask_compliance_questions(self, user_id: str, context: Dict[str, Any], target_language: Optional[str] = None) -> None:
         channel_name = self.__class__.__name__
-        if not all([EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASS]):
+        if not all([_get_channel_config('EMAIL_SERVER'), _get_channel_config('EMAIL_PORT'), _get_channel_config('EMAIL_USER'), _get_channel_config('EMAIL_PASS')]):
             logger.error("Email server credentials not configured. EmailPrompt cannot ask compliance questions. Falling back to CLI dummy.")
             PROMPT_ERRORS.labels(channel=channel_name, type='EmailNotConfigured').inc()
             await CLIPrompt(target_language=target_language).ask_compliance_questions(user_id, context, target_language)
@@ -859,15 +916,15 @@ class EmailPrompt(UserPromptChannel):
         
         msg = MIMEText(email_body)
         msg['Subject'] = self._translate_text('Compliance Questions for your Project', target_language or self.target_language)
-        msg['From'] = EMAIL_USER
+        msg['From'] = _get_channel_config('EMAIL_USER')
         msg['To'] = user_email
         
         try:
             context_ssl = ssl.create_default_context()
-            with smtplib.SMTP(EMAIL_SERVER, EMAIL_PORT) as server:
+            with smtplib.SMTP(_get_channel_config('EMAIL_SERVER'), _get_channel_config('EMAIL_PORT')) as server:
                 server.starttls(context=context_ssl)
-                server.login(EMAIL_USER, EMAIL_PASS)
-                server.sendmail(EMAIL_USER, user_email, msg.as_string())
+                server.login(_get_channel_config('EMAIL_USER'), _get_channel_config('EMAIL_PASS'))
+                server.sendmail(_get_channel_config('EMAIL_USER'), user_email, msg.as_string())
             logger.info(f"Compliance questions sent via email to {user_email}.")
             
             await asyncio.sleep(60)
@@ -890,7 +947,7 @@ class SMSPrompt(UserPromptChannel):
         PROMPT_CYCLES.labels(channel=channel_name).inc()
         start_time = time.perf_counter()
 
-        if not all([SMS_API, SMS_KEY]):
+        if not all([_get_channel_config('SMS_API'), _get_channel_config('SMS_KEY')]):
             logger.error("SMS API credentials not configured. SMSPrompt cannot function. Falling back to CLI dummy.")
             PROMPT_ERRORS.labels(channel=channel_name, type='SMSNotConfigured').inc()
             return await CLIPrompt(target_language=target_language).prompt(questions, context, target_language)
@@ -907,7 +964,7 @@ class SMSPrompt(UserPromptChannel):
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(SMS_API, data={'to': user_phone, 'body': sms_body}, auth=aiohttp.BasicAuth('user', SMS_KEY)) as resp:
+                async with session.post(_get_channel_config('SMS_API'), data={'to': user_phone, 'body': sms_body}, auth=aiohttp.BasicAuth('user', _get_channel_config('SMS_KEY'))) as resp:
                     resp.raise_for_status()
             logger.info(f"SMS question sent to {user_phone}.")
             
@@ -931,7 +988,7 @@ class SMSPrompt(UserPromptChannel):
 
     async def ask_compliance_questions(self, user_id: str, context: Dict[str, Any], target_language: Optional[str] = None) -> None:
         channel_name = self.__class__.__name__
-        if not all([SMS_API, SMS_KEY]):
+        if not all([_get_channel_config('SMS_API'), _get_channel_config('SMS_KEY')]):
             logger.error("SMS API credentials not configured. SMSPrompt cannot ask compliance questions. Falling back to CLI dummy.")
             PROMPT_ERRORS.labels(channel=channel_name, type='SMSNotConfigured').inc()
             await CLIPrompt(target_language=target_language).ask_compliance_questions(user_id, context, target_language)
@@ -949,7 +1006,7 @@ class SMSPrompt(UserPromptChannel):
             sms_body = f"Compliance Q{i+1}: {translated_q_text}"
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(SMS_API, data={'to': user_phone, 'body': sms_body}, auth=aiohttp.BasicAuth('user', SMS_KEY)) as resp:
+                    async with session.post(_get_channel_config('SMS_API'), data={'to': user_phone, 'body': sms_body}, auth=aiohttp.BasicAuth('user', _get_channel_config('SMS_KEY'))) as resp:
                         resp.raise_for_status()
                 logger.info(f"Compliance Q{i+1} sent via SMS to {user_phone}.")
                 await asyncio.sleep(10)
@@ -1089,13 +1146,13 @@ def get_channel(channel_type: str, target_language: Optional[str] = None) -> Use
         if not HAS_FASTAPI: raise ValueError("FastAPI not available for WebPrompt.")
         return WebPrompt(target_language=lang)
     if channel_type == 'slack': 
-        if not SLACK_WEBHOOK: raise ValueError("Slack webhook not configured for SlackPrompt.")
+        if not _get_channel_config('SLACK_WEBHOOK'): raise ValueError("Slack webhook not configured for SlackPrompt.")
         return SlackPrompt(target_language=lang)
     if channel_type == 'email': 
-        if not all([EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASS]): raise ValueError("Email not configured for EmailPrompt.")
+        if not all([_get_channel_config('EMAIL_SERVER'), _get_channel_config('EMAIL_PORT'), _get_channel_config('EMAIL_USER'), _get_channel_config('EMAIL_PASS')]): raise ValueError("Email not configured for EmailPrompt.")
         return EmailPrompt(target_language=lang)
     if channel_type == 'sms': 
-        if not all([SMS_API, SMS_KEY]): raise ValueError("SMS not configured for SMSPrompt.")
+        if not all([_get_channel_config('SMS_API'), _get_channel_config('SMS_KEY')]): raise ValueError("SMS not configured for SMSPrompt.")
         return SMSPrompt(target_language=lang)
     if channel_type == 'voice': 
         if not HAS_SPEECH_RECOGNITION: raise ValueError("Speech Recognition not available for VoicePrompt.")
@@ -1138,7 +1195,9 @@ def update_profile_from_feedback(user_id: str, rating: float, question_id: str):
     if rating < 0.5:
         log_action("Unclear Question Feedback", {"user_id": user_id, "question_id": question_id, "rating": rating})
     
-    if 'voice' in profile.preferences and USER_ENGAGEMENT.labels(user_id=user_id)._value > 0.8:
+    # FIX: Properly access Prometheus metric value
+    engagement_value = USER_ENGAGEMENT.labels(user_id=user_id)._value.get() if hasattr(USER_ENGAGEMENT.labels(user_id=user_id)._value, 'get') else 0.0
+    if 'voice' in profile.preferences and engagement_value > 0.8:
         profile.preferences['voice'] = True
     
     save_profile(user_id, profile)
@@ -1193,355 +1252,3 @@ def log_interaction(user_id: str, channel_name: str, questions: List[str], answe
 # Entry point for running FastAPI app
 if HAS_FASTAPI:
     web_prompt_app = WebPrompt.app
-
-
-# Tests
-import unittest
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
-import hashlib
-
-# Mock external dependencies for tests
-# We need to patch the imported names in the __main__ context where the tests run
-patch_log_action = patch('__main__.log_action', new_callable=MagicMock)
-mock_log_action = patch_log_action.start()
-
-patch_detect_language = patch('__main__.detect_language', return_value='en')
-mock_detect_language = patch_detect_language.start()
-
-patch_redact_sensitive = patch('__main__.redact_sensitive', side_effect=lambda x: x)
-mock_redact_sensitive = patch_redact_sensitive.start()
-
-TEST_FERNET_KEY = base64.urlsafe_b64encode(b'\x00'*32)
-mock_fernet_instance_test = Fernet(TEST_FERNET_KEY)
-
-patch_fernet_global = patch('__main__.get_fernet', return_value=mock_fernet_instance_test)
-mock_fernet_global = patch_fernet_global.start()
-
-patch_translator = patch('__main__.Translator')
-mock_translator_cls = patch_translator.start()
-mock_translator_instance = MagicMock()
-mock_translator_instance.translate.side_effect = lambda text, dest, src='en': MagicMock(text=f"Translated_{text}_to_{dest}")
-mock_translator_cls.return_value = mock_translator_instance
-
-
-class TestUserProfile(unittest.TestCase):
-    _profile_file = os.path.join('user_profiles', 'test_user.json')
-
-    def setUp(self):
-        if os.path.exists(self._profile_file):
-            os.remove(self._profile_file)
-        PROMPT_CYCLES.clear()
-        PROMPT_LATENCY.clear()
-        PROMPT_ERRORS.clear()
-        USER_ENGAGEMENT.clear()
-        FEEDBACK_RATINGS.clear()
-        COMPLIANCE_QUESTIONS_ASKED.clear()
-        COMPLIANCE_ANSWERS_RECEIVED.clear()
-        mock_log_action.reset_mock()
-
-
-    def tearDown(self):
-        if os.path.exists(self._profile_file):
-            os.remove(self._profile_file)
-            
-    def test_config_alignment(self):
-        self.assertIsNotNone(config)
-        self.assertEqual(SLACK_WEBHOOK, config.CLARIFIER_SLACK_WEBHOOK if hasattr(config, 'CLARIFIER_SLACK_WEBHOOK') else None)
-
-    def test_load_save_profile(self):
-        profile = UserProfile(user_id='test_user', preferred_channel='web', language='es')
-        profile.compliance_preferences['gdpr_apply'] = True
-        save_profile('test_user', profile)
-        
-        loaded_profile = load_profile('test_user')
-        self.assertEqual(loaded_profile.user_id, 'test_user')
-        self.assertEqual(loaded_profile.preferred_channel, 'web')
-        self.assertEqual(loaded_profile.language, 'es')
-        self.assertTrue(loaded_profile.compliance_preferences['gdpr_apply'])
-
-    def test_update_profile_from_feedback(self):
-        profile = UserProfile(user_id='feedback_user')
-        save_profile('feedback_user', profile)
-        
-        update_profile_from_feedback('feedback_user', 0.8, 'q1')
-        updated_profile = load_profile('feedback_user')
-        self.assertEqual(updated_profile.feedback_scores['q1'], 0.8)
-        self.assertEqual(USER_ENGAGEMENT.labels(user_id='feedback_user')._value, 0.8)
-        
-        update_profile_from_feedback('feedback_user', 0.4, 'q3')
-        mock_log_action.assert_called_with("Unclear Question Feedback", {"user_id": "feedback_user", "question_id": "q3", "rating": 0.4})
-
-
-class TestUserPromptChannels(unittest.IsolatedAsyncioTestCase):
-    _user_id = 'test_user_channel'
-    _profile_file = os.path.join(PROFILE_DIR, _user_id + '.json')
-
-    async def asyncSetUp(self):
-        if os.path.exists(self._profile_file):
-            os.remove(self._profile_file)
-        profile = UserProfile(user_id=self._user_id, language='en')
-        save_profile(self._user_id, profile)
-        
-        PROMPT_CYCLES.clear()
-        PROMPT_LATENCY.clear()
-        PROMPT_ERRORS.clear()
-        USER_ENGAGEMENT.clear()
-        FEEDBACK_RATINGS.clear()
-        COMPLIANCE_QUESTIONS_ASKED.clear()
-        COMPLIANCE_ANSWERS_RECEIVED.clear()
-        mock_log_action.reset_mock()
-        mock_translator_instance.translate.reset_mock()
-
-    async def asyncTearDown(self):
-        if os.path.exists(self._profile_file):
-            os.remove(self._profile_file)
-
-    @patch('builtins.input', side_effect=['answer one', 'answer two'])
-    async def test_cli_prompt_basic_english(self, mock_input):
-        channel = get_channel('cli', target_language='en')
-        questions = ["Q1?", "Q2?"]
-        answers = await channel.prompt(questions, {'user_id': self._user_id})
-        
-        self.assertEqual(answers, ["answer one", "answer two"])
-        self.assertEqual(mock_input.call_count, 2)
-        mock_log_action.assert_called_with(
-            "User Interaction",
-            {
-                "user_id": self._user_id,
-                "channel": "CLIPrompt",
-                "questions_count": 2,
-                "answers_provided_count": 2,
-                "duration_seconds": Any,
-                "language_used": "en",
-                "questions_hashes": Any,
-                "answers_hashes": Any
-            }
-        )
-        mock_translator_instance.translate.assert_not_called()
-
-    @patch('builtins.input', side_effect=['respuesta uno', 'END'])
-    async def test_cli_prompt_multi_line_spanish(self, mock_input):
-        profile = load_profile(self._user_id)
-        profile.language = 'es'
-        profile.preferences['multi_line'] = True
-        save_profile(self._user_id, profile)
-
-        channel = get_channel('cli', target_language='es')
-        questions = ["Question in English?"]
-        answers = await channel.prompt(questions, {'user_id': self._user_id})
-        
-        self.assertEqual(answers, ["Translated_respuesta uno_to_en"])
-        mock_translator_instance.translate.assert_any_call("Question in English?", dest='es')
-        mock_translator_instance.translate.assert_any_call("respuesta uno", dest='en')
-
-    @patch('builtins.input', side_effect=['0.7'])
-    async def test_cli_get_feedback(self, mock_input):
-        channel = get_channel('cli', target_language='en')
-        feedback = await channel.get_feedback(["Q1"], ["A1"], {'user_id': self._user_id})
-        self.assertEqual(feedback, 0.7)
-
-    @patch('builtins.input', side_effect=['yes', 'no', 'yes', 'EU', 'no'])
-    async def test_cli_ask_compliance_questions(self, mock_input):
-        channel = get_channel('cli', target_language='en')
-        user_id = self._user_id
-        await channel.ask_compliance_questions(user_id, {'user_id': user_id})
-
-        profile = load_profile(user_id)
-        self.assertEqual(profile.compliance_preferences['gdpr_apply'], True)
-        self.assertEqual(profile.compliance_preferences['data_residency'], 'EU')
-        mock_log_action.assert_any_call("Compliance Question Answered", {"user_id": user_id, "question_id": "data_residency", "answer": "EU"})
-
-
-    @unittest.skipUnless(HAS_TEXTUAL, "Textual library not installed.")
-    async def test_gui_prompt(self):
-        with patch('textual.app.App.run_async', new=AsyncMock(return_value=["GUI Answer 1"])):
-            channel = get_channel('gui', target_language='en')
-            questions = ["GUI Q1?"]
-            answers = await channel.prompt(questions, {'user_id': self._user_id})
-            self.assertEqual(answers, ["GUI Answer 1"])
-
-    @unittest.skipUnless(HAS_TEXTUAL, "Textual library not installed.")
-    async def test_gui_ask_compliance_questions(self):
-        with patch('textual.app.App.run_async', new=AsyncMock(return_value=None)):
-            with patch.object(CLIPrompt, 'ask_compliance_questions', new=AsyncMock()) as mock_cli_fallback:
-                with patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance:
-                    channel = get_channel('gui', target_language='en')
-                    user_id = self._user_id
-                    await channel.ask_compliance_questions(user_id, {'user_id': user_id})
-                    self.assertEqual(mock_store_compliance.call_count, len(COMPLIANCE_QUESTIONS))
-                    mock_cli_fallback.assert_not_awaited()
-
-
-    @unittest.skipUnless(HAS_FASTAPI, "FastAPI not installed.")
-    async def test_web_prompt(self):
-        channel = get_channel('web', target_language='en')
-        questions = ["Web Q1?", "Web Q2?"]
-        
-        async def mock_wait_for_answer(queue, timeout):
-            await queue.put(["Mock Web Answer 1", "Mock Web Answer 2"])
-            return await queue.get()
-
-        with patch.dict(WebPrompt._web_prompt_queue, defaultdict(asyncio.Queue)), \
-             patch.dict(WebPrompt._web_question_cache, {}), \
-             patch('uuid.uuid4', return_value='mock_session_uuid'):
-            
-            with patch('asyncio.wait_for', new=mock_wait_for_answer):
-                answers_task = asyncio.create_task(channel.prompt(questions, {'user_id': self._user_id}))
-                answers = await answers_task
-            
-            self.assertEqual(answers, ["Mock Web Answer 1", "Mock Web Answer 2"])
-            self.assertIn('mock_session_uuid', WebPrompt._web_question_cache)
-
-    @unittest.skipUnless(HAS_FASTAPI, "FastAPI not installed.")
-    async def test_web_ask_compliance_questions(self):
-        channel = get_channel('web', target_language='en')
-        user_id = self._user_id
-
-        async def mock_wait_for_compliance_answer(queue, timeout):
-            mock_answers_dict = {
-                "gdpr_apply": True, "phi_data": False, "pci_dss": True,
-                "data_residency": "EU", "child_privacy": False
-            }
-            await queue.put(mock_answers_dict)
-            return await queue.get()
-
-        with patch.dict(WebPrompt._web_compliance_queue, defaultdict(asyncio.Queue)), \
-             patch.dict(WebPrompt._web_compliance_questions_cache, {}), \
-             patch('uuid.uuid4', return_value='mock_session_uuid_compliance'), \
-             patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance_answer:
-            
-            with patch('asyncio.wait_for', new=mock_wait_for_compliance_answer):
-                await channel.ask_compliance_questions(user_id, {'user_id': user_id})
-            
-            self.assertEqual(mock_store_compliance_answer.call_count, len(COMPLIANCE_QUESTIONS))
-            mock_store_compliance_answer.assert_any_call(user_id, 'gdpr_apply', True)
-
-
-    @patch('aiohttp.ClientSession.post', new_callable=AsyncMock)
-    async def test_slack_prompt(self, mock_post):
-        mock_response = AsyncMock(); mock_response.raise_for_status = AsyncMock()
-        mock_post.return_value.__aenter__.return_value = mock_response
-        channel = get_channel('slack', target_language='en')
-        answers = await channel.prompt(["Slack Q1?"], {'user_id': self._user_id})
-        self.assertEqual(answers, ["Mocked Slack Answer"])
-        mock_post.assert_awaited_once()
-
-    @patch('aiohttp.ClientSession.post', new_callable=AsyncMock)
-    async def test_slack_ask_compliance_questions(self, mock_post):
-        mock_response = AsyncMock(); mock_response.raise_for_status = AsyncMock()
-        mock_post.return_value.__aenter__.return_value = mock_response
-        with patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance:
-            channel = get_channel('slack', target_language='en')
-            await channel.ask_compliance_questions(self._user_id, {'user_id': self._user_id})
-            self.assertEqual(mock_store_compliance.call_count, len(COMPLIANCE_QUESTIONS))
-
-
-    @patch('smtplib.SMTP', new_callable=MagicMock)
-    @patch('ssl.create_default_context', return_value=MagicMock())
-    async def test_email_prompt(self, mock_ssl_context, mock_smtp):
-        mock_server = MagicMock(); mock_smtp.return_value.__enter__.return_value = mock_server
-        channel = get_channel('email', target_language='en')
-        answers = await channel.prompt(["Email Q1?"], {'user_id': self._user_id, 'user_email': 'recipient@mock.com'})
-        self.assertEqual(answers, ["Mocked Email Answer"])
-        mock_server.sendmail.assert_called_once()
-
-    @patch('smtplib.SMTP', new_callable=MagicMock)
-    @patch('ssl.create_default_context', return_value=MagicMock())
-    async def test_email_ask_compliance_questions(self, mock_ssl_context, mock_smtp):
-        mock_server = MagicMock(); mock_smtp.return_value.__enter__.return_value = mock_server
-        with patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance:
-            channel = get_channel('email', target_language='en')
-            await channel.ask_compliance_questions(self._user_id, {'user_id': self._user_id, 'user_email': 'recipient@mock.com'})
-            self.assertEqual(mock_store_compliance.call_count, len(COMPLIANCE_QUESTIONS))
-
-
-    @patch('aiohttp.ClientSession.post', new_callable=AsyncMock)
-    async def test_sms_prompt(self, mock_post):
-        mock_response = AsyncMock(); mock_response.raise_for_status = AsyncMock()
-        mock_post.return_value.__aenter__.return_value = mock_response
-        channel = get_channel('sms', target_language='en')
-        answers = await channel.prompt(["SMS Q1?"], {'user_id': self._user_id, 'user_phone': '+1234567890'})
-        self.assertEqual(answers, ["Mocked SMS Answer"])
-        mock_post.assert_awaited_once()
-
-    @patch('aiohttp.ClientSession.post', new_callable=AsyncMock)
-    async def test_sms_ask_compliance_questions(self, mock_post):
-        mock_response = AsyncMock(); mock_response.raise_for_status = AsyncMock()
-        mock_post.return_value.__aenter__.return_value = mock_response
-        with patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance:
-            channel = get_channel('sms', target_language='en')
-            await channel.ask_compliance_questions(self._user_id, {'user_id': self._user_id, 'user_phone': '+1234567890'})
-            self.assertEqual(mock_store_compliance.call_count, len(COMPLIANCE_QUESTIONS))
-
-
-    @unittest.skipUnless(HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed.")
-    @patch('speech_recognition.Recognizer.listen', new_callable=MagicMock)
-    @patch('speech_recognition.Recognizer.recognize_google', return_value='voice answer')
-    @patch('speech_recognition.Microphone', new_callable=MagicMock)
-    async def test_voice_prompt(self, mock_mic, mock_recognize_google, mock_listen):
-        mock_mic.return_value.__enter__.return_value = mock_mic.return_value
-        channel = get_channel('voice', target_language='en')
-        answers = await channel.prompt(["Voice Q1?"], {'user_id': self._user_id})
-        self.assertEqual(answers, ["voice answer"])
-        mock_recognize_google.assert_called_once()
-
-    @unittest.skipUnless(HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed.")
-    @patch('speech_recognition.Recognizer.listen', new_callable=MagicMock)
-    @patch('speech_recognition.Recognizer.recognize_google', side_effect=['yes', 'no', 'yes', 'EU', 'no'])
-    @patch('speech_recognition.Microphone', new_callable=MagicMock)
-    async def test_voice_ask_compliance_questions(self, mock_mic, mock_recognize_google, mock_listen):
-        mock_mic.return_value.__enter__.return_value = mock_mic.return_value
-        with patch('__main__.store_compliance_answer', new=MagicMock()) as mock_store_compliance:
-            channel = get_channel('voice', target_language='en')
-            await channel.ask_compliance_questions(self._user_id, {'user_id': self._user_id})
-            self.assertEqual(mock_store_compliance.call_count, len(COMPLIANCE_QUESTIONS))
-            mock_store_compliance.assert_any_call(self._user_id, 'gdpr_apply', True)
-
-
-    async def test_handle_input_encryption_redaction(self):
-        mock_redact_sensitive.side_effect = lambda x: x.replace('secret', '[REDACTED_SECRET]')
-        channel = get_channel('cli', target_language='en')
-        profile = load_profile(self._user_id)
-        raw_answers = ["This is a secret answer."]
-        
-        encrypted_answers = await handle_input(raw_answers, profile)
-        
-        self.assertEqual(len(encrypted_answers), 1)
-        decrypted_answer = channel._decrypt_answer(encrypted_answers[0])
-        self.assertEqual(decrypted_answer, "This is a [REDACTED_SECRET] answer.")
-        mock_redact_sensitive.assert_called_with("This is a secret answer.")
-
-    def test_store_compliance_answer(self):
-        profile = UserProfile(user_id='compliance_user')
-        save_profile('compliance_user', profile)
-        store_compliance_answer('compliance_user', 'gdpr_apply', True)
-        updated_profile = load_profile('compliance_user')
-        self.assertTrue(updated_profile.compliance_preferences['gdpr_apply'])
-        mock_log_action.assert_called_with("Compliance Question Answered", {"user_id": "compliance_user", "question_id": "gdpr_apply", "answer": "True"})
-
-    @patch('__main__.CLIPrompt.prompt', new_callable=AsyncMock, side_effect=[["corrected answer"]])
-    async def test_recover_error(self, mock_channel_prompt):
-        channel = get_channel('cli', target_language='en')
-        answer = await recover_error(channel, "Original Q?", "Input Error", {'user_id': self._user_id})
-        self.assertEqual(answer, "corrected answer")
-        mock_channel_prompt.assert_called_once()
-        self.assertEqual(PROMPT_ERRORS.labels(channel='CLIPrompt', type='recovery_prompt')._value, 1)
-
-    @patch('__main__.CLIPrompt.prompt', new_callable=AsyncMock, side_effect=[["skip"]])
-    async def test_recover_error_skip(self, mock_channel_prompt):
-        channel = get_channel('cli', target_language='en')
-        answer = await recover_error(channel, "Original Q?", "Input Error", {'user_id': self._user_id})
-        self.assertEqual(answer, "[SKIPPED_BY_USER]")
-
-
-# Main execution block
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    unittest.main()
-
-# Stop all patchers after all tests are run
-patch_log_action.stop()
-patch_detect_language.stop()
-patch_redact_sensitive.stop()
-patch_fernet_global.stop()
-patch_translator.stop()

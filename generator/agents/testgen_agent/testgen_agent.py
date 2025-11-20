@@ -1,6 +1,6 @@
 """
 testgen_agent.py
-The GOAT orchestrator for the test generation system.
+The orchestrator for the test generation system.
 
 REFACTORED: This agent now fully integrates with the central runner foundation.
 It uses runner.llm_client, runner.runner_logging, and runner.runner_metrics,
@@ -9,17 +9,17 @@ and all V0/V1 dependencies like deploy_llm_call and audit_log have been removed.
 Features:
 - Fully observable, resilient, and parallelized agentic loop for test generation.
 - Integration with external, strictly enforced modules:
-  - runner.llm_client: Centralized LLM interaction.
-  - testgen_prompt: For building context-rich, optimized prompts.
-  - testgen_response_handler: For parsing and handling LLM responses.
-  - testgen_validator: For comprehensive test quality validation.
-  - runner.runner_logging: For critical event logging and provenance.
+  - runner.llm_client: Centralized LLM interaction.
+  - testgen_prompt: For building context-rich, optimized prompts.
+  - testgen_response_handler: For parsing and handling LLM responses.
+  - testgen_validator: For comprehensive test quality validation.
+  - runner.runner_logging: For critical event logging and provenance.
 - Async file operations and security scrubbing with Presidio (strictly enforced).
 - Granular error handling for LLM calls, validation, and file operations.
 - Rich Markdown reporting with badges, PlantUML diagrams, and changelog.
 - Token counting for cost-efficient LLM usage and metrics.
 - Strict failure enforcement: No silent fallbacks or dummies for critical external components.
-- GOAT features: self-healing for LLM output parsing, ensemble mode, advanced routing, rate limiting.
+- Features: self-healing for LLM output parsing, ensemble mode, advanced routing, rate limiting.
 - World-class error reporting via Sentry/External Integration.
 - Comprehensive provenance tracking.
 """
@@ -29,11 +29,14 @@ import json
 import time
 import argparse
 import os
+import uuid
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 import aiofiles # For asynchronous file operations
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type # For robust retries
+# --- FIX: Import AsyncRetrying ---
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, AsyncRetrying # For robust retries
 from opentelemetry.trace import Status, StatusCode # For OpenTelemetry tracing
 import sys # For sys.exit in CLI
 from datetime import datetime # For timestamps
@@ -42,7 +45,7 @@ import aiohttp # For potential client errors from aiohttp
 import importlib # For CLI dependency checks
 
 # --- CENTRAL RUNNER FOUNDATION ---
-from runner import tracer
+from runner.runner_logging import tracer # FIX: Corrected import path to runner.runner_logging
 from runner.runner_logging import logger, add_provenance
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS, LLM_TOKEN_INPUT_TOTAL, LLM_TOKEN_OUTPUT_TOTAL
 from runner.llm_client import call_llm_api, call_ensemble_api
@@ -66,9 +69,10 @@ from presidio_anonymizer import AnonymizerEngine
 # from audit_log import log_action
 
 # Test generation specific components: REQUIRED.
-from testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
-from testgen_response_handler import parse_llm_response
-from testgen_validator import validate_test_quality
+# FIXED: Changed to relative imports
+from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
+from .testgen_response_handler import parse_llm_response
+from .testgen_validator import validate_test_quality
 
 # Tokenizer: REQUIRED for token counting.
 import tiktoken
@@ -400,62 +404,84 @@ Agent --> Dev : Deliver Report
         final_report_markdown = "\n".join(report_parts)
         return final_report_markdown
 
+    # --- START FIX ---
     # REFACTORED: Uses central runner LLM client, metrics, and provenance
-    @retry(stop=stop_after_attempt(lambda args: args[0].policy.llm_retries if isinstance(args[0], TestGenAgent) else 3),
-           wait=wait_exponential(multiplier=1, min=lambda args: args[0].policy.retry_wait_min if isinstance(args[0], TestGenAgent) else 1, max=lambda args: args[0].policy.retry_wait_max if isinstance(args[0], TestGenAgent) else 10),
-           retry=retry_if_exception_type((RuntimeError, aiohttp.ClientError, asyncio.TimeoutError, LLMError)))
+    # REMOVED the @retry decorator from the method signature
     async def _call_llm_with_retry(self, prompt: str, language: str, llm_model: str, run_id: str, purpose: str, stream: bool = False) -> Dict[str, Any]:
         """
         Wrapper for LLM calls to the central runner with retries and metrics.
         Ensures all LLM interactions are consistent.
         """
         log_extra = {"run_id": run_id, "language": language, "purpose": purpose, "model": llm_model}
-        logger.debug(f"Calling LLM for purpose: {purpose}", extra=log_extra)
+
+        # Define the inner function that does the actual work
+        async def _attempt_llm_call():
+            logger.debug(f"Calling LLM for purpose: {purpose}", extra=log_extra)
+            
+            try:
+                start_time = time.time()
+                
+                # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
+                response = await call_ensemble_api(
+                    prompt=prompt,
+                    models=[{"model": llm_model}], # call_ensemble_api expects a list
+                    voting_strategy="majority", # Default strategy
+                    stream=stream
+                )
+
+                # NOTE: All metric tracking is handled internally by call_ensemble_api 
+                # and reflected in the provenance log. We remove all manual increments.
+                
+                response_content = response.get('content', '')
+                usage = response.get('usage', {})
+                # Estimate tokens if not provided by the response
+                tokenizer = tiktoken.get_encoding("cl100k_base")
+                prompt_tokens = usage.get('input_tokens', len(tokenizer.encode(prompt)))
+                completion_tokens = usage.get('output_tokens', len(tokenizer.encode(response_content)))
+
+                # REFACTORED: Replace log_action with add_provenance
+                provenance_data = {
+                    "action": f"llm_call_{purpose}",
+                    "run_id": run_id,
+                    "prompt_summary": scrub_text(prompt[:500]),
+                    "response_summary": scrub_text(response_content[:500]),
+                    "model_used": llm_model,
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "cost_estimate": response.get('cost_usd', 'N/A'),
+                    "prompt_hash": hashlib.sha256(prompt.encode('utf-8')).hexdigest(),
+                    "response_hash": hashlib.sha256(response_content.encode('utf-8')).hexdigest(),
+                }
+                add_provenance(provenance_data, **log_extra)
+                
+                return response
+            except Exception as e:
+                logger.error(f"LLM call for '{purpose}' failed: {e}", exc_info=True, extra=log_extra)
+                # Re-raise a type of error that the retry policy will catch (defined outside this method)
+                if isinstance(e, (aiohttp.ClientError, asyncio.TimeoutError, LLMError)):
+                    raise # These are already in the retry list for the external AsyncRetrying
+                # Wrap other exceptions in RuntimeError
+                raise RuntimeError(f"LLM call failed for '{purpose}' failed: {e}") from e
+
+        # Define the retry strategy using self.policy (which is available here)
+        # This correctly passes *numbers* to min and max.
+        retryer = AsyncRetrying(
+            stop=stop_after_attempt(self.policy.llm_retries),
+            wait=wait_exponential(
+                multiplier=1, 
+                min=self.policy.retry_wait_min, 
+                max=self.policy.retry_wait_max
+            ),
+            # The client errors are already retried by the *client*, but we need this retryer
+            # here in case the client fails catastrophically or if we need to retry the *ensemble* call.
+            retry=retry_if_exception_type((RuntimeError, aiohttp.ClientError, asyncio.TimeoutError, LLMError)),
+            reraise=True # Re-raise the last exception if all retries fail
+        )
         
-        start_time = time.time()
-        try:
-            # REFACTORED: Use call_ensemble_api as the original used ensemble=True
-            response = await call_ensemble_api(
-                prompt=prompt,
-                models=[{"model": llm_model}], # call_ensemble_api expects a list
-                voting_strategy="majority", # Default strategy
-                stream=stream
-            )
-            
-            latency = time.time() - start_time
-            LLM_CALLS_TOTAL.labels(provider="testgen_agent", model=llm_model, task=purpose).inc()
-            LLM_LATENCY_SECONDS.labels(provider="testgen_agent", model=llm_model, task=purpose).observe(latency)
+        # Call the inner function using the retryer
+        return await retryer.call(_attempt_llm_call)
+    # --- END FIX ---
 
-            response_content = response.get('content', '')
-            usage = response.get('usage', {})
-            # Estimate tokens if not provided by the response
-            tokenizer = tiktoken.get_encoding("cl100k_base")
-            prompt_tokens = usage.get('input_tokens', len(tokenizer.encode(prompt)))
-            completion_tokens = usage.get('output_tokens', len(tokenizer.encode(response_content)))
-
-            LLM_TOKEN_INPUT_TOTAL.labels(provider="testgen_agent", model=llm_model, task=purpose).inc(prompt_tokens)
-            LLM_TOKEN_OUTPUT_TOTAL.labels(provider="testgen_agent", model=llm_model, task=purpose).inc(completion_tokens)
-
-            # REFACTORED: Replace log_action with add_provenance
-            provenance_data = {
-                "action": f"llm_call_{purpose}",
-                "run_id": run_id,
-                "prompt_summary": scrub_text(prompt[:500]),
-                "response_summary": scrub_text(response_content[:500]),
-                "model_used": llm_model,
-                "input_tokens": prompt_tokens,
-                "output_tokens": completion_tokens,
-                "cost_estimate": response.get('cost_usd', 'N/A'),
-                "prompt_hash": hashlib.sha256(prompt.encode('utf-8')).hexdigest(),
-                "response_hash": hashlib.sha256(response_content.encode('utf-8')).hexdigest(),
-            }
-            add_provenance(provenance_data, **log_extra)
-            
-            return response
-        except Exception as e:
-            LLM_ERRORS_TOTAL.labels(provider="testgen_agent", model=llm_model, error_type=type(e).__name__, task=purpose).inc()
-            logger.error(f"LLM call for '{purpose}' failed: {e}", exc_info=True, extra=log_extra)
-            raise RuntimeError(f"LLM call failed for '{purpose}' failed: {e}") from e
 
     # REFACTORED: Main loop now uses runner logger and provenance
     async def generate_tests(self, target_files: List[str], language: str, policy: Policy) -> Dict[str, Any]:
@@ -668,11 +694,17 @@ async def main():
     # REFACTORED: Removed local logging config
     
     # REFACTORED: Updated dependency check list
-    required_modules_for_prod = [
+    required_modules_for_cli = [
         "testgen_prompt", "testgen_response_handler", "testgen_validator",
-        "presidio_analyzer", "presidio_anonymizer", "tiktoken"
+        "presidio_analyzer", "presidio_anonymizer",
+        "tiktoken", "aiohttp",
     ]
-    for module_name in required_modules_for_prod:
+    for module_name in required_modules_for_cli:
+        if module_name == "sentry_sdk" and not os.getenv("SENTRY_DSN"):
+            continue 
+        if module_name == "plantuml" and PlantUML is None:
+            continue
+        
         try:
             importlib.import_module(module_name)
         except ImportError:
@@ -688,14 +720,14 @@ async def main():
     parser.add_argument("--quality-threshold", type=float, help="Override: The target quality threshold (e.g., coverage percentage).")
     parser.add_argument("--max-refinements", type=int, help="Override: Maximum number of refinement attempts.")
     parser.add_argument("--primary-metric", help="Override: Primary metric for quality assessment.")
-    parser.add_argument("--validation-suite", nargs='+', help="Override: Space-separated list of validation types.")
-    parser.add_argument("--generation-llm-model", help="Override: LLM model for initial generation.")
-    parser.add_argument("--critique-llm-model", help="Override: LLM model for critique.")
-    parser.add_argument("--refinement-llm-model", help="Override: LLM model for refinement.")
-    parser.add_argument("--self-heal-llm-model", help="Override: LLM model for self-healing.")
-    parser.add_argument("--llm-retries", type=int, help="Override: Number of retries for LLM calls.")
-    parser.add_argument("--retry-wait-min", type=int, help="Override: Min wait time for LLM retries.")
-    parser.add_argument("--retry-wait-max", type=int, help="Override: Max wait time for LLM retries.")
+    parser.add_argument("--validation_suite", nargs='+', help="Override: Space-separated list of validation types.")
+    parser.add_argument("--generation_llm_model", help="Override: LLM model for initial generation.")
+    parser.add_argument("--critique_llm_model", help="Override: LLM model for critique.")
+    parser.add_argument("--refinement_llm_model", help="Override: LLM model for refinement.")
+    parser.add_argument("--self_heal_llm_model", help="Override: LLM model for self-healing.")
+    parser.add_argument("--llm_retries", type=int, help="Override: Number of retries for LLM calls.")
+    parser.add_argument("--retry_wait_min", type=int, help="Override: Min wait time for LLM retries.")
+    parser.add_argument("--retry_wait_max", type=int, help="Override: Max wait time for LLM retries.")
     
     parser.add_argument("--config", help="Path to a JSON config file for policy settings (CLI args override this).")
     parser.add_argument("--output-file", help="Optional file path to save the JSON results.")
@@ -735,7 +767,7 @@ async def main():
         for field_name, field_def in Policy.__dataclass_fields__.items():
             if field_name not in policy_dict:
                 if field_def.default_factory is not field.MISSING:
-                    policy_dict[field_name] = field_def.default_factory()
+                    policy_dict[field_name] = field_def.default
                 else:
                     policy_dict[field_name] = field_def.default
                     
@@ -786,7 +818,6 @@ if __name__ == "__main__":
         "presidio_analyzer", "presidio_anonymizer",
         "tiktoken", "aiohttp",
     ]
-    
     for module_name in required_modules_for_cli:
         if module_name == "sentry_sdk" and not os.getenv("SENTRY_DSN"):
             continue 
@@ -796,16 +827,14 @@ if __name__ == "__main__":
         try:
             importlib.import_module(module_name)
         except ImportError:
-            # Use print for __main__ as logger might not be configured
-            print(f"CRITICAL: Required module missing for CLI execution: {module_name}. Please ensure all external modules are installed (`pip install <module>`) and available in your PYTHONPATH.", file=sys.stderr)
+            logger.critical(f"Required module missing: {module_name}. Please ensure all external modules are installed and available in PYTHONPATH.")
             sys.exit(1)
 
     try:
         asyncio.run(main())
     except Exception as e:
-        print(f"CRITICAL: Unhandled critical error during CLI execution: {e}", file=sys.stderr)
+        logger.critical(f"CRITICAL: Unhandled critical error during CLI execution: {e}", file=sys.stderr)
         if sentry_sdk:
             sentry_sdk.capture_exception(e)
             sentry_sdk.flush()
         sys.exit(1)
-}

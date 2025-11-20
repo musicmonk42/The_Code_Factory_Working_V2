@@ -1,5 +1,5 @@
 # runner/core.py
-# World-class, gold-standard core logic for the runner system.
+# Core logic for the runner system.
 # Provides robust, extensible, and observable test execution,
 # with strict contract enforcement and structured error handling.
 
@@ -22,6 +22,7 @@ from functools import partial
 from pathlib import Path
 import uuid # Explicitly import uuid for clarity
 import contextlib # [NEW] Added for shutdown
+from contextlib import asynccontextmanager # [NEW] Added for lifespan
 
 import aiohttp
 import backoff
@@ -39,12 +40,15 @@ from runner.runner_parsers import (
     parse_go_test_json, parse_surefire_xml, parse_jacoco_xml, parse_istanbul_json, 
     parse_go_coverprofile, parse_coverage_html, TestReportSchema, CoverageReportSchema
 )
+# [CHANGE A] Add direct import for runtime patching
+import runner.runner_parsers as runner_parsers
 from runner.runner_security_utils import redact_secrets
 from runner.runner_logging import logger, log_action, log_audit_event
 from runner.runner_metrics import * # Ensure all metrics are imported explicitly
 from runner.runner_contracts import TaskPayload, TaskResult, BatchTaskPayload # NEW: Contracts
+# --- FIX: Import 'ExecutionError' and alias it to 'TestExecutionError' ---
 from runner.runner_errors import (
-    RunnerError, BackendError, FrameworkError, TestExecutionError, ParsingError, 
+    RunnerError, BackendError, FrameworkError, ExecutionError as TestExecutionError, ParsingError, 
     SetupError, TimeoutError, DistributedError, ConfigurationError, PersistenceError, 
     error_codes
 )
@@ -200,6 +204,171 @@ runner_instance: Optional["Runner"] = None
 reloading_lock = asyncio.Lock()
 
 
+# --- Sandbox Test Execution Functions for TestGen Validator ---
+
+async def run_tests_in_sandbox(
+    code_files: Dict[str, str],
+    test_files: Dict[str, str], 
+    temp_path: str,
+    language: str,
+    coverage: bool = True,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Secure sandbox execution for test validation.
+    
+    Args:
+        code_files: Dictionary of filename -> code content
+        test_files: Dictionary of filename -> test content
+        temp_path: Temporary directory path
+        language: Programming language
+        coverage: Whether to collect coverage data
+        
+    Returns:
+        Dictionary with test results and coverage data
+    """
+    try:
+        # Create a runner config for sandbox execution
+        config = RunnerConfig(
+            backend_type="local",  # Use local backend for sandbox
+            timeout_seconds=300,
+            enable_metrics=False  # Disable metrics for sandbox runs
+        )
+        runner = Runner(config)
+        
+        # Create task payload
+        task_payload = TaskPayload(
+            test_files=test_files,
+            code_files=code_files,
+            output_path=temp_path,
+            timeout=300,
+            dry_run=False,
+            task_id=f"sandbox_{uuid.uuid4()}"
+        )
+        
+        # Run the tests
+        result = await runner.run_tests(task_payload)
+        
+        # Extract coverage and test results
+        results = result.results or {}
+        
+        return {
+            "coverage_percentage": results.get("coverage_percentage", 0.0),
+            "lines_covered": results.get("lines_covered", 0),
+            "total_lines": results.get("total_lines", 0),
+            "test_results": results.get("test_results", {}),
+            "pass_count": results.get("pass_count", 0),
+            "fail_count": results.get("fail_count", 0),
+            "status": "success" if result.status == "completed" else "failed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Sandbox execution failed: {e}")
+        return {
+            "coverage_percentage": 0.0,
+            "lines_covered": 0,
+            "total_lines": 0,
+            "test_results": {},
+            "pass_count": 0,
+            "fail_count": 0,
+            "status": "failed",
+            "error": str(e)
+        }
+
+async def run_stress_tests(
+    code_files: Dict[str, str],
+    test_files: Dict[str, str],
+    temp_path: str, 
+    language: str,
+    config: Dict[str, Any] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Run stress/performance tests in a controlled environment.
+    
+    Args:
+        code_files: Dictionary of filename -> code content
+        test_files: Dictionary of filename -> test content  
+        temp_path: Temporary directory path
+        language: Programming language
+        config: Stress testing configuration
+        
+    Returns:
+        Dictionary with performance metrics
+    """
+    try:
+        stress_config = config or {}
+        
+        # Create a runner config for stress testing
+        runner_config = RunnerConfig(
+            backend_type="local",
+            timeout_seconds=stress_config.get("timeout", 600),
+            enable_metrics=True  # Enable metrics for performance tracking
+        )
+        runner = Runner(runner_config)
+        
+        # Create task payload for stress testing
+        task_payload = TaskPayload(
+            test_files=test_files,
+            code_files=code_files,
+            output_path=temp_path,
+            timeout=stress_config.get("timeout", 600),
+            dry_run=False,
+            task_id=f"stress_{uuid.uuid4()}"
+        )
+        
+        # Run stress tests multiple times to get performance metrics
+        iterations = stress_config.get("iterations", 3)
+        response_times = []
+        errors = 0
+        crashes = 0
+        
+        for i in range(iterations):
+            try:
+                start_time = time.time()
+                result = await runner.run_tests(task_payload)
+                end_time = time.time()
+                
+                response_time = (end_time - start_time) * 1000  # Convert to ms
+                response_times.append(response_time)
+                
+                if result.status != "completed":
+                    errors += 1
+                    
+            except Exception as e:
+                errors += 1
+                crashes += 1
+                logger.warning(f"Stress test iteration {i+1} crashed: {e}")
+                
+        # Calculate metrics
+        avg_response_time = sum(response_times) / len(response_times) if response_times else float('inf')
+        error_rate = (errors / iterations) * 100 if iterations > 0 else 100.0
+        crashes_detected = crashes > 0
+        
+        return {
+            "avg_response_time_ms": avg_response_time,
+            "error_rate_percentage": error_rate, 
+            "crashes_detected": crashes_detected,
+            "total_iterations": iterations,
+            "successful_runs": iterations - errors,
+            "response_times": response_times,
+            "status": "success" if error_rate < 50 else "failed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Stress testing failed: {e}")
+        return {
+            "avg_response_time_ms": float('inf'),
+            "error_rate_percentage": 100.0,
+            "crashes_detected": True,
+            "total_iterations": 0,
+            "successful_runs": 0,
+            "response_times": [],
+            "status": "failed",
+            "error": str(e)
+        }
+
+
 class Runner(ABC):
     """
     The most robust, extensible, multi-language, multi-backend runner with prioritized,
@@ -231,6 +400,16 @@ class Runner(ABC):
         # [NEW] Background task references
         self._monitor_task: Optional[asyncio.Task] = None
         self._distributed_task: Optional[asyncio.Task] = None
+        
+        # Backwards-compatible background task for existing integrations/tests
+        try:
+            loop = asyncio.get_running_loop()
+            # Start the queue monitor automatically when an event loop is running
+            self._monitor_task = loop.create_task(self._monitor_queue())
+            self.background_task = self._monitor_task
+        except RuntimeError:
+            # No running loop at construction time; services can be started explicitly later.
+            self.background_task = None
         
         self._load_persisted_queue()
         # [REMOVED] _self_test() - Moved to start_services
@@ -265,14 +444,21 @@ class Runner(ABC):
         logger.info("Stopping Runner background services...")
         
         tasks_to_cancel = [self._monitor_task, self._distributed_task]
+        # Include legacy alias if present
+        bg_task = getattr(self, 'background_task', None)
+        if bg_task is not None:
+            tasks_to_cancel.append(bg_task)
+        
         for task in tasks_to_cancel:
             if task and not task.done():
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-        
+
         self._monitor_task = None
         self._distributed_task = None
+        if hasattr(self, 'background_task'):
+            self.background_task = None
         
         if self.executor:
             self.executor.shutdown(wait=True)
@@ -368,7 +554,8 @@ class Runner(ABC):
         """Monitors the task queue and updates Prometheus metrics."""
         while True:
             try:
-                RUN_QUEUE.set(len(self.queue))
+                # [FIX] Provide required labels for the RUN_QUEUE gauge
+                RUN_QUEUE.labels(framework='all', instance_id=self.instance_id).set(len(self.queue))
                 
                 status_counts: Dict[str, int] = defaultdict(int) # Use defaultdict for cleaner counting
                 for task_result in self.task_status_map.values():
@@ -412,6 +599,7 @@ class Runner(ABC):
 
                     # FIX: Use getattr
                     batch_size: int = getattr(self.config, 'dist_batch_size', 5)
+                    
                     tasks_to_send: List[TaskPayload] = []
                     
                     for _ in range(min(batch_size, len(self.queue))):
@@ -524,11 +712,13 @@ class Runner(ABC):
         span = trace.get_current_span()
         try:
             current_config_snapshot = self.config
-            config_hash = hashlib.sha256(current_config_snapshot.model_dump_json(sort_keys=True).encode()).hexdigest()
+            # [PYDANTIC V2 FIX] Remove sort_keys=True
+            config_hash = hashlib.sha256(current_config_snapshot.model_dump_json().encode()).hexdigest()
             
             # Redact sensitive data *before* logging, as a defense-in-depth
             # The logger's filter will also redact, but this is safer.
-            sanitized_entry_data = await redact_secrets(entry_data.copy(), patterns=self.config.custom_redaction_patterns)
+            # [FIX] redact_secrets is now synchronous, remove await
+            sanitized_entry_data = redact_secrets(entry_data.copy(), patterns=self.config.custom_redaction_patterns)
             
             # Create the data payload for the audit event
             audit_data_payload = {
@@ -689,6 +879,7 @@ class Runner(ABC):
         tmp_queue = [] 
         while self.queue:
             prio_task = heapq.heappop(self.queue)
+            # *** FIX: Call model_dump() on the .task attribute ***
             tasks_list.append({'priority': prio_task.priority, 'task': prio_task.task.model_dump()})
             tmp_queue.append(prio_task) 
         
@@ -723,10 +914,19 @@ class Runner(ABC):
     def _update_task_status(self, task_id: str, status: str, **kwargs: Any) -> None:
         """Updates the status of a task in the in-memory map and emits a metric."""
         if task_id not in self.task_status_map:
+            explicit_started_at = kwargs.pop('started_at', None)
+
+            if status == 'running':
+                started_at = explicit_started_at or time.time()
+            else:
+                # Use explicit_started_at if provided; otherwise fall back to current time
+                # to satisfy non-optional numeric field in TaskResult.
+                started_at = explicit_started_at if explicit_started_at is not None else time.time()
+
             self.task_status_map[task_id] = TaskResult(
                 task_id=task_id,
                 status=status,
-                started_at=kwargs.pop('started_at', None) or time.time() if status == 'running' else None,
+                started_at=started_at,
                 finished_at=kwargs.pop('finished_at', None),
                 results=kwargs.pop('results', None),
                 error=kwargs.pop('error', None),
@@ -740,10 +940,26 @@ class Runner(ABC):
             except Exception: pass
             
             task_result.status = status
+            
+            # [CHANGE C START] Normalize error to a dict for reliable inspection
             if status in ['completed', 'failed', 'timed_out']:
                 task_result.finished_at = kwargs.pop('finished_at', time.time())
                 task_result.results = kwargs.pop('results', task_result.results)
-                task_result.error = kwargs.pop('error', task_result.error)
+
+                error_val = kwargs.pop('error', task_result.error)
+
+                # Normalise error into a dict so tests (and callers) can reliably inspect it.
+                if isinstance(error_val, RunnerError):
+                    error_val = error_val.as_dict()
+                elif isinstance(error_val, dict) or error_val is None:
+                    # already in desired shape or not provided
+                    pass
+                else:
+                    # Treat anything else (e.g., string) as a message.
+                    error_val = {"error_code": str(error_val)}
+
+                task_result.error = error_val
+            # [CHANGE C END]
             elif status == 'running' and task_result.started_at is None:
                 task_result.started_at = kwargs.pop('started_at', time.time())
             
@@ -779,14 +995,6 @@ class Runner(ABC):
             })
         return snapshot
 
-    @backoff.on_exception(
-        backoff.expo,
-        (Exception), # This should be more specific, e.g., (BackendError, SetupError)
-        max_tries=3,
-        on_backoff=lambda details: logger.warning(f"Retrying {details['tries']} for run_tests call: {details['exception']}"),
-        on_giveup=lambda details: logger.error(f"Giving up after {details['tries']} retries for run_tests: {details['exception']}"),
-        reraise=True # Re-raise the exception after giving up
-    )
     async def run_tests(self, task_payload: TaskPayload) -> TaskResult:
         span = trace.get_current_span()
         task_id = task_payload.task_id if task_payload.task_id else str(uuid.uuid4())
@@ -833,6 +1041,7 @@ class Runner(ABC):
         temp_dir_path: Optional[Path] = None
 
         try:
+            # [CHANGE B START] Dynamically resolve parsers for patching
             actual_framework_name = self.config.framework
             if actual_framework_name == 'auto':
                 actual_framework_name = self._detect_framework(task_payload.test_files)
@@ -841,7 +1050,40 @@ class Runner(ABC):
             if not framework_info:
                 raise FrameworkError(error_codes["FRAMEWORK_UNSUPPORTED"], detail=f"Framework '{actual_framework_name}' not supported or detected.", task_id=task_id, framework_name=actual_framework_name)
 
+            # Use a copy so we don't mutate the global FRAMEWORKS mapping.
+            framework_info = dict(framework_info)
+            
+            # IMPORTANT:
+            # Always resolve parser / coverage_parser from runner.runner_parsers at runtime
+            # so that tests patching runner.runner_parsers.parse_junit_xml, etc., take effect.
+            if actual_framework_name == "pytest":
+                framework_info["parser"] = runner_parsers.parse_junit_xml
+                framework_info["coverage_parser"] = runner_parsers.parse_coverage_xml
+            elif actual_framework_name == "jest":
+                framework_info["parser"] = runner_parsers.parse_jest_json
+                framework_info["coverage_parser"] = runner_parsers.parse_istanbul_json
+            elif actual_framework_name == "unittest":
+                framework_info["parser"] = runner_parsers.parse_unittest_output
+            elif actual_framework_name == "behave":
+                framework_info["parser"] = runner_parsers.parse_behave_junit
+            elif actual_framework_name == "robot":
+                framework_info["parser"] = runner_parsers.parse_robot_xml
+            elif actual_framework_name == "go test":
+                framework_info["parser"] = runner_parsers.parse_go_test_json
+                framework_info["coverage_parser"] = runner_parsers.parse_go_coverprofile
+            elif actual_framework_name == "junit":
+                framework_info["parser"] = runner_parsers.parse_surefire_xml
+                framework_info["coverage_parser"] = runner_parsers.parse_jacoco_xml
+            elif actual_framework_name == "gradle":
+                framework_info["parser"] = runner_parsers.parse_junit_xml
+                framework_info["coverage_parser"] = runner_parsers.parse_jacoco_xml
+            elif actual_framework_name == "selenium":
+                framework_info["parser"] = runner_parsers.parse_junit_xml
+            # (Note: 'mocha' parser is a lambda, so it can't be resolved this way - fine for tests)
+            
             self.framework_info = framework_info
+            # [CHANGE B END]
+            
             logger.info(json.dumps({
                 "event": "test_execution_started",
                 "task_id": task_id,
@@ -883,21 +1125,37 @@ class Runner(ABC):
             cmd_to_execute: Union[str, List[str]] = self.framework_info['cmd']
             span.add_event(f"Executing test command: {cmd_to_execute}")
             exec_results: Dict[str, Any]
+            
+            # --- CRITICAL FIX: REPLACE direct subprocess_wrapper call with backend.execute ---
             try:
-                # --- REFACTOR FIX: Call subprocess_wrapper directly ---
-                exec_results = await subprocess_wrapper(
-                    cmd_to_execute,
+                # 1. Update the payload with the final command detected by the runner
+                #    (The backend might need this for Docker ENTRYPOINT/CMD)
+                task_payload.command = cmd_to_execute
+
+                # 2. Call the backend's isolated execution environment
+                # Note: self.backend.execute is expected to return TaskResult, or an equivalent structure
+                task_result_from_backend: TaskResult = await self.backend.execute(
+                    payload=task_payload,
+                    work_dir=temp_dir_path,
                     timeout=timeout,
-                    cwd=temp_dir_path,
-                    sandbox=True, # Always run in a secure sandbox via the backend/wrapper
-                    # Use unique circuit breaker name tied to task ID
-                    circuit_breaker_name=f"task_{task_id}_exec"
                 )
-            except RunnerError as e: # Catch structured errors from subprocess_wrapper
-                e.task_id = task_id
+                
+                # 3. Extract the necessary execution results from the TaskResult
+                #    (The backend is responsible for populating stdout/stderr/returncode)
+                exec_results = {
+                    'success': task_result_from_backend.status == 'completed',
+                    'stdout': task_result_from_backend.results.get('stdout', ''),
+                    'stderr': task_result_from_backend.results.get('stderr', ''),
+                    'returncode': task_result_from_backend.results.get('returncode', 1),
+                    'duration': task_result_from_backend.results.get('duration', time.time() - self.task_status_map[task_id].started_at),
+                }
+
+            except RunnerError as e: # Catch structured errors from backend.execute
+                e.task_id = task_id # Ensure task_id is propagated
                 raise e # Re-raise directly
             except Exception as e: # Catch any other unexpected errors
                 raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Test execution failed due to unexpected error.", task_id=task_id, cmd=str(cmd_to_execute), cause=e)
+            # --- END CRITICAL FIX ---
             
             stdout = exec_results.get('stdout', '')
             stderr = exec_results.get('stderr', '')
@@ -931,8 +1189,15 @@ class Runner(ABC):
             if self.framework_info.get('coverage_parser'):
                 span.add_event("Parsing coverage data")
                 coverage_report: Optional[CoverageReportSchema] = None
+                coverage_parser = self.framework_info.get('coverage_parser')
                 try:
-                    coverage_report = await self.framework_info['coverage_parser'](temp_dir_path) # Parsers are now async and return schema
+                    # --- FIX: Find actual coverage file, not the directory ---
+                    cov_file = temp_dir_path / "coverage.xml"  # or glob: next(temp_dir_path.glob("coverage*"), None)
+                    if cov_file.exists():
+                        coverage_report = await coverage_parser(cov_file)
+                    else:
+                        logger.debug("No coverage file found; skipping coverage parsing.")
+                    
                     if coverage_report:
                         logger.debug(json.dumps({"event": "parsed_coverage_data", "task_id": task_id, "data": coverage_report.model_dump(by_alias=True)}))
                         parsed_results['coverage_percentage'] = coverage_report.coverage_percentage
@@ -1055,12 +1320,29 @@ class Runner(ABC):
                     
                     try:
                         logger.info(f"Running doc generation using '{actual_doc_framework_name}' for task {task_id}...")
-                        build_result = await self.backend.execute(doc_framework_info['cmd'], doc_output_source_dir, timeout)
+                        
+                        # Prepare payload for documentation build/validation
+                        doc_build_payload = TaskPayload(
+                            test_files=task_payload.test_files, # Pass along files for context
+                            code_files=task_payload.code_files,
+                            output_path=task_payload.output_path,
+                            timeout=timeout,
+                            dry_run=False,
+                            task_id=f"{task_id}_doc_build",
+                            command=doc_framework_info['cmd']
+                        )
+
+                        build_result_task = await self.backend.execute(doc_build_payload, doc_output_source_dir, timeout)
+                        build_result = build_result_task.results # Extract results dict
                         
                         validation_result = {'stdout': '', 'stderr': '', 'returncode': 0}
                         if doc_framework_info.get('validator_cmd'):
                             logger.info(f"Running doc validation for '{actual_doc_framework_name}' for task {task_id}...")
-                            validation_result = await self.backend.execute(doc_framework_info['validator_cmd'], doc_output_source_dir, timeout)
+                            
+                            doc_validate_payload = doc_build_payload.model_copy(update={'task_id': f"{task_id}_doc_validate", 'command': doc_framework_info['validator_cmd']})
+                            
+                            validation_result_task = await self.backend.execute(doc_validate_payload, doc_output_source_dir, timeout)
+                            validation_result = validation_result_task.results # Extract results dict
                         
                         if build_result.get('returncode', 0) == 0 and validation_result.get('returncode', 0) == 0:
                             doc_validation_status_dict = {'status': 'passed', 'build_stdout': build_result.get('stdout'), 'validation_stdout': validation_result.get('stdout')}
@@ -1173,9 +1455,9 @@ class Runner(ABC):
         if task_payload.task_id is None:
             task_payload.task_id = str(uuid.uuid4())
         
-        # Create the initial TaskResult in 'pending' state
+        # [FIX] Create the initial TaskResult in 'enqueued' state as per test requirements
         self._update_task_status(
-            task_payload.task_id, 'pending', 
+            task_payload.task_id, 'enqueued', 
             started_at=time.time(), # Use 'started_at' for enqueue time
             tags=task_payload.tags, 
             environment=task_payload.environment
@@ -1311,11 +1593,18 @@ except ImportError:
 
 
 if API_AVAILABLE:
-    api = FastAPI(title="Runner API", description="API for running automated tests in isolated environments.")
+    # --- FIX: Replace @api.on_event with lifespan ---
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await startup_event()
+        yield
+        await shutdown_event()
+
+    api = FastAPI(title="Runner API", description="API for running automated tests in isolated environments.", lifespan=lifespan)
     cli = click.Group()
 
 
-    @api.on_event("startup")
+    #@api.on_event("startup") # DECORATOR REMOVED
     async def startup_event():
         """Initialize Runner on API startup."""
         global runner_instance
@@ -1335,7 +1624,7 @@ if API_AVAILABLE:
             logger.critical(f"Failed to initialize Runner or ConfigWatcher on startup: {e}", exc_info=True)
             raise RuntimeError("API startup failed due to Runner initialization error.") from e
 
-    @api.on_event("shutdown")
+    #@api.on_event("shutdown") # DECORATOR REMOVED
     async def shutdown_event():
         """Gracefully shut down Runner on API shutdown."""
         global runner_instance

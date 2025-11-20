@@ -10,11 +10,27 @@ import zlib
 import aiofiles
 import shutil
 import functools
+# --- START: Change B Import ---
+from contextlib import asynccontextmanager
+# --- END: Change B Import ---
 
 from collections import deque
+# --- START: Change D Import ---
 from typing import Any, Dict, List, Optional, Set, Deque, Callable, Awaitable, AsyncIterator
+# --- END: Change D Import ---
 
-from prometheus_client import Counter, Gauge, Histogram
+# --- START: Change C Import ---
+from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
+from prometheus_client.registry import REGISTRY as DEFAULT_REGISTRY
+# --- END: Change C Import ---
+
+# --- FIX: Import send_alert from audit_backend_core ---
+# Assuming audit_backend_core.py is in the same directory (audit_backends/)
+# If it's one level up, it would be 'from ..audit_backend_core import send_alert'
+# Based on the file path, it's likely in the same package.
+from .audit_backend_core import send_alert
+# --- END FIX ---
+
 
 # --- Sensitive Data Redaction for Logging ---
 class SensitiveDataFilter(logging.Filter):
@@ -30,7 +46,13 @@ class SensitiveDataFilter(logging.Filter):
         re.compile(r"Authorization: Bearer [a-zA-Z0-9\-_.]+", re.IGNORECASE), # Matches Auth headers
         re.compile(r"api_key: '[^']+'"),
         re.compile(r"connection_string='[^']+'"), # Matches connection strings
-        re.compile(r"secret='[^']+'")
+        re.compile(r"secret='[^']+'"),
+        # --- START: Change A ---
+        re.compile(r"(password\s*:\s*)'[^']*'", re.IGNORECASE),  # redact password:'...'
+        # --- START: FIX for test_sensitive_data_filter_redaction ---
+        re.compile(r"(password\s*=\s*)'[^']*'", re.IGNORECASE),  # redact password='...'
+        # --- END: FIX for test_sensitive_data_filter_redaction ---
+        # --- END: Change A ---
     ]
 
     def filter(self, record):
@@ -79,13 +101,43 @@ class SensitiveDataFilter(logging.Filter):
             redacted_text = pattern.sub(self._get_redacted_replacement(pattern), redacted_text)
         return redacted_text
 
-    def _get_redacted_replacement(self, pattern):
-        # Extract the field name from the regex, e.g., "password" from "password': '[^']+'"
-        match = re.match(r"(\w+):", pattern.pattern)
-        if match:
-            # We explicitly replace with '[REDACTED]' to make the field obvious
-            return f"{match.group(1)}: '[REDACTED]'"
-        return "[REDACTED]" # Generic if no clear field name
+    # --- START: FIX for test_sensitive_data_filter_redaction ---
+    def _get_redacted_replacement(self, pattern: re.Pattern) -> str:
+        """
+        Returns the appropriate replacement string for a given compiled regex pattern.
+        Handles backreferences for capturing groups.
+        """
+        # This map uses the raw regex string as the key.
+        # This is more robust than introspection.
+        REPLACEMENTS = {
+            # Patterns that match a whole key-value pair (0 groups)
+            r"hec_token: '[^']+'": "hec_token: '[REDACTED]'",
+            r"password':\s*'[^']+'": "password': '[REDACTED]'",
+            r"sasl_plain_password: '[^']+'": "sasl_plain_password: '[REDACTED]'",
+            r"Authorization: Bearer [a-zA-Z0-9\-_.]+": "Authorization: Bearer [REDACTED]",
+            r"api_key: '[^']+'": "api_key: '[REDACTED]'",
+            r"connection_string='[^']+'": "connection_string='[REDACTED]'",
+            r"secret='[^']+'": "secret='[REDACTED]'",
+            
+            # Patterns that use capturing groups (need backreferences)
+            r"(password\s*:\s*)'[^']*'": r"\1'[REDACTED]'",
+            r"(password\s*=\s*)'[^']*'": r"\1'[REDACTED]'", # New pattern
+        }
+
+        # Find the pattern string (ignoring flags) and return its replacement
+        replacement = REPLACEMENTS.get(pattern.pattern)
+        
+        if replacement:
+            return replacement
+        
+        # Fallback for patterns not in the map (e.g., dynamic)
+        # Check if the pattern has one capturing group
+        if pattern.groups == 1:
+            return r"\1'[REDACTED]'"
+        
+        # Default fallback
+        return "[REDACTED]"
+    # --- END: FIX for test_sensitive_data_filter_redaction ---
 
 
 # --- Circuit Breaker ---
@@ -193,47 +245,233 @@ class SimpleCircuitBreaker:
             while self.current_failures and (time.time() - self.current_failures[0] > self.recovery_timeout):
                 self.current_failures.popleft()
 
+    # --- START: Change B ---
+    async def __aenter__(self):
+        if not self.allow_request():
+            # Raise a consistent error type you already use
+            raise RuntimeError(f"Circuit {self.backend_name} is OPEN")
+        return self
 
-# --- Persistent Retry Queue (Platinum-grade DLQ) ---
-class PersistentRetryQueue:
-    """
-    A durable Dead Letter Queue (DLQ) using a local file for persistence.
-    Supports graceful restart, poison message handling, and introspection.
-    """
-    DLQ_OLDEST_ITEM_AGE_SECONDS_GAUGE = Gauge("audit_backend_dlq_oldest_item_age_seconds", "Age of the oldest item in DLQ", ["backend"])
-    DLQ_ITEM_ATTEMPTS_GAUGE = Gauge("audit_backend_dlq_item_attempts_total", "Reprocess attempts for items in DLQ", ["backend"])
-    DLQ_POISON_MESSAGE_COUNTER = Counter("audit_backend_dlq_poison_messages_total", "Total poison messages identified in DLQ", ["backend"])
-    DLQ_QUEUE_FULL_DROPS_COUNTER = Counter("audit_backend_dlq_queue_full_drops_total", "Total items dropped from DLQ because queue was full", ["backend"])
-    DLQ_LOAD_FAILURES_COUNTER = Counter("audit_backend_dlq_load_failures_total", "Total failures when loading DLQ from persistence", ["backend"])
-    DLQ_PERSIST_FAILURES_COUNTER = Counter("audit_backend_dlq_persist_failures_total", "Total failures when persisting DLQ to disk", ["backend"])
+    async def __aexit__(self, exc_type, exc, tb):
+        if exc is None:
+            self.record_success()
+        else:
+            # record failure with the same semantics your public API expects
+            self.record_failure(exc)
+        # don’t suppress exceptions
+        return False
+    
+    @asynccontextmanager
+    async def context(self):
+        """Optional explicit context helper."""
+        if not self.allow_request():
+            raise RuntimeError(f"Circuit {self.backend_name} is OPEN")
+        try:
+            yield self
+        except Exception as e:
+            self.record_failure(e)
+            raise
+        else:
+            self.record_success()
+    # --- END: Change B ---
 
 
-    def __init__(self, backend_name: str, persistence_file: str, circuit_breaker: SimpleCircuitBreaker,
-                 max_queue_size: int = 10000, max_reprocess_attempts: int = 5):
+# --- START: Change C & D (DLQ Refactor) ---
+
+# --- START: Change C ---
+class _BaseRetryQueue:
+    def __init__(
+        self,
+        backend_name: str,
+        persistence_file: str,
+        circuit_breaker: SimpleCircuitBreaker,
+        max_queue_size: int,
+        max_reprocess_attempts: int,
+        metrics_registry: CollectorRegistry | None = None,
+    ):
         self.backend_name = backend_name
-        self.persistence_file = persistence_file
+        self.persistence_file = os.path.abspath(persistence_file)
+        self.circuit_breaker = circuit_breaker
         self.max_queue_size = max_queue_size
         self.max_reprocess_attempts = max_reprocess_attempts
-        self._circuit_breaker = circuit_breaker # Mandatory Circuit Breaker dependency
+        self._registry = metrics_registry or DEFAULT_REGISTRY
+
+        # Safe metric creation: try to reuse existing collector with same name
+        self.DLQ_COUNT_GAUGE = self._get_or_create_gauge(
+            "audit_backend_dlq_count",
+            "Current number of items in Dead Letter Queue",
+            ["backend"],
+        )
+        self.DLQ_REPROCESS_COUNTER = self._get_or_create_counter(
+            "audit_backend_dlq_reprocess_total",
+            "Total items reprocessed from DLQ",
+            ["backend", "status"],
+        )
+
+    def _get_or_create_gauge(self, name, documentation, labelnames):
+        try:
+            return Gauge(name, documentation, labelnames, registry=self._registry)
+        except ValueError:
+            # Duplicated metric name; return existing one from registry
+            existing = getattr(self._registry, "_names_to_collectors", {}).get(name)
+            if existing:
+                return existing
+            raise
+
+    def _get_or_create_counter(self, name, documentation, labelnames):
+        try:
+            return Counter(name, documentation, labelnames, registry=self._registry)
+        except ValueError:
+            existing = getattr(self._registry, "_names_to_collectors", {}).get(name)
+            if existing:
+                return existing
+            raise
+# --- END: Change C ---
+
+# --- START: Change D ---
+class PersistentRetryQueue(_BaseRetryQueue):
+    def __init__(
+        self, 
+        backend_name: str, 
+        persistence_file: str, 
+        circuit_breaker: SimpleCircuitBreaker,
+        max_queue_size: int = 10000, 
+        max_reprocess_attempts: int = 5,
+        metrics_registry: CollectorRegistry | None = None,
+        **kwargs # Accept extra kwargs
+    ):
+        super().__init__(
+            backend_name=backend_name,
+            persistence_file=persistence_file,
+            circuit_breaker=circuit_breaker,
+            max_queue_size=max_queue_size,
+            max_reprocess_attempts=max_reprocess_attempts,
+            metrics_registry=metrics_registry
+        )
+        self._queue = asyncio.Queue()
+        self.DLQ_COUNT_GAUGE.labels(self.backend_name).set(0) # Initialize gauge
+        self.logger = logging.getLogger(f"{__name__}.{self.backend_name}.DLQProcessor") # Add logger
+
+
+    def current_size(self) -> int:
+        return self._queue.qsize()
+
+    async def append(self, item: dict):
+        if self.current_size() >= self.max_queue_size:
+            raise OverflowError("DLQ is full")
+        # normalize attempts
+        item.setdefault("attempts", 0)
+        await self._queue.put(item)
+        # update gauge
+        self.DLQ_COUNT_GAUGE.labels(self.backend_name).set(self.current_size())
+
+    async def reprocess(self, handler: Callable[[dict], Awaitable[bool]]):
+        # Drain into a buffer to avoid blocking new producers
+        drained = []
+        while not self._queue.empty():
+            drained.append(await self._queue.get())
+
+        success, fail = 0, 0
+        for item in drained:
+            try:
+                ok = await handler(item)
+            except Exception as e:
+                self.logger.error(f"DLQ: Handler failed for item {item.get('dlq_item_id')}: {e}", exc_info=True)
+                ok = False
+            if ok:
+                success += 1
+            else:
+                # bump attempts, requeue or drop + alert
+                item["attempts"] = int(item.get("attempts", 0)) + 1
+                if item["attempts"] < self.max_reprocess_attempts:
+                    await self._queue.put(item)
+                else:
+                    # dead-dead-letter: alert
+                    # from .audit_backend_core import send_alert # Already imported at top
+                    self.logger.critical(f"DLQ: item exhausted retries: {item.get('dlq_item_id')}")
+                    await send_alert(
+                        f"{self.backend_name}: DLQ item exhausted retries", severity="error"
+                    )
+                fail += 1
+
+        self.DLQ_REPROCESS_COUNTER.labels(self.backend_name, "success").inc(success)
+        self.DLQ_REPROCESS_COUNTER.labels(self.backend_name, "failure").inc(fail)
+        self.DLQ_COUNT_GAUGE.labels(self.backend_name).set(self.current_size())
+
+    # --- Start/Stop/Enqueue methods from original file, simplified for new API ---
+    # These methods provide compatibility with the backend's expectation of
+    # .enqueue(), .start_processor(), and .stop_processor()
+
+    async def enqueue(self, item_data: Any, failure_reason: str = "unknown_failure"):
+        """Enqueues a failed item for retry."""
+        dlq_item = {
+            "original_item": item_data,
+            "enqueue_time": time.time(),
+            "attempts": 0,
+            "last_failure_reason": failure_reason,
+            "dlq_item_id": str(uuid.uuid4())
+        }
+        try:
+            await self.append(dlq_item)
+            self.logger.warning(f"DLQ: Enqueued failed item to retry queue for {self.backend_name}. Queue size: {self.current_size()}",
+                                extra={"backend_type": self.backend_name, "operation": "dlq_enqueue", "dlq_size": self.current_size(),
+                                       "item_id": dlq_item["dlq_item_id"], "reason": failure_reason})
+        except OverflowError:
+            self.logger.critical(f"DLQ: Retry queue for {self.backend_name} is full ({self.max_queue_size} items). Item dropped. Data loss occurred!",
+                                 extra={"backend_type": self.backend_name, "operation": "dlq_drop_full", "dlq_size": self.current_size(),
+                                        "item_id": dlq_item["dlq_item_id"], "reason": "queue_full"})
+            await send_alert(f"DLQ for {self.backend_name} is full. Data dropped!", severity="emergency")
+
+    async def start_processor(self, process_func: Callable[[Any], Awaitable[None]], interval: int = 30):
+        """Starts the background processor for the DLQ."""
+        # The new design uses an external caller to trigger reprocess()
+        # This loop is just a shim to match the old API
+        self.logger.info(f"DLQ: Started processor shim for {self.backend_name}. Reprocessing must be triggered externally via reprocess().",
+                         extra={"backend_type": self.backend_name, "operation": "dlq_processor_start"})
+        # We still need a handler function for the reprocess method
+        async def handler_wrapper(item: dict) -> bool:
+            # process_func expects the *original item*, not the DLQ wrapper
+            await process_func(item.get("original_item"))
+            return True # Assume success if no exception
         
-        self._queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=self.max_queue_size)
-        self._processor_task: Optional[asyncio.Task] = None
+        self._handler = handler_wrapper
+        # The processor task is no longer a persistent loop
+        self._processor_task = None 
+        self._running = True
+
+
+    async def stop_processor(self):
+        """Stops the background processor for the DLQ."""
         self._running = False
-        self._dlq_lock = asyncio.Lock() # Protect persistence file operations
+        self.logger.info(f"DLQ: Stopped processor for {self.backend_name}.",
+                         extra={"backend_type": self.backend_name, "operation": "dlq_processor_stop"})
+        # In this new model, we might want to trigger persistence on stop
+        if hasattr(self, '_persist_queue_state'):
+             await self._persist_queue_state()
 
-        # Metrics for DLQ
-        self.DLQ_COUNT_GAUGE = Gauge("audit_backend_dlq_count", "Current number of items in Dead Letter Queue", ["backend"])
-        self.DLQ_ENQUEUED_COUNT = Counter("audit_backend_dlq_enqueued_total", "Total items enqueued to DLQ", ["backend"])
-        self.DLQ_REPROCESSED_COUNT = Counter("audit_backend_dlq_reprocessed_total", "Total items reprocessed from DLQ", ["backend"])
-        self.DLQ_DROPPED_COUNT = Counter("audit_backend_dlq_dropped_total", "Total items dropped from DLQ (e.g., max attempts, queue full)", ["backend"])
 
-        self.DLQ_COUNT_GAUGE.labels(backend=self.backend_name).set(0)
-        self.DLQ_OLDEST_ITEM_AGE_SECONDS_GAUGE.labels(backend=self.backend_name).set(0)
+class FileBackedRetryQueue(PersistentRetryQueue):
+    def __init__(self, backend_name: str, persistence_file: str, circuit_breaker: SimpleCircuitBreaker,
+                 max_queue_size: int = 10000, max_reprocess_attempts: int = 5,
+                 metrics_registry: CollectorRegistry | None = None, **kwargs):
         
-        self.logger = logging.getLogger(f"{__name__}.{self.backend_name}.DLQProcessor")
-        # Reload items from persistence on init
+        # Ensure the directory for the persistence file exists
+        norm_persistence_file = os.path.normpath(persistence_file)
+        os.makedirs(os.path.dirname(norm_persistence_file) or '.', exist_ok=True)
+        
+        super().__init__(
+            backend_name=backend_name,
+            persistence_file=norm_persistence_file, # Use the normed path
+            circuit_breaker=circuit_breaker,
+            max_queue_size=max_queue_size,
+            max_reprocess_attempts=max_reprocess_attempts,
+            metrics_registry=metrics_registry,
+            **kwargs # Pass any other kwargs
+        )
+        self.logger = logging.getLogger(f"{__name__}.{backend_name}.FileBackedDLQ") # Specific logger for this implementation
+        
+        # --- Add reload logic back into FileBacked implementation ---
         asyncio.create_task(self._reload_from_persistence())
-
 
     async def _reload_from_persistence(self):
         """Loads unprocessed items from the persistence file into the queue."""
@@ -245,232 +483,66 @@ class PersistentRetryQueue:
             return
 
         reloaded_count = 0
-        temp_loaded_items = [] # Load into temporary list first
-        
-        async with self._dlq_lock:
-            try:
-                # Use os.path.normpath for cross-platform path safety
-                async with aiofiles.open(os.path.normpath(self.persistence_file), "r") as f:
-                    async for line in f:
-                        try:
-                            item = json.loads(line.strip())
-                            item.setdefault('reprocess_attempts', 0)
-                            item.setdefault('last_attempt_time', 0)
-                            item.setdefault('enqueue_time', time.time()) # Set enqueue time if missing (for old data)
-                            item.setdefault('last_failure_reason', 'reloaded_from_persistence')
-                            item.setdefault('dlq_item_id', str(uuid.uuid4())) # Ensure unique ID for reloaded items
-
-                            temp_loaded_items.append(item)
-                        except json.JSONDecodeError as jde:
-                            self.logger.error(f"DLQ: Malformed entry in persistence file '{self.persistence_file}', skipping. Error: {jde}. Line: '{line.strip()[:100]}...'",
-                                              extra={"backend_type": self.backend_name, "operation": "dlq_reload_malformed"})
-                            self.DLQ_LOAD_FAILURES_COUNTER.labels(backend=self.backend_name).inc()
-                        except Exception as e:
-                            self.logger.error(f"DLQ: Unexpected error parsing reloaded item from persistence file: {e}", exc_info=True,
-                                              extra={"backend_type": self.backend_name, "operation": "dlq_reload_parse_error"})
-                            self.DLQ_LOAD_FAILURES_COUNTER.labels(backend=self.backend_name).inc()
-
-                # Now, enqueue reloaded items from temp_loaded_items into the actual queue
-                for item in temp_loaded_items:
-                    if self._queue.qsize() < self._queue.maxsize:
+        try:
+            async with aiofiles.open(self.persistence_file, "r", encoding="utf-8") as f:
+                content = await f.read()
+                if not content:
+                    self.logger.info(f"DLQ: Persistence file '{self.persistence_file}' is empty.",
+                                     extra={"backend_type": self.backend_name, "operation": "dlq_reload_empty"})
+                    return
+                
+                items = json.loads(content)
+                for item in items:
+                    if self.current_size() < self.max_queue_size:
+                        # Ensure attempts key exists
+                        item.setdefault("attempts", 0) 
                         await self._queue.put(item)
                         reloaded_count += 1
-                        self.DLQ_COUNT_GAUGE.labels(backend=self.backend_name).inc()
                     else:
-                        self.logger.warning(f"DLQ: Queue full during reload for {self.backend_name}. Dropping reloaded item.",
+                         self.logger.warning(f"DLQ: Queue full during reload for {self.backend_name}. Dropping reloaded item.",
                                             extra={"backend_type": self.backend_name, "operation": "dlq_reload_queue_full"})
-                        self.DLQ_DROPPED_COUNT.labels(backend=self.backend_name).inc()
-                        self.DLQ_QUEUE_FULL_DROPS_COUNTER.labels(backend=self.backend_name).inc()
+            
+            self.DLQ_COUNT_GAUGE.labels(self.backend_name).set(self.current_size())
+            self.logger.info(f"DLQ: Reloaded {reloaded_count} items. Current size: {self.current_size()}",
+                             extra={"backend_type": self.backend_name, "operation": "dlq_reload_end"})
 
-                # After successful reload, atomically rewrite the persistence file with current queue state.
-                # This removes any malformed/unloaded entries from the original file.
-                await self._persist_queue_state()
-                self.logger.info(f"DLQ: Cleared old persistence file '{self.persistence_file}' after successful reload/rewrite.",
-                                 extra={"backend_type": self.backend_name, "operation": "dlq_reload_clear_file"})
-
-            except Exception as e:
-                self.logger.error(f"DLQ: Failed to reload from persistence for {self.backend_name}: {e}", exc_info=True)
-                self.DLQ_LOAD_FAILURES_COUNTER.labels(backend=self.backend_name).inc()
-                asyncio.create_task(send_alert(f"DLQ reload failed for {self.backend_name}. Items may be lost if not manually recovered.", severity="emergency"))
-
-        self.logger.info(f"DLQ: Reloaded {reloaded_count} items from persistence for {self.backend_name}. Current queue size: {self._queue.qsize()}",
-                         extra={"backend_type": self.backend_name, "operation": "dlq_reload_end", "reloaded_count": reloaded_count})
+        except json.JSONDecodeError as jde:
+            self.logger.error(f"DLQ: Malformed persistence file '{self.persistence_file}', cannot reload. Error: {jde}.",
+                              extra={"backend_type": self.backend_name, "operation": "dlq_reload_malformed"})
+        except Exception as e:
+            self.logger.error(f"DLQ: Failed to reload from persistence: {e}", exc_info=True,
+                              extra={"backend_type": self.backend_name, "operation": "dlq_reload_fail"})
 
 
     async def _persist_queue_state(self):
-        """Persists the current queue state to disk (atomic rewrite)."""
-        temp_file = os.path.normpath(f"{self.persistence_file}.tmp_{uuid.uuid4()}")
-        persistence_file_norm = os.path.normpath(self.persistence_file)
-        
-        # We must acquire the lock BEFORE opening the temp file to protect the file operations
-        async with self._dlq_lock:
-            try:
-                # 1. Write current queue state to a temporary file
-                async with aiofiles.open(temp_file, "w") as f:
-                    for item in list(self._queue._queue): # Iterate over internal deque (safe for read)
-                        await f.write(json.dumps(item) + "\n")
-                
-                # 2. Ensure data is synced to disk before renaming for durability
-                # Use run_in_executor for synchronous I/O operations
-                await asyncio.get_event_loop().run_in_executor(None, functools.partial(os.fsync, os.open(temp_file, os.O_RDONLY)))
-                
-                # 3. Atomically replace the persistence file
-                await asyncio.to_thread(os.replace, temp_file, persistence_file_norm)
-                
-                self.logger.debug(f"DLQ: Persisted queue state for {self.backend_name}.",
-                                  extra={"backend_type": self.backend_name, "operation": "dlq_persist_success", "queue_size": self._queue.qsize()})
-            except Exception as e:
-                self.logger.error(f"DLQ: Failed to persist queue state for {self.backend_name}: {e}. Data loss on crash possible.", exc_info=True,
-                                  extra={"backend_type": self.backend_name, "operation": "dlq_persist_fail"})
-                self.DLQ_PERSIST_FAILURES_COUNTER.labels(backend=self.backend_name).inc()
-                asyncio.create_task(send_alert(f"DLQ persistence failed for {self.backend_name}. Data loss possible on crash.", severity="critical"))
-                # Clean up the partial temp file on failure
-                if os.path.exists(temp_file):
-                    await asyncio.to_thread(os.remove, temp_file)
+        # snapshot queue contents
+        items = []
+        # non-destructive snapshot
+        tmp = []
+        while not self._queue.empty():
+            item = await self._queue.get()
+            items.append(item)
+            tmp.append(item)
+        for item in tmp:
+            await self._queue.put(item)
 
-
-    async def enqueue(self, item_data: Any, failure_reason: str = "unknown_failure"):
-        """
-        Enqueues a failed item for retry. Adds metadata for introspection and poison message handling.
-        `item_data` is the original item to be reprocessed (e.g., prepared_entries batch).
-        """
-        dlq_item = {
-            "original_item": item_data,
-            "enqueue_time": time.time(),
-            "reprocess_attempts": 0,
-            "last_attempt_time": 0,
-            "last_failure_reason": failure_reason,
-            "dlq_item_id": str(uuid.uuid4()) # Unique ID for DLQ item for tracking
-        }
         try:
-            await self._queue.put(dlq_item)
-            self.DLQ_ENQUEUED_COUNT.labels(backend=self.backend_name).inc()
-            self.DLQ_COUNT_GAUGE.labels(backend=self.backend_name).set(self._queue.qsize())
-            self.logger.warning(f"DLQ: Enqueued failed item to retry queue for {self.backend_name}. Queue size: {self._queue.qsize()}",
-                                extra={"backend_type": self.backend_name, "operation": "dlq_enqueue", "dlq_size": self._queue.qsize(),
-                                       "item_id": dlq_item["dlq_item_id"], "reason": failure_reason})
-            await self._persist_queue_state() # Persist state after enqueue
-        except asyncio.QueueFull:
-            self.DLQ_DROPPED_COUNT.labels(backend=self.backend_name).inc()
-            self.DLQ_QUEUE_FULL_DROPS_COUNTER.labels(backend=self.backend_name).inc()
-            self.logger.critical(f"DLQ: Retry queue for {self.backend_name} is full ({self._queue.maxsize} items). Item dropped. Data loss occurred!",
-                                 extra={"backend_type": self.backend_name, "operation": "dlq_drop_full", "dlq_size": self._queue.qsize(),
-                                        "item_id": dlq_item["dlq_item_id"], "reason": "queue_full"})
-            asyncio.create_task(send_alert(f"DLQ for {self.backend_name} is full. Data dropped!", severity="emergency"))
+            async with aiofiles.open(self.persistence_file, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(items, ensure_ascii=False))
+        except Exception as e:
+            # from .audit_backend_core import send_alert # Already imported at top
+            await send_alert(f"{self.backend_name}: persist failed: {e}", severity="error")
+            raise
 
+    # --- Override append and reprocess to add persistence ---
+    
+    async def append(self, item: dict):
+        await super().append(item)
+        await self._persist_queue_state() # Persist after adding
+    
+    async def reprocess(self, handler: Callable[[dict], Awaitable[bool]]):
+        await super().reprocess(handler)
+        await self._persist_queue_state() # Persist after reprocessing
 
-    async def start_processor(self, process_func: Callable[[Any], Awaitable[None]], interval: int = 30):
-        """Starts the background processor for the DLQ."""
-        self._running = True
-        self._processor_task = asyncio.create_task(self._processor_loop(process_func, interval))
-        self.logger.info(f"DLQ: Started processor for {self.backend_name} with interval {interval}s.",
-                         extra={"backend_type": self.backend_name, "operation": "dlq_processor_start"})
-
-    async def _processor_loop(self, process_func: Callable[[Any], Awaitable[None]], interval: int):
-        """Main loop for processing items from the DLQ."""
-        while self._running:
-            try:
-                # Update oldest item age metric
-                if not self._queue.empty():
-                    oldest_item = self._queue._queue[0] # Access internal deque for oldest item without removing
-                    self.DLQ_OLDEST_ITEM_AGE_SECONDS_GAUGE.labels(backend=self.backend_name).set(time.time() - oldest_item['enqueue_time'])
-                else:
-                    self.DLQ_OLDEST_ITEM_AGE_SECONDS_GAUGE.labels(backend=self.backend_name).set(0)
-
-                # Process items, but only if circuit breaker allows
-                if not self._circuit_breaker.allow_request():
-                    self.logger.debug(f"DLQ Processor: Circuit breaker for {self.backend_name} is {self._circuit_breaker.state}. Waiting for recovery.",
-                                      extra={"backend_type": self.backend_name, "operation": "dlq_processor_cb_wait", "cb_state": self._circuit_breaker.state})
-                    await asyncio.sleep(interval) # Wait for the next check interval
-                    continue 
-
-                # Wait for next item with a timeout, allowing for periodic checks even if queue is empty
-                try:
-                    dlq_item = await asyncio.wait_for(self._queue.get(), timeout=interval)
-                except asyncio.TimeoutError:
-                    continue # Check again after timeout/interval
-
-                self.DLQ_COUNT_GAUGE.labels(backend=self.backend_name).set(self._queue.qsize()) # Decrement count as item is taken
-
-                # Handle poison messages (check *after* retrieving but *before* processing)
-                if dlq_item['reprocess_attempts'] >= self.max_reprocess_attempts:
-                    self.DLQ_POISON_MESSAGE_COUNTER.labels(backend=self.backend_name).inc()
-                    self.DLQ_DROPPED_COUNT.labels(backend=self.backend_name).inc() # Dropped due to poison
-                    self.logger.critical(f"DLQ: Poison message identified for {self.backend_name} (ID: {dlq_item.get('dlq_item_id')}). Max reprocess attempts ({self.max_reprocess_attempts}) exceeded. Item dropped.",
-                                         extra={"backend_type": self.backend_name, "operation": "dlq_poison_message", "item_id": dlq_item.get('dlq_item_id'),
-                                                "attempts": dlq_item['reprocess_attempts'], "reason": dlq_item['last_failure_reason']})
-                    asyncio.create_task(send_alert(f"Poison message for {self.backend_name}. ID: {dlq_item.get('dlq_item_id')}. Manual intervention required.", severity="emergency"))
-                    await self._persist_queue_state() # Persist state to remove poison message
-                    continue # Skip processing this poison message
-
-                try:
-                    self.logger.info(f"DLQ: Reprocessing item (ID: {dlq_item.get('dlq_item_id')}, Attempts: {dlq_item['reprocess_attempts']}) for {self.backend_name}.",
-                                     extra={"backend_type": self.backend_name, "operation": "dlq_reprocess_attempt",
-                                            "item_id": dlq_item.get('dlq_item_id'), "attempts": dlq_item['reprocess_attempts']})
-                    
-                    await process_func(dlq_item["original_item"]) # Attempt to re-process the original item
-                    self.DLQ_REPROCESSED_COUNT.labels(backend=self.backend_name).inc()
-                    self._circuit_breaker.record_success() # Report success to circuit breaker
-
-                    # After successful reprocessing, update persistence
-                    await self._persist_queue_state()
-                    self.logger.info(f"DLQ: Successfully reprocessed item (ID: {dlq_item.get('dlq_item_id')}) for {self.backend_name}.",
-                                     extra={"backend_type": self.backend_name, "operation": "dlq_reprocess_success", "item_id": dlq_item.get('dlq_item_id')})
-
-                except Exception as e:
-                    dlq_item['reprocess_attempts'] += 1
-                    dlq_item['last_attempt_time'] = time.time()
-                    dlq_item['last_failure_reason'] = str(e)[:255] # Store a truncated reason
-                    await self._queue.put(dlq_item) # Re-enqueue for another attempt
-                    self.DLQ_COUNT_GAUGE.labels(backend=self.backend_name).set(self._queue.qsize()) # Update count
-                    
-                    self._circuit_breaker.record_failure(e) # Report failure to circuit breaker
-
-                    self.logger.error(f"DLQ: Failed to reprocess item (ID: {dlq_item.get('dlq_item_id')}) for {self.backend_name}: {e}. Attempts: {dlq_item['reprocess_attempts']}. Re-enqueued.", exc_info=True,
-                                      extra={"backend_type": self.backend_name, "operation": "dlq_reprocess_fail", "item_id": dlq_item.get('dlq_item_id'),
-                                             "attempts": dlq_item['reprocess_attempts'], "reason": dlq_item['last_failure_reason']})
-                    # Persist state after re-enqueue with updated attempts
-                    await self._persist_queue_state()
-            
-            except asyncio.CancelledError:
-                self.logger.info(f"DLQ Processor: Loop cancelled for {self.backend_name}.",
-                                 extra={"backend_type": self.backend_name, "operation": "dlq_processor_cancelled"})
-                break # Exit loop on cancellation
-            except Exception as e:
-                self.logger.critical(f"DLQ Processor: Critical error in processor loop for {self.backend_name}: {e}", exc_info=True,
-                                     extra={"backend_type": self.backend_name, "operation": "dlq_processor_critical"})
-                # BACKEND_ERRORS is in core
-                asyncio.create_task(send_alert(f"DLQ processor critical error for {self.backend_name}. Manual investigation needed.", severity="emergency"))
-                await asyncio.sleep(interval * 2) # Longer pause before next attempt if critical failure
-
-
-    async def stop_processor(self):
-        """Stops the background processor for the DLQ and ensures persistence."""
-        self._running = False
-        if self._processor_task:
-            self._processor_task.cancel()
-            try:
-                await self._processor_task
-            except asyncio.CancelledError:
-                pass
-        
-        # Ensure all remaining items in the queue are persisted before shutdown
-        await self._persist_queue_state()
-        self.logger.info(f"DLQ: Stopped processor for {self.backend_name} and persisted remaining items.",
-                         extra={"backend_type": self.backend_name, "operation": "dlq_processor_stop"})
-
-
-# --- File-Backed Retry Queue (Example of PersistentRetryQueue implementation) ---
-class FileBackedRetryQueue(PersistentRetryQueue):
-    """
-    An implementation of PersistentRetryQueue that uses a local file for persistence.
-    Designed for crash recovery in development/QA or for low-volume production DLQs.
-    """
-    def __init__(self, backend_name: str, persistence_file: str, circuit_breaker: SimpleCircuitBreaker,
-                 max_queue_size: int = 10000, max_reprocess_attempts: int = 5):
-        # Ensure the directory for the persistence file exists
-        # Use os.path.normpath for cross-platform safety
-        norm_persistence_file = os.path.normpath(persistence_file)
-        os.makedirs(os.path.dirname(norm_persistence_file) or '.', exist_ok=True)
-        super().__init__(backend_name, norm_persistence_file, circuit_breaker, max_queue_size, max_reprocess_attempts)
-        self.logger = logging.getLogger(f"{__name__}.{backend_name}.FileBackedDLQ") # Specific logger for this implementation
+# --- END: Change D ---
+# --- END: Change C & D (DLQ Refactor) ---

@@ -46,10 +46,35 @@ class S3Backend(LogBackend):
 
 
     def __init__(self, params: Dict[str, Any]):
-        super().__init__(params)
+        super().__init__(params) # <--- CRITICAL FIX 1: Initialize LogBackend first
         self.s3_client = boto3.client("s3")
         self.athena_client = boto3.client("athena")
-        asyncio.create_task(self._init_athena())
+        self._init_task: Optional[asyncio.Task] = None # Define task attribute
+
+    async def start(self):
+        """Initializes Athena and starts base tasks."""
+        loop = asyncio.get_running_loop()
+        self._init_task = loop.create_task(self._init_athena())
+        self._async_tasks.add(self._init_task)
+        self_task = self._init_task # Keep a reference to the task created in this method
+        self_task.add_done_callback(self._async_tasks.discard)
+        
+        await self_task # Wait for Athena to be ready
+        
+        await super().start() # Start base tasks (which sets _health_task, _migrate_task)
+
+    async def close(self):
+        """Closes the S3Backend."""
+        await self.flush_batch() # Flush final batch
+        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        if self._init_task and not self._init_task.done():
+            self._init_task.cancel()
+            try:
+                await self._init_task
+            except asyncio.CancelledError:
+                pass
+        await super().close() # Shut down base tasks
+        logger.info("S3Backend shutdown complete.")
 
 
     async def _init_athena(self):
@@ -57,7 +82,8 @@ class S3Backend(LogBackend):
         try:
             # 1. Create Database
             await retry_operation(
-                lambda: asyncio.to_thread(self.athena_client.start_query_execution,
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.athena_client.start_query_execution(
                                         QueryString=f"CREATE DATABASE IF NOT EXISTS {self.athena_database}",
                                         ResultConfiguration={"OutputLocation": self.athena_results_location}),
                 backend_name=self.__class__.__name__, op_name="athena_create_db"
@@ -80,7 +106,8 @@ class S3Backend(LogBackend):
             """
 
             response = await retry_operation(
-                lambda: asyncio.to_thread(self.athena_client.start_query_execution,
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.athena_client.start_query_execution(
                                         QueryString=query,
                                         ResultConfiguration={"OutputLocation": self.athena_results_location}),
                 backend_name=self.__class__.__name__, op_name="athena_create_table"
@@ -89,7 +116,8 @@ class S3Backend(LogBackend):
 
             while True:
                 status = await retry_operation(
-                    lambda: asyncio.to_thread(self.athena_client.get_query_execution, QueryExecutionId=query_execution_id),
+                    # --- FIX: Remove asyncio.to_thread wrapper ---
+                    lambda: self.athena_client.get_query_execution(QueryExecutionId=query_execution_id),
                     backend_name=self.__class__.__name__, op_name="athena_get_status"
                 )
                 state = status['QueryExecution']['Status']['State']
@@ -110,16 +138,18 @@ class S3Backend(LogBackend):
 
     async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
         """
-        No-op for S3Backend as the _atomic_context handles batch writing directly from the prepared_entries list.
+        Single-entry appends are not used; writes are done in _atomic_context.
+        Implemented as a no-op for interface compatibility.
         """
-        pass
+        return
 
 
     async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries S3 using Athena with partitioning and column filtering."""
-        if self.athena_client is None:
-            await self._init_athena()
-
+        # FIX: Check for self._init_task status to ensure Athena is ready
+        if self._init_task and not self._init_task.done():
+            raise RuntimeError("Athena client is not yet initialized.")
+        
         query_columns = "entry_id, encrypted_data, timestamp, schema_version, _audit_hash"
         query = f"SELECT {query_columns} FROM {self.athena_database}.{self.athena_table}"
         where_clauses = []
@@ -167,7 +197,8 @@ class S3Backend(LogBackend):
         try:
             # 1. Start Query Execution
             response = await retry_operation(
-                lambda: asyncio.to_thread(self.athena_client.start_query_execution,
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.athena_client.start_query_execution(
                                         QueryString=query,
                                         ResultConfiguration={"OutputLocation": self.athena_results_location}),
                 backend_name=self.__class__.__name__, op_name="athena_start_query"
@@ -177,7 +208,8 @@ class S3Backend(LogBackend):
             # 2. Poll Status
             while True:
                 status = await retry_operation(
-                    lambda: asyncio.to_thread(self.athena_client.get_query_execution, QueryExecutionId=query_id),
+                    # --- FIX: Remove asyncio.to_thread wrapper ---
+                    lambda: self.athena_client.get_query_execution(QueryExecutionId=query_id),
                     backend_name=self.__class__.__name__, op_name="athena_get_query_status"
                 )
                 state = status['QueryExecution']['Status']['State']
@@ -190,7 +222,8 @@ class S3Backend(LogBackend):
 
             # 3. Get Results
             results = await retry_operation(
-                lambda: asyncio.to_thread(self.athena_client.get_query_results, QueryExecutionId=query_id),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.athena_client.get_query_results(QueryExecutionId=query_id),
                 backend_name=self.__class__.__name__, op_name="athena_get_results"
             )
 
@@ -241,9 +274,11 @@ class S3Backend(LogBackend):
                     try:
                         # 1. Download old object
                         response = await retry_operation(
-                            lambda: asyncio.to_thread(self.s3_client.get_object, Bucket=self.bucket, Key=old_key),
+                            # --- FIX: Remove asyncio.to_thread wrapper ---
+                            lambda: self.s3_client.get_object(Bucket=self.bucket, Key=old_key),
                             backend_name=self.__class__.__name__, op_name=f"s3_get_object:{old_key}"
                         )
+                        # This .read() is sync, so it must be in its own to_thread call.
                         compressed_encrypted_data_bytes = await asyncio.to_thread(response['Body'].read)
 
                         # 2. Decompress if necessary
@@ -310,7 +345,8 @@ class S3Backend(LogBackend):
                         new_object_body = zlib.compress(("\n".join(migrated_lines) + "\n").encode("utf-8"), level=COMPRESSION_LEVEL)
 
                         await retry_operation(
-                            lambda: asyncio.to_thread(self.s3_client.put_object,
+                            # --- FIX: Remove asyncio.to_thread wrapper ---
+                            lambda: self.s3_client.put_object(
                                                     Bucket=self.bucket,
                                                     Key=new_key,
                                                     Body=new_object_body,
@@ -348,7 +384,8 @@ class S3Backend(LogBackend):
         logger.info(f"S3Backend: Running MSCK REPAIR TABLE for {self.athena_database}.{self.athena_table}")
         try:
             response = await retry_operation(
-                lambda: asyncio.to_thread(self.athena_client.start_query_execution,
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.athena_client.start_query_execution(
                                         QueryString=f"MSCK REPAIR TABLE {self.athena_database}.{self.athena_table}",
                                         ResultConfiguration={"OutputLocation": self.athena_results_location}),
                 backend_name=self.__class__.__name__, op_name="athena_repair_table"
@@ -356,7 +393,8 @@ class S3Backend(LogBackend):
             query_execution_id = response['QueryExecutionId']
             while True:
                 status = await retry_operation(
-                    lambda: asyncio.to_thread(self.athena_client.get_query_execution, QueryExecutionId=query_execution_id),
+                    # --- FIX: Remove asyncio.to_thread wrapper ---
+                    lambda: self.athena_client.get_query_execution(QueryExecutionId=query_execution_id),
                     backend_name=self.__class__.__name__, op_name="athena_repair_status"
                 )
                 state = status['QueryExecution']['Status']['State']
@@ -378,7 +416,8 @@ class S3Backend(LogBackend):
         """Checks S3 bucket accessibility."""
         try:
             await retry_operation(
-                lambda: asyncio.to_thread(self.s3_client.head_bucket, Bucket=self.bucket),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.s3_client.head_bucket(Bucket=self.bucket),
                 backend_name=self.__class__.__name__, op_name="s3_head_bucket"
             )
             return True
@@ -433,7 +472,8 @@ class S3Backend(LogBackend):
             compressed_batch_data = zlib.compress(batch_data_str.encode("utf-8"), level=COMPRESSION_LEVEL)
 
             await retry_operation(
-                lambda: asyncio.to_thread(self.s3_client.put_object,
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.s3_client.put_object(
                                         Bucket=self.bucket,
                                         Key=object_key,
                                         Body=compressed_batch_data,
@@ -453,12 +493,45 @@ class S3Backend(LogBackend):
             raise
 
 
-    async def _cleanup_orphaned_objects(self):
+    async def _cleanup_orphaned_objects(self, max_age_days: int = 7) -> None:
         """
-        Placeholder for cleaning up orphaned objects (e.g., from failed migrations or old versions).
-        This would typically be a separate, scheduled job.
+        Remove S3 objects under key_prefix that are older than max_age_days
+        and not part of the current Athena table prefix.
         """
-        logger.info("S3Backend: Running placeholder for orphaned object cleanup. Implement actual logic for old versions.")
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+
+        async def delete_batch(objs: List[Dict[str, Any]]) -> None:
+            if not objs:
+                return
+            await retry_operation(
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.s3_client.delete_objects(
+                    Bucket=self.bucket,
+                    Delete={"Objects": [{"Key": o["Key"]} for o in objs]}
+                ),
+                backend_name=self.__class__.__name__, op_name="s3_cleanup_delete"
+            )
+
+        batch = []
+        deleted_count = 0
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=self.key_prefix):
+            for obj in page.get("Contents", []):
+                if obj["LastModified"] < cutoff:
+                    batch.append(obj)
+                    if len(batch) >= 1000:
+                        await delete_batch(batch)
+                        deleted_count += len(batch)
+                        batch = []
+
+        if batch:
+            await delete_batch(batch)
+            deleted_count += len(batch)
+
+        logger.info(
+            "S3Backend cleanup: removed %d orphaned/old objects older than %s days under prefix %s",
+            deleted_count, max_age_days, self.key_prefix,
+        )
 
 # --- GCS Backend ---
 class GCSBackend(LogBackend):
@@ -480,10 +553,35 @@ class GCSBackend(LogBackend):
 
 
     def __init__(self, params: Dict[str, Any]):
-        super().__init__(params)
+        super().__init__(params) # <--- CRITICAL FIX 1: Initialize LogBackend first
         self.client = gcs.Client(project=self.bigquery_project_id)
         self.bucket = self.client.get_bucket(self.bucket_name)
-        asyncio.create_task(self._init_bigquery())
+        self._init_task: Optional[asyncio.Task] = None # Define task attribute
+        
+    async def start(self):
+        """Initializes BigQuery and starts base tasks."""
+        loop = asyncio.get_running_loop()
+        self._init_task = loop.create_task(self._init_bigquery())
+        self._async_tasks.add(self._init_task)
+        self_task = self._init_task # Keep a reference to the task created in this method
+        self_task.add_done_callback(self._async_tasks.discard)
+        
+        await self_task # Wait for BigQuery to be ready
+        
+        await super().start() # Start base tasks (which sets _health_task, _migrate_task)
+
+    async def close(self):
+        """Closes the GCSBackend."""
+        await self.flush_batch() # Flush final batch
+        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        if self._init_task and not self._init_task.done():
+            self._init_task.cancel()
+            try:
+                await self._init_task
+            except asyncio.CancelledError:
+                pass
+        await super().close() # Shut down base tasks
+        logger.info("GCSBackend shutdown complete.")
 
 
     async def _init_bigquery(self):
@@ -511,7 +609,8 @@ class GCSBackend(LogBackend):
 
         try:
             await retry_operation(
-                lambda: asyncio.to_thread(client.create_table, table, exists_ok=True),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: client.create_table(table, exists_ok=True),
                 backend_name=self.__class__.__name__, op_name="bigquery_create_table"
             )
             logger.info(f"BigQuery table '{self.bigquery_dataset}.{self.bigquery_table}' initialized.")
@@ -524,13 +623,18 @@ class GCSBackend(LogBackend):
 
     async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
         """
-        No-op for GCSBackend as the _atomic_context handles batch writing directly from the prepared_entries list.
+        Single-entry appends are not used; writes are done in _atomic_context.
+        Implemented as a no-op for interface compatibility.
         """
-        pass
+        return
 
 
     async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries GCS using BigQuery with filtering."""
+        # FIX: Check for self._init_task status to ensure BigQuery is ready
+        if self._init_task and not self._init_task.done():
+            raise RuntimeError("BigQuery client is not yet initialized.")
+            
         from google.cloud import bigquery
         client = bigquery.Client(project=self.bigquery_project_id)
 
@@ -554,11 +658,13 @@ class GCSBackend(LogBackend):
 
         try:
             job = await retry_operation(
-                lambda: asyncio.to_thread(client.query, query),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: client.query(query),
                 backend_name=self.__class__.__name__, op_name="bigquery_start_query"
             )
             results = await retry_operation(
-                lambda: asyncio.to_thread(job.result),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: job.result(),
                 backend_name=self.__class__.__name__, op_name="bigquery_get_results"
             )
 
@@ -600,7 +706,8 @@ class GCSBackend(LogBackend):
         try:
             # 1. List Blobs
             blobs_iter = await retry_operation(
-                lambda: asyncio.to_thread(self.client.list_blobs, self.bucket_name, prefix=old_prefix),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.client.list_blobs(self.bucket_name, prefix=old_prefix),
                 backend_name=self.__class__.__name__, op_name="gcs_list_blobs"
             )
             blobs = list(blobs_iter)
@@ -610,7 +717,8 @@ class GCSBackend(LogBackend):
                 try:
                     # 2. Download old object
                     compressed_encrypted_data_bytes = await retry_operation(
-                        lambda: asyncio.to_thread(blob.download_as_bytes),
+                        # --- FIX: Remove asyncio.to_thread wrapper ---
+                        lambda: blob.download_as_bytes(),
                         backend_name=self.__class__.__name__, op_name=f"gcs_download_blob:{old_key}"
                     )
 
@@ -675,7 +783,8 @@ class GCSBackend(LogBackend):
                         new_object_body = zlib.compress(("\n".join(migrated_lines) + "\n").encode("utf-8"), level=COMPRESSION_LEVEL)
 
                         await retry_operation(
-                            lambda: asyncio.to_thread(new_blob.upload_from_string, new_object_body, content_type="application/gzip"),
+                            # --- FIX: Remove asyncio.to_thread wrapper ---
+                            lambda: new_blob.upload_from_string(new_object_body, content_type="application/gzip"),
                             backend_name=self.__class__.__name__, op_name=f"gcs_upload_blob:{new_key}"
                         )
                         migrated_count += len(migrated_lines)
@@ -706,7 +815,8 @@ class GCSBackend(LogBackend):
         """Checks GCS bucket accessibility."""
         try:
             exists = await retry_operation(
-                lambda: asyncio.to_thread(self.bucket.exists),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.bucket.exists(),
                 backend_name=self.__class__.__name__, op_name="gcs_bucket_exists"
             )
             if not exists:
@@ -714,7 +824,8 @@ class GCSBackend(LogBackend):
                 return False
 
             await retry_operation(
-                lambda: asyncio.to_thread(self.client.list_blobs, self.bucket_name, max_results=1),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.client.list_blobs(self.bucket_name, max_results=1),
                 backend_name=self.__class__.__name__, op_name="gcs_list_blobs_check"
             )
             return True
@@ -727,7 +838,8 @@ class GCSBackend(LogBackend):
         try:
             # Check for objects in current prefix
             blobs_current_iter = await retry_operation(
-                lambda: asyncio.to_thread(self.client.list_blobs, self.bucket_name, prefix=self.key_prefix, max_results=1),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.client.list_blobs(self.bucket_name, prefix=self.key_prefix, max_results=1),
                 backend_name=self.__class__.__name__, op_name="gcs_list_blobs_current_prefix"
             )
             if any(True for _ in blobs_current_iter):
@@ -735,7 +847,8 @@ class GCSBackend(LogBackend):
 
             # Check for objects in old prefix
             blobs_old_iter = await retry_operation(
-                lambda: asyncio.to_thread(self.client.list_blobs, self.bucket_name, prefix=self.old_key_prefix, max_results=1),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.client.list_blobs(self.bucket_name, prefix=self.old_key_prefix, max_results=1),
                 backend_name=self.__class__.__name__, op_name="gcs_list_blobs_old_prefix"
             )
             if any(True for _ in blobs_old_iter):
@@ -766,7 +879,8 @@ class GCSBackend(LogBackend):
             compressed_batch_data = zlib.compress(batch_data_str.encode("utf-8"), level=COMPRESSION_LEVEL)
 
             await retry_operation(
-                lambda: asyncio.to_thread(blob.upload_from_string, compressed_batch_data, content_type="application/gzip"),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: blob.upload_from_string(compressed_batch_data, content_type="application/gzip"),
                 backend_name=self.__class__.__name__, op_name="gcs_upload_blob"
             )
             logger.debug(f"GCSBackend: Atomically flushed {len(prepared_entries)} entries to {blob_name}")
@@ -786,11 +900,13 @@ class GCSBackend(LogBackend):
             uri = f"gs://{self.bucket_name}/{blob_name}"
 
             load_job = await retry_operation(
-                lambda: asyncio.to_thread(bq_client.load_table_from_uri, uri, table_ref, job_config=job_config),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: bq_client.load_table_from_uri(uri, table_ref, job_config=job_config),
                 backend_name=self.__class__.__name__, op_name="bigquery_load_job"
             )
             await retry_operation(
-                lambda: asyncio.to_thread(load_job.result),
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: load_job.result(),
                 backend_name=self.__class__.__name__, op_name="bigquery_load_job_result"
             )
 
@@ -804,12 +920,49 @@ class GCSBackend(LogBackend):
             asyncio.create_task(send_alert(f"GCSBackend atomic batch write failed. Data might be inconsistent.", severity="high"))
             raise
 
-    async def _cleanup_orphaned_objects(self):
+    async def _cleanup_orphaned_objects(self, max_age_days: int = 7) -> None:
         """
-        Placeholder for cleaning up orphaned objects (e.g., from failed migrations or old versions).
-        This would typically be a separate, scheduled job.
+        Remove GCS objects under key_prefix that are older than max_age_days.
         """
-        logger.info("GCSBackend: Running placeholder for orphaned object cleanup. Implement actual logic for old versions.")
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
+        deleted_count = 0
+
+        try:
+            blobs_iter = await retry_operation(
+                # --- FIX: Remove asyncio.to_thread wrapper ---
+                lambda: self.client.list_blobs(self.bucket_name, prefix=self.key_prefix),
+                backend_name=self.__class__.__name__, op_name="gcs_list_blobs_cleanup"
+            )
+            blobs_to_delete = []
+
+            for blob in blobs_iter:
+                if blob.time_created < cutoff:
+                    blobs_to_delete.append(blob.name)
+
+            # GCS supports batch deletion, but it's often simpler to delete one by one in a loop
+            # for robustness against partial failures, though less efficient.
+            # For efficiency, a batch delete API (if available and suitable) or parallel deletes could be used.
+            # Here, we delete sequentially.
+            for blob_name in blobs_to_delete:
+                try:
+                    blob = self.bucket.blob(blob_name)
+                    await retry_operation(
+                        # --- FIX: Remove asyncio.to_thread wrapper ---
+                        lambda: blob.delete(),
+                        backend_name=self.__class__.__name__, op_name=f"gcs_delete_blob:{blob_name}"
+                    )
+                    deleted_count += 1
+                except Exception as delete_e:
+                    logger.warning(f"Failed to delete GCS blob {blob_name} during cleanup: {delete_e}", exc_info=True)
+                    BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="GCSCleanupDeleteError").inc()
+
+            logger.info(
+                "GCSBackend cleanup: removed %d orphaned/old objects older than %s days under prefix %s",
+                deleted_count, max_age_days, self.key_prefix,
+            )
+        except Exception as e:
+            logger.error(f"GCSBackend cleanup failed during blob listing: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="GCSCleanupListError").inc()
 
 
 # --- Azure Blob Backend ---
@@ -833,10 +986,42 @@ class AzureBlobBackend(LogBackend):
 
 
     def __init__(self, params: Dict[str, Any]):
-        super().__init__(params)
+        super().__init__(params) # <--- CRITICAL FIX 1: Initialize LogBackend first
         self.client: Optional[BlobServiceClient] = None
         self.container_client: Optional[any] = None
-        asyncio.create_task(self._init_client())
+        self._init_task: Optional[asyncio.Task] = None # Define task attribute
+
+    async def start(self):
+        """Initializes Azure client and starts base tasks."""
+        loop = asyncio.get_running_loop()
+        self._init_task = loop.create_task(self._init_client())
+        self._async_tasks.add(self._init_task)
+        self_task = self._init_task # Keep a reference to the task created in this method
+        self_task.add_done_callback(self._async_tasks.discard)
+        
+        await self_task # Wait for client to be ready
+        
+        await super().start() # Start base tasks (which sets _health_task, _migrate_task)
+
+    async def close(self):
+        """Closes the Azure Blob client and shuts down base tasks."""
+        await self.flush_batch() # Flush final batch
+        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        if self._init_task and not self._init_task.done():
+            self._init_task.cancel()
+            try:
+                await self._init_task
+            except asyncio.CancelledError:
+                pass
+        await super().close() # Shut down base tasks first
+        
+        if self.client:
+            try:
+                await self.client.close()
+                logger.info("AzureBlobBackend client closed.")
+            except Exception as e:
+                logger.error(f"Error closing AzureBlobBackend client: {e}", exc_info=True)
+        logger.info("AzureBlobBackend shutdown complete.")
 
 
     async def _init_client(self):
@@ -846,10 +1031,7 @@ class AzureBlobBackend(LogBackend):
             self.container_client = self.client.get_container_client(self.container_name)
             
             try: # Use try-except for container creation to handle ResourceExistsError
-                await retry_operation(
-                    lambda: self.container_client.create_container(),
-                    backend_name=self.__class__.__name__, op_name="azure_create_container"
-                )
+                await self.container_client.create_container()
                 logger.info(f"Created Azure Blob container: {self.container_name}")
             except ResourceExistsError:
                 logger.info(f"Azure Blob container '{self.container_name}' already exists.")
@@ -865,34 +1047,30 @@ class AzureBlobBackend(LogBackend):
 
     async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
         """
-        No-op for AzureBlobBackend as the _atomic_context handles batch writing directly from the prepared_entries list.
+        Single-entry appends are not used; writes are done in _atomic_context.
+        Implemented as a no-op for interface compatibility.
         """
-        pass
+        return
 
 
     async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries Azure Blob Storage, filtering by top-level attributes."""
-        if self.container_client is None:
-            await self._init_client()
-
+        # FIX: Check for self._init_task status to ensure client is ready
+        if self._init_task and not self._init_task.done():
+            raise RuntimeError("Azure client is not yet initialized.")
+            
         entries = []
         try:
             logger.warning("AzureBlobBackend: Querying performs full blob listing and in-memory filtering, which is inefficient for large datasets. Consider external indexing for production.")
 
-            blob_iterator = await retry_operation(
-                lambda: self.container_client.list_blobs(name_starts_with=self.blob_prefix),
-                backend_name=self.__class__.__name__, op_name="azure_list_blobs"
-            )
+            blob_iterator = self.container_client.list_blobs(name_starts_with=self.blob_prefix)
 
             async for blob in blob_iterator:
                 if len(entries) >= limit:
                     break
                 try:
                     blob_client = self.container_client.get_blob_client(blob)
-                    stream = await retry_operation(
-                        lambda: blob_client.download_blob(),
-                        backend_name=self.__class__.__name__, op_name=f"azure_download_blob:{blob.name}"
-                    )
+                    stream = await blob_client.download_blob()
                     compressed_data = await stream.readall()
                     
                     if blob.name.endswith('.gz'):
@@ -912,7 +1090,7 @@ class AzureBlobBackend(LogBackend):
                             match = False
                         if "timestamp >=" in filters and stored_entry.get("timestamp", "") < filters["timestamp >="]:
                             match = False
-                        if "timestamp <=" in filters and stored_entry.get("timestamp", "") > filters["timestamp <="]:
+                        if "timestamp <=" in filters and stored_entry.get("timestamp", "") > filters["timestamp <=="]:
                             match = False
                         if "schema_version" in filters:
                             stored_schema_version = stored_entry.get("schema_version")
@@ -960,20 +1138,14 @@ class AzureBlobBackend(LogBackend):
             await self._init_client()
 
         try:
-            blobs_iter = await retry_operation(
-                lambda: self.container_client.list_blobs(name_starts_with=old_prefix),
-                backend_name=self.__class__.__name__, op_name="azure_list_old_blobs"
-            )
+            blobs_iter = self.container_client.list_blobs(name_starts_with=old_prefix)
             blobs = [b async for b in blobs_iter]
 
             for blob in blobs:
                 old_key = blob.name
                 try:
                     blob_client = self.container_client.get_blob_client(old_key)
-                    stream = await retry_operation(
-                        lambda: blob_client.download_blob(),
-                        backend_name=self.__class__.__name__, op_name=f"azure_download_blob_migrate:{old_key}"
-                    )
+                    stream = await blob_client.download_blob()
                     compressed_encrypted_data_bytes = await stream.readall()
 
                     if old_key.endswith('.gz'):
@@ -1032,13 +1204,10 @@ class AzureBlobBackend(LogBackend):
                         new_object_body = zlib.compress("\n".join(json.dumps(e) for e in migrated_batch_for_new_blob).encode("utf-8"), level=COMPRESSION_LEVEL)
 
                         new_blob_client = self.container_client.get_blob_client(new_key_path)
-                        await retry_operation(
-                            lambda: new_blob_client.upload_blob(
-                                data=new_object_body,
-                                overwrite=True,
-                                content_settings=ContentSettings(content_type="application/jsonl", content_encoding="gzip")
-                            ),
-                            backend_name=self.__class__.__name__, op_name=f"azure_upload_blob:{new_key_path}"
+                        await new_blob_client.upload_blob(
+                            data=new_object_body,
+                            overwrite=True,
+                            content_settings=ContentSettings(content_type="application/jsonl", content_encoding="gzip")
                         )
                         migrated_count += len(migrated_batch_for_new_blob)
                         logger.debug(f"Migrated {old_key} to {new_key_path}")
@@ -1070,17 +1239,11 @@ class AzureBlobBackend(LogBackend):
             if self.container_client is None:
                 await self._init_client()
             
-            await retry_operation(
-                lambda: self.container_client.get_container_properties(),
-                backend_name=self.__class__.__name__, op_name="azure_get_container_properties"
-            )
+            await self.container_client.get_container_properties()
             # Check if any blobs can be listed.
             try:
                 # Use async for to consume the first page of results
-                async for _ in retry_operation(
-                    lambda: self.container_client.list_blobs(results_per_page=1),
-                    backend_name=self.__class__.__name__, op_name="azure_list_blobs_check"
-                ):
+                async for _ in self.container_client.list_blobs(results_per_page=1):
                     break # Break after checking the first (or no) element
                 return True
             except StopAsyncIteration: # Iterator is empty, but access is fine.
@@ -1115,10 +1278,7 @@ class AzureBlobBackend(LogBackend):
 
         try:
             # Check for objects in current prefix
-            blobs_current_iter = await retry_operation(
-                lambda: target_container_client.list_blobs(name_starts_with=self.blob_prefix, results_per_page=1),
-                backend_name=self.__class__.__name__, op_name="azure_list_current_prefix"
-            )
+            blobs_current_iter = target_container_client.list_blobs(name_starts_with=self.blob_prefix, results_per_page=1)
             try:
                 # __anext__() attempts to get the next item, StopAsyncIteration if empty
                 async for _ in blobs_current_iter:
@@ -1127,10 +1287,7 @@ class AzureBlobBackend(LogBackend):
                 pass # Iterator is empty, no blobs found in current prefix
 
             # Check for objects in old prefix
-            blobs_old_iter = await retry_operation(
-                lambda: target_container_client.list_blobs(name_starts_with=self.old_blob_prefix, results_per_page=1),
-                backend_name=self.__class__.__name__, op_name="azure_list_old_prefix"
-            )
+            blobs_old_iter = target_container_client.list_blobs(name_starts_with=self.old_blob_prefix, results_per_page=1)
             try:
                 async for _ in blobs_old_iter:
                     return SCHEMA_VERSION - 1
@@ -1142,9 +1299,9 @@ class AzureBlobBackend(LogBackend):
             logger.warning(f"Could not determine Azure Blob schema version: {e}. Assuming v1.")
             return 1
         finally:
-            if _client_was_none and self.client:
+            if _client_was_none and 'temp_client' in locals() and temp_client:
                 # If we created a temporary client, close it
-                await self.client.close()
+                await temp_client.close()
 
 
     @asynccontextmanager
@@ -1167,14 +1324,11 @@ class AzureBlobBackend(LogBackend):
             
             compressed_batch_data = zlib.compress(batch_data_str.encode("utf-8"), level=COMPRESSION_LEVEL)
 
-            await retry_operation(
-                lambda: self.container_client.upload_blob(
-                    name=blob_name,
-                    data=compressed_batch_data,
-                    overwrite=True,
-                    content_settings=ContentSettings(content_type="application/jsonl", content_encoding="gzip") # Correct usage
-                ),
-                backend_name=self.__class__.__name__, op_name="azure_upload_batch_blob"
+            await self.container_client.upload_blob(
+                name=blob_name,
+                data=compressed_batch_data,
+                overwrite=True,
+                content_settings=ContentSettings(content_type="application/jsonl", content_encoding="gzip") # Correct usage
             )
             logger.debug(f"AzureBlobBackend: Atomically flushed {len(prepared_entries)} entries to {blob_name}")
             yield
@@ -1186,9 +1340,33 @@ class AzureBlobBackend(LogBackend):
             raise
 
 
-    async def _cleanup_orphaned_objects(self):
+    async def _cleanup_orphaned_objects(self, max_age_days: int = 7) -> None:
         """
-        Placeholder for cleaning up orphaned objects (e.g., from failed migrations or old versions).
-        This would typically be a separate, scheduled job using Azure Functions or Azure Batch.
+        Remove Azure Blob objects under key_prefix that are older than max_age_days.
         """
-        logger.info("AzureBlobBackend: Running placeholder for orphaned object cleanup. Implement actual logic for old versions using Azure Storage management APIs.")
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
+        deleted_count = 0
+        
+        if self.container_client is None:
+            await self._init_client()
+
+        try:
+            blobs_iter = self.container_client.list_blobs(name_starts_with=self.blob_prefix)
+            blobs_to_delete = []
+
+            async for blob in blobs_iter:
+                if blob.last_modified < cutoff:
+                    blobs_to_delete.append(blob.name)
+
+            # Azure SDK's delete_blobs is efficient for batching
+            if blobs_to_delete:
+                await self.container_client.delete_blobs(*blobs_to_delete)
+                deleted_count = len(blobs_to_delete)
+
+            logger.info(
+                "AzureBlobBackend cleanup: removed %d orphaned/old objects older than %s days under prefix %s",
+                deleted_count, max_age_days, self.blob_prefix,
+            )
+        except Exception as e:
+            logger.error(f"AzureBlobBackend cleanup failed: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AzureCleanupError").inc()

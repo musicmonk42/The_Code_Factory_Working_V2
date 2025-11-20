@@ -1,9 +1,19 @@
-# audit_backends/__init__.py
+# generator/audit_log/audit_backend/__init__.py
 from typing import Any, Dict, Optional, Type
 
 # Core components
 from .audit_backend_core import (
-    LogBackend, AuditBackendError, MigrationError, TamperDetectionError, logger # Also logger, for consistency if needed
+    LogBackend,
+    AuditBackendError,
+    MigrationError,
+    TamperDetectionError,
+    CryptoInitializationError,
+    SCHEMA_VERSION,
+    compute_hash,
+    _STATUS_OK,
+    _STATUS_ERROR,
+    logger,
+    retry_operation,   # <-- ADD here (it’s defined in audit_backend_core)
 )
 
 # File and SQL Backends
@@ -12,12 +22,16 @@ from .audit_backend_file_sql import FileBackend, SQLiteBackend
 # Cloud Backends
 from .audit_backend_cloud import S3Backend, GCSBackend, AzureBlobBackend
 
-# Streaming Backends (from the new _backends file)
+# Streaming Backends
 from .audit_backend_streaming_backends import HTTPBackend, KafkaBackend, SplunkBackend, InMemoryBackend
 
-# Streaming Utilities (optional, for direct access if needed, but primarily for internal use)
+# Streaming Utilities (public exports expected by tests)
 from .audit_backend_streaming_utils import (
-    SensitiveDataFilter, SimpleCircuitBreaker, PersistentRetryQueue, FileBackedRetryQueue
+    SensitiveDataFilter,
+    SimpleCircuitBreaker,
+    PersistentRetryQueue,
+    FileBackedRetryQueue,
+    # retry_operation,  # <-- REMOVE this line
 )
 
 # A central registry for easy backend instantiation
@@ -38,7 +52,10 @@ def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> L
     backend_type_lower = backend_type.lower()
     if backend_type_lower not in _BACKEND_REGISTRY:
         raise ValueError(f"Unknown backend: {backend_type}. Available: {list(_BACKEND_REGISTRY.keys())}")
-    
+
+    # normalize params so we can index safely
+    params = dict(params or {})
+
     # Instantiate the DLQ class if a specific one is requested for a backend
     # This assumes dlq_class param would be passed by string name, e.g. "FileBackedRetryQueue"
     if "dlq_class" in params and isinstance(params["dlq_class"], str):
@@ -47,32 +64,44 @@ def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> L
         elif params["dlq_class"] == "PersistentRetryQueue":
             params["dlq_class"] = PersistentRetryQueue
         else:
-            logger.warning(f"Unknown DLQ class '{params['dlq_class']}'. Defaulting to PersistentRetryQueue.")
+            logger.warning(
+                "Unknown DLQ class '%s'. Defaulting to PersistentRetryQueue.",
+                params["dlq_class"],
+            )
             params["dlq_class"] = PersistentRetryQueue
 
-    return _BACKEND_REGISTRY[backend_type_lower](params or {})
+    return _BACKEND_REGISTRY[backend_type_lower](params)
 
-
-# Define what is accessible when 'from audit_backends import *' is used
 __all__ = [
+    # core
     "LogBackend",
+    "AuditBackendError",
+    "MigrationError",
+    "TamperDetectionError",
+    "CryptoInitializationError",
+    "SCHEMA_VERSION",
+    "compute_hash",
+    "_STATUS_OK",
+    "_STATUS_ERROR",
+    "logger",
+    # file/sql backends
     "FileBackend",
     "SQLiteBackend",
+    # cloud backends
     "S3Backend",
     "GCSBackend",
     "AzureBlobBackend",
+    # streaming backends
     "HTTPBackend",
     "KafkaBackend",
     "SplunkBackend",
     "InMemoryBackend",
-    "get_backend",
-    "AuditBackendError",
-    "MigrationError",
-    "TamperDetectionError",
-    # Optionally re-export utility classes if they are commonly used directly.
-    # Otherwise, they are implicitly available via specific imports.
+    # streaming utils
     "SensitiveDataFilter",
     "SimpleCircuitBreaker",
     "PersistentRetryQueue",
     "FileBackedRetryQueue",
+    "retry_operation",
+    # factory
+    "get_backend",
 ]

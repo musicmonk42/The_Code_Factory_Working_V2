@@ -1,5 +1,5 @@
 # runner/backends.py
-# World-class, gold-standard execution backends for the runner system.
+# Execution backends for the runner system.
 # Provides isolated environments with robust setup, execution, health checks, and recovery,
 # integrating structured error handling and consistent output contracts.
 #
@@ -40,6 +40,8 @@ import aiofiles
 
 # Assume runner.config and runner.logging are correctly imported and configured
 from runner.runner_config import RunnerConfig
+# --- ADDED IMPORT ---
+from runner.runner_contracts import TaskPayload, TaskResult
 # --- REFACTOR FIX: Corrected imports to point to runner foundation ---
 from runner.runner_logging import logger, add_provenance
 from runner.runner_metrics import (
@@ -57,7 +59,8 @@ from runner.process_utils import subprocess_wrapper, detect_anomaly
 
 # Import structured errors for consistent error handling across backends
 # FIX: Corrected module typo from 'runner.errors' to 'runner.runner_errors'
-from runner.runner_errors import RunnerError, BackendError, TestExecutionError, SetupError, TimeoutError, ConfigurationError # Explicitly import used error types
+# --- FIX: Changed 'TestExecutionError' to 'ExecutionError' ---
+from runner.runner_errors import RunnerError, BackendError, ExecutionError, SetupError, TimeoutError, ConfigurationError # Explicitly import used error types
 from runner.runner_errors import ERROR_CODE_REGISTRY as error_codes # Import the error code registry
 
 # OpenTelemetry Tracing (assuming it's set up globally)
@@ -104,7 +107,7 @@ except ImportError:
     HAS_BOTO3 = False
     boto3 = None
     BotoClientError = None
-    logger.warning("boto3 library not found. LambdaBackend will be unavailable.")
+    logger.warning("boto3 not found. LambdaBackend will be unavailable.")
 
 try:
     import libvirt
@@ -121,6 +124,70 @@ except ImportError:
     HAS_PARAMIKO = False
     paramiko = None
     logger.warning("paramiko library not found. SSHBackend will be unavailable.")
+
+# --- FIX: MOVED DEFINITIONS UP ---
+# These definitions must appear *before* the imports below them that
+# might trigger a circular import loop (e.g., via runner_config ->
+# runner_errors -> runner_security_utils -> __init__ -> runner_core -> runner_backends)
+# By defining BACKEND_REGISTRY here, it exists when runner_core imports it,
+# even if the import is part of a loop.
+
+# --- Backend ABC and Registry ---
+BACKEND_REGISTRY: Dict[str, Type["Backend"]] = {}
+
+class Backend(ABC):
+    """Abstract Base Class for all execution backends."""
+    def __init__(self, config: RunnerConfig):
+        self.config = config
+        self.instance_id = config.instance_id
+    
+    @abstractmethod
+    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
+        """
+        Prepare the backend environment.
+        This might involve pulling images, creating containers, or setting up SSH connections.
+        """
+        pass
+
+    @abstractmethod
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
+        """
+        Execute the test command in the prepared environment.
+        Returns a TaskResult object.
+        """
+        pass
+    
+    @abstractmethod
+    def health(self) -> Dict[str, Any]:
+        """
+        Check the health of the backend (e.g., Docker daemon running, K8s API reachable).
+        Returns {'status': 'healthy'|'unhealthy', 'details': '...'}.
+        """
+        pass
+
+    @abstractmethod
+    async def recover(self) -> None:
+        """
+        Attempt to recover the backend from an unhealthy state.
+        (e.g., restart Docker, refresh K8s client).
+        """
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Clean up any persistent resources (e.g., clients, connections)."""
+        pass
+
+def register_backend(name: str) -> Callable[[Type[Backend]], Type[Backend]]:
+    """Decorator to register a new backend class."""
+    def decorator(cls: Type[Backend]) -> Type[Backend]:
+        if name in BACKEND_REGISTRY:
+            logger.warning(f"Backend '{name}' is already registered. Overwriting.")
+        BACKEND_REGISTRY[name] = cls
+        logger.info(f"Registered execution backend: {name}")
+        return cls
+    return decorator
+# --- END FIX ---
 
 
 # --- REFACTOR MERGE: Sandboxing helpers from process_utils.py ---
@@ -175,7 +242,7 @@ def set_resource_limits(cpu_time_limit: int = 10, mem_limit_mb: int = 500, file_
     except Exception as e:
         logger.error(f"Failed to set resource limits: {e}", exc_info=True)
         # In a high-security context, this could be a fatal error.
-        raise ConfigurationError(error_codes["CONFIGURATION_ERROR"], detail=f"Failed to apply resource limits: {e}", cause=e)
+        raise ConfigurationError("CONFIGURATION_ERROR", detail=f"Failed to apply resource limits: {e}", cause=e)
 
 def drop_privileges(user: str = 'nobody', group: str = 'nogroup'):
     """
@@ -210,7 +277,7 @@ def drop_privileges(user: str = 'nobody', group: str = 'nogroup'):
     except (KeyError, OSError, ImportError) as e:
         logger.error(f"Failed to drop privileges to '{user}':'{group}': {e}. This is a critical security failure.", exc_info=True)
         # This MUST be a fatal error. Running as root when not intended is a critical vulnerability.
-        raise ConfigurationError(error_codes["CONFIGURATION_ERROR"], detail=f"Failed to drop privileges: {e}. Cannot continue execution as root.", cause=e)
+        raise ConfigurationError("CONFIGURATION_ERROR", detail=f"Failed to drop privileges: {e}. Cannot continue execution as root.", cause=e)
 
 # --- REFACTOR NOTE: subprocess_wrapper is now imported from runner.process_utils ---
 # The previous local implementation (lines 200-327) has been removed in favor of the
@@ -224,60 +291,14 @@ def drop_privileges(user: str = 'nobody', group: str = 'nogroup'):
 # --- END REFACTOR NOTE ---
 
 # --- Backend ABC and Registry ---
-BACKEND_REGISTRY: Dict[str, Type["Backend"]] = {}
+# --- FIX: MOVED TO TOP OF FILE (line 138) ---
+# BACKEND_REGISTRY: Dict[str, Type["Backend"]] = {}
+# class Backend(ABC):
+# ...
+# def register_backend(name: str) -> Callable[[Type[Backend]], Type[Backend]]:
+# ...
+# --- END FIX ---
 
-class Backend(ABC):
-    """Abstract Base Class for all execution backends."""
-    def __init__(self, config: RunnerConfig):
-        self.config = config
-        self.instance_id = config.instance_id
-    
-    @abstractmethod
-    async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
-        """
-        Prepare the backend environment.
-        This might involve pulling images, creating containers, or setting up SSH connections.
-        """
-        pass
-
-    @abstractmethod
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
-        """
-        Execute the test command in the prepared environment.
-        Returns a dictionary with 'stdout', 'stderr', 'returncode', and 'duration'.
-        """
-        pass
-    
-    @abstractmethod
-    def health(self) -> Dict[str, Any]:
-        """
-        Check the health of the backend (e.g., Docker daemon running, K8s API reachable).
-        Returns {'status': 'healthy'|'unhealthy', 'details': '...'}.
-        """
-        pass
-
-    @abstractmethod
-    async def recover(self) -> None:
-        """
-        Attempt to recover the backend from an unhealthy state.
-        (e.g., restart Docker, refresh K8s client).
-        """
-        pass
-
-    @abstractmethod
-    async def close(self) -> None:
-        """Clean up any persistent resources (e.g., clients, connections)."""
-        pass
-
-def register_backend(name: str) -> Callable[[Type[Backend]], Type[Backend]]:
-    """Decorator to register a new backend class."""
-    def decorator(cls: Type[Backend]) -> Type[Backend]:
-        if name in BACKEND_REGISTRY:
-            logger.warning(f"Backend '{name}' is already registered. Overwriting.")
-        BACKEND_REGISTRY[name] = cls
-        logger.info(f"Registered execution backend: {name}")
-        return cls
-    return decorator
 
 # --- Local Backend (for lightweight, non-isolated execution) ---
 @register_backend("local")
@@ -287,9 +308,9 @@ class LocalBackend(Backend):
     This backend is fast but provides minimal isolation (relies on POSIX resource limits and privilege dropping).
     """
     def __init__(self, config: RunnerConfig):
-        super().__init__(config)
-        self.health_status = {'status': 'healthy', 'details': 'Local execution is always available.'}
-        HEALTH_STATUS.labels(component_name='backend_local', instance_id=self.instance_id).set(1)
+        self.config = config
+        self.instance_id = config.instance_id
+        self.start_time = time.time()
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if custom_setup_script:
@@ -304,36 +325,92 @@ class LocalBackend(Backend):
                     ['/bin/bash', str(setup_script_path)],
                     timeout=self.config.timeout,
                     cwd=work_dir,
-                    circuit_breaker_name='local_setup',
                     drop_priv=False # Setup might need privileges
                 )
                 if not result['success']:
-                    raise SetupError(error_codes["SETUP_FAILURE"], detail=f"Custom setup script failed: {result['stderr']}", backend_type="local", stage="custom_script", stderr=result['stderr'])
+                    # *** FIX: Use string key, not registry value ***
+                    raise SetupError("SETUP_FAILURE", detail=f"Custom setup script failed: {result['stderr']}", backend_type="local", stage="custom_script", stderr=result['stderr'])
                 logger.info("Local custom setup script executed successfully.")
+            except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"Subprocess setup timed out: {e}")
+                # *** FIX: Use string key, not registry value ***
+                raise TimeoutError(
+                    "TASK_TIMEOUT",
+                    detail=f"Setup timed out after {self.config.timeout} seconds.",
+                    timeout_seconds=self.config.timeout,
+                    cause=e,
+                    cmd=custom_setup_script
+                )
             except Exception as e:
-                raise SetupError(error_codes["SETUP_FAILURE"], detail=f"Failed to write or execute custom setup script: {e}", backend_type="local", stage="custom_script", cause=e)
+                # *** FIX: Use string key, not registry value ***
+                raise SetupError("SETUP_FAILURE", detail=f"Failed to write or execute custom setup script: {e}", backend_type="local", stage="custom_script", cause=e)
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         # --- REFACTOR FIX: Use subprocess_wrapper ---
-        result = await subprocess_wrapper(
-            command,
-            timeout=timeout,
-            cwd=work_dir,
-            circuit_breaker_name='local_execute'
-            # Sandboxing (set_limits, drop_priv) is handled by default in subprocess_wrapper
-        )
+        command = payload.command # Get command from payload
+        task_id = payload.task_id # Get task_id from payload
+
+        try:
+            result = await subprocess_wrapper(
+                command,
+                timeout=timeout,
+                cwd=work_dir
+                # Sandboxing (set_limits, drop_priv) is handled by default in subprocess_wrapper
+            )
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Subprocess execution timed out for task {task_id}: {e}")
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"Execution timed out after {timeout} seconds.",
+                task_id=task_id,
+                timeout_seconds=timeout,
+                cause=e,
+                cmd=" ".join(command)
+            )
+        
         if not result['success'] and result.get('stderr') != 'Circuit breaker is open.':
-            # Don't raise TestExecutionError if it was just a circuit breaker trip
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Local execution failed with code {result['returncode']}", task_id=result.get('run_id'), returncode=result['returncode'], stdout=result.get('stdout'), stderr=result.get('stderr'), cmd=" ".join(command))
-        return result
+            # Don't raise ExecutionError if it was just a circuit breaker trip
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail=f"Local execution failed with code {result['returncode']}", 
+                task_id=task_id, 
+                returncode=result['returncode'], 
+                stdout=result.get('stdout'), 
+                stderr=result.get('stderr'), 
+                cmd=" ".join(command)
+            )
+        
+        # Convert dict result to TaskResult
+        return TaskResult(
+            task_id=task_id,
+            status='completed' if result['success'] else 'failed',
+            results={
+                'stdout': result.get('stdout'),
+                'stderr': result.get('stderr'),
+                'returncode': result.get('returncode'),
+                'duration': result.get('duration'),
+            },
+            started_at=result.get('start_time', time.time()), # Guessing start_time
+            finished_at=time.time()
+        )
 
     def health(self) -> Dict[str, Any]:
-        return self.health_status
+        return {
+            "status": "healthy",
+            "details": {
+                "uptime": time.time() - getattr(self, 'start_time', time.time()),
+                "message": "Local execution is always available."
+            }
+        }
 
     async def recover(self) -> None:
         logger.info("LocalBackend requires no recovery. Resetting health status.")
-        self.health_status = {'status': 'healthy', 'details': 'Local execution is always available.'}
-        HEALTH_STATUS.labels(component_name='backend_local', instance_id=self.instance_id).set(1)
+        HEALTH_STATUS.labels(
+            component_name='backend_local',
+            instance_id=self.instance_id
+        ).set(1.0)
 
     async def close(self) -> None:
         pass # No resources to close
@@ -357,29 +434,50 @@ class NodeJSBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.node_path:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="NodeJS backend is not healthy. Executable not found.", backend_type="nodejs", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="NodeJS backend is not healthy. Executable not found.", backend_type="nodejs", stage="health_check")
         
         # Run npm install if package.json exists
         if (work_dir / 'package.json').exists():
             logger.info("package.json found. Running npm install...")
-            result = await subprocess_wrapper(
-                ['npm', 'install'],
-                timeout=self.config.timeout,
-                cwd=work_dir,
-                circuit_breaker_name='nodejs_npm_install'
-            )
+            try:
+                result = await subprocess_wrapper(
+                    ['npm', 'install'],
+                    timeout=self.config.timeout,
+                    cwd=work_dir
+                )
+            except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"npm install timed out: {e}")
+                # *** FIX: Use string key, not registry value ***
+                raise TimeoutError(
+                    "TASK_TIMEOUT",
+                    detail=f"npm install timed out after {self.config.timeout} seconds.",
+                    timeout_seconds=self.config.timeout,
+                    cause=e,
+                    cmd="npm install"
+                )
             if not result['success']:
-                raise SetupError(error_codes["SETUP_FAILURE"], detail=f"npm install failed: {result['stderr']}", backend_type="nodejs", stage="npm_install", stderr=result['stderr'])
+                # *** FIX: Use string key, not registry value ***
+                raise SetupError("SETUP_FAILURE", detail=f"npm install failed: {result['stderr']}", backend_type="nodejs", stage="npm_install", stderr=result['stderr'])
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the NodeJS command.
         
-        Note: Assumes `command` is a standard command list (e.g., ['node', 'index.js'])
+        Note: Assumes `payload.command` is a standard command list (e.g., ['node', 'index.js'])
         but includes logic to run raw code content if necessary (for compatibility with process_utils).
         """
+        command = payload.command
+        task_id = payload.task_id
+
         if not self.node_path:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="NodeJS executable not found.", backend_type="nodejs")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="NodeJS executable not found.", 
+                backend_type="nodejs", 
+                task_id=task_id
+            )
 
         # Fallback to running raw code content if the command looks like raw code
         if not command or not any(Path(c).suffix in ['.js', '.ts'] for c in command):
@@ -394,25 +492,60 @@ class NodeJSBackend(Backend):
                 logger.info(f"Running NodeJS script: {' '.join(run_cmd)}")
             except Exception as e:
                 logger.error(f"Failed to write NodeJS script: {e}", exc_info=True)
-                raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to write NodeJS script: {e}", cause=e)
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
+                    detail=f"Failed to write NodeJS script: {e}", 
+                    cause=e, 
+                    task_id=task_id
+                )
         else:
             run_cmd = command # Use the command directly
 
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
+            start_time = time.time()
             run_result = await subprocess_wrapper(
                 run_cmd, 
                 timeout=timeout, 
-                cwd=work_dir, 
-                circuit_breaker_name='nodejs_run'
+                cwd=work_dir
             )
             
             # Simplified provenance logging for the execution
             add_provenance({'action': 'nodejs_execute', 'command': ' '.join(run_cmd), 'result_success': run_result['success']}, action="nodejs_execution")
-            return run_result
+            
+            return TaskResult(
+                task_id=task_id,
+                status='completed' if run_result['success'] else 'failed',
+                results={
+                    'stdout': run_result.get('stdout'),
+                    'stderr': run_result.get('stderr'),
+                    'returncode': run_result.get('returncode'),
+                    'duration': run_result.get('duration'),
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"NodeJS execution timed out for task {task_id}: {e}")
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"NodeJS execution timed out after {timeout} seconds.",
+                task_id=task_id,
+                timeout_seconds=timeout,
+                cause=e,
+                cmd=" ".join(run_cmd)
+            )
         except Exception as e:
             logger.error(f"NodeJS execution failed: {e}", exc_info=True)
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to run NodeJS command: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail=f"Failed to run NodeJS command: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
         # --- END REFACTOR MERGE ---
 
     def health(self) -> Dict[str, Any]:
@@ -449,26 +582,47 @@ class GoBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.go_path:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="Go backend is not healthy. Executable not found.", backend_type="go", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="Go backend is not healthy. Executable not found.", backend_type="go", stage="health_check")
         
         # Run go mod init/tidy if go.mod exists
         if (work_dir / 'go.mod').exists():
             logger.info("go.mod found. Running go mod tidy...")
-            result = await subprocess_wrapper(
-                [self.go_path, 'mod', 'tidy'],
-                timeout=self.config.timeout,
-                cwd=work_dir,
-                circuit_breaker_name='go_mod_tidy'
-            )
+            try:
+                result = await subprocess_wrapper(
+                    [self.go_path, 'mod', 'tidy'],
+                    timeout=self.config.timeout,
+                    cwd=work_dir
+                )
+            except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"go mod tidy timed out: {e}")
+                # *** FIX: Use string key, not registry value ***
+                raise TimeoutError(
+                    "TASK_TIMEOUT",
+                    detail=f"go mod tidy timed out after {self.config.timeout} seconds.",
+                    timeout_seconds=self.config.timeout,
+                    cause=e,
+                    cmd="go mod tidy"
+                )
             if not result['success']:
-                raise SetupError(error_codes["SETUP_FAILURE"], detail=f"go mod tidy failed: {result['stderr']}", backend_type="go", stage="go_mod_tidy", stderr=result['stderr'])
+                # *** FIX: Use string key, not registry value ***
+                raise SetupError("SETUP_FAILURE", detail=f"go mod tidy failed: {result['stderr']}", backend_type="go", stage="go_mod_tidy", stderr=result['stderr'])
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the Go command, compiling it first.
         """
+        command = payload.command
+        task_id = payload.task_id
+
         if not self.go_path:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Go executable not found.", backend_type="go")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="Go executable not found.", 
+                backend_type="go", 
+                task_id=task_id
+            )
 
         # Determine if the command is a raw file path (e.g., go test ./...) or a code content
         if not command or len(command) == 1 and Path(command[0]).suffix == '.go':
@@ -487,35 +641,90 @@ class GoBackend(Backend):
                 compile_result = await subprocess_wrapper(
                     compile_cmd, 
                     timeout=timeout, 
-                    cwd=work_dir, 
-                    circuit_breaker_name='go_compile'
+                    cwd=work_dir
                 )
 
                 if not compile_result['success']:
                     logger.error(f"Go compilation failed: {compile_result['stderr']}")
-                    return compile_result # Return compilation error
+                    return TaskResult(
+                        task_id=task_id,
+                        status='failed',
+                        results={
+                            'stdout': compile_result.get('stdout'),
+                            'stderr': compile_result.get('stderr'),
+                            'returncode': compile_result.get('returncode'),
+                            'duration': compile_result.get('duration'),
+                        },
+                        started_at=compile_result.get('start_time', time.time()),
+                        finished_at=time.time()
+                    )
 
                 # Run the compiled binary
                 run_cmd = [str(output_bin)]
+            except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"Go compilation timed out for task {task_id}: {e}")
+                # *** FIX: Use string key, not registry value ***
+                raise TimeoutError(
+                    "TASK_TIMEOUT",
+                    detail=f"Go compilation timed out after {timeout} seconds.",
+                    task_id=task_id,
+                    timeout_seconds=timeout,
+                    cause=e,
+                    cmd=" ".join(compile_cmd)
+                )
             except Exception as e:
                 logger.error(f"Failed to write Go script: {e}", exc_info=True)
-                raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to write Go script: {e}", cause=e)
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
+                    detail=f"Failed to write Go script: {e}", 
+                    cause=e, 
+                    task_id=task_id
+                )
         else:
             run_cmd = command # Assume standard command list (e.g., ['go', 'test', './...'])
             
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
+            start_time = time.time()
             run_result = await subprocess_wrapper(
                 run_cmd, 
                 timeout=timeout, 
-                cwd=work_dir, 
-                circuit_breaker_name='go_run'
+                cwd=work_dir
             )
             add_provenance({'action': 'go_execute', 'command': ' '.join(run_cmd), 'result_success': run_result['success']}, action="go_execution")
-            return run_result
+            return TaskResult(
+                task_id=task_id,
+                status='completed' if run_result['success'] else 'failed',
+                results={
+                    'stdout': run_result.get('stdout'),
+                    'stderr': run_result.get('stderr'),
+                    'returncode': run_result.get('returncode'),
+                    'duration': run_result.get('duration'),
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Go execution timed out for task {task_id}: {e}")
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"Go execution timed out after {timeout} seconds.",
+                task_id=task_id,
+                timeout_seconds=timeout,
+                cause=e,
+                cmd=" ".join(run_cmd)
+            )
         except Exception as e:
             logger.error(f"Go execution failed: {e}", exc_info=True)
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to run Go command: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail=f"Failed to run Go command: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
         # --- END REFACTOR MERGE ---
 
     def health(self) -> Dict[str, Any]:
@@ -553,31 +762,54 @@ class JavaBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.java_path or not self.javac_path:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="Java backend is not healthy. Executable not found.", backend_type="java", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="Java backend is not healthy. Executable not found.", backend_type="java", stage="health_check")
         
         # Run mvn/gradle install if pom.xml/build.gradle exists
-        if (work_dir / 'pom.xml').exists() and shutil.which("mvn"):
-            logger.info("pom.xml found. Running mvn install...")
-            result = await subprocess_wrapper(
-                ['mvn', 'install'], timeout=self.config.timeout, cwd=work_dir, circuit_breaker_name='java_mvn_install'
+        try:
+            if (work_dir / 'pom.xml').exists() and shutil.which("mvn"):
+                logger.info("pom.xml found. Running mvn install...")
+                result = await subprocess_wrapper(
+                    ['mvn', 'install'], timeout=self.config.timeout, cwd=work_dir
+                )
+                if not result['success']:
+                    # *** FIX: Use string key, not registry value ***
+                    raise SetupError("SETUP_FAILURE", detail=f"mvn install failed: {result['stderr']}", backend_type="java", stage="mvn_install", stderr=result['stderr'])
+            elif (work_dir / 'build.gradle').exists() and shutil.which("gradle"):
+                logger.info("build.gradle found. Running gradle build...")
+                result = await subprocess_wrapper(
+                    ['gradle', 'build'], timeout=self.config.timeout, cwd=work_dir
+                )
+                if not result['success']:
+                    # *** FIX: Use string key, not registry value ***
+                    raise SetupError("SETUP_FAILURE", detail=f"gradle build failed: {result['stderr']}", backend_type="java", stage="gradle_build", stderr=result['stderr'])
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Java build (mvn/gradle) timed out: {e}")
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"Java build timed out after {self.config.timeout} seconds.",
+                timeout_seconds=self.config.timeout,
+                cause=e,
+                cmd="mvn install / gradle build"
             )
-            if not result['success']:
-                raise SetupError(error_codes["SETUP_FAILURE"], detail=f"mvn install failed: {result['stderr']}", backend_type="java", stage="mvn_install", stderr=result['stderr'])
-        elif (work_dir / 'build.gradle').exists() and shutil.which("gradle"):
-            logger.info("build.gradle found. Running gradle build...")
-            result = await subprocess_wrapper(
-                ['gradle', 'build'], timeout=self.config.timeout, cwd=work_dir, circuit_breaker_name='java_gradle_build'
-            )
-            if not result['success']:
-                raise SetupError(error_codes["SETUP_FAILURE"], detail=f"gradle build failed: {result['stderr']}", backend_type="java", stage="gradle_build", stderr=result['stderr'])
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
         """
         Executes the Java command, compiling it first.
         Note: Assumes `command` is a list of commands, or raw code content for a single file.
         """
+        command = payload.command
+        task_id = payload.task_id
+
         if not self.java_path or not self.javac_path:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Java/Javac executable not found.", backend_type="java")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="Java/Javac executable not found.", 
+                backend_type="java", 
+                task_id=task_id
+            )
 
         code = " ".join(command)
         
@@ -597,33 +829,96 @@ class JavaBackend(Backend):
                 compile_cmd = [self.javac_path, str(java_file)]
                 logger.info(f"Compiling Java code: {' '.join(compile_cmd)}")
                 compile_result = await subprocess_wrapper(
-                    compile_cmd, timeout=timeout, cwd=work_dir, circuit_breaker_name='java_compile'
+                    compile_cmd, timeout=timeout, cwd=work_dir
                 )
                 if not compile_result['success']:
                     logger.error(f"Java compilation failed: {compile_result['stderr']}")
-                    return compile_result
+                    return TaskResult(
+                        task_id=task_id,
+                        status='failed',
+                        results={
+                            'stdout': compile_result.get('stdout'),
+                            'stderr': compile_result.get('stderr'),
+                            'returncode': compile_result.get('returncode'),
+                            'duration': compile_result.get('duration'),
+                        },
+                        started_at=compile_result.get('start_time', time.time()),
+                        finished_at=time.time()
+                    )
 
                 # Run
                 run_cmd = [self.java_path, '-cp', '.', class_name] # Add classpath to include compiled class
+            except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"Java compilation timed out for task {task_id}: {e}")
+                # *** FIX: Use string key, not registry value ***
+                raise TimeoutError(
+                    "TASK_TIMEOUT",
+                    detail=f"Java compilation timed out after {timeout} seconds.",
+                    task_id=task_id,
+                    timeout_seconds=timeout,
+                    cause=e,
+                    cmd=" ".join(compile_cmd)
+                )
             except Exception as e:
                 logger.error(f"Failed to write or compile Java script: {e}", exc_info=True)
-                raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to write or compile Java script: {e}", cause=e)
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
+                    detail=f"Failed to write or compile Java script: {e}", 
+                    cause=e, 
+                    task_id=task_id
+                )
 
         elif command:
             run_cmd = command # Standard command list
         else:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="No command or code provided to execute.", backend_type="java")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="No command or code provided to execute.", 
+                backend_type="java", 
+                task_id=task_id
+            )
 
         # --- REFACTOR MERGE: Use subprocess_wrapper ---
         try:
+            start_time = time.time()
             run_result = await subprocess_wrapper(
-                run_cmd, timeout=timeout, cwd=work_dir, circuit_breaker_name='java_run'
+                run_cmd, timeout=timeout, cwd=work_dir
             )
             add_provenance({'action': 'java_execute', 'command': ' '.join(run_cmd), 'result_success': run_result['success']}, action="java_execution")
-            return run_result
+            return TaskResult(
+                task_id=task_id,
+                status='completed' if run_result['success'] else 'failed',
+                results={
+                    'stdout': run_result.get('stdout'),
+                    'stderr': run_result.get('stderr'),
+                    'returncode': run_result.get('returncode'),
+                    'duration': run_result.get('duration'),
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Java execution timed out for task {task_id}: {e}")
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"Java execution timed out after {timeout} seconds.",
+                task_id=task_id,
+                timeout_seconds=timeout,
+                cause=e,
+                cmd=" ".join(run_cmd)
+            )
         except Exception as e:
             logger.error(f"Java execution failed: {e}", exc_info=True)
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail=f"Failed to run Java command: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail=f"Failed to run Java command: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
         # --- END REFACTOR MERGE ---
 
     def health(self) -> Dict[str, Any]:
@@ -670,21 +965,32 @@ class DockerBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.client:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="Docker backend is not healthy.", backend_type="docker", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="Docker backend is not healthy.", backend_type="docker", stage="health_check")
         
         logger.info(f"DockerBackend setup complete for {work_dir}. Image will be pulled/run in execute.")
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
+        command = payload.command # Get command from payload
+        task_id = payload.task_id # Get task_id from payload
+        start_time = time.time() # Record start time
+
         if not self.client:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Docker backend is not healthy.", backend_type="docker")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="Docker backend is not healthy.", 
+                backend_type="docker", 
+                task_id=task_id
+            )
         
         # Use a specific, language-appropriate image from config
         image_name = self.config.framework_images.get(self.config.framework, "python:3.10-slim")
         
         # Resource limits
         resource_limits = {
-            'mem_limit': self.config.resource_limits.get('memory', '512m'),
-            'cpus': self.config.resource_limits.get('cpu', 1.0)
+            'mem_limit': self.config.resources.get('memory', '512m'),
+            'cpus': self.config.resources.get('cpu', 1.0)
         }
         
         container = None
@@ -707,37 +1013,68 @@ class DockerBackend(Backend):
             
             result = await asyncio.to_thread(container.wait, timeout=timeout)
             
-            stdout = await asyncio.to_thread(container.logs, stdout=True, stderr=False)
-            stderr = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
+            stdout_bytes = await asyncio.to_thread(container.logs, stdout=True, stderr=False)
+            stderr_bytes = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
             
+            stdout = stdout_bytes.decode('utf-8', errors='ignore')
+            stderr = stderr_bytes.decode('utf-8', errors='ignore')
             returncode = result.get('StatusCode', -1)
+            duration = time.time() - start_time
             
             if returncode != 0:
-                raise TestExecutionError(
-                    error_codes["TEST_EXECUTION_FAILED"], 
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
                     detail=f"Container execution failed with code {returncode}",
                     returncode=returncode, 
-                    stdout=stdout.decode('utf-8', errors='ignore'), 
-                    stderr=stderr.decode('utf-8', errors='ignore'), 
-                    cmd=" ".join(command)
+                    stdout=stdout, 
+                    stderr=stderr, 
+                    cmd=" ".join(command),
+                    task_id=task_id
                 )
 
-            return {
-                'success': True,
-                'returncode': returncode,
-                'stdout': stdout.decode('utf-8', errors='ignore'),
-                'stderr': stderr.decode('utf-8', errors='ignore'),
-                'run_id': container.id,
-                'duration': -1 # Duration not easily available without polling
-            }
+            # Convert dict result to TaskResult
+            return TaskResult(
+                task_id=task_id,
+                status='completed',
+                results={
+                    'stdout': stdout,
+                    'stderr': stderr,
+                    'returncode': returncode,
+                    'duration': duration,
+                    'run_id': container.id
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
         except asyncio.TimeoutError:
             if container:
                 await asyncio.to_thread(container.stop, timeout=5)
-            raise TimeoutError(error_codes["TASK_TIMEOUT"], detail="Container execution timed out.", timeout_seconds=timeout, cmd=" ".join(command))
+            # *** FIX: Use string key, not registry value ***
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail="Container execution timed out.", 
+                timeout_seconds=timeout, 
+                cmd=" ".join(command), 
+                task_id=task_id
+            )
         except DockerAPIError as e:
-            raise BackendError(error_codes["BACKEND_INIT_FAILURE"], detail=f"Docker API error: {e}", backend_type="docker", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise BackendError(
+                "BACKEND_INIT_FAILURE",
+                detail=f"Docker API error: {e}", 
+                backend_type="docker", 
+                cause=e, 
+                task_id=task_id
+            )
         except Exception as e:
-            raise RunnerError(error_codes["UNEXPECTED_ERROR"], detail=f"Unexpected Docker error: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise RunnerError(
+                "UNEXPECTED_ERROR",
+                detail=f"Unexpected Docker error: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
         finally:
             if container:
                 await asyncio.to_thread(container.remove, v=True, force=True)
@@ -805,7 +1142,8 @@ class KubernetesBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.core_v1 or not self.batch_v1:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="Kubernetes backend is not healthy.", backend_type="kubernetes", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="Kubernetes backend is not healthy.", backend_type="kubernetes", stage="health_check")
         
         # Setup in K8s involves creating a ConfigMap for the code/tests
         # and a PersistentVolumeClaim for the output.
@@ -831,21 +1169,32 @@ class KubernetesBackend(Backend):
             await asyncio.to_thread(self.core_v1.create_namespaced_config_map, namespace=self.namespace, body=config_map)
             self.config_map_name = config_map_name # Store for cleanup
         except K8sApiException as e:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail=f"Failed to create ConfigMap: {e.reason}", backend_type="kubernetes", stage="create_configmap", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail=f"Failed to create ConfigMap: {e.reason}", backend_type="kubernetes", stage="create_configmap", cause=e)
 
         # 2. (Optional) Create PVC for outputs if needed
         # self.pvc_name = ...
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
+        command = payload.command
+        task_id = payload.task_id
+        start_time = time.time()
+
         if not self.core_v1 or not self.batch_v1 or not hasattr(self, 'config_map_name'):
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Kubernetes backend is not healthy or setup failed.", backend_type="kubernetes")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="Kubernetes backend is not healthy or setup failed.", 
+                backend_type="kubernetes", 
+                task_id=task_id
+            )
 
         job_name = f"runner-job-{uuid.uuid4().hex[:8]}"
         image_name = self.config.framework_images.get(self.config.framework, "python:3.10-slim")
 
         # Define container resource limits
         resources = k8s_client.V1ResourceRequirements(
-            limits={"cpu": str(self.config.resource_limits.get('cpu', 1.0)), "memory": self.config.resource_limits.get('memory', '512Mi')},
+            limits={"cpu": str(self.config.resources.get('cpu', 1.0)), "memory": self.config.resources.get('memory', '512Mi')},
             requests={"cpu": "100m", "memory": "128Mi"}
         )
 
@@ -885,7 +1234,7 @@ class KubernetesBackend(Backend):
         try:
             await asyncio.to_thread(self.batch_v1.create_namespaced_job, namespace=self.namespace, body=job)
             
-            start_time = time.time()
+            job_start_time = time.time()
             while True:
                 job_status = await asyncio.to_thread(self.batch_v1.read_namespaced_job_status, name=job_name, namespace=self.namespace)
                 
@@ -896,40 +1245,81 @@ class KubernetesBackend(Backend):
                     returncode = 1
                     break
                 
-                if (time.time() - start_time) > timeout:
-                    raise TimeoutError(error_codes["TASK_TIMEOUT"], detail="Kubernetes job timed out.", timeout_seconds=timeout, cmd=" ".join(command))
+                if (time.time() - job_start_time) > timeout:
+                    # *** FIX: Use string key, not registry value ***
+                    raise TimeoutError(
+                        "TASK_TIMEOUT",
+                        detail="Kubernetes job timed out.", 
+                        timeout_seconds=timeout, 
+                        cmd=" ".join(command), 
+                        task_id=task_id
+                    )
                 
                 await asyncio.sleep(2) # Poll interval
             
             # Fetch logs from the job's pod
             pods = await asyncio.to_thread(self.core_v1.list_namespaced_pod, namespace=self.namespace, label_selector=f"job-name={job_name}")
             if not pods.items:
-                raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="K8s job pod not found.", job_name=job_name)
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
+                    detail="K8s job pod not found.", 
+                    job_name=job_name, 
+                    task_id=task_id
+                )
             
             pod_name = pods.items[0].metadata.name
             log_stream = await asyncio.to_thread(self.core_v1.read_namespaced_pod_log, name=pod_name, namespace=self.namespace, follow=False)
             
             stdout = log_stream
             stderr = "" # K8s logs are combined
+            duration = time.time() - start_time
             
             if returncode != 0:
-                raise TestExecutionError(
-                    error_codes["TEST_EXECUTION_FAILED"], 
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
                     detail=f"K8s job execution failed. Check pod logs.",
                     returncode=returncode, 
                     stdout=stdout, 
                     stderr=stderr, 
                     cmd=" ".join(command),
                     job_name=job_name,
-                    pod_name=pod_name
+                    pod_name=pod_name,
+                    task_id=task_id
                 )
                 
-            return {'success': True, 'returncode': returncode, 'stdout': stdout, 'stderr': stderr, 'run_id': job_name, 'duration': time.time() - start_time}
+            return TaskResult(
+                task_id=task_id,
+                status='completed',
+                results={
+                    'stdout': stdout,
+                    'stderr': stderr,
+                    'returncode': returncode,
+                    'duration': duration,
+                    'run_id': job_name
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
 
         except K8sApiException as e:
-            raise BackendError(error_codes["BACKEND_INIT_FAILURE"], detail=f"Kubernetes API error: {e.reason}", backend_type="kubernetes", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise BackendError(
+                "BACKEND_INIT_FAILURE",
+                detail=f"Kubernetes API error: {e.reason}", 
+                backend_type="kubernetes", 
+                cause=e, 
+                task_id=task_id
+            )
         except Exception as e:
-            raise RunnerError(error_codes["UNEXPECTED_ERROR"], detail=f"Unexpected K8s error: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise RunnerError(
+                "UNEXPECTED_ERROR",
+                detail=f"Unexpected K8s error: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
         finally:
             # Cleanup job and configmap
             try:
@@ -1000,15 +1390,26 @@ class LambdaBackend(Backend):
 
     async def setup(self, work_dir: Path, custom_setup_script: Optional[str] = None) -> None:
         if not self.client:
-            raise SetupError(error_codes["SETUP_FAILURE"], detail="Lambda backend is not healthy.", backend_type="lambda", stage="health_check")
+            # *** FIX: Use string key, not registry value ***
+            raise SetupError("SETUP_FAILURE", detail="Lambda backend is not healthy.", backend_type="lambda", stage="health_check")
         logger.info("LambdaBackend setup is handled by the Lambda function's environment. No local setup required.")
 
-    async def execute(self, command: List[str], work_dir: Path, timeout: int) -> Dict[str, Any]:
+    async def execute(self, payload: TaskPayload, work_dir: Path, timeout: int) -> TaskResult:
+        command = payload.command
+        task_id = payload.task_id
+        start_time = time.time()
+
         if not self.client:
-            raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Lambda backend is not healthy.", backend_type="lambda")
+            # *** FIX: Use string key, not registry value ***
+            raise ExecutionError(
+                "TEST_EXECUTION_FAILED",
+                detail="Lambda backend is not healthy.", 
+                backend_type="lambda", 
+                task_id=task_id
+            )
 
         # Package work_dir files into a payload (e.g., zip or pass as JSON)
-        payload = {
+        lambda_payload_data = {
             'command': command,
             'files': {},
             'timeout': timeout
@@ -1016,17 +1417,16 @@ class LambdaBackend(Backend):
         for file_path in work_dir.rglob('*'):
             if file_path.is_file():
                 try:
-                    payload['files'][file_path.name] = file_path.read_text(encoding='utf-8')
+                    lambda_payload_data['files'][file_path.name] = file_path.read_text(encoding='utf-8')
                 except Exception:
-                    payload['files'][file_path.name] = file_path.read_bytes().hex() # Fallback for binary
+                    lambda_payload_data['files'][file_path.name] = file_path.read_bytes().hex() # Fallback for binary
 
         try:
-            start_time = time.time()
             response = await asyncio.to_thread(
                 self.client.invoke,
                 FunctionName=self.function_name,
                 InvocationType='RequestResponse',
-                Payload=json.dumps(payload),
+                Payload=json.dumps(lambda_payload_data),
                 LogType='Tail' # Get last 4KB of logs
             )
             duration = time.time() - start_time
@@ -1037,32 +1437,59 @@ class LambdaBackend(Backend):
             try:
                 result = json.loads(response_payload_str)
             except json.JSONDecodeError:
-                raise TestExecutionError(error_codes["TEST_EXECUTION_FAILED"], detail="Lambda function returned invalid JSON.", lambda_payload=response_payload_str, logs=log_result)
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
+                    detail="Lambda function returned invalid JSON.", 
+                    lambda_payload=response_payload_str, 
+                    logs=log_result, 
+                    task_id=task_id
+                )
 
             if response.get('FunctionError'):
-                raise TestExecutionError(
-                    error_codes["TEST_EXECUTION_FAILED"], 
+                # *** FIX: Use string key, not registry value ***
+                raise ExecutionError(
+                    "TEST_EXECUTION_FAILED",
                     detail=f"Lambda function execution failed: {result.get('errorMessage', 'Unknown error')}",
                     returncode=result.get('returncode', 1), 
                     stdout=result.get('stdout', ''), 
                     stderr=result.get('stderr', result.get('errorMessage', '')), 
                     cmd=" ".join(command),
-                    logs=log_result
+                    logs=log_result,
+                    task_id=task_id
                 )
 
-            return {
-                'success': True,
-                'returncode': result.get('returncode', 0),
-                'stdout': result.get('stdout', ''),
-                'stderr': result.get('stderr', ''),
-                'run_id': response['ResponseMetadata']['RequestId'],
-                'duration': duration,
-                'logs': log_result
-            }
+            return TaskResult(
+                task_id=task_id,
+                status='completed',
+                results={
+                    'stdout': result.get('stdout', ''),
+                    'stderr': result.get('stderr', ''),
+                    'returncode': result.get('returncode', 0),
+                    'duration': duration,
+                    'run_id': response['ResponseMetadata']['RequestId'],
+                    'logs': log_result
+                },
+                started_at=start_time,
+                finished_at=time.time()
+            )
         except BotoClientError as e:
-            raise BackendError(error_codes["BACKEND_INIT_FAILURE"], detail=f"AWS Lambda API error: {e}", backend_type="lambda", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise BackendError(
+                "BACKEND_INIT_FAILURE",
+                detail=f"AWS Lambda API error: {e}", 
+                backend_type="lambda", 
+                cause=e, 
+                task_id=task_id
+            )
         except Exception as e:
-            raise RunnerError(error_codes["UNEXPECTED_ERROR"], detail=f"Unexpected Lambda error: {e}", cause=e)
+            # *** FIX: Use string key, not registry value ***
+            raise RunnerError(
+                "UNEXPECTED_ERROR",
+                detail=f"Unexpected Lambda error: {e}", 
+                cause=e, 
+                task_id=task_id
+            )
 
     def health(self) -> Dict[str, Any]:
         if not HAS_BOTO3:
@@ -1092,7 +1519,7 @@ class LambdaBackend(Backend):
     async def close(self) -> None:
         if self.client:
             await asyncio.to_thread(self.client.close)
-            logger.info("Boto3 Lambda client closed.")
+            logger.info("BBoto3 Lambda client closed.")
 
 # --- Health Check Aggregator ---
 def check_all_backends(config: RunnerConfig) -> Dict[str, Any]:

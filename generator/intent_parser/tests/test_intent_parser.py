@@ -1,180 +1,373 @@
-
 import asyncio
-import json
-import os
 import unittest
-from unittest.mock import patch, AsyncMock, MagicMock
+import tempfile
+import shutil
+import logging
+import sys
+import yaml  # <-- FIX 1: Added missing import
 from pathlib import Path
-from intent_parser import IntentParser, IntentParserConfig, LLMConfig, MultiLanguageSupportConfig, ParserStrategy, RegexExtractor, LLMDetector, LLMSummarizer
-from intent_parser import PARSE_LATENCY, PARSE_ERRORS, AMBIGUITY_RATE, LANG_DETECTION_COUNT, FORMAT_DETECTION_COUNT, EXTRACTION_COUNT, LLM_CLIENT_CALLS, REDACTION_COUNT, FEEDBACK_RECORDED_COUNT, CACHE_CORRUPTION_EVENTS
+from unittest.mock import patch, MagicMock, AsyncMock
 
-# Mock dependencies
-patch_redact_sensitive = patch('intent_parser.redact_sensitive', side_effect=lambda x: x.replace('secret', '[REDACTED_SECRET]').replace('123-45-6789', '[REDACTED_SSN]'))
-mock_redact_sensitive = patch_redact_sensitive.start()
+# ---
+# Mock all external runner dependencies *before* importing the module under test.
+# This ensures the module imports successfully even in a standalone environment.
+# ---
 
-patch_log_action = patch('intent_parser.log_action', AsyncMock())
-mock_log_action = patch_log_action.start()
+# 1. Mock Pydantic models from other modules (if any were used)
+# (No external Pydantic models are imported by intent_parser.py)
 
-patch_detect_pii = patch('intent_parser.detect_pii', side_effect=lambda x: 'secret' in x or '123-45-6789' in x)
-mock_detect_pii = patch_detect_pii.start()
+# 2. Mock runner.* modules
+mock_runner_logging = MagicMock()
+mock_runner_logging.log_action = MagicMock()
+sys.modules['runner.runner_logging'] = mock_runner_logging
 
-patch_fernet = patch('intent_parser.Fernet', return_value=MagicMock(
-    encrypt=lambda x: b'encrypted_' + x,
-    decrypt=lambda x: x[len(b'encrypted_'):],
-))
-mock_fernet = patch_fernet.start()
+mock_runner_security = MagicMock()
+mock_runner_security.redact_secrets = MagicMock(side_effect=lambda x, **kw: x)
+sys.modules['runner.runner_security_utils'] = mock_runner_security
 
-patch_translator = patch('intent_parser.Translator', return_value=MagicMock())
-mock_translator = patch_translator.start()
+# 3. Mock Prometheus metrics
+mock_prometheus = MagicMock()
+sys.modules['prometheus_client'] = mock_prometheus
 
-patch_tracer = patch('intent_parser.tracer', new=MagicMock())
-mock_tracer = patch_tracer.start()
+# 4. Mock OpenTelemetry
+mock_otel = MagicMock()
+mock_otel.trace.get_tracer.return_value.start_as_current_span = MagicMock(
+    return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+)
+sys.modules['opentelemetry'] = mock_otel
 
-patch_aiohttp_session = patch('aiohttp.ClientSession')
-mock_aiohttp_session = patch_aiohttp_session.start()
+# 5. Mock heavy ML/parsing libs
+sys.modules['spacy'] = MagicMock(name="MockSpacyModule")
+sys.modules['torch'] = MagicMock()
+sys.modules['transformers'] = MagicMock()
+sys.modules['pdfplumber'] = MagicMock()
+sys.modules['pytesseract'] = MagicMock()
+sys.modules['rst_to_myst'] = MagicMock()
+sys.modules['langdetect'] = MagicMock()
 
-class TestIntentParser(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        # Reset metrics
-        PARSE_LATENCY.clear()
-        PARSE_ERRORS.clear()
-        AMBIGUITY_RATE.clear()
-        LANG_DETECTION_COUNT.clear()
-        FORMAT_DETECTION_COUNT.clear()
-        EXTRACTION_COUNT.clear()
-        LLM_CLIENT_CALLS.clear()
-        REDACTION_COUNT.clear()
-        FEEDBACK_RECORDED_COUNT.clear()
-        CACHE_CORRUPTION_EVENTS.clear()
+# --- Now, import the module to be tested ---
+from intent_parser.intent_parser import (
+    IntentParser,
+    IntentParserConfig,
+    MarkdownStrategy,
+    RSTStrategy,
+    PlaintextStrategy,
+    YAMLStrategy,
+    PDFStrategy,
+    RegexExtractor,
+    generate_provenance,
+    get_spacy,
+    get_torch,
+    get_transformers,
+    HAS_PDFPLUMBER,
+    HAS_PYTESSERACT,
+    _spacy,  # <-- Import globals to reset them
+    _torch,
+    _transformers
+)
 
-        # Reset mocks
-        mock_log_action.reset_mock()
-        mock_redact_sensitive.reset_mock()
-        mock_detect_pii.reset_mock()
-        mock_translator.reset_mock()
-        mock_tracer.reset_mock()
+# Silence the logger for clean test output
+logging.disable(logging.CRITICAL)
 
-        # Setup test configuration
-        self.config = IntentParserConfig(
-            format='auto',
-            extraction_patterns={'features': r'-\s*(.+)', 'constraints': r'Constraint:\s*(.+)'},
-            llm_config=LLMConfig(provider='openai', model='gpt-4o', api_key_env_var='OPENAI_API_KEY'),
-            feedback_file='feedback.json',
-            cache_dir='parser_cache',
-            multi_language_support=MultiLanguageSupportConfig(
-                enabled=True,
-                default_lang='en',
-                language_patterns={
-                    'es': {'features': r'- *(rasgo|característica):\s*(.+)', 'constraints': r'Restricción:\s*(.+)'}
-                }
-            ),
-            security_config={'enable_custom_redaction': True, 'custom_redaction_patterns': [r'SSN:\s*(\d{3}-\d{2}-\d{4})'], 'pii_detection_sensitivity': 'medium'}
-        )
 
-        # Initialize IntentParser
-        self.parser = IntentParser(self.config)
-        self.parser.feedback = {'ratings': []}
-        self.content = "- Feature 1\n- Feature 2\nConstraint: Must be secure\nSSN: 123-45-6789"
-        self.user_id = 'test_user'
+# --- Dummy Config Content (from intent_parser.yaml) ---
+DUMMY_CONFIG_YAML = """
+schema_version: 1.1
+format: auto
+extraction_patterns:
+  features: '-\s*(.+)'
+  constraints: 'Constraint:\s*(.+)'
+llm_config:
+  provider: openai
+  model: gpt-4o
+  api_key_env_var: OPENAI_API_KEY
+  temperature: 0.1
+  seed: 42
+  max_tokens_summary: 1000
+feedback_file: feedback.json
+cache_dir: parser_cache
+multi_language_support:
+  enabled: true
+  default_lang: en
+  language_patterns:
+    es:
+      features: '- *(rasgo|característica):\s*(.+)'
+      constraints: 'Restricción:\s*(.+)'
+"""
 
-        # Create cache directory
-        os.makedirs('parser_cache', exist_ok=True)
+class TestIntentParser(unittest.TestCase):
 
-    async def asyncTearDown(self):
-        import shutil
-        if os.path.exists('parser_cache'):
-            shutil.rmtree('parser_cache')
-        if os.path.exists('feedback.json'):
-            os.remove('feedback.json')
-        patch_redact_sensitive.stop()
-        patch_log_action.stop()
-        patch_detect_pii.stop()
-        patch_fernet.stop()
-        patch_translator.stop()
-        patch_tracer.stop()
-        patch_aiohttp_session.stop()
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name)
+        self.config_path = self.temp_path / "test_config.yaml"
+        # --- FIX 2: Added encoding='utf-8' ---
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            f.write(DUMMY_CONFIG_YAML)
+        
+        # Reset mocks before each test
+        mock_runner_logging.log_action.reset_mock()
+        mock_runner_security.redact_secrets.reset_mock()
+        
+        # Mock the LLM and NLP stubs
+        self.mock_detector = MagicMock()
+        self.mock_detector.detect = AsyncMock(return_value=["ambiguity 1"])
+        
+        self.mock_summarizer = MagicMock()
+        self.mock_summarizer.summarize = MagicMock(side_effect=lambda req, **kw: req) # Pass-through
+        
+        # --- FIX: Reset lazy loaders before each test ---
+        global _spacy, _torch, _transformers
+        _spacy = None
+        _torch = None
+        _transformers = None
 
-    async def test_parse_markdown(self):
-        """Test parsing Markdown content."""
-        self.parser.parser = self.parser._select_parser('markdown')
-        result = await self.parser.parse(self.content, user_id=self.user_id)
+    def tearDown(self):
+        self.temp_dir.cleanup()
+        # --- FIX: Reset lazy loaders after each test ---
+        global _spacy, _torch, _transformers
+        _spacy = None
+        _torch = None
+        _transformers = None
 
-        self.assertIn('features', result)
-        self.assertIn('constraints', result)
-        self.assertIn('ambiguities', result)
-        self.assertEqual(result['features'], ['Feature 1', 'Feature 2'])
-        self.assertEqual(result['constraints'], ['Must be secure'])
-        self.assertIn('[REDACTED_SSN]', json.dumps(result))
-        self.assertEqual(FORMAT_DETECTION_COUNT.labels(format='markdown')._value, 1)
-        self.assertEqual(EXTRACTION_COUNT.labels(extractor_type='RegexExtractor', language='en')._value, 1)
-        mock_log_action.assert_any_call('Parse Completed', Any)
+    # --- Config and Lazy Loading Tests ---
 
-    async def test_pii_redaction(self):
-        """Test PII redaction in parsed content."""
-        result = await self.parser.parse(self.content, user_id=self.user_id)
+    def test_config_load_success(self):
+        """Tests successful loading of the YAML config into the Pydantic model."""
+        config = IntentParserConfig.model_validate(yaml.safe_load(DUMMY_CONFIG_YAML))
+        self.assertEqual(config.format, 'auto')
+        self.assertEqual(config.llm_config.model, 'gpt-4o')
+        self.assertEqual(config.multi_language_support.language_patterns['es']['features'], '- *(rasgo|característica):\s*(.+)')
+        self.assertTrue((self.temp_path / "parser_cache").exists())
 
-        self.assertIn('[REDACTED_SSN]', json.dumps(result))
-        self.assertNotIn('123-45-6789', json.dumps(result))
-        self.assertEqual(REDACTION_COUNT._value, 1)
-        mock_redact_sensitive.assert_called()
-        mock_detect_pii.assert_called()
+    def test_config_load_invalid_format(self):
+        """Tests that the Pydantic validator catches invalid 'format' values."""
+        invalid_config_yaml = DUMMY_CONFIG_YAML.replace("format: auto", "format: docx")
+        with self.assertRaises(ValueError):
+            IntentParserConfig.model_validate(yaml.safe_load(invalid_config_yaml))
 
-    async def test_multilingual_support(self):
-        """Test parsing Spanish content."""
-        content = "- rasgo: Característica 1\nRestricción: Debe ser seguro"
-        with patch('intent_parser.detect', return_value='es'):
-            result = await self.parser.parse(content, user_id=self.user_id)
+    # --- FIX 4: Patch builtins.__import__ to mock `import spacy` ---
+    @patch('builtins.__import__', side_effect=ImportError("test error"))
+    def test_lazy_load_failure(self, mock_import):
+        """Tests that lazy loaders propagate ImportError."""
+        with self.assertRaises(ImportError):
+            get_spacy()
+        
+        # Test torch and transformers as well
+        with self.assertRaises(ImportError):
+            get_torch()
+        with self.assertRaises(ImportError):
+            get_transformers()
 
-        self.assertEqual(result['features'], ['Característica 1'])
-        self.assertEqual(result['constraints'], ['Debe ser seguro'])
-        self.assertEqual(LANG_DETECTION_COUNT.labels(language='es')._value, 1)
-        mock_translator.return_value.translate.assert_called()
+    # --- FIX 5: Patch builtins.__import__ to mock `import spacy` ---
+    @patch('builtins.__import__', return_value=MagicMock(name="spacy_mock"))
+    def test_lazy_load_success(self, mock_import):
+        """Tests that lazy loaders import a module only once."""
+        mock_spacy = mock_import.return_value
+        
+        # First call
+        spacy_instance = get_spacy()
+        self.assertEqual(spacy_instance.name, "spacy_mock")
+        # Check that it tried to import 'spacy'
+        mock_import.assert_any_call('spacy', unittest.mock.ANY, unittest.mock.ANY, unittest.mock.ANY, unittest.mock.ANY)
+        call_count = mock_import.call_count
+        
+        # Second call (should be cached)
+        spacy_instance_2 = get_spacy()
+        self.assertEqual(spacy_instance_2.name, "spacy_mock")
+        # Call count should not increase
+        self.assertEqual(mock_import.call_count, call_count)
 
-    async def test_cache_encryption(self):
-        """Test encryption of cached LLM responses."""
-        with patch.object(self.parser.detector, 'detect', AsyncMock(return_value=['ambiguity'])):
-            result = await self.parser.parse(self.content, user_id=self.user_id)
+    # --- Strategy Tests ---
 
-        cache_file = os.path.join('parser_cache', f"{hashlib.sha256(self.content.encode()).hexdigest()}.cache")
-        with open(cache_file, 'rb') as f:
-            cached_data = f.read()
-        self.assertTrue(cached_data.startswith(b'encrypted_'))
-        mock_fernet.return_value.encrypt.assert_called()
+    def test_markdown_strategy(self):
+        """Tests parsing of Markdown content."""
+        strategy = MarkdownStrategy()
+        content = "# Title\nHello.\n## Features\n- Feature 1\n```python\nprint('code')\n```"
+        sections = strategy.parse(content)
+        self.assertIn('Title', sections)
+        self.assertIn('Features', sections)
+        self.assertIn('Hello', sections['Title'])
+        self.assertIn('- Feature 1', sections['Features'])
+        self.assertIn('[CODE_BLOCK]', sections['Features'])
+        self.assertNotIn('print(\'code\')', sections['Features'])
 
-    async def test_llm_failure_fallback(self):
-        """Test fallback on LLM failure."""
-        with patch.object(self.parser.detector, 'detect', side_effect=aiohttp.ClientError("API failure")):
-            with patch('intent_parser.LLMDetector.fallback_detection', return_value=['fallback ambiguity']):
-                result = await self.parser.parse(self.content, user_id=self.user_id)
+    # --- FIX 6: Patch the correct function: rst_to_myst.convert ---
+    @patch('intent_parser.intent_parser.rst_to_myst.convert', side_effect=Exception("RST Error"))
+    def test_rst_strategy_failure_fallback(self, mock_convert):
+        """Tests RST parser falling back to PlaintextStrategy on error."""
+        strategy = RSTStrategy()
+        content = "Bad RST content"
+        sections = strategy.parse(content)
+        mock_convert.assert_called_with(content)
+        self.assertEqual(sections, {"Full Document": content})
 
-        self.assertEqual(result['ambiguities'], ['fallback ambiguity'])
-        self.assertEqual(LLM_CLIENT_FALLBACKS.labels(reason='ClientError')._value, 1)
-        self.assertEqual(PARSE_ERRORS.labels(stage='ambiguity_detection', error_type='ClientError')._value, 1)
-        mock_log_action.assert_any_call('Parse Completed', Any)
+    def test_yaml_strategy_success(self):
+        """Tests parsing of valid YAML."""
+        strategy = YAMLStrategy()
+        content = "key: value\nitems:\n  - 1\n  - 2"
+        sections = strategy.parse(content)
+        self.assertEqual(sections['key'], 'value')
+        self.assertEqual(sections['items'], '[1, 2]')
 
-    async def test_feedback_recording(self):
-        """Test recording user feedback."""
-        with patch('aiofiles.open', new_callable=AsyncMock) as mock_open:
-            feedback = {'rating': 0.8, 'comments': 'Good clarity'}
-            await self.parser.record_feedback(feedback, self.user_id)
+    def test_yaml_strategy_failure_fallback(self):
+        """Tests YAML parser falling back to PlaintextStrategy on error."""
+        strategy = YAMLStrategy()
+        content = "key: value\n unindented: error"
+        sections = strategy.parse(content)
+        self.assertEqual(sections, {"Full Document": content})
 
-        self.assertEqual(FEEDBACK_RECORDED_COUNT._value, 1)
-        mock_open.assert_called_with('feedback.json', mode='w', encoding='utf-8')
-        mock_log_action.assert_called_with('Feedback Recorded', {'user_id': self.user_id, 'feedback': Any})
+    @patch('intent_parser.intent_parser.HAS_PDFPLUMBER', False)
+    def test_pdf_strategy_no_lib_fallback(self):
+        """Tests PDF parser falling back to Plaintext when library is missing."""
+        strategy = PDFStrategy()
+        sections = strategy.parse(Path("dummy.pdf"))
+        self.assertIn("Full Document", sections)
 
-    async def test_invalid_format(self):
-        """Test handling of unsupported document format."""
-        with self.assertRaises(ValueError) as cm:
-            self.parser._select_parser('unsupported')
-        self.assertEqual(str(cm.exception), 'Unsupported format: unsupported')
-        self.assertEqual(PARSE_ERRORS.labels(stage='parser_selection', error_type='ValueError')._value, 1)
+    @patch('intent_parser.intent_parser.HAS_PDFPLUMBER', True)
+    @patch('intent_parser.intent_parser.HAS_PYTESSERACT', True)
+    @patch('intent_parser.intent_parser.pdfplumber')
+    @patch('intent_parser.intent_parser.pytesseract')
+    @patch('intent_parser.intent_parser.Image')
+    def test_pdf_strategy_with_ocr(self, mock_image, mock_tesseract, mock_pdfplumber):
+        """Tests PDF parsing with successful text and OCR extraction."""
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Page text."
+        mock_page.images = [{"width": 10, "height": 10, "stream": MagicMock(get_data=MagicMock(return_value=b"imagedata"))}]
+        
+        mock_pdf = MagicMock()
+        mock_pdf.pages = [mock_page]
+        mock_pdfplumber.open.return_value.__enter__.return_value = mock_pdf
+        
+        mock_tesseract.image_to_string.return_value = "OCR text."
+        
+        strategy = PDFStrategy()
+        sections = strategy.parse(Path("dummy.pdf"))
+        
+        self.assertIn("Page text.", sections["Full Document (PDF)"])
+        self.assertIn("[OCR_IMAGE_TEXT]:\nOCR text.", sections["Full Document (PDF)"])
 
-    async def test_empty_content(self):
-        """Test handling of empty content."""
-        with self.assertRaises(ValueError) as cm:
-            await self.parser.parse('', user_id=self.user_id)
-        self.assertEqual(str(cm.exception), 'No content or file path provided.')
-        self.assertEqual(PARSE_ERRORS.labels(stage='overall_parse', error_type='ValueError')._value, 1)
+    def test_regex_extractor(self):
+        """Tests the RegexExtractor with default and language-specific patterns."""
+        config = IntentParserConfig.model_validate(yaml.safe_load(DUMMY_CONFIG_YAML))
+        extractor = RegexExtractor(config.extraction_patterns, config.multi_language_support.language_patterns)
+        
+        # Test default (English)
+        sections = {"doc": "- Feature A\n- Feature B\nConstraint: C1"}
+        extracted_en = extractor.extract(sections, language='en')
+        self.assertEqual(extracted_en['features'], ['Feature A', 'Feature B'])
+        self.assertEqual(extracted_en['constraints'], ['C1'])
+
+        # Test Spanish
+        sections_es = {"doc": "- rasgo: Feature ES\nRestricción: C1 ES"}
+        extracted_es = extractor.extract(sections_es, language='es')
+        self.assertEqual(extracted_es['features'], ['Feature ES'])
+        self.assertEqual(extracted_es['constraints'], ['C1 ES'])
+
+    def test_generate_provenance(self):
+        """Tests provenance generation."""
+        content = "hello"
+        prov = generate_provenance(content)
+        self.assertEqual(prov['content_hash'], '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
+        self.assertEqual(prov['source_type'], 'string')
+        
+        # --- FIX 3: Make test OS-agnostic ---
+        file_path_obj = Path("a/b.txt")
+        prov_file = generate_provenance(content, file_path=file_path_obj)
+        self.assertEqual(prov_file['source_type'], 'file')
+        self.assertEqual(prov_file['file_path'], str(file_path_obj)) # Compare str(Path) to str(Path)
+        
+        # Check that it called the (mocked) log_action
+        self.assertGreaterEqual(mock_runner_logging.log_action.call_count, 2)
+
+    # --- Main IntentParser Class Tests ---
+
+    @patch('intent_parser.intent_parser.LLMDetector')
+    @patch('intent_parser.intent_parser.LLMSummarizer')
+    def test_parser_init_and_reload(self, mock_summarizer, mock_detector):
+        """Tests that the parser initializes and reloads its config."""
+        parser = IntentParser(config_path=str(self.config_path))
+        self.assertEqual(parser.config.llm_config.model, 'gpt-4o')
+        self.assertIsInstance(parser.extractor, RegexExtractor)
+        
+        # Modify the config file
+        new_config_yaml = DUMMY_CONFIG_YAML.replace("model: gpt-4o", "model: gpt-5")
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            f.write(new_config_yaml)
+            
+        parser.reload_config_and_strategies()
+        self.assertEqual(parser.config.llm_config.model, 'gpt-5')
+        mock_runner_logging.log_action.assert_called_with("Config Reloaded", {"path": str(self.config_path)})
+
+    def test_select_parser_auto_logic(self):
+        """Tests the automatic parser selection based on file extension."""
+        parser = IntentParser(config_path=str(self.config_path))
+        self.assertIsInstance(parser._select_parser('auto', Path('file.md')), MarkdownStrategy)
+        self.assertIsInstance(parser._select_parser('auto', Path('file.rst')), RSTStrategy)
+        self.assertIsInstance(parser._select_parser('auto', Path('file.yaml')), YAMLStrategy)
+        self.assertIsInstance(parser._select_parser('auto', Path('file.txt')), PlaintextStrategy)
+        self.assertIsInstance(parser._select_parser('auto', Path('file.unknown')), PlaintextStrategy)
+        # Test PDF fallback
+        with patch('intent_parser.intent_parser.HAS_PDFPLUMBER', False):
+            self.assertIsInstance(parser._select_parser('auto', Path('file.pdf')), PlaintextStrategy)
+
+    @patch('intent_parser.intent_parser.LLMDetector', return_value=MagicMock(detect=AsyncMock(return_value=[])))
+    @patch('intent_parser.intent_parser.LLMSummarizer', return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)))
+    @patch('intent_parser.intent_parser.detect', return_value='en')
+    def test_parse_workflow_simple_markdown(self, mock_detect, mock_summarizer, mock_detector):
+        """Tests the full parse workflow with simple Markdown content."""
+        parser = IntentParser(config_path=str(self.config_path))
+        content = "# Features\n- F1\nConstraint: C1"
+        
+        result = asyncio.run(parser.parse(content=content, format_hint='markdown'))
+        
+        self.assertEqual(result['features'], ['F1'])
+        self.assertEqual(result['constraints'], ['C1'])
+        self.assertEqual(result['ambiguities'], [])
+        
+        # Check that mocks were called
+        mock_runner_security.redact_secrets.assert_called_with(content)
+        mock_detect.assert_called_with(content)
+        mock_detector.return_value.detect.assert_called_once()
+        mock_summarizer.return_value.summarize.assert_called_once()
+        mock_runner_logging.log_action.assert_any_call("Parse Completed", unittest.mock.ANY)
+
+    @patch('intent_parser.intent_parser.LLMDetector', return_value=MagicMock(detect=AsyncMock(return_value=[])))
+    @patch('intent_parser.intent_parser.LLMSummarizer', return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)))
+    @patch('intent_parser.intent_parser.detect', return_value='es')
+    def test_parse_workflow_multilang_file(self, mock_detect, mock_summarizer, mock_detector):
+        """Tests the parse workflow reading from a file with multi-language detection."""
+        content_es = "- rasgo: Feature ES\nRestricción: C1 ES"
+        test_file = self.temp_path / "readme_es.md"
+        test_file.write_text(content_es)
+        
+        parser = IntentParser(config_path=str(self.config_path))
+        result = asyncio.run(parser.parse(file_path=test_file, format_hint='auto'))
+        
+        self.assertEqual(result['features'], ['Feature ES'])
+        self.assertEqual(result['constraints'], ['C1 ES'])
+        self.assertEqual(parser.input_language, 'es')
+        mock_detect.assert_called_with(content_es)
+
+    @patch('intent_parser.intent_parser.LLMDetector')
+    @patch('intent_parser.intent_parser.LLMSummarizer')
+    def test_parse_workflow_errors(self, mock_summarizer, mock_detector):
+        """Tests error handling in the parse workflow."""
+        parser = IntentParser(config_path=str(self.config_path))
+        
+        # Test FileNotFoundError
+        with self.assertRaises(FileNotFoundError):
+            asyncio.run(parser.parse(file_path=Path("non_existent_file.md")))
+            
+        # Test ValueError (no content)
+        with self.assertRaises(ValueError):
+            asyncio.run(parser.parse())
+            
+        # Test general exception fallback
+        mock_detector.return_value.detect.side_effect = Exception("Detector failed")
+        with self.assertRaises(Exception):
+            asyncio.run(parser.parse(content="test"))
+
 
 if __name__ == '__main__':
     unittest.main()

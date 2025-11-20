@@ -41,7 +41,7 @@ from watchdog.observers import Observer
 import tiktoken # Imported for token counting
 
 # --- CENTRAL RUNNER FOUNDATION ---
-from runner import tracer
+from runner.runner_logging import tracer # FIX: Corrected import path to runner.runner_logging
 from runner.llm_client import call_llm_api, call_ensemble_api
 from runner.runner_logging import logger, add_provenance
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS, LLM_TOKEN_INPUT_TOTAL, LLM_TOKEN_OUTPUT_TOTAL
@@ -324,7 +324,7 @@ class AdvancedTemplateTracker:
         prompt = f"Refine this prompt template based on performance: {json.dumps(performance_data)}\nTemplate:\n{current_content}\nImprove for better {performance_data['primary_metric']}."
         pre_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
         
-        # REFACTORED: Use internal regex sanitizer, not imported scrub_prompt
+        # REFACTORED: Use internal regex sanitizer
         scrubbed_prompt = _local_regex_sanitize(prompt)
         
         post_hash = hashlib.sha256(scrubbed_prompt.encode('utf-8')).hexdigest()
@@ -354,10 +354,9 @@ class AdvancedTemplateTracker:
                 model=model
             )
             
-            # Add runner metrics
-            LLM_CALLS_TOTAL.labels(provider="testgen_prompt", model=model, task="auto_evolve_template").inc()
-            LLM_LATENCY_SECONDS.labels(provider="testgen_prompt", model=model, task="auto_evolve_template").observe(time.time() - start_time)
-            add_provenance({"action": "auto_evolve_template_llm", "model": model, "run_id": str(uuid.uuid4())})
+            # REMOVED: Manual LLM Metrics (Handled by llm_client)
+            # LLM_CALLS_TOTAL.labels(provider="testgen_prompt", model=model, task="auto_evolve_template").inc()
+            # LLM_LATENCY_SECONDS.labels(provider="testgen_prompt", model=model, task="auto_evolve_template").observe(time.time() - start_time)
             
             new_content = response.get('content', current_content)
             
@@ -632,9 +631,9 @@ class AgenticPromptBuilder(abc.ABC):
                 )
                 prompt = summary_response["content"]
                 
-                # Add runner metrics
-                LLM_CALLS_TOTAL.labels(provider="testgen_prompt", model=model, task="manage_tokens_summarize").inc()
-                LLM_LATENCY_SECONDS.labels(provider="testgen_prompt", model=model, task="manage_tokens_summarize").observe(time.time() - start_time)
+                # REMOVED: Manual LLM Metrics (Handled by llm_client)
+                # LLM_CALLS_TOTAL.labels(provider="testgen_prompt", model=model, task="manage_tokens_summarize").inc()
+                # LLM_LATENCY_SECONDS.labels(provider="testgen_prompt", model=model, task="manage_tokens_summarize").observe(time.time() - start_time)
                 
                 new_tokens = len(tokenizer.encode(prompt))
                 add_provenance({"action": "PromptSummarized", "original_tokens": tokens, "new_tokens": new_tokens, "trigger": "manage_tokens"})
@@ -661,7 +660,7 @@ class AgenticPromptBuilder(abc.ABC):
 """
         return f"{explainability}\n{prompt}"
 
-class TestPromptBuilder(AgenticPromptBuilder):
+class DefaultPromptBuilder(AgenticPromptBuilder):
     """
     Builds prompts for test generation, critique, and refinement.
     REFACTORED: Uses central runner logging.
@@ -742,14 +741,14 @@ class TestPromptBuilder(AgenticPromptBuilder):
 multi_vdb = MultiVectorDBManager()
 tracker = AdvancedTemplateTracker()
 director = AdaptivePromptDirector(multi_vdb, tracker)
-agentic_builder = TestPromptBuilder(director)
+agentic_builder = DefaultPromptBuilder(director)
 
 def build_agentic_prompt(prompt_type: str, builder_name: str = "test", **kwargs) -> str:
     """
     Public API to build an agentic prompt using a specified builder.
     """
     if "test" not in PROMPT_BUILDER_REGISTRY:
-        register_prompt_builder("test", TestPromptBuilder)
+        register_prompt_builder("test", DefaultPromptBuilder)
 
     builder_class = PROMPT_BUILDER_REGISTRY.get(builder_name)
     if not builder_class:
@@ -777,13 +776,13 @@ def initialize_codebase_for_rag(repo_path: str):
                     content = f.read()
                 if file.endswith(('.py', '.js', '.ts', '.java', '.rs', '.go')):
                     code_files[filepath] = content
-                elif 'test' in file.lower():
+                elif 'test' in file.lower() or file.lower().startswith('test_'):
                     test_files[filepath] = content
                 elif file.endswith(('.md', '.rst', '.txt')):
                     doc_files[filepath] = content
                 elif file in ('requirements.txt', 'package.json', 'Cargo.toml'):
                     dep_files[filepath] = content
-                elif 'log' in file.lower() and 'fail' in content.lower():
+                elif file.lower().endswith(('.log', '.txt')) and 'fail' in content.lower(): # FIX: Added case-insensitivity check to endswith
                     content = content[-20000:] 
                     failure_logs[filepath] = content
             except Exception as e:

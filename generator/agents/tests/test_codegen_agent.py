@@ -241,7 +241,7 @@ async def test_generate_code_returns_error_on_bad_format(mock_llm, temp_codegen_
     """
     Align with actual behavior: for a non-JSON / non-structured response,
     current implementation falls back to treating it as a single file
-    (e.g., app.py) rather than producing error.txt.
+    (e.g., main.py) rather than producing error.txt.
     """
     bad_response = "not-json, not-code-block"
     mock_llm.return_value = bad_response
@@ -254,9 +254,9 @@ async def test_generate_code_returns_error_on_bad_format(mock_llm, temp_codegen_
         temp_codegen_env["config_path"],
     )
 
-    # Based on your run, the implementation produced {'app.py': bad_response}
-    assert "app.py" in result
-    assert result["app.py"] == bad_response
+    # The implementation defaults to 'main.py' for non-JSON responses
+    assert "main.py" in result
+    assert result["main.py"] == bad_response
     assert mock_llm.called
 
 

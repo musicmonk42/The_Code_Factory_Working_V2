@@ -29,7 +29,7 @@ import os
 import uuid
 from typing import Dict, Any, Optional, List # <-- FIX: Moved 'List' here
 from datetime import datetime, timezone
-from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from pydantic import BaseModel, Field, ValidationError as PydanticValidationError, field_validator, ConfigDict
 from prometheus_client import Counter, Histogram, REGISTRY
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -64,11 +64,19 @@ trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(exporter))
 
 # Prometheus metrics
 _metrics_lock = threading.Lock()
+_created_metrics = {}  # Cache of created metrics
+
 def get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
+    """Thread-safe metric creation that avoids duplicate registration."""
     with _metrics_lock:
-        if name in REGISTRY._names_to_collectors:
-            return REGISTRY._names_to_collectors[name]
-        return metric_class(name, description, labelnames=labelnames, **kwargs)
+        # Check our cache first
+        if name in _created_metrics:
+            return _created_metrics[name]
+        
+        # Create the metric and cache it
+        metric = metric_class(name, description, labelnames=labelnames, **kwargs)
+        _created_metrics[name] = metric
+        return metric
 
 workflow_latency = get_or_create_metric(
     Histogram,
@@ -276,8 +284,17 @@ async def run_generator_workflow(
             )
             return output.model_dump()
 
-        except (ValidationError, WorkflowError) as e:
-            stage = "validation" if isinstance(e, ValidationError) else "execution"
+        except (PydanticValidationError, ValidationError, WorkflowError, GeneratorPluginError) as e:
+            # Determine the stage based on error type
+            if isinstance(e, PydanticValidationError):
+                stage = "validation"
+            elif isinstance(e, ValidationError):
+                stage = "validation"
+            elif isinstance(e, WorkflowError):
+                stage = "execution"
+            else:  # GeneratorPluginError
+                stage = "plugin"
+            
             workflow_errors.labels(correlation_id=correlation_id, stage=stage, error_type=type(e).__name__).inc()
             logger.error(f"Workflow failed at stage '{stage}': {e} [Correlation ID: {correlation_id}]", exc_info=True)
             span.record_exception(e)

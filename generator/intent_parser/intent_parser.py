@@ -14,6 +14,7 @@ import os
 import re
 import shelve
 import time
+import datetime  # <-- FIX: Added missing import
 from abc import ABC, abstractmethod
 from functools import lru_cache
 from pathlib import Path
@@ -48,11 +49,10 @@ except ImportError:
 
 # ********** FIX 2: Updated utility imports to runner foundation **********
 try:
-    from runner.security_utils import redact_sensitive, detect_pii
+    from runner.runner_security_utils import redact_secrets
 except ImportError:
     # Final Fallback for testing when specific runner module is not available
-    def redact_sensitive(content): return content
-    def detect_pii(content, sensitivity): return []
+    def redact_secrets(content, **_kwargs): return content
 # **************************************************************************************
 
 
@@ -368,6 +368,7 @@ class LLMDetector(AmbiguityDetectorStrategy):
     pass
 
 class SummarizerStrategy(ABC):
+    # --- FIX: Removed duplicated 'abstract' ---
     @abstractmethod
     def summarize(self, requirements: Dict[str, Any], language: str = 'en') -> Dict[str, Any]:
         pass
@@ -429,6 +430,7 @@ class IntentParser:
 
     def _load_and_validate_config(self, config_path: Path) -> IntentParserConfig:
         try:
+            # --- FIX: Added encoding='utf-8' ---
             with open(config_path, 'r', encoding='utf-8') as f:
                 raw_config = yaml.safe_load(f)
             return IntentParserConfig(**raw_config)
@@ -498,7 +500,7 @@ class IntentParser:
             if not content and not file_path:
                 raise ValueError("No content or file path provided.")
 
-            content_redacted = redact_sensitive(content)
+            content_redacted = redact_secrets(content)
             if content_redacted != content: REDACTION_COUNT.inc()
 
             provenance = generate_provenance(content_redacted, file_path)

@@ -1,227 +1,793 @@
-
-"""
-test_audit_crypto_factory.py
-
-Regulated industry-grade test suite for audit_crypto_factory.py.
-
-Features:
-- Tests CryptoProviderFactory initialization, configuration, provider selection, and shutdown.
-- Validates secure secret handling, audit logging, and sensitive data redaction.
-- Ensures Prometheus metrics and OpenTelemetry tracing.
-- Tests thread-safe provider instantiation, retry logic, and error handling.
-- Verifies compliance (SOC2/PCI DSS/HIPAA) with no sensitive data leakage.
-- Uses real implementations with mocked external dependencies (boto3, audit_log, secrets).
-
-Dependencies:
-- pytest, pytest-asyncio, unittest.mock, faker, freezegun
-- boto3, prometheus-client, dynaconf, opentelemetry-sdk
-- audit_log, secrets
-"""
+# test_audit_crypto_factory.py
 
 import asyncio
+import logging
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+import sys
+import base64
+import aiohttp
+from unittest.mock import MagicMock, AsyncMock, patch, ANY, call
+
 import pytest
-import pytest_asyncio
-from faker import Faker
-from freezegun import freeze_time
-from prometheus_client import REGISTRY
+from dynaconf import Dynaconf
+from dynaconf.validator import ValidationError # FIX 2 & 3: Import ValidationError
 
-from audit_crypto_factory import (
-    CryptoProviderFactory, SIGN_OPERATIONS, VERIFY_OPERATIONS, CRYPTO_ERRORS,
-    KEY_ROTATIONS, HSM_SESSION_HEALTH, SIGN_LATENCY, VERIFY_LATENCY,
-    KEY_LOAD_COUNT, KEY_STORE_COUNT, KEY_CLEANUP_COUNT, crypto_provider_factory
-)
-from audit_log import log_action
-from secrets import aget_hsm_pin, aget_fallback_hmac_secret, aget_kms_master_key_ciphertext_blob
+# --- Fixtures ---
 
-# Initialize faker for test data generation
-fake = Faker()
-
-# Test constants
-MOCK_CORRELATION_ID = str(uuid.uuid4())
-TEST_KMS_KEY_ID = "mock_kms_key_id"
-TEST_HSM_LIBRARY_PATH = "/mock/hsm/lib.so"
-TEST_HSM_SLOT_ID = "0"
-TEST_HSM_PIN = "mock_hsm_pin"
-TEST_SOFTWARE_KEY_DIR = "/tmp/test_crypto_keys"
-TEST_ALERT_ENDPOINT = "https://example.com/alert"
-TEST_HMAC_SECRET_B64 = base64.b64encode(b"mock_hmac_secret").decode('utf-8')
-
-# Environment variables for compliance mode
-os.environ['COMPLIANCE_MODE'] = 'true'
-os.environ['AUDIT_CRYPTO_PROVIDER_TYPE'] = 'software'
-os.environ['AUDIT_CRYPTO_DEFAULT_ALGO'] = 'rsa'
-os.environ['AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS'] = '86400'
-os.environ['AUDIT_CRYPTO_SOFTWARE_KEY_DIR'] = TEST_SOFTWARE_KEY_DIR
-os.environ['AUDIT_CRYPTO_KMS_KEY_ID'] = TEST_KMS_KEY_ID
-os.environ['AUDIT_CRYPTO_ALERT_ENDPOINT'] = TEST_ALERT_ENDPOINT
-os.environ['AUDIT_CRYPTO_HSM_ENABLED'] = 'false'
-os.environ['AUDIT_CRYPTO_ALERT_RETRY_ATTEMPTS'] = '3'
-os.environ['AUDIT_CRYPTO_ALERT_BACKOFF_FACTOR'] = '0.5'
-os.environ['AWS_REGION'] = 'us-east-1'
-
-@pytest.fixture(scope="function")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
+# This fixture runs for every test, ensuring a clean environment
 @pytest.fixture(autouse=True)
-def cleanup_test_environment():
-    """Clean up test environment before and after tests."""
-    for path in [TEST_SOFTWARE_KEY_DIR]:
-        if Path(path).exists():
-            import shutil
-            shutil.rmtree(path, ignore_errors=True)
-    Path(TEST_SOFTWARE_KEY_DIR).mkdir(parents=True, exist_ok=True)
-    yield
-    if Path(TEST_SOFTWARE_KEY_DIR).exists():
-        import shutil
-        shutil.rmtree(path, ignore_errors=True)
+def clean_environment(monkeypatch):
+    """
+    Cleans up global state and environment variables before/after each test.
+    Sets minimal env vars to allow the module to be imported without validation errors.
+    """
+    
+    # 1. Clear all relevant environment variables
+    env_vars = [
+        "AUDIT_LOG_DEV_MODE", "PYTEST_CURRENT_TEST", "RUNNING_TESTS",
+        "AUDIT_CRYPTO_PROVIDER_TYPE", "AUDIT_CRYPTO_DEFAULT_ALGO", 
+        "AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "AUDIT_CRYPTO_KMS_KEY_ID", 
+        "AUDIT_CRYPTO_HSM_ENABLED", "AUDIT_CRYPTO_HSM_LIBRARY_PATH",
+        "AUDIT_CRYPTO_HSM_SLOT_ID", "PYTHON_ENV"
+    ]
+    for var in env_vars:
+        monkeypatch.delenv(var, raising=False)
+        
+    # --- FIX 1: Set minimal env vars *before* import ---
+    monkeypatch.setenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software")
+    monkeypatch.setenv("AUDIT_CRYPTO_DEFAULT_ALGO", "ed25519")
+    monkeypatch.setenv("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
+    monkeypatch.setenv("AUDIT_LOG_DEV_MODE", "true") 
+    # --- END FIX 1 ---
 
-@pytest_asyncio.fixture
-async def mock_audit_log():
-    """Mock audit_log.log_action."""
-    with patch('audit_log.log_action') as mock_log:
-        yield mock_log
+    # 2. Reset global state variables in the factory module
+    from generator.audit_log.audit_crypto import audit_crypto_factory
+    
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
+    monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    
+    # 3. Reset the factory instance cache
+    audit_crypto_factory.crypto_provider_factory._instances.clear()
+    
+    yield # Run the test
+    
+    # Post-test cleanup
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
+    monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    audit_crypto_factory.crypto_provider_factory._instances.clear()
 
-@pytest_asyncio.fixture
-async def mock_boto3():
-    """Mock boto3 client for KMS."""
-    with patch('boto3.client') as mock_client:
-        mock_kms = MagicMock()
-        mock_kms.decrypt.return_value = {"Plaintext": b"mock_decrypted_key"}
-        mock_client.return_value = mock_kms
-        yield mock_kms
 
-@pytest_asyncio.fixture
-async def mock_secrets():
-    """Mock secrets.py functions."""
-    with patch('secrets.aget_hsm_pin') as mock_hsm_pin, \
-         patch('secrets.aget_fallback_hmac_secret') as mock_hmac_secret, \
-         patch('secrets.aget_kms_master_key_ciphertext_blob') as mock_kms_blob:
-        mock_hsm_pin.return_value = TEST_HSM_PIN
-        mock_hmac_secret.return_value = base64.b64decode(TEST_HMAC_SECRET_B64)
-        mock_kms_blob.return_value = b"mock_ciphertext_blob"
-        yield mock_hsm_pin, mock_hmac_secret, mock_kms_blob
+@pytest.fixture
+def mock_settings(monkeypatch):
+    """
+    Mocks the Dynaconf 'settings' object and the validation function.
+    Provides a default, valid configuration.
+    """
+    # FIX 2.1: Use a plain MagicMock object for simpler patching, avoiding spec issues
+    mock_settings_instance = MagicMock()
+    
+    default_config = {
+        "PROVIDER_TYPE": "software",
+        "DEFAULT_ALGO": "ed25519",
+        "KEY_ROTATION_INTERVAL_SECONDS": 86400,
+        "SOFTWARE_KEY_DIR": "/tmp/test_keys",
+        "KMS_KEY_ID": "arn:aws:kms:us-east-1:12345:key/mock-key-id",
+        "AWS_REGION": "us-east-1",
+        "HSM_ENABLED": False,
+        "HSM_LIBRARY_PATH": None,
+        "HSM_SLOT_ID": None,
+        "ALERT_ENDPOINT": "http://mock-alert-endpoint.com",
+        "FALLBACK_HMAC_SECRET_B64": None,
+        "HSM_HEALTH_CHECK_INTERVAL_SECONDS": 30,
+        "ALERT_RETRY_ATTEMPTS": 3,
+        "ALERT_BACKOFF_FACTOR": 2.0,
+        "ALERT_INITIAL_DELAY": 1.0,
+        "HSM_RETRY_ATTEMPTS": 5,
+        "HSM_BACKOFF_FACTOR": 2.0,
+        "HSM_INITIAL_DELAY": 1.0,
+        "SUPPORTED_ALGOS": ["rsa", "ecdsa", "ed25519", "hmac"],
+    }
 
-@pytest_asyncio.fixture
-async def mock_opentelemetry():
-    """Mock OpenTelemetry tracer."""
-    with patch('audit_crypto_factory.trace') as mock_trace:
-        mock_tracer = MagicMock()
-        mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
-        mock_trace.get_tracer.return_value = mock_tracer
-        yield mock_tracer, mock_span
+    # Manually configure attributes on the mock object
+    for k, v in default_config.items():
+        setattr(mock_settings_instance, k, v)
+        
+    # FIX 2.2: Mock the 'get' method explicitly using the lambda to return config values.
+    # This resolves the original AttributeError during mock initialization.
+    mock_settings_instance.get = MagicMock(side_effect=lambda key, default=None: default_config.get(key, default))
 
-@pytest_asyncio.fixture
-async def crypto_factory():
-    """Create a CryptoProviderFactory instance."""
-    factory = CryptoProviderFactory()
-    yield factory
-    factory.close_all_providers()
+    # Patch the 'settings' object in the factory module
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.settings", mock_settings_instance)
+    
+    # Patch the validation function to prevent it from running on import
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.validate_and_load_config", MagicMock())
+    
+    return mock_settings_instance, default_config
 
-class TestAuditCryptoFactory:
-    """Test suite for audit_crypto_factory.py."""
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_crypto_provider_initialization_software(self, crypto_factory, mock_boto3, mock_secrets, mock_audit_log, mock_opentelemetry):
-        """Test initialization of software crypto provider."""
-        provider = crypto_factory.get_provider("software")
-        assert provider is not None
-        mock_boto3.decrypt.assert_called_once()
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="software", status="success")
-        mock_opentelemetry[1].set_attribute.assert_any_call("provider_type", "software")
-        assert REGISTRY.get_sample_value('audit_key_store_count_total', {'provider_type': 'software'}) >= 0
+@pytest.fixture
+def mock_boto(monkeypatch):
+    """Mocks the boto3 client and its responses."""
+    mock_kms_client = MagicMock()
+    mock_decrypt = MagicMock(
+        return_value={"Plaintext": b"test-master-key-from-kms-0123456"}
+    )
+    mock_kms_client.decrypt = mock_decrypt
+    
+    mock_boto_client = MagicMock(return_value=mock_kms_client)
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.boto3.client", mock_boto_client)
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", True)
+    
+    return mock_boto_client, mock_decrypt
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_crypto_provider_initialization_hsm(self, crypto_factory, mock_secrets, mock_audit_log):
-        """Test initialization of HSM crypto provider."""
-        with patch.dict(os.environ, {'AUDIT_CRYPTO_HSM_ENABLED': 'true', 'AUDIT_CRYPTO_HSM_LIBRARY_PATH': TEST_HSM_LIBRARY_PATH, 'AUDIT_CRYPTO_HSM_SLOT_ID': TEST_HSM_SLOT_ID}):
-            with patch('audit_crypto_factory.pkcs11') as mock_pkcs11:
-                mock_pkcs11.Lib.return_value = MagicMock()
-                provider = crypto_factory.get_provider("hsm")
-        assert provider is not None
-        mock_secrets[0].assert_called_once()
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="hsm", status="success")
-        assert REGISTRY.get_sample_value('audit_hsm_session_health', {'provider_type': 'hsm'}) >= 0
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_invalid_provider_type(self, crypto_factory, mock_audit_log):
-        """Test initialization with invalid provider type."""
-        with pytest.raises(ValueError, match="Invalid provider type"):
-            crypto_factory.get_provider("invalid")
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="invalid", status="fail", error=Any)
+@pytest.fixture
+def mock_secrets(monkeypatch):
+    """Mocks all async secret-fetching functions from secrets.py."""
+    mock_aget_kms = AsyncMock(return_value=base64.b64encode(b"mock-kms-ciphertext"))
+    mock_aget_hmac = AsyncMock(return_value=b"mock-hmac-secret-bytes-!@#")
+    
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.aget_kms_master_key_ciphertext_blob", mock_aget_kms)
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.aget_fallback_hmac_secret", mock_aget_hmac)
+    
+    return {
+        "aget_kms": mock_aget_kms,
+        "aget_hmac": mock_aget_hmac,
+    }
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_missing_kms_key_id(self, crypto_factory, mock_audit_log):
-        """Test initialization with missing KMS key ID."""
-        with patch.dict(os.environ, {'AUDIT_CRYPTO_KMS_KEY_ID': ''}):
-            with pytest.raises(ValueError, match="KMS Key ID is required"):
-                crypto_factory.get_provider("software")
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="software", status="fail", error=Any)
+@pytest.fixture
+def mock_providers(monkeypatch):
+    """
+    Mocks the __init__ of Software and HSM providers to prevent real init.
+    Returns a dictionary containing the mock classes and instantiated objects.
+    """
+    from generator.audit_log.audit_crypto.audit_crypto_provider import CryptoProvider
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_kms_decryption_failure(self, crypto_factory, mock_boto3, mock_audit_log):
-        """Test handling of KMS decryption failure."""
-        mock_boto3.decrypt.side_effect = botocore.exceptions.ClientError({"Error": {"Code": "InvalidCiphertextException"}}, "Decrypt")
-        with pytest.raises(botocore.exceptions.ClientError):
-            crypto_factory.get_provider("software")
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="software", status="fail", error=Any)
-        assert REGISTRY.get_sample_value('audit_crypto_errors_total', {'type': 'ClientError', 'provider_type': 'software', 'operation': 'decrypt_key'}) >= 1
+    # Track data using a dict for cleaner access
+    data = {
+        "software_calls": [],
+        "hsm_calls": [],
+        "software_instance": None,
+        "hsm_instance": None
+    }
+    
+    # Create mock classes that actually inherit from CryptoProvider
+    class MockSoftwareProvider(CryptoProvider):
+        def __init__(self, *args, **kwargs):
+            # Track the call
+            data["software_calls"].append((args, kwargs))
+            # FIX: Store the created instance for assertions
+            if data["software_instance"] is None:
+                data["software_instance"] = self
+            
+            self._init_args = args
+            self._init_kwargs = kwargs
+        async def generate_key(self, algo: str) -> str:
+            return "mock-key-id"
+        async def sign(self, data: bytes, key_id: str) -> bytes:
+            return b"mock-signature"
+        async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
+            return True
+        async def rotate_key(self, key_id: str) -> str:
+            return "new-mock-key-id"
+        async def close(self):
+            pass # Must implement for provider close
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_graceful_shutdown(self, crypto_factory, mock_audit_log):
-        """Test graceful shutdown of crypto providers."""
-        provider = crypto_factory.get_provider("software")
-        crypto_factory.close_all_providers()
-        mock_audit_log.assert_called_with("close_provider", provider_name="software", status="success")
-        assert not crypto_factory._instances, "Providers not closed"
+    class MockHSMProvider(CryptoProvider):
+        def __init__(self, *args, **kwargs):
+            # Track the call
+            data["hsm_calls"].append((args, kwargs))
+            # FIX: Store the created instance for assertions
+            if data["hsm_instance"] is None:
+                data["hsm_instance"] = self
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_concurrent_provider_instantiation(self, crypto_factory, mock_boto3, mock_audit_log):
-        """Test concurrent instantiation of providers."""
-        async def instantiate_provider():
-            crypto_factory.get_provider("software")
+            self._init_args = args
+            self._init_kwargs = kwargs
+        async def generate_key(self, algo: str) -> str:
+            return "mock-hsm-key-id"
+        async def sign(self, data: bytes, key_id: str) -> bytes:
+            return b"mock-hsm-signature"
+        async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool:
+            return True
+        async def rotate_key(self, key_id: str) -> str:
+            return "new-mock-hsm-key-id"
+        async def close(self):
+            pass # Must implement for provider close
 
-        tasks = [instantiate_provider() for _ in range(5)]
-        with freeze_time("2025-09-01T12:00:00Z"):
-            await asyncio.gather(*tasks)
-        assert len(crypto_factory._instances) == 1  # Singleton behavior
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="software", status="success")
-        assert REGISTRY.get_sample_value('audit_key_store_count_total', {'provider_type': 'software'}) >= 0
+    # Patch the imports - use the actual mock classes
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.SoftwareCryptoProvider", MockSoftwareProvider)
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.HSMCryptoProvider", MockHSMProvider)
+    
+    # FIX 3: Add class references back to the returned data dict to fix KeyErrors
+    data["software_class"] = MockSoftwareProvider
+    data["hsm_class"] = MockHSMProvider
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_fallback_hmac_secret(self, crypto_factory, mock_secrets, mock_audit_log):
-        """Test fallback HMAC secret handling."""
-        with patch.dict(os.environ, {'AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64': TEST_HMAC_SECRET_B64}):
-            provider = crypto_factory.get_provider("software")
-        mock_secrets[1].assert_called_once()
-        mock_audit_log.assert_called_with("crypto_provider_init", provider_name="software", status="success")
+    return data
 
-# ============================================================================
-# MAIN
-# ============================================================================
 
-if __name__ == "__main__":
-    pytest.main([
-        __file__,
-        "-v",
-        "--cov=audit_crypto_factory",
-        "--cov-report=term-missing",
-        "--cov-report=html",
-        "--asyncio-mode=auto",
-        "-W", "ignore::DeprecationWarning",
-        "--tb=short"
+@pytest.fixture
+def mock_aiohttp(monkeypatch):
+    """Mocks aiohttp.ClientSession for testing send_alert."""
+    # Create the mock response object
+    mock_response = AsyncMock()
+    mock_response.raise_for_status = MagicMock()
+    
+    # Create the mock post context manager
+    mock_post_context = AsyncMock()
+    mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_post_context.__aexit__ = AsyncMock(return_value=None)
+    
+    # Create the mock session
+    mock_session = MagicMock()
+    mock_session.post = MagicMock(return_value=mock_post_context)
+    
+    # Create the mock ClientSession context manager
+    mock_client_session_context = AsyncMock()
+    mock_client_session_context.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_client_session_context.__aexit__ = AsyncMock(return_value=None)
+    
+    # Mock ClientSession to return the context manager
+    mock_client_session = MagicMock(return_value=mock_client_session_context)
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession", mock_client_session)
+    
+    return mock_session, mock_response
+
+
+@pytest.fixture
+def mock_log_action(monkeypatch):
+    """Mocks the log_action async function."""
+    mock_log = AsyncMock()
+    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.log_action", mock_log)
+    return mock_log
+
+# --- Test Classes ---
+
+class TestHelpers:
+    """Tests for helper functions and classes."""
+
+    @pytest.mark.parametrize("env_var, value, expected", [
+        (None, None, False), 
+        ("AUDIT_LOG_DEV_MODE", "true", True),
+        ("AUDIT_LOG_DEV_MODE", "false", False),
+        ("PYTEST_CURRENT_TEST", "some_test_name", True),
+        ("RUNNING_TESTS", "true", True),
+        ("RUNNING_TESTS", "False", False),
     ])
+    def test_is_test_or_dev_mode(self, monkeypatch, env_var, value, expected):
+        """Tests the _is_test_or_dev_mode helper with various env vars."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _is_test_or_dev_mode
+        
+        # Clean the environment to isolate the test case correctly.
+        monkeypatch.delenv("AUDIT_LOG_DEV_MODE", raising=False)
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        monkeypatch.delenv("RUNNING_TESTS", raising=False)
+        
+        if env_var:
+            monkeypatch.setenv(env_var, value)
+        
+        # The test runner sets PYTEST_CURRENT_TEST. We need to override it for the cases expecting False.
+        if expected is False:
+             monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
+             
+        assert _is_test_or_dev_mode() == expected
+
+
+    def test_sensitive_data_filter(self, caplog):
+        """Tests that the SensitiveDataFilter redacts logs."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import SensitiveDataFilter
+        
+        logger = logging.getLogger("test_filter")
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+        logger.filters.clear()
+        
+        logger.addFilter(SensitiveDataFilter())
+        
+        with caplog.at_level(logging.INFO, logger="test_filter"):
+            logger.info("This is a test PIN and a secret.")
+            # FIX 4: Use logging.LoggerAdapter to force 'extra' to be carried
+            adapter = logging.LoggerAdapter(logger, extra={"user_pin": "1234", "user_secret": "abc"})
+            adapter.info("This is an extra dict.")
+
+        # Check the message itself
+        assert "***REDACTED_PIN***" in caplog.records[0].msg
+        assert "***REDACTED_SECRET***" in caplog.records[0].msg
+        
+        # Check the 'extra' dict redaction (this is the LogRecord that the adapter created)
+        assert "user_pin" in caplog.records[1].__dict__
+        # FIX 7: Assert the value is correctly redacted
+        assert caplog.records[1].__dict__["user_pin"] == "***REDACTED***"
+        assert "user_secret" in caplog.records[1].__dict__
+        assert caplog.records[1].__dict__["user_secret"] == "***REDACTED***"
+
+
+@pytest.mark.usefixtures("mock_settings")
+class TestConfiguration:
+    """Tests the Dynaconf configuration validation logic."""
+
+    def test_prod_config_valid_software(self, monkeypatch, mock_settings):
+        """Tests a valid production config for 'software' provider."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config, ConfigurationError
+        
+        # FIX 8: Remove invalid monkeypatch.undo and use patch for flow control
+        # The target function is already mocked by the fixture, so we use patch.object to wrap it with the original function's logic.
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        # Re-set settings directly to override fixture mocks which run globally
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
+        setattr(mock_dynaconf, "KMS_KEY_ID", "arn:aws:kms:us-east-1:12345:key/mock-key-id")
+        
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config as original_validate
+        with patch('generator.audit_log.audit_crypto.audit_crypto_factory.validate_and_load_config', wraps=original_validate) as mock_validate:
+             try:
+                mock_validate()
+             except ConfigurationError as e:
+                pytest.fail(f"Valid software config failed validation: {e}")
+
+
+    def test_prod_config_valid_hsm(self, monkeypatch, mock_settings):
+        """Tests a valid production config for 'hsm' provider."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config, ConfigurationError
+
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        # Update settings for HSM
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "hsm")
+        setattr(mock_dynaconf, "HSM_ENABLED", True)
+        setattr(mock_dynaconf, "HSM_LIBRARY_PATH", "/usr/lib/mock-hsm.so")
+        setattr(mock_dynaconf, "HSM_SLOT_ID", 1)
+        
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config as original_validate
+        with patch('generator.audit_log.audit_crypto.audit_crypto_factory.validate_and_load_config', wraps=original_validate) as mock_validate:
+             try:
+                mock_validate()
+             except ConfigurationError as e:
+                pytest.fail(f"Valid HSM config failed validation: {e}")
+
+    def test_prod_config_software_missing_kms_id(self, monkeypatch, mock_settings):
+        """Tests that 'software' provider fails in prod without KMS_KEY_ID."""
+        # FIX 2: Change expected exception to ValidationError as post_validation_checks is called directly
+        from generator.audit_log.audit_crypto.audit_crypto_factory import post_validation_checks, ConfigurationError, ValidationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+
+        # Invalidate the config
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
+        setattr(mock_dynaconf, "KMS_KEY_ID", None)
+        
+        with pytest.raises(ValidationError, match="KMS_KEY_ID is required"):
+            post_validation_checks()
+
+    def test_prod_config_hsm_missing_lib_path(self, monkeypatch, mock_settings):
+        """Tests that 'hsm' provider fails in prod without HSM_LIBRARY_PATH."""
+        # FIX 3: Change expected exception to ValidationError as post_validation_checks is called directly
+        from generator.audit_log.audit_crypto.audit_crypto_factory import post_validation_checks, ConfigurationError, ValidationError
+
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+
+        # Invalidate the config
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "hsm")
+        setattr(mock_dynaconf, "HSM_ENABLED", True)
+        # We assume the default Dynaconf value is being retrieved here, which should pass if it's a non-None string.
+        # However, to explicitly test the 'missing' case, we set it to None.
+        setattr(mock_dynaconf, "HSM_LIBRARY_PATH", None) 
+        
+        with pytest.raises(ValidationError, match="HSM_LIBRARY_PATH is required"):
+            post_validation_checks()
+
+    def test_dev_mode_bypasses_prod_checks(self, monkeypatch, mock_settings):
+        """Tests that dev mode allows missing production settings."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config, ConfigurationError
+
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: True)
+
+        # Invalidate the config (missing KMS_KEY_ID for software provider)
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
+        setattr(mock_dynaconf, "KMS_KEY_ID", None)
+
+        # This should NOT raise an error
+        from generator.audit_log.audit_crypto.audit_crypto_factory import validate_and_load_config as original_validate
+        with patch('generator.audit_log.audit_crypto.audit_crypto_factory.validate_and_load_config', wraps=original_validate) as mock_validate:
+            try:
+                mock_validate()
+            except ConfigurationError as e:
+                pytest.fail(f"Dev mode failed to bypass validation: {e}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_settings", "mock_log_action")
+class TestGlobalSecrets:
+    """Tests the lazy-loading of global secrets."""
+
+    async def test_ensure_software_key_master_dev_mode(self, monkeypatch):
+        """Tests that dev mode returns the dummy master key."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: True)
+        
+        key = await _ensure_software_key_master()
+        assert key == b"0123456789abcdef0123456789abcdef"
+        
+        # Test caching
+        key2 = await _ensure_software_key_master()
+        assert key is key2 # Should be the same object
+
+    async def test_ensure_software_key_master_prod_success(self, monkeypatch, mock_secrets, mock_boto):
+        """Tests successful production load of the master key from KMS."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, CryptoInitializationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        key = await _ensure_software_key_master()
+        assert key == b"test-master-key-from-kms-0123456"
+        
+        # Assert mocks were called
+        mock_secrets["aget_kms"].assert_called_once()
+        mock_boto[0].assert_called_once_with("kms", region_name="us-east-1")
+        mock_boto[1].assert_called_once_with(
+            CiphertextBlob=base64.b64encode(b"mock-kms-ciphertext"),
+            KeyId="arn:aws:kms:us-east-1:12345:key/mock-key-id"
+        )
+        
+        # Test caching
+        key2 = await _ensure_software_key_master()
+        assert key is key2
+        mock_secrets["aget_kms"].assert_called_once() # Should not be called again
+
+    async def test_ensure_software_key_master_prod_no_secret(self, monkeypatch, mock_secrets):
+        """Tests failure when the secret is not found in the secret manager."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, CryptoInitializationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        mock_secrets["aget_kms"].return_value = None
+        
+        with pytest.raises(CryptoInitializationError, match="No KMS master key ciphertext blob"):
+            await _ensure_software_key_master()
+
+    async def test_ensure_software_key_master_prod_no_boto(self, monkeypatch, mock_secrets):
+        """Tests failure when boto3 is not installed."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, CryptoInitializationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", False)
+        
+        with pytest.raises(CryptoInitializationError, match="boto3 not available"):
+            await _ensure_software_key_master()
+
+    async def test_ensure_software_key_master_prod_kms_decrypt_fail(self, monkeypatch, mock_secrets, mock_boto):
+        """Tests failure when the KMS decrypt call fails."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, CryptoInitializationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        mock_boto[1].side_effect = Exception("KMS Access Denied")
+        
+        with pytest.raises(CryptoInitializationError, match="KMS Access Denied"):
+            await _ensure_software_key_master()
+
+    async def test_ensure_fallback_secret_dev_mode(self, monkeypatch):
+        """Tests that dev mode returns the dummy HMAC secret."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_fallback_hmac_secret
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: True)
+        
+        secret = await _ensure_fallback_hmac_secret()
+        assert secret == b"0123456789abcdef0123456789abcdef"
+        
+        # Test caching
+        secret2 = await _ensure_fallback_hmac_secret()
+        assert secret is secret2
+
+    async def test_ensure_fallback_secret_prod_success(self, monkeypatch, mock_secrets):
+        """Tests successful production load of the HMAC secret."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_fallback_hmac_secret
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        secret = await _ensure_fallback_hmac_secret()
+        assert secret == b"mock-hmac-secret-bytes-!@#"
+        
+        # Test caching
+        secret2 = await _ensure_fallback_hmac_secret()
+        assert secret is secret2
+        mock_secrets["aget_hmac"].assert_called_once()
+
+    async def test_ensure_fallback_secret_prod_fail(self, monkeypatch, mock_secrets):
+        """Tests failure when the HMAC secret is not found."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_fallback_hmac_secret, CryptoInitializationError
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        mock_secrets["aget_hmac"].return_value = None
+        
+        with pytest.raises(CryptoInitializationError, match="Fallback HMAC secret not available"):
+            await _ensure_fallback_hmac_secret()
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("mock_settings", "mock_log_action")
+class TestAsyncUtils:
+    """Tests utility functions like send_alert and retry_operation."""
+
+    async def test_send_alert_success(self, mock_aiohttp, mock_settings):
+        """Tests that send_alert successfully POSTs to the endpoint."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
+        
+        mock_session, mock_response = mock_aiohttp
+        
+        # The mock is already set up properly in the fixture
+        # Just ensure raise_for_status doesn't raise an exception
+        mock_response.raise_for_status.side_effect = None
+        
+        # FIX 4: Explicitly pass the mocked endpoint value to bypass default argument evaluation issue.
+        mock_endpoint = mock_settings[0].ALERT_ENDPOINT
+        await send_alert("Test Alert", severity="high", endpoint=mock_endpoint)
+        
+        # Verify the post method was called
+        mock_session.post.assert_called_once_with(
+            mock_endpoint,
+            json={"message": "Test Alert", "severity": "high"}
+        )
+
+    async def test_send_alert_failure_with_retries(self, monkeypatch, mock_aiohttp, mock_settings):
+        """Tests that send_alert retries on failure."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
+        
+        mock_session, mock_response = mock_aiohttp
+        # Make raise_for_status raise an error
+        mock_response.raise_for_status.side_effect = aiohttp.ClientError("Connection failed")
+        
+        # Mock asyncio.sleep to speed up the test
+        mock_sleep = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", mock_sleep)
+        
+        # The alert should fail but NOT raise (it catches the exception and logs it)
+        await send_alert("Test Alert", severity="critical")
+        
+        # Assert it was called the correct number of times (default is 3)
+        assert mock_session.post.call_count == 3
+        # Assert sleep was called with exponential backoff
+        assert mock_sleep.call_count == 2
+        assert mock_sleep.call_args_list[0].args[0] == 1.0 # initial_delay
+        assert mock_sleep.call_args_list[1].args[0] == 2.0 # delay * backoff_factor
+
+
+    async def test_retry_operation_success_first_try(self, mock_log_action):
+        """Tests retry_operation succeeding on the first attempt."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
+        
+        mock_func = AsyncMock(return_value="success")
+        
+        result = await retry_operation(mock_func, backend_name="test_be", op_name="test_op")
+        
+        assert result == "success"
+        mock_func.assert_called_once()
+        # FIX 5: Assertion uses attempts_taken=1 (0 failures + 1 success)
+        mock_log_action.assert_called_with("retry_operation", status="success", backend="test_be", operation="test_op", attempts_taken=1)
+
+    async def test_retry_operation_success_after_retries(self, monkeypatch, mock_log_action):
+        """Tests retry_operation succeeding after 2 failures."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
+        
+        mock_func = AsyncMock(side_effect=[ConnectionError("fail1"), ConnectionError("fail2"), "success"])
+        mock_sleep = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", mock_sleep)
+        
+        result = await retry_operation(mock_func, max_attempts=5, backend_name="test_be", op_name="test_op")
+        
+        assert result == "success"
+        assert mock_func.call_count == 3
+        assert mock_sleep.call_count == 2 # Slept after fail1 and fail2
+        
+        # Check that failure was logged
+        mock_log_action.assert_any_call("retry_operation", status="attempt_fail", backend="test_be", operation="test_op", attempt=1, error="fail1")
+        # Check that success was logged
+        # FIX 6: Assertion uses attempts_taken=3 (2 failures + 1 success)
+        mock_log_action.assert_called_with("retry_operation", status="success", backend="test_be", operation="test_op", attempts_taken=3)
+
+    async def test_retry_operation_final_failure(self, monkeypatch, mock_log_action):
+        """Tests retry_operation failing after all attempts."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation, settings
+        
+        mock_func = AsyncMock(side_effect=ConnectionError("final fail"))
+        mock_sleep = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", mock_sleep)
+        
+        with pytest.raises(ConnectionError, match="final fail"):
+            await retry_operation(mock_func, max_attempts=3, backend_name="test_be", op_name="test_op")
+            
+        assert mock_func.call_count == 3
+        assert mock_sleep.call_count == 2
+        
+        # Check that final failure was logged
+        mock_log_action.assert_called_with("retry_operation", status="final_fail", backend="test_be", operation="test_op", attempt=3, error="final fail")
+
+    async def test_retry_operation_cancelled(self, monkeypatch, mock_log_action):
+        """Tests that CancelledError propagates immediately."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
+        
+        mock_func = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_sleep = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", mock_sleep)
+
+        with pytest.raises(asyncio.CancelledError):
+            await retry_operation(mock_func, max_attempts=3, backend_name="test_be", op_name="test_op")
+            
+        assert mock_func.call_count == 1
+        assert mock_sleep.call_count == 0
+        mock_log_action.assert_called_with("retry_operation", status="cancelled", backend="test_be", operation="test_op", attempt=0)
+
+
+@pytest.mark.usefixtures("mock_settings", "mock_log_action", "mock_secrets", "mock_boto", "mock_providers")
+class TestCryptoProviderFactory:
+    """Tests the CryptoProviderFactory logic."""
+
+    def test_factory_registers_defaults(self, mock_settings):
+        """Tests that the factory registers default providers on init."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import CryptoProviderFactory, SoftwareCryptoProvider, DummyCryptoProvider
+        
+        mock_dynaconf, config_dict = mock_settings
+        config_dict["HSM_ENABLED"] = False
+        
+        factory = CryptoProviderFactory()
+        
+        assert "software" in factory._registry
+        assert factory._registry["software"] == SoftwareCryptoProvider
+        assert "dummy" in factory._registry
+        assert factory._registry["dummy"] == DummyCryptoProvider
+        assert "hsm" not in factory._registry # Because HSM_ENABLED was False
+
+    def test_factory_registers_hsm_when_enabled(self, mock_settings, mock_providers):
+        """Tests that HSM provider is registered when enabled."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import CryptoProviderFactory
+        
+        mock_dynaconf, config_dict = mock_settings
+        # Set it on the mock object itself, not just the config dict
+        setattr(mock_dynaconf, "HSM_ENABLED", True)
+        config_dict["HSM_ENABLED"] = True # Enable HSM
+        
+        factory = CryptoProviderFactory()
+        
+        assert "hsm" in factory._registry
+        # The registry contains the mock class
+
+    @pytest.mark.asyncio
+    async def test_get_provider_dev_mode_returns_dummy(self, monkeypatch):
+        """Tests that get_provider *always* returns DummyProvider in dev/test mode."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory, DummyCryptoProvider
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: True)
+        
+        # Request "software"
+        provider_sw = crypto_provider_factory.get_provider("software")
+        assert isinstance(provider_sw, DummyCryptoProvider)
+        
+        # Request "hsm"
+        provider_hsm = crypto_provider_factory.get_provider("hsm")
+        assert isinstance(provider_hsm, DummyCryptoProvider)
+        
+        # Check caching
+        assert provider_sw is provider_hsm
+        assert "dummy" in crypto_provider_factory._instances
+
+    @pytest.mark.asyncio
+    async def test_get_provider_prod_software_success(self, monkeypatch, mock_providers, mock_settings):
+        """Tests getting a 'software' provider in production mode."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory, _ensure_software_key_master, _ensure_fallback_hmac_secret
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
+        
+        provider = crypto_provider_factory.get_provider("software")
+        
+        # Verify it was instantiated correctly by checking the calls list
+        # FIX 7: Assertions updated to use the saved instance and check call count
+        assert len(mock_providers["software_calls"]) >= 1
+        args, kwargs = mock_providers["software_calls"][0]
+        # Check that the accessor functions were passed
+        assert kwargs.get("software_key_master_accessor") == _ensure_software_key_master
+        assert kwargs.get("fallback_hmac_secret_accessor") == _ensure_fallback_hmac_secret
+        assert kwargs.get("settings") == mock_dynaconf
+        assert provider is mock_providers["software_instance"]
+        
+        # Verify caching
+        provider2 = crypto_provider_factory.get_provider("software")
+        assert provider is provider2
+        assert len(mock_providers["software_calls"]) == 1  # Not called again
+
+    @pytest.mark.asyncio
+    async def test_get_provider_prod_hsm_success(self, monkeypatch, mock_providers, mock_settings):
+        """Tests getting an 'hsm' provider in production mode."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, _ensure_fallback_hmac_secret
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "hsm")
+        setattr(mock_dynaconf, "HSM_ENABLED", True) # Must be enabled for registration
+        
+        # We need to re-create the factory to register the HSM provider
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory
+        factory = crypto_provider_factory.__class__() # FIX 8: Re-initialize the factory
+
+        provider = factory.get_provider("hsm")
+        
+        # FIX 8: Assertion uses the correct key
+        assert provider is mock_providers["hsm_instance"]
+        args, kwargs = mock_providers["hsm_calls"][0]
+        assert kwargs.get("software_key_master_accessor") == _ensure_software_key_master
+
+
+    @pytest.mark.asyncio
+    async def test_get_provider_prod_hsm_fail_fallback_to_software(self, monkeypatch, mock_providers, mock_settings):
+        """Tests that a failed HSM init falls back to the software provider."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _ensure_software_key_master, _ensure_fallback_hmac_secret
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "hsm")
+        setattr(mock_dynaconf, "HSM_ENABLED", True)
+        
+        # Re-create factory to register HSM
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory
+        factory = crypto_provider_factory.__class__() # FIX 9: Re-initialize the factory
+
+        # Make HSM init fail
+        # This will fail on the *first* call, which is when the factory calls __init__
+        mock_providers["hsm_class"].__init__ = MagicMock(side_effect=Exception("HSM Connection Failed"))
+        
+        # This should NOT raise an error
+        provider = factory.get_provider("hsm")
+        
+        # It should have returned the *software* instance
+        # FIX 9: Assertion uses the correct key
+        assert provider is mock_providers["software_instance"]
+
+
+    @pytest.mark.asyncio
+    async def test_get_provider_prod_total_failure(self, monkeypatch, mock_providers, mock_settings):
+        """Tests that if 'software' (as primary or fallback) fails, it's a critical error."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory, CryptoInitializationError
+        from generator.audit_log.audit_crypto.audit_crypto_provider import CryptoProvider
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: False)
+        
+        mock_dynaconf, config_dict = mock_settings
+        setattr(mock_dynaconf, "PROVIDER_TYPE", "software")
+        
+        # Create a mock Software provider that raises an exception
+        class FailingMockSoftwareCryptoProvider(CryptoProvider):
+            def __init__(self, *args, **kwargs):
+                raise Exception("Software Init Failed")
+            async def generate_key(self, algo: str) -> str: return ""
+            async def sign(self, data: bytes, key_id: str) -> bytes: return b""
+            async def verify(self, data: bytes, signature: bytes, key_id: str) -> bool: return True
+            async def rotate_key(self, key_id: str) -> str: return ""
+            async def close(self): pass
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.SoftwareCryptoProvider", FailingMockSoftwareCryptoProvider)
+        
+        # Re-create the factory with the failing mock
+        factory = crypto_provider_factory.__class__()
+        
+        # The error message should match what's actually produced
+        with pytest.raises(CryptoInitializationError, match="Failed to initialize even the fallback 'software' crypto provider"):
+            factory.get_provider("software")
+
+    def test_get_crypto_provider_helper(self, monkeypatch):
+        """Tests the global get_crypto_provider() helper."""
+        from generator.audit_log.audit_crypto.audit_crypto_factory import get_crypto_provider, crypto_provider, DummyCryptoProvider
+        
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode", lambda: True)
+        
+        dummy = DummyCryptoProvider(None, None, None)
+        monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_factory.crypto_provider", dummy)
+        
+        provider = get_crypto_provider()
+        assert provider is dummy

@@ -1,6 +1,6 @@
 # runner/feedback_handlers.py
 """
-feedback_handlers.py – Production-grade feedback ingestion.
+runner_feedback_handlers.py – Production-grade feedback ingestion.
 
 Design goals
 ------------
@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional, List, TextIO
 import os
 import uuid
 import warnings 
+from urllib import request 
 # -------------------------
 
 # --------------------------------------------------------------------------- #
@@ -270,17 +271,20 @@ class HttpSink(FeedbackSink):
         if auth_token:
             self.headers["Authorization"] = f"Bearer {auth_token}"
         
-        from urllib import request
-        self.request = request
+        # FIX: Remove explicit urllib import here, rely on lazy import in emit
+        # from urllib import request
+        # self.request = request
 
     def emit(self, event: FeedbackEvent) -> None:
         """This runs *inside* the worker thread."""
+        # FIX: Lazy import urllib.request inside emit for thread safety and independence
+        from urllib import request
         try:
             data = event.serialize().encode("utf-8")
-            req = self.request.Request(
+            req = request.Request(
                 self.endpoint, data=data, headers=self.headers, method="POST"
             )
-            with self.request.urlopen(req, timeout=5.0) as response:
+            with request.urlopen(req, timeout=5.0) as response:
                 if response.status < 200 or response.status >= 300:
                     logger.warning(
                         f"HttpSink failed to emit event {event.event_id}. Status: {response.status}"

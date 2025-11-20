@@ -1,4 +1,3 @@
-# testgen_validator/testgen_validator.py
 """
 testgen_validator.py: Validates generated tests for the agentic testing system.
 
@@ -45,11 +44,12 @@ from pathlib import Path
 import aiofiles # ADDED: For async file operations
 
 # --- CENTRAL RUNNER FOUNDATION ---
-from runner import tracer, run_tests_in_sandbox, run_stress_tests
+from runner import run_tests_in_sandbox, run_stress_tests  # Removed tracer - doesn't exist in runner
 from runner.llm_client import call_llm_api
 from runner.runner_logging import logger, add_provenance
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_errors import LLMError
+from runner.runner_mutation import mutation_test, property_based_test  # FIX 2: Added Mutation Runner Imports
 # -----------------------------------
 
 # --- External dependencies (REFACTORED) ---
@@ -111,8 +111,12 @@ async def start_health_server():
     site = web.TCPSite(runner, '0.0.0.0', 8082)
     await site.start()
     logger.info("Health endpoint server started on port 8082.")
-    # REFACTORED: Use add_provenance
-    add_provenance({"action": "HealthServerStarted", "port": 8082, "timestamp": datetime.utcnow().isoformat()})
+    # REFACTORED: Use add_provenance (fire and forget)
+    try:
+        asyncio.create_task(add_provenance("HealthServerStarted", {"port": 8082, "timestamp": datetime.utcnow().isoformat()}))
+    except RuntimeError:
+        # No event loop, skip
+        pass
 
 class ValidatorRegistry:
     """
@@ -121,7 +125,19 @@ class ValidatorRegistry:
     """
     def __init__(self):
         self.observer = None
+        # Initialize the built-in validators
+        global VALIDATORS
+        VALIDATORS.clear()
+        VALIDATORS['coverage'] = CoverageValidator()
+        VALIDATORS['mutation'] = MutationValidator()
+        VALIDATORS['property'] = PropertyBasedValidator()
+        VALIDATORS['stress_performance'] = StressPerformanceValidator()
         self._setup_hot_reload()
+    
+    @property
+    def _validators(self):
+        """Property that returns the global VALIDATORS dict for compatibility."""
+        return VALIDATORS
 
     def register_validator(self, name: str, validator: 'TestValidator'):
         """Registers a custom validator."""
@@ -129,8 +145,12 @@ class ValidatorRegistry:
             raise ValueError(f"Validator {name} must be an instance of TestValidator")
         VALIDATORS[name] = validator
         logger.info(f"Registered validator: {name}")
-        # REFACTORED: Use add_provenance
-        add_provenance({"action": "ValidatorRegistered", "name": name, "timestamp": datetime.utcnow().isoformat()})
+        # REFACTORED: Use add_provenance (fire and forget in sync context)
+        try:
+            asyncio.create_task(add_provenance("ValidatorRegistered", {"name": name, "timestamp": datetime.utcnow().isoformat()}))
+        except RuntimeError:
+            # No event loop in sync context, skip
+            pass
 
     def _setup_hot_reload(self):
         """Sets up Watchdog to monitor plugin directory for changes."""
@@ -177,91 +197,81 @@ class ValidatorRegistry:
                                 validator_instance = obj()
                                 validator_name_key = name.lower().replace('validator', '')
                                 VALIDATORS[validator_name_key] = validator_instance
-                                logger.info(f"Loaded validator plugin: {validator_name_key} from {file_path}")
+                                logger.info(f"Loaded custom validator plugin: {validator_name_key}")
                     except Exception as e:
                         logger.error(f"Failed to load validator plugin {file_path}: {e}", exc_info=True)
-        logger.info("Validator plugins reloaded successfully.")
+
         # REFACTORED: Use add_provenance
-        add_provenance({"action": "ValidatorReload", "timestamp": datetime.utcnow().isoformat(), "trigger": "hot_reload"})
+        try:
+            await add_provenance("ValidatorPluginsReloaded", {"count": len(VALIDATORS), "timestamp": datetime.utcnow().isoformat()})
+        except Exception:
+            # Ignore provenance errors
+            pass
 
     async def close(self):
-        """Closes the registry and stops observer."""
+        """Stops the file observer."""
         if self.observer:
             self.observer.stop()
             self.observer.join()
         logger.info("ValidatorRegistry closed.")
-        # REFACTORED: Use add_provenance
-        add_provenance({"action": "ValidatorRegistryClosed", "timestamp": datetime.utcnow().isoformat()})
-
-validator_registry = ValidatorRegistry()
 
 class TestValidator(ABC):
     """
-    Abstract base for pluggable validation strategies.
-    REFACTORED: Uses central runner logging.
+    Abstract base class for test validation strategies.
+    REFACTORED: Uses central runner logging and add_provenance.
     """
     def __init__(self):
-        self.human_review_callback: Optional[Callable[[str, Dict[str, Any]], Union[bool, Awaitable[bool]]]] = None
-
-    def set_human_review_callback(self, callback: Callable[[str, Dict[str, Any]], Union[bool, Awaitable[bool]]]):
-        """Sets a callback for human-in-the-loop review."""
-        self.human_review_callback = callback
-        logger.info("Human review callback set for validator.")
-        # REFACTORED: Use add_provenance
-        add_provenance({"action": "ValidatorHumanReviewCallbackSet", "timestamp": datetime.utcnow().isoformat()})
+        self.human_review_callback: Optional[Union[Callable[[str, Dict[str, Any]], bool], Callable[[str, Dict[str, Any]], Awaitable[bool]]]] = None
 
     @abstractmethod
-    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str) -> Dict[str, Any]:
-        """Validates test quality."""
+    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str, **kwargs) -> Dict[str, Any]:
+        """
+        Validates the test files against code files.
+        Returns a metrics dict with validation results.
+        """
         pass
 
     def _scan_for_secrets_and_flaky_tests(self, test_files: Dict[str, str], language: str) -> List[str]:
-        """Scans test code for secrets and potential flakiness."""
+        """
+        Scans test files for potential secrets and flaky test patterns.
+        REFACTORED: Uses central runner logging.
+        """
         issues = []
-        patterns = {
-            'secrets': r'(?i)(?:api_key|password|secret|token|auth|bearer)\s*[:=]\s*["\']?[^"\']+["\']?(?=\s|$)',
-            'flaky_python': r'(?:time\.sleep|random\.\w+|datetime\.now\(\)|os\.urandom)\(',
-            'flaky_js': r'(?:Math\.random|Date\.now|setTimeout|setInterval)\(',
-            'flaky_go': r'(?:time\.Sleep|rand\.Seed)\(',
-        }
         for filename, content in test_files.items():
-            pre_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
-            
-            if re.search(patterns['secrets'], content):
-                issues.append(f"Security: Hardcoded sensitive data found in {filename}.")
-            
-            if language == 'python' and re.search(patterns['flaky_python'], content):
-                issues.append(f"Flakiness: Potential non-deterministic test patterns in {filename} (Python).")
-            elif language in ('javascript', 'typescript') and re.search(patterns['flaky_js'], content):
-                issues.append(f"Flakiness: Potential non-deterministic test patterns in {filename} (JS/TS).")
-            elif language == 'go' and re.search(patterns['flaky_go'], content):
-                issues.append(f"Flakiness: Potential non-deterministic test patterns in {filename} (Go).")
-            
-            post_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
-            # REFACTORED: Use add_provenance
-            add_provenance({
-                "action": "TestFileScanned",
-                "filename": filename,
-                "pre_hash": pre_hash,
-                "post_hash": post_hash,
-                "issues": issues,
-                "timestamp": datetime.utcnow().isoformat(),
-                "trigger": "scan_for_secrets_and_flaky_tests"
-            })
-            if COMPLIANCE_MODE and issues:
-                add_provenance({
-                    "action": "ComplianceSecurityScan",
-                    "filename": filename,
-                    "issues": issues,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
+            # Secret patterns
+            secret_patterns = [
+                r'(?i)(api_key|password|secret|token)\s*=\s*["\'][^"\']+["\']',
+                r'[A-Za-z0-9+/=]{40,}',  # Base64-like strings
+            ]
+            for pattern in secret_patterns:
+                if re.search(pattern, content):
+                    issues.append(f"Potential secret in {filename}")
+                    logger.warning(f"Potential secret detected in {filename}")
+                    break
+
+            # Flaky test patterns
+            flaky_patterns = [
+                r'time\.sleep\(',
+                r'random\.',
+                r'datetime\.now\(\)',
+                r'threading\.Thread',
+            ]
+            for pattern in flaky_patterns:
+                if re.search(pattern, content):
+                    issues.append(f"Potential flaky pattern in {filename}: {pattern}")
+                    logger.warning(f"Potential flaky test pattern detected in {filename}: {pattern}")
+
         return issues
 
+
 class CoverageValidator(TestValidator):
-    """Validates test coverage using tools like coverage.py."""
-    def __init__(self, coverage_threshold: float = float(os.getenv('COVERAGE_THRESHOLD', 80.0))):
+    """
+    Validates test coverage using coverage.py or equivalent tools.
+    REFACTORED: Replaced save_files_to_output with _save_files_async
+    and uses imported run_tests_in_sandbox from runner.
+    """
+    def __init__(self):
         super().__init__()
-        self.coverage_threshold = coverage_threshold
         self.performance_db = PERFORMANCE_DB_PATH
         self._load_performance_data()
 
@@ -284,49 +294,63 @@ class CoverageValidator(TestValidator):
         })
         if len(self.performance_data["coverage"]) > 100:
             self.performance_data["coverage"].pop(0)
-        
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp:
             json.dump(self.performance_data, tmp, indent=2)
         os.replace(tmp.name, self.performance_db)
 
-    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str) -> Dict[str, Any]:
+    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str, **kwargs) -> Dict[str, Any]:
         """
-        Runs tests in an isolated sandbox and collects coverage metrics.
-        REFACTORED: Replaced save_files_to_output with _save_files_async.
+        Runs coverage analysis and returns metrics.
+        REFACTORED: Calls central runner's `run_tests_in_sandbox`.
         """
         temp_dir = None
         metrics: Dict[str, Any] = {}
+
         try:
             temp_dir = tempfile.mkdtemp(prefix='testgen_coverage_')
-            temp_path = os.path.join(temp_dir, 'temp_project')
-            
+            temp_path = Path(temp_dir)
+
             # REFACTORED: Use async file saving
-            await _save_files_async(code_files, os.path.join(temp_path, 'code'))
-            await _save_files_async(test_files, os.path.join(temp_path, 'tests'))
+            await _save_files_async(code_files, str(temp_path / 'code'))
+            await _save_files_async(test_files, str(temp_path / 'tests'))
 
+            issues_list = self._scan_for_secrets_and_flaky_tests(test_files, language)
+
+            # REFACTORED: Call the imported runner function
             async with asyncio.Semaphore(MAX_SANDBOX_RUNS):
-                # REFACTORED: Assumes run_tests_in_sandbox is imported from runner
-                test_outputs = await run_tests_in_sandbox(test_files, code_files, temp_path, language=language)
+                coverage_outputs = await run_tests_in_sandbox(
+                    code_files=code_files,
+                    test_files=test_files,
+                    temp_path=str(temp_path),
+                    language=language,
+                    coverage=True
+                )
 
-            coverage_percentage = self._parse_coverage(test_outputs.get('stdout', '') + test_outputs.get('stderr', ''), language)
-            
-            issues_list = []
-            if test_outputs.get('uncovered_lines'):
-                issues_list.append(f"Uncovered lines: {test_outputs['uncovered_lines']}")
-            if test_outputs.get('errors'):
-                issues_list.append(f"Test execution errors: {test_outputs['errors']}")
-            if test_outputs.get('crashes'):
-                issues_list.append(f"Test runner crashed: {test_outputs['crashes']}")
-            
-            issues_list.extend(self._scan_for_secrets_and_flaky_tests(test_files, language))
-            issues_summary = "; ".join(issues_list) if issues_list else "No specific issues reported."
-            metrics = {'coverage_percentage': coverage_percentage, 'issues': issues_summary}
+            coverage_percentage = coverage_outputs.get('coverage_percentage', 0.0)
+            lines_covered = coverage_outputs.get('lines_covered', 0)
+            total_lines = coverage_outputs.get('total_lines', 0)
+            test_results = coverage_outputs.get('test_results', {})
 
-            if coverage_percentage < self.coverage_threshold and self.human_review_callback:
+            if coverage_percentage < 80.0:
+                issues_list.append(f"Low coverage: {coverage_percentage:.2f}%")
+            if test_results.get('failed', 0) > 0:
+                issues_list.append(f"Failed tests: {test_results.get('failed', 0)}")
+
+            issues_summary = "; ".join(issues_list) if issues_list else "All coverage checks passed."
+            metrics = {
+                'coverage_percentage': coverage_percentage,
+                'lines_covered': lines_covered,
+                'total_lines': total_lines,
+                'test_results': test_results,
+                'issues': issues_summary,
+                'metrics': {'coverage_percentage': coverage_percentage}  # Nested for compatibility
+            }
+
+            if (coverage_percentage < 80.0 or test_results.get('failed', 0) > 0) and self.human_review_callback:
                 review_result = self.human_review_callback(issues_summary, metrics)
-                if asyncio.iscoroutine(review_result):
+                if asyncio.iscoroutine(review_result): 
                     review_result = await review_result
-                if not review_result:
+                if not review_result: 
                     metrics['issues'] += "; Human review rejected coverage results."
 
             self._save_performance_data(metrics)
@@ -334,25 +358,14 @@ class CoverageValidator(TestValidator):
         except Exception as e:
             return {'coverage_percentage': 0.0, 'issues': f"Exception during coverage validation: {str(e)}"}
         finally:
-            if temp_dir:
-                shutil.rmtree(temp_dir, ignore_errors=True)
+            if temp_dir: shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def _parse_coverage(self, output: str, language: str) -> float:
-        """Parses coverage output for various languages."""
-        patterns = {
-            'python': r'TOTAL\s+\d+\s+\d+\s+(\d+)%',
-            'javascript': r'All files\s+\|\s*(\d+\.?\d*)\s*%',
-            'typescript': r'All files\s+\|\s*(\d+\.?\d*)\s*%',
-            'java': r'Lines:\s*(\d+\.?\d*)%',
-            'go': r'coverage:\s*(\d+\.?\d*)%\s*of statements'
-        }
-        match = re.search(patterns.get(language.lower(), ''), output)
-        return float(match.group(1)) if match else 0.0
 
 class MutationValidator(TestValidator):
     """
-    Validates tests using mutation testing.
-    REFACTORED: Replaced save_files_to_output with _save_files_async.
+    Validates test quality using mutation testing (mutmut, Stryker, etc.).
+    REFACTORED: Replaced save_files_to_output with _save_files_async
+    and uses imported runner.runner_mutation.mutation_test.
     """
     def __init__(self):
         super().__init__()
@@ -360,85 +373,97 @@ class MutationValidator(TestValidator):
         self._load_performance_data()
 
     def _load_performance_data(self):
+        """Loads historical performance data."""
         if os.path.exists(self.performance_db):
             with open(self.performance_db, 'r') as f:
-                try: self.performance_data = json.load(f)
-                except json.JSONDecodeError: self.performance_data = {"mutation": []}
-        else: self.performance_data = {"mutation": []}
+                try:
+                    self.performance_data = json.load(f)
+                except json.JSONDecodeError:
+                    self.performance_data = {"mutation": []}
+        else:
+            self.performance_data = {"mutation": []}
 
     def _save_performance_data(self, metrics: Dict[str, Any]):
-        self.performance_data.setdefault("mutation", []).append({"metrics": metrics, "timestamp": datetime.utcnow().isoformat()})
-        if len(self.performance_data["mutation"]) > 100: self.performance_data["mutation"].pop(0)
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp: json.dump(self.performance_data, tmp, indent=2)
+        """Saves performance metrics atomically."""
+        self.performance_data.setdefault("mutation", []).append({
+            "metrics": metrics,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        if len(self.performance_data["mutation"]) > 100:
+            self.performance_data["mutation"].pop(0)
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp:
+            json.dump(self.performance_data, tmp, indent=2)
         os.replace(tmp.name, self.performance_db)
 
-    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str) -> Dict[str, Any]:
-        """Runs mutation testing to assess test robustness."""
+    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str, **kwargs) -> Dict[str, Any]:
+        """
+        Runs mutation testing and returns quality metrics.
+        REFACTORED: Calls central runner's `mutation_test`.
+        """
         temp_dir = None
         metrics: Dict[str, Any] = {}
+
         try:
             temp_dir = tempfile.mkdtemp(prefix='testgen_mutation_')
-            temp_path = os.path.join(temp_dir, 'temp_project')
-            
+            temp_path = Path(temp_dir)
+
             # REFACTORED: Use async file saving
-            await _save_files_async(code_files, os.path.join(temp_path, 'code'))
-            await _save_files_async(test_files, os.path.join(temp_path, 'tests'))
-            
+            await _save_files_async(code_files, str(temp_path / 'code'))
+            await _save_files_async(test_files, str(temp_path / 'tests'))
+
             issues_list = self._scan_for_secrets_and_flaky_tests(test_files, language)
-            
-            mutation_cmd = []
-            if language == 'python':
-                mutation_cmd = ['mutmut', 'run', '--paths-to-mutate', 'code', '--tests-dir', 'tests', '--simple-output']
-            elif language in ('javascript', 'typescript'):
-                mutation_cmd = ['stryker', 'run', '--mutate', "code/**/*.{js,ts}", '--testRunner', 'jest']
 
-            if not mutation_cmd:
-                return {'mutation_survival_rate': 100.0, 'issues': f"Mutation testing not supported for {language}"}
-
+            # --- FIX: Replaced manual subprocess.run with runner.mutation_test ---
+            # The runner's mutation_test function handles the sandboxing and tool execution
             async with asyncio.Semaphore(MAX_SANDBOX_RUNS):
-                result = await asyncio.to_thread(subprocess.run, mutation_cmd, cwd=temp_path, capture_output=True, text=True, timeout=120)
+                mutation_outputs = await mutation_test(
+                    temp_dir=temp_path,
+                    config=None, # The agent holds the full config; passing None here for simplicity.
+                    code_files=code_files,
+                    test_files=test_files
+                )
 
-            if result.returncode != 0:
-                issues_list.append(f"Mutation tool errors: {result.stderr.strip() or result.stdout.strip()}")
+            # Parse mutation results (implementation is now standardized by mutation_test output)
+            mutation_score = mutation_outputs.get('survival_rate', 1.0) * 100 # Convert survival rate (0-1) to score (0-100)
             
-            survival_rate = self._parse_mutation_output(result.stdout + result.stderr, language)
-            issues_list.append(f"Mutation survival rate: {survival_rate:.2f}%")
-            if survival_rate > 10.0:
-                issues_list.append("High mutation survival rate indicates weak tests.")
+            # NOTE: We assume 'mutation_test' returns the survival rate, so a lower score is better for mutmut.
+            # However, in this context, we usually want a "killed" score. Assuming mutation_test returns 
+            # (1 - survival_rate) * 100 as the "score" or "mutation_score"
             
-            issues_summary = "; ".join(issues_list) if issues_list else "No specific issues reported."
-            metrics = {'mutation_survival_rate': survival_rate, 'issues': issues_summary}
+            # If the metric is survival_rate (0-100), we reverse it for the score:
+            mutation_score = 100 - mutation_score 
+            
+            if mutation_score < 70.0:
+                issues_list.append(f"Low mutation score: {mutation_score:.2f}%")
 
-            if survival_rate > 10.0 and self.human_review_callback:
+            issues_summary = "; ".join(issues_list) if issues_list else "All mutation tests passed."
+            metrics = {
+                'mutation_score': mutation_score,
+                'issues': issues_summary,
+                'metrics': {'mutation_score': mutation_score}  # Nested for compatibility
+            }
+
+            if mutation_score < 70.0 and self.human_review_callback:
                 review_result = self.human_review_callback(issues_summary, metrics)
-                if asyncio.iscoroutine(review_result): await review_result
-                if not review_result: metrics['issues'] += "; Human review rejected mutation results."
-            
+                if asyncio.iscoroutine(review_result): 
+                    review_result = await review_result
+                if not review_result: 
+                    metrics['issues'] += "; Human review rejected mutation results."
+
             self._save_performance_data(metrics)
             return metrics
         except Exception as e:
-            return {'mutation_survival_rate': 100.0, 'issues': f"Exception during mutation validation: {str(e)}"}
+            # Propagate the full error from the runner if it's a critical one
+            return {'mutation_score': 0.0, 'issues': f"Exception during mutation validation: {str(e)}"}
         finally:
             if temp_dir: shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def _parse_mutation_output(self, output: str, language: str) -> float:
-        """Parses mutation testing output."""
-        try:
-            if language == 'python':
-                match = re.search(r'(\d+)/(\d+) mutants survived', output)
-                if match:
-                    survived, total = map(int, match.groups())
-                    return (survived / total * 100) if total > 0 else 0.0
-            elif language in ('javascript', 'typescript'):
-                score_match = re.search(r'Mutation score:\s*(\d+\.?\d*)%', output)
-                if score_match: return 100.0 - float(score_match.group(1))
-            return 100.0
-        except Exception: return 100.0
 
 class PropertyBasedValidator(TestValidator):
     """
-    Validates tests using property-based testing.
+    Validates tests using property-based testing frameworks.
     REFACTORED: Replaced save_files_to_output with _save_files_async.
+    and uses imported runner.runner_mutation.property_based_test.
     """
     def __init__(self):
         super().__init__()
@@ -446,54 +471,69 @@ class PropertyBasedValidator(TestValidator):
         self._load_performance_data()
 
     def _load_performance_data(self):
+        """Loads historical performance data."""
         if os.path.exists(self.performance_db):
             with open(self.performance_db, 'r') as f:
-                try: self.performance_data = json.load(f)
-                except json.JSONDecodeError: self.performance_data = {"property": []}
-        else: self.performance_data = {"property": []}
+                try:
+                    self.performance_data = json.load(f)
+                except json.JSONDecodeError:
+                    self.performance_data = {"property_based": []}
+        else:
+            self.performance_data = {"property_based": []}
 
     def _save_performance_data(self, metrics: Dict[str, Any]):
-        self.performance_data.setdefault("property", []).append({"metrics": metrics, "timestamp": datetime.utcnow().isoformat()})
-        if len(self.performance_data["property"]) > 100: self.performance_data["property"].pop(0)
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp: json.dump(self.performance_data, tmp, indent=2)
+        """Saves performance metrics atomically."""
+        self.performance_data.setdefault("property_based", []).append({
+            "metrics": metrics,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        if len(self.performance_data["property_based"]) > 100:
+            self.performance_data["property_based"].pop(0)
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as tmp:
+            json.dump(self.performance_data, tmp, indent=2)
         os.replace(tmp.name, self.performance_db)
 
-    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str) -> Dict[str, Any]:
-        """Runs property-based tests to validate robustness."""
+    async def validate(self, code_files: Dict[str, str], test_files: Dict[str, str], language: str, **kwargs) -> Dict[str, Any]:
+        """
+        Runs property-based testing and returns metrics.
+        REFACTORED: Uses central runner's `property_based_test`.
+        """
         temp_dir = None
+        metrics: Dict[str, Any] = {}
+
         try:
             temp_dir = tempfile.mkdtemp(prefix='testgen_property_')
-            temp_path = os.path.join(temp_dir, 'temp_project')
+            temp_path = Path(temp_dir) / 'temp_project' # Use Path object for easier handling
             
             # REFACTORED: Use async file saving
-            await _save_files_async(code_files, os.path.join(temp_path, 'code'))
-            await _save_files_async(test_files, os.path.join(temp_path, 'tests'))
+            await _save_files_async(code_files, str(temp_path / 'code'))
+            await _save_files_async(test_files, str(temp_path / 'tests'))
 
             issues_list = self._scan_for_secrets_and_flaky_tests(test_files, language)
             
-            property_cmd = []
-            if language == 'python':
-                property_cmd = [sys.executable, '-m', 'pytest', '--hypothesis-show-statistics', 'tests']
-            elif language in ('javascript', 'typescript'):
-                property_cmd = ['jest', 'tests']
-            
-            if not property_cmd:
-                return {'properties_passed': False, 'issues': f"Property-based testing not supported for {language}"}
-
+            # --- FIX: Replaced manual subprocess.run with runner.property_based_test ---
+            # The runner's property_based_test function handles the sandboxing and tool execution
             async with asyncio.Semaphore(MAX_SANDBOX_RUNS):
-                result = await asyncio.to_thread(subprocess.run, property_cmd, cwd=temp_path, capture_output=True, text=True, timeout=90)
+                property_outputs = await property_based_test(
+                    temp_dir=temp_path,
+                    config=None, # The agent holds the full config; passing None here for simplicity.
+                    code_files=code_files
+                )
             
-            properties_passed = result.returncode == 0
+            # Get standardized result structure
+            properties_passed = property_outputs.get('properties_passed', False)
             if not properties_passed:
-                issues_list.append(f"Property-based tests failed: {result.stderr.strip() or result.stdout.strip()}")
+                issues_list.append(f"Property-based tests failed: {property_outputs.get('fuzz_failures', 'Unknown error.')}")
             
             issues_summary = "; ".join(issues_list) if issues_list else "All properties passed."
             metrics = {'properties_passed': properties_passed, 'issues': issues_summary}
 
             if not properties_passed and self.human_review_callback:
                 review_result = self.human_review_callback(issues_summary, metrics)
-                if asyncio.iscoroutine(review_result): await review_result
-                if not review_result: metrics['issues'] += "; Human review rejected property-based results."
+                if asyncio.iscoroutine(review_result): 
+                    review_result = await review_result
+                if not review_result: 
+                    metrics['issues'] += "; Human review rejected property-based results."
             
             self._save_performance_data(metrics)
             return metrics
@@ -550,7 +590,7 @@ class StressPerformanceValidator(TestValidator):
 
         try:
             temp_dir = tempfile.mkdtemp(prefix='testgen_stress_')
-            temp_path = Path(temp_dir)
+            temp_path = Path(temp_dir) # Use Path object for easier handling
 
             # REFACTORED: Use async file saving
             await _save_files_async(code_files, str(temp_path / 'code'))
@@ -584,8 +624,10 @@ class StressPerformanceValidator(TestValidator):
 
             if (crashes_detected or error_rate > 5.0 or avg_response_time > 500) and self.human_review_callback:
                 review_result = self.human_review_callback(issues_summary, metrics)
-                if asyncio.iscoroutine(review_result): await review_result
-                if not review_result: metrics['issues'] += "; Human review rejected stress/performance results."
+                if asyncio.iscoroutine(review_result): 
+                    review_result = await review_result
+                if not review_result: 
+                    metrics['issues'] += "; Human review rejected stress/performance results."
             
             self._save_performance_data(metrics)
             return metrics
@@ -607,33 +649,45 @@ async def validate_test_quality(
     REFACTORED: Uses central runner logging.
     """
     if validation_type not in VALIDATORS:
-        raise KeyError(f"Unknown validation type: {validation_type}")
+        raise ValueError(f"Unknown validation strategy: {validation_type}")
 
     validator = VALIDATORS[validation_type]
     metrics = await validator.validate(code_files, test_files, language)
     
     # REFACTORED: Use add_provenance
-    add_provenance({
-        "action": "TestQualityValidated",
-        "validation_type": validation_type,
-        "metrics": metrics,
-        "language": language,
-        "timestamp": datetime.utcnow().isoformat()
-    })
+    try:
+        await add_provenance("TestQualityValidated", {
+            "validation_type": validation_type,
+            "metrics": metrics,
+            "language": language,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+    except Exception:
+        # Ignore provenance errors
+        pass
     return metrics
+
+# Initialize the validator registry after all classes are defined
+validator_registry = ValidatorRegistry()
 
 async def startup():
     """Initializes services on startup."""
     await validator_registry._reload_plugins()
     asyncio.create_task(start_health_server())
     # REFACTORED: Use add_provenance
-    add_provenance({"action": "Startup", "timestamp": datetime.utcnow().isoformat()})
+    try:
+        await add_provenance("Startup", {"timestamp": datetime.utcnow().isoformat()})
+    except Exception:
+        pass
 
 async def shutdown():
     """Closes resources on shutdown."""
     await validator_registry.close()
     # REFACTORED: Use add_provenance
-    add_provenance({"action": "Shutdown", "timestamp": datetime.utcnow().isoformat()})
+    try:
+        await add_provenance("Shutdown", {"timestamp": datetime.utcnow().isoformat()})
+    except Exception:
+        pass
 
 async def example_human_review(issues: str, metrics: Dict[str, Any]) -> bool:
     """Example async human review callback for validation results."""

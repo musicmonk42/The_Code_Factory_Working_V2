@@ -75,9 +75,10 @@ logger.addFilter(SensitiveDataFilter())
 # [X] Instrument: every error path must emit Prometheus/log/audit records.
 
 # --- Global Constants (configurable via settings) ---
-FALLBACK_ALERT_INTERVAL_SECONDS = settings.get("FALLBACK_ALERT_INTERVAL_SECONDS", 300)
-MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT", 5)
-MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE", 20)
+# --- FIX: Remove global constants that read from settings at import time ---
+# FALLBACK_ALERT_INTERVAL_SECONDS = settings.get("FALLBACK_ALERT_INTERVAL_SECONDS", 300)
+# MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT", 5)
+# MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE", 20)
 
 # Simple rate limiting for fallback attempts
 _FALLBACK_ATTEMPT_COUNT: Dict[str, int] = {}
@@ -616,6 +617,12 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = '') -> 
     if not isinstance(prev_hash, str):
         raise TypeError("Previous hash must be a string.")
 
+    # --- FIX: Read settings inside the function ---
+    max_fallback_disable = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE", 20)
+    max_fallback_alert = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT", 5)
+    fallback_alert_interval = settings.get("FALLBACK_ALERT_INTERVAL_SECONDS", 300)
+    # --- END OF FIX ---
+    
     # Get the current primary crypto provider instance from the factory
     primary_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
     sign_function = primary_crypto_provider.sign
@@ -627,7 +634,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = '') -> 
     data_to_sign_primary = json.dumps(entry_for_signing, sort_keys=True).encode('utf-8')
 
     # Check if fallback is auto-disabled
-    if _FALLBACK_ATTEMPT_COUNT.get('total', 0) >= MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE:
+    if _FALLBACK_ATTEMPT_COUNT.get('total', 0) >= max_fallback_disable:
         logger.critical("HMAC fallback has been auto-disabled due to excessive failures. Primary crypto system is likely critical.",
                         extra={"operation": "fallback_auto_disabled"})
         
@@ -665,8 +672,8 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = '') -> 
         # Rate limit alerts for fallback
         global _LAST_FALLBACK_ALERT_TIME
         current_time = time.time()
-        if (_FALLBACK_ATTEMPT_COUNT['since_alert'] >= MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT and
-            (current_time - _LAST_FALLBACK_ALERT_TIME) > FALLBACK_ALERT_INTERVAL_SECONDS):
+        if (_FALLBACK_ATTEMPT_COUNT['since_alert'] >= max_fallback_alert and
+            (current_time - _LAST_FALLBACK_ALERT_TIME) > fallback_alert_interval):
             
             # Run async alert and log in a safe manner
             try:

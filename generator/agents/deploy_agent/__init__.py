@@ -1,5 +1,6 @@
+# __init__.py
 from .deploy_agent import DeployAgent
-from .deploy_prompt import build_deploy_prompt  # if that’s your public builder
+from .deploy_prompt import DeployPromptAgent  # FIX: Import the class, not the non-existent method
 from .deploy_response_handler import (
     parse_llm_response,
     monitor_and_scan_code,
@@ -13,7 +14,7 @@ from .deploy_validator import (
 
 __all__ = [
     "DeployAgent",
-    "build_deploy_prompt",
+    "DeployPromptAgent",  # FIX: Export the correct class
     "parse_llm_response",
     "monitor_and_scan_code",
     "HandlerRegistry",

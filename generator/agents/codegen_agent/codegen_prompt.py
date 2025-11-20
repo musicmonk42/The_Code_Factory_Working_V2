@@ -59,10 +59,11 @@ except ImportError:
 # --- New Centralized Utility Imports (Hypothetical) ---
 # Assuming 'runner' is an importable package structure
 try:
-    from runner.runner_logging import log_audit_event
-    from runner.runner_security_utils import redact_secrets
-    from runner.llm_client import count_tokens
-    from runner.llm_client import SecretsManager # <-- ADDED REAL IMPORT
+    # --- FIX: Changed imports to be relative ---
+    from ...runner.runner_logging import log_audit_event
+    from ...runner.runner_security_utils import redact_secrets
+    from ...runner.llm_client import count_tokens
+    from ...runner.llm_client import SecretsManager # <-- ADDED REAL IMPORT
     # We will need a placeholder or a default AuditLogger/security_utils for the function signature if we cannot remove the dependency fully.
     # For now, we will update the usage. The dummy AuditLogger in build_code_generation_prompt will be replaced.
 except ImportError as e:

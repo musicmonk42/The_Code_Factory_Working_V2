@@ -3,54 +3,90 @@ import os
 import tempfile
 import pathlib
 
-# FIX: Set env vars at the very top before other imports
+# --- CRITICAL ENVIRONMENT SETUP (MUST BE FIRST) ---
+# Set TESTING flags for conditional logic in runner modules
 os.environ.setdefault("TESTING", "1")
-tmp_plugins = pathlib.Path(tempfile.gettempdir()) / "plugins"
+os.environ.setdefault("DEV_MODE", "1")
+
+# Create and set the LLM plugin directory (Dynaconf/LLMPluginManager dependency)
+# Setting both formats for Dynaconf compatibility
+tmp_plugins = pathlib.Path(tempfile.gettempdir()) / f"plugins_pytest_{os.getpid()}"
 tmp_plugins.mkdir(exist_ok=True)
 os.environ.setdefault("LLM_PLUGIN__PLUGIN_DIR", str(tmp_plugins))
 os.environ.setdefault("LLM_PLUGIN_PLUGIN_DIR", str(tmp_plugins))
-# optional noise reducers
-os.environ.setdefault("DEV_MODE", "1")
+
+# Silence noisy third-party libraries (OTEL, Audit Crypto)
 os.environ.setdefault("OTEL_SDK_DISABLED", "1")
 os.environ.setdefault("AUDIT_CRYPTO_DISABLE_IMPORT_VALIDATE", "1")
-# End of patch
-
-from pathlib import Path
-
-# === 1. Set TESTING flags ===
-# Make test mode detectable during import
-os.environ["TESTING"] = "1"
-os.environ["DEV_MODE"] = "1"
-# Silence OTEL provider warnings in tests
-os.environ["OTEL_SDK_DISABLED"] = "1"
-# Ensure audit-crypto factory doesn't validate at import (if still reached somewhere)
-os.environ["AUDIT_CRYPTO_DISABLE_IMPORT_VALIDATE"] = "1"
-
-# FIX: Provide a default PLUGIN_DIR using the correct Dynaconf env var prefix
-# and create the directory to prevent validation errors.
-# Note: This block is now redundant due to the patch above, but harmless to leave.
-tmp_plugins = Path(tempfile.gettempdir()) / "plugins"
-tmp_plugins.mkdir(exist_ok=True)
-# Set both formats as Dynaconf might pick up either
-os.environ.setdefault("LLM_PLUGIN__PLUGIN_DIR", str(tmp_plugins))
-os.environ.setdefault("LLM_PLUGIN_PLUGIN_DIR", str(tmp_plugins))
-
 
 # === 2. Set Dynaconf DEVELOPMENT environment variables ===
-os.environ["AUDIT_CRYPTO_DEVELOPMENT_PROVIDER_TYPE"] = "software"
+# These configurations ensure audit/crypto functions fall back gracefully in DEV mode
+# --- FIX: Corrected variable name ---
+os.environ["PROVIDER_TYPE"] = "software"
+# --- END FIX ---
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_DEFAULT_ALGO"] = "hmac"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
-os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = "/tmp/pytest-keys"
+os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = str(pathlib.Path(tempfile.gettempdir()) / "pytest-keys") # Use tempdir
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KMS_KEY_ID"] = "dummy-kms-key"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_AWS_REGION"] = "us-east-1"
 
+
 # === 3. Add project root to path ===
-project_root = Path(__file__).parent.parent.parent
+project_root = pathlib.Path(__file__).parent.parent.parent
 import sys
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# === 4. Pytest config ===
+# === 4. Pytest config & Fixtures ===
 import pytest
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+from runner.llm_client import LLMClient
+from runner import llm_client # Import the module namespace to access the global variable
+
 def pytest_configure(config):
+    """Sets pytest configuration options."""
     config.option.asyncio_mode = "auto"
+    
+# CRITICAL FIX for asynchronous cleanup hang during teardown
+# We must explicitly shut down the global LLMClient singleton if it was initialized.
+@pytest.fixture(scope="session")
+def event_loop():
+    """Ensure a session-scoped event loop for cleaner async finalizers."""
+    # Get or create event loop
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    yield loop
+    
+    # Minimal cleanup - just close the loop at the very end
+    try:
+        loop.close()
+    except Exception:
+        pass
+
+@pytest.fixture(scope="session", autouse=True)
+async def async_cleanup_global_client():
+    """
+    Session-scoped async fixture to explicitly await LLMClient.close()
+    on the global singleton instance, resolving the KeyboardInterrupt issue.
+    """
+    yield
+    # CRITICAL FIX: If the global client was initialized, await its close method.
+    if llm_client._async_client:
+        try:
+            # Explicitly await the cleanup of all aiohttp/redis resources with timeout.
+            await asyncio.wait_for(llm_client._async_client.close(), timeout=5.0)
+        except asyncio.TimeoutError:
+            print(f"\n[CLEANUP TIMEOUT] Global LLMClient cleanup timed out after 5s", file=sys.stderr)
+        except Exception as e:
+            # Log the error but continue teardown
+            print(f"\n[CLEANUP ERROR] Failed to close global LLMClient: {e}", file=sys.stderr)
+        finally:
+            llm_client._async_client = None

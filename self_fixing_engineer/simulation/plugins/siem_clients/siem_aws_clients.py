@@ -210,38 +210,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
         try:
             aws_config_data = config.get(self.client_type.lower(), {})
             
-            # Load credentials from Secrets Manager if specified
-            aws_credentials_secret_id = aws_config_data.get("aws_credentials_secret_id")
-            secrets_providers = aws_config_data.get("secrets_providers", [])
-            secrets_provider_config = aws_config_data.get("secrets_provider_config", {})
-
-            if aws_credentials_secret_id:
-                for provider_name in secrets_providers:
-                    try:
-                        if provider_name == "aws": # Only AWS Secrets Manager for AWS creds
-                            backend = AWSSecretsBackend(region_name=aws_config_data.get("region_name"))
-                            credentials_json = await backend.get_secret(aws_credentials_secret_id)
-                        # Add logic for other providers if they can store AWS creds
-                        # For now, we assume this is not the case
-                        else:
-                            _base_logger.warning(f"Secrets backend '{provider_name}' not supported for AWS credentials.", extra={'client_type': self.client_type})
-                            continue
-                        
-                        credentials = json.loads(credentials_json)
-                        aws_config_data["aws_access_key_id"] = credentials.get("aws_access_key_id")
-                        aws_config_data["aws_secret_access_key"] = credentials.get("aws_secret_access_key")
-                        if not aws_config_data["aws_access_key_id"] or not aws_config_data["aws_secret_access_key"]:
-                            raise ValueError("AWS credentials JSON missing 'aws_access_key_id' or 'aws_secret_access_key'.")
-                        self.logger.info(f"AWS credentials loaded from secrets backend: {provider_name}.")
-                        break
-                    except Exception as e:
-                        _base_logger.warning(f"Failed to fetch AWS credentials from {provider_name}: {e}", exc_info=True, extra={'client_type': self.client_type})
-                        continue
-                else:
-                    # If secrets_id was provided but all providers failed
-                    _base_logger.critical("CRITICAL: Failed to load AWS credentials from any configured secrets backend. Aborting startup.", extra={'client_type': self.client_type})
-                    alert_operator("CRITICAL: Failed to load AWS credentials from secrets. Aborting.", level="CRITICAL")
-                    sys.exit(1)
+            # --- FIX: REMOVED ASYNC BLOCK ---
+            # The async loading of secrets is moved to _get_aws_client
+            # We validate the configuration *as provided*.
             
             validated_config = AwsCloudWatchConfig(**aws_config_data).dict(exclude_unset=True)
         except ValidationError as e:
@@ -249,8 +220,8 @@ class AwsCloudWatchClient(BaseSIEMClient):
             alert_operator(f"CRITICAL: Invalid AWS CloudWatch client configuration: {e}. Aborting.", level="CRITICAL")
             sys.exit(1) # Fail fast on configuration errors
         except Exception as e:
-            _base_logger.critical(f"CRITICAL: Failed to load AWS CloudWatch client secrets or configuration: {e}. Aborting startup.", exc_info=True, extra={'client_type': self.client_type})
-            alert_operator(f"CRITICAL: Failed to load AWS CloudWatch client secrets or configuration: {e}. Aborting.", level="CRITICAL")
+            _base_logger.critical(f"CRITICAL: Failed to load AWS CloudWatch client configuration: {e}. Aborting startup.", exc_info=True, extra={'client_type': self.client_type})
+            alert_operator(f"CRITICAL: Failed to load AWS CloudWatch client configuration: {e}. Aborting.", level="CRITICAL")
             sys.exit(1) # Fail fast on general config/secrets loading errors
 
         self.region_name = validated_config["region_name"]
@@ -260,6 +231,12 @@ class AwsCloudWatchClient(BaseSIEMClient):
         self.auto_create_log_stream = validated_config["auto_create_log_stream"]
         self.aws_access_key_id = validated_config.get("aws_access_key_id")
         self.aws_secret_access_key = validated_config.get("aws_secret_access_key")
+        
+        # --- FIX: Store secret config for lazy loading ---
+        self.aws_credentials_secret_id = validated_config.get("aws_credentials_secret_id")
+        self.secrets_providers = validated_config.get("secrets_providers", [])
+        self.secrets_provider_config = validated_config.get("secrets_provider_config")
+        # --- END FIX ---
 
         self._cw_logs_client = None # Boto3 client, lazily initialized
         self._kms_client = None # Boto3 KMS client, lazily initialized
@@ -270,6 +247,38 @@ class AwsCloudWatchClient(BaseSIEMClient):
     async def _get_aws_client(self):
         """Lazily initializes and returns the boto3 CloudWatch Logs client."""
         if self._cw_logs_client is None:
+            
+            # --- FIX: ADDED ASYNC SECRET LOADING ---
+            # Check if we need to load credentials from a secret
+            if self.aws_credentials_secret_id and not (self.aws_access_key_id and self.aws_secret_access_key):
+                _base_logger.debug("aws_credentials_secret_id found, attempting to load credentials from secrets backend.", extra=self.logger.extra)
+                for provider_name in self.secrets_providers:
+                    try:
+                        if provider_name == "aws":
+                            backend = AWSSecretsBackend(region_name=self.region_name)
+                            credentials_json = await backend.get_secret(self.aws_credentials_secret_id)
+                        else:
+                            _base_logger.warning(f"Secrets backend '{provider_name}' not supported for AWS credentials.", extra={'client_type': self.client_type})
+                            continue
+                        
+                        credentials = json.loads(credentials_json)
+                        self.aws_access_key_id = credentials.get("aws_access_key_id")
+                        self.aws_secret_access_key = credentials.get("aws_secret_access_key")
+                        if not self.aws_access_key_id or not self.aws_secret_access_key:
+                            raise ValueError("AWS credentials JSON missing 'aws_access_key_id' or 'aws_secret_access_key'.")
+                        self.logger.info(f"AWS credentials loaded from secrets backend: {provider_name}.")
+                        break # Successfully loaded
+                    except Exception as e:
+                        _base_logger.warning(f"Failed to fetch AWS credentials from {provider_name}: {e}", exc_info=True, extra={'client_type': self.client_type})
+                        continue
+                else:
+                    # If secrets_id was provided but all providers failed
+                    _base_logger.critical("CRITICAL: Failed to load AWS credentials from any configured secrets backend. Aborting client creation.", extra={'client_type': self.client_type})
+                    alert_operator("CRITICAL: Failed to load AWS credentials from secrets. Aborting.", level="CRITICAL")
+                    # Raise a config error, which will be caught by the calling function
+                    raise SIEMClientConfigurationError("Failed to load AWS credentials from any configured secrets backend.", self.client_type)
+            # --- END: ASYNC SECRET LOADING ---
+
             # If aws_access_key_id/secret_access_key are None, boto3 will use its default credential chain (IAM roles, etc.)
             if self.aws_access_key_id and self.aws_secret_access_key:
                 # SECURITY ENHANCEMENT: Decrypt credentials with KMS if in production

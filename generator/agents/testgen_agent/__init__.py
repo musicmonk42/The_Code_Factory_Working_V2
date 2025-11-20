@@ -17,27 +17,63 @@ Each submodule integrates with:
 - runner.llm_client           → Async LLM orchestration (OpenAI, Anthropic, local).
 - runner.runner_metrics       → Prometheus / OTEL-compatible instrumentation.
 - runner.tracer               → Distributed tracing support.
+
+FIXED: This version uses relative imports and proper error handling to work
+both as a standalone package and as part of a larger project.
 """
 
-from .testgen_agent import TestGenAgent
-from .testgen_prompt import build_testgen_prompt
-from .testgen_response_handler import parse_testgen_response, handle_testgen_response
-from .testgen_validator import (
-    validate_test_quality,
-    CoverageValidator,
-    MutationValidator,
-    PropertyBasedValidator,
-    StressPerformanceValidator,
-)
+# Import main classes and functions with error handling
+__all__ = []
 
-__all__ = [
-    "TestGenAgent",
-    "build_testgen_prompt",
-    "parse_testgen_response",
-    "handle_testgen_response",
-    "validate_test_quality",
-    "CoverageValidator",
-    "MutationValidator",
-    "PropertyBasedValidator",
-    "StressPerformanceValidator",
-]
+try:
+    from .testgen_agent import TestGenAgent, Policy, validate_policy
+    __all__.extend(["TestGenAgent", "Policy", "validate_policy"])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Could not import testgen_agent components: {e}")
+
+try:
+    from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
+    __all__.extend(["build_agentic_prompt", "initialize_codebase_for_rag"])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Could not import testgen_prompt components: {e}")
+
+try:
+    from .testgen_response_handler import parse_llm_response, handle_testgen_response
+    __all__.extend(["parse_llm_response", "handle_testgen_response"])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Could not import testgen_response_handler components: {e}")
+
+try:
+    from .testgen_validator import (
+        validate_test_quality,
+        CoverageValidator,
+        MutationValidator,
+        PropertyBasedValidator,
+        StressPerformanceValidator,
+    )
+    __all__.extend([
+        "validate_test_quality",
+        "CoverageValidator",
+        "MutationValidator",
+        "PropertyBasedValidator", 
+        "StressPerformanceValidator",
+    ])
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Could not import testgen_validator components: {e}")
+
+# Package metadata
+__version__ = "1.0.0"
+__author__ = "TestGen Agent Team"
+__description__ = "Intelligent test generation agent with validation and refinement capabilities"
+
+# If no imports succeeded, provide helpful error message
+if not __all__:
+    import warnings
+    warnings.warn(
+        "No testgen_agent components could be imported. "
+        "Please ensure all dependencies are installed and the runner foundation is available."
+    )

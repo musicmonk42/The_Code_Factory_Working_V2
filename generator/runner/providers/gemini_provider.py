@@ -1,7 +1,11 @@
 # runner/llm_client_providers/gemini_provider.py
 """
 gemini_provider.py
-Google Gemini LLM provider plugin with GOAT-level upgrades for observability, reliability, security, extensibility, and more.
+Google Gemini LLM provider plugin.
+
+This is a "dumb" plugin. All reliability (circuit breaking),
+observability (metrics, logging, tracing), and security (redaction)
+are handled by the llm_client.py manager that calls this plugin.
 """
 
 import os
@@ -11,6 +15,7 @@ import time
 import re
 import json
 import yaml
+import asyncio
 from typing import Union, Dict, Any, AsyncGenerator, Callable, List, Optional
 import aiohttp
 
@@ -18,170 +23,90 @@ import aiohttp
 try:
     from google.generativeai import GenerativeModel, configure
     from google.generativeai.types import GenerateContentResponse
-    import google.generativeai.types.generation_types
+    # Import specific error types for translation
+    from google.api_core.exceptions import InvalidArgument, PermissionDenied, NotFound, InternalServerError, ServiceUnavailable, DeadlineExceeded, ResourceExhausted
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
     # Define dummy types for the class to load without crashing
     class GenerateContentResponse: pass
+    class InvalidArgument(Exception): pass
+    class PermissionDenied(Exception): pass
+    class NotFound(Exception): pass
+    class InternalServerError(Exception): pass
+    class ServiceUnavailable(Exception): pass
+    class DeadlineExceeded(Exception): pass
+    class ResourceExhausted(Exception): pass
+
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # ---- Runner foundation imports ------------------------------------------------
-# [FIX] Corrected imports
-from runner.runner_logging import logger, log_audit_event
-from runner.runner_metrics import (
-    LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS,
-    LLM_TOKENS_INPUT, LLM_TOKENS_OUTPUT, LLM_COST_TOTAL,
-    LLM_PROVIDER_HEALTH,
-)
-from runner.runner_security_utils import redact_secrets
+from runner.llm_provider_base import LLMProvider
 from runner.runner_errors import LLMError, ConfigurationError
-from runner.runner_config import RunnerConfig, load_config # [FIX] Import load_config
-
-# [FIX] Guarded tracer import
-try:
-    from runner import tracer   # central OTEL tracer
-    if tracer is None: raise ImportError("Tracer is None")
-except ImportError:
-    logger.warning("Tracer not found, using OTel default.")
-    from opentelemetry import trace
-    tracer = trace.get_tracer(__name__)
-
-# [FIX] Corrected import path for base class
-try:
-    from runner.llm_client.llm_provider_base import LLMProvider
-except ImportError:
-    try:
-        from ..docgen_llm_call import LLMProvider
-    except ImportError:
-        logger.critical("Failed to import LLMProvider base class. Shutting down.")
-        # Define a dummy base class to allow the file to be parsed
-        class LLMProvider:
-            name: str = "dummy"
-            def __init__(self): pass
-            async def call(self, *args, **kwargs): raise NotImplementedError()
-            async def health_check(self, *args, **kwargs): return False
+from runner.runner_config import load_config # For loading API key in get_provider
 # -------------------------------------------------------------------------------
 
-# Configuration and API Key loading
-config = load_config() # [FIX] Use load_config()
-API_KEY = config.llm_provider_api_key or os.getenv("GEMINI_API_KEY")
-
-# [REMOVED] Global configure(api_key=API_KEY) - Moved to __init__
+# Get the logger for this module
+logger = logging.getLogger(__name__)
 
 # Metrics initialization (Prometheus) - Retain local metrics for stream chunks
+# These are plugin-specific and not managed by the central llm_client
 from prometheus_client import Counter, Histogram
+# --- FIX: Import shared metrics from runner_metrics ---
+from runner.runner_metrics import stream_chunks_total, stream_chunk_latency
+# --- END FIX ---
 
-stream_chunks_total = Counter('llm_stream_chunks_total', 'Total number of stream chunks', ['model'])
-stream_chunk_latency = Histogram('llm_stream_chunk_latency_seconds', 'Latency per stream chunk in seconds', ['model'])
+# --- FIX: REMOVE LOCAL DEFINITIONS ---
+# stream_chunks_total = Counter('llm_stream_chunks_total', 'Total number of stream chunks', ['model'])
+# stream_chunk_latency = Histogram('llm_stream_chunk_latency_seconds', 'Latency per stream chunk in seconds', ['model'])
+# --- END FIX ---
 
-# Simple Circuit Breaker implementation
-class CircuitBreaker:
-    """
-    A simple circuit breaker to prevent calls during repeated failures.
-    """
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failures = 0
-        self.last_failure_time: float = 0.0
-        self.is_open = False
-
-    def can_proceed(self) -> bool:
-        if self.is_open:
-            if time.time() - self.last_failure_time > self.recovery_timeout:
-                self.is_open = False
-                self.failures = 0
-                logger.info("Circuit breaker recovered and closed.")
-                return True
-            logger.warning("Circuit breaker is open.")
-            return False
-        return True
-
-    def is_closed(self) -> bool:
-        return not self.is_open
-    
-    def record_failure(self):
-        self.failures += 1
-        self.last_failure_time = time.time()
-        if self.failures >= self.failure_threshold:
-            self.is_open = True
-            logger.error(f"Circuit breaker opened after {self.failures} failures.")
-
-    def record_success(self):
-        if self.is_open:
-            logger.info("Circuit breaker closed after success.")
-        self.failures = 0
-        self.is_open = False
-
-# Security: Regex patterns for scrubbing secrets/PII (Used only for local log redaction now)
-SECRET_PATTERNS = [
-    r'(?i)(api[-_]?key|secret|token)\s*[:=]\s*["\']?[a-zA-Z0-9_\-]{20,}["\']?',  # API keys, secrets, tokens
-    r'(?i)password\s*[:=]\s*["\']?.+?["\']?',  # Passwords
-    r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Emails
-    r'\b(?:\d{3}-?\d{2}-?\d{4})\b',  # SSN-like
-    r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|6(?:011|5[0-9]{2})[0-9]{12}|(?:2131|1800|35[0-9]{3})[0-9]{11})\b',  # Credit cards
-]
-
-def scrub_text(text: str) -> str:
-    """
-    Scrub sensitive information from text using regex patterns.
-    (Retained for the local log redaction helper)
-    """
-    for pattern in SECRET_PATTERNS:
-        text = re.sub(pattern, '[REDACTED]', text)
-    return text
-
-# Cost awareness: Pricing per model (USD per token). Updated as of July 2025.
-PRICING = {
-    'gemini-2.5-pro': {'input': 1.25e-6, 'output': 10e-6},  # Base rates; actual may vary by prompt size
-    'gemini-2.5-flash': {'input': 0.3e-6, 'output': 2.5e-6},
-    'gemini-2.5-flash-lite': {'input': 0.1e-6, 'output': 0.4e-6},
-    # Add more models as needed; for thresholds, use base for estimation
-}
-
-def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    """
-    Calculate cost based on token counts and model pricing.
-    Note: This is an estimation; actual costs may vary based on prompt size thresholds.
-    """
-    if model in PRICING:
-        return PRICING[model]['input'] * input_tokens + PRICING[model]['output'] * output_tokens
-    logger.warning(f"No pricing info for model {model}. Cost set to 0.")
-    return 0.0
 
 class GeminiProvider(LLMProvider):
     """
-    Enhanced LLMProvider for Google Gemini with observability, reliability, security, and extensibility features.
+    Dumb plugin for Google Gemini.
+    
+    Handles the direct API interaction with the Gemini SDK.
+    Assumes it is managed by a higher-level client that provides
+    logging, metrics, tracing, circuit breaking, and scrubbing.
     """
     name = "gemini"
 
-    def __init__(self):
+    def __init__(self, api_key: str):
         """
         Initialize the Gemini provider with API key validation and initial setup.
         """
         super().__init__()
-        # Use centrally loaded key, falling back to os.getenv
-        self.api_key = API_KEY or os.getenv('GEMINI_API_KEY')
         
-        # [FIX] SDK/key guards
-        if not HAS_GEMINI or not self.api_key:
-            LLM_ERRORS_TOTAL.labels(provider=self.name, model="gemini-config").inc()
-            raise ConfigurationError("Gemini provider configured but SDK (google-generativeai) or GEMINI_API_KEY is missing.")
+        if not HAS_GEMINI:
+             # --- FIX: Pass 'error_code' and 'detail' keywords ---
+             raise ConfigurationError(
+                 detail="Gemini provider configured but SDK (google-generativeai) is missing.",
+                 error_code="CONFIG_SDK_MISSING"
+             )
+        
+        if not api_key:
+            # --- FIX: Pass 'error_code' and 'detail' keywords ---
+            raise ConfigurationError(
+                detail="GeminiProvider initialized without an API key.",
+                error_code="CONFIG_INIT_KEY_MISSING"
+            )
 
+        self.api_key = api_key
         try:
-            # [FIX] Configure the SDK *after* checking the key
-            configure(api_key=self.api_key) # Use the centrally loaded/preferred key
+            # Configure the SDK *once* with the key
+            configure(api_key=self.api_key)
         except Exception as e:
-            LLM_ERRORS_TOTAL.labels(provider=self.name, model="gemini-config").inc()
-            raise ConfigurationError(f"Failed to configure Gemini SDK: {e}")
+            # --- FIX: Pass 'error_code' and 'detail' keywords ---
+            raise ConfigurationError(
+                detail=f"Failed to configure Gemini SDK: {e}",
+                error_code="CONFIG_SDK_FAILURE"
+            )
 
-        self.circuit_breaker = CircuitBreaker()
         self.custom_models: Dict[str, str] = {}  # model_name: gemini_model_name (for custom aliases)
         self.pre_hooks: List[Callable[[str], str]] = []
         self.post_hooks: List[Callable[[Any], Any]] = []
-        LLM_PROVIDER_HEALTH.labels(provider=self.name).set(1)
         self.load_plugins()  # Initial load
 
     def load_config(self, file_path: str):
@@ -222,176 +147,100 @@ class GeminiProvider(LLMProvider):
         """
         Auto-discover and hot-reload plugins/extensions. (Placeholder: Implement directory scan for .py files.)
         """
-        # Example: Scan 'plugins/' directory and load modules dynamically using importlib.
-        # For hot-reload, use watchdogs or periodic checks in a separate thread.
         logger.info("Plugins loaded (placeholder implementation).")
 
-    @retry(retry=retry_if_exception_type(Exception), stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=30))
+    @retry(
+        retry=retry_if_exception_type((ServiceUnavailable, InternalServerError, DeadlineExceeded, ResourceExhausted)), 
+        stop=stop_after_attempt(5), 
+        wait=wait_exponential(multiplier=1, min=2, max=30)
+    )
     async def _api_call(self, client: GenerativeModel, scrubbed_prompt: str, stream: bool, run_id: str):
         """
-        Internal API call with retry and tracing.
+        Internal API call with retry and error translation.
         """
-        with tracer.start_as_current_span("gemini_api_call") as span:
-            span.set_attribute("model", client.model_name)
-            span.set_attribute("run_id", run_id)
-            span.set_attribute("stream", stream)
-            try:
-                if stream:
-                    return await client.generate_content_async(scrubbed_prompt, stream=True)
-                else:
-                    return await client.generate_content_async(scrubbed_prompt)
-            except ValueError as e:
-                error_msg = f"Invalid request: {str(e)}. Check prompt format or model capabilities."
-                logger.error(error_msg, extra={'run_id': run_id})
-                span.set_attribute("error", error_msg)
-                raise LLMError(detail=error_msg, provider=self.name) from e
-            except Exception as e:  # Catch broader for retry
-                error_type = type(e).__name__
-                # Check for specific Gemini/Google API errors if available
-                if "API_KEY" in str(e):
-                    error_msg = "API error: Invalid API Key."
-                else:
-                    error_msg = f"API error ({error_type}): {str(e)}. Check API key, network, or service status."
-                logger.error(error_msg, extra={'run_id': run_id})
-                span.set_attribute("error", error_msg)
-                raise LLMError(detail=error_msg, provider=self.name) from e
-    
-    async def _scrub_prompt(self, prompt: str) -> str:
-        """
-        Scrub prompt using the central security utility.
-        """
-        # [FIX] Use central redactor
-        return await redact_secrets(prompt)
+        try:
+            if stream:
+                return await client.generate_content_async(scrubbed_prompt, stream=True)
+            else:
+                return await client.generate_content_async(scrubbed_prompt)
+        except (InvalidArgument, ValueError) as e:
+            error_msg = f"Invalid request: {str(e)}. Check prompt format or model capabilities."
+            raise LLMError(detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR") from e
+        except PermissionDenied as e:
+            error_msg = f"API error: Invalid API Key or insufficient permissions. {str(e)}"
+            raise LLMError(detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR") from e
+        except NotFound as e:
+            error_msg = f"API error: Model not found or endpoint incorrect. {str(e)}"
+            raise LLMError(detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR") from e
+        except (ServiceUnavailable, InternalServerError, DeadlineExceeded, ResourceExhausted) as e:
+            # These are retriable errors
+            error_type = type(e).__name__
+            error_msg = f"Retriable API error ({error_type}): {str(e)}. Retrying..."
+            logger.warning(error_msg, extra={'run_id': run_id})
+            raise # Re-raise to trigger tenacity retry
+        except Exception as e:  # Catch broader exceptions
+            error_type = type(e).__name__
+            error_msg = f"API error ({error_type}): {str(e)}."
+            raise LLMError(detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR") from e
 
     async def call(self, prompt: str, model: str, stream: bool = False, **kwargs) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Call the LLM with reliability, security, and observability features.
+        The prompt is assumed to be pre-scrubbed by the llm_client.
         """
-        if not self.circuit_breaker.can_proceed():
-            LLM_ERRORS_TOTAL.labels(provider=self.name, model=model).inc()
-            raise RuntimeError("CircuitOpenError: Provider disabled due to failures. Try later or reset circuit.")
-
-        run_id = str(uuid.uuid4())
-        timestamp = time.time()
-        log_extra = {'run_id': run_id, 'model': model, 'stream': stream, 'provenance': self.name}
         
-        logger.info(f"[{run_id}] Calling {self.name} model={model}", extra={"run_id": run_id})
-        # [REMOVED] add_provenance call - moved to after the call
-
-        start_time = time.time()
-        
-        # [FIX] Redact before call
-        scrubbed_prompt = await self._scrub_prompt(prompt)
-        
+        # Apply any registered pre-processing hooks
+        processed_prompt = prompt
         for hook in self.pre_hooks:
-            scrubbed_prompt = hook(scrubbed_prompt)
+            processed_prompt = hook(processed_prompt)
 
+        # Get the actual Gemini model name from alias, or use the provided name
         gemini_model = self.custom_models.get(model, model)
         client = GenerativeModel(gemini_model)
         
-        input_tokens = await self.count_tokens(scrubbed_prompt, gemini_model)
-        LLM_TOKENS_INPUT.labels(provider=self.name, model=model).inc(input_tokens)
-        LLM_CALLS_TOTAL.labels(provider=self.name, model=model).inc() # [FIX] Use .inc()
+        # A run_id just for this call, in case _api_call needs it for logging retries
+        run_id = str(uuid.uuid4())[:8]
 
         try:
-            response = await self._api_call(client, scrubbed_prompt, stream, run_id)
-
-            self.circuit_breaker.record_success()
-            LLM_PROVIDER_HEALTH.labels(provider=self.name).set(1)
+            response = await self._api_call(client, processed_prompt, stream, run_id)
 
             if stream:
                 async def gen():
                     partial_response = ""
                     chunk_start = time.time()
-                    output_tokens = 0
-                    with tracer.start_as_current_span("gemini_stream") as span:
-                        span.set_attribute("model", model)
-                        span.set_attribute("run_id", run_id)
-                        try:
-                            async for chunk in response:
-                                chunk_text = chunk.text
-                                yield chunk_text
-                                partial_response += chunk_text
-                                # [FIX] Await token count
-                                chunk_output_tokens = await self.count_tokens(chunk_text, model)
-                                output_tokens += chunk_output_tokens
-                                chunk_latency = time.time() - chunk_start
-                                stream_chunk_latency.labels(model=model).observe(chunk_latency)
-                                stream_chunks_total.labels(model=model).inc()
-                                logger.debug("Stream chunk", extra={**log_extra, 'chunk_size': len(chunk_text), 'latency': chunk_latency, 'preview': self._redact_log(chunk_text)})
-                                span.add_event("chunk_received", {"latency": chunk_latency})
-                                chunk_start = time.time()
-                        except Exception as e:
-                            logger.error("Stream error", extra={**log_extra, 'error': str(e)})
-                            LLM_ERRORS_TOTAL.labels(provider=self.name, model=model).inc()
-                            self.circuit_breaker.record_failure()
-                            raise LLMError(detail=str(e), provider=self.name) from e
-                        finally:
-                            # Finalize
-                            LLM_TOKENS_OUTPUT.labels(provider=self.name, model=model).inc(output_tokens)
-                            cost = calculate_cost(model, input_tokens, output_tokens)
-                            LLM_COST_TOTAL.labels(provider=self.name, model=model).inc(cost)
-                            total_latency = time.time() - start_time
-                            LLM_LATENCY_SECONDS.labels(provider=self.name, model=model).observe(total_latency)
-                            logger.info("Stream completed", extra={**log_extra, 'output_tokens': output_tokens, 'cost': cost, 'latency': total_latency})
-                            stamped_partial = {'partial_content': partial_response, 'model': model, 'version': '1.0', 'run_id': run_id, 'timestamp': timestamp}
-                            for hook in self.post_hooks:
-                                stamped_partial = hook(stamped_partial)
-                            span.set_attribute("output_tokens", output_tokens)
-                            span.set_attribute("cost", cost)
-                            # [FIX] Audit after call (stream)
-                            await log_audit_event(
-                                action="llm_provider_call",
-                                data={"provider": self.name, "model": model, "run_id": run_id, "stream": True, "input_tokens": input_tokens, "output_tokens": output_tokens}
-                            )
-
+                    try:
+                        async for chunk in response:
+                            chunk_text = chunk.text
+                            yield chunk_text
+                            partial_response += chunk_text
+                            
+                            # Keep local, plugin-specific stream metrics
+                            chunk_latency = time.time() - chunk_start
+                            stream_chunk_latency.labels(model=model).observe(chunk_latency)
+                            stream_chunks_total.labels(model=model).inc()
+                            chunk_start = time.time()
+                    except Exception as e:
+                        # Let the llm_client handle logging this error
+                        raise LLMError(detail=f"Error during streaming: {e}", provider=self.name) from e
                 return gen()
             else:
-                with tracer.start_as_current_span("gemini_call") as span:
-                    span.set_attribute("model", model)
-                    span.set_attribute("run_id", run_id)
-                    content = response.text
-                    output_tokens = await self.count_tokens(content, model) # [FIX] Await token count
-                    
-                    LLM_TOKENS_OUTPUT.labels(provider=self.name, model=model).inc(output_tokens)
-                    cost = calculate_cost(model, input_tokens, output_tokens)
-                    LLM_COST_TOTAL.labels(provider=self.name, model=model).inc(cost)
-                    total_latency = time.time() - start_time
-                    LLM_LATENCY_SECONDS.labels(provider=self.name, model=model).observe(total_latency)
-                    
-                    # [FIX] Audit after call (non-stream)
-                    await log_audit_event(
-                        action="llm_provider_call",
-                        data={"provider": self.name, "model": model, "run_id": run_id, "stream": False, "input_tokens": input_tokens, "output_tokens": output_tokens}
-                    )
-                    
-                    logger.info("Call completed", extra={**log_extra, 'output_tokens': output_tokens, 'cost': cost, 'latency': total_latency, 'response_preview': self._redact_log(content)})
-                    stamped_response = {"content": content, "model": model, "version": '1.0', "run_id": run_id, "timestamp": timestamp}
-                    for hook in self.post_hooks:
-                        stamped_response = hook(stamped_response)
-                    span.set_attribute("output_tokens", output_tokens)
-                    span.set_attribute("cost", cost)
-                    return stamped_response
+                content = response.text
+                
+                # Apply post-processing hooks
+                stamped_response = {"content": content, "model": model}
+                for hook in self.post_hooks:
+                    stamped_response = hook(stamped_response)
+                
+                # Return the simple, hook-modified dictionary
+                return {"content": stamped_response["content"], "model": stamped_response["model"]}
+        
         except Exception as e:
-            self.circuit_breaker.record_failure()
-            LLM_ERRORS_TOTAL.labels(provider=self.name, model=model).inc()
-            logger.error("Call error", extra={**log_extra, 'error': str(e)})
-            
-            # Re-raise as LLMError if it's not already one from _api_call
+            # Let the llm_client handle logging, metrics, and circuit breaking
             if isinstance(e, LLMError):
-                raise
+                raise  # Re-raise errors we've already translated
             else:
-                raise LLMError(detail=str(e), provider=self.name) from e
-        finally:
-            # Update health gauge based on final circuit breaker state
-            LLM_PROVIDER_HEALTH.labels(provider=self.name).set(1 if self.circuit_breaker.is_closed() else 0)
-
-
-    def _redact_log(self, content: str) -> str:
-        """
-        Redact sensitive content for logging. (Uses local scrub_text utility)
-        """
-        return scrub_text(content)[:100] + '...' if len(content) > 100 else scrub_text(content)
+                # Wrap unexpected errors
+                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """
@@ -401,7 +250,7 @@ class GeminiProvider(LLMProvider):
              logger.warning("Gemini SDK not found. Using approximation for token count.")
              return len(text) // 4 + 1
         try:
-            client = GenerativeModel(model)
+            client = GenerativeModel(self.custom_models.get(model, model))
             response = await client.count_tokens_async(text)
             return response.total_tokens
         except Exception as e:
@@ -413,194 +262,144 @@ class GeminiProvider(LLMProvider):
         """
         Perform health check and update metrics/logs.
         """
-        run_id = str(uuid.uuid4())
-        log_extra = {'run_id': run_id, 'provenance': 'health_check'}
-        logger.info("Health check started", extra=log_extra)
-        
-        # [FIX] Add guard for API key and SDK
         if not self.api_key or not HAS_GEMINI:
-             logger.error("Gemini health check failed: API key or SDK is missing.", extra=log_extra)
-             LLM_PROVIDER_HEALTH.labels(provider=self.name).set(0)
              return False
         
-        # Reset health gauge before check
-        LLM_PROVIDER_HEALTH.labels(provider=self.name).set(0)
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Using the standard models endpoint
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
+                async with session.get(url, timeout=5) as resp:
+                    return resp.status == 200
+        except Exception:
+            return False
+
+# --- Plugin Manager Entry Point ---
+def get_provider():
+    """
+    Plugin manager entry point.
+    Loads the API key from config/env and instantiates the provider.
+    """
+    config = load_config()
+    API_KEY = config.llm_provider_api_key or os.getenv("GEMINI_API_KEY")
+
+    if not HAS_GEMINI:
+        logger.error("Google GenerativeAI SDK not found. Skipping GeminiProvider.")
+        # --- FIX: Pass 'error_code' and 'detail' keywords ---
+        raise ConfigurationError(
+            detail="Google GenerativeAI SDK not found. Please run 'pip install google-generativeai'.",
+            error_code="CONFIG_SDK_MISSING"
+        )
         
-        with tracer.start_as_current_span("gemini_health_check") as span:
-            is_healthy = False
-            try:
-                async with aiohttp.ClientSession() as session:
-                    # Using the standard models endpoint
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
-                    async with session.get(url) as resp:
-                        is_healthy = resp.status == 200
-                        LLM_PROVIDER_HEALTH.labels(provider=self.name).set(1 if is_healthy else 0)
-                        logger.info("Health check result", extra={**log_extra, 'healthy': is_healthy})
-                        span.set_attribute("status", is_healthy)
-                        return is_healthy
-            except Exception as e:
-                LLM_PROVIDER_HEALTH.labels(provider=self.name).set(0)
-                error_msg = f"Health check error: {str(e)}. Check API key or network."
-                logger.error(error_msg, extra=log_extra)
-                span.set_attribute("error", error_msg)
-                return False
-
-    def get_circuit_status(self) -> Dict[str, Any]:
-        """
-        Get current circuit breaker status for monitoring.
-        """
-        return {'is_open': self.circuit_breaker.is_open, 'failures': self.circuit_breaker.failures, 'last_failure_time': self.circuit_breaker.last_failure_time}
-
-# Testability: Unit/Integration tests
-import unittest
-from unittest.mock import patch, AsyncMock
-
-class TestGeminiProvider(unittest.IsolatedAsyncioTestCase):
-    
-    @patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key'})
-    @patch('runner.runner_config.load_config', return_value=MagicMock(llm_provider_api_key=''))
-    @patch('google.generativeai.configure')
-    def setUp(self, mock_configure, mock_config_load):
-        # This setup will fail if HAS_GEMINI is False, but tests should be skipped anyway
-        if HAS_GEMINI:
-            self.provider = GeminiProvider()
-        else:
-            self.skipTest("google-generativeai SDK not installed")
-
-    def test_scrub_text(self):
-        input_text = "My api_key = sk-abc123 and email is test@example.com"
-        # Note: Testing the original local scrub_text used by _redact_log
-        scrubbed = scrub_text(input_text)
-        self.assertIn('[REDACTED]', scrubbed)
-        self.assertNotIn('sk-abc123', scrubbed)
-        self.assertNotIn('test@example.com', scrubbed)
-
-    def test_calculate_cost(self):
-        cost = calculate_cost('gemini-2.5-flash', 1000, 500)
-        self.assertEqual(cost, (0.3e-6 * 1000) + (2.5e-6 * 500))
-
-    def test_circuit_breaker(self):
-        cb = CircuitBreaker(failure_threshold=2)
-        cb.record_failure()
-        self.assertTrue(cb.can_proceed())
-        cb.record_failure()
-        self.assertFalse(cb.can_proceed())
-        cb.record_success()
-        self.assertTrue(cb.can_proceed())
-
-    @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
-    async def test_count_tokens(self, mock_count):
-        mock_count.return_value = type('Resp', (), {'total_tokens': 10})
-        tokens = await self.provider.count_tokens("test", "model")
-        self.assertEqual(tokens, 10)
-
-    @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
-    @patch('google.generativeai.GenerativeModel.generate_content_async', new_callable=AsyncMock)
-    @patch('runner.llm_client_providers.gemini_provider.log_audit_event', new_callable=AsyncMock)
-    async def test_call_non_stream(self, mock_audit, mock_generate, mock_count):
-        mock_generate.return_value = type('Resp', (), {'text': 'Hello'})
-        mock_count.return_value = type('Resp', (), {'total_tokens': 1})
-        response = await self.provider.call("test prompt", "gemini-2.5-pro")
-        self.assertIn('content', response)
-        self.assertIn('run_id', response)
-        self.assertEqual(response['content'], 'Hello')
-        mock_audit.assert_called_once() # Check that audit was called
-
-    @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
-    @patch('google.generativeai.GenerativeModel.generate_content_async', new_callable=AsyncMock)
-    @patch('runner.llm_client_providers.gemini_provider.log_audit_event', new_callable=AsyncMock)
-    async def test_call_stream(self, mock_audit, mock_generate, mock_count):
-        async def mock_stream():
-            yield type('Chunk', (), {'text': 'chunk1'})
-            yield type('Chunk', (), {'text': 'chunk2'})
-
-        mock_generate.return_value = mock_stream()
-        mock_count.return_value = type('Resp', (), {'total_tokens': 1})
+    if not API_KEY:
+        # This error will be caught by the llm_plugin_manager
+        # --- FIX: Pass 'error_code' and 'detail' keywords ---
+        raise ConfigurationError(
+            detail="GEMINI_API_KEY environment variable or runner config not set.",
+            error_code="CONFIG_LOAD_KEY_MISSING"
+        )
         
-        gen = await self.provider.call("test", "model", stream=True)
-        chunks = []
-        async for chunk in gen:
-            chunks.append(chunk)
-        self.assertEqual(chunks, ['chunk1', 'chunk2'])
-        mock_audit.assert_called_once() # Check that audit was called
+    return GeminiProvider(api_key=API_KEY)
 
-# API/CLI Integration
-try:
-    from fastapi import FastAPI, Query
-    from starlette.responses import StreamingResponse
-    import uvicorn
-    HAS_API_LIBS = True
-except ImportError:
-    HAS_API_LIBS = False
-    logger.warning("FastAPI/Uvicorn not installed. API/CLI server functionality will be disabled.")
-
-
-if HAS_API_LIBS:
-    app = FastAPI()
-
-    @app.get("/health")
-    async def api_health():
-        # Note: Requires API_KEY environment variable to be set for initialization
-        if not HAS_GEMINI or not API_KEY:
-            return {"healthy": False, "circuit": "SDK or API_KEY_MISSING"}
-        provider = GeminiProvider() 
-        return {"healthy": await provider.health_check(), "circuit": provider.get_circuit_status()}
-
-    @app.get("/metrics")
-    def api_metrics():
-        from prometheus_client import generate_latest
-        return generate_latest()
-
-    @app.post("/call")
-    async def api_call(prompt: str = Query(...), model: str = Query("gemini-2.5-pro"), stream: bool = Query(False)):
-        # Note: Requires API_KEY environment variable to be set for initialization
-        if not HAS_GEMINI or not API_KEY:
-            return {"error": "Gemini SDK or API_KEY not configured on server."}
-        provider = GeminiProvider() 
-        if stream:
-            gen = await provider.call(prompt, model, stream=True)
-            async def stream_gen():
-                async for chunk in gen:
-                    yield chunk
-            return StreamingResponse(stream_gen(), media_type="text/event-stream")
-        else:
-            return await provider.call(prompt, model)
-
-# CLI integration
+# --- Test/Example Usage ---
 if __name__ == "__main__":
     import argparse
+    import sys
+    from unittest.mock import patch, AsyncMock, MagicMock
+    import unittest
+
+    # Setup basic logging for standalone execution
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # Mock config loader for tests
+    mock_config = MagicMock()
+    mock_config.llm_provider_api_key = ''
+    
+    # Mock the SDK configure call
+    if HAS_GEMINI:
+        gemini_configure_patch = patch('google.generativeai.configure')
+    else:
+        # If SDK not installed, patch a dummy
+        gemini_configure_patch = patch('gemini_provider.configure', MagicMock())
+
+    class TestGeminiProvider(unittest.IsolatedAsyncioTestCase):
+        
+        @patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key'})
+        @patch('runner.runner_config.load_config', return_value=mock_config)
+        def setUp(self, mock_config_load):
+            if not HAS_GEMINI: 
+                self.skipTest("google-generativeai SDK not installed")
+            
+            # Mock the 'configure' call during GeminiProvider init
+            with gemini_configure_patch:
+                self.provider = GeminiProvider(api_key="test-key")
+
+        @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
+        async def test_count_tokens(self, mock_count):
+            if not HAS_GEMINI: self.skipTest("google-generativeai SDK not installed")
+            mock_count.return_value = type('Resp', (), {'total_tokens': 10})
+            tokens = await self.provider.count_tokens("test", "model")
+            self.assertEqual(tokens, 10)
+
+        @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
+        @patch('google.generativeai.GenerativeModel.generate_content_async', new_callable=AsyncMock)
+        async def test_call_non_stream(self, mock_generate, mock_count):
+            if not HAS_GEMINI: self.skipTest("google-generativeai SDK not installed")
+            mock_generate.return_value = type('Resp', (), {'text': 'Hello'})
+            mock_count.return_value = type('Resp', (), {'total_tokens': 1})
+            
+            response = await self.provider.call("test prompt", "gemini-2.5-pro")
+            self.assertIn('content', response)
+            self.assertEqual(response['content'], 'Hello')
+
+        @patch('google.generativeai.GenerativeModel.count_tokens_async', new_callable=AsyncMock)
+        @patch('google.generativeai.GenerativeModel.generate_content_async', new_callable=AsyncMock)
+        async def test_call_stream(self, mock_generate, mock_count):
+            if not HAS_GEMINI: self.skipTest("google-generativeai SDK not installed")
+            async def mock_stream():
+                yield type('Chunk', (), {'text': 'chunk1'})
+                yield type('Chunk', (), {'text': 'chunk2'})
+
+            mock_generate.return_value = mock_stream()
+            mock_count.return_value = type('Resp', (), {'total_tokens': 1})
+            
+            gen = await self.provider.call("test", "model", stream=True)
+            chunks = []
+            async for chunk in gen:
+                chunks.append(chunk)
+            self.assertEqual(chunks, ['chunk1', 'chunk2'])
+
     parser = argparse.ArgumentParser(description="Gemini Provider CLI")
-    parser.add_argument("--prompt", required=False, help="Input prompt") # Make optional for --test/--server
+    parser.add_argument("--prompt", required=False, help="Input prompt")
     parser.add_argument("--model", default="gemini-2.5-pro", help="Model name")
     parser.add_argument("--stream", action="store_true", help="Stream response")
     parser.add_argument("--test", action="store_true", help="Run tests")
     parser.add_argument("--server", action="store_true", help="Start FastAPI server")
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+
+    async def main_cli():
+        try:
+            with gemini_configure_patch:
+                provider = get_provider()
+        except ConfigurationError as e:
+            print(f"ERROR: {e}")
+            return
+
+        if args.stream:
+            gen = await provider.call(args.prompt, args.model, stream=True)
+            async for chunk in gen:
+                print(chunk, end='', flush=True)
+            print()
+        else:
+            response = await provider.call(args.prompt, args.model)
+            print(json.dumps(response, indent=2))
 
     if args.test:
-        unittest.main(argv=['first-arg-is-ignored']) # Pass dummy arg to unittest.main
-    elif args.server:
-        if HAS_API_LIBS and HAS_GEMINI:
-            if not API_KEY:
-                print("ERROR: GEMINI_API_KEY environment variable must be set to run the server.")
-            else:
-                uvicorn.run(app, host="0.0.0.0", port=8000)
-        else:
-            print("Cannot start server: FastAPI/Uvicorn or google-generativeai not installed.")
+        unittest.main(argv=[sys.argv[0]])
     elif args.prompt:
-        if not HAS_GEMINI or not API_KEY:
-             print("ERROR: GEMINI_API_KEY environment variable must be set, and google-generativeai must be installed.")
+        if not HAS_GEMINI:
+            print("Cannot run CLI: google-generativeai SDK not installed.")
         else:
-            import asyncio
-            provider = GeminiProvider() 
-            if args.stream:
-                async def stream_main():
-                    gen = await provider.call(args.prompt, args.model, stream=True)
-                    async for chunk in gen:
-                        print(chunk, end='', flush=True)
-                asyncio.run(stream_main())
-            else:
-                response = asyncio.run(provider.call(args.prompt, args.model))
-                print(response["content"])
+            asyncio.run(main_cli())
     else:
         parser.print_help()

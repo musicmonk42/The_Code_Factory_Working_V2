@@ -91,7 +91,7 @@ class SecretsManager:
     def get_required(self, secret_name: str) -> str:
         secret = self.get_secret(secret_name) # FIX: Use get_secret
         if not secret:
-            raise ConfigurationError(f"Missing secret: {secret_name}")
+            raise ConfigurationError(f"Missing secret: {secret_name}", detail=f"Environment variable {secret_name} is not set")
         return secret
 
 # --- Cache Manager ---
@@ -240,7 +240,8 @@ class LLMClient:
         model = model or getattr(self.config, 'default_llm_model', 'gpt-4') 
         
         # [FIX] Redact secrets from the prompt *before* it's used in cache keys or logs
-        prompt = await redact_secrets(prompt)
+        # [FIX] redact_secrets is now synchronous, remove await
+        prompt = redact_secrets(prompt)
         start_time = time.time()
 
         if not await self.rate_limiter.acquire(provider):
@@ -263,7 +264,10 @@ class LLMClient:
             if not plugin:
                 metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                 self.circuit_breaker.record_failure(provider)
-                raise ConfigurationError(f"LLM provider '{provider}' not loaded. SDK or API key may be missing.")
+                raise ConfigurationError(
+                    f"LLM provider '{provider}' not loaded", 
+                    detail="SDK or API key may be missing"
+                )
 
             response = await plugin.call(prompt=prompt, model=model, stream=stream, **kwargs)
             latency = time.time() - start_time
@@ -408,7 +412,7 @@ async def shutdown_llm_client():
         await _async_client.close()
         _async_client = None
 
-import atexit
-atexit.register(lambda: asyncio.run(shutdown_llm_client()))
+# import atexit
+# atexit.register(lambda: asyncio.run(shutdown_llm_client()))
 
 __all__ = ["call_llm_api", "call_ensemble_api", "shutdown_llm_client"]

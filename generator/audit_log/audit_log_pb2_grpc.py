@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import audit_log_pb2 as audit__log__pb2
+from . import audit_log_pb2 as audit__log__pb2
 
 GRPC_GENERATED_VERSION = '1.63.2'
 GRPC_VERSION = grpc.__version__

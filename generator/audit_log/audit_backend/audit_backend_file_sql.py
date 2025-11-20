@@ -30,6 +30,20 @@ class FileBackend(LogBackend):
         self.dir_path = os.path.dirname(self.log_file) or os.path.curdir
         os.makedirs(self.dir_path, exist_ok=True)
 
+    async def start(self):
+        """Starts base tasks."""
+        await super().start()
+        # FileBackend has no extra init tasks (like connections)
+        # WAL recovery is handled by _atomic_context
+        await self.recover_wal() # Run WAL recovery on start
+
+    async def close(self):
+        """Closes the FileBackend."""
+        # Ensure final batch is flushed before shutdown
+        await self.flush_batch()
+        await super().close()
+        logger.info("FileBackend shutdown complete.")
+
 
     async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
         """
@@ -80,7 +94,7 @@ class FileBackend(LogBackend):
                             match = False
                         if "timestamp >=" in filters and stored_entry.get("timestamp", "") < filters["timestamp >="]:
                             match = False
-                        if "timestamp <=" in filters and stored_entry.get("timestamp", "") > filters["timestamp <="]:
+                        if "timestamp <=" in filters and stored_entry.get("timestamp", "") > filters["timestamp <=="]:
                             match = False
                         if "schema_version" in filters:
                             stored_schema_version = stored_entry.get("schema_version")
@@ -139,75 +153,92 @@ class FileBackend(LogBackend):
                 # If no old file, create an empty temp file and then replace it, effectively creating a new log.
                 async with aiofiles.open(temp_new_file, "w") as f:
                     await f.write("")
-                await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(f.fileno()))
+                # We need the file descriptor to fsync, so we can't use aiofiles fully here if fsync is critical
+                # Re-opening to get fd for fsync
+                fd = await asyncio.to_thread(os.open, temp_new_file, os.O_WRONLY)
+                await asyncio.to_thread(os.fsync, fd)
+                await asyncio.to_thread(os.close, fd)
+                
                 await asyncio.to_thread(os.replace, temp_new_file, self.log_file) # Commit empty file
                 return # No old data to migrate if file didn't exist
 
             migrated_count = 0
             # Step 2: Read from backup (old data), modify, and write to new temp file
-            async with aiofiles.open(backup_file, "r") as old_f, aiofiles.open(temp_new_file, "w") as new_f:
-                async for line_num, line in enumerate(old_f, 1):
-                    stripped_line = line.strip()
-                    if not stripped_line:
-                        continue
-                    try:
-                        stored_entry = json.loads(stripped_line)
+            async with aiofiles.open(backup_file, "r") as old_f:
+                # Open the temp file for writing and get its descriptor for fsync
+                new_f_handle = await aiofiles.open(temp_new_file, "w")
+                try:
+                    # --- FIX: Changed loop to be compatible with aiofiles ---
+                    line_num = 0
+                    async for line in old_f:
+                        line_num += 1
+                        # --- END FIX ---
+                        stripped_line = line.strip()
+                        if not stripped_line:
+                            continue
+                        try:
+                            stored_entry = json.loads(stripped_line)
 
-                        encrypted_b64 = stored_entry.get("encrypted_data")
-                        if not encrypted_b64:
-                            logger.warning(f"FileBackend migration: Skipping line {line_num} with empty encrypted_data. Line: '{stripped_line[:100]}...'")
-                            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationEmptyEncData").inc()
-                            continue # Skip to next line
+                            encrypted_b64 = stored_entry.get("encrypted_data")
+                            if not encrypted_b64:
+                                logger.warning(f"FileBackend migration: Skipping line {line_num} with empty encrypted_data. Line: '{stripped_line[:100]}...'")
+                                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationEmptyEncData").inc()
+                                continue # Skip to next line
 
-                        # --- FIX: Correct typo base66.b64decode to base64.b64decode ---
-                        decrypted = self._decrypt(base64.b64decode(encrypted_b64))
-                        decompressed = self._decompress(decrypted)
-                        original_audit_entry = json.loads(decompressed)
+                            # --- FIX: Corrected typo from base66 to base64 ---
+                            decrypted = self._decrypt(base64.b64decode(encrypted_b64))
+                            decompressed = self._decompress(decrypted)
+                            original_audit_entry = json.loads(decompressed)
 
-                        if "entry_id" not in original_audit_entry or not original_audit_entry["entry_id"]:
-                            original_audit_entry["entry_id"] = str(uuid.uuid4())
-                            logger.debug(f"FileBackend migration: Assigned new entry_id for line {line_num}.")
+                            if "entry_id" not in original_audit_entry or not original_audit_entry["entry_id"]:
+                                original_audit_entry["entry_id"] = str(uuid.uuid4())
+                                logger.debug(f"FileBackend migration: Assigned new entry_id for line {line_num}.")
 
-                        if "timestamp" not in original_audit_entry or not original_audit_entry["timestamp"]:
-                            original_audit_entry["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds') + 'Z'
-                            logger.debug(f"FileBackend migration: Assigned new timestamp for line {line_num}.")
+                            if "timestamp" not in original_audit_entry or not original_audit_entry["timestamp"]:
+                                original_audit_entry["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds') + 'Z'
+                                logger.debug(f"FileBackend migration: Assigned new timestamp for line {line_num}.")
 
-                        if self.tamper_detection_enabled:
-                            temp_audit_entry_for_hash = original_audit_entry.copy()
-                            temp_audit_entry_for_hash.pop("_audit_hash", None)
-                            new_hash = compute_hash(json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode("utf-8"))
-                            original_audit_entry["_audit_hash"] = new_hash
+                            # --- FIX: Update schema version *before* re-calculating hash ---
+                            original_audit_entry["schema_version"] = self.schema_version
+                            
+                            if self.tamper_detection_enabled:
+                                temp_audit_entry_for_hash = original_audit_entry.copy()
+                                temp_audit_entry_for_hash.pop("_audit_hash", None)
+                                new_hash = compute_hash(json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode("utf-8"))
+                                original_audit_entry["_audit_hash"] = new_hash
+                            # --- END FIX ---
 
-                        original_audit_entry["schema_version"] = self.schema_version
+                            updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
+                            updated_compressed = self._compress(updated_data_str)
+                            updated_encrypted = self._encrypt(updated_compressed)
+                            updated_base64_data = base64.b64encode(updated_encrypted).decode("utf-8")
 
-                        updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
-                        updated_compressed = self._compress(updated_data_str)
-                        updated_encrypted = self._encrypt(updated_compressed)
-                        updated_base64_data = base64.b64encode(updated_encrypted).decode("utf-8")
+                            new_stored_entry = {
+                                "encrypted_data": updated_base64_data,
+                                "entry_id": original_audit_entry["entry_id"],
+                                "timestamp": original_audit_entry["timestamp"],
+                                "schema_version": self.schema_version,
+                                "_audit_hash": original_audit_entry["_audit_hash"] # Use the *new* hash
+                            }
+                            await new_f_handle.write(json.dumps(new_stored_entry) + "\n")
+                            migrated_count += 1
 
-                        new_stored_entry = {
-                            "encrypted_data": updated_base64_data,
-                            "entry_id": original_audit_entry["entry_id"],
-                            "timestamp": original_audit_entry["timestamp"],
-                            "schema_version": self.schema_version,
-                            "_audit_hash": original_audit_entry["_audit_hash"]
-                        }
-                        await new_f.write(json.dumps(new_stored_entry) + "\n")
-                        migrated_count += 1
-
-                    except (json.JSONDecodeError, ValueError, TamperDetectionError) as jde:
-                        logger.error(f"FileBackend migration: Failed to process line {line_num} due to data corruption/format error: {jde}. Line: '{stripped_line[:100]}...'", exc_info=True)
-                        BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationDataCorruption").inc()
-                        asyncio.create_task(send_alert(f"FileBackend migration encountered corrupted data at line {line_num}. Migration failed.", severity="critical"))
-                        raise MigrationError(f"Data corruption during migration at line {line_num}: {jde}")
-                    except Exception as migrate_line_e:
-                        logger.error(f"FileBackend migration: Unexpected error processing line {line_num}: {migrate_line_e}. Line: '{stripped_line[:100]}...'")
-                        BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationLineError").inc()
-                        asyncio.create_task(send_alert(f"FileBackend migration failed for a line. Error: {migrate_line_e}", severity="critical"))
-                        raise MigrationError(f"Unexpected error during migration at line {line_num}: {migrate_line_e}")
-
-            await new_f.flush()
-            await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(new_f.fileno()))
+                        except (json.JSONDecodeError, ValueError, TamperDetectionError) as jde:
+                            logger.error(f"FileBackend migration: Failed to process line {line_num} due to data corruption/format error: {jde}. Line: '{stripped_line[:100]}...'", exc_info=True)
+                            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationDataCorruption").inc()
+                            asyncio.create_task(send_alert(f"FileBackend migration encountered corrupted data at line {line_num}. Migration failed.", severity="critical"))
+                            raise MigrationError(f"Data corruption during migration at line {line_num}: {jde}")
+                        except Exception as migrate_line_e:
+                            logger.error(f"FileBackend migration: Unexpected error processing line {line_num}: {migrate_line_e}. Line: '{stripped_line[:100]}...'")
+                            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationLineError").inc()
+                            asyncio.create_task(send_alert(f"FileBackend migration failed for a line. Error: {migrate_line_e}", severity="critical"))
+                            raise MigrationError(f"Unexpected error during migration at line {line_num}: {migrate_line_e}")
+                
+                    await new_f_handle.flush()
+                    await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(new_f_handle.fileno()))
+                
+                finally:
+                    await new_f_handle.close() # Ensure file is closed
 
             # Step 3: Atomically replace the old file with the new one
             await asyncio.to_thread(os.replace, temp_new_file, self.log_file)
@@ -313,6 +344,11 @@ class FileBackend(LogBackend):
         temp_file = os.path.normpath(f"{self.dir_path}/.tmp_batch_write_{uuid.uuid4()}") # Unique temp file for concurrent safety
         
         try:
+            # --- FIX: Write to WAL first for durability ---
+            for prepared_entry in prepared_entries:
+                await self._append_single(prepared_entry)
+            # --- END FIX ---
+            
             # Read existing content for append (atomically).
             existing_content_lines = []
             if os.path.exists(self.log_file):
@@ -396,7 +432,11 @@ class FileBackend(LogBackend):
         wal_entries = []
         try:
             async with aiofiles.open(self.wal_file, "r") as wal_f:
-                async for line_num, line in enumerate(wal_f, 1):
+                # --- FIX: Changed loop to be compatible with aiofiles ---
+                line_num = 0
+                async for line in wal_f:
+                    line_num += 1
+                    # --- END FIX ---
                     stripped_line = line.strip()
                     if not stripped_line:
                         continue
@@ -502,7 +542,44 @@ class SQLiteBackend(LogBackend):
     def __init__(self, params: Dict[str, Any]):
         super().__init__(params)
         self.conn: Optional[sqlite3.Connection] = None
-        asyncio.create_task(self._init_connection())
+        # --- FIX: Task creation moved to start() ---
+        # self._init_conn_task = asyncio.create_task(self._init_connection())
+        # self._async_tasks.add(self._init_conn_task)
+        # self._init_conn_task.add_done_callback(self._async_tasks.discard)
+
+    # --- START: FIX (Moved task creation from __init__ to start) ---
+    async def start(self):
+        """Initializes connection and starts base tasks."""
+        # Initialize connection *before* starting base tasks (like migration)
+        loop = asyncio.get_running_loop()
+        self._init_conn_task = loop.create_task(self._init_connection())
+        self._async_tasks.add(self._init_conn_task)
+        self._init_conn_task.add_done_callback(self._async_tasks.discard)
+        
+        await self.wait_for_init() # Wait for connection to be ready
+        
+        # Now start the base tasks (migrate, flush, health)
+        await super().start()
+    # --- END: FIX ---
+
+    async def close(self):
+        """Closes the SQLite connection and shuts down base tasks."""
+        # Ensure final batch is flushed
+        await self.flush_batch()
+        
+        # First, shut down base tasks (flush, health, etc.)
+        await super().close() 
+        
+        # Now, close the connection
+        if self.conn:
+            try:
+                await asyncio.to_thread(self.conn.close)
+                logger.info("SQLiteBackend connection closed.")
+                self.conn = None
+            except sqlite3.Error as e:
+                logger.error(f"Error closing SQLiteBackend connection: {e}", exc_info=True)
+                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="CloseError").inc()
+
 
     async def _init_connection(self):
         """Initializes SQLite connection."""
@@ -535,7 +612,7 @@ class SQLiteBackend(LogBackend):
     async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
         """Inserts single prepared entry with deduplication."""
         if self.conn is None:
-            await self._init_connection()
+            await self.wait_for_init() # Wait for connection to be ready
 
         try:
             # logs_v{SCHEMA_VERSION} ensures we write to the currently active table
@@ -558,7 +635,7 @@ class SQLiteBackend(LogBackend):
     async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries SQLite with timestamp, entry_id, and schema_version filtering."""
         if self.conn is None:
-            await self._init_connection()
+            await self.wait_for_init()
 
         # Query the currently active table for the schema version
         query = f"SELECT entry_id, data, timestamp, schema_version, _audit_hash FROM logs_v{self.schema_version}"
@@ -570,7 +647,7 @@ class SQLiteBackend(LogBackend):
             values.append(filters["timestamp >="])
         if "timestamp <=" in filters:
             where_clauses.append("timestamp <= ?")
-            values.append(filters["timestamp <="])
+            values.append(filters["timestamp <=="])
         if "entry_id" in filters:
             where_clauses.append("entry_id = ?")
             values.append(filters["entry_id"])
@@ -611,22 +688,26 @@ class SQLiteBackend(LogBackend):
         Migrates SQLite schema, including new columns and data transformation.
         Uses a transactional approach with a temporary table for atomicity and rollback.
         """
+        # Wait for connection to be established before trying to migrate
+        await self.wait_for_init()
+        
         current_on_disk_version = await self._get_current_schema_version()
         if current_on_disk_version >= self.schema_version:
-            # Ensure the table for the current schema exists if it was v1
-            if self.schema_version > 1 and current_on_disk_version == 1:
-                # This should handle the edge case where _get_current_schema_version returns 1 
-                # but the app is running SCHEMA_VERSION=2, but the actual table is logs_v1
-                pass
-            else:
-                logger.info(f"SQLiteBackend schema is already at v{self.schema_version} or newer. No migration needed.")
-                return
+            logger.info(
+                f"SQLiteBackend schema is already at v{current_on_disk_version} "
+                f"(target v{self.schema_version}). No migration needed."
+            )
+            return
 
         logger.info(f"SQLiteBackend: Starting migration from v{current_on_disk_version} to v{self.schema_version}.")
 
-        async def migrate_sync_logic():
+        # --- FIX: Changed 'async def' to 'def' ---
+        def migrate_sync_logic():
+            # --- FIX: Changed 'await self._init_connection()' to a sync check ---
             if self.conn is None:
-                await self._init_connection()
+                # This should be impossible after wait_for_init(), but safety check
+                raise ConnectionError("SQLiteBackend connection not initialized for migration.")
+            # --- END FIX ---
 
             cursor = self.conn.cursor()
 
@@ -661,9 +742,10 @@ class SQLiteBackend(LogBackend):
                 if old_table_exists:
                     logger.info(f"SQLiteBackend migration: Copying data from '{old_table_name}' to new schema.")
                     # Select all data from the old table
-                    rows_old = cursor.execute(f"SELECT timestamp, entry_id, schema_version, _audit_hash, data FROM {old_table_name}").fetchall()
+                    # Ensure we select all columns that existed, even if we don't use them all
+                    old_rows_cursor = cursor.execute(f"SELECT * FROM {old_table_name}")
                     
-                    for row in rows_old:
+                    for row in old_rows_cursor:
                         # Data is already encrypted/compressed/base64 encoded from old table
                         encrypted_data_b64 = row["data"]
 
@@ -673,12 +755,15 @@ class SQLiteBackend(LogBackend):
                         original_audit_entry = json.loads(decompressed_str)
                         
                         # Apply migration rules: Ensure all new fields are present/updated
-                        entry_id = original_audit_entry.get("entry_id", row.get("entry_id", str(uuid.uuid4())))
-                        timestamp = original_audit_entry.get("timestamp", row.get("timestamp") or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds') + 'Z')
+                        entry_id = original_audit_entry.get("entry_id", row["entry_id"] if "entry_id" in row.keys() else str(uuid.uuid4()))
+                        timestamp = original_audit_entry.get("timestamp", row["timestamp"] if "timestamp" in row.keys() else datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds') + 'Z')
                         
                         original_audit_entry["entry_id"] = entry_id
                         original_audit_entry["timestamp"] = timestamp
                         
+                        # --- FIX: Update schema version *before* re-calculating hash ---
+                        original_audit_entry["schema_version"] = self.schema_version
+
                         # Recalculate hash and update schema version for the migrated *content*
                         if self.tamper_detection_enabled:
                             temp_audit_entry_for_hash = original_audit_entry.copy()
@@ -688,10 +773,8 @@ class SQLiteBackend(LogBackend):
                         else:
                             original_audit_entry.pop("_audit_hash", None)
                             audit_hash = ""
+                        # --- END FIX ---
                         
-                        # Set the new schema version
-                        original_audit_entry["schema_version"] = self.schema_version
-
                         # Re-encrypt and re-compress the updated audit log entry with current key
                         updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                         updated_compressed = self._compress(updated_data_str)
@@ -753,7 +836,7 @@ class SQLiteBackend(LogBackend):
         """Checks SQLite connectivity and database integrity."""
         try:
             if self.conn is None:
-                await self._init_connection()
+                await self.wait_for_init()
             
             # Simple connection test
             await asyncio.to_thread(self.conn.execute, "SELECT 1;")
@@ -826,7 +909,7 @@ class SQLiteBackend(LogBackend):
         Ensures all entries in the batch are committed together or none are.
         """
         if self.conn is None:
-            await self._init_connection()
+            await self.wait_for_init()
         
         try:
             await asyncio.to_thread(self.conn.execute, "BEGIN TRANSACTION;")
@@ -850,3 +933,10 @@ class SQLiteBackend(LogBackend):
         after a crash. This method primarily serves as a confirmation log.
         """
         logger.info(f"SQLiteBackend: WAL recovery is handled automatically by PRAGMA journal_mode=WAL upon connection to '{self.db_file}'.")
+
+    async def wait_for_init(self):
+        """Waits for the async _init_connection task to complete."""
+        if self._init_conn_task and not self._init_conn_task.done():
+            await self._init_conn_task
+        if self.conn is None:
+            raise ConnectionError("SQLiteBackend connection failed to initialize.")

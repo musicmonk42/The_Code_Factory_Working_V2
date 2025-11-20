@@ -45,10 +45,13 @@ from .codegen_response_handler import parse_llm_response, add_traceability_comme
 
 # --- RUNNER UTILITY IMPORTS (ENFORCED) ---
 try:
-    from runner.runner_logging import log_audit_event
-    from runner.runner_security_utils import scan_for_vulnerabilities
-    from runner.llm_client import call_llm_api, call_ensemble_api, CircuitBreaker
-    from runner.runner_metrics import LLM_RATE_LIMIT_EXCEEDED, LLM_CIRCUIT_STATE
+    # --- FIX: Changed imports to be ABSOLUTE from the 'generator' root ---
+    from generator.runner.runner_logging import log_audit_event
+    from generator.runner.runner_security_utils import scan_for_vulnerabilities
+    from generator.runner.llm_client import call_llm_api, call_ensemble_api
+    # CircuitBreaker is in llm_client, but if you need the class itself:
+    from generator.runner.llm_client import CircuitBreaker
+    from generator.runner.runner_metrics import LLM_RATE_LIMIT_EXCEEDED, LLM_CIRCUIT_STATE
 except ImportError as e:
     # Hard fail: this agent is not allowed to run without the runner stack.
     raise ImportError(
@@ -71,7 +74,7 @@ except ImportError:
         FIX = "FIX"
 from datetime import datetime
 
-# =G============================================================================
+# ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
 # --- All internal AuditLogger definitions replaced with centralized call ---
@@ -433,7 +436,7 @@ async def perform_security_scans(code_files: dict) -> dict:
             # Increment once per scan that finds at least one issue.
             SECURITY_FINDINGS.labels(scanner="default").inc()
         except Exception:
-            # Under stubbed metrics, labels()/inc() may be simplified; ignore failures.
+            # Under stubbed metrics, labels()/inc() may be a no-op; ignore failures.
             pass
 
     return code_files

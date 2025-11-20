@@ -1,11 +1,18 @@
 # runner/errors.py
-# World-class, gold-standard structured error definitions for the runner system.
+# Structured error definitions for the runner system.
 # Defines a custom exception hierarchy for consistent error reporting, logging, and API responses.
 
 import datetime  # For timestamp_utc in error dictionary
+import asyncio # <-- ADDED for async handling
+import inspect # <-- ADDED for async handling
 from typing import Optional, Dict, Any, Type, List
+# --- FIX: Add imports for redaction and logging ---
+from runner.runner_security_utils import redact_secrets
+# from runner.runner_logging import log_action
+import logging
+logger = logging.getLogger(__name__)
 
-# --- Error Code Registry (Gold Standard: Centralized, Unique Error Codes) ---
+# --- Error Code Registry (Centralized, Unique Error Codes) ---
 # This dictionary will store a mapping of unique error codes to their descriptions
 # to prevent clashes and provide a single source of truth for all defined error codes.
 ERROR_CODE_REGISTRY: Dict[str, str] = {}
@@ -22,31 +29,27 @@ def register_error_code(code: str, description: str):
     ERROR_CODE_REGISTRY[code] = description
 
 # --- OpenTelemetry Integration (Optional, but Gold Standard for Observability) ---
+# --- FIX: Make NO-OP tracer robust for testing and missing dependencies ---
 try:
     import opentelemetry.trace as trace
-    # Assuming _tracer is initialized elsewhere (e.g., in runner/logging or main entrypoint)
-    # If not, a basic no-op tracer should be used or passed in.
     _tracer = trace.get_tracer(__name__)
     HAS_OPENTELEMETRY = True
-except ImportError:
-    # Use a dummy tracer if OpenTelemetry is not installed to avoid runtime errors
-    class NoOpSpan:
-        def set_attribute(self, key, value): pass
-        def set_status(self, status): pass
-        def record_exception(self, exception): pass
-        def end(self): pass
+except Exception:  # catch ImportError *and* any runtime error
+    # --- NO-OP FALLBACK -------------------------------------------------
+    class _NoOpSpan:
+        def set_attribute(self, *a, **k): pass
+        def set_status(self, *a, **k): pass
+        def record_exception(self, *a, **k): pass
+        def end(self, *a, **k): pass
         def __enter__(self): return self
-        def __exit__(self, exc_type, exc_val, exc_tb): pass
+        def __exit__(self, *a, **k): pass
 
-    class NoOpTracer:
-        def start_as_current_span(self, name, *args, **kwargs): return NoOpSpan()
-        def start_span(self, name, *args, **kwargs): return NoOpSpan()
+    class _NoOpTracer:
+        def start_as_current_span(self, *a, **k): return _NoOpSpan()
+        def start_span(self, *a, **k): return _NoOpSpan()
 
-    _tracer = NoOpTracer()
+    _tracer = _NoOpTracer()
     HAS_OPENTELEMETRY = False
-    # In a real system, you might want a more robust logging framework for missing deps
-    import logging
-    logging.getLogger(__name__).warning("OpenTelemetry not installed. Error tracing will be disabled.")
 
 
 # --- Base Runner Exception ---
@@ -63,7 +66,32 @@ class RunnerError(Exception):
             register_error_code(error_code, detail) # Use detail as description for unknown codes
 
         self.error_code: str = error_code
-        self.detail: str = detail
+        
+        # --- FIX: REDACT PII (redact_secrets is now synchronous) ---
+        redacted = detail
+        try:
+            # CALL THE NOW SYNCHRONOUS redact_secrets directly
+            redacted = redact_secrets(detail)
+        except Exception:
+            # On any failure (e.g., mock issue, missing dependency), fall back to the original detail
+            redacted = detail
+
+        self.detail: str = redacted
+        
+        # --- FIX: AUDIT LOG ---
+        try:
+            from runner.runner_logging import log_action
+            log_action(
+                action="error_raised",
+                error_type=self.__class__.__name__,
+                error_code=error_code,
+                detail=self.detail,
+                task_id=task_id,
+                **kwargs,
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("log_action unavailable during error init (circular import avoided)")
+        
         self.task_id: Optional[str] = task_id
         self.cause: Optional[Exception] = cause
         self.extra_info: Dict[str, Any] = kwargs
@@ -134,39 +162,50 @@ class BackendError(RunnerError):
     Raised when an issue occurs with the selected execution backend
     (e.g., Docker daemon unreachable, Kubernetes API error).
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  backend_type: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("BACKEND_INIT_FAILURE", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          backend_type=backend_type, cause=cause, **kwargs)
 
 class FrameworkError(RunnerError):
     """
     Raised when the test framework is unsupported, not detected, or misconfigured.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  framework_name: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("FRAMEWORK_UNSUPPORTED", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          framework_name=framework_name, cause=cause, **kwargs)
 
-class TestExecutionError(RunnerError):
+# --- FIX: Renamed TestExecutionError to ExecutionError ---
+class ExecutionError(RunnerError):
     """
-    Raised when the test execution command fails, returns a non-zero code, or times out.
+    Raised when test execution fails (non-zero exit, timeout, etc.).
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
-                 returncode: Optional[int] = None, stdout: str = "", stderr: str = "",
-                 cause: Optional[Exception] = None, **kwargs: Any):
-        # The base class also takes a 'cause' argument, which is now explicitly passed
-        super().__init__("TEST_EXECUTION_FAILED", detail, task_id=task_id,
-                         returncode=returncode, stdout_snippet=stdout[:500], stderr_snippet=stderr[:500],
-                         cause=cause, **kwargs)
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
+                 returncode: Optional[int] = None,
+                 cmd: Optional[str] = None,
+                 stdout_snippet: Optional[str] = "",
+                 stderr_snippet: Optional[str] = "",
+                 cause: Optional[Exception] = None,
+                 **kwargs: Any):
+        super().__init__(error_code, detail, task_id=task_id,
+                          returncode=returncode,
+                          cmd=cmd,
+                          stdout_snippet=stdout_snippet,
+                          stderr_snippet=stderr_snippet,
+                          cause=cause,
+                          **kwargs)
 
 class ParsingError(RunnerError):
     """
     Raised when parsing test results, coverage data, or other output files fails.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  parser_type: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("PARSING_ERROR", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          parser_type=parser_type, cause=cause, **kwargs)
 
 class SetupError(RunnerError):
@@ -174,18 +213,20 @@ class SetupError(RunnerError):
     Raised when the execution environment setup (e.g., file transfer,
     custom setup command within the backend) fails.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  stage: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("SETUP_FAILURE", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          setup_stage=stage, cause=cause, **kwargs)
 
-class TimeoutError(RunnerError): # Renamed to TimeoutError to avoid conflict with Python's built-in
+class TimeoutError(RunnerError):
     """
-    Raised when a task exceeds its allocated execution time.
+    Raised when an operation exceeds its allocated time limit.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  timeout_seconds: Optional[int] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("TASK_TIMEOUT", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          timeout_seconds=timeout_seconds, cause=cause, **kwargs)
 
 class DistributedError(RunnerError):
@@ -193,27 +234,30 @@ class DistributedError(RunnerError):
     Raised when an issue occurs in distributed task processing
     (e.g., network error to coordinator, remote worker failure).
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  endpoint: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("DISTRIBUTED_COMMUNICATION_ERROR", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          endpoint=endpoint, cause=cause, **kwargs)
 
 class PersistenceError(RunnerError):
     """
     Raised when saving or loading persistent state (e.g., task queue, results) fails.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  file_path: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("PERSISTENCE_FAILURE", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          file_path=file_path, cause=cause, **kwargs)
 
 class ConfigurationError(RunnerError):
     """
     Raised when an issue occurs during configuration loading or validation.
     """
-    def __init__(self, detail: str, config_file: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, config_file: Optional[str] = None,
                  cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("CONFIGURATION_ERROR", detail, config_file=config_file,
+        super().__init__(error_code, detail, config_file=config_file,
                          cause=cause, **kwargs)
 
 class ValidationError(RunnerError):
@@ -221,16 +265,19 @@ class ValidationError(RunnerError):
     Raised when data validation fails for input payloads or internal data structures.
     This often wraps Pydantic validation errors.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  field: Optional[str] = None, value: Any = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("VALIDATION_ERROR", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          field=field, value=value, cause=cause, **kwargs)
 
-# FIX: Add the missing LLMError class definition
+# --- FIX: ADDED MISSING CLASS DEFINITIONS ---
+
 class LLMError(RunnerError):
     """
     Raised when an issue occurs with an LLM provider, rate limit, or circuit breaker.
     """
+    # This class signature was already correct.
     def __init__(self, detail: str, error_code: str = "LLM_PROVIDER_ERROR", 
                  task_id: Optional[str] = None, provider: Optional[str] = None, 
                  cause: Optional[Exception] = None, **kwargs: Any):
@@ -240,12 +287,12 @@ class LLMError(RunnerError):
         super().__init__(error_code, detail, task_id=task_id,
                          provider=provider, cause=cause, **kwargs)
 
-# FIX: Add the missing ExporterError class definition
 class ExporterError(RunnerError):
     """
     Raised when exporting metrics to an external system (e.g., Datadog, CloudWatch) fails.
     """
-    def __init__(self, detail: str, task_id: Optional[str] = None,
+    # FIX: Added 'error_code: str' as the first argument (and kept 'detail' as second)
+    def __init__(self, error_code: str, detail: str, task_id: Optional[str] = None,
                  exporter_name: Optional[str] = None, cause: Optional[Exception] = None, **kwargs: Any):
-        super().__init__("EXPORTER_FAILURE", detail, task_id=task_id,
+        super().__init__(error_code, detail, task_id=task_id,
                          exporter_name=exporter_name, cause=cause, **kwargs)

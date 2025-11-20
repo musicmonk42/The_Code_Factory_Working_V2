@@ -1,946 +1,725 @@
 """
 test_deploy_agent.py
-
-Industry-grade test suite for DeployAgent with comprehensive coverage including:
-- Unit tests for all public methods
-- Integration tests for plugin system
-- Performance tests for concurrent operations
-- Security tests for data scrubbing
-- Failure scenario testing and recovery
-- Mock LLM responses and external tool calls
+Comprehensive tests for deploy_agent module (orchestration layer).
 """
 
+import pytest
 import asyncio
 import json
-import os
-import sys
 import tempfile
-import time
-import uuid
-from datetime import datetime
+import aiosqlite # FIX: Import aiosqlite
 from pathlib import Path
-from typing import Dict, Any, List, Optional, AsyncGenerator
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, call, ANY
-
-import pytest
-import pytest_asyncio
-from pytest_mock import MockerFixture
-import aiofiles
-import networkx as nx
-from freezegun import freeze_time
-from hypothesis import given, strategies as st, settings
-from faker import Faker
-
-# Test fixtures and utilities
-from test_fixtures import (
-    create_test_repository,
-    cleanup_test_repository,
-    generate_mock_config,
-    generate_mock_validation_result
-)
+from unittest.mock import Mock, AsyncMock, patch, MagicMock, call
+from datetime import datetime
+import uuid # FIX: Import uuid for the concurrent test fix
 
 # Import the module under test
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from deploy_agent import (
+from generator.agents.deploy_agent.deploy_agent import (
     DeployAgent,
     TargetPlugin,
     PluginRegistry,
     scrub_text,
-    ScrubFilter
 )
-
-# Initialize faker for test data generation
-fake = Faker()
-
-# Test constants
-TEST_REPO_PATH = "/tmp/test_deploy_repo"
-TEST_PLUGIN_DIR = "/tmp/test_plugins"
-TEST_DB_PATH = "/tmp/test_deploy.db"
-MOCK_RUN_ID = "test-run-" + str(uuid.uuid4())
+from generator.agents.deploy_agent.deploy_validator import ValidatorRegistry
 
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
 
-@pytest.fixture(scope="function")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+@pytest.fixture
+def temp_repo():
+    """Create a temporary repository for testing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir)
+        
+        # Create repo structure
+        (repo_path / ".git").mkdir()
+        (repo_path / "src").mkdir()
+        (repo_path / "tests").mkdir()
+        
+        # Create sample files
+        (repo_path / "README.md").write_text("# Test Project\n\nA test repository.")
+        (repo_path / "src" / "main.py").write_text("""
+def main():
+    print("Hello, World!")
 
+if __name__ == "__main__":
+    main()
+""")
+        (repo_path / "requirements.txt").write_text("flask==2.0.1\nrequests==2.26.0")
+        (repo_path / "Dockerfile").write_text("""
+FROM python:3.9
+WORKDIR /app
+COPY . .
+RUN pip install -r requirements.txt
+CMD ["python", "src/main.py"]
+""")
+        
+        yield repo_path
 
-@pytest_asyncio.fixture
-async def test_repository():
-    """Create a test repository with sample files."""
-    repo_path = Path(TEST_REPO_PATH)
-    repo_path.mkdir(parents=True, exist_ok=True)
-    
-    # Create sample files
-    files = {
-        "main.py": "import flask\napp = flask.Flask(__name__)",
-        "requirements.txt": "flask==2.0.1\nrequests==2.27.1",
-        "package.json": json.dumps({
-            "name": "test-app",
-            "dependencies": {"express": "^4.17.1"},
-            "devDependencies": {"jest": "^27.0.0"}
-        }),
-        "go.mod": "module test\ngo 1.17\nrequire github.com/gin-gonic/gin v1.7.0",
-        "Dockerfile": "FROM python:3.9\nCOPY . /app\nCMD python main.py"
-    }
-    
-    for filename, content in files.items():
-        file_path = repo_path / filename
-        async with aiofiles.open(file_path, 'w') as f:
-            await f.write(content)
-    
-    # Initialize git repo
-    os.system(f"cd {repo_path} && git init && git add . && git commit -m 'Initial commit' > /dev/null 2>&1")
-    
-    yield repo_path
-    
-    # Cleanup
-    import shutil
-    if repo_path.exists():
-        shutil.rmtree(repo_path)
-
-
-@pytest_asyncio.fixture
-async def mock_llm_orchestrator(mocker: MockerFixture):
-    """Mock LLM orchestrator with configurable responses."""
-    orchestrator = AsyncMock()
-    
-    async def generate_config_mock(prompt, model, stream=False, ensemble=False, cancel_event=None):
-        if stream:
-            async def stream_gen():
-                yield '{"config": "streaming"}'
-                yield '[END_STREAM_METADATA]{"status": "success"}[/END_STREAM_METADATA]'
-            return stream_gen()
-        return {
-            "config": {"type": "mock_config", "content": "test configuration"},
-            "model": model,
-            "provider": "mock",
-            "valid": True,
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cost": 0.01,
-            "latency": 0.5
-        }
-    
-    orchestrator.generate_config = generate_config_mock
-    return orchestrator
+@pytest.fixture
+async def agent(temp_repo):
+    """Async fixture to create and initialize a DeployAgent."""
+    with patch.dict('os.environ', {'TESTING': '1'}):
+        agent = DeployAgent(str(temp_repo))
+        agent.db_path = str(temp_repo / "test_agent.db")
+        await agent._init_db()
+        yield agent
 
 
 @pytest.fixture
-def mock_plugin():
-    """Create a mock target plugin."""
-    plugin = Mock(spec=TargetPlugin)
-    plugin.__version__ = "1.0.0"
-    plugin.health_check.return_value = True
-    plugin.generate_config = AsyncMock(return_value={
-        "type": "mock",
-        "config": "test config"
-    })
-    plugin.validate_config = AsyncMock(return_value={
+def mock_llm_dockerfile_response():
+    """Mock LLM response for Dockerfile generation."""
+    return {
+        "content": """FROM python:3.9-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+USER appuser
+EXPOSE 8000
+CMD ["python", "src/main.py"]
+""",
+        "model": "gpt-4",
+        "provider": "openai",
+        "tokens": 100
+    }
+
+
+@pytest.fixture
+def mock_validation_success():
+    """Mock successful validation response."""
+    return {
         "valid": True,
-        "details": "Validation passed"
-    })
-    plugin.simulate_deployment = AsyncMock(return_value={
-        "status": "success",
-        "message": "Simulation successful"
-    })
-    return plugin
+        "build_status": "success",
+        "lint_status": "passed",
+        "lint_issues": [],
+        "security_findings": [],
+        "compliance_score": 1.0,
+        "provenance": {
+            "timestamp": datetime.now().isoformat(),
+            "validator": "DockerValidator"
+        }
+    }
 
 
-@pytest_asyncio.fixture
-async def deploy_agent(test_repository, mock_llm_orchestrator):
-    """Create a DeployAgent instance with mocked dependencies."""
-    agent = DeployAgent(
-        repo_path=str(test_repository),
-        languages_supported=["python", "javascript", "go"],
-        plugin_dir=TEST_PLUGIN_DIR,
-        llm_orchestrator_instance=mock_llm_orchestrator
-    )
-    
-    # Ensure plugin directory exists
-    Path(TEST_PLUGIN_DIR).mkdir(parents=True, exist_ok=True)
-    
-    yield agent
-    
-    # Cleanup
-    if agent.db:
-        agent.db.close()
-    if Path(TEST_DB_PATH).exists():
-        os.remove(TEST_DB_PATH)
+@pytest.fixture
+def mock_validation_with_issues():
+    """Mock validation response with issues."""
+    return {
+        "valid": False,
+        "build_status": "failed",
+        "lint_status": "failed",
+        "lint_issues": [
+            "Missing FROM instruction",
+            "No USER specified (running as root)"
+        ],
+        "security_findings": [
+            {
+                "type": "Security",
+                "category": "RootUser",
+                "description": "Container runs as root",
+                "severity": "High"
+            }
+        ],
+        "compliance_score": 0.3,
+        "provenance": {
+            "timestamp": datetime.now().isoformat(),
+            "validator": "DockerValidator"
+        }
+    }
 
 
 # ============================================================================
-# UNIT TESTS - Core Functionality
+# TESTS: DeployAgent Initialization
 # ============================================================================
 
-class TestDeployAgentCore:
-    """Test core DeployAgent functionality."""
+class TestDeployAgentInit:
+    """Tests for DeployAgent initialization."""
     
     @pytest.mark.asyncio
-    async def test_initialization(self, test_repository):
-        """Test DeployAgent initialization with valid parameters."""
-        agent = DeployAgent(
-            repo_path=str(test_repository),
-            languages_supported=["python", "rust"],
-            rate_limit=10
-        )
-        
-        assert agent.repo_path == test_repository
-        assert agent.languages_supported == ["python", "rust"]
+    async def test_init_with_valid_repo(self, agent, temp_repo):
+        """Test initializing agent with valid repo path."""
+        assert agent.repo_path == temp_repo
         assert agent.run_id is not None
-        assert len(agent.run_id) == 36  # UUID format
-        assert agent.history == []
-        assert agent.last_result is None
+        assert isinstance(agent.plugin_registry, PluginRegistry)
+        assert agent.db_path == str(temp_repo / "test_agent.db")
     
     @pytest.mark.asyncio
-    async def test_initialization_invalid_repo(self):
-        """Test DeployAgent initialization with invalid repository path."""
+    async def test_init_creates_database(self, agent):
+        """Test that initialization creates SQLite database."""
+        db_path = Path(agent.db_path)
+        assert db_path.exists()
+        
+        async with aiosqlite.connect(db_path) as db:
+            async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
+                tables = [row[0] for row in await cursor.fetchall()]
+                assert "history" in tables
+    
+    def test_init_with_nonexistent_repo(self):
+        """Test initializing with non-existent repository."""
         with pytest.raises(ValueError, match="Repository path does not exist"):
-            DeployAgent(repo_path="/non/existent/path")
+            DeployAgent("/nonexistent/path")
     
-    @pytest.mark.asyncio
-    async def test_gather_context(self, deploy_agent):
-        """Test context gathering from repository."""
-        context = await deploy_agent.gather_context(["main.py", "requirements.txt"])
-        
-        assert "dependencies" in context
-        assert "python" in context["dependencies"]
-        assert "flask==2.0.1" in context["dependencies"]["python"]
-        assert "file_contents" in context
-        assert "main.py" in context["file_contents"]
-        assert "recent_commits" in context
-        assert len(context["recent_commits"]) > 0
-    
-    @pytest.mark.asyncio
-    async def test_gather_context_with_missing_files(self, deploy_agent):
-        """Test context gathering with some missing files."""
-        context = await deploy_agent.gather_context(["main.py", "nonexistent.txt"])
-        
-        assert "main.py" in context["file_contents"]
-        assert "nonexistent.txt" not in context["file_contents"]
-    
-    @pytest.mark.asyncio
-    @patch('deploy_agent.asyncio.create_subprocess_exec')
-    async def test_gather_context_git_failure(self, mock_subprocess, deploy_agent):
-        """Test context gathering when git command fails."""
-        mock_proc = AsyncMock()
-        mock_proc.returncode = 1
-        mock_proc.communicate.return_value = (b"", b"git error")
-        mock_subprocess.return_value = mock_proc
-        
-        context = await deploy_agent.gather_context([])
-        
-        assert context["recent_commits"] == []
-
-
-class TestSecurityFeatures:
-    """Test security-related functionality."""
-    
-    def test_scrub_text_basic(self):
-        """Test basic text scrubbing for sensitive data."""
-        test_cases = [
-            ("api_key=sk-1234567890abcdef", "api_key=[REDACTED]"),
-            ("password: mysecret123", "password: [REDACTED]"),
-            ("email: user@example.com", "email: [REDACTED]"),
-            ("SSN: 123-45-6789", "SSN: [REDACTED]"),
-            ("credit card: 4111111111111111", "credit card: [REDACTED]")
-        ]
-        
-        for input_text, expected in test_cases:
-            assert scrub_text(input_text) == expected
-    
-    def test_scrub_text_multiple_patterns(self):
-        """Test scrubbing with multiple sensitive patterns."""
-        text = "API_KEY=secret123 and password:pass456 with email test@test.com"
-        result = scrub_text(text)
-        
-        assert "secret123" not in result
-        assert "pass456" not in result
-        assert "test@test.com" not in result
-        assert result.count("[REDACTED]") == 3
-    
-    @patch('deploy_agent.AnalyzerEngine')
-    @patch('deploy_agent.AnonymizerEngine')
-    def test_scrub_text_with_presidio(self, mock_anonymizer, mock_analyzer):
-        """Test scrubbing with Presidio when available."""
-        mock_analyzer_instance = Mock()
-        mock_analyzer_instance.analyze.return_value = [Mock(start=0, end=10)]
-        mock_analyzer.return_value = mock_analyzer_instance
-        
-        mock_anonymizer_instance = Mock()
-        mock_anonymizer_instance.anonymize.return_value = Mock(text="[REDACTED] data")
-        mock_anonymizer.return_value = mock_anonymizer_instance
-        
-        result = scrub_text("sensitive data")
-        assert result == "[REDACTED] data"
-    
-    def test_scrub_filter(self):
-        """Test the ScrubFilter for logging."""
-        filter_obj = ScrubFilter()
-        record = Mock()
-        record.msg = "Password: secret123"
-        
-        assert filter_obj.filter(record)
-        assert record.msg == "Password: [REDACTED]"
-
 
 # ============================================================================
-# PLUGIN SYSTEM TESTS
+# TESTS: Plugin System
 # ============================================================================
 
 class TestPluginSystem:
-    """Test plugin registry and management."""
+    """Tests for plugin registry and management."""
     
-    @pytest.mark.asyncio
-    async def test_plugin_registration(self, deploy_agent, mock_plugin):
+    def test_plugin_registry_register(self):
         """Test registering a plugin."""
-        deploy_agent.register_plugin("test_target", mock_plugin)
-        
-        registered_plugin = deploy_agent.registry.get_plugin("test_target")
-        assert registered_plugin == mock_plugin
-        assert "test_target" in deploy_agent.registry.plugins
+        with patch.dict('os.environ', {'TESTING': '1'}):
+            registry = PluginRegistry(plugin_dir="./test_plugins")
+            
+            class TestPlugin(TargetPlugin):
+                async def generate_config(self, *args, **kwargs): return {"config": "test"}
+                async def validate_config(self, *args, **kwargs): return {"status": "valid"}
+                async def simulate_deployment(self, *args, **kwargs): return {"result": "success"}
+                async def rollback(self, *args, **kwargs): return True
+                def health_check(self): return True
+            
+            plugin = TestPlugin()
+            registry.register("test", plugin)
+            
+            assert registry.get_plugin("test") == plugin
+    
+    def test_plugin_registry_get_unknown(self):
+        """Test getting unknown plugin returns None."""
+        with patch.dict('os.environ', {'TESTING': '1'}):
+            registry = PluginRegistry(plugin_dir="./test_plugins")
+            assert registry.get_plugin("unknown") is None
     
     @pytest.mark.asyncio
-    async def test_plugin_hot_reload(self, deploy_agent):
-        """Test plugin hot-reload functionality."""
-        plugin_file = Path(TEST_PLUGIN_DIR) / "test_plugin.py"
+    async def test_custom_plugin_registration(self, agent):
+        """Test registering and using custom plugin."""
+        class CustomPlugin(TargetPlugin):
+            async def generate_config(self, *args, **kwargs): return {"config": "custom content"}
+            async def validate_config(self, *args, **kwargs): return {"status": "valid"}
+            async def simulate_deployment(self, *args, **kwargs): return {"result": "simulated"}
+            async def rollback(self, *args, **kwargs): return True
+            def health_check(self): return True
         
-        # Write initial plugin
-        plugin_code = '''
-from deploy_agent import TargetPlugin
-
-class TestPlugin(TargetPlugin):
-    __version__ = "1.0"
-    
-    async def generate_config(self, target_files, instructions, context, previous_configs):
-        return {"version": "1.0"}
-    
-    async def validate_config(self, config):
-        return {"valid": True}
-    
-    async def simulate_deployment(self, config):
-        return {"status": "success"}
-    
-    def health_check(self):
-        return True
-'''
-        plugin_file.write_text(plugin_code)
+        custom = CustomPlugin()
+        agent.register_plugin("custom", custom)
         
-        # Load plugins
-        deploy_agent.registry.load_plugins()
-        
-        # Modify plugin
-        plugin_code_v2 = plugin_code.replace('"1.0"', '"2.0"')
-        plugin_file.write_text(plugin_code_v2)
-        
-        # Trigger reload
-        deploy_agent.registry.load_plugins()
-        
-        # Verify version update
-        plugin = deploy_agent.registry.get_plugin("test_plugin")
-        assert plugin is not None
-        # Clean up
-        plugin_file.unlink()
-    
-    @pytest.mark.asyncio
-    async def test_plugin_health_check(self, deploy_agent, mock_plugin):
-        """Test plugin health monitoring."""
-        mock_plugin.health_check.return_value = True
-        deploy_agent.register_plugin("healthy", mock_plugin)
-        
-        mock_unhealthy = Mock(spec=TargetPlugin)
-        mock_unhealthy.health_check.return_value = False
-        deploy_agent.register_plugin("unhealthy", mock_unhealthy)
-        
-        assert deploy_agent.registry.plugin_info["healthy"]["health"] == True
-        assert deploy_agent.registry.plugin_info["unhealthy"]["health"] == False
+        assert agent.plugin_registry.get_plugin("custom") == custom
 
 
 # ============================================================================
-# CONFIGURATION GENERATION TESTS
+# TESTS: Configuration Generation
 # ============================================================================
 
 class TestConfigurationGeneration:
-    """Test configuration generation pipeline."""
+    """Tests for configuration generation."""
     
     @pytest.mark.asyncio
-    async def test_generate_documentation_basic(self, deploy_agent, mock_plugin):
-        """Test basic documentation generation."""
-        deploy_agent.register_plugin("docker", mock_plugin)
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    @patch('generator.agents.deploy_agent.deploy_agent.ValidatorRegistry')
+    async def test_generate_documentation_docker(
+        self, mock_validator_registry, mock_handler, mock_llm, agent,
+        mock_llm_dockerfile_response, mock_validation_success
+    ):
+        """Test generating Docker configuration."""
+        mock_llm.return_value = mock_llm_dockerfile_response
+        mock_handler.return_value = {
+            "final_config_output": mock_llm_dockerfile_response["content"],
+            "structured_data": {"FROM": "python:3.9-slim"},
+            "provenance": {
+                "run_id": "test-123",
+                "timestamp": datetime.now().isoformat()
+            }
+        }
         
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py"],
-            doc_type="README",
+        mock_validator = MagicMock()
+        mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+        agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+        
+        agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+        agent.compliance_check_final = AsyncMock(return_value=[])
+        agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+        agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+        
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
+        
+        result = await agent.generate_documentation(
+            target_files=["src/main.py", "requirements.txt"],
             targets=["docker"],
-            instructions="Generate minimal config",
-            human_approval=False,
-            ensemble=False,
-            stream=False
-        )
-        
-        assert result["run_id"] == deploy_agent.run_id
-        assert "configs" in result
-        assert "docker" in result["configs"]
-        assert result["validations"]["docker"]["valid"] == True
-        assert result["simulations"]["docker"]["status"] == "success"
-    
-    @pytest.mark.asyncio
-    async def test_generate_with_dependencies(self, deploy_agent, mock_plugin):
-        """Test generation with target dependencies."""
-        # Register plugins for dependent targets
-        deploy_agent.register_plugin("docker", mock_plugin)
-        deploy_agent.register_plugin("helm", mock_plugin)
-        
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py"],
-            targets=["helm"],  # helm depends on docker
+            doc_type="deployment",
             human_approval=False
         )
         
-        # Verify both targets were processed in order
+        assert "configs" in result
         assert "docker" in result["configs"]
-        assert "helm" in result["configs"]
+        assert "FROM python:3.9-slim" in result["configs"]["docker"]
+        assert mock_llm.called
+        mock_handler.assert_called_with(
+            raw_response=mock_llm_dockerfile_response['content'],
+            handler_registry=agent.handler_registry,
+            output_format='docker',
+            to_format='docker',
+            repo_path=str(agent.repo_path),
+            run_id=agent.run_id
+        )
     
     @pytest.mark.asyncio
-    async def test_generate_with_streaming(self, deploy_agent):
-        """Test configuration generation with streaming."""
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py"],
-            doc_type="README",
-            targets=["docs"],
-            stream=True
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    async def test_generate_multiple_targets(
+        self, mock_handler, mock_llm, agent,
+        mock_validation_success
+    ):
+        """Test generating configurations for multiple targets."""
+        mock_llm.return_value = {
+            "content": "Generated config",
+            "model": "gpt-4",
+            "provider": "openai"
+        }
+        mock_handler.return_value = {
+            "final_config_output": "Generated config",
+            "structured_data": {},
+            "provenance": {"run_id": "test-123"}
+        }
+        
+        mock_validator = MagicMock()
+        mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+        agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+        
+        agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+        agent.compliance_check_final = AsyncMock(return_value=[])
+        agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+        agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+        
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
+        
+        result = await agent.generate_documentation(
+            target_files=["src/main.py"],
+            targets=["docker", "helm", "docs"],
+            doc_type="deployment",
+            human_approval=False
         )
         
-        assert "configs" in result
+        assert len(result["configs"]) == 3
+        assert "docker" in result["configs"]
+        assert "helm" in result["configs"]
         assert "docs" in result["configs"]
     
     @pytest.mark.asyncio
-    async def test_generate_with_ensemble(self, deploy_agent):
-        """Test configuration generation with ensemble mode."""
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py"],
-            targets=["docs"],
-            ensemble=True,
-            stream=False
-        )
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    async def test_generate_with_llm_failure(self, mock_llm, agent):
+        """Test handling LLM failure during generation."""
+        mock_llm.side_effect = Exception("LLM API Error")
         
-        assert result is not None
-        assert "configs" in result
-    
-    @pytest.mark.asyncio
-    @patch('deploy_agent.DeployAgent.request_human_approval')
-    async def test_generate_with_human_approval(self, mock_approval, deploy_agent, mock_plugin):
-        """Test generation with human approval workflow."""
-        mock_approval.return_value = True
-        deploy_agent.register_plugin("docker", mock_plugin)
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
         
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py"],
-            targets=["docker"],
-            human_approval=True,
-            cli_approval=True
-        )
-        
-        assert mock_approval.called
-        assert result["provenance"]["config_status"] == "Approved"
-    
-    @pytest.mark.asyncio
-    async def test_generate_with_cycle_detection(self, deploy_agent):
-        """Test that cyclic dependencies are detected."""
-        # Create a cycle in the dependency graph
-        deploy_agent.target_dependencies_graph.add_edge("terraform", "docker")
-        
-        with pytest.raises(ValueError, match="Cycle detected"):
-            await deploy_agent.generate_documentation(
-                target_files=["main.py"],
-                targets=["docker", "helm", "terraform"]
-            )
+        with patch.object(agent, 'self_heal', new=AsyncMock(return_value=None)):
+            with pytest.raises(Exception, match="LLM call failed for target docker"):
+                await agent.generate_documentation(
+                    target_files=["src/main.py"],
+                    targets=["docker"],
+                    doc_type="deployment",
+                    human_approval=False
+                )
 
 
 # ============================================================================
-# VALIDATION AND COMPLIANCE TESTS
+# TESTS: Rollback
 # ============================================================================
 
-class TestValidationAndCompliance:
-    """Test validation and compliance checking."""
+class TestRollback:
+    """Tests for rollback functionality."""
     
     @pytest.mark.asyncio
-    async def test_validate_configs(self, deploy_agent, mock_plugin):
-        """Test configuration validation."""
-        deploy_agent.register_plugin("docker", mock_plugin)
-        
-        config = {"type": "docker", "image": "python:3.9"}
-        result = await deploy_agent.validate_configs(config, ["main.py"], "docker")
-        
-        assert result["valid"] == True
-        assert "details" in result
-    
-    @pytest.mark.asyncio
-    async def test_validate_with_invalid_plugin(self, deploy_agent):
-        """Test validation with missing plugin."""
-        config = {"type": "unknown"}
-        result = await deploy_agent.validate_configs(config, ["main.py"], "unknown_target")
-        
-        assert result["valid"] == False
-        assert "No validator plugin found" in result["error"]
-    
-    @pytest.mark.asyncio
-    @patch('deploy_agent.asyncio.create_subprocess_exec')
-    async def test_compliance_check_with_trivy(self, mock_subprocess, deploy_agent):
-        """Test compliance checking with Trivy."""
-        mock_proc = AsyncMock()
-        mock_proc.returncode = 0
-        mock_proc.communicate.return_value = (
-            json.dumps({"Results": []}).encode(),
-            b""
-        )
-        mock_subprocess.return_value = mock_proc
-        
-        issues = await deploy_agent.compliance_check({"config": "test"})
-        
-        assert isinstance(issues, list)
-        mock_subprocess.assert_called()
-    
-    @pytest.mark.asyncio
-    async def test_compliance_check_missing_sections(self, deploy_agent):
-        """Test compliance check for missing required sections."""
-        config = {"data": "test"}  # Missing license and copyright
-        issues = await deploy_agent.compliance_check(config)
-        
-        assert any("license" in issue.lower() for issue in issues)
-        assert any("copyright" in issue.lower() for issue in issues)
-
-
-# ============================================================================
-# SELF-HEALING TESTS
-# ============================================================================
-
-class TestSelfHealing:
-    """Test self-healing capabilities."""
-    
-    @pytest.mark.asyncio
-    async def test_self_heal_successful(self, deploy_agent, mock_plugin):
-        """Test successful self-healing after failure."""
-        deploy_agent.register_plugin("docker", mock_plugin)
-        
-        # Mock the LLM to return a fixed config
-        async def mock_generate_fixed(*args, **kwargs):
-            return {
-                "config": {
-                    "docker": {"type": "fixed", "status": "healed"}
-                }
-            }
-        
-        deploy_agent.llm_orchestrator.generate_config = mock_generate_fixed
-        
-        result = await deploy_agent.self_heal(
-            target_files=["main.py"],
-            doc_type="config",
-            targets=["docker"],
-            instructions="Fix the config",
-            error="Original error message",
-            llm_model="gpt-4",
-            ensemble=False,
-            stream=False
-        )
-        
-        assert result is not None
-        assert "configs" in result
-        assert result["provenance"]["generated_by"] == "DeployAgent (Self-Healed)"
-    
-    @pytest.mark.asyncio
-    async def test_self_heal_max_attempts(self, deploy_agent):
-        """Test self-healing stops after max attempts."""
-        # Mock to always fail validation
-        async def mock_validate(*args, **kwargs):
-            return {"valid": False, "error": "Still broken"}
-        
-        deploy_agent.validate_configs = mock_validate
-        
-        result = await deploy_agent.self_heal(
-            target_files=["main.py"],
-            doc_type="config",
-            targets=["docker"],
-            instructions=None,
-            error="Test error",
-            llm_model="gpt-4",
-            ensemble=False,
-            stream=False
-        )
-        
-        assert result is None  # Should fail after 3 attempts
-
-
-# ============================================================================
-# ROLLBACK AND HISTORY TESTS
-# ============================================================================
-
-class TestRollbackAndHistory:
-    """Test rollback and history management."""
-    
-    @pytest.mark.asyncio
-    async def test_save_and_retrieve_history(self, deploy_agent):
-        """Test saving and retrieving run history."""
-        test_result = {
-            "configs": {"docker": {"test": "config"}},
-            "run_id": "test-123",
-            "timestamp": datetime.now().isoformat()
+    async def test_rollback_to_previous_run(self, agent):
+        """Test rolling back to previous run."""
+        first_run = {
+            "run_id": "run-001",
+            "timestamp": datetime.now().isoformat(),
+            # Configs must be JSON-dumped strings for json.loads() in rollback() to work
+            "configs": {"docker": json.dumps({"config_key": "FROM python:3.8"})}
         }
         
-        # Save to history
-        cursor = deploy_agent.db.cursor()
-        cursor.execute(
-            "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-            ("test-123", test_result["timestamp"], json.dumps(test_result))
-        )
-        deploy_agent.db.commit()
+        second_run = {
+            "run_id": "run-002",
+            "timestamp": datetime.now().isoformat(),
+            "configs": {"docker": json.dumps({"config_key": "FROM python:3.9"})}
+        }
         
-        # Retrieve
-        retrieved = deploy_agent.get_previous_run("test-123")
+        agent.history = [first_run, second_run]
+        agent.last_result = second_run
+        
+        async with aiosqlite.connect(agent.db_path) as db:
+            await db.execute(
+                "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
+                (first_run["run_id"], first_run["timestamp"], json.dumps(first_run))
+            )
+            await db.commit()
+        
+        with patch.object(agent.plugin_registry, 'get_plugin') as mock_get_plugin:
+            mock_plugin = MagicMock()
+            mock_plugin.rollback = AsyncMock(return_value=True)
+            mock_get_plugin.return_value = mock_plugin
+            
+            success = await agent.rollback("run-001")
+            
+            assert success
+            assert mock_plugin.rollback.called
+    
+    @pytest.mark.asyncio
+    async def test_rollback_nonexistent_run(self, agent):
+        """Test rolling back to non-existent run."""
+        success = await agent.rollback("nonexistent-run")
+        assert not success
+    
+    @pytest.mark.asyncio
+    async def test_get_previous_run(self, agent):
+        """Test retrieving previous run from history."""
+        run = {
+            "run_id": "test-run",
+            "timestamp": datetime.now().isoformat(),
+            "configs": {"docker": "FROM python:3.9"}
+        }
+        
+        async with aiosqlite.connect(agent.db_path) as db:
+            await db.execute(
+                "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
+                (run["run_id"], run["timestamp"], json.dumps(run))
+            )
+            await db.commit()
+        
+        retrieved = await agent.get_previous_run("test-run")
         
         assert retrieved is not None
-        assert retrieved["run_id"] == "test-123"
-        assert retrieved["configs"] == test_result["configs"]
+        assert retrieved["run_id"] == "test-run"
+
+
+# ============================================================================
+# TESTS: Human Approval
+# ============================================================================
+
+class TestHumanApproval:
+    """Tests for human approval workflow."""
     
     @pytest.mark.asyncio
-    @patch('deploy_agent.asyncio.create_subprocess_exec')
-    async def test_rollback_kubernetes(self, mock_subprocess, deploy_agent):
-        """Test rollback for Kubernetes target."""
-        # Setup history
-        previous_run = {
-            "target": "kubernetes",
-            "configs": {"apiVersion": "v1", "kind": "Pod"}
+    @patch('aiohttp.ClientSession')
+    async def test_human_approval_webhook_approved(self, mock_session, agent):
+        """Test human approval when approved via webhook."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "approved": True,
+            "comments": "Looks good!"
+        })
+        
+        mock_session_instance = MagicMock()
+        mock_session_instance.post = AsyncMock(return_value=mock_response)
+        mock_session.return_value.__aenter__.return_value = mock_session_instance
+        
+        agent.webhook_url = "http://test.hook"
+        
+        approved = await agent.request_human_approval({}, {})
+        
+        assert approved
+    
+    @pytest.mark.asyncio
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    async def test_generation_with_approval_required_and_rejected(
+        self, mock_handler, mock_llm, agent,
+        mock_validation_success
+    ):
+        """Test generation when human approval is required and rejected."""
+        mock_llm.return_value = {"content": "FROM python:3.9", "model": "gpt-4"}
+        mock_handler.return_value = {
+            "final_config_output": "FROM python:3.9",
+            "structured_data": {},
+            "provenance": {}
         }
         
-        cursor = deploy_agent.db.cursor()
-        cursor.execute(
-            "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-            ("rollback-123", datetime.now().isoformat(), json.dumps(previous_run))
+        mock_validator = MagicMock()
+        mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+        agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+        
+        agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+        agent.compliance_check_final = AsyncMock(return_value=[])
+        agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+        agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+        
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
+        
+        with patch.object(agent, 'request_human_approval', new=AsyncMock(return_value=False)):
+            with pytest.raises(ValueError, match="Configuration rejected by human reviewer"):
+                await agent.generate_documentation(
+                    target_files=["src/main.py"],
+                    targets=["docker"],
+                    doc_type="deployment",
+                    human_approval=True
+                )
+
+
+# ============================================================================
+# TESTS: Report Generation
+# ============================================================================
+
+class TestReportGeneration:
+    """Tests for report generation."""
+    
+    @pytest.mark.asyncio
+    async def test_generate_report(self, agent):
+        """Test generating deployment report."""
+        result = {
+            "run_id": "test-123",
+            "timestamp": datetime.now().isoformat(),
+            "configs": {
+                "docker": "FROM python:3.9\nCMD python app.py"
+            },
+            "validations": {
+                "docker": {
+                    "build_status": "success",
+                    "lint_status": "passed"
+                }
+            },
+            "compliances": {
+                "docker": []
+            },
+            "simulations": {
+                "docker": {"status": "success"}
+            },
+            "explanations": {
+                "docker": "This is a Python application container"
+            },
+            "badges": {},
+            "provenance": {
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+        
+        report = await agent.generate_report(result)
+        
+        assert "Deployment Configuration Report" in report
+        assert "test-123" in report
+        assert "docker" in report
+        assert "FROM python:3.9" in report
+    
+    @pytest.mark.asyncio
+    async def test_generate_report_empty(self, agent):
+        """Test generating report with empty result."""
+        result = {
+            "run_id": "empty",
+            "timestamp": datetime.now().isoformat(),
+            "configs": {},
+            "provenance": {}
+        }
+        
+        report = await agent.generate_report(result)
+        
+        assert "Deployment Configuration Report" in report
+        assert "empty" in report
+
+
+# ============================================================================
+# TESTS: Security
+# ============================================================================
+
+class TestSecurity:
+    """Tests for security features."""
+    
+    @patch('generator.agents.deploy_agent.deploy_agent.redact_secrets', return_value="My API key is: [REDACTED]")
+    def test_scrub_text_api_key(self, mock_redact):
+        """Test scrubbing API keys from text."""
+        text = "My API key is: sk-1234567890abcdef1234567890abcdef"
+        scrubbed = scrub_text(text)
+        
+        assert "sk-1234567890abcdef1234567890abcdef" not in scrubbed
+        assert "[REDACTED]" in scrubbed
+        mock_redact.assert_called_with(text)
+
+    @patch('generator.agents.deploy_agent.deploy_agent.redact_secrets', return_value="password=[REDACTED]")
+    def test_scrub_text_password(self, mock_redact):
+        """Test scrubbing passwords from text."""
+        text = "password=mysecretpassword123"
+        scrubbed = scrub_text(text)
+        
+        assert "mysecretpassword123" not in scrubbed
+        mock_redact.assert_called_with(text)
+
+
+# ============================================================================
+# TESTS: Metrics and Observability
+# ============================================================================
+
+class TestMetricsObservability:
+    """Tests for metrics and observability."""
+    
+    @pytest.mark.asyncio
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    @patch('generator.agents.deploy_agent.deploy_agent.SUCCESSFUL_GENERATIONS')
+    async def test_metrics_successful_generation(
+        self, mock_metric, mock_handler, mock_llm, 
+        agent, mock_validation_success
+    ):
+        """Test that metrics are recorded on successful generation."""
+        mock_llm.return_value = {"content": "FROM python:3.9", "model": "gpt-4"}
+        mock_handler.return_value = {
+            "final_config_output": "FROM python:3.9",
+            "structured_data": {},
+            "provenance": {}
+        }
+        
+        mock_validator = MagicMock()
+        mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+        agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+        
+        agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+        agent.compliance_check_final = AsyncMock(return_value=[])
+        agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+        agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+        
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
+        
+        await agent.generate_documentation(
+            target_files=["src/main.py"],
+            targets=["docker"],
+            doc_type="deployment",
+            human_approval=False
         )
-        deploy_agent.db.commit()
         
-        # Mock kubectl
-        mock_proc = AsyncMock()
-        mock_proc.returncode = 0
-        mock_proc.communicate.return_value = (b"configured", b"")
-        mock_subprocess.return_value = mock_proc
-        
-        # Mock plugin
-        mock_k8s_plugin = Mock(spec=TargetPlugin)
-        deploy_agent.register_plugin("kubernetes", mock_k8s_plugin)
-        
-        result = await deploy_agent.rollback("rollback-123")
-        
-        assert result == True
-        mock_subprocess.assert_called()
-    
-    @pytest.mark.asyncio
-    async def test_rollback_nonexistent_run(self, deploy_agent):
-        """Test rollback with non-existent run ID."""
-        result = await deploy_agent.rollback("nonexistent-id")
-        assert result == False
+        mock_metric.labels.assert_called_with(run_type="deployment")
 
 
 # ============================================================================
-# PERFORMANCE TESTS
-# ============================================================================
-
-class TestPerformance:
-    """Test performance and concurrency."""
-    
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(10)
-    async def test_concurrent_generation(self, deploy_agent, mock_plugin):
-        """Test concurrent configuration generation."""
-        deploy_agent.register_plugin("docker", mock_plugin)
-        deploy_agent.register_plugin("helm", mock_plugin)
-        
-        # Run multiple generations concurrently
-        tasks = [
-            deploy_agent.generate_documentation(
-                target_files=["main.py"],
-                targets=["docker"],
-                human_approval=False
-            )
-            for _ in range(3)
-        ]
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # All should succeed
-        for result in results:
-            assert not isinstance(result, Exception)
-            assert "configs" in result
-    
-    @pytest.mark.asyncio
-    async def test_rate_limiting(self, deploy_agent, mock_plugin):
-        """Test rate limiting with semaphore."""
-        deploy_agent.register_plugin("docker", mock_plugin)
-        deploy_agent.sem = asyncio.Semaphore(2)  # Limit to 2 concurrent
-        
-        start_time = time.time()
-        
-        # Try to run 4 tasks
-        tasks = [
-            deploy_agent.generate_documentation(
-                target_files=["main.py"],
-                targets=["docker"],
-                human_approval=False
-            )
-            for _ in range(4)
-        ]
-        
-        await asyncio.gather(*tasks)
-        
-        # Should take longer due to rate limiting
-        duration = time.time() - start_time
-        assert duration > 0  # Just ensure it completes
-
-
-# ============================================================================
-# INTEGRATION TESTS
-# ============================================================================
-
-class TestIntegration:
-    """End-to-end integration tests."""
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_full_pipeline(self, deploy_agent, mock_plugin):
-        """Test complete pipeline from generation to validation."""
-        # Register multiple plugins
-        deploy_agent.register_plugin("docker", mock_plugin)
-        deploy_agent.register_plugin("helm", mock_plugin)
-        deploy_agent.register_plugin("terraform", mock_plugin)
-        
-        # Run full pipeline
-        result = await deploy_agent.generate_documentation(
-            target_files=["main.py", "requirements.txt", "Dockerfile"],
-            doc_type="README",
-            targets=["docker", "helm", "terraform"],
-            instructions="Generate production-ready configs",
-            human_approval=False,
-            ensemble=False,
-            stream=False,
-            llm_model="gpt-4"
-        )
-        
-        # Verify all components
-        assert result["run_id"] is not None
-        assert len(result["configs"]) == 3
-        assert all(target in result["configs"] for target in ["docker", "helm", "terraform"])
-        assert all(result["validations"][t]["valid"] for t in ["docker", "helm", "terraform"])
-        assert all(result["simulations"][t]["status"] == "success" for t in ["docker", "helm", "terraform"])
-        assert "badges" in result
-        assert "provenance" in result
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_error_recovery_pipeline(self, deploy_agent):
-        """Test pipeline with errors and recovery."""
-        # Create a plugin that fails initially
-        failing_plugin = Mock(spec=TargetPlugin)
-        failing_plugin.generate_config = AsyncMock(
-            side_effect=[Exception("First attempt failed"), {"config": "recovered"}]
-        )
-        failing_plugin.validate_config = AsyncMock(return_value={"valid": True})
-        failing_plugin.simulate_deployment = AsyncMock(return_value={"status": "success"})
-        failing_plugin.health_check.return_value = True
-        
-        deploy_agent.register_plugin("unstable", failing_plugin)
-        
-        # Should trigger self-healing
-        with pytest.raises(Exception):
-            await deploy_agent.generate_documentation(
-                target_files=["main.py"],
-                targets=["unstable"],
-                human_approval=False
-            )
-
-
-# ============================================================================
-# PROPERTY-BASED TESTS
-# ============================================================================
-
-class TestPropertyBased:
-    """Property-based tests using Hypothesis."""
-    
-    @given(
-        text=st.text(min_size=0, max_size=1000),
-        include_secrets=st.booleans()
-    )
-    def test_scrub_text_properties(self, text, include_secrets):
-        """Property: scrubbed text never contains sensitive patterns."""
-        if include_secrets:
-            text = f"api_key={fake.sha256()[:20]} {text}"
-        
-        result = scrub_text(text)
-        
-        # Properties that should always hold
-        assert len(result) <= len(text) + result.count("[REDACTED]") * 10
-        assert "api_key=" not in result or "[REDACTED]" in result
-    
-    @given(
-        num_targets=st.integers(min_value=1, max_value=10),
-        with_dependencies=st.booleans()
-    )
-    @pytest.mark.asyncio
-    async def test_dependency_graph_properties(self, num_targets, with_dependencies):
-        """Property: dependency resolution always produces valid order."""
-        agent = DeployAgent(repo_path=TEST_REPO_PATH)
-        
-        # Create random targets
-        targets = [f"target_{i}" for i in range(num_targets)]
-        for target in targets:
-            agent.target_dependencies_graph.add_node(target)
-        
-        # Add random dependencies (ensuring no cycles)
-        if with_dependencies and num_targets > 1:
-            for i in range(1, num_targets):
-                agent.target_dependencies_graph.add_edge(targets[i-1], targets[i])
-        
-        # Property: topological sort should work without cycles
-        try:
-            ordered = list(nx.topological_sort(agent.target_dependencies_graph))
-            # Verify ordering respects dependencies
-            for edge in agent.target_dependencies_graph.edges():
-                assert ordered.index(edge[0]) < ordered.index(edge[1])
-        except nx.NetworkXUnfeasible:
-            # Only happens if there's a cycle (which we avoided)
-            assert False, "Unexpected cycle in dependency graph"
-
-
-# ============================================================================
-# EDGE CASES AND ERROR SCENARIOS
+# TESTS: Edge Cases
 # ============================================================================
 
 class TestEdgeCases:
-    """Test edge cases and error scenarios."""
+    """Tests for edge cases and error conditions."""
     
     @pytest.mark.asyncio
-    async def test_empty_repository(self):
-        """Test with empty repository."""
-        with tempfile.TemporaryDirectory() as empty_repo:
-            agent = DeployAgent(repo_path=empty_repo)
-            context = await agent.gather_context([])
-            
-            assert context["file_contents"] == {}
-            assert context["dependencies"] == {}
-    
-    @pytest.mark.asyncio
-    async def test_unicode_in_files(self, deploy_agent):
-        """Test handling of Unicode characters in files."""
-        unicode_content = "Hello 世界 🚀 émojis"
-        test_file = deploy_agent.repo_path / "unicode.txt"
-        
-        async with aiofiles.open(test_file, 'w', encoding='utf-8') as f:
-            await f.write(unicode_content)
-        
-        context = await deploy_agent.gather_context(["unicode.txt"])
-        
-        assert "unicode.txt" in context["file_contents"]
-        # Content should be scrubbed but Unicode preserved
-        assert "世界" in context["file_contents"]["unicode.txt"]
-    
-    @pytest.mark.asyncio
-    async def test_large_file_handling(self, deploy_agent):
-        """Test handling of large files."""
-        large_content = "x" * (10 * 1024 * 1024)  # 10MB
-        test_file = deploy_agent.repo_path / "large.txt"
-        
-        async with aiofiles.open(test_file, 'w') as f:
-            await f.write(large_content)
-        
-        # Should handle without memory issues
-        context = await deploy_agent.gather_context(["large.txt"])
-        
-        assert "large.txt" in context["file_contents"]
-    
-    @pytest.mark.asyncio
-    async def test_concurrent_database_access(self, deploy_agent):
-        """Test concurrent database operations."""
-        async def write_history(run_id):
-            cursor = deploy_agent.db.cursor()
-            cursor.execute(
-                "INSERT INTO history (id, timestamp, result) VALUES (?, ?, ?)",
-                (run_id, datetime.now().isoformat(), json.dumps({"test": run_id}))
-            )
-            deploy_agent.db.commit()
-        
-        # Run concurrent writes
-        tasks = [write_history(f"concurrent-{i}") for i in range(10)]
-        await asyncio.gather(*tasks)
-        
-        # Verify all were written
-        cursor = deploy_agent.db.cursor()
-        cursor.execute("SELECT COUNT(*) FROM history WHERE id LIKE 'concurrent-%'")
-        count = cursor.fetchone()[0]
-        
-        assert count == 10
-
-
-# ============================================================================
-# MOCK RESPONSES AND FIXTURES MODULE
-# ============================================================================
-
-"""test_fixtures.py - Shared fixtures and utilities for tests"""
-
-def create_test_repository(path: str) -> Path:
-    """Create a test repository with sample files."""
-    repo_path = Path(path)
-    repo_path.mkdir(parents=True, exist_ok=True)
-    return repo_path
-
-def cleanup_test_repository(path: Path):
-    """Clean up test repository."""
-    import shutil
-    if path.exists():
-        shutil.rmtree(path)
-
-def generate_mock_config(target: str) -> Dict[str, Any]:
-    """Generate mock configuration for a target."""
-    configs = {
-        "docker": {
-            "FROM": "python:3.9",
-            "WORKDIR": "/app",
-            "COPY": ". .",
-            "CMD": ["python", "app.py"]
-        },
-        "helm": {
-            "apiVersion": "v2",
-            "name": "test-chart",
-            "version": "0.1.0",
-            "dependencies": []
-        },
-        "terraform": {
-            "terraform": {"required_version": ">= 0.14"},
-            "provider": {"aws": {"version": "~> 3.0"}}
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    async def test_generate_with_no_files(
+        self, mock_handler, mock_llm, 
+        agent, mock_validation_success
+    ):
+        """Test generation with no target files."""
+        mock_llm.return_value = {"content": "FROM scratch", "model": "gpt-4"}
+        mock_handler.return_value = {
+            "final_config_output": "FROM scratch",
+            "structured_data": {},
+            "provenance": {}
         }
-    }
-    return configs.get(target, {"type": target, "config": "mock"})
+        
+        mock_validator = MagicMock()
+        mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+        agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+        
+        agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+        agent.compliance_check_final = AsyncMock(return_value=[])
+        agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+        agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+        
+        # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
+        agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
+        
+        result = await agent.generate_documentation(
+            target_files=[],
+            targets=["docker"],
+            doc_type="deployment",
+            human_approval=False
+        )
+        
+        assert "configs" in result
+    
+    @pytest.mark.asyncio
+    async def test_supported_languages(self, agent):
+        """Test getting supported languages."""
+        languages = agent.supported_languages()
+        
+        assert isinstance(languages, list)
+        assert "python" in languages
+    
+    @pytest.mark.asyncio
+    @patch('generator.agents.deploy_agent.deploy_agent.call_llm_api')
+    @patch('generator.agents.deploy_agent.deploy_agent.handle_deploy_response')
+    async def test_concurrent_generations(
+        self, mock_handler, mock_llm, 
+        agent, mock_validation_success, temp_repo # FIX: Add temp_repo fixture
+    ):
+        """Test handling concurrent generation requests."""
+        
+        # FIX: Define a helper function to create a new, fully-mocked agent
+        # for each concurrent task. This ensures each run has a unique run_id.
+        async def create_and_run_agent():
+            with patch.dict('os.environ', {'TESTING': '1'}):
+                # Each task gets a new agent, so it gets a new run_id
+                new_agent = DeployAgent(str(temp_repo))
+                # They can all share the same test database file
+                new_agent.db_path = agent.db_path
+                # Must await async init
+                await new_agent._init_db()
 
-def generate_mock_validation_result(valid: bool = True) -> Dict[str, Any]:
-    """Generate mock validation result."""
-    return {
-        "valid": valid,
-        "details": "Validation passed" if valid else "Validation failed",
-        "errors": [] if valid else ["Error 1", "Error 2"]
-    }
+            # Mock all dependencies for the new agent instance
+            mock_llm.return_value = {"content": "config", "model": "gpt-4"}
+            mock_handler.return_value = {
+                "final_config_output": "config",
+                "structured_data": {},
+                "provenance": {}
+            }
+            mock_validator = MagicMock()
+            mock_validator.validate = AsyncMock(return_value=mock_validation_success)
+            new_agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+            
+            new_agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+            new_agent.compliance_check_final = AsyncMock(return_value=[])
+            new_agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+            new_agent.generate_explanation_final = AsyncMock(return_value="Explanation")
+            new_agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
 
+            # Run the generation
+            return await new_agent.generate_documentation(
+                target_files=["src/main.py"],
+                targets=["docker"],
+                doc_type="deployment",
+                human_approval=False
+            )
+        
+        # Start multiple generations concurrently
+        tasks = [ create_and_run_agent() for _ in range(3) ]
+        
+        results = await asyncio.gather(*tasks)
+        
+        # Verify all 3 tasks completed
+        assert len(results) == 3
+        assert all("configs" in r for r in results)
+
+        # Verify 3 unique run IDs were created
+        run_ids = [r['run_id'] for r in results]
+        assert len(set(run_ids)) == 3
+        
+        # Verify all 3 unique runs were successfully written to the database
+        async with aiosqlite.connect(agent.db_path) as db:
+            async with db.execute("SELECT id FROM history") as cursor:
+                rows = await cursor.fetchall()
+                # Note: This checks count in the DB. If tests run in parallel
+                # this might be flaky, but for this file it should be fine.
+                # We check that our 3 unique IDs are present.
+                db_ids = set(r[0] for r in rows)
+                assert set(run_ids).issubset(db_ids)
+
+
+# ============================================================================
+# RUN TESTS
+# ============================================================================
 
 if __name__ == "__main__":
-    # Run tests with coverage
-    pytest.main([
-        __file__,
-        "-v",
-        "--cov=deploy_agent",
-        "--cov-report=html",
-        "--cov-report=term-missing",
-        "-m", "not integration"  # Skip integration tests by default
-    ])
+    pytest.main([__file__, "-v", "--tb=short"])

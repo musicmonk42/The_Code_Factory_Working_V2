@@ -1,83 +1,87 @@
-# runner/contracts.py
-# World-class, gold-standard schemas for test execution tasks.
-# This module defines the data contracts (Pydantic models) only.
-# It is designed to be pure, dependency-light, and universally importable.
+# generator/runner/runner_contracts.py
+# Defines the data structures (Pydantic models) for tasks and results.
 
+import time
 import uuid
-from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
-
-# Define the current schema version for these contracts.
-# This constant lives here as it's directly tied to the model's definition.
-CURRENT_SCHEMA_VERSION = 2
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field, field_validator, model_validator
+from datetime import datetime
 
 class TaskPayload(BaseModel):
     """
-    Schema for a test execution task payload.
-    This model defines the structure and basic validation rules for incoming tasks.
+    Data contract for submitting a new test/code execution task.
     """
-    # Core Task Fields
-    test_files: Dict[str, str] = Field(..., description="Dictionary of test file paths to their content.")
-    code_files: Dict[str, str] = Field(..., description="Dictionary of code file paths to their content.")
-    output_path: str = Field(..., description="Local path where results should be stored.")
+    task_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    test_files: Dict[str, str] = Field(..., description="Filenames mapped to their string content for test files.")
+    code_files: Dict[str, str] = Field(..., description="Filenames mapped to their string content for source code.")
+    output_path: str = Field(..., description="The designated output directory for results.")
     
-    # Execution Control Fields
-    timeout: Optional[int] = Field(None, description="Override default execution timeout in seconds.")
-    dry_run: bool = Field(False, description="If true, simulate the test run without actual execution.")
-    priority: int = Field(0, description="Priority of the task (lower number indicates higher priority).")
-    
-    # Identification and Metadata
-    task_id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier for the task. Auto-generated if not provided.")
-    tags: List[str] = Field(default_factory=list, description="Metadata tags for querying and categorization.")
-    environment: str = Field("production", description="The execution environment associated with this task (e.g., 'dev', 'staging', 'production').")
+    # --- ADD THIS LINE ---
+    command: Optional[List[str]] = Field(None, description="The command to execute in the backend.")
 
-    # Schema Versioning for Data Compatibility
-    schema_version: int = Field(CURRENT_SCHEMA_VERSION, description="Schema version of this TaskPayload. Used for external migration logic.")
+    timeout: Optional[int] = Field(None, description="Task-specific timeout in seconds.")
+    dry_run: bool = Field(False, description="If true, backend should simulate execution.")
+    priority: int = Field(0, description="Task priority (higher numbers = higher priority).")
+    tags: List[str] = Field(default_factory=list, description="Arbitrary tags for grouping/filtering.")
+    environment: str = Field("production", description="Execution environment (e.g., 'production', 'staging').")
+    schema_version: int = Field(2, description="The version of this payload schema.")
 
-    # Note: Sensitive data encryption, digital signatures, file size validation, and
-    # allowed extensions should be handled at the *API/Service layer* before
-    # model instantiation, or as part of data persistence/transfer logic.
-    # This model defines the structure, not the operational security or transport.
+    @field_validator('output_path')
+    @classmethod
+    def validate_output_path(cls, v: str) -> str:
+        """
+        Ensure output_path is a meaningful, non-empty string.
+        """
+        if not v or not v.strip():
+            raise ValueError("output_path must be a non-empty string.")
+        return v
+
+    @model_validator(mode='after')
+    def validate_has_files(self):
+        """
+        Ensure the task is not an empty shell: require at least one of
+        test_files or code_files to be populated.
+        """
+        if not self.test_files and not self.code_files:
+            raise ValueError(
+                "At least one of 'test_files' or 'code_files' must be provided."
+            )
+        return self
+
 
 class TaskResult(BaseModel):
     """
-    Schema for the result of a test execution task.
-    This model defines the structure for output data from a task.
+    Data contract for the result of an executed task.
     """
-    # Core Result Fields
-    task_id: str = Field(..., description="Unique identifier of the completed task.")
-    status: str = Field(..., description="Overall status of the task ('completed', 'enqueued', 'failed', 'timed_out').")
+    task_id: str
+    status: str = Field(..., description="Status of the task (e.g., 'completed', 'failed', 'enqueued', 'timeout').")
     
-    # Detailed Results
-    results: Optional[Dict[str, Any]] = Field(None, description="Detailed test results and metrics from execution.")
-    error: Optional[Dict[str, Any]] = Field(None, description="Structured error information if the task failed.")
+    results: Optional[Dict[str, Any]] = Field(None, description="Structured results (e.g., pass/fail counts, coverage).")
+    error: Optional[Dict[str, Any]] = Field(None, description="Structured error information if status is 'failed'.")
     
-    # Timestamps
-    started_at: Optional[float] = Field(None, description="Unix epoch timestamp when the task started processing.")
-    finished_at: Optional[float] = Field(None, description="Unix epoch timestamp when the task finished processing.")
+    started_at: float = Field(default_factory=time.time)
+    finished_at: Optional[float] = Field(None, description="Timestamp when the task finished processing.")
     
-    # Metadata (copied from TaskPayload or derived)
-    tags: List[str] = Field(default_factory=list, description="Metadata tags inherited from the task payload.")
-    environment: str = Field("production", description="Execution environment where the task was processed.")
+    tags: List[str] = Field(default_factory=list)
+    
+    # These fields might be in the 'results' dict, but adding them here based on test mocks
+    pass_rate: Optional[float] = Field(None, description="Overall pass rate, if applicable.")
+    coverage_percentage: Optional[float] = Field(None, description="Overall coverage, if applicable.")
 
-    # Schema Versioning
-    schema_version: int = Field(CURRENT_SCHEMA_VERSION, description="Schema version of this TaskResult. Used for external migration logic.")
 
-    # Note: The 'status' validation is a simple enum check, suitable for a contracts file.
-    # More complex business logic validation would typically be in service layer.
-    
 class BatchTaskPayload(BaseModel):
     """
-    Schema for a batch of test execution tasks.
-    This groups multiple TaskPayloads for efficient submission.
+    Data contract for submitting a batch of tasks.
     """
-    tasks: List[TaskPayload] = Field(..., description="A list of TaskPayload objects within this batch.")
-    batch_id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier for the batch. Auto-generated if not provided.")
+    batch_id: str = Field(default_factory=lambda: f"batch_{uuid.uuid4()}")
+    tasks: List[TaskPayload] = Field(..., min_length=1)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Schema Versioning
-    schema_version: int = Field(CURRENT_SCHEMA_VERSION, description="Schema version of this BatchTaskPayload.")
-
-    # Note: Validation for unique task IDs within a batch should be handled at the
-    # service layer where the batch is processed, not strictly within the Pydantic model
-    # definition itself, to keep models pure. Pydantic's List validation will ensure
-    # all items are TaskPayloads.
+    @model_validator(mode='after')
+    def validate_non_empty_tasks(self):
+        """
+        Ensure a batch has at least one task.
+        """
+        if not self.tasks:
+            raise ValueError("BatchTaskPayload must contain at least one task.")
+        return self

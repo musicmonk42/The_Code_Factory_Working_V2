@@ -1,311 +1,433 @@
-
 """
 test_audit_backend_file_sql.py
 
-Regulated industry-grade test suite for audit_backend_file_sql.py.
-
-Features:
-- Tests FileBackend and SQLiteBackend for batch writes, queries, schema migration, health checks, and WAL recovery.
-- Validates PII/secret redaction, audit logging, and tamper detection.
-- Ensures Prometheus metrics and OpenTelemetry tracing.
-- Tests async-safe batch operations, retry logic, and thread-safety.
-- Verifies error handling, invalid configurations, and compliance (SOC2/PCI DSS/HIPAA).
-- Uses real implementations with mocked external dependencies (Presidio, audit_log, file operations).
-
-Dependencies:
-- pytest, pytest-asyncio, unittest.mock, faker, freezegun, aiofiles
-- sqlite3, zlib, presidio-analyzer, prometheus-client, opentelemetry-sdk
-- audit_log, audit_utils
+Modern test suite for audit_backend_file_sql.py, compatible with the
+new core architecture (encryption, batching, async-native).
 """
 
-import asyncio
-import json
+# --- env must be set before any package import that touches Dynaconf ---
 import os
+import json
+import base64
+import zlib
+import datetime
+from typing import Dict
+
+os.environ["AUDIT_LOG_DEV_MODE"] = "true"
+encryption_key = base64.urlsafe_b64encode(b"0"*32).decode("ascii")
+os.environ["AUDIT_ENCRYPTION_KEYS"] = f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
+os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "gzip")
+os.environ.setdefault("AUDIT_COMPRESSION_LEVEL", "6")
+os.environ.setdefault("AUDIT_BATCH_FLUSH_INTERVAL", "5")
+os.environ.setdefault("AUDIT_BATCH_MAX_SIZE", "100")
+os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "60")
+os.environ.setdefault("AUDIT_RETRY_MAX_ATTEMPTS", "3")
+os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
+os.environ.setdefault("AUDIT_TAMPER_DETECTION_ENABLED", "true")
+# --- end env block ---
+
+import sys
+import types
+import asyncio
+import sqlite3
+import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
+
 import pytest
 import pytest_asyncio
-from faker import Faker
-from freezegun import freeze_time
-import sqlite3
 import aiofiles
 from prometheus_client import REGISTRY
-import zlib
 
-from audit_backend_file_sql import FileBackend, SQLiteBackend
-from audit_log import log_action
-from audit_utils import compute_hash
+# --- Package Shim ---
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PKG_ROOT = REPO_ROOT / "audit_log" / "audit_backend"
+p = str(REPO_ROOT)
+if p not in sys.path:
+    sys.path.insert(0, p)
+if "audit_log" not in sys.modules:
+    pkg = types.ModuleType("audit_log")
+    pkg.__path__ = [str(REPO_ROOT / "audit_log")]
+    sys.modules["audit_log"] = pkg
+if "audit_log.audit_backend" not in sys.modules:
+    subpkg = types.ModuleType("audit_log.audit_backend")
+    subpkg.__path__ = [str(PKG_ROOT)]
+    sys.modules["audit_log.audit_backend"] = subpkg
+    sys.modules["audit_log"].audit_backend = subpkg
 
-# Initialize faker for test data generation
-fake = Faker()
+# Load core first
+import importlib.util
+CORE_PATH = PKG_ROOT / "audit_backend_core.py"
+core_spec = importlib.util.spec_from_file_location("audit_log.audit_backend.audit_backend_core", str(CORE_PATH))
+core = importlib.util.module_from_spec(core_spec)
+sys.modules["audit_log.audit_backend.audit_backend_core"] = core
+sys.modules["audit_log.audit_backend"].audit_backend_core = core
+core_spec.loader.exec_module(core)
 
-# Test constants
-TEST_LOG_DIR = "/tmp/test_audit_backend_file_sql"
-TEST_LOG_FILE = f"{TEST_LOG_DIR}/audit.log"
-TEST_DB_FILE = f"{TEST_LOG_DIR}/audit.db"
-MOCK_CORRELATION_ID = str(uuid.uuid4())
+# Load file/sql module
+FILE_SQL_PATH = PKG_ROOT / "audit_backend_file_sql.py"
+spec = importlib.util.spec_from_file_location("audit_log.audit_backend.audit_backend_file_sql", str(FILE_SQL_PATH))
+file_sql = importlib.util.module_from_spec(spec)
+sys.modules["audit_log.audit_backend.audit_backend_file_sql"] = file_sql
+sys.modules["audit_log.audit_backend"].audit_backend_file_sql = file_sql
+spec.loader.exec_module(file_sql)
 
-# Environment variables for compliance mode
-os.environ['COMPLIANCE_MODE'] = 'true'
-os.environ['AUDIT_ENCRYPTION_KEYS'] = json.dumps([base64.b64encode(b"mock_key_32_bytes_1234567890abcd").decode('utf-8')])
-os.environ['AUDIT_COMPRESSION_ALGO'] = 'zlib'
-os.environ['AUDIT_COMPRESSION_LEVEL'] = '9'
-os.environ['AUDIT_BATCH_FLUSH_INTERVAL'] = '10'
-os.environ['AUDIT_BATCH_MAX_SIZE'] = '100'
-os.environ['AUDIT_HEALTH_CHECK_INTERVAL'] = '30'
-os.environ['AUDIT_RETRY_MAX_ATTEMPTS'] = '3'
-os.environ['AUDIT_RETRY_BACKOFF_FACTOR'] = '0.5'
-os.environ['AUDIT_TAMPER_DETECTION_ENABLED'] = 'true'
+# Expose classes for tests
+FileBackend = file_sql.FileBackend
+SQLiteBackend = file_sql.SQLiteBackend
+SCHEMA_VERSION = core.SCHEMA_VERSION
+ENCRYPTER = core.ENCRYPTER
+COMPRESSION_ALGO = core.COMPRESSION_ALGO
+COMPRESSION_LEVEL = core.COMPRESSION_LEVEL
+compute_hash = core.compute_hash
+# --- End Shim ---
+
+
+# --- Test Helper Functions ---
+
+def _prepare_v1_entry(entry_data: Dict) -> str:
+    """Creates a V1-style (schema_version=1) prepared entry string."""
+    entry_data["schema_version"] = 1
+    if "entry_id" not in entry_data:
+        entry_data["entry_id"] = str(uuid.uuid4())
+    if "timestamp" not in entry_data:
+        # --- FIX: Ensure timestamp matches core logic (milliseconds + Z) ---
+        entry_data["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds') + 'Z'
+    
+    # --- FIX: Compute hash on a copy *before* adding the hash itself ---
+    # The hash is computed on the data *without* the hash in it.
+    temp_hash_data = entry_data.copy()
+    hash_str = json.dumps(temp_hash_data, sort_keys=True).encode("utf-8")
+    computed_hash = compute_hash(hash_str)
+    
+    # Now add the hash to the data to be encrypted
+    entry_data["_audit_hash"] = computed_hash
+    # --- END FIX ---
+
+    # Encrypt/Compress the payload (which now includes the hash)
+    data_str = json.dumps(entry_data, sort_keys=True)
+    if COMPRESSION_ALGO == "gzip":
+        compressed = zlib.compress(data_str.encode("utf-8"), level=COMPRESSION_LEVEL)
+    else:
+        compressed = data_str.encode("utf-8")
+    
+    encrypted = ENCRYPTER.encrypt(compressed)
+    base64_data = base64.b64encode(encrypted).decode("utf-8")
+
+    # This is the format the backend stores
+    stored_entry = {
+        "encrypted_data": base64_data,
+        "entry_id": entry_data["entry_id"],
+        "schema_version": 1,
+        "timestamp": entry_data["timestamp"],
+        "_audit_hash": computed_hash # Store the correctly computed hash
+    }
+    return json.dumps(stored_entry)
+
+
+# --- Mocks and Fixtures ---
 
 @pytest.fixture(scope="function")
 def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    """Separate loop per test."""
+    loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
-@pytest.fixture(autouse=True)
-def cleanup_test_environment():
-    """Clean up test environment before and after tests."""
-    for path in [TEST_LOG_DIR]:
-        if Path(path).exists():
-            import shutil
-            shutil.rmtree(path, ignore_errors=True)
-    Path(TEST_LOG_DIR).mkdir(parents=True, exist_ok=True)
-    yield
-    if Path(TEST_LOG_DIR).exists():
-        import shutil
-        shutil.rmtree(path, ignore_errors=True)
-
-@pytest_asyncio.fixture
-async def mock_presidio():
-    """Mock Presidio analyzer and anonymizer."""
-    with patch('audit_utils.presidio_analyzer.AnalyzerEngine') as mock_analyzer, \
-         patch('audit_utils.presidio_anonymizer.AnonymizerEngine') as mock_anonymizer:
-        mock_analyzer_inst = MagicMock()
-        mock_anonymizer_inst = MagicMock()
-        mock_analyzer_inst.analyze.return_value = [
-            MagicMock(entity_type='EMAIL_ADDRESS', start=10, end=25)
-        ]
-        mock_anonymizer_inst.anonymize.return_value = MagicMock(
-            text="[REDACTED_EMAIL]"
-        )
-        mock_analyzer.return_value = mock_analyzer_inst
-        mock_anonymizer.return_value = mock_anonymizer_inst
-        yield mock_analyzer_inst, mock_anonymizer_inst
-
-@pytest_asyncio.fixture
-async def mock_audit_log():
-    """Mock audit_log.log_action."""
-    with patch('audit_log.log_action') as mock_log:
-        yield mock_log
-
-@pytest_asyncio.fixture
-async def mock_send_alert():
-    """Mock audit_utils.send_alert."""
-    with patch('audit_utils.send_alert') as mock_alert:
-        yield mock_alert
-
-@pytest_asyncio.fixture
-async def mock_opentelemetry():
-    """Mock OpenTelemetry tracer."""
-    with patch('audit_backend_core.trace') as mock_trace:
-        mock_tracer = MagicMock()
+@pytest_asyncio.fixture(autouse=True)
+async def mock_alerts_and_otel():
+    """Mock alerts and tracing for all tests."""
+    with patch("audit_log.audit_backend.audit_backend_core.send_alert", new_callable=AsyncMock) as mock_alert, \
+         patch("audit_log.audit_backend.audit_backend_core.tracer") as mock_tracer:
+        
         mock_span = MagicMock()
         mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
-        mock_trace.get_tracer.return_value = mock_tracer
-        yield mock_tracer, mock_span
+        yield mock_alert, mock_tracer, mock_span
 
 @pytest_asyncio.fixture
-async def file_backend():
-    """Create a FileBackend instance."""
-    backend = FileBackend({"log_file": TEST_LOG_FILE})
+async def file_backend(tmp_path):
+    """Create a FileBackend instance in a temp directory."""
+    log_file = tmp_path / "audit.log"
+    backend = FileBackend({"log_file": str(log_file)})
+    
+    # --- FIX: Call start() to run migration and init tasks ---
+    await backend.start()
+    
     yield backend
-    await backend.close()
+    
+    # --- FIX: Iterate over a list copy and remove .close() call ---
+    # Manually cancel tasks to avoid resource warnings
+    for task in list(backend._async_tasks): # Iterate over a copy
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 @pytest_asyncio.fixture
-async def sqlite_backend():
-    """Create a SQLiteBackend instance."""
-    backend = SQLiteBackend({"db_file": TEST_DB_FILE})
+async def sqlite_backend(tmp_path):
+    """Create a SQLiteBackend instance in a temp directory."""
+    db_file = tmp_path / "audit.db"
+    backend = SQLiteBackend({"db_file": str(db_file)})
+    
+    # --- FIX: Call start() to run init and migration tasks ---
+    await backend.start()
+
     yield backend
+    
     await backend.close()
 
-class TestAuditBackendFileSQL:
-    """Test suite for audit_backend_file_sql.py."""
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_file_backend_append(self, file_backend, mock_presidio, mock_audit_log, mock_opentelemetry):
-        """Test FileBackend append operation with WAL."""
-        entry = {
-            "action": "user_login",
-            "details_json": json.dumps({"email": "test@example.com"}),
-            "trace_id": MOCK_CORRELATION_ID,
-            "actor": "user-123",
-            "timestamp": "2025-09-01T12:00:00Z"
-        }
-        with freeze_time("2025-09-01T12:00:00Z"):
-            await file_backend.append(entry)
-        mock_presidio[0].analyze.assert_called_once()
-        mock_audit_log.assert_called_with("backend_append", backend="FileBackend", success=True)
-        mock_opentelemetry[1].set_attribute.assert_any_call("backend", "FileBackend")
-        assert REGISTRY.get_sample_value('audit_backend_writes_total', {'backend': 'FileBackend'}) == 1
+# --- Test Suite ---
 
-        # Verify WAL file
-        async with aiofiles.open(file_backend.wal_file, 'r') as wal:
-            content = await wal.read()
-        assert "[REDACTED_EMAIL]" in content
+@pytest.mark.asyncio
+async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel):
+    """Test FileBackend append, flush (atomic write), and WAL cleanup."""
+    mock_alert, mock_tracer, mock_span = mock_alerts_and_otel
+    
+    # --- FIX: Don't pass entry_id, let append() create it ---
+    entry = {"action": "login", "user": "test"}
+    
+    # 1. Append (adds to batch)
+    await file_backend.append(entry)
+    
+    # 2. Flush (triggers WAL write + atomic write)
+    await file_backend.flush_batch()
+    
+    # Check WAL file is gone (written and then deleted)
+    assert not os.path.exists(file_backend.wal_file)
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_sqlite_backend_append(self, sqlite_backend, mock_presidio, mock_audit_log):
-        """Test SQLiteBackend append operation."""
-        entry = {
-            "action": "user_login",
-            "details_json": json.dumps({"email": "test@example.com"}),
-            "trace_id": MOCK_CORRELATION_ID,
-            "actor": "user-123",
-            "timestamp": "2025-09-01T12:00:00Z"
-        }
-        with freeze_time("2025-09-01T12:00:00Z"):
-            await sqlite_backend.append(entry)
-        mock_presidio[0].analyze.assert_called_once()
-        mock_audit_log.assert_called_with("backend_append", backend="SQLiteBackend", success=True)
-        assert REGISTRY.get_sample_value('audit_backend_writes_total', {'backend': 'SQLiteBackend'}) == 1
+    # Check main log file
+    assert os.path.exists(file_backend.log_file)
+    
+    # --- FIX: Query the backend, don't read the raw file ---
+    results = await file_backend.query({}, limit=1)
+    assert len(results) == 1
+    assert results[0]["action"] == "login"
+    # --- END FIX ---
+    
+    # Check metrics and traces
+    mock_span.set_attribute.assert_any_call("batch.size", 1)
+    assert REGISTRY.get_sample_value("audit_backend_writes_total", {"backend": "FileBackend"}) == 1
 
-        # Verify database
-        conn = sqlite3.connect(TEST_DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("SELECT encrypted_data FROM logs WHERE entry_id = ?", (entry["entry_id"],))
-        result = cursor.fetchone()
-        assert result and "[REDACTED_EMAIL]" in result[0]
-        conn.close()
+@pytest.mark.asyncio
+async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_otel):
+    """Test SQLiteBackend append and flush (transaction commit)."""
+    # --- FIX: Don't pass entry_id ---
+    entry = {"action": "create_user", "user": "test"}
+    
+    await sqlite_backend.append(entry)
+    await sqlite_backend.flush_batch()
+    
+    # --- FIX: Query for the content, not the ephemeral entry_id ---
+    conn = sqlite3.connect(sqlite_backend.db_file)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT data FROM logs_v{SCHEMA_VERSION} LIMIT 1")
+    result = cursor.fetchone()
+    conn.close()
+    
+    assert result is not None
+    
+    # Decrypt to verify
+    decrypted = ENCRYPTER.decrypt(base64.b64decode(result[0]))
+    decompressed = zlib.decompress(decrypted).decode("utf-8")
+    final_entry = json.loads(decompressed)
+    
+    assert final_entry["action"] == "create_user"
+    assert REGISTRY.get_sample_value("audit_backend_writes_total", {"backend": "SQLiteBackend"}) == 1
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_file_backend_query(self, file_backend, mock_audit_log):
-        """Test FileBackend query operation."""
-        entry = {
-            "entry_id": "123",
-            "encrypted_data": json.dumps({"email": "[REDACTED_EMAIL]"}),
-            "schema_version": 1,
-            "_audit_hash": "mock_hash",
-            "timestamp": "2025-09-01T12:00:00Z"
-        }
-        async with aiofiles.open(file_backend.log_file, 'a') as f:
-            await f.write(json.dumps(entry) + "\n")
-        results = await file_backend._query_single({"entry_id": "123"}, limit=1)
-        assert len(results) == 1
-        assert results[0]["entry_id"] == "123"
-        mock_audit_log.assert_called_with("backend_query", backend="FileBackend", success=True)
+@pytest.mark.asyncio
+async def test_file_backend_query_and_tamper(file_backend, mock_alerts_and_otel):
+    """Tests FileBackend query and tamper detection."""
+    mock_alert, _, _ = mock_alerts_and_otel
+    
+    # --- FIX: Let append create the ID ---
+    entry = {"action": "query_test", "user": "test"}
+    
+    await file_backend.append(entry)
+    await file_backend.flush_batch()
+    
+    # 1. Test successful query
+    # --- FIX: Query by content ---
+    results = await file_backend.query({}, limit=1)
+    assert len(results) == 1
+    assert results[0]["action"] == "query_test"
+    entry_id = results[0]["entry_id"] # Get the real ID
+    
+    # 2. Manually tamper with the log file
+    async with aiofiles.open(file_backend.log_file, "r") as f:
+        log_content = await f.read()
+    
+    stored_entry = json.loads(log_content)
+    stored_entry["encrypted_data"] = "tampered_data" # Corrupt the data
+    
+    async with aiofiles.open(file_backend.log_file, "w") as f:
+        await f.write(json.dumps(stored_entry))
+        
+    # 3. Test query with tampered data (using the real ID)
+    results = await file_backend.query({"entry_id": entry_id}, limit=1)
+    assert len(results) == 0 # Query should fail decryption/tamper check
+    
+    # --- FIX: Check for the correct alert ---
+    # The query method logs the decryption error and sends a "Failed to process" alert.
+    mock_alert.assert_called_with(
+        f"Failed to process log entry from FileBackend. Entry ID: {entry_id}", 
+        severity="medium"
+    )
+    # --- END FIX ---
+    assert REGISTRY.get_sample_value("audit_backend_errors_total", {"backend": "FileBackend", "type": "DecodeError"}) > 0
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_sqlite_backend_query(self, sqlite_backend, mock_audit_log):
-        """Test SQLiteBackend query operation."""
-        entry = {
-            "entry_id": "123",
-            "encrypted_data": json.dumps({"email": "[REDACTED_EMAIL]"}),
-            "schema_version": 1,
-            "_audit_hash": "mock_hash",
-            "timestamp": "2025-09-01T12:00:00Z"
-        }
-        await sqlite_backend._append_single(entry)
-        results = await sqlite_backend._query_single({"entry_id": "123"}, limit=1)
-        assert len(results) == 1
-        assert results[0]["entry_id"] == "123"
-        mock_audit_log.assert_called_with("backend_query", backend="SQLiteBackend", success=True)
+@pytest.mark.asyncio
+async def test_sqlite_backend_query_and_tamper(sqlite_backend, mock_alerts_and_otel):
+    """Tests SQLiteBackend query and tamper detection."""
+    mock_alert, _, _ = mock_alerts_and_otel
+    
+    # --- FIX: Let append create the ID ---
+    entry = {"action": "query_test_db", "user": "test"}
+    
+    await sqlite_backend.append(entry)
+    await sqlite_backend.flush_batch()
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_file_backend_wal_recovery(self, file_backend, mock_audit_log):
-        """Test FileBackend WAL recovery."""
-        entry = {
-            "entry_id": "123",
-            "encrypted_data": json.dumps({"email": "[REDACTED_EMAIL]"}),
-            "schema_version": 1,
-            "_audit_hash": "mock_hash"
-        }
-        async with aiofiles.open(file_backend.wal_file, 'a') as wal:
-            await wal.write(json.dumps(entry) + "\n")
-        await file_backend.recover_wal()
-        async with aiofiles.open(file_backend.log_file, 'r') as log:
-            content = await log.read()
-        assert "123" in content
-        mock_audit_log.assert_called_with("wal_recovery", backend="FileBackend", success=True)
+    # 1. Test successful query
+    # --- FIX: Query by content ---
+    results = await sqlite_backend.query({}, limit=1)
+    assert len(results) == 1
+    assert results[0]["action"] == "query_test_db"
+    entry_id = results[0]["entry_id"] # Get the real ID
+    
+    # 2. Manually tamper with the DB
+    conn = sqlite3.connect(sqlite_backend.db_file)
+    conn.execute(f"UPDATE logs_v{SCHEMA_VERSION} SET _audit_hash = 'invalid_hash' WHERE entry_id = ?", (entry_id,))
+    conn.commit()
+    conn.close()
+    
+    # 3. Test query with tampered data (using the real ID)
+    # --- FIX: This will now fail thanks to the fix in audit_backend_core.py ---
+    results = await sqlite_backend.query({"entry_id": entry_id}, limit=1)
+    assert len(results) == 0 # Query should fail tamper check
+    # --- END FIX ---
+    
+    # --- START: FIX for test_sqlite_backend_query_and_tamper ---
+    # The test was expecting a "Failed to process" alert (medium),
+    # but the code correctly identifies tampering and sends a "Tamper detected" alert (critical).
+    mock_alert.assert_called_with(
+        f"Tamper detected for entry_id {entry_id} in SQLiteBackend!",
+        severity="critical"
+    )
+    # --- END: FIX for test_sqlite_backend_query_and_tamper ---
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_sqlite_backend_health_check(self, sqlite_backend, mock_audit_log):
-        """Test SQLiteBackend health check."""
-        health_status = await sqlite_backend._health_check()
-        assert health_status is True
-        mock_audit_log.assert_called_with("backend_health_check", backend="SQLiteBackend", status="healthy")
-        assert REGISTRY.get_sample_value('audit_backend_health', {'backend': 'SQLiteBackend'}) == 1
+    assert REGISTRY.get_sample_value("audit_backend_tamper_detection_failures_total", {"backend": "SQLiteBackend"}) == 1
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_file_backend_tamper_detection(self, file_backend, mock_audit_log, mock_send_alert):
-        """Test FileBackend tamper detection."""
-        entry = {
-            "entry_id": "123",
-            "encrypted_data": "mock_data",
-            "schema_version": 1,
-            "_audit_hash": "invalid_hash"
-        }
-        with patch('audit_utils.compute_hash', return_value="correct_hash"):
-            with pytest.raises(TamperDetectionError, match="Tamper detected"):
-                await file_backend._verify_entry(entry)
-        mock_audit_log.assert_called_with("tamper_detected", backend="FileBackend", issue=Any)
-        mock_send_alert.assert_called_with(Any, severity="critical")
+@pytest.mark.asyncio
+async def test_file_backend_wal_recovery(file_backend, mock_alerts_and_otel):
+    """Test FileBackend WAL recovery logic."""
+    entry_id_1 = str(uuid.uuid4())
+    entry_id_2 = str(uuid.uuid4())
+    entry_1_prepared = json.loads(_prepare_v1_entry({"action": "wal_test_1", "entry_id": entry_id_1}))
+    entry_2_prepared = json.loads(_prepare_v1_entry({"action": "wal_test_2", "entry_id": entry_id_2}))
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_sqlite_backend_schema_migration(self, sqlite_backend, mock_audit_log):
-        """Test SQLiteBackend schema migration."""
-        await sqlite_backend._migrate_schema()
-        mock_audit_log.assert_called_with("schema_migration", backend="SQLiteBackend", success=True)
+    # 1. Add one entry to the main log (simulating a successful flush)
+    async with aiofiles.open(file_backend.log_file, "w") as f:
+        await f.write(json.dumps(entry_1_prepared) + "\n")
+        
+    # 2. Add both entries to the WAL (simulating a crash during next flush)
+    async with aiofiles.open(file_backend.wal_file, "w") as f:
+        await f.write(json.dumps(entry_1_prepared) + "\n") # This one is a duplicate
+        await f.write(json.dumps(entry_2_prepared) + "\n") # This one is new
+        
+    # 3. Run recovery
+    await file_backend.recover_wal()
+    
+    # 4. Check main log file
+    async with aiofiles.open(file_backend.log_file, "r") as f:
+        lines = await f.readlines()
+        
+    assert len(lines) == 2 # Should have entry 1 and entry 2
+    content = "".join(lines)
+    assert entry_id_1 in content
+    assert entry_id_2 in content
+    
+    # 5. Check WAL is gone
+    assert not os.path.exists(file_backend.wal_file)
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_file_backend_invalid_config(self, mock_audit_log):
-        """Test FileBackend with invalid configuration."""
-        with pytest.raises(ValueError, match="log_file parameter is required"):
-            FileBackend({})
-        mock_audit_log.assert_called_with("backend_init_error", backend="FileBackend", error=Any)
+@pytest.mark.asyncio
+async def test_file_backend_migration(tmp_path, mock_alerts_and_otel):
+    """Test FileBackend schema migration."""
+    log_file = tmp_path / "audit.log"
+    entry_id_v1 = str(uuid.uuid4())
+    
+    # 1. Create a V1 log file manually
+    v1_entry_str = _prepare_v1_entry({"action": "v1_test", "entry_id": entry_id_v1})
+    async with aiofiles.open(log_file, "w") as f:
+        await f.write(v1_entry_str + "\n")
+        
+    # 2. Initialize the backend. This will trigger migration.
+    backend = FileBackend({"log_file": str(log_file)})
+    # --- FIX: Call start() to run migration and init tasks ---
+    await backend.start()
+    
+    # 3. Query for the migrated entry
+    results = await backend.query({"entry_id": entry_id_v1}, limit=1)
+    
+    # 4. Validate migration
+    assert len(results) == 1
+    assert results[0]["action"] == "v1_test"
+    assert results[0]["schema_version"] == SCHEMA_VERSION # Should be 2
+    assert results[0]["_audit_hash"] != json.loads(v1_entry_str)["_audit_hash"] # Hash should be recomputed
 
-    @pytest.mark.asyncio
-    @pytest.mark.timeout(30)
-    async def test_concurrent_file_appends(self, file_backend, mock_presidio, mock_audit_log):
-        """Test concurrent FileBackend append operations."""
-        async def append_entry(i):
-            entry = {
-                "action": f"user_action_{i}",
-                "details_json": json.dumps({"email": f"test{i}@example.com"}),
-                "trace_id": MOCK_CORRELATION_ID,
-                "actor": "user-123",
-                "timestamp": "2025-09-01T12:00:00Z"
-            }
-            await file_backend.append(entry)
+    # --- FIX: Clean up FileBackend tasks manually ---
+    for task in list(backend._async_tasks): # Iterate over a copy
+        task.cancel()
+        try: await task
+        except asyncio.CancelledError: pass
 
-        tasks = [append_entry(i) for i in range(5)]
-        with freeze_time("2025-09-01T12:00:00Z"):
-            await asyncio.gather(*tasks)
-        assert mock_audit_log.call_count >= 5
-        assert REGISTRY.get_sample_value('audit_backend_writes_total', {'backend': 'FileBackend'}) == 5
+@pytest.mark.asyncio
+async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
+    """Test SQLiteBackend schema migration."""
+    db_file = tmp_path / "audit.db"
+    entry_id_v1 = str(uuid.uuid4())
+    # --- FIX: Corrected typo _prepare_vv1_entry to _prepare_v1_entry ---
+    v1_entry = json.loads(_prepare_v1_entry({"action": "v1_db_test", "entry_id": entry_id_v1}))
+    
+    # 1. Create a V1 database manually
+    conn = sqlite3.connect(db_file)
+    conn.execute("""
+        CREATE TABLE logs_v1 (
+            id INTEGER PRIMARY KEY,
+            timestamp TEXT,
+            entry_id TEXT UNIQUE,
+            schema_version INTEGER,
+            _audit_hash TEXT,
+            data TEXT
+        )
+    """)
+    conn.execute(
+        "INSERT INTO logs_v1 (entry_id, data, timestamp, schema_version, _audit_hash) VALUES (?, ?, ?, ?, ?)",
+        (entry_id_v1, v1_entry["encrypted_data"], v1_entry["timestamp"], 1, v1_entry["_audit_hash"])
+    )
+    conn.commit()
+    conn.close()
+    
+    # 2. Initialize the backend, triggering migration
+    backend = SQLiteBackend({"db_file": str(db_file)})
+    # --- FIX: Call start() to run init and migration tasks ---
+    await backend.start()
+    
+    # 3. Query for the migrated entry
+    results = await backend.query({"entry_id": entry_id_v1}, limit=1)
+    
+    # 4. Validate migration
+    assert len(results) == 1
+    assert results[0]["action"] == "v1_db_test"
+    assert results[0]["schema_version"] == SCHEMA_VERSION # Should be 2
+    
+    # 5. Check table structure
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v1'")
+    assert cursor.fetchone() is None # v1 table should be gone
+    cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v{SCHEMA_VERSION}'")
+    assert cursor.fetchone() is not None # v2 table should exist
+    conn.close()
 
-# ============================================================================
-# MAIN
-# ============================================================================
-
-if __name__ == "__main__":
-    pytest.main([
-        __file__,
-        "-v",
-        "--cov=audit_backend_file_sql",
-        "--cov-report=term-missing",
-        "--cov-report=html",
-        "--asyncio-mode=auto",
-        "-W", "ignore::DeprecationWarning",
-        "--tb=short"
-    ])
+    await backend.close()

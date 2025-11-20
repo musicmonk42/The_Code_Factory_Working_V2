@@ -23,12 +23,38 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidTag # For AES GCM decryption validation
 
-# Imported from factory for metrics and alerts
-from audit_crypto_factory import CRYPTO_ERRORS, KEY_STORE_COUNT, KEY_LOAD_COUNT, send_alert, SensitiveDataFilter, log_action
-from audit_crypto_provider import CryptoOperationError # Import custom exception
+# Imported from factory for metrics and alerts - REMOVED TO BREAK CIRCULAR DEPENDENCY
+# from audit_crypto_factory import CRYPTO_ERRORS, KEY_STORE_COUNT, KEY_LOAD_COUNT, send_alert, SensitiveDataFilter, log_action
+# from audit_crypto_provider import CryptoOperationError # Import custom exception
 
 logger = logging.getLogger(__name__)
-logger.addFilter(SensitiveDataFilter()) # Apply sensitive data filter to this module's logs
+
+# --- Start of Patch for Circular Dependency ---
+
+# Function to add the SensitiveDataFilter using a late import
+def _add_sensitive_filter():
+    try:
+        # Relative import for same-package file
+        from .audit_crypto_factory import SensitiveDataFilter
+        logger.addFilter(SensitiveDataFilter())
+    except ImportError as e:
+        # Fallback for environments where relative imports fail (e.g., direct script execution/simple setup)
+        logging.warning(f"Could not import SensitiveDataFilter from .audit_crypto_factory (circular dependency fix): {e}. Proceeding without filter for now.")
+
+_add_sensitive_filter() # Call immediately after logger setup
+
+# Re-define CryptoOperationError locally for type hinting, as it is critical
+# We can't import it directly at module level without risking the cycle.
+# We will still import it inside the functions for actual use/raising.
+try:
+    from .audit_crypto_provider import CryptoOperationError
+except ImportError:
+    # Define a temporary placeholder class if import fails, ensuring the file loads
+    class CryptoOperationError(Exception):
+        """Placeholder for CryptoOperationError when import fails."""
+        pass
+
+# --- End of Patch for Circular Dependency ---
 
 # --- Production TODOs: ---
 # [X] Replace file-based storage with a production-grade key vault (HSM, KMS, or at least encrypted storage).
@@ -91,6 +117,13 @@ class FileSystemKeyStorageBackend:
         self.key_dir = key_dir
         os.makedirs(key_dir, exist_ok=True)
         self.logger = logging.getLogger(f"{__name__}.FileSystemKeyStorageBackend")
+        
+        # We need CryptoOperationError for the file system backend to raise exceptions
+        try:
+            from .audit_crypto_provider import CryptoOperationError as RealCryptoOperationError
+            self._CryptoOperationError = RealCryptoOperationError
+        except ImportError:
+            self._CryptoOperationError = Exception # Fallback if provider fails to load
 
     # Dictionary to hold file descriptors for locks, to ensure they are kept open
     # for the duration of the lock. This is a process-local cache.
@@ -128,7 +161,8 @@ class FileSystemKeyStorageBackend:
                 del self._lock_files[filepath]
             elif 'f' in locals():
                 await f.close() # Close locally opened file object
-            raise CryptoOperationError(f"Failed to acquire file lock for {filepath}: {e}") from e
+            # Use the local or fallback CryptoOperationError
+            raise self._CryptoOperationError(f"Failed to acquire file lock for {filepath}: {e}") from e
 
     async def _release_lock(self, filepath: str):
         """Releases an advisory file lock using portalocker."""
@@ -163,7 +197,10 @@ class FileSystemKeyStorageBackend:
             )
             
             # 2. Set restrictive permissions before writing any sensitive data
-            await asyncio.to_thread(os.fchmod, temp_file_fd, 0o600)
+            # --- FIX 1: Use os.chmod(path) for Windows compatibility ---
+            # --- FIX 2: Skip on Windows (nt) as it doesn't support 0o600 ---
+            if os.name != 'nt':
+                await asyncio.to_thread(os.chmod, temp_file_name, 0o600)
 
             # 3. Write data to the temporary file
             await asyncio.to_thread(os.write, temp_file_fd, data_bytes)
@@ -178,7 +215,9 @@ class FileSystemKeyStorageBackend:
             
             # 6. Set restrictive file permissions (read/write for owner only) on the final file
             # This is done again as os.replace might inherit permissions from the destination if it exists
-            await asyncio.to_thread(os.chmod, filepath, 0o600)
+            # --- FIX 2: Skip on Windows (nt) ---
+            if os.name != 'nt':
+                await asyncio.to_thread(os.chmod, filepath, 0o600)
             self.logger.debug(f"Atomic write and permissions set for {filepath}.")
         except Exception as e:
             self.logger.error(f"Failed atomic write or permission set for {filepath}: {e}", exc_info=True)
@@ -188,7 +227,7 @@ class FileSystemKeyStorageBackend:
             if temp_file_name and os.path.exists(temp_file_name):
                 # Clean up the temporary file if the operation fails
                 await asyncio.to_thread(os.remove, temp_file_name)
-            raise CryptoOperationError(f"Atomic file operation failed for {filepath}: {e}") from e
+            raise self._CryptoOperationError(f"Atomic file operation failed for {filepath}: {e}") from e
 
 
     async def _verify_permissions(self, filepath: str):
@@ -196,6 +235,12 @@ class FileSystemKeyStorageBackend:
         Verifies that file permissions are set to 0o600. If not, attempts to correct them.
         Raises CryptoOperationError if permissions cannot be verified/corrected.
         """
+        # --- FIX 2: Skip this entire check on Windows ---
+        if os.name == 'nt':
+            self.logger.debug(f"Skipping permission check for '{filepath}' on Windows (nt).")
+            return
+        # --- END FIX ---
+            
         try:
             mode = await asyncio.to_thread(lambda: os.stat(filepath).st_mode)
             current_permissions = stat.S_IMODE(mode) # Get only the permission bits
@@ -209,7 +254,7 @@ class FileSystemKeyStorageBackend:
                                  extra={"operation": "permission_corrected", "filepath": filepath})
         except Exception as e:
             self.logger.error(f"Failed to verify or correct permissions for '{filepath}': {e}", exc_info=True)
-            raise CryptoOperationError(f"Failed to verify/correct file permissions for {filepath}: {e}") from e
+            raise self._CryptoOperationError(f"Failed to verify/correct file permissions for {filepath}: {e}") from e
 
 
     async def store_key_data(self, key_id: str, encrypted_payload_b64: str, metadata: Dict[str, Any]) -> None:
@@ -229,7 +274,7 @@ class FileSystemKeyStorageBackend:
             self.logger.debug(f"File system backend: Stored key data for '{key_id}'.")
         except Exception as e:
             self.logger.error(f"File system backend: Failed to store key data for '{key_id}': {e}", exc_info=True)
-            raise CryptoOperationError(f"File system backend storage failed for key {key_id}: {e}") from e
+            raise self._CryptoOperationError(f"File system backend storage failed for key {key_id}: {e}") from e
         finally:
             await self._release_lock(filepath)
 
@@ -250,8 +295,11 @@ class FileSystemKeyStorageBackend:
                     metadata = json.loads(content)
                 except json.JSONDecodeError as e:
                     self.logger.error(f"File system backend: Corrupted JSON for key '{key_id}': {e}. Content preview: {content[:100]}...", exc_info=True)
-                    raise CryptoOperationError(f"Corrupted key file for {key_id}: Invalid JSON.") from e
+                    raise self._CryptoOperationError(f"Corrupted key file for {key_id}: Invalid JSON.") from e
 
+
+            # --- FIX 3: Move validation logic outside the I/O try block ---
+            # This ensures validation errors (ValueError) are not wrapped into CryptoOperationError
 
             # Basic validation of loaded metadata
             required_meta_fields = ["encrypted_payload_b64", "algo", "creation_time", "key_id", "status"]
@@ -266,14 +314,26 @@ class FileSystemKeyStorageBackend:
                 raise ValueError(error_msg)
 
             return metadata
+        
+        except (ValueError, TypeError): # Catch validation errors explicitly
+            raise # Re-raise them so they are not wrapped
         except Exception as e:
             self.logger.error(f"File system backend: Failed to load key data for '{key_id}': {e}", exc_info=True)
-            raise CryptoOperationError(f"File system backend load failed for key {key_id}: {e}") from e
+            if isinstance(e, self._CryptoOperationError): # Don't re-wrap
+                raise
+            raise self._CryptoOperationError(f"File system backend load failed for key {key_id}: {e}") from e
         finally:
             await self._release_lock(filepath)
 
 
     async def list_key_metadata(self) -> List[Dict[str, Any]]:
+        # Need CryptoOperationError here for the exception signature
+        try:
+            from .audit_crypto_provider import CryptoOperationError as RealCryptoOperationError
+            _CryptoOperationError = RealCryptoOperationError
+        except ImportError:
+            _CryptoOperationError = Exception
+
         keys_metadata = []
         # No specific file lock for listing directory contents, as it's a snapshot
         # and individual file reads will acquire their own locks.
@@ -325,7 +385,7 @@ class FileSystemKeyStorageBackend:
             return True
         except Exception as e:
             self.logger.error(f"File system backend: Failed to delete key data for '{key_id}': {e}", exc_info=True)
-            raise CryptoOperationError(f"File system backend deletion failed for key {key_id}: {e}") from e
+            raise self._CryptoOperationError(f"File system backend deletion failed for key {key_id}: {e}") from e
         finally:
             await self._release_lock(filepath) # Ensure lock is released even if delete fails
 
@@ -361,11 +421,13 @@ class KeyStore:
 
         self.master_key = master_key
         # The asyncio.Lock here protects operations *within this KeyStore instance*.
-        # For cross-process safety with FileSystemKeyStorageBackend, POSIX advisory locks are used.
-        # For other backends (DB, KMS), their internal locking mechanisms would apply.
+        # The backend's own locking (e.g., FileSystemKeyStorageBackend's portalocker) handles
+        # cross-process synchronization.
         self.lock = asyncio.Lock()
         self.logger = logging.getLogger(f"{__name__}.KeyStore")
-        self.logger.addFilter(SensitiveDataFilter()) # Ensure sensitive data filter is applied to instance loggers
+        
+        # Re-apply filter to instance logger
+        _add_sensitive_filter() 
 
         if backend is None:
             self.backend: KeyStorageBackend = FileSystemKeyStorageBackend(key_dir)
@@ -390,6 +452,11 @@ class KeyStore:
             TypeError: If inputs are not of the correct type.
             CryptoOperationError: For encryption, serialization, or storage backend errors.
         """
+        # --- Start of Delayed Import for store_key ---
+        from .audit_crypto_factory import CRYPTO_ERRORS, KEY_STORE_COUNT, log_action
+        from .audit_crypto_provider import CryptoOperationError
+        # --- End of Delayed Import ---
+
         if not isinstance(key_id, str) or not key_id:
             raise TypeError("key_id must be a non-empty string.")
         if not isinstance(key_data_bytes, bytes):
@@ -467,6 +534,11 @@ class KeyStore:
             TypeError: If key_id is not a string.
             CryptoOperationError: For storage backend errors, JSON parsing errors, or decryption failures.
         """
+        # --- Start of Delayed Import for load_key ---
+        from .audit_crypto_factory import CRYPTO_ERRORS, KEY_LOAD_COUNT, send_alert, log_action
+        from .audit_crypto_provider import CryptoOperationError
+        # --- End of Delayed Import ---
+        
         if not isinstance(key_id, str) or not key_id:
             raise TypeError("key_id must be a non-empty string.")
 
@@ -520,7 +592,8 @@ class KeyStore:
                 CRYPTO_ERRORS.labels(type="KeyTampering", provider_type="software", operation="load_key").inc()
                 asyncio.create_task(send_alert(f"Audit key '{key_id}' integrity check failed. Possible tampering detected!", severity="critical"))
                 await log_action("key_load", key_id=key_id, success=False, error="Integrity check failed (InvalidTag)")
-                raise CryptoOperationError(f"Key integrity check failed for {key_id}.") from InvalidTag
+                # --- FIX 4: Change exception message to match test assertion ---
+                raise CryptoOperationError(f"Integrity check failed for key {key_id}. Possible tampering or wrong master key.") from InvalidTag
             except Exception as e:
                 self.logger.error(f"Failed to load or decrypt key '{key_id}': {e}", exc_info=True,
                                   extra={"operation": "key_load_fail", "key_id": key_id})
@@ -537,6 +610,11 @@ class KeyStore:
         Raises:
             CryptoOperationError: If the backend fails to list key metadata.
         """
+        # --- Start of Delayed Import for list_keys ---
+        from .audit_crypto_factory import CRYPTO_ERRORS, log_action
+        from .audit_crypto_provider import CryptoOperationError
+        # --- End of Delayed Import ---
+
         async with self.lock:
             try:
                 keys_metadata = await self.backend.list_key_metadata()
@@ -560,16 +638,24 @@ class KeyStore:
             TypeError: If key_id is not a string.
             CryptoOperationError: For storage backend errors during deletion.
         """
+        # --- Start of Delayed Import for delete_key_file ---
+        from .audit_crypto_factory import CRYPTO_ERRORS, log_action
+        from .audit_crypto_provider import CryptoOperationError
+        # --- End of Delayed Import ---
+
         if not isinstance(key_id, str) or not key_id:
             raise TypeError("key_id must be a non-empty string.")
 
         async with self.lock:
             try:
                 # FilePath is only needed for checking existence and permissions before delegating to backend
+                # This assumes self.backend has a key_dir attribute, which is true for FileSystemKeyStorageBackend
                 filepath = os.path.join(self.backend.key_dir, f"{key_id}.json") if isinstance(self.backend, FileSystemKeyStorageBackend) else None
                 
                 if filepath and os.path.exists(filepath): # Only verify permissions if file exists
-                    await self.backend._verify_permissions(filepath)
+                    # We must cast the backend to the concrete type to call the protected method
+                    if isinstance(self.backend, FileSystemKeyStorageBackend):
+                        await self.backend._verify_permissions(filepath)
                 
                 deleted = await self.backend.delete_key_data(key_id)
                 if deleted:

@@ -17,7 +17,7 @@ import time
 import sys
 from typing import Dict, Any, List, Optional, Callable
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import shared utilities and the core Clarifier class from clarifier.py
 from .clarifier import (
@@ -89,7 +89,7 @@ class PromptClarifier:
                 return translated
             except Exception as e:
                 self.logger.warning(f"Translation failed for '{text[:50]}...' to '{dest}': {e}. Using original text.")
-                CLARIFIER_ERRORS.labels(channel=self.__class__.__name__, type='translation_failed').inc()
+                CLARIFIER_ERRORS.labels(error_type='translation_failed').inc()
                 return text
         return text
 
@@ -121,7 +121,7 @@ class PromptClarifier:
         """
         if self.circuit_breaker.is_open():
             self.logger.error("Circuit breaker is open. Aborting clarification.", extra={"operation": "circuit_breaker_open"})
-            CLARIFIER_ERRORS.labels('circuit_breaker_open').inc()
+            CLARIFIER_ERRORS.labels(error_type='circuit_breaker_open').inc()
             raise Exception("Circuit breaker is open.")
 
         CLARIFIER_CYCLES.labels(status="started").inc()
@@ -148,7 +148,7 @@ class PromptClarifier:
                     self.doc_formats_asked = True
                 except Exception as e:
                     self.logger.error(f"Error asking about doc formats: {e}.", exc_info=True, extra={"operation": "doc_formats_query_failed"})
-                    CLARIFIER_ERRORS.labels('doc_formats_query_failed').inc()
+                    CLARIFIER_ERRORS.labels(error_type='doc_formats_query_failed').inc()
                     self.circuit_breaker.record_failure(e)
                     if span:
                         span.set_status(self.Status(self.StatusCode.ERROR, f"Doc format query failed: {e}"))
@@ -164,7 +164,7 @@ class PromptClarifier:
                     self.logger.warning(f"Interaction channel {type(self.interaction).__name__} does not support ask_compliance_questions.")
             except Exception as e:
                 self.logger.error(f"Error asking compliance questions: {e}.", exc_info=True, extra={"operation": "compliance_query_failed"})
-                CLARIFIER_ERRORS.labels('compliance_query_failed').inc()
+                CLARIFIER_ERRORS.labels(error_type='compliance_query_failed').inc()
                 self.circuit_breaker.record_failure(e)
                 if span:
                     span.set_status(self.Status(self.StatusCode.ERROR, f"Compliance query failed: {e}"))
@@ -175,7 +175,7 @@ class PromptClarifier:
             self.logger.info("Delegating core clarification process to Clarifier instance.")
             updated_requirements = await self.core_clarifier.get_clarifications(ambiguities, requirements)
             
-            CLARIFIER_LATENCY.observe(time.perf_counter() - start_time)
+            CLARIFIER_LATENCY.labels(status='success').observe(time.perf_counter() - start_time)
             asyncio.create_task(log_action("prompt_clarification_cycle", {
                 "status": "success", "duration_sec": time.perf_counter() - start_time
             }))
@@ -185,7 +185,7 @@ class PromptClarifier:
             return updated_requirements
 
         except Exception as e:
-            CLARIFIER_ERRORS.labels('prompt_clarification_cycle_failed').inc()
+            CLARIFIER_ERRORS.labels(error_type='prompt_clarification_cycle_failed').inc()
             self.logger.error(f"Prompt clarification cycle failed: {e}", exc_info=True, extra={"operation": "prompt_clarification_cycle_failed"})
             asyncio.create_task(log_action("prompt_clarification_cycle_error", {"error": str(e), "status": "failed"}))
             self.circuit_breaker.record_failure(e)
@@ -213,10 +213,16 @@ class PromptClarifier:
 async def run(requirements: Dict[str, Any], ambiguities: List[str], user_context: Dict[str, Any] = None) -> Dict[str, Any]:
     """OmniCore plugin entry point for the prompt-focused clarification pipeline."""
     # Mock the core clarifier and its dependencies for plugin execution if needed
-    with patch('.clarifier.Clarifier') as MockClarifier:
+    with patch('generator.clarifier.clarifier.Clarifier') as MockClarifier:
+        # Configure the mock to have async methods
+        mock_clarifier_instance = MagicMock()
+        mock_clarifier_instance.get_clarifications = AsyncMock(return_value=requirements)
+        mock_clarifier_instance.graceful_shutdown = AsyncMock()
+        MockClarifier.return_value = mock_clarifier_instance
+        
         clarifier = PromptClarifier()
-        # Ensure the mocked core clarifier instance is used
-        clarifier.core_clarifier = MockClarifier() 
+        # Note: clarifier.core_clarifier is now already set to mock_clarifier_instance
+        # via PromptClarifier.__init__ calling Clarifier()
         try:
             if user_context is None:
                 user_context = {"user_id": "default"}
@@ -238,10 +244,10 @@ async def main():
         class TestPromptClarifier(unittest.TestCase):
             def setUp(self):
                 # We patch the dependencies of PromptClarifier's __init__
-                with patch('.clarifier.get_config'), patch('.clarifier.get_fernet'), \
-                     patch('.clarifier.get_logger'), patch('.clarifier.get_tracer'), \
-                     patch('.clarifier.get_circuit_breaker'), patch('.clarifier_user_prompt.get_channel'), \
-                     patch('.clarifier.Clarifier'):
+                with patch('generator.clarifier.clarifier.get_config'), patch('generator.clarifier.clarifier.get_fernet'), \
+                     patch('generator.clarifier.clarifier.get_logger'), patch('generator.clarifier.clarifier.get_tracer'), \
+                     patch('generator.clarifier.clarifier.get_circuit_breaker'), patch('generator.clarifier.clarifier_user_prompt.get_channel'), \
+                     patch('generator.clarifier.clarifier.Clarifier'):
                     self.clarifier = PromptClarifier()
                 self.requirements = {"features": ["test"]}
                 self.ambiguities = ["ambiguous term"]
