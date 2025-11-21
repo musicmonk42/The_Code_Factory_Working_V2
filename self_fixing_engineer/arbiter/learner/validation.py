@@ -264,7 +264,7 @@ async def reload_schemas(learner: Any, directory: Optional[str] = None) -> None:
             logger.warning("Failed to cache schemas in Redis", error=str(e))
 
         try:
-            await learner.audit_logger.add_entry(
+            await learner.audit_logger.log_event(
                 component="validation",
                 event="schemas_reloaded",
                 details={"schema_count": len(new_schemas), "directory": directory},

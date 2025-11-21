@@ -71,8 +71,13 @@ except ImportError:
 
     class DummyAuditLog:
         """A dummy audit log class that does nothing."""
-        def log_event(self, component: str, event: str, details: Dict[str, Any], user_id: str):
+        async def log_event(self, component: str, event: str, details: Dict[str, Any], user_id: str = "system"):
             logger.info(f"DummyAuditLog: Event '{event}' in component '{component}' logged.")
+            await asyncio.sleep(0)  # Make it properly async
+        
+        async def add_entry(self, component: str, event: str, details: Dict[str, Any], user_id: str = "system"):
+            """Alias for log_event to maintain compatibility."""
+            await self.log_event(component, event, details, user_id)
             
     async def audit_log(*args, **kwargs):
         """A dummy async function for logging audit events as a no-op."""
@@ -173,7 +178,7 @@ class Learner:
     async def start(self):
         """Performs all necessary async initialization tasks."""
         await self.meta_data_store.connect()
-        self.start_self_audit()
+        await self.start_self_audit()
 
     async def _run_self_audit(self):
         """Periodically performs a self-audit of the knowledge base and audit trail."""
@@ -187,15 +192,15 @@ class Learner:
                 audit_log_path = self.audit_logger.log_path if hasattr(self.audit_logger, 'log_path') else None
                 if not audit_log_path or not os.path.exists(audit_log_path):
                     logger.warning("Audit log file not found. Skipping audit trail verification.", log_path=audit_log_path)
-                    await self.audit_logger.log_event("self_audit", "Audit log file not found, skipped integrity check.", {"status": "skipped", "component": "audit_trail"})
+                    await self.audit_logger.log_event("self_audit", "Audit log file not found, skipped integrity check.", {"status": "skipped", "component": "audit_trail"}, "system")
                 else:
                     audit_trail_valid = verify_audit_chain(audit_log_path)
                     if audit_trail_valid:
                         logger.info("Audit trail integrity verified successfully.")
-                        await self.audit_logger.log_event("self_audit", "Audit trail integrity check PASSED.", {"status": "success", "component": "audit_trail"})
+                        await self.audit_logger.log_event("self_audit", "Audit trail integrity check PASSED.", {"status": "success", "component": "audit_trail"}, "system")
                     else:
                         logger.critical("Audit trail integrity check FAILED. Potential tampering detected!")
-                        await self.audit_logger.log_event("self_audit", "Audit trail integrity check FAILED. Potential tampering detected!", {"status": "failure", "component": "audit_trail"})
+                        await self.audit_logger.log_event("self_audit", "Audit trail integrity check FAILED. Potential tampering detected!", {"status": "failure", "component": "audit_trail"}, "system")
                         await self.arbiter.bug_manager.bug_detected(
                             "audit_trail_tampering",
                             "Audit trail integrity check failed. Potential data tampering.",
@@ -203,11 +208,11 @@ class Learner:
                         )
 
                 logger.info("Knowledge base consistency check (conceptual) completed.")
-                await self.audit_logger.log_event("self_audit", "Knowledge consistency check (conceptual) completed.", {"status": "info", "component": "knowledge_base"})
+                await self.audit_logger.log_event("self_audit", "Knowledge consistency check (conceptual) completed.", {"status": "info", "component": "knowledge_base"}, "system")
 
             except Exception as e:
                 logger.error("Error during self-audit", error=str(e), exc_info=True)
-                await self.audit_logger.log_event("self_audit", f"Self-audit failed: {e}", {"status": "error", "error_message": str(e)})
+                await self.audit_logger.log_event("self_audit", f"Self-audit failed: {e}", {"status": "error", "error_message": str(e)}, "system")
                 await self.arbiter.bug_manager.bug_detected(
                     "self_audit_failure",
                     f"Self-audit process encountered an error: {e}",
@@ -216,7 +221,7 @@ class Learner:
             finally:
                 audit_duration = time.monotonic() - audit_start_time
                 logger.info("Self-audit completed", duration_seconds=audit_duration)
-                await self.audit_logger.log_event("self_audit", "Self-audit completed.", {"duration_seconds": audit_duration, "status": "completed"})
+                await self.audit_logger.log_event("self_audit", "Self-audit completed.", {"duration_seconds": audit_duration, "status": "completed"}, "system")
 
             await asyncio.sleep(ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS)
             if self.arbiter.is_running_self_audit and self._self_audit_stop_event.is_set():
@@ -224,14 +229,14 @@ class Learner:
 
         self.arbiter.is_running_self_audit = False
 
-    def start_self_audit(self):
+    async def start_self_audit(self):
         """Starts the periodic self-audit background task."""
         if self._self_audit_task is None or self._self_audit_task.done():
             self._self_audit_stop_event.clear()
             self._self_audit_task = asyncio.create_task(self._run_self_audit())
             logger.info("Self-audit background task started.")
-            # FIX: Use the AuditLogger instance, not the dummy function
-            self.audit_logger.log_event("self_audit_control", "Self-audit task started.", {"action": "start"})
+            # FIX: Use the AuditLogger instance with await
+            await self.audit_logger.log_event("self_audit_control", "Self-audit task started.", {"action": "start"}, "system")
 
     async def stop_self_audit(self):
         """Stops the periodic self-audit background task."""
@@ -240,13 +245,13 @@ class Learner:
             try:
                 await self._self_audit_task
                 logger.info("Self-audit background task stopped.")
-                self.audit_logger.log_event("self_audit_control", "Self-audit task stopped.", {"action": "stop"})
+                await self.audit_logger.log_event("self_audit_control", "Self-audit task stopped.", {"action": "stop"}, "system")
             except asyncio.CancelledError:
                 logger.info("Self-audit task was cancelled.")
-                self.audit_logger.log_event("self_audit_control", "Self-audit task cancelled.", {"action": "cancel"})
+                await self.audit_logger.log_event("self_audit_control", "Self-audit task cancelled.", {"action": "cancel"}, "system")
             except Exception as e:
                 logger.error("Error stopping self-audit task", error=str(e), exc_info=True)
-                self.audit_logger.log_event("self_audit_control", f"Error stopping self-audit task: {e}", {"action": "stop_error", "error": str(e)})
+                await self.audit_logger.log_event("self_audit_control", f"Error stopping self-audit task: {e}", {"action": "stop_error", "error": str(e)}, "system")
         if self.meta_data_store:
             await self.meta_data_store.disconnect()
 
@@ -260,19 +265,19 @@ class Learner:
                 try:
                     if not re.match(ArbiterConfig.VALID_DOMAIN_PATTERN, domain):
                         learn_error_counter.labels(**get_labels(domain=domain, error_type='invalid_domain')).inc()
-                        await self.audit_logger.log_event("learn_error", f"Invalid domain format: {domain}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "invalid_domain"})
+                        await self.audit_logger.log_event("learn_error", f"Invalid domain format: {domain}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "invalid_domain"}, user_id or "system")
                         return {"status": "failed", "reason": f"invalid_domain: {domain}"}
 
                     allowed, reason = await should_auto_learn(domain, key, user_id, value)
                     if not allowed:
                         logger.info("Auto-learning blocked by policy", domain=domain, key=key, reason=reason)
-                        await self.audit_logger.log_event("learn_skipped", f"Auto-learning blocked by policy: {reason}", {"domain": domain, "key": key, "user_id": user_id, "reason": reason})
+                        await self.audit_logger.log_event("learn_skipped", f"Auto-learning blocked by policy: {reason}", {"domain": domain, "key": key, "user_id": user_id, "reason": reason}, user_id or "system")
                         return {"status": "skipped", "reason": f"policy_blocked: {reason}"}
 
                     validation_result = await validate_data(self, domain, value)
                     if not validation_result["is_valid"]:
                         learn_error_counter.labels(**get_labels(domain=domain, error_type=validation_result['reason_code'])).inc()
-                        await self.audit_logger.log_event("learn_error", f"Validation failed for {domain}:{key}: {validation_result['reason']}", {"domain": domain, "key": key, "user_id": user_id, "error_type": validation_result['reason_code'], "validation_errors": validation_result['reason']})
+                        await self.audit_logger.log_event("learn_error", f"Validation failed for {domain}:{key}: {validation_result['reason']}", {"domain": domain, "key": key, "user_id": user_id, "error_type": validation_result['reason_code'], "validation_errors": validation_result['reason']}, user_id or "system")
                         return {"status": "failed", "reason": validation_result['reason']}
 
                     lock_key = f"knowledge_lock:{domain}:{key}"
@@ -288,7 +293,7 @@ class Learner:
                         if result.get("status") == "learned":
                             for hook in self.event_hooks['post_learn']:
                                 await (hook(domain, key, value, result) if asyncio.iscoroutinefunction(hook) else asyncio.to_thread(hook, domain, key, value, result))
-                            await self.audit_logger.log_event("knowledge_learn", f"Learned {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "source": source, "version": result.get('version')})
+                            await self.audit_logger.log_event("knowledge_learn", f"Learned {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "source": source, "version": result.get('version')}, user_id or "system")
 
                             try:
                                 learning_record = LearningRecord(
@@ -311,21 +316,21 @@ class Learner:
                             except Exception as meta_e:
                                 logger.error("Failed to write meta-learning record", domain=domain, key=key, error=str(meta_e), exc_info=True)
                                 learn_error_counter.labels(**get_labels(domain=domain, error_type='meta_learning_write_error')).inc()
-                                await self.audit_logger.log_event("meta_learning_error", f"Failed to write meta-learning record: {meta_e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(meta_e)})
+                                await self.audit_logger.log_event("meta_learning_error", f"Failed to write meta-learning record: {meta_e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(meta_e)}, user_id or "system")
 
                         return result
 
                 except InvalidToken:
                     learn_error_counter.labels(**get_labels(domain=domain, error_type='encryption_error')).inc()
-                    await self.audit_logger.log_event("learn_error", f"Encryption/decryption error for {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "encryption_error"})
+                    await self.audit_logger.log_event("learn_error", f"Encryption/decryption error for {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "encryption_error"}, user_id or "system")
                     return {"status": "failed", "reason": "encryption_decryption_error"}
                 except asyncio.TimeoutError:
                     learn_error_counter.labels(**get_labels(domain=domain, error_type='lock_timeout')).inc()
-                    await self.audit_logger.log_event("learn_error", f"Lock timeout for {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "lock_timeout"})
+                    await self.audit_logger.log_event("learn_error", f"Lock timeout for {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "lock_timeout"}, user_id or "system")
                     return {"status": "failed", "reason": "lock_timeout"}
                 except Exception as e:
                     logger.error("Error learning knowledge", domain=domain, key=key, error=str(e), exc_info=True)
-                    await self.audit_logger.log_event("learn_error", f"Error learning {domain}:{key}: {e}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "unexpected_error", "exception": str(e)})
+                    await self.audit_logger.log_event("learn_error", f"Error learning {domain}:{key}: {e}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "unexpected_error", "exception": str(e)}, user_id or "system")
                     learn_error_counter.labels(**get_labels(domain=domain, error_type='unexpected_error')).inc()
                     await self.arbiter.bug_manager.bug_detected(
                         "learn_new_thing_unexpected",
@@ -342,6 +347,8 @@ class Learner:
         previous_entry = mem.get(key, {"domain": domain, "value": None})
         previous_value = await self._get_previous_value(previous_entry, domain)
         is_encrypted = domain in ArbiterConfig.ENCRYPTED_DOMAINS
+        if is_encrypted and "v1" not in self.ciphers:
+            raise ValueError("Encryption key 'v1' not available")
         stored_value = await encrypt_value(value, self.ciphers["v1"], "v1") if is_encrypted else value
 
         if previous_entry.get("value") == stored_value and previous_entry.get("source") == source:
@@ -386,12 +393,12 @@ class Learner:
                 await self.db_circuit_breaker.record_failure()
                 learn_error_counter.labels(**get_labels(domain=domain, error_type='db_persist_failure')).inc()
                 logger.error("Failed to persist knowledge", domain=domain, key=key, error=str(e))
-                await self.audit_logger.log_event("learn_error", f"Failed to persist knowledge: {e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(e)})
+                await self.audit_logger.log_event("learn_error", f"Failed to persist knowledge: {e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(e)}, user_id or "system")
                 raise e
         else:
             logger.warning("Persistence skipped due to open DB circuit breaker.", domain=domain, key=key)
             learn_error_counter.labels(**get_labels(domain=domain, error_type='circuit_breaker_open_db')).inc()
-            await self.audit_logger.log_event("learn_skipped", f"DB persistence skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "db_circuit_open"})
+            await self.audit_logger.log_event("learn_skipped", f"DB persistence skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "db_circuit_open"}, user_id or "system")
 
         redis_value = value_with_metadata.copy()
         if is_encrypted and isinstance(redis_value["value"], bytes):
@@ -444,20 +451,20 @@ class Learner:
                         reason_msg = validation_res['reason'] if isinstance(validation_res, dict) else str(validation_res)
                         all_results.append({"status": "skipped", "reason": reason_msg, "fact": fact})
                         learn_error_counter.labels(**get_labels(domain=domain if domain else "unknown", error_type=reason_code)).inc()
-                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to validation", domain=domain, key=key, user_id=user_id, reason=reason_msg)
+                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to validation", {"domain": domain, "key": key, "user_id": user_id, "reason": reason_msg}, user_id or "system")
                         continue
 
                     if not all([domain, key, value is not None]):
                         all_results.append({"status": "skipped", "reason": "malformed_fact_structure", "fact": fact})
                         learn_error_counter.labels(**get_labels(domain=domain if domain else "unknown", error_type="malformed_fact_structure")).inc()
-                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to malformed structure", domain=domain, key=key, user_id=user_id, reason="malformed_fact_structure")
+                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to malformed structure", {"domain": domain, "key": key, "user_id": user_id, "reason": "malformed_fact_structure"}, user_id or "system")
                         continue
 
                     allowed, reason = await should_auto_learn(domain, key, user_id, value)
                     if not allowed:
                         all_results.append({"status": "skipped", "reason": f"policy_blocked: {reason}", "fact": fact})
                         learn_error_counter.labels(**get_labels(domain=domain, error_type="policy_blocked")).inc()
-                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to policy", domain=domain, key=key, user_id=user_id, reason=reason)
+                        await self.audit_logger.log_event("learn_batch_skipped", "Fact skipped in batch due to policy", {"domain": domain, "key": key, "user_id": user_id, "reason": reason}, user_id or "system")
                         continue
 
                     individual_learn_tasks.append(
@@ -478,7 +485,7 @@ class Learner:
                         logger.error("Error processing fact in batch", domain=fact.get('domain'), key=fact.get('key'), error=str(res))
                         all_results.append({"status": "failed", "reason": f"processing_error: {res}", "fact": fact})
                         learn_error_counter.labels(**get_labels(domain=fact.get('domain', 'unknown'), error_type='batch_processing_exception')).inc()
-                        await self.audit_logger.log_event("learn_batch_error", f"Error processing fact in batch: {res}", {"domain": fact.get('domain'), "key": fact.get('key'), "user_id": user_id, "error": str(res)})
+                        await self.audit_logger.log_event("learn_batch_error", f"Error processing fact in batch: {res}", {"domain": fact.get('domain'), "key": fact.get('key'), "user_id": user_id, "error": str(res)}, user_id or "system")
                     else:
                         all_results.append(res["result"])
                         if res["result"].get("status") == "learned":
@@ -513,20 +520,20 @@ class Learner:
                             async with self.db.transaction():
                                 await persist_knowledge_batch(self.db, self.audit_circuit_breaker, batch_db_entries, user_id)
                             await self.db_circuit_breaker.record_success()
-                            await self.audit_logger.log_event("knowledge_learn_batch", "Batch learned facts", {"count": len(batch_db_entries), "user_id": user_id, "source": source})
+                            await self.audit_logger.log_event("knowledge_learn_batch", "Batch learned facts", {"count": len(batch_db_entries), "user_id": user_id, "source": source}, user_id or "system")
                         except Exception as e:
                             await self.db_circuit_breaker.record_failure()
                             learn_error_counter.labels(**get_labels(domain="batch", error_type='db_persist_failure_batch')).inc()
                             logger.error("Failed to persist batch knowledge", error=str(e), exc_info=True)
-                            await self.audit_logger.log_event("learn_batch_error", f"Failed to persist batch knowledge: {e}", {"user_id": user_id, "error": str(e)})
+                            await self.audit_logger.log_event("learn_batch_error", f"Failed to persist batch knowledge: {e}", {"user_id": user_id, "error": str(e)}, user_id or "system")
                             raise e
                     else:
                         logger.info("Batch persistence skipped: No valid entries to persist.")
-                        await self.audit_logger.log_event("knowledge_learn_batch_skipped", "Batch persistence skipped: No valid entries to persist.", {"user_id": user_id, "source": source})
+                        await self.audit_logger.log_event("knowledge_learn_batch_skipped", "Batch persistence skipped: No valid entries to persist.", {"user_id": user_id, "source": source}, user_id or "system")
                 else:
                     logger.warning("Batch persistence skipped due to open DB circuit breaker.")
                     learn_error_counter.labels(**get_labels(domain="batch", error_type='circuit_breaker_open_db_batch')).inc()
-                    await self.audit_logger.log_event("knowledge_learn_batch_skipped", "Batch persistence skipped due to open DB circuit breaker.", {"user_id": user_id, "source": source, "reason": "db_circuit_open"})
+                    await self.audit_logger.log_event("knowledge_learn_batch_skipped", "Batch persistence skipped due to open DB circuit breaker.", {"user_id": user_id, "source": source, "reason": "db_circuit_open"}, user_id or "system")
 
 
             if meta_learning_records:
@@ -536,7 +543,7 @@ class Learner:
                 except Exception as meta_b_e:
                     logger.error("Failed to write meta-learning batch records", error=str(meta_b_e), exc_info=True)
                     learn_error_counter.labels(**get_labels(domain="batch", error_type='meta_learning_batch_write_error')).inc()
-                    await self.audit_logger.log_event("meta_learning_batch_error", f"Failed to write meta-learning batch records: {meta_b_e}", {"user_id": user_id, "error": str(meta_b_e)})
+                    await self.audit_logger.log_event("meta_learning_batch_error", f"Failed to write meta-learning batch records: {meta_b_e}", {"user_id": user_id, "error": str(meta_b_e)}, user_id or "system")
 
             learn_duration_seconds.labels(**get_labels(domain="batch")).observe(time.monotonic() - start_time)
             logger.info("Batch learning completed", processed_count=len(facts))
@@ -548,6 +555,8 @@ class Learner:
         previous_entry = mem.get(key, {"domain": domain, "value": None})
         previous_value = await self._get_previous_value(previous_entry, domain)
         is_encrypted = domain in ArbiterConfig.ENCRYPTED_DOMAINS
+        if is_encrypted and "v1" not in self.ciphers:
+            raise ValueError("Encryption key 'v1' not available")
         stored_value = await encrypt_value(value, self.ciphers["v1"], "v1") if is_encrypted else value
 
         if previous_entry.get("value") == stored_value and previous_entry.get("source") == source:
@@ -601,7 +610,7 @@ class Learner:
         with tracer.start_as_current_span("forget_fact"):
             start_time = time.monotonic()
             if not re.match(ArbiterConfig.VALID_DOMAIN_PATTERN, domain):
-                await self.audit_logger.log_event("forget_error", f"Invalid domain format for forgetting: {domain}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "invalid_domain"})
+                await self.audit_logger.log_event("forget_error", f"Invalid domain format for forgetting: {domain}", {"domain": domain, "key": key, "user_id": user_id, "error_type": "invalid_domain"}, user_id or "system")
                 return {"status": "failed", "reason": f"invalid_domain: {domain}"}
 
             lock_key = f"knowledge_lock:{domain}:{key}"
@@ -612,7 +621,7 @@ class Learner:
                 fact_to_forget = await self.retrieve_knowledge(domain, key, decrypt=False)
                 if not fact_to_forget:
                     logger.info("Fact not found for forgetting.", domain=domain, key=key)
-                    await self.audit_logger.log_event("knowledge_forget_skipped", f"Fact not found for forgetting: {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "reason": "fact_not_found"})
+                    await self.audit_logger.log_event("knowledge_forget_skipped", f"Fact not found for forgetting: {domain}:{key}", {"domain": domain, "key": key, "user_id": user_id, "reason": "fact_not_found"}, user_id or "system")
                     return {"status": "skipped", "reason": "fact_not_found"}
                 
                 decrypted_value_for_audit = None
@@ -679,11 +688,11 @@ class Learner:
                         else:
                             logger.error("Audit log for forgetting skipped due to open audit circuit breaker!", domain=domain, key=key)
                             learn_error_counter.labels(**get_labels(domain=domain, error_type='audit_circuit_open_forget')).inc()
-                            await self.audit_logger.log_event("forget_error", f"Audit log skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "audit_circuit_open"})
+                            await self.audit_logger.log_event("forget_error", f"Audit log skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "audit_circuit_open"}, user_id or "system")
                     else:
                         logger.warning("DB deletion skipped due to open DB circuit breaker.", domain=domain, key=key)
                         learn_error_counter.labels(**get_labels(domain=domain, error_type='db_circuit_open_forget')).inc()
-                        await self.audit_logger.log_event("forget_skipped", f"DB deletion skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "db_circuit_open"})
+                        await self.audit_logger.log_event("forget_skipped", f"DB deletion skipped for {domain}:{key} due to circuit breaker.", {"domain": domain, "key": key, "user_id": user_id, "reason": "db_circuit_open"}, user_id or "system")
                     
                     try:
                         learning_record = LearningRecord(
@@ -706,14 +715,14 @@ class Learner:
                     except Exception as meta_e:
                         logger.error("Failed to write meta-learning record for forgetting", domain=domain, key=key, error=str(meta_e), exc_info=True)
                         learn_error_counter.labels(**get_labels(domain=domain, error_type='meta_learning_forget_write_error')).inc()
-                        await self.audit_logger.log_event("meta_learning_error", f"Failed to write meta-learning record for forgetting {domain}:{key}: {meta_e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(meta_e)})
+                        await self.audit_logger.log_event("meta_learning_error", f"Failed to write meta-learning record for forgetting {domain}:{key}: {meta_e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(meta_e)}, user_id or "system")
 
                     forget_counter.labels(**get_labels(domain=domain)).inc()
                     return {"status": "forgotten", "reason": "success"}
                 except Exception as e:
                     logger.error("Error forgetting fact", domain=domain, key=key, error=str(e))
                     learn_error_counter.labels(**get_labels(domain=domain, error_type='forget_error')).inc()
-                    await self.audit_logger.log_event("forget_error", f"Error forgetting {domain}:{key}: {e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(e)})
+                    await self.audit_logger.log_event("forget_error", f"Error forgetting {domain}:{key}: {e}", {"domain": domain, "key": key, "user_id": user_id, "error": str(e)}, user_id or "system")
                     return {"status": "failed", "reason": f"forget_error: {e}"}
                 finally:
                     forget_duration_seconds.labels(**get_labels(domain=domain)).observe(time.monotonic() - start_time)

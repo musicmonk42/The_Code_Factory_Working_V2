@@ -145,7 +145,7 @@ async def process_unstructured_data(
             fuzzy_parser_failure_total.labels(parser_name="none", error_type="no_parsers").inc()
             result = [{"status": "failed", "reason": "no_fuzzy_parsers", "text_hash": hashlib.sha256(text.encode()).hexdigest()}]
             try:
-                await learner.audit_logger.add_entry(
+                await learner.audit_logger.log_event(
                     component="fuzzy_parser",
                     event="no_parsers",
                     details={"text_hash": result[0]["text_hash"], "reason": "No parsers registered"},
@@ -216,7 +216,7 @@ async def process_unstructured_data(
             logger.info("No facts extracted by any parser", text_hash=hashlib.sha256(text.encode()).hexdigest())
             result = [{"status": "skipped", "reason": "no_facts_extracted", "text_hash": hashlib.sha256(text.encode()).hexdigest()}]
             try:
-                await learner.audit_logger.add_entry(
+                await learner.audit_logger.log_event(
                     component="fuzzy_parser",
                     event="no_facts_extracted",
                     details={"text_hash": result[0]["text_hash"], "reason": "No facts extracted"},
@@ -230,7 +230,7 @@ async def process_unstructured_data(
         try:
             results = await _learn_batch_with_retry(learner, extracted_facts, user_id, source)
             try:
-                await learner.audit_logger.add_entry(
+                await learner.audit_logger.log_event(
                     component="fuzzy_parser",
                     event="facts_learned",
                     details={"text_hash": hashlib.sha256(text.encode()).hexdigest(), "fact_count": len(extracted_facts)},
@@ -243,7 +243,7 @@ async def process_unstructured_data(
             logger.error("Failed to learn batch of fuzzy facts", error=str(e))
             learn_error_counter.labels(domain="unstructured", error_type="learn_batch_failure").inc()
             try:
-                await learner.audit_logger.add_entry(
+                await learner.audit_logger.log_event(
                     component="fuzzy_parser",
                     event="learn_batch_failed",
                     details={"text_hash": hashlib.sha256(text.encode()).hexdigest(), "error": str(e)},
@@ -298,7 +298,7 @@ async def register_fuzzy_parser_hook_async(learner: "Learner", parser: FuzzyPars
         
         # Now we can properly audit the registration
         try:
-            await learner.audit_logger.add_entry(
+            await learner.audit_logger.log_event(
                 component="fuzzy_parser",
                 event="parser_registered",
                 details={"parser_name": parser.__class__.__name__, "priority": priority},

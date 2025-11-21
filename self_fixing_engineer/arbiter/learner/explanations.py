@@ -355,7 +355,7 @@ async def record_explanation_quality(
 
         # Audit the feedback
         try:
-            await learner.audit_logger.add_entry(
+            await learner.audit_logger.log_event(
                 component="explanation",
                 event="quality_feedback",
                 details=feedback_entry,
