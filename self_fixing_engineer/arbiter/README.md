@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Arbiter module** is the central orchestration, policy enforcement, and self-improvement hub of the Self-Fixing Engineer (SFE) platform—an autonomous AI system designed to analyze, repair, evolve, and govern codebases while adhering to ethical guidelines. Developed by **Unexpected Innovations Inc.** (as of September 10, 2025), Arbiter integrates advanced components for agent coordination, knowledge management, bug remediation, explainable reasoning, and multi-modal processing. It is compliant with 2025 AI regulations (e.g., EU AI Act, NIST AI RMF 2.1) and emphasizes transparency, auditability, and user empowerment through human-in-the-loop (HITL) integrations.
+The **Arbiter module** is the central orchestration, policy enforcement, and self-improvement hub of the Self-Fixing Engineer (SFE) platform—an autonomous AI system designed to analyze, repair, evolve, and govern codebases while adhering to ethical guidelines. Developed by **Novatrax Labs LLC** (as of September 10, 2025), Arbiter integrates advanced components for agent coordination, knowledge management, bug remediation, explainable reasoning, and multi-modal processing. It is compliant with 2025 AI regulations (e.g., EU AI Act, NIST AI RMF 2.1) and emphasizes transparency, auditability, and user empowerment through human-in-the-loop (HITL) integrations.
 
 **Key Capabilities:**
 
@@ -234,4 +234,4 @@ Wiki: https://github.com/unexpected-innovations/sfe/wiki
 
 License
 SPDX-License-Identifier: Apache-2.0
-Copyright © 2025 Unexpected Innovations Inc. All rights reserved.
+Copyright © 2025 Novatrax Labs LLC All rights reserved.

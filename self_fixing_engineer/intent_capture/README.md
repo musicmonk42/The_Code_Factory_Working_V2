@@ -1,15 +1,15 @@
 # Intent Agent Module – Self-Fixing Engineer (SFE) 🚀
 
 **Intent Agent v2.0.0 – The _Golden Dialogue_ Edition**  
-*Proprietary Technology by Unexpected Innovations Inc.*
+*Proprietary Technology by Novatrax Labs LLC*
 
 ---
 
 Transform requirements into reality with Intent Agent’s intelligent orchestration.
 
-> **Note:** This technology is proprietary and not open-sourced. All rights reserved by Unexpected Innovations Inc.  
+> **Note:** This technology is proprietary and not open-sourced. All rights reserved by Novatrax Labs LLC  
 > Unauthorized use, distribution, or reverse engineering is strictly prohibited.  
-> For licensing inquiries, contact [licensing@unexpectedinnovations.com](mailto:licensing@unexpectedinnovations.com).
+> For licensing inquiries, contact [licensing@novatraxlabs.com](mailto:licensing@novatraxlabs.com).
 
 ---
 
@@ -352,7 +352,7 @@ _For logs: `tail -f cli.log | jq`_
 
 ## Contribution Guidelines
 
-- **Contributions require NDA.** Contact [contrib@unexpectedinnovations.com](mailto:contrib@unexpectedinnovations.com)
+- **Contributions require NDA.** Contact [contrib@novatraxlabs.com](mailto:contrib@novatraxlabs.com)
 - **Style:** PEP8, Ruff/Black
 - **Tests:** 100% coverage for new code
 - **Docs:** Update Sphinx, commit examples
@@ -374,7 +374,7 @@ _For logs: `tail -f cli.log | jq`_
 
 ## Support
 
-- **Enterprise support:** [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com) (24/7 SLA)
+- **Enterprise support:** [support@novatraxlabs.com](mailto:support@novatraxlabs.com) (24/7 SLA)
 - **Docs:** Internal wiki (portal access)
 - **Issues:** Jira (`<jira-url>`)
 
@@ -382,11 +382,11 @@ _For logs: `tail -f cli.log | jq`_
 
 ## License
 
-**Proprietary and Confidential © 2025 Unexpected Innovations Inc. All rights reserved.**  
+**Proprietary and Confidential © 2025 Novatrax Labs LLC All rights reserved.**  
 Intent Agent and Self-Fixing Engineer™ are proprietary technologies.
 
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.
 
-For commercial licensing or evaluation, contact [commercial@unexpectedinnovations.com](mailto:commercial@unexpectedinnovations.com).
+For commercial licensing or evaluation, contact [commercial@novatraxlabs.com](mailto:commercial@novatraxlabs.com).
 
 _Capture intent with precision using Intent Agent’s AI-driven orchestration._

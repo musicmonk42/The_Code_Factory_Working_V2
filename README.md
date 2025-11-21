@@ -1,9 +1,9 @@
 # Code Factory Platform 🚀
-Code Factory v1.0.0 – The "Self-Sustaining Code" EditionProprietary Technology by Unexpected Innovations
+Code Factory v1.0.0 – The "Self-Sustaining Code" EditionProprietary Technology by Novatrax Labs
 Transform natural language into production-ready applications with automated, self-healing maintenance powered by AI, DLT, and multi-agent orchestration.
 Crafted with precision in Fairhope, Alabama, USA.
 The Code Factory is an enterprise-grade, AI-driven ecosystem that automates the entire software development and maintenance lifecycle. It turns high-level requirements (e.g., README files) into fully functional applications, including code, tests, deployment configurations, and documentation, while continuously maintaining and enhancing them through self-healing, compliance, and optimization. Comprising the README-to-App Code Generator (RCG), OmniCore Omega Pro Engine (OmniCore), and Self-Fixing Engineer (SFE, powered by Arbiter AI), it delivers unparalleled automation, security, and scalability for developers, DevOps, and enterprises in regulated industries.
-Version: 1.0.0 (August 24, 2025)License: Proprietary (© 2025 Unexpected Innovations)Contact: support@unexpectedinnovations.comIssues: <enterprise-repo-url>/issues (enterprise access required)
+Version: 1.0.0 (August 24, 2025)License: Proprietary (© 2025 Novatrax Labs LLC)Contact: support@novatraxlabs.comIssues: <enterprise-repo-url>/issues (enterprise access required)
 
 Table of Contents
 
@@ -293,12 +293,12 @@ Future: Quantum-native optimization (quantum.py).
 
 Support
 
-Email: support@unexpectedinnovations.com
+Email: support@novatraxlabs.com
 Issues: <enterprise-repo-url>/issues
 SLA: Enterprise 24/7 support
 
 
 License
-Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.Code Factory and Self-Fixing Engineer™ are proprietary technologies. Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited. For licensing, contact support@unexpectedinnovations.com.
+Proprietary and Confidential © 2025 Novatrax Labs LLC. All rights reserved.Code Factory and Self-Fixing Engineer™ are proprietary technologies. Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited. For licensing, contact support@novatraxlabs.com.
 
 Unleash the future of software development with Code Factory’s AI-driven, self-sustaining ecosystem.

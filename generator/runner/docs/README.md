@@ -270,6 +270,6 @@ Textual
 
 For advanced integration help, Dockerfiles, CI workflows, or compliance documentation, contact the project maintainers.
 
-This README is auto-generated and enforced via CI. Contact maintainers to regenerate or extend for new features.Proprietary Software: For internal use by Unexpected Innovations Inc. under proprietary license.
+This README is auto-generated and enforced via CI. Contact maintainers to regenerate or extend for new features.Proprietary Software: For internal use by Novatrax Labs LLC under proprietary license.
 
 

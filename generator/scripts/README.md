@@ -177,6 +177,6 @@ jobs:
 Q: How is auditability enforced?A: Scripts generate logs and JSON reports (e.g., migrate_prompts.py). Audit logs include trace IDs and timestamps for traceability.
 
 
-This README is auto-generated and enforced via CI. Contact maintainers to regenerate or extend for new features.Proprietary Software: For internal use by Unexpected Innovations Inc. under proprietary license.
+This README is auto-generated and enforced via CI. Contact maintainers to regenerate or extend for new features.Proprietary Software: For internal use by Novatrax Labs LLC under proprietary license.
 
 

@@ -38,7 +38,7 @@ As of September 10, 2025, this guide is up to date with v2.0.
 
 \## What is SFE and the Simulation Module?
 
-\- \*\*SFE Overview\*\*: SFE is a self-healing AI system that fixes code bugs, optimizes performance, and evolves software autonomously. It's built by Unexpected Innovations Inc. and includes modules like `arbiter` (orchestration), `guardrails` (safety), and this one.
+\- \*\*SFE Overview\*\*: SFE is a self-healing AI system that fixes code bugs, optimizes performance, and evolves software autonomously. It's built by Novatrax Labs LLC and includes modules like `arbiter` (orchestration), `guardrails` (safety), and this one.
 
 \- \*\*Simulation Module\*\*: Runs "what-if" tests, stress simulations, and AI-driven evolutions. It uses tools like quantum computing (`quantum.py`) and parallel processing (`parallel.py`) to model real-world scenarios.
 

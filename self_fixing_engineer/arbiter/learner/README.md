@@ -249,6 +249,6 @@ Circuit Breaker Pattern
 structlog
 
 License
-© 2025 Unexpected Innovations Inc. All rights reserved.Proprietary software for internal or licensed use only.Contact legal@unexpectedinnovations.com for details.
+© 2025 Novatrax Labs LLC All rights reserved.Proprietary software for internal or licensed use only.Contact legal@novatraxlabs.com for details.
 Contact
-For questions, bugs, or features:engineering@unexpectedinnovations.com
+For questions, bugs, or features:engineering@novatraxlabs.com

@@ -1,9 +1,9 @@
 Refactor Agent Module - Self-Fixing Engineer (SFE) 🚀
-Universal Crew v10.0.0 - The "Infinite Orchestration" EditionProprietary Technology by Unexpected Innovations
+Universal Crew v10.0.0 - The "Infinite Orchestration" EditionProprietary Technology by Novatrax Labs
 Orchestrate AI, human, and plugin agents for self-healing, refactoring, and governance with runtime dynamism.
 The Refactor Agent module, or Universal Crew ∞, is the orchestration heart of the Self-Fixing Engineer (SFE) platform. It manages a dynamic crew of AI, human, and plugin agents to automate code refactoring, testing, simulation, and governance across enterprise codebases. Defined by a YAML schema in refactor_agent.yaml, the module supports runtime-resolved roles, skills, and escalation paths, integrating with cloud-native services (AWS, Azure, NATS) and plugins for security, observability, and visualization. Designed for scalability and zero-trust security, it enables continuous learning, cross-repo refactoring, and human-in-the-loop oversight.
 Crafted with precision in Fairhope, Alabama, USA.Orchestrate the future with Universal Crew’s infinite adaptability.
-Version: 10.0.0 (stable as of September 10, 2025)SPDX-License-Identifier: MITCopyright: © 2025 Unexpected Innovations Inc.
+Version: 10.0.0 (stable as of September 10, 2025)SPDX-License-Identifier: MITCopyright: © 2025 Novatrax Labs LLC
 For new users: If you're new to SFE or Code Factory, start with GETTING_STARTED.md for basics and DEMO_GUIDE.md to run your first demo.
 
 Table of Contents
@@ -183,12 +183,12 @@ Future: Dynamic escalation, multi-modal support.
 
 Support
 
-Email: support@unexpectedinnovations.com
+Email: support@novatraxlabs.com
 GitHub: /issues
 Discord: https://discord.gg/sfe-community
 Wiki: /wiki
 
 
 License
-Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.
-For licensing: support@unexpectedinnovations.com.
+Proprietary and Confidential © 2025 Novatrax Labs. All rights reserved.
+For licensing: support@novatraxlabs.com.
