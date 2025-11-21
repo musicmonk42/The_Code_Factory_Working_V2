@@ -62,23 +62,24 @@ RUN sphinx-build -b html docs docs/_build/html  # Assuming Sphinx in 'docs/' dir
 FROM python:3.11-slim AS runtime
 
 # Reuse ARGs from build stage
-ARG API_PORT
+ARG API_PORT=8000
 ARG CONFIG_PATH
 
 # Environment variables for runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    API_PORT=${API_PORT} \
     CONFIG_PATH=${CONFIG_PATH} \
     # Observability envs
     PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus \
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
-# Expose ports: API and metrics
-EXPOSE ${API_PORT} 8001  # 8001 for Prometheus metrics
+# Expose ports: API and metrics (8000 for API, 8001 for Prometheus)
+EXPOSE 8000 8001
 
 # Health check: hits /health endpoint (adjust to your app's health check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --spider --q http://localhost:${API_PORT}/health || exit 1
+    CMD wget --spider --q http://localhost:8000/health || exit 1
 
 # Create non-root user for security
 RUN useradd -m appuser && \
