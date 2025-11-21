@@ -204,11 +204,43 @@ except ImportError as e:
     logging.warning(f"Optional dependency missing: {e} (envs)")
     BaseCodeHealthEnv = object
 
-from envs.evolution import evolve_configs
-from arbiter.models.postgres_client import PostgresClient
-from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
-from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
-from arbiter.codebase_analyzer import CodebaseAnalyzer as CodeAnalyzer
+try:
+    from envs.evolution import evolve_configs
+except ImportError as e:
+    logging.warning(f"Optional dependency missing: {e} (evolution)")
+    def evolve_configs(*args, **kwargs):
+        logging.warning("evolve_configs called but evolution module not available")
+        return None
+
+try:
+    from arbiter.models.postgres_client import PostgresClient
+except ImportError as e:
+    logging.warning(f"Optional dependency missing: {e} (PostgresClient)")
+    class PostgresClient:
+        def __init__(self, *args, **kwargs):
+            raise NotImplementedError("PostgresClient requires asyncpg module")
+
+try:
+    from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
+except ImportError as e:
+    logging.warning(f"Optional dependency missing: {e} (MultiModalPlugin)")
+    class MultiModalPlugin:
+        pass
+
+try:
+    from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
+except ImportError as e:
+    logging.warning(f"Optional dependency missing: {e} (Neo4jKnowledgeGraph)")
+    class Neo4jKnowledgeGraph:
+        def __init__(self, *args, **kwargs):
+            raise NotImplementedError("Neo4jKnowledgeGraph requires neo4j module")
+
+try:
+    from arbiter.codebase_analyzer import CodebaseAnalyzer as CodeAnalyzer
+except ImportError as e:
+    logging.warning(f"Optional dependency missing: {e} (CodebaseAnalyzer)")
+    class CodeAnalyzer:
+        pass
 
 # --- Audit and Error Log Models ---
 class AuditLogModel(Base):

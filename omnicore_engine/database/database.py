@@ -62,7 +62,7 @@ except Exception:
 # Local imports from the refactored structure
 from .models import Base, AgentState, ExplainAuditRecord, GeneratorAgentState, SFEAgentState
 from .metrics_helpers import get_or_create_counter_local, get_or_create_gauge_local, get_or_create_histogram_local
-from .encryption import FernetEncryption # NEW IMPORT
+from omnicore_engine.message_bus.encryption import FernetEncryption # NEW IMPORT
 
 # Corrected imports using the new arbiter package and centralized settings
 from arbiter.config import ArbiterConfig
@@ -104,8 +104,8 @@ except ImportError:
     plugin_registry = None
 
 # New imports for EnterpriseSecurityUtils
-from security_utils import EnterpriseSecurityUtils
-from security_config import get_security_config
+from omnicore_engine.security_utils import EnterpriseSecurityUtils
+from omnicore_engine.security_config import get_security_config
 
 
 # This function should be moved to a separate utils.py file to avoid circular imports.
