@@ -10,7 +10,7 @@ ensuring data consistency, validation, and ease of use with LLMs or Knowledge Gr
 
 import re
 import logging
-from pydantic import BaseModel, Field, HttpUrl, field_validator, ValidationError, constr, conlist, AnyUrl, ConfigDict, ValidationInfo
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator, ValidationError, constr, conlist, AnyUrl, ConfigDict, ValidationInfo
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timezone
 from enum import Enum
@@ -121,14 +121,17 @@ class AudioAnalysisResult(BaseConfig):
     raw_response: Optional[Dict[str, Any]] = Field(None, description="Raw response from the underlying ML model/API for debugging/inspection.")
     severity: Optional[Severity] = Field(None, description="An optional severity level for the analysis result.")
 
-    @field_validator('speaker_count')
-    @classmethod
-    def check_speaker_count(cls, v, info: ValidationInfo):
-        values = info.data
-        tx = values.get('transcription')
-        if v is not None and tx and tx.speakers and v != len(tx.speakers):
-            raise ValueError(f"speaker_count ({v}) must equal number of speakers ({len(tx.speakers)}).")
-        return v
+    @model_validator(mode='after')
+    def check_speaker_count(self):
+        if (self.speaker_count is not None and 
+            self.transcription and 
+            self.transcription.speakers and 
+            self.speaker_count != len(self.transcription.speakers)):
+            raise ValueError(
+                f"speaker_count ({self.speaker_count}) must equal "
+                f"number of speakers ({len(self.transcription.speakers)})."
+            )
+        return self
     
     @field_validator('timestamp_utc', mode='after')
     @classmethod

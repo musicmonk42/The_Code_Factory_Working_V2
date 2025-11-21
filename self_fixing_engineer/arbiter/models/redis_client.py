@@ -437,7 +437,16 @@ class RedisClient:
             if not key or len(key) > 1024:
                 raise ValueError(f"Key '{key}' must be non-empty and <= 1024 characters.")
         values = await self._execute_operation("mget", "multiple", self.client.mget, keys)
-        return [json.loads(v) if isinstance(v, str) and v.startswith(('{', '[')) else v for v in values]
+        
+        def safe_parse(v):
+            if isinstance(v, str) and v.startswith(('{', '[')):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    return v
+            return v
+        
+        return [safe_parse(v) for v in values]
 
 
     async def delete(self, *keys: str) -> int:
