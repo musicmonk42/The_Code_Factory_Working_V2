@@ -89,7 +89,7 @@ class LocalProvider(LLMProvider):
 
         for model_name, details in config.get('models', {}).items():
             # [FIX] Use the correct arguments for register_custom_model
-            self.register_custom_model(model_name, details['endpoint'], details.get('headers', {}))
+            self.register_custom_model(model_name, details)
 
     def register_custom_model(self, model_name: str, config: Dict[str, Any]):
         """
@@ -276,21 +276,27 @@ class LocalProvider(LLMProvider):
                 return gen()
             else:
                 lines = await response.text()
-                # Non-streaming response is usually one big JSON object in the stream format from Ollama
-                full_json = "".join([line for line in lines.splitlines() if line.strip()])
+                # Non-streaming response may contain multiple JSON objects (Ollama format)
+                # Parse each line separately to handle multiple JSON objects correctly
+                responses = []
+                for line in lines.splitlines():
+                    if line.strip():
+                        try:
+                            responses.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
                 
-                # Parse the full response to extract content
-                try:
-                    final_response_obj = json.loads(full_json)
-                    content = final_response_obj.get('response', '')
-                except json.JSONDecodeError:
-                    # Fallback for unexpected formats
-                    logger.warning("Failed to parse non-streaming response as single JSON object.", extra={'run_id': run_id})
+                # Extract content from all response objects
+                if responses:
+                    content = "".join([r.get('response', '') for r in responses])
+                else:
+                    # Fallback: try parsing the entire response as single JSON
                     try:
-                        # Try to parse line by line and join
-                        content = "".join([json.loads(line)['response'] for line in lines.splitlines() if line.strip()])
-                    except Exception:
-                        content = "" # Give up if parsing fails
+                        final_response_obj = json.loads(lines)
+                        content = final_response_obj.get('response', '')
+                    except json.JSONDecodeError:
+                        logger.warning("Failed to parse non-streaming response", extra={'run_id': run_id})
+                        content = ""
                 
                 # Apply post-processing hooks
                 stamped_response = {"content": content, "model": model}
@@ -313,21 +319,16 @@ class LocalProvider(LLMProvider):
         Approximate token count.
         [FIX] Now correctly uses a custom 'token_counter' if available.
         """
-        # Kept async signature for consistency.
         model_config = self.custom_models.get(model)
         if model_config and 'token_counter' in model_config:
             counter = model_config['token_counter']
             try:
-                if asyncio.iscoroutinefunction(counter):
-                    return await counter(text)
-                else:
-                    # Run synchronous lambda in a thread
-                    return await asyncio.to_thread(counter, text)
+                return await asyncio.to_thread(counter, text)
             except Exception as e:
                 logger.warning(f"Custom token_counter for model '{model}' failed: {e}. Falling back to default.")
 
-        # A simple approximation
-        return await asyncio.to_thread(lambda: len(text.split()))
+        # Simple fallback: count words as rough approximation
+        return len(text.split())
 
     async def health_check(self) -> bool:
         """

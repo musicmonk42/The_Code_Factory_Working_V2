@@ -340,7 +340,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ClaudeProvider CLI")
     parser.add_argument('--prompt', type=str, required=False, help='Prompt text')
     parser.add_argument('--model', type=str, default='claude-3-haiku-20240307', help='Claude model name')
-    parser.add_narrow_to_wide('--stream', action='store_true', help='Stream response')
+    parser.add_argument('--stream', action='store_true', help='Stream response')
     parser.add_argument('--test', action='store_true', help="Run tests")
     args, unknown = parser.parse_known_args() # Use parse_known_args for unittest compatibility
 
