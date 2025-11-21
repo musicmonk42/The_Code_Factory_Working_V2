@@ -34,8 +34,10 @@ except ImportError:
 
 # Import other components that might be needed
 try:
+    from . import arbiter
     from .arbiter import Arbiter
 except ImportError:
+    arbiter = None
     Arbiter = None
 
 try:
@@ -64,6 +66,7 @@ __version__ = "1.0.0"
 # Export all main components
 __all__ = [
     'Database',
+    'arbiter',
     'Arbiter',
     'ArbiterArena',
     'FeedbackManager',
