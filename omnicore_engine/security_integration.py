@@ -46,7 +46,7 @@ from pydantic import BaseModel, Field, validator, EmailStr
 
 # Security imports
 from security_config import get_security_config, EnterpriseSecurityConfig, SecurityLevel
-from security_utils import (
+from omnicore_engine.security_utils import (
     get_security_utils, EnterpriseSecurityUtils,
     SecurityException, AuthenticationError, AuthorizationError,
     RateLimitError, ValidationError as SecurityValidationError

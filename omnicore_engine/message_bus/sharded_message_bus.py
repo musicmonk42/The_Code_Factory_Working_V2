@@ -58,7 +58,7 @@ from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
 from omnicore_engine.message_bus.message_types import Message
 
 # New imports
-from security_utils import get_security_utils
+from omnicore_engine.security_utils import get_security_utils
 
 
 logger = structlog.get_logger(__name__)
