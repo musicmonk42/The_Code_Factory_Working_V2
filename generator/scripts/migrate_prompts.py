@@ -156,22 +156,25 @@ class PromptReplacer(ast.NodeTransformer):
     """
     AST transformer to replace the PROMPT_TEMPLATES dict assignment with loader code.
     """
-    def __init__(self, dict_node_to_replace: ast.Dict, loader_code: str):
-        self.dict_node_to_replace = dict_node_to_replace
+    def __init__(self, loader_code: str):
         self.loader_code_ast = ast.parse(loader_code.strip()).body
         self.replaced = False
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         self.generic_visit(node)
-        if not self.replaced and node.value == self.dict_node_to_replace:
-            # Replace the assignment node with the loader code
-            self.replaced = True
-            # The loader code might be multiple statements. Insert them directly.
-            # If loader_code_ast is list, return as list.
-            # If it's a single statement, just replace the node.
-            if len(self.loader_code_ast) == 1:
-                return self.loader_code_ast[0]
-            return self.loader_code_ast
+        # Check if this is the PROMPT_TEMPLATES assignment
+        if not self.replaced:
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == 'PROMPT_TEMPLATES':
+                    if isinstance(node.value, ast.Dict):
+                        # Replace the assignment node with the loader code
+                        self.replaced = True
+                        # The loader code might be multiple statements. Insert them directly.
+                        # If loader_code_ast is list, return as list.
+                        # If it's a single statement, just replace the node.
+                        if len(self.loader_code_ast) == 1:
+                            return self.loader_code_ast[0]
+                        return self.loader_code_ast
         return node
 
 def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_code: str) -> str:
@@ -179,7 +182,7 @@ def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_
     Replaces the PROMPT_TEMPLATES dict in the original code with generated loader code.
     Args:
         original_code (str): The content of the original Python file.
-        dict_node (ast.Dict): The AST node of the PROMPT_TEMPLATES dictionary to be replaced.
+        dict_node (ast.Dict): The AST node of the PROMPT_TEMPLATES dictionary (not used, kept for compatibility).
         loader_code (str): The Python code string for the new loader.
     Returns:
         str: The modified Python code.
@@ -187,7 +190,7 @@ def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_
         PromptMigrationError: If the dict node cannot be found or replaced in the code.
     """
     tree = ast.parse(original_code)
-    transformer = PromptReplacer(dict_node, loader_code)
+    transformer = PromptReplacer(loader_code)
     new_tree = transformer.visit(tree)
     if not transformer.replaced:
         raise PromptMigrationError("Failed to find and replace PROMPT_TEMPLATES dict in the code.")
@@ -417,8 +420,8 @@ def generate_summary_report(reports: List[Dict[str, Any]]) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate inline prompt dicts to .j2 template files.")
-    parser.add_argument("--source", required=True, help="Source .py file or directory")
-    parser.add_argument("--dest", required=True, help="Destination directory for .j2 templates")
+    parser.add_argument("--source", help="Source .py file or directory")
+    parser.add_argument("--dest", help="Destination directory for .j2 templates")
     parser.add_argument("--recursive", action='store_true', help="Recursively scan directories for .py files.")
     parser.add_argument("--dry-run", action='store_true', help="Preview changes, do not write files.")
     parser.add_argument("--no-backup", action='store_true', help="Do not backup original files before modification.")
@@ -592,6 +595,9 @@ PROMPT_TEMPLATES = {
 
     else:
         # Standard script execution
+        if not args.source or not args.dest:
+            parser.error("--source and --dest are required when not running tests")
+        
         source_path = Path(args.source)
         dest_path = Path(args.dest)
         
