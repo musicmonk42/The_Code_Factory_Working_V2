@@ -159,7 +159,7 @@ class SizeLimitMiddleware(BaseHTTPMiddleware):
 
 # In fastapi_app.py, add security middleware
 from security_config import get_security_config
-from security_utils import get_security_utils, RateLimiter
+from omnicore_engine.security_utils import get_security_utils, RateLimiter
 
 security_config = get_security_config()
 security_utils = get_security_utils()

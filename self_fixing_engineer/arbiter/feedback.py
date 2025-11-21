@@ -18,7 +18,13 @@ import aiofiles
 from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
 from tenacity import retry, stop_after_attempt, wait_exponential
 from arbiter.otel_config import get_tracer
-import psycopg2
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    psycopg2 = None
+    PSYCOPG2_AVAILABLE = False
+    logging.warning("psycopg2 not available. PostgreSQL features will be disabled.")
 import aiosqlite
 from arbiter.arbiter_plugin_registry import register, PlugInKind, registry as arbiter_registry
 
@@ -73,12 +79,7 @@ except ImportError:
 
 
 # Check for psycopg2 and aiosqlite for client-specific functionality
-try:
-    import psycopg2
-    POSTGRES_AVAILABLE = True
-except ImportError:
-    POSTGRES_AVAILABLE = False
-    pass
+POSTGRES_AVAILABLE = PSYCOPG2_AVAILABLE
         
 try:
     import aiosqlite
@@ -86,6 +87,17 @@ try:
 except ImportError:
     SQLLITE_AVAILABLE = False
     pass
+
+# Define FeedbackType enum for feedback categorization
+class FeedbackType:
+    """Enumeration of feedback types"""
+    BUG_REPORT = "bug_report"
+    FEATURE_REQUEST = "feature_request"
+    GENERAL = "general"
+    APPROVAL = "approval"
+    DENIAL = "denial"
+    IMPROVEMENT = "improvement"
+    ISSUE = "issue"
 
 # Determine if the application is running in production
 IS_PRODUCTION = os.getenv("APP_ENV", "development") == "production"
