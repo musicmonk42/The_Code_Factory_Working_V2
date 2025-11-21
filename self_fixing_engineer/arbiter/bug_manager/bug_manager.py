@@ -39,6 +39,9 @@ def register(kind):
 
 logger = logging.getLogger(__name__)
 
+# Fixed: ContextVar must be defined at module level, not inside functions
+_bug_id_var = contextvars.ContextVar('bug_id', default=None)
+
 # Prometheus Metrics
 BUG_REPORT = get_or_create_metric(Counter, 'bug_report', 'Total number of bug reports received', ['severity'])
 BUG_REPORT_SUCCESS = get_or_create_metric(Counter, 'bug_report_success', 'Total number of bug reports successfully processed', ['severity'])
@@ -191,12 +194,15 @@ class RateLimiter:
             return await func(instance, error_data, *args, **kwargs)
         return wrapper
 
-rate_limiter = RateLimiter(Settings())
+# Fixed: Removed global rate_limiter that uses wrong settings
+# Each BugManager instance will use its own rate_limiter
 
 class BugManager:
     def __init__(self, settings: Settings):
         apply_settings_validation(settings)
         self.settings = settings
+        # Fixed: Create rate_limiter per-instance with correct settings
+        self._rate_limiter = RateLimiter(self.settings)
         try:
             self.notification_service = NotificationService(self.settings)
         except ImportError as e:
@@ -230,7 +236,8 @@ class BugManager:
     async def _initialize(self):
         """Perform async initialization of services."""
         await self.audit_log_manager.initialize()
-        await rate_limiter.initialize()
+        # Fixed: Use instance rate_limiter instead of global
+        await self._rate_limiter.initialize()
         if self.ml_remediation_model:
             logger.info("MLRemediationModel initialized.")
         self._initialized = True
@@ -251,12 +258,22 @@ class BugManager:
             await self.audit_log_manager.shutdown()
         logger.info("BugManager fully shut down.")
 
-    @rate_limiter.rate_limit
+    # Fixed: Apply rate limiting inside the method instead of as decorator
+    # to use the instance's rate_limiter with correct settings
     async def report(self, 
                      error_data: Union[Exception, str, Dict[str, Any]], 
                      severity: Union[str, Severity] = Severity.MEDIUM, 
                      location: Optional[str] = None,
                      custom_details: Optional[Dict[str, Any]] = None) -> None:
+        # Apply rate limiting manually using instance rate_limiter
+        return await self._rate_limiter.rate_limit(self._report_impl)(self, error_data, severity, location, custom_details)
+    
+    async def _report_impl(self, 
+                           error_data: Union[Exception, str, Dict[str, Any]], 
+                           severity: Union[str, Severity] = Severity.MEDIUM, 
+                           location: Optional[str] = None,
+                           custom_details: Optional[Dict[str, Any]] = None) -> None:
+        """Internal implementation of report with actual logic."""
         # Lazy initialization to prevent race conditions
         async with self._init_lock:
             if not self._initialized:
@@ -268,8 +285,8 @@ class BugManager:
         
         # 2.2: Context-aware logging
         bug_signature = self._generate_bug_signature(error_data, location, custom_details)
-        bug_id = contextvars.ContextVar('bug_id', default=None)
-        bug_id.set(bug_signature[:8])
+        # Fixed: Use module-level ContextVar instead of creating new one
+        _bug_id_var.set(bug_signature[:8])
 
         try:
             if isinstance(severity, str):
