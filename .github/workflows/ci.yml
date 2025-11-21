@@ -9,11 +9,16 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
+
+permissions:
+  contents: read
   
 jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -45,6 +50,8 @@ jobs:
   test-generator:
     name: Test Generator Component
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -86,6 +93,8 @@ jobs:
   test-omnicore:
     name: Test OmniCore Engine
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     services:
       redis:
@@ -139,6 +148,8 @@ jobs:
   test-sfe:
     name: Test Self-Fixing Engineer
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -179,6 +190,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: [test-generator, test-omnicore, test-sfe]
+    permissions:
+      contents: read
     
     services:
       redis:
@@ -227,6 +240,8 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     needs: [lint, test-generator, test-omnicore, test-sfe]
+    permissions:
+      contents: read
     
     strategy:
       matrix:
@@ -262,6 +277,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test-generator, test-omnicore, test-sfe, integration-test, build-docker]
     if: always()
+    permissions:
+      contents: read
     
     steps:
       - name: Check CI status
