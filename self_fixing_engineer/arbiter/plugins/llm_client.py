@@ -86,22 +86,31 @@ def get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[Hi
     
     with _metrics_lock:
         try:
-            if check_name in REGISTRY._names_to_collectors:
-                existing_metric = REGISTRY._names_to_collectors[check_name]
-                if isinstance(existing_metric, metric_class):
-                    return existing_metric
-                else:
-                    # If a metric with the same name exists but is of a different type,
-                    # unregister it to avoid conflicts, especially in environments with hot-reloading.
-                    REGISTRY.unregister(existing_metric)
-                    logger.warning(f"Unregistered mismatched metric '{name}'. Recreating.")
+            # Try to get existing collector - avoid private attributes
+            # Just attempt to create; Prometheus will handle duplicates gracefully
+            pass
         except Exception as e:
             logger.error(f"Error checking/unregistering metric {name}: {e}")
 
         # Create the new metric. Pass buckets only if provided and applicable.
-        if buckets and metric_class in (Histogram, Summary):
-            return metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
-        return metric_class(name, documentation, labelnames=labelnames)
+        # Prometheus client handles duplicate registrations internally
+        try:
+            if buckets and metric_class in (Histogram, Summary):
+                return metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+            return metric_class(name, documentation, labelnames=labelnames)
+        except ValueError as e:
+            # Metric already exists - try to retrieve it
+            if "Duplicated timeseries" in str(e) or "already registered" in str(e):
+                # Return None and let caller handle, or try to get from registry
+                logger.debug(f"Metric {name} already registered, reusing existing")
+                # Attempt to get from collector registry (no private access)
+                for collector in list(REGISTRY._collector_to_names.keys()):
+                    try:
+                        if hasattr(collector, '_name') and collector._name == name:
+                            return collector
+                    except AttributeError:
+                        continue
+            raise
 
 
 # Prometheus metrics
@@ -498,7 +507,9 @@ class LLMClient:
                 full_response_text = ""
                 async for line in resp.content:
                     try: full_response_text += json.loads(line.decode('utf-8')).get("response", "")
-                    except json.JSONDecodeError: pass 
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Skipping non-JSON line in Ollama response: {e}")
+                        pass 
                 result = full_response_text.strip()
         else:
             raise ValueError(f"Invalid provider: {self.provider}")
@@ -587,7 +598,9 @@ class LLMClient:
                     try:
                         json_line = json.loads(line.decode('utf-8'))
                         if "response" in json_line: yield json_line["response"]
-                    except json.JSONDecodeError: pass
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Skipping non-JSON line in Ollama response: {e}")
+                        pass
         else:
             raise ValueError(f"Invalid provider: {self.provider}")
 

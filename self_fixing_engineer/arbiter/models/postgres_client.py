@@ -693,18 +693,18 @@ class PostgresClient:
         
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                # Prepare records for COPY
+                # Prepare records for COPY and update original data_list with generated IDs
                 records = []
                 for data_item in data_list:
-                    current_data = data_item.copy()
-                    if pk_columns == ["id"] and "id" not in current_data:
-                        current_data["id"] = str(uuid.uuid4())
-                    elif pk_columns == ["session_id"] and "session_id" not in current_data:
-                        current_data["session_id"] = str(uuid.uuid4())
+                    # Generate IDs directly in the original data_item to ensure consistency
+                    if pk_columns == ["id"] and "id" not in data_item:
+                        data_item["id"] = str(uuid.uuid4())
+                    elif pk_columns == ["session_id"] and "session_id" not in data_item:
+                        data_item["session_id"] = str(uuid.uuid4())
                     elif table == "agent_knowledge":
-                        if "domain" not in current_data or "key" not in current_data:
+                        if "domain" not in data_item or "key" not in data_item:
                             raise ValueError("Each item in agent_knowledge batch must have 'domain' and 'key'.")
-                    record = [current_data.get(col) for col in columns]
+                    record = [data_item.get(col) for col in columns]
                     for i, col in enumerate(columns):
                         if col in jsonb_columns and record[i] is not None:
                             record[i] = json.dumps(record[i])
@@ -712,9 +712,9 @@ class PostgresClient:
                             record[i] = record[i].isoformat()
                     records.append(tuple(record))
                     if table == "agent_knowledge":
-                        saved_ids.append(f"{current_data['domain']}:{current_data['key']}")
+                        saved_ids.append(f"{data_item['domain']}:{data_item['key']}")
                     else:
-                        saved_ids.append(str(current_data[pk_columns[0]]))
+                        saved_ids.append(str(data_item[pk_columns[0]]))
                 
                 # Use COPY for bulk insert
                 await conn.copy_records_to_table(
@@ -724,7 +724,7 @@ class PostgresClient:
                     schema_name="public"
                 )
                 
-                # Handle conflicts with UPSERT
+                # Handle conflicts with UPSERT (now using data_item with generated IDs)
                 for data_item in data_list:
                     query_sql, values = await self._get_insert_update_sql_and_values(table, data_item)
                     await conn.execute(query_sql, *values)

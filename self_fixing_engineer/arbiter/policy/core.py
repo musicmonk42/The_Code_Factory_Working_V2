@@ -373,7 +373,7 @@ class PolicyEngine:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, ImportError)),
         before_sleep=lambda retry_state: logger.debug(f"Retrying LLMClient creation: attempt {retry_state.attempt_number}")
     )
     def _create_llm_client(self):
@@ -396,7 +396,7 @@ class PolicyEngine:
             current_time = time.monotonic()
             if current_time - self._last_llm_call_time < self._llm_call_interval:
                 await asyncio.sleep(self._llm_call_interval - (current_time - self._last_llm_call_time))
-            if is_llm_policy_circuit_breaker_open():
+            if await is_llm_policy_circuit_breaker_open():
                 span.set_attribute("circuit_breaker_status", "open")
                 return "NO", "Circuit breaker open for LLM provider.", 0.0
             
@@ -415,7 +415,7 @@ class PolicyEngine:
                 )
                 self._last_llm_call_time = time.monotonic()
                 LLM_CALL_LATENCY.labels(provider=llm_provider).observe(time.monotonic() - start_time)
-                record_llm_policy_api_success()
+                await record_llm_policy_api_success()
                 decision, reason, trust_score = self._validate_llm_policy_output(
                     llm_response, self._policies.get("llm_rules", {}).get("valid_responses", ["YES", "NO"])
                 )
@@ -425,12 +425,12 @@ class PolicyEngine:
                 span.set_attribute("llm.trust_score", trust_score)
                 return decision, reason, trust_score
             except asyncio.TimeoutError:
-                record_llm_policy_api_failure()
+                await record_llm_policy_api_failure()
                 logger.error(f"LLM call timed out after {self.config.LLM_API_TIMEOUT_SECONDS} seconds")
                 span.record_exception(asyncio.TimeoutError("LLM call timed out"))
                 return "NO", f"LLM call timed out after {self.config.LLM_API_TIMEOUT_SECONDS} seconds", 0.0
             except Exception as e:
-                record_llm_policy_api_failure()
+                await record_llm_policy_api_failure()
                 LLM_CALL_LATENCY.labels(provider=llm_provider).observe(time.monotonic() - start_time)
                 logger.error(f"Error calling LLM for policy evaluation: {e}")
                 span.record_exception(e)

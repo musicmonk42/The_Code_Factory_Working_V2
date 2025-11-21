@@ -326,8 +326,11 @@ class AuditLedgerClient:
                 # Try to parse JSON to handle different secret formats
                 try:
                     maybe_json = json.loads(secret)
-                    secret = maybe_json.get("private_key") or maybe_json.get("ETHEREUM_PRIVATE_KEY") or secret
+                    secret = maybe_json.get("private_key") or maybe_json.get("ETHEREUM_PRIVATE_KEY")
+                    if not secret:
+                        raise ValueError("Neither 'private_key' nor 'ETHEREUM_PRIVATE_KEY' found in secret JSON")
                 except json.JSONDecodeError:
+                    # Treat as plain string
                     pass
                 
                 logger.info("Successfully retrieved private key from AWS Secrets Manager.")

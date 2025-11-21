@@ -10,7 +10,7 @@ import atexit
 import threading
 import sys
 import re
-import docker # Import the docker library for sandboxing
+
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, Callable, List
 from datetime import datetime, timezone
@@ -22,6 +22,23 @@ from PIL import Image
 # Assuming these are available from the arbiter package root
 from arbiter.config import ArbiterConfig
 from arbiter.plugins.multi_modal_config import MultiModalConfig
+
+# Initialize logger early before any usage
+logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+    logger.addHandler(handler)
+
+# Import docker with try-except for graceful degradation
+try:
+    import docker
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None
+    logger.warning("Docker library not available. Sandboxing will be disabled.")
 
 # It's better to explicitly define the import paths for the sub-packages
 from .multimodal.interface import (
@@ -43,13 +60,6 @@ try:
 except ImportError:
     # Prometheus and Redis are optional dependencies
     Counter, Histogram, redis = None, None, None
-
-logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
-    logger.addHandler(handler)
 
 # Helper functions for metrics
 def get_or_create_counter(name: str, description: str, labels: List[str]) -> Counter:
@@ -242,7 +252,7 @@ class InputValidator:
 
             # Apply PII masking if enabled
             if security_config.mask_pii_in_logs:
-                for pattern in security_config.pii_patterns:
+                for pattern in security_config.pii_patterns.values():
                     data = re.sub(pattern, '[PII_MASKED]', data)
                 logger.debug("PII masking applied to text input.")
 
@@ -322,6 +332,9 @@ class SandboxExecutor:
                 raise MultiModalException(f"Error during execution: {e}") from e
         
         # Real sandboxing implementation using docker-py
+        if not DOCKER_AVAILABLE:
+            raise ConfigurationError("Docker library not available. Sandboxing cannot be enabled.")
+        
         try:
             client = docker.from_env()
             
@@ -330,20 +343,37 @@ class SandboxExecutor:
 
             # The Docker command will execute a Python one-liner to deserialize input,
             # run the function, and serialize the output.
-            # NOTE: This assumes the target function's module is available in the container.
-            # For production, this logic would be more sophisticated with pre-built images.
+            # NOTE: This sandboxing approach has limitations:
+            # - Relative imports won't work in container
+            # - Function module might not be available in container
+            # - No way to pass actual function code to container
+            # For production, use pre-built images with required dependencies.
             docker_cmd = f"python -c 'import json; from .multimodal.interface import {func.__name__}; data = json.loads(input()); result = {func.__name__}(*data[\"args\"], **data[\"kwargs\"]); print(json.dumps(result.model_dump()))'"
 
             # Run the container with restricted permissions
+            # Note: docker-py does not support 'input' parameter. Use stdin instead.
             container = client.containers.run(
                 image="python:3.9-slim", # Or a more specific image with required dependencies
                 command=["/bin/sh", "-c", docker_cmd],
                 network_mode="none",
                 read_only=True,
-                input=input_data, # Pass input data via stdin
+                stdin_open=True,
                 detach=True,
                 remove=True # Clean up container after it exits
             )
+            
+            # Write input data to container stdin
+            try:
+                sock = container.attach_socket(params={'stdin': 1, 'stream': 1})
+                # Access underlying socket with error handling for encapsulation
+                try:
+                    sock._sock.sendall(input_data.encode('utf-8'))
+                except AttributeError:
+                    # If _sock doesn't exist, try public API
+                    sock.sendall(input_data.encode('utf-8'))
+                sock.close()
+            except Exception as e:
+                logger.warning(f"Failed to write to container stdin: {e}. Proceeding without input.")
 
             # Wait for the container to finish and get its logs
             result = container.wait(timeout=30) # Wait for a max of 30 seconds
@@ -555,8 +585,8 @@ class MultiModalPlugin:
         if state == "open":
             last_failure_time = self._circuit_breaker_last_failure_time.get(modality, 0.0)
             timeout = self.config.circuit_breaker_config.timeout_seconds
-            # Use asyncio's event loop time for consistency in async context
-            if asyncio.get_event_loop().time() - last_failure_time > timeout:
+            # Use time.monotonic() for consistent monotonic time measurement
+            if time.monotonic() - last_failure_time > timeout:
                 # Transition to half-open
                 self._circuit_breaker_states[modality] = "half-open"
                 logger.warning(f"Circuit breaker for {modality} is now 'half-open'.")
@@ -574,13 +604,13 @@ class MultiModalPlugin:
             self._circuit_breaker_failures[modality] += 1
             if self._circuit_breaker_states.get(modality) == "half-open":
                 self._circuit_breaker_states[modality] = "open"
-                # Use asyncio's event loop time for consistency in async context
-                self._circuit_breaker_last_failure_time[modality] = asyncio.get_event_loop().time()
+                # Use time.monotonic() for consistent monotonic time measurement
+                self._circuit_breaker_last_failure_time[modality] = time.monotonic()
                 logger.error(f"Circuit breaker for {modality} failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures.get(modality) >= self.config.circuit_breaker_config.threshold:
                 self._circuit_breaker_states[modality] = "open"
-                # Use asyncio's event loop time for consistency in async context
-                self._circuit_breaker_last_failure_time[modality] = asyncio.get_event_loop().time()
+                # Use time.monotonic() for consistent monotonic time measurement
+                self._circuit_breaker_last_failure_time[modality] = time.monotonic()
                 logger.error(f"Circuit breaker for {modality} is now 'open' after {self._circuit_breaker_failures.get(modality)} consecutive failures.")
 
     async def _process_data(self, modality: str, data: Any, processor: Any) -> ProcessingResult:

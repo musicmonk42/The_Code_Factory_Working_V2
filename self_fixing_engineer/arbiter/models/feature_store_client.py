@@ -622,7 +622,12 @@ class FeatureStoreClient:
                         response = await loop.run_in_executor(None, lambda: self._fs.get_online_features(features=feature_refs, entity_rows=batch))
                         d = response.to_dict()
                         if d:
-                            n = len(next(iter(d.values())))
+                            # Validate that all dictionary values have consistent lengths
+                            lengths = [len(v) for v in d.values() if isinstance(v, list)]
+                            if not lengths or len(set(lengths)) > 1:
+                                logger.error(f"Inconsistent response lengths: {lengths}")
+                                raise ValueError("Feast response has inconsistent value lengths")
+                            n = lengths[0]
                             rows = [{k: v[i] for k, v in d.items()} for i in range(n)]
                             # ensure entity keys are present (Feast may omit them)
                             for j, ent in enumerate(batch[:n]):
