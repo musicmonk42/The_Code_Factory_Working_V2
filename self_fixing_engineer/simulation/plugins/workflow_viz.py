@@ -188,8 +188,16 @@ def validate_custom_phases(phases: List[Tuple[str, str]]) -> List[Tuple[str, str
 def validate_export_path(path: Union[str, Path]) -> Path:
     path_obj = Path(path).resolve()
     results_dir_obj = RESULTS_DIR.resolve()
-    if not path_obj.is_relative_to(results_dir_obj):
-        raise ValueError("Export path must be within results directory")
+    # is_relative_to() added in Python 3.9, use fallback for compatibility
+    try:
+        if not path_obj.is_relative_to(results_dir_obj):
+            raise ValueError("Export path must be within results directory")
+    except AttributeError:
+        # Python < 3.9 fallback
+        try:
+            path_obj.relative_to(results_dir_obj)
+        except ValueError:
+            raise ValueError("Export path must be within results directory")
     return path_obj
 
 def _scrub_secrets(data: Union[Dict, List, str]) -> Union[Dict, List, str]:

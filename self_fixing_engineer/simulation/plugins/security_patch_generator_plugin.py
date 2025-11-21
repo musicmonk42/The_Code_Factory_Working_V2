@@ -73,37 +73,42 @@ except ImportError:
 
 try:
     from prometheus_client import Counter, Histogram, REGISTRY
+    import threading
     PROMETHEUS_AVAILABLE = True
+    
+    # Lock for thread-safe metric creation
+    _metrics_lock = threading.Lock()
 
     def _get_or_create_metric(metric_type: type, name: str, documentation: str,
                               labelnames: Optional[Tuple[str, ...]] = None,
                               buckets: Optional[Tuple[float, ...]] = None) -> Any:
         labelnames = labelnames or ()
-        try:
-            names_map = getattr(REGISTRY, "_names_to_collectors", None)
-            if isinstance(names_map, dict) and name in names_map:
-                return names_map[name]
-        except Exception:
-            pass
-        try:
-            if metric_type == Histogram:
-                return metric_type(name, documentation, labelnames=labelnames, buckets=buckets or Histogram.DEFAULT_BUCKETS)
-            if metric_type == Counter:
-                return metric_type(name, documentation, labelnames=labelnames)
-            return metric_type(name, documentation, labelnames=labelnames)
-        except ValueError:
+        with _metrics_lock:
             try:
                 names_map = getattr(REGISTRY, "_names_to_collectors", None)
                 if isinstance(names_map, dict) and name in names_map:
                     return names_map[name]
             except Exception:
                 pass
-            class _Dummy:
-                def inc(self, *a, **k): pass
-                def set(self, *a, **k): pass
-                def observe(self, *a, **k): pass
-                def labels(self, *a, **k): return self
-            return _Dummy()
+            try:
+                if metric_type == Histogram:
+                    return metric_type(name, documentation, labelnames=labelnames, buckets=buckets or Histogram.DEFAULT_BUCKETS)
+                if metric_type == Counter:
+                    return metric_type(name, documentation, labelnames=labelnames)
+                return metric_type(name, documentation, labelnames=labelnames)
+            except ValueError:
+                try:
+                    names_map = getattr(REGISTRY, "_names_to_collectors", None)
+                    if isinstance(names_map, dict) and name in names_map:
+                        return names_map[name]
+                except Exception:
+                    pass
+                class _Dummy:
+                    def inc(self, *a, **k): pass
+                    def set(self, *a, **k): pass
+                    def observe(self, *a, **k): pass
+                    def labels(self, *a, **k): return self
+                return _Dummy()
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     logger.warning("Prometheus client not found. Metrics for security patch generator will be disabled.")
