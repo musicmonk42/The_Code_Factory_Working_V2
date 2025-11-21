@@ -12,7 +12,6 @@ astroid==3.3.11
 astunparse==1.6.3
 async-timeout==4.0.3
 attrs==25.3.0
-backports.asyncio.runner==1.2.0
 bandit==1.8.6
 bidict==0.23.1
 black==25.1.0

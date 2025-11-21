@@ -32,7 +32,6 @@ azure-monitor-ingestion==1.1.0
 azure-monitor-query==2.0.0
 backoff==2.2.1
 backports-datetime-fromisoformat==2.0.3
-backports.asyncio.runner==1.2.0
 bandit==1.8.6
 bcrypt==4.3.0
 bigtree==0.30.1
