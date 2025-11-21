@@ -628,53 +628,56 @@ class PolicyEngine:
         Determines if test generation is allowed for a given module and language.
         """
         cache_key = (module_identifier, language)
+        
+        # Hold lock for entire operation to prevent redundant computation
         async with self._gen_lock:
+            # Check cache first
             if cache_key in self._gen_cache:
                 return self._gen_cache[cache_key]
-        
-        input_data = {"module_identifier": module_identifier, "language": language}
-        
-        if self.config.opa_integration_enabled:
-            try:
-                allowed, reason = await self.policy_client.evaluate_policy(Constants.OPA_POLICY_PATHS["generation_check"], input_data)
-                self.metrics_client.policy_evaluations_total.labels(result="allowed" if allowed else "denied", rule="generation_check").inc()
-                async with self._gen_lock:
-                    self._gen_cache[cache_key] = (allowed, reason)
-                return allowed, reason
-            except Exception as e:
-                logger.exception("OPA evaluation failed; falling back to local rules.")
-                self.metrics_client.policy_evaluations_total.labels(result="denied", rule="generation_check").inc()
-                return False, f"OPA policy evaluation failed: {e}. Defaulting to deny."
-        
-        generation_rules = self.policies.get("generation_rules", {})
-        
-        if any(reg_mod in module_identifier for reg_mod in generation_rules.get("regulated_modules", [])):
-            result = await self._deny("generation_rules_local", input_data, "Test generation explicitly forbidden for regulated modules.")
-            async with self._gen_lock:
-                self._gen_cache[cache_key] = result
-            return result
             
-        lang = (language or "").lower()
-        allowed_langs = [l.lower() for l in generation_rules.get("allowed_languages", ["python"])]
-        if lang not in allowed_langs:
-            result = await self._deny("generation_rules_local", input_data, f"Test generation not allowed for '{language}'.")
-            async with self._gen_lock:
-                self._gen_cache[cache_key] = result
-            return result
+            # Cache miss - compute the result while holding lock
+            input_data = {"module_identifier": module_identifier, "language": language}
             
-        module_path_like = module_identifier.replace('.', os.sep)
-        full_module_path = os.path.join(self.config.project_root, module_path_like)
-        safe_subfolders = generation_rules.get("safe_subfolders", [])
-        if safe_subfolders and not any(os.path.commonpath([full_module_path, os.path.join(self.config.project_root, f)]) == os.path.join(self.config.project_root, f) for f in safe_subfolders):
-            logger.debug(
-                "Module '%s' not in safe_subfolders %s; continuing (advisory).",
-                module_identifier, safe_subfolders
-            )
-        
-        result = await self._allow("generation_rules_local", input_data, "Policy allows test generation.")
-        async with self._gen_lock:
+            if self.config.opa_integration_enabled:
+                try:
+                    allowed, reason = await self.policy_client.evaluate_policy(Constants.OPA_POLICY_PATHS["generation_check"], input_data)
+                    self.metrics_client.policy_evaluations_total.labels(result="allowed" if allowed else "denied", rule="generation_check").inc()
+                    result = (allowed, reason)
+                    self._gen_cache[cache_key] = result
+                    return result
+                except Exception as e:
+                    logger.exception("OPA evaluation failed; falling back to local rules.")
+                    self.metrics_client.policy_evaluations_total.labels(result="denied", rule="generation_check").inc()
+                    result = (False, f"OPA policy evaluation failed: {e}. Defaulting to deny.")
+                    self._gen_cache[cache_key] = result
+                    return result
+            
+            generation_rules = self.policies.get("generation_rules", {})
+            
+            if any(reg_mod in module_identifier for reg_mod in generation_rules.get("regulated_modules", [])):
+                result = await self._deny("generation_rules_local", input_data, "Test generation explicitly forbidden for regulated modules.")
+                self._gen_cache[cache_key] = result
+                return result
+                
+            lang = (language or "").lower()
+            allowed_langs = [l.lower() for l in generation_rules.get("allowed_languages", ["python"])]
+            if lang not in allowed_langs:
+                result = await self._deny("generation_rules_local", input_data, f"Test generation not allowed for '{language}'.")
+                self._gen_cache[cache_key] = result
+                return result
+                
+            module_path_like = module_identifier.replace('.', os.sep)
+            full_module_path = os.path.join(self.config.project_root, module_path_like)
+            safe_subfolders = generation_rules.get("safe_subfolders", [])
+            if safe_subfolders and not any(os.path.commonpath([full_module_path, os.path.join(self.config.project_root, f)]) == os.path.join(self.config.project_root, f) for f in safe_subfolders):
+                logger.debug(
+                    "Module '%s' not in safe_subfolders %s; continuing (advisory).",
+                    module_identifier, safe_subfolders
+                )
+            
+            result = await self._allow("generation_rules_local", input_data, "Policy allows test generation.")
             self._gen_cache[cache_key] = result
-        return result
+            return result
 
     async def should_integrate_test(self, module_identifier: str, test_quality_score: float, language: str, has_security_issues: bool = False, security_severity_str: str = "NONE") -> Tuple[bool, str]:
         """

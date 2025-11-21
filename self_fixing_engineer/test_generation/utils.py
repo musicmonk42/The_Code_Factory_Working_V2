@@ -588,7 +588,7 @@ async def cleanup_temp_dir(path: str) -> None:
         # Do not re-raise
         return
 
-def cleanup_path_safe(path):
+def cleanup_path_safe(path: str) -> None:
     """
     Safely removes a file or directory without throwing errors.
     This avoids exceptions in teardown phases.
@@ -886,7 +886,7 @@ class _RobustEnvBuilder(venv.EnvBuilder):
 
 
 @zero_trust_guard
-async def create_and_install_venv(venv_rel_or_root: str, project_root_or_deps: Optional[str] = None, deps: Optional[List[str]] = None, config: Dict[str, Any] = {}) -> Tuple[bool, Optional[str]]:
+async def create_and_install_venv(venv_rel_or_root: str, project_root_or_deps: Optional[str] = None, deps: Optional[List[str]] = None, config: Optional[Dict[str, Any]] = None) -> Tuple[bool, Optional[str]]:
     """
     Create a project-scoped virtual environment and install minimal deps.
     
@@ -895,6 +895,9 @@ async def create_and_install_venv(venv_rel_or_root: str, project_root_or_deps: O
     - create_and_install_venv(venv_rel, project_root, deps) -> new format used by tests
     """
     import sys
+    
+    if config is None:
+        config = {}
     
     # Check number of positional arguments passed
     if deps is not None:

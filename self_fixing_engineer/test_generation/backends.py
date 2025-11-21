@@ -403,11 +403,11 @@ class PynguinBackend:
                 
                 logger.info(f"Installing Pynguin dependencies: {', '.join(dependencies)} into {venv_path}")
                 pip_path = os.path.join(venv_path, "bin", "pip")
-                if os.path.exists(pip_path):
-                     # a non-windows venv
-                    pass
-                else:
-                    pip_path = os.path.join(venv_path, "Scripts", "pip.exe") # Windows compatibility
+                if not os.path.exists(pip_path):
+                    # Try Windows path
+                    pip_path = os.path.join(venv_path, "Scripts", "pip.exe")
+                    if not os.path.exists(pip_path):
+                        raise FileNotFoundError(f"pip executable not found in venv at {venv_path}")
                 
                 subprocess.run(
                     [pip_path, "install", "--disable-pip-version-check", "--no-input", *dependencies],
