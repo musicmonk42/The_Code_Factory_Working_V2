@@ -50,6 +50,9 @@ except ImportError:
             return redacted_data
     logging.warning("logging_utils.py not found. Using enhanced placeholder PII redaction.")
 
+# Create a module-level instance to avoid recreating on every request
+_pii_filter = PIIRedactorFilter()
+
 logger = logging.getLogger(__name__)
 
 # --- Prometheus Metrics ---
@@ -182,8 +185,8 @@ class _BaseHTTPClient:
         Performs an HTTP request, redacting PII from the payload before sending.
         Handles response parsing with JSON fallback and content-type checks.
         """
-        # Fix: Call _redact_dict with the correct arguments
-        redacted_data = PIIRedactorFilter()._redact_dict(data, seen=set(), depth=0) if data else None
+        # Fix: Use module-level _pii_filter instance to avoid recreation
+        redacted_data = _pii_filter._redact_dict(data, seen=set(), depth=0) if data else None
 
         try:
             async with self.session.request(method, url, json=redacted_data, headers=self.headers) as response:

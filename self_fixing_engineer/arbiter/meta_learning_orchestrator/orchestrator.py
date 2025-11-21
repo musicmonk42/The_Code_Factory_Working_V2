@@ -329,11 +329,11 @@ class MetaLearningOrchestrator:
         self._data_cleanup_task: Optional[asyncio.Task] = None
         
         self._new_records_count: int = 0
+        self._records_count_lock = asyncio.Lock()  # Protect _new_records_count from race conditions
         self._current_active_model: Optional[ModelVersion] = None
 
         self._is_leader: bool = False
         self._fencing_token: Optional[int] = None
-        self._last_audit_hash: str = "genesis_hash"
 
         # Validate local directories for fallback
         if not self.config.USE_S3_DATA_LAKE and not self.config.USE_KAFKA_INGESTION:
@@ -494,7 +494,7 @@ class MetaLearningOrchestrator:
         ML_LEADER_STATUS.set(1)
         self._fencing_token = lock_info.get("token")
         _log_structured(logging.INFO, "Instance is now the LEADER.", instance_id=self._instance_id, fencing_token=self._fencing_token)
-        await self.audit_utils.add_audit_event("leader_elected", {"instance_id": self._instance_id, "fencing_token": self._fencing_token}, self._last_audit_hash)
+        await self.audit_utils.add_audit_event("leader_elected", {"instance_id": self._instance_id, "fencing_token": self._fencing_token})
         
         # Start leader-only tasks
         if not self._training_check_task or self._training_check_task.done():
@@ -515,7 +515,7 @@ class MetaLearningOrchestrator:
             self._fencing_token = None
             _log_structured(logging.INFO, "Instance stepping down from leadership.",
                             instance_id=self._instance_id, reason=reason, old_fencing_token=fencing_token_before_clear)
-            await self.audit_utils.add_audit_event("leader_stepped_down", {"instance_id": self._instance_id, "reason": reason}, self._last_audit_hash)
+            await self.audit_utils.add_audit_event("leader_stepped_down", {"instance_id": self._instance_id, "reason": reason})
             
             # Cancel leader-only tasks
             tasks_to_cancel = [self._training_check_task, self._data_cleanup_task]
@@ -640,13 +640,14 @@ class MetaLearningOrchestrator:
     async def ingest_learning_record(self, record_data: Dict[str, Any]):
         """Ingests a single learning record and updates the internal count."""
         await self.ingestor.ingest_learning_record(record_data)
-        self._new_records_count += 1
-        ML_DATA_QUEUE_SIZE.set(self._new_records_count)
+        async with self._records_count_lock:
+            self._new_records_count += 1
+            ML_DATA_QUEUE_SIZE.set(self._new_records_count)
         await self.audit_utils.add_audit_event("record_ingested", {
             "agent_id": record_data.get("agent_id"),
             "session_id": record_data.get("session_id"),
             "event_type": record_data.get("event_type")
-        }, self._last_audit_hash)
+        })
         
     async def _training_check_core(self):
         """Core logic for the periodic training check, executed only by the leader."""
@@ -696,29 +697,25 @@ class MetaLearningOrchestrator:
         else:
             await self._cleanup_local_data_lake()
         
-        await self.audit_utils.add_audit_event("data_cleanup_completed", {"retained_days": self.config.DATA_RETENTION_DAYS}, self._last_audit_hash)
+        await self.audit_utils.add_audit_event("data_cleanup_completed", {"retained_days": self.config.DATA_RETENTION_DAYS})
 
     async def _cleanup_s3_data_lake(self):
         """Cleans up old objects from the S3 data lake. Note: S3 Lifecycle Policies are the recommended production approach."""
         cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.config.DATA_RETENTION_DAYS)
-        s3_client = None
         try:
-            s3_client = aioboto3.Session().client("s3")
-            paginator = s3_client.get_paginator('list_objects_v2')
-            async for page in paginator.paginate(Bucket=self.config.DATA_LAKE_S3_BUCKET, Prefix=self.config.DATA_LAKE_S3_PREFIX):
-                if 'Contents' in page:
-                    objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents'] if obj['LastModified'] < cutoff_time]
-                    
-                    if objects_to_delete:
-                        delete_payload = {'Objects': objects_to_delete}
-                        await s3_client.delete_objects(Bucket=self.config.DATA_LAKE_S3_BUCKET, Delete=delete_payload)
-                        _log_structured(logging.INFO, "Deleted old objects from S3.", count=len(objects_to_delete), bucket=self.config.DATA_LAKE_S3_BUCKET)
+            async with aioboto3.Session().client("s3") as s3_client:
+                paginator = s3_client.get_paginator('list_objects_v2')
+                async for page in paginator.paginate(Bucket=self.config.DATA_LAKE_S3_BUCKET, Prefix=self.config.DATA_LAKE_S3_PREFIX):
+                    if 'Contents' in page:
+                        objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents'] if obj['LastModified'] < cutoff_time]
+                        
+                        if objects_to_delete:
+                            delete_payload = {'Objects': objects_to_delete}
+                            await s3_client.delete_objects(Bucket=self.config.DATA_LAKE_S3_BUCKET, Delete=delete_payload)
+                            _log_structured(logging.INFO, "Deleted old objects from S3.", count=len(objects_to_delete), bucket=self.config.DATA_LAKE_S3_BUCKET)
         except Exception as e:
             _log_structured(logging.ERROR, "Failed to cleanup S3 data lake.", error=str(e), exc_info=True)
             ML_ORCHESTRATOR_ERRORS.inc()
-        finally:
-            if s3_client:
-                await s3_client.close()
 
     async def _cleanup_local_data_lake(self):
         """Cleans up old records from the local data lake file using an atomic replace operation."""
