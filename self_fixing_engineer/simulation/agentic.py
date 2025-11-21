@@ -132,10 +132,8 @@ class SecretsManager:
                 agentic_logger.critical(msg)
                 if SENTRY_ENABLED: sentry_sdk.capture_message(f"Critical: Missing secret {key}")
                 alert_operator(f"Critical: Missing required secret '{key}'.", level="CRITICAL")
-                if os.getenv("PYTEST_CURRENT_TEST"):
-                    raise RuntimeError(f"Missing required secret: {key}")
-                else:
-                    sys.exit(1)
+                # Raise exception instead of sys.exit() to allow proper error handling
+                raise RuntimeError(f"Missing required secret: {key}")
             else:
                 self.cache[key] = default
                 return default
@@ -262,7 +260,8 @@ class AuditLogger:
             if self._loop and self._loop.is_running():
                 fut = asyncio.run_coroutine_threadsafe(self.shutdown(), self._loop)
                 with suppress(Exception):
-                    fut.result(timeout=0.75)
+                    # Increased timeout from 0.75s to 5s to allow tasks to complete
+                    fut.result(timeout=5.0)
         except Exception:
             pass
 

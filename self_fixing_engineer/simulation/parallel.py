@@ -112,10 +112,14 @@ def get_or_create_metric(metric_type, name, documentation, labelnames=None, buck
     """Get or create a metric, handling both real and mocked metric types"""
     labelnames = labelnames or []
     
-    # Handle mocked metric types
+    # Handle mocked metric types - check if it's callable
     if not isinstance(metric_type, type):
-        # If it's a mock, just return a new instance
-        return metric_type(name, documentation, labelnames)
+        # If it's a mock or callable, check if it's actually callable
+        if callable(metric_type):
+            return metric_type(name, documentation, labelnames)
+        else:
+            # If it's not callable and not a type, something is wrong
+            raise TypeError(f"metric_type must be a type or callable, got {type(metric_type)}")
     
     # Rest of original logic...
     if name in _metrics_registry._names_to_collectors:
