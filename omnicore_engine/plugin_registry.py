@@ -52,18 +52,16 @@ except ImportError:
             self.PLUGIN_DIR = 'plugins'
             self.PLUGIN_EXECUTION_TIMEOUT = 30
             self.PLUGINS_ENABLED = True
+            self.PLUGIN_SIGNING_KEY = 'insecure_default_key'
+    assistant_pkg_path = []
+    print("arbiter package not found. Using mock config.")
 
 try:
     from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind, PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
 except ImportError:
     ArbiterPlugInKind = None
     ARBITER_PLUGIN_REGISTRY = None
-            self.PLUGIN_SIGNING_KEY = 'insecure_default_key'
-    class ArbiterPlugInKind(str, Enum):
-        pass
-    ARBITER_PLUGIN_REGISTRY = {}
-    assistant_pkg_path = []
-    print("arbiter package not found. Using mock config and registry.")
+    print("arbiter_plugin_registry not found. Using None values.")
 
 
 try:

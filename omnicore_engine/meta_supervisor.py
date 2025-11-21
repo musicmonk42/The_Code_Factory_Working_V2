@@ -175,6 +175,7 @@ class MetaSupervisor:
         # Rate limiter for external operations (Redis, DB) to prevent overload
         self.rate_limiter = AsyncLimiter(max_rate=settings.SUPERVISOR_RATE_LIMIT_OPS, time_period=settings.SUPERVISOR_RATE_LIMIT_PERIOD)
         self.logger = logger
+        self._start_time = time.time()
         
         # Feature flags for proactive hooks (default to False, can be enabled via settings)
         self.enable_proactive_model_retraining = getattr(settings, 'ENABLE_PROACTIVE_MODEL_RETRAINING', False)
