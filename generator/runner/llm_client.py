@@ -212,7 +212,11 @@ class LLMClient:
     async def _initialize(self):
         # NOTE: self.manager._load_task is awaited here.
         # If the test mocks self.manager, it must ensure _load_task is awaitable (e.g., an AsyncMock).
-        await self.manager._load_task 
+        if hasattr(self.manager, '_load_task'):
+            await self.manager._load_task
+        else:
+            logger.warning("LLMPluginManager does not have _load_task attribute. Skipping initialization wait.")
+        
         for name in self.manager.list_providers():
             metrics.LLM_PROVIDER_HEALTH.labels(provider=name).set(1)
         self._is_initialized.set()
@@ -380,6 +384,7 @@ class LLMClient:
 
 # --- Global API ---
 _async_client: Optional[LLMClient] = None
+_client_lock = asyncio.Lock()
 
 async def call_llm_api(
     prompt: str,
@@ -389,9 +394,10 @@ async def call_llm_api(
     config: Optional[RunnerConfig] = None
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
     global _async_client
-    if _async_client is None:
-        config = config or RunnerConfig.load()
-        _async_client = LLMClient(config)
+    async with _client_lock:
+        if _async_client is None:
+            config = config or RunnerConfig.load()
+            _async_client = LLMClient(config)
     return await _async_client.call_llm_api(prompt, model, stream, provider)
 
 async def call_ensemble_api(
@@ -401,9 +407,10 @@ async def call_ensemble_api(
     config: Optional[RunnerConfig] = None
 ) -> Dict[str, Any]:
     global _async_client
-    if _async_client is None:
-        config = config or RunnerConfig.load()
-        _async_client = LLMClient(config)
+    async with _client_lock:
+        if _async_client is None:
+            config = config or RunnerConfig.load()
+            _async_client = LLMClient(config)
     return await _async_client.call_ensemble_api(prompt, models, voting_strategy)
 
 async def shutdown_llm_client():

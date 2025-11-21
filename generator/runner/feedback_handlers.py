@@ -242,6 +242,13 @@ class FileSink(FeedbackSink):
             logger.warning(
                 f"FileSink write to '{self.filepath}' failed: {e}", exc_info=True
             )
+            # Close and reset file handle on error to prevent leaked handles
+            if self._fh:
+                try:
+                    self._fh.close()
+                except:
+                    pass
+                self._fh = None
 
     def flush(self) -> None:
         try:
