@@ -1,0 +1,110 @@
+name: Generator Component CI
+
+on:
+  push:
+    paths:
+      - 'generator/**'
+      - '.github/workflows/generator-ci.yml'
+  pull_request:
+    paths:
+      - 'generator/**'
+  workflow_dispatch:
+
+jobs:
+  test-generator:
+    name: Test Generator Component
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          cd generator
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f master_requirements.txt ]; then
+            pip install -r master_requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run tests
+        run: |
+          cd generator
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v
+          else
+            echo "No tests directory found"
+            exit 0
+          fi
+          
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./generator/coverage.xml
+          flags: generator
+          fail_ci_if_error: false
+
+  lint-generator:
+    name: Lint Generator Component
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff flake8
+          
+      - name: Run Black
+        run: |
+          black --check generator/ || true
+          
+      - name: Run Ruff
+        run: |
+          ruff check generator/ || true
+          
+      - name: Run Flake8
+        run: |
+          flake8 generator/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+  build-generator:
+    name: Build Generator Docker Image
+    runs-on: ubuntu-latest
+    needs: [test-generator, lint-generator]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker image
+        run: |
+          if [ -f generator/Dockerfile ]; then
+            docker build -t generator:test -f generator/Dockerfile ./generator
+          else
+            echo "No Dockerfile found in generator/"
+            exit 0
+          fi
+          
+      - name: Test Docker image
+        run: |
+          docker run --rm generator:test python --version || true

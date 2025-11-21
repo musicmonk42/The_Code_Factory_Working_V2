@@ -1,7 +1,24 @@
 AI README-to-App Code Generator
 
+> **Quick Start**: See [QUICKSTART.md](../QUICKSTART.md) for platform-wide setup, or use `make run-generator` from the root directory.
+
 The AI README-to-App Code Generator is a cutting-edge platform that automates the generation of production-ready deployment configurations (e.g., Dockerfiles, Helm charts, Terraform scripts) from natural language inputs like READMEs or app descriptions. Powered by advanced LLMs (OpenAI, xAI Grok, Google Gemini, Anthropic Claude, and local models like Ollama), it offers unparalleled reliability, security, and observability, making it the greatest orchestration system for DevOps automation.
+
 Designed for developers, DevOps engineers, and enterprises, this platform streamlines CI/CD pipeline creation with features like self-healing, ensemble voting, and AI-driven prompt optimization. It integrates seamlessly with modern observability tools (Prometheus, OpenTelemetry) and supports extensible plugins for new providers and formats.
+
+## Quick Commands
+
+```bash
+# From root directory
+make run-generator           # Start Generator API
+make test-generator          # Run Generator tests
+docker-compose up generator  # Run with Docker
+
+# From generator directory
+python main.py --interface api        # Start API server
+python demo_investor.py               # Run demo
+pytest tests/ -v                      # Run tests
+```
 🌟 Features
 
 Multi-Provider LLM Orchestration: Supports OpenAI, Grok, Gemini, Claude, and local LLMs with dynamic provider selection based on latency, cost, and quality.
