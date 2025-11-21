@@ -179,8 +179,8 @@ class AlertDispatcher(threading.Thread):
                                 # Try parsing as HTTP date (RFC 2616)
                                 try:
                                     retry_time = parsedate_to_datetime(retry_after)
-                                    # parsedate_to_datetime returns timezone-aware datetime
-                                    # If it's naive, assume UTC
+                                    # parsedate_to_datetime returns a naive datetime object
+                                    # Assume UTC timezone for comparison
                                     if retry_time.tzinfo is None:
                                         retry_time = retry_time.replace(tzinfo=timezone.utc)
                                     base = max(0, (retry_time - datetime.now(timezone.utc)).total_seconds())

@@ -52,32 +52,38 @@ except ImportError as e:
     logger.critical(
         "CRITICAL: Missing core dependency for gRPC runner: %s. Aborting startup.", e
     )
-    # Provide harmless fallbacks so importing this module doesn't kill pytest
+    # Provide fallbacks so importing this module doesn't kill pytest, but fail when actually used
     MISSING_DEPS = True
 
     def alert_operator(*args, **kwargs):
+        if PRODUCTION_MODE:
+            raise ImportError("core_utils.send_alert is required but missing")
         logger.warning("alert_operator called but core_utils.send_alert is missing.")
 
     def scrub_sensitive_data(value):
+        if PRODUCTION_MODE:
+            raise ImportError("core_utils.scrub is required but missing")
         return value
 
     class _MockLogger:
         def log_event(self, *args, **kwargs):
+            if PRODUCTION_MODE:
+                raise ImportError("core_audit.audit_logger is required but missing")
             logger.warning("audit_logger.log_event called but core_audit is missing.")
     audit_logger = _MockLogger()
 
     class _MockSecrets:
         def get_secret(self, key, required=False):
+            if PRODUCTION_MODE or required:
+                raise ImportError(f"core_secrets.SECRETS_MANAGER is required but missing")
             logger.warning("SECRETS_MANAGER.get_secret called but core_secrets is missing.")
-            if required and PRODUCTION_MODE:
-                raise RuntimeError(f"Secret '{key}' is required but core_secrets is missing.")
             return None
     SECRETS_MANAGER = _MockSecrets()
 
-# Early exit if dependencies are missing
-if MISSING_DEPS:
-    logger.critical("Cannot run gRPC runner without core dependencies")
-    sys.exit(1)
+    # Only exit in production mode; allow import for testing
+    if PRODUCTION_MODE:
+        logger.critical("Cannot run gRPC runner in production without core dependencies")
+        sys.exit(1)
 
 
 # --- Custom Exceptions ---
