@@ -16,6 +16,7 @@ import shelve
 import time
 import datetime  # <-- FIX: Added missing import
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -78,8 +79,32 @@ try:
     from opentelemetry.trace import Status, StatusCode
     tracer = trace.get_tracer(__name__)
 except ImportError:
-    tracer = None
+    trace = None
+    Status = None
+    StatusCode = None
     logging.warning("OpenTelemetry not installed. Tracing will be disabled.")
+    
+    # Create a no-op tracer for when OpenTelemetry is not available
+    from contextlib import contextmanager
+    
+    class NoOpSpan:
+        """No-op span context manager."""
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+        def set_status(self, *args, **kwargs):
+            pass
+        def set_attribute(self, *args, **kwargs):
+            pass
+    
+    class NoOpTracer:
+        @contextmanager
+        def start_as_current_span(self, name):
+            """No-op context manager for tracing when OpenTelemetry is not available."""
+            yield NoOpSpan()
+    
+    tracer = NoOpTracer()
 
 
 # --- Lazy Loading for Heavy ML Dependencies ---
@@ -350,7 +375,10 @@ class NLPExtractor(ExtractorStrategy):
             nlp = spacy.load(f"{language}_core_web_sm")
             # ... rest of extraction logic
     """
-    pass
+    def extract(self, sections: Dict[str, str], language: str = 'en') -> Dict[str, List[str]]:
+        """Placeholder implementation. Override this method to use NLP-based extraction."""
+        logger.warning("NLPExtractor.extract() called but not implemented. Returning empty dict.")
+        return {}
 
 class AmbiguityDetectorStrategy(ABC):
     @abstractmethod
@@ -365,7 +393,16 @@ class LLMDetector(AmbiguityDetectorStrategy):
         transformers = get_transformers()
         torch = get_torch()
     """
-    pass
+    def __init__(self, llm_config: LLMConfig, feedback: 'FeedbackLoop'):
+        """Initialize LLM detector with configuration and feedback loop."""
+        self.llm_config = llm_config
+        self.feedback = feedback
+        logger.info("LLMDetector initialized (stub implementation)")
+    
+    async def detect(self, text: str, dry_run: bool, language: str = 'en') -> List[str]:
+        """Placeholder implementation. Override this method to use LLM-based detection."""
+        logger.warning("LLMDetector.detect() called but not implemented. Returning empty list.")
+        return []
 
 class SummarizerStrategy(ABC):
     # --- FIX: Removed duplicated 'abstract' ---
@@ -381,11 +418,32 @@ class LLMSummarizer(SummarizerStrategy):
         transformers = get_transformers()
         torch = get_torch()
     """
-    pass
+    def __init__(self, llm_config: LLMConfig):
+        """Initialize LLM summarizer with configuration."""
+        self.llm_config = llm_config
+        logger.info("LLMSummarizer initialized (stub implementation)")
+    
+    def summarize(self, requirements: Dict[str, Any], language: str = 'en') -> Dict[str, Any]:
+        """Placeholder implementation. Override this method to use LLM-based summarization."""
+        logger.warning("LLMSummarizer.summarize() called but not implemented. Returning requirements as-is.")
+        return requirements
 
 class TruncateSummarizer(SummarizerStrategy):
-    # Implementation...
-    pass
+    """Simple summarizer that truncates content to a maximum length."""
+    def __init__(self, max_length: int = 1000):
+        """Initialize truncate summarizer with max length."""
+        self.max_length = max_length
+        logger.info(f"TruncateSummarizer initialized with max_length={max_length}")
+    
+    def summarize(self, requirements: Dict[str, Any], language: str = 'en') -> Dict[str, Any]:
+        """Truncate requirements to max length."""
+        truncated = {}
+        for key, value in requirements.items():
+            if isinstance(value, str) and len(value) > self.max_length:
+                truncated[key] = value[:self.max_length] + "..."
+            else:
+                truncated[key] = value
+        return truncated
 
 class LLMClient:
     """
@@ -395,11 +453,53 @@ class LLMClient:
         transformers = get_transformers()
         torch = get_torch()
     """
-    pass
+    def __init__(self, llm_config: LLMConfig, cache_dir: str = 'parser_cache'):
+        """Initialize LLM client with configuration and cache directory."""
+        self.llm_config = llm_config
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"LLMClient initialized with provider={llm_config.provider}, model={llm_config.model}")
+    
+    async def call_api(self, prompt: str, **kwargs) -> str:
+        """Placeholder implementation for LLM API calls."""
+        logger.warning("LLMClient.call_api() called but not fully implemented. Returning empty string.")
+        return ""
 
 class FeedbackLoop:
-    # Implementation...
-    pass
+    """Manages feedback collection and storage for intent parser improvements."""
+    def __init__(self, feedback_file: str = 'feedback.json'):
+        """Initialize feedback loop with file path."""
+        self.feedback_file = Path(feedback_file)
+        self.feedback_data = []
+        
+        # Load existing feedback if file exists
+        if self.feedback_file.exists():
+            try:
+                with open(self.feedback_file, 'r') as f:
+                    self.feedback_data = json.load(f)
+                logger.info(f"Loaded {len(self.feedback_data)} feedback entries from {feedback_file}")
+            except Exception as e:
+                logger.warning(f"Failed to load feedback file: {e}")
+                self.feedback_data = []
+        else:
+            logger.info(f"FeedbackLoop initialized with new file: {feedback_file}")
+    
+    def record_feedback(self, feedback: Dict[str, Any]) -> None:
+        """Record feedback entry."""
+        self.feedback_data.append(feedback)
+        try:
+            with open(self.feedback_file, 'w') as f:
+                json.dump(self.feedback_data, f, indent=2)
+            FEEDBACK_RECORDED_COUNT.inc()
+        except Exception as e:
+            logger.error(f"Failed to save feedback: {e}")
+    
+    def get_feedback_stats(self) -> Dict[str, Any]:
+        """Get statistics about collected feedback."""
+        return {
+            'total_entries': len(self.feedback_data),
+            'file': str(self.feedback_file)
+        }
     
 def generate_provenance(content: str, file_path: Optional[Path] = None) -> Dict[str, Any]:
     content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()

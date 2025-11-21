@@ -444,15 +444,22 @@ def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) ->
     Returns:
         RunnerConfig: The validated and migrated RunnerConfig instance.
     """
-    # FIX: Handle case where config_file might be a dummy file for env-only tests (like in __main__)
+    config_path = Path(config_file)
+    
+    # Check if file should exist (not a test scenario with overrides)
+    # Note: We check `is None` rather than `not overrides` because an empty dict {} is valid
+    # and means "load from file with no overrides", while None means "use defaults if no file"
+    if not config_path.exists() and overrides is None:
+        raise ConfigurationError(
+            "CONFIGURATION_ERROR",
+            detail=f"Configuration file not found: {config_file}"
+        )
+    
     data: Dict[str, Any] = {}
-    if Path(config_file).exists():
+    if config_path.exists():
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
-        except FileNotFoundError:
-            logger.error(f"Configuration file not found: {config_file}")
-            raise
         except yaml.YAMLError as e:
             logger.error(f"Error parsing YAML config file {config_file}: {e}")
             raise

@@ -259,7 +259,7 @@ async def _run_subprocess_once(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
-    Internal helper to run a subprocess exactly once.
+    Internal helper to run a subprocess exactly once using asyncio.
 
     Returns a normalized result dict. Does not apply backoff or circuit-breaking.
     """
@@ -267,29 +267,39 @@ async def _run_subprocess_once(
     if env:
         full_env.update(env)
 
-    completed = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=False,
-        timeout=timeout,
+    # Use asyncio subprocess instead of blocking subprocess.run
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
         cwd=str(cwd) if cwd is not None else None,
         env=full_env,
     )
+    
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            process.communicate(),
+            timeout=timeout
+        )
+        returncode = process.returncode
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+        raise subprocess.TimeoutExpired(cmd, timeout)
 
-    stdout = (completed.stdout or b"").decode("utf-8", errors="replace")
-    stderr = (completed.stderr or b"").decode("utf-8", errors="replace")
+    stdout = (stdout_bytes or b"").decode("utf-8", errors="replace")
+    stderr = (stderr_bytes or b"").decode("utf-8", errors="replace")
 
     stdout = redact_secrets(stdout)
     stderr = redact_secrets(stderr)
 
-    success = completed.returncode == 0
+    success = returncode == 0
 
     result: Dict[str, Any] = {
         "success": success,
         "stdout": stdout,
         "stderr": stderr,
-        "returncode": completed.returncode,
+        "returncode": returncode,
     }
 
     result = add_provenance(result, action="subprocess_wrapper")
@@ -299,7 +309,7 @@ async def _run_subprocess_once(
         logger.error(
             "Subprocess failed: cmd=%r rc=%s stderr=%s",
             cmd,
-            completed.returncode,
+            returncode,
             stderr,
         )
 

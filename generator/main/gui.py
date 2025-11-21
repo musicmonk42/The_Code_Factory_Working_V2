@@ -345,6 +345,7 @@ class MainApp(App):
     def __init__(self, production_mode: bool = False):
         super().__init__()
         self.production_mode = production_mode
+        self._thread_id = threading.get_ident()  # Store main thread ID for TuiLogHandler
         self._app_initialized = False
         self.config_watcher = None
         self.parser_config_watcher = None

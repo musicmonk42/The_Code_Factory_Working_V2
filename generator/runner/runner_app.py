@@ -846,10 +846,8 @@ class RunnerApp(_TextualAppBase):
 
             # Call, supporting both async and sync implementations (and mocks)
             result = op(payload)
-            # *** FIX: Check if op is async, not just the result ***
-            # This correctly handles AsyncMocks which return an awaitable
-            if inspect.isawaitable(result) or \
-               (isinstance(op, (AsyncMock, MagicMock)) and not isinstance(result, MagicMock)):
+            # Check if result is awaitable and await it if necessary
+            if inspect.isawaitable(result):
                 result = await result
 
             if enqueue_mode:

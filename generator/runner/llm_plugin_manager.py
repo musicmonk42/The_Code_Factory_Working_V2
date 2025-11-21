@@ -245,16 +245,15 @@ class LLMPluginManager:
         self.reload_queue: asyncio.Queue = asyncio.Queue()
         self._watcher_consumer_task: Optional[asyncio.Task] = None
 
-        # Try to bind to a running event loop; otherwise, create one.
+        # Try to bind to a running event loop; raise if not available
         try:
             self.loop = asyncio.get_running_loop()
         except RuntimeError:
-            logger.error(
-                "LLMPluginManager initialized without a running event loop. "
-                "Auto-reload will not work reliably."
+            # Don't create/set a new loop - let the caller handle it
+            raise RuntimeError(
+                "LLMPluginManager requires a running event loop. "
+                "Initialize within an async context or use asyncio.run()."
             )
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
 
         # Load integrity manifest if provided.
         if settings.get("HASH_MANIFEST"):
