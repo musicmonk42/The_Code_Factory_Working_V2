@@ -853,10 +853,10 @@ def refresh_session_proxy(sid: str) -> Session:
 sanitize_html = sanitize_html_proxy
 hash_password = hash_password_proxy
 verify_password = verify_password_proxy
-generate_token = generate_token
-verify_token = verify_token
-encrypt = encrypt
-decrypt = decrypt
+generate_token = generate_token_proxy
+verify_token = verify_token_proxy
+encrypt = encrypt_proxy
+decrypt = decrypt_proxy
 create_session = create_session_proxy
 get_session = get_session_proxy
 revoke_session = revoke_session_proxy
