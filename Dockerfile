@@ -6,7 +6,9 @@
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install build tools for any packages that need compiling
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,20 +20,28 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-# Copy the whole repository (simplifies layout differences)
-COPY . /app
+
+# Copy only requirements first for better layer caching
+COPY requirements.txt master_requirements.txt* ./
+COPY generator/requirements.txt* generator/ 2>/dev/null || true
+COPY omnicore_engine/requirements.txt* omnicore_engine/ 2>/dev/null || true
+COPY self_fixing_engineer/requirements.txt* self_fixing_engineer/ 2>/dev/null || true
+COPY pyproject.toml* setup.py* ./
 
 # Upgrade packaging tools and install dependencies if found
 RUN pip install --upgrade pip setuptools wheel \
  && if [ -f requirements.txt ]; then \
         pip install --no-cache-dir -r requirements.txt; \
-    elif [ -f Generator/requirements.txt ]; then \
-        pip install --no-cache-dir -r Generator/requirements.txt; \
+    elif [ -f generator/requirements.txt ]; then \
+        pip install --no-cache-dir -r generator/requirements.txt; \
     elif [ -f pyproject.toml ]; then \
         pip install --no-cache-dir .; \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi
+
+# Copy the rest of the application
+COPY . /app
 
 ###############################################
 # Runtime stage: minimal image, non-root user
