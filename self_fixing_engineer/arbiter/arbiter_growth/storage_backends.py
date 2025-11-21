@@ -218,13 +218,22 @@ class SQLiteStorageBackend:
     @_wrap_exception("SQLite")
     @SQL_BREAKER
     async def load_events(self, arbiter_id: str, from_offset: Union[int, str] = 0) -> List[Dict[str, Any]]:
+        """
+        Fixed: Use ID-based filtering instead of OFFSET clause to correctly load events.
+        """
         events = []
-        offset = int(from_offset) if isinstance(from_offset, (int, str)) and str(from_offset).isdigit() else 0
+        # Fixed: Track by actual ID instead of skip count
+        offset_id = int(from_offset) if isinstance(from_offset, (int, str)) and str(from_offset).isdigit() else 0
         batch_size = self.config.get("sqlite.batch_size", 1000)
         
         async with self._get_session() as session:
             while True:
-                stmt = select(GrowthEventRecord).filter_by(arbiter_id=arbiter_id).order_by(GrowthEventRecord.id).offset(offset).limit(batch_size)
+                # Fixed: Filter by ID > offset_id instead of using OFFSET
+                stmt = (select(GrowthEventRecord)
+                       .filter_by(arbiter_id=arbiter_id)
+                       .filter(GrowthEventRecord.id > offset_id)
+                       .order_by(GrowthEventRecord.id)
+                       .limit(batch_size))
                 result = await session.execute(stmt)
                 records = result.scalars().all()
                 if not records: break
@@ -237,9 +246,10 @@ class SQLiteStorageBackend:
                             "event_version": r.event_version,
                             "canonical_offset": r.id
                         })
+                        offset_id = r.id  # Fixed: Update to last processed ID
                     except InvalidToken:
                         logger.warning("Skipping undecryptable event ID %d for arbiter '%s'.", r.id, arbiter_id)
-                offset += len(records)
+                        offset_id = r.id  # Skip to next even on error
                 if len(records) < batch_size: break
         return events
 
@@ -387,13 +397,18 @@ class RedisStreamsStorageBackend:
     @_wrap_exception("Redis")
     @REDIS_BREAKER
     async def load_events(self, arbiter_id: str, from_offset: Union[int, str] = '0-0') -> List[Dict[str, Any]]:
+        """
+        Fixed: Improved loop termination condition and reduced block time to avoid hanging.
+        """
         events = []
         stream_key = self._key(arbiter_id, "events")
         last_id = from_offset if isinstance(from_offset, str) else '0-0'
         
         while True:
-            response = await self.redis.xread({stream_key: last_id}, count=1000, block=2000)
-            if not response:
+            # Fixed: Reduced block time from 2000ms to 100ms to avoid hanging
+            response = await self.redis.xread({stream_key: last_id}, count=1000, block=100)
+            # Fixed: Check if we got any messages properly
+            if not response or not response[0][1]:
                 break
             for msg_id, msg_data in response[0][1]:
                 try:
@@ -406,8 +421,7 @@ class RedisStreamsStorageBackend:
                     })
                 except InvalidToken:
                     logger.warning("Skipping undecryptable event ID %s in stream '%s'.", msg_id.decode('utf-8'), stream_key)
-            if len(response[0][1]) == 0:
-                break
+            # Removed redundant check that would never trigger
             last_id = response[0][1][-1][0]
         return events
 

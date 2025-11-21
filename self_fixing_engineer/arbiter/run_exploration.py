@@ -472,6 +472,8 @@ async def main():
 async def start_health_server(config):
     """Starts the health check server."""
     app = web.Application()
+    # Fixed: Store config in app state so health_handler can access it
+    app['config'] = config
     app.router.add_get("/health", health_handler)
     runner = web.AppRunner(app)
     await runner.setup()
@@ -483,7 +485,8 @@ async def start_health_server(config):
 async def health_handler(request: web.Request) -> web.Response:
     """Handles health check requests."""
     try:
-        # A simple check for a basic, healthy state
+        # Fixed: Access config from app state instead of undefined variable
+        config = request.app.get('config', {})
         health_data = {"status": "healthy", "config_loaded": bool(config)}
         workflow_ops_total.labels(operation="health_check").inc()
         return web.json_response(health_data)
