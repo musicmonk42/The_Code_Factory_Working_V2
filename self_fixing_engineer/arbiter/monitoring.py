@@ -224,7 +224,7 @@ class Monitor:
             with self._lock:
                 # Add metadata and timestamp
                 action_with_meta = dict(self.global_metadata, **action)
-                action_with_meta.setdefault("timestamp", datetime.utcnow().isoformat() + "Z")
+                action_with_meta.setdefault("timestamp", datetime.now(timezone.utc).isoformat())  # Fixed: replaced deprecated utcnow()
                 action_with_meta.setdefault("source", "unknown")
 
                 # Apply tamper-evident hashing
@@ -464,12 +464,13 @@ class Monitor:
             encryption_key = encryption_key.encode()
         
         # Generate a new key if the provided one is invalid
+        # Fixed: Don't silently regenerate key - this causes data loss!
         try:
             fernet = Fernet(encryption_key)
-        except Exception:
-            # If the key is invalid, generate a new one
-            encryption_key = Fernet.generate_key()
-            fernet = Fernet(encryption_key)
+        except Exception as e:
+            # Raise an error instead of silently generating a new key
+            # as this would make previously encrypted data inaccessible
+            raise ValueError(f"Invalid Fernet encryption key: {e}. Cannot decrypt existing data with a new key.") from e
         
         with self._lock:
             try:

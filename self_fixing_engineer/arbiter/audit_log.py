@@ -85,7 +85,7 @@ class AuditLoggerConfig:
     dlt_retry_count: int = int(os.environ.get("DLT_RETRY_COUNT", 3))
     dlt_batch_size: int = int(os.environ.get("DLT_BATCH_SIZE", 10))
     syslog_enabled: bool = syslog is not None
-    syslog_facility: int = int(os.environ.get("SYSLOG_FACILITY", syslog.LOG_LOCAL0 if syslog else 0))
+    syslog_facility: int = int(os.environ.get("SYSLOG_FACILITY", getattr(syslog, 'LOG_LOCAL0', 0)))  # Fixed: safe attribute access
     async_logging: bool = os.environ.get("ASYNC_LOGGING", "true").lower() == "true"
     metrics_enabled: bool = prometheus_client is not None
     valid_event_types: List[str] = field(default_factory=lambda: [

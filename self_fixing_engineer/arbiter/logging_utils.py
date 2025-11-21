@@ -189,22 +189,28 @@ class PIIRedactorFilter(logging.Filter):
             redacted = self.custom_redactor(redacted)
         
         # Apply pattern-based redaction
+        # Fixed: Collect all replacements first, then apply in reverse order to maintain correct indices
+        replacements = []
         for pattern, replacement, pii_type in self.patterns:
-            matches = pattern.finditer(redacted)
+            matches = list(pattern.finditer(redacted))
             for match in matches:
                 if self.hash_pii:
                     # Store hash for correlation
                     pii_hash = hashlib.sha256(match.group().encode()).hexdigest()[:8]
                     replacement_with_hash = f"{replacement}:{pii_hash}"
-                    redacted = redacted[:match.start()] + replacement_with_hash + redacted[match.end():]
+                    replacements.append((match.start(), match.end(), replacement_with_hash, pii_type))
                 else:
-                    redacted = redacted[:match.start()] + replacement + redacted[match.end():]
-                
-                redacted_items.append(pii_type)
-                
-                # Update metrics
-                if self.enable_metrics:
-                    self._update_metrics(pii_type)
+                    replacements.append((match.start(), match.end(), replacement, pii_type))
+        
+        # Apply replacements in reverse order to maintain correct indices
+        replacements.sort(key=lambda x: x[0], reverse=True)
+        for start, end, replacement_text, pii_type in replacements:
+            redacted = redacted[:start] + replacement_text + redacted[end:]
+            redacted_items.append(pii_type)
+            
+            # Update metrics
+            if self.enable_metrics:
+                self._update_metrics(pii_type)
         
         # Cache result
         with self._lock:
