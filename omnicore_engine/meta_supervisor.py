@@ -1339,12 +1339,29 @@ if __name__ == "__main__":
 
             # Dummy implementations for core dependencies needed by MetaSupervisor.
             # In a real setup, these would be proper instances.
-            from app.omnicore_engine.database import Database as DummyDatabase
-            from app.audit import ExplainAudit as DummyExplainAudit
-            from app.utils.merkle_tree import MerkleTree as DummyMerkleTree
-            from app.omnicore_engine.plugin_registry import PLUGIN_REGISTRY as DummyPluginRegistry
-            from app.omnicore_engine.plugin_registry import PluginMeta, PlugInKind
-            from app.omnicore_engine.array_backend import ArrayBackend as DummyArrayBackend
+            try:
+                from omnicore_engine.database.database import Database as DummyDatabase
+            except ImportError:
+                DummyDatabase = None
+            try:
+                from omnicore_engine.audit import ExplainAudit as DummyExplainAudit
+            except ImportError:
+                DummyExplainAudit = None
+            try:
+                from omnicore_engine.merkle_tree import MerkleTree as DummyMerkleTree
+            except ImportError:
+                DummyMerkleTree = None
+            try:
+                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as DummyPluginRegistry
+                from omnicore_engine.plugin_registry import PluginMeta, PlugInKind
+            except ImportError:
+                DummyPluginRegistry = None
+                PluginMeta = None
+                PlugInKind = None
+            try:
+                from omnicore_engine.array_backend import ArrayBackend as DummyArrayBackend
+            except ImportError:
+                DummyArrayBackend = None
             from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
             from sqlalchemy.ext.declarative import declarative_base
             from sqlalchemy import text # Import text for raw SQL

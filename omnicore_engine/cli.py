@@ -97,8 +97,9 @@ except ImportError:
 #         def __init__(self, *args, **kwargs): pass
 
 # BenchmarkingEngine and related mocks
+# BenchmarkingEngine mock - these modules don't exist in the project
 try:
-    from app.ai_assistant.benchmarking_engine import BenchmarkingEngine, BenchmarkProfile, ConsoleReporter, JSONReporter, MonteCarloSimulator, MultiverseSimulator
+    from omnicore_engine.benchmarking_engine import BenchmarkingEngine, BenchmarkProfile, ConsoleReporter, JSONReporter, MonteCarloSimulator, MultiverseSimulator
 except ImportError:
     logger.warning("BenchmarkingEngine module not found. Benchmarking features will be unavailable.")
     class BenchmarkingEngine:
@@ -115,29 +116,30 @@ except ImportError:
     class MultiverseSimulator:
         def __init__(self, *args, **kwargs): pass
 
-# PolicyEngine mock
+# PolicyEngine mock - module doesn't exist
 try:
-    from app.ai_assistant.policy.policy.policy_engine import PolicyEngine # Updated import path
+    from arbiter.policy.policy_manager import PolicyEngine
 except ImportError:
     logger.warning("PolicyEngine module not found. Policy checks will be unavailable.")
     class PolicyEngine:
         def __init__(self, *args, **kwargs): pass
         async def should_auto_learn(self, *args, **kwargs): return True, "Mock Policy: Always allowed"
 
-# FeedbackManager mock
+# FeedbackManager mock - module doesn't exist
 try:
-    from app.feedback_manager.feedback_manager import FeedbackManager, FeedbackType
+    from arbiter.feedback import FeedbackManager
+    FeedbackType = None  # Define if needed
 except ImportError:
     logger.warning("FeedbackManager module not found. Feedback features will be unavailable.")
     class FeedbackManager:
         def __init__(self, *args, **kwargs): pass
         async def record_feedback(self, user_id: str, feedback_type: Any, details: Dict[str, Any]): pass
         async def log_error(self, *args, **kwargs): pass
+    FeedbackType = None
 
 # Prometheus metrics
-# Assuming CLI_COMMANDS, CLI_ERRORS, REGISTRY are defined in app.metrics
 try:
-    from app.metrics import CLI_COMMANDS, CLI_ERRORS, REGISTRY
+    from omnicore_engine.metrics import CLI_COMMANDS, CLI_ERRORS, REGISTRY
 except ImportError:
     logger.warning("Prometheus metrics not available. CLI metrics will be disabled.")
     class MockCounter:
@@ -367,7 +369,7 @@ def main():
 
     # Initialize MerkleTree for CLI audit operations
     try:
-        from app.omnicore_engine.merkle_tree import MerkleTree
+        from omnicore_engine.merkle_tree import MerkleTree
         system_audit_merkle_tree_cli = MerkleTree()
     except ImportError:
         logger.warning("MerkleTree not found for CLI audit operations. Mocking.")
@@ -509,7 +511,11 @@ def main():
         data = await load_file(current_args.request_file)
         data = await anonymize_data(data, current_args.user_id)
         engine = await _initialize_omnicore_engine()
-        from app.omnicore_engine.simulation import SimRequest
+        try:
+            from omnicore_engine.simulation import SimRequest
+        except ImportError:
+            logger.error("SimRequest not found. Simulation unavailable.")
+            return {"error": "Simulation module not available"}
         sim_request = SimRequest(**data)
         return await engine.simulate(sim_request)
 
@@ -533,10 +539,8 @@ def main():
             logger.warning("Financial engine plugin not found for benchmarking. Using dummy function.")
             functions.append(lambda x: x)
 
-        try:
-            from app.ai_assistant.benchmarking_engine import BenchmarkProfile, ConsoleReporter, JSONReporter, MonteCarloSimulator, MultiverseSimulator, BenchmarkingEngine
-        except ImportError:
-            logger.error("BenchmarkingEngine components not available.")
+        # BenchmarkingEngine already imported at top with fallback mock
+        # No need for duplicate import here
             sys.exit(EXIT_CODE_INITIALIZATION_ERROR)
 
         profiles = [
@@ -732,7 +736,11 @@ def main():
 
     async def _run_plugin_install_cmd(current_args: argparse.Namespace):
         engine_instance = await _initialize_omnicore_engine()
-        from app.omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
+        try:
+            from omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
+        except ImportError:
+            logger.error("PluginMarketplace and PluginVersionManager not available")
+            return {"error": "Plugin marketplace not available"}
         # Initialize PluginVersionManager explicitly if not already a direct property of engine_instance
         # This assumes engine_instance has attributes like database and audit
         plugin_version_manager = PluginVersionManager(
@@ -750,7 +758,11 @@ def main():
 
     async def _run_plugin_rate_cmd(current_args: argparse.Namespace):
         engine_instance = await _initialize_omnicore_engine()
-        from app.omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
+        try:
+            from omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
+        except ImportError:
+            logger.error("PluginMarketplace and PluginVersionManager not available")
+            return {"error": "Plugin marketplace not available"}
         plugin_version_manager = PluginVersionManager(
             registry=engine_instance.plugin_registry,
             db=engine_instance.database,
@@ -795,7 +807,7 @@ def main():
     async def _run_generate_test_cases_cmd(current_args: argparse.Namespace):
         engine_instance = await _initialize_omnicore_engine()
         try:
-            from app.ai_assistant.snapshot_manager import SnapshotManager
+            from omnicore_engine.snapshot_manager import SnapshotManager
             snapshot_manager = SnapshotManager(db=engine_instance.database, audit_client=engine_instance.audit)
             test_cases = await snapshot_manager.generate_test_cases()
             return test_cases

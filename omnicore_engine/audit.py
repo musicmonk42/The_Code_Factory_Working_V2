@@ -169,15 +169,13 @@ class CryptoValidator:
         if not self.is_key_valid:
             self.logger.error("Attempted to encrypt data with an invalid Fernet key. Encryption skipped.")
             raise ValueError("Encryption key is invalid.")
-        from app.omnicore_engine.core import settings as core_settings
-        return Fernet(core_settings.ENCRYPTION_KEY.get_secret_value().encode('utf-8')).encrypt(data)
+        return Fernet(settings.ENCRYPTION_KEY.get_secret_value().encode('utf-8')).encrypt(data)
 
     def decrypt_data(self, data: bytes) -> bytes:
         if not self.is_key_valid:
             self.logger.error("Attempted to decrypt data with an invalid Fernet key. Decryption skipped.")
             raise ValueError("Encryption key is invalid.")
-        from app.omnicore_engine.core import settings as core_settings
-        return Fernet(core_settings.ENCRYPTION_KEY.get_secret_value().encode('utf-8')).decrypt(data)
+        return Fernet(settings.ENCRYPTION_KEY.get_secret_value().encode('utf-8')).decrypt(data)
 
 class KafkaAuditStreamer:
     def __init__(self, bootstrap_servers: str, topic: str = "audit_events"):
