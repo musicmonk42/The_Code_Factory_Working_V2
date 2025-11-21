@@ -22,11 +22,14 @@ ENV PATH="/opt/venv/bin:${PATH}"
 WORKDIR /app
 
 # Copy only requirements first for better layer caching
-COPY requirements.txt master_requirements.txt* ./
-COPY generator/requirements.txt* generator/ 2>/dev/null || true
-COPY omnicore_engine/requirements.txt* omnicore_engine/ 2>/dev/null || true
-COPY self_fixing_engineer/requirements.txt* self_fixing_engineer/ 2>/dev/null || true
-COPY pyproject.toml* setup.py* ./
+COPY requirements.txt* master_requirements.txt* ./
+
+# Copy subdirectory requirements if they exist
+# Using wildcard patterns to make these optional
+COPY generator/requirements.tx[t] generator/ 2>/dev/null || :
+COPY omnicore_engine/requirements.tx[t] omnicore_engine/ 2>/dev/null || :
+COPY self_fixing_engineer/requirements.tx[t] self_fixing_engineer/ 2>/dev/null || :
+COPY pyproject.tom[l] setup.p[y] ./ 2>/dev/null || :
 
 # Upgrade packaging tools and install dependencies if found
 RUN pip install --upgrade pip setuptools wheel \

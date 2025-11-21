@@ -31,9 +31,14 @@ demo_output/
 *.db-shm
 *.db-wal
 chroma_db/
-*.json
-!requirements*.json
-!package*.json
+audit*.json
+*_log.json
+test_metrics_snapshot.json
+validator_performance.json
+deploy_agent_history.db
+mock_history.db*
+agentic_audit_integrity.json
+dlt_audit*.json*
 
 # Documentation and audit files
 *.md
