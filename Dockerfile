@@ -69,18 +69,18 @@ COPY --from=builder /app /app
 RUN chown -R appuser:appuser /app /opt/venv
 USER appuser
 
-# The Generator README indicates a FastAPI server at :8000 via deploy_llm_call
+# The generator README indicates a FastAPI server at :8000 via deploy_llm_call
 EXPOSE 8000
 
 # Start the API server if present; otherwise provide a helpful fallback
-# Tries (in order): Generator.deploy_llm_call, deploy_llm_call, or prints help.
+# Tries (in order): generator.deploy_llm_call, deploy_llm_call, or prints help.
 CMD ["/bin/sh", "-c", "\
-  if [ -f Generator/deploy_llm_call.py ]; then \
-    python -m Generator.deploy_llm_call --server; \
+  if [ -f generator/deploy_llm_call.py ]; then \
+    python -m generator.deploy_llm_call --server; \
   elif [ -f deploy_llm_call.py ]; then \
     python -m deploy_llm_call --server; \
   else \
     echo 'No server entrypoint found (deploy_llm_call). Override CMD or adjust paths.' && \
-    python -c 'import sys; print(\"Repo mounted at /app. Try: python -m Generator.deploy_llm_call --server\")'; \
+    python -c 'import sys; print(\"Repo mounted at /app. Try: python -m generator.deploy_llm_call --server\")'; \
   fi \
 "]
