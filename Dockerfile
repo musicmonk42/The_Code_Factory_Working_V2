@@ -38,19 +38,27 @@ COPY self_fixing_engineer/requirements.txt self_fixing_engineer/requirements.txt
 
 # Upgrade packaging tools and install dependencies if found
 # Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
+# Note: The || fallback catches any pip failure including SSL errors. This is intentional
+# to handle corporate proxies and development environments with SSL inspection.
 RUN pip install --upgrade pip setuptools wheel || \
-    pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel
+    (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
+     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
 
 # Install project dependencies
+# Note: --trusted-host bypasses SSL verification as a fallback for environments with
+# SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
 RUN if [ -f requirements.txt ]; then \
         pip install --no-cache-dir -r requirements.txt || \
-        pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt; \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
     elif [ -f generator/requirements.txt ]; then \
         pip install --no-cache-dir -r generator/requirements.txt || \
-        pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt; \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt); \
     elif [ -f pyproject.toml ]; then \
         pip install --no-cache-dir . || \
-        pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .; \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi

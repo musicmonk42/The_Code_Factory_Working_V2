@@ -41,12 +41,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements and install dependencies
 # Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
+# Note: The || fallback catches any pip failure including SSL errors. This is intentional
+# to handle corporate proxies and development environments with SSL inspection.
 COPY requirements.txt .
 RUN pip install --upgrade pip || \
-    pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip
+    (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
+     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip)
 
+# Note: --trusted-host bypasses SSL verification as a fallback for environments with
+# SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
 RUN pip install -r requirements.txt ${EXTRA_DEPS} || \
-    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt ${EXTRA_DEPS}
+    (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+     pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt ${EXTRA_DEPS})
 
 RUN pip cache purge  # Clean up pip cache for smaller image
 
