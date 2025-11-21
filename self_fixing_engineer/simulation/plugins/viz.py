@@ -549,12 +549,25 @@ async def batch_export_panels(panel_ids: Optional[List[str]] = None, format: Opt
             args = panel.get("export_args", ())
             kwargs = panel.get("export_kwargs", {})
             
-            # Generate a cache key for the plot data
-            plot_data_hash = hashlib.sha256(json.dumps({
+            # Generate a cache key for the plot data with better collision resistance
+            # Include timestamp for dynamic data and type information
+            cache_data = {
                 "panel_id": pid,
+                "plot_type": panel["plot_type"],
                 "args": args,
-                "kwargs": kwargs
-            }, sort_keys=True, default=str).encode()).hexdigest()
+                "kwargs": kwargs,
+                # Add type information for better uniqueness
+                "arg_types": [type(arg).__name__ for arg in args] if args else [],
+                "kwarg_types": {k: type(v).__name__ for k, v in kwargs.items()} if kwargs else {}
+            }
+            try:
+                # Use repr() for better object representation than default=str
+                plot_data_json = json.dumps(cache_data, sort_keys=True, default=repr)
+            except (TypeError, ValueError):
+                # Fallback to str if repr fails
+                plot_data_json = json.dumps(cache_data, sort_keys=True, default=str)
+            
+            plot_data_hash = hashlib.sha256(plot_data_json.encode()).hexdigest()
             cache_key = f"plot_data:{plot_data_hash}"
 
             # Try to get plot data from cache

@@ -169,3 +169,166 @@ except Exception:
 opentelemetry = _check_and_import_critical("opentelemetry")
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
+
+# --- PYDANTIC_AVAILABLE Flag ---
+PYDANTIC_AVAILABLE = True  # Set to True since pydantic was successfully imported above
+
+# --- Exception Hierarchy ---
+class SIEMClientError(Exception):
+    """Base exception for all SIEM client errors."""
+    def __init__(self, message: str, client_type: str = "Unknown", details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.message = message
+        self.client_type = client_type
+        self.details = details or {}
+
+class SIEMClientConfigurationError(SIEMClientError):
+    """Raised when there's a configuration issue."""
+    pass
+
+class SIEMClientAuthError(SIEMClientError):
+    """Raised when authentication fails."""
+    pass
+
+class SIEMClientConnectivityError(SIEMClientError):
+    """Raised when there's a network connectivity issue."""
+    pass
+
+class SIEMClientQueryError(SIEMClientError):
+    """Raised when a query operation fails."""
+    pass
+
+class SIEMClientPublishError(SIEMClientError):
+    """Raised when publishing/sending logs fails."""
+    pass
+
+class SIEMClientResponseError(SIEMClientError):
+    """Raised when the SIEM service returns an unexpected response."""
+    pass
+
+# --- Secrets Manager (Placeholder) ---
+class SecretsManager:
+    """
+    Placeholder secrets manager for retrieving secrets from environment variables.
+    In production, this should integrate with AWS Secrets Manager, Azure Key Vault, etc.
+    """
+    def get_secret(self, key: str, required: bool = False, default: Any = None) -> Any:
+        """Get a secret from environment variables."""
+        value = os.getenv(key, default)
+        if required and value is None:
+            raise SIEMClientConfigurationError(
+                f"Required secret '{key}' not found in environment",
+                client_type="SecretsManager"
+            )
+        return value
+
+SECRETS_MANAGER = SecretsManager()
+
+# --- Generic Log Event Model ---
+class GenericLogEvent(BaseModel):
+    """Generic log event structure for SIEM clients."""
+    timestamp: str = Field(default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z")
+    level: str = "INFO"
+    message: str
+    source: str = "siem_client"
+    event_type: str = "generic"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    class Config:
+        extra = Extra.allow
+
+# --- Aiohttp Client Mixin ---
+class AiohttpClientMixin:
+    """
+    Mixin class providing aiohttp session management for SIEM clients.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_lock = asyncio.Lock()
+    
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create an aiohttp session."""
+        if self._session is None or self._session.closed:
+            async with self._session_lock:
+                if self._session is None or self._session.closed:
+                    self._session = aiohttp.ClientSession()
+        return self._session
+    
+    async def _close_session(self):
+        """Close the aiohttp session."""
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+# --- Base SIEM Client ---
+class BaseSIEMClient(ABC):
+    """
+    Abstract base class for all SIEM clients.
+    Provides common functionality and defines the interface that all clients must implement.
+    """
+    def __init__(self, config: Dict[str, Any], client_type: str = "generic"):
+        self.config = config
+        self.client_type = client_type
+        self.logger = SIEMClientLoggerAdapter(_base_logger, {'client_type': client_type, 'correlation_id': str(uuid.uuid4())})
+        self._executor = ThreadPoolExecutor(max_workers=4)
+    
+    def _run_blocking_in_executor(self, func: Callable, *args, **kwargs):
+        """Run a blocking function in a thread pool executor."""
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(self._executor, lambda: func(*args, **kwargs))
+    
+    def _parse_relative_time_range_to_ms(self, time_range: str) -> Tuple[int, int]:
+        """
+        Parse relative time range string (e.g., '1h', '24h', '7d') to millisecond timestamps.
+        Returns (start_ms, end_ms) tuple.
+        """
+        match = re.match(r'(\d+)([smhd])', time_range.lower())
+        if not match:
+            raise ValueError(f"Invalid time range format: {time_range}")
+        
+        value, unit = int(match.group(1)), match.group(2)
+        unit_to_seconds = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+        seconds = value * unit_to_seconds[unit]
+        
+        end_ms = int(time.time() * 1000)
+        start_ms = end_ms - (seconds * 1000)
+        return start_ms, end_ms
+    
+    def _parse_relative_time_range_to_timedelta(self, time_range: str) -> datetime.timedelta:
+        """Parse relative time range string to timedelta."""
+        match = re.match(r'(\d+)([smhd])', time_range.lower())
+        if not match:
+            raise ValueError(f"Invalid time range format: {time_range}")
+        
+        value, unit = int(match.group(1)), match.group(2)
+        if unit == 's':
+            return datetime.timedelta(seconds=value)
+        elif unit == 'm':
+            return datetime.timedelta(minutes=value)
+        elif unit == 'h':
+            return datetime.timedelta(hours=value)
+        elif unit == 'd':
+            return datetime.timedelta(days=value)
+        else:
+            raise ValueError(f"Unknown time unit: {unit}")
+    
+    @abstractmethod
+    async def health_check(self) -> Tuple[bool, str]:
+        """Check if the SIEM service is healthy and reachable."""
+        pass
+    
+    @abstractmethod
+    async def send_log(self, log_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Send a log event to the SIEM service."""
+        pass
+    
+    @abstractmethod
+    async def query_logs(self, query: str, time_range: str = "1h", limit: int = 100) -> List[Dict[str, Any]]:
+        """Query logs from the SIEM service."""
+        pass
+    
+    async def close(self):
+        """Cleanup resources."""
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)

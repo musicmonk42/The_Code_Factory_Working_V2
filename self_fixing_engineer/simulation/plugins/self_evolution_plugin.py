@@ -44,10 +44,33 @@ AsyncFunc = Callable[..., Any]
 
 # --- Conditional Imports for Enhancements ---
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator, model_validator
+    from pydantic import BaseModel, Field, ValidationError
+    try:
+        from pydantic import VERSION as PYDANTIC_VERSION
+        PYDANTIC_V2 = int(PYDANTIC_VERSION.split('.')[0]) >= 2
+    except Exception:
+        PYDANTIC_V2 = False
+    
+    # Version-specific imports
+    if PYDANTIC_V2:
+        try:
+            from pydantic import model_validator
+        except ImportError:
+            model_validator = None
+        validator = None  # v1 validator not available in v2
+    else:
+        try:
+            from pydantic import validator
+        except ImportError:
+            validator = None
+        model_validator = None  # v2 model_validator not available in v1
+    
     pydantic_available = True
 except ImportError:
     pydantic_available = False
+    PYDANTIC_V2 = False
+    validator = None
+    model_validator = None
     logger.warning("Pydantic not found. Using simplified configuration model.")
 
 try:
@@ -139,9 +162,12 @@ except ImportError:
                 r'[a-zA-Z0-9+/]{40,}={0,2}'  # Base64 pattern (common for tokens)
             ]
             
+            # Pre-compile patterns for efficiency
+            compiled_patterns = [re.compile(p, re.IGNORECASE) for p in patterns]
+            
             results = []
-            for pattern in patterns:
-                matches = re.finditer(pattern, data, re.IGNORECASE)
+            for pattern in compiled_patterns:
+                matches = pattern.finditer(data)
                 for match in matches:
                     results.append(type('Secret', (), {'secret_value': match.group(0)}))
             return results

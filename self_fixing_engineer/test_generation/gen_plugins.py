@@ -564,6 +564,12 @@ def generate_tests(
             return {"status": "error", "tests": [], "count": 0, "error": "Invalid module_path due to non-identifier characters", "metrics": {"generation_time": time.time() - start}}
         try:
             resolved_path = os.path.realpath(module_path)
+            # Security: Verify resolved_path is within project boundaries
+            project_root = config.get("project_root", os.getcwd())
+            project_root_resolved = os.path.realpath(project_root)
+            if not resolved_path.startswith(project_root_resolved):
+                logger.error("Module path is outside project boundaries.", extra={"code_hash": code_hash, "module_path": module_path, "resolved": resolved_path})
+                return {"status": "error", "tests": [], "count": 0, "error": "Module path must be within project boundaries", "metrics": {"generation_time": time.time() - start}}
             if not os.path.exists(resolved_path):
                 logger.error("Module path does not exist.", extra={"code_hash": code_hash, "module_path": module_path})
                 return {"status": "error", "tests": [], "count": 0, "error": "Module path does not exist", "metrics": {"generation_time": time.time() - start}}

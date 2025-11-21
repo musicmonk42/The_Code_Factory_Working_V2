@@ -458,11 +458,12 @@ _global_secret_patterns = [
     r'public_key=[\'"]?[A-Za-z0-9+/=]{44}[\'"]?',
 ]
 
-@lru_cache(maxsize=100)
 def scrub_secrets(data: Any, patterns: Optional[List[str]] = None) -> Any:
     """
     Recursively scrubs sensitive data from dictionaries, lists, tuples, and sets.
     Handles cyclical data structures and redacts secrets based on key names and value patterns.
+    
+    Note: @lru_cache decorator removed to support unhashable types (dict, list, set).
     """
     all_patterns = [re.compile(p, re.IGNORECASE) for p in (patterns or _global_secret_patterns)]
     seen = set()
@@ -530,10 +531,14 @@ def _get_dlt_audit_hmac_key() -> bytes:
 class AuditManager:
     _instance = None
     _is_initialized = False
+    _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(AuditManager, cls).__new__(cls)
+            with cls._lock:
+                # Double-checked locking pattern for thread safety
+                if cls._instance is None:
+                    cls._instance = super(AuditManager, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):

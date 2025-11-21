@@ -406,9 +406,10 @@ if FASTAPI_AVAILABLE:
                             break
                         # You can also handle other message types here if needed
                         # For example, ping/pong or client-side state updates
-                except (WebSocketDisconnect, RuntimeError, Exception):
+                except (WebSocketDisconnect, RuntimeError, ConnectionError, Exception):
                     # Any exception in receive means the connection is broken
                     disconnect_event.set()
+                    logger.debug("WebSocket disconnect detected in watcher")
             
             watcher_task = asyncio.create_task(disconnect_watcher())
             

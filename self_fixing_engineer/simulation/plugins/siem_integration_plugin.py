@@ -87,11 +87,28 @@ except ImportError:
 
 # --- Pydantic for Schema Validation ---
 try:
-    from pydantic import BaseModel, Field, ValidationError, Extra, PrivateAttr
+    from pydantic import BaseModel, Field, ValidationError
+    try:
+        from pydantic import VERSION as PYDANTIC_VERSION
+        PYDANTIC_V2 = int(PYDANTIC_VERSION.split('.')[0]) >= 2
+    except Exception:
+        PYDANTIC_V2 = False
+    
+    # Version-specific imports
+    if PYDANTIC_V2:
+        from pydantic import ConfigDict
+        try:
+            from pydantic import PrivateAttr
+        except ImportError:
+            from pydantic.fields import PrivateAttr
+    else:
+        from pydantic import Extra, PrivateAttr
+    
     from pydantic.networks import IPvAnyAddress
     PYDANTIC_AVAILABLE = True
 except ImportError:
     logger.error("Pydantic not found. Schema validation will be disabled.", exc_info=True)
+    PYDANTIC_V2 = False
     class BaseModel:
         def __init__(self, **data: Any): self.__dict__.update(data)
         def dict(self, *args, **kwargs): return self.__dict__
@@ -198,6 +215,46 @@ PLUGIN_MANIFEST = {
     "tags": ["siem", "security", "audit", "logging", "splunk", "elk", "datadog", "azure_sentinel", "aws", "gcp", "azure", "event_grid", "service_bus", "cloud_logging", "observability", "policy", "telemetry"]
 }
 
+# --- Helper Functions for Configuration ---
+def _filter_none(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively filter out None values from a dictionary."""
+    if not isinstance(d, dict):
+        return d
+    return {k: _filter_none(v) for k, v in d.items() if v is not None}
+
+def _load_raw_config_from_env() -> Dict[str, Any]:
+    """Load SIEM configuration from environment variables."""
+    config = {
+        "default_siem_type": os.getenv("SIEM_DEFAULT_TYPE"),
+        "default_timeout_seconds": os.getenv("SIEM_DEFAULT_TIMEOUT_SECONDS"),
+        "retry_attempts": os.getenv("SIEM_RETRY_ATTEMPTS"),
+        "retry_backoff_factor": os.getenv("SIEM_RETRY_BACKOFF_FACTOR"),
+        "enable_batching": os.getenv("SIEM_ENABLE_BATCHING"),
+        "batch_size": os.getenv("SIEM_BATCH_SIZE"),
+        "batch_interval_seconds": os.getenv("SIEM_BATCH_INTERVAL_SECONDS"),
+        "distributed_queue_enabled": os.getenv("SIEM_DISTRIBUTED_QUEUE_ENABLED"),
+        "distributed_queue_url": os.getenv("SIEM_DISTRIBUTED_QUEUE_URL"),
+    }
+
+    sub_configs = {
+        "splunk": {"url": os.getenv("SIEM_SPLUNK_HEC_URL"), "token": os.getenv("SIEM_SPLUNK_HEC_TOKEN"), "source": os.getenv("SIEM_SPLUNK_SOURCE"), "sourcetype": os.getenv("SIEM_SPLUNK_SOURCETYPE"), "index": os.getenv("SIEM_SPLUNK_INDEX")},
+        "elastic": {"url": os.getenv("SIEM_ELASTIC_APM_URL"), "api_key": os.getenv("SIEM_ELASTIC_API_KEY"), "username": os.getenv("SIEM_ELASTIC_USERNAME"), "password": os.getenv("SIEM_ELASTIC_PASSWORD"), "index": os.getenv("SIEM_ELASTIC_INDEX")},
+        "datadog": {"url": os.getenv("SIEM_DATADOG_API_URL"), "query_url": os.getenv("SIEM_DATADOG_QUERY_URL"), "api_key": os.getenv("SIEM_DATADOG_API_KEY"), "application_key": os.getenv("SIEM_DATADOG_APPLICATION_KEY"), "service": os.getenv("SIEM_DATADOG_SERVICE"), "source": os.getenv("SIEM_DATADOG_SOURCE"), "tags": os.getenv("SIEM_DATADOG_TAGS").split(',') if os.getenv("SIEM_DATADOG_TAGS") else None},
+        "azure_sentinel": {"workspace_id": os.getenv("SIEM_AZURE_WORKSPACE_ID"), "shared_key": os.getenv("SIEM_AZURE_SHARED_KEY"), "log_type": os.getenv("SIEM_AZURE_LOG_TYPE"), "api_version": os.getenv("SIEM_AZURE_API_VERSION"), "monitor_query_endpoint": os.getenv("SIEM_AZURE_MONITOR_QUERY_ENDPOINT")},
+        "azure_event_grid": {"endpoint": os.getenv("SIEM_AZURE_EVENTGRID_ENDPOINT"), "key": os.getenv("SIEM_AZURE_EVENTGRID_KEY"), "topic_name": os.getenv("SIEM_AZURE_EVENTGRID_TOPIC_NAME")},
+        "azure_service_bus": {"connection_string": os.getenv("SIEM_AZURE_SERVICEBUS_CONNECTION_STRING"), "queue_name": os.getenv("SIEM_AZURE_SERVICEBUS_QUEUE_NAME"), "topic_name": os.getenv("SIEM_AZURE_SERVICEBUS_TOPIC_NAME")},
+        "aws_cloudwatch": {"region_name": os.getenv("AWS_REGION"), "log_group_name": os.getenv("AWS_CLOUDWATCH_LOG_GROUP_NAME"), "log_stream_name": os.getenv("AWS_CLOUDWATCH_LOG_STREAM_NAME")},
+        "gcp_logging": {"project_id": os.getenv("GCP_PROJECT_ID"), "log_name": os.getenv("GCP_LOG_NAME"), "credentials_path": os.getenv("GCP_CREDENTIALS_PATH")},
+        "policy": {"rules": json.loads(os.getenv("SIEM_POLICY_RULES")) if os.getenv("SIEM_POLICY_RULES") else None, "default_pii_patterns": os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS").split(',') if os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS") else None, "allowed_event_types": os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES").split(',') if os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES") else None, "disallowed_event_types": os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES").split(',') if os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES") else None, "compliance_flags": os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS").split(',') if os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS") else None}
+    }
+
+    for name, sub_config_data in sub_configs.items():
+        filtered_sub_config = _filter_none(sub_config_data)
+        if filtered_sub_config:
+            config[name] = filtered_sub_config
+    
+    return _filter_none(config)
+
 # --- Plugin-Specific Configuration Schema (Pydantic) ---
 if PYDANTIC_AVAILABLE:
     class SplunkConfig(BaseModel):
@@ -206,14 +263,22 @@ if PYDANTIC_AVAILABLE:
         source: str = "sfe_audit"
         sourcetype: str = "_json"
         index: Optional[str] = None
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class ElasticConfig(BaseModel):
         url: str
         api_key: Optional[str] = None
         username: Optional[str] = None
         password: Optional[str] = None
         index: str = "sfe-logs"
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class DatadogConfig(BaseModel):
         url: str = "https://http-intake.logs.datadoghq.com/api/v2/logs"
         query_url: str = "https://api.datadoghq.com/api/v1/logs-queries"
@@ -222,52 +287,88 @@ if PYDANTIC_AVAILABLE:
         service: str = "sfe-agent"
         source: str = "sfe-audit-plugin"
         tags: List[str] = Field(default_factory=list)
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class AzureSentinelConfig(BaseModel):
         workspace_id: str
         shared_key: str
         log_type: str = "SFE_Audit_CL"
         api_version: str = "2016-04-01"
         monitor_query_endpoint: Optional[str] = None
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class AzureEventGridConfig(BaseModel):
         endpoint: str
         key: str
         topic_name: str = "sfe-events"
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class AzureServiceBusConfig(BaseModel):
         connection_string: Optional[str] = None
         queue_name: Optional[str] = None
         topic_name: Optional[str] = None
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class AWSCloudWatchConfig(BaseModel):
         region_name: str = "us-east-1"
         log_group_name: str = "sfe-audit-logs"
         log_stream_name: str = "default"
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class GCPLoggingConfig(BaseModel):
         project_id: str
         log_name: str = "sfe-audit-log"
         credentials_path: Optional[str] = None
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class PolicyCondition(BaseModel):
         field: str = Field(..., description="Field name to apply the condition to.")
         operator: str = Field(..., description="Operator (e.g., 'equals', 'contains', 'matches_regex', 'is_in').")
         value: Union[str, int, float, bool, List[Any]] = Field(..., description="Value to compare against. Can be a regex string for 'matches_regex'.")
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class PolicyRule(BaseModel):
         conditions: List[PolicyCondition] = Field(default_factory=list, description="List of conditions that must ALL be true for this rule to apply.")
         action: str = Field(..., description="Action to take: 'mask', 'block', 'allow'.")
         target_field: Optional[str] = Field(None, description="Field to apply action to if action is 'mask'.")
         mask_with: str = Field("[MASKED]", description="Value to replace with if action is 'mask'.")
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class PolicyConfig(BaseModel):
         rules: List[PolicyRule] = Field(default_factory=list, description="Ordered list of policy rules.")
         default_pii_patterns: List[str] = Field(default_factory=list, description="Default regex patterns for PII masking if no rule applies.")
         allowed_event_types: Optional[List[str]] = None
         disallowed_event_types: Optional[List[str]] = None
         compliance_flags: List[str] = Field(default_factory=list, description="Compliance flags to tag events with.")
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
     class PluginGlobalConfig(BaseModel):
         _CONFIG_VERSION = PrivateAttr(1)
         default_siem_type: str = Field(default="splunk", pattern="^(splunk|elastic|datadog|azure_sentinel|azure_event_grid|azure_service_bus|aws_cloudwatch|gcp_logging)$")
@@ -288,7 +389,11 @@ if PYDANTIC_AVAILABLE:
         aws_cloudwatch: Optional[AWSCloudWatchConfig] = None
         gcp_logging: Optional[GCPLoggingConfig] = None
         policy: PolicyConfig = Field(default_factory=PolicyConfig)
-        class Config: extra = Extra.forbid
+        if PYDANTIC_V2:
+            model_config = ConfigDict(extra="forbid")
+        else:
+            class Config:
+                extra = Extra.forbid
         @classmethod
         def migrate_config(cls, raw_config: Dict[str, Any]) -> Dict[str, Any]:
             config_version = raw_config.get('_CONFIG_VERSION', 0)
@@ -298,42 +403,7 @@ if PYDANTIC_AVAILABLE:
                     raw_config.setdefault('policy', {})['default_pii_patterns'] = raw_config.pop('pii_masking_patterns')
                 raw_config['_CONFIG_VERSION'] = 1
             return raw_config
-    def _filter_none(d: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(d, dict): return d
-        return {k: _filter_none(v) for k, v in d.items() if v is not None}
     try:
-        def _load_raw_config_from_env() -> Dict[str, Any]:
-            config = {
-                "default_siem_type": os.getenv("SIEM_DEFAULT_TYPE"),
-                "default_timeout_seconds": os.getenv("SIEM_DEFAULT_TIMEOUT_SECONDS"),
-                "retry_attempts": os.getenv("SIEM_RETRY_ATTEMPTS"),
-                "retry_backoff_factor": os.getenv("SIEM_RETRY_BACKOFF_FACTOR"),
-                "enable_batching": os.getenv("SIEM_ENABLE_BATCHING"),
-                "batch_size": os.getenv("SIEM_BATCH_SIZE"),
-                "batch_interval_seconds": os.getenv("SIEM_BATCH_INTERVAL_SECONDS"),
-                "distributed_queue_enabled": os.getenv("SIEM_DISTRIBUTED_QUEUE_ENABLED"),
-                "distributed_queue_url": os.getenv("SIEM_DISTRIBUTED_QUEUE_URL"),
-            }
-
-            sub_configs = {
-                "splunk": {"url": os.getenv("SIEM_SPLUNK_HEC_URL"), "token": os.getenv("SIEM_SPLUNK_HEC_TOKEN"), "source": os.getenv("SIEM_SPLUNK_SOURCE"), "sourcetype": os.getenv("SIEM_SPLUNK_SOURCETYPE"), "index": os.getenv("SIEM_SPLUNK_INDEX")},
-                "elastic": {"url": os.getenv("SIEM_ELASTIC_APM_URL"), "api_key": os.getenv("SIEM_ELASTIC_API_KEY"), "username": os.getenv("SIEM_ELASTIC_USERNAME"), "password": os.getenv("SIEM_ELASTIC_PASSWORD"), "index": os.getenv("SIEM_ELASTIC_INDEX")},
-                "datadog": {"url": os.getenv("SIEM_DATADOG_API_URL"), "query_url": os.getenv("SIEM_DATADOG_QUERY_URL"), "api_key": os.getenv("SIEM_DATADOG_API_KEY"), "application_key": os.getenv("SIEM_DATADOG_APPLICATION_KEY"), "service": os.getenv("SIEM_DATADOG_SERVICE"), "source": os.getenv("SIEM_DATADOG_SOURCE"), "tags": os.getenv("SIEM_DATADOG_TAGS").split(',') if os.getenv("SIEM_DATADOG_TAGS") else None},
-                "azure_sentinel": {"workspace_id": os.getenv("SIEM_AZURE_WORKSPACE_ID"), "shared_key": os.getenv("SIEM_AZURE_SHARED_KEY"), "log_type": os.getenv("SIEM_AZURE_LOG_TYPE"), "api_version": os.getenv("SIEM_AZURE_API_VERSION"), "monitor_query_endpoint": os.getenv("SIEM_AZURE_MONITOR_QUERY_ENDPOINT")},
-                "azure_event_grid": {"endpoint": os.getenv("SIEM_AZURE_EVENTGRID_ENDPOINT"), "key": os.getenv("SIEM_AZURE_EVENTGRID_KEY"), "topic_name": os.getenv("SIEM_AZURE_EVENTGRID_TOPIC_NAME")},
-                "azure_service_bus": {"connection_string": os.getenv("SIEM_AZURE_SERVICEBUS_CONNECTION_STRING"), "queue_name": os.getenv("SIEM_AZURE_SERVICEBUS_QUEUE_NAME"), "topic_name": os.getenv("SIEM_AZURE_SERVICEBUS_TOPIC_NAME")},
-                "aws_cloudwatch": {"region_name": os.getenv("AWS_REGION"), "log_group_name": os.getenv("AWS_CLOUDWATCH_LOG_GROUP_NAME"), "log_stream_name": os.getenv("AWS_CLOUDWATCH_LOG_STREAM_NAME")},
-                "gcp_logging": {"project_id": os.getenv("GCP_PROJECT_ID"), "log_name": os.getenv("GCP_LOG_NAME"), "credentials_path": os.getenv("GCP_CREDENTIALS_PATH")},
-                "policy": {"rules": json.loads(os.getenv("SIEM_POLICY_RULES")) if os.getenv("SIEM_POLICY_RULES") else None, "default_pii_patterns": os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS").split(',') if os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS") else None, "allowed_event_types": os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES").split(',') if os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES") else None, "disallowed_event_types": os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES").split(',') if os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES") else None, "compliance_flags": os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS").split(',') if os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS") else None}
-            }
-
-            for name, sub_config_data in sub_configs.items():
-                filtered_sub_config = _filter_none(sub_config_data)
-                if filtered_sub_config:
-                    config[name] = filtered_sub_config
-            
-            return _filter_none(config)
-
         raw_config_from_env = _load_raw_config_from_env()
         migrated_config = PluginGlobalConfig.migrate_config(raw_config_from_env)
         migrated_config.pop('_CONFIG_VERSION', None)
@@ -398,18 +468,25 @@ class PolicyEnforcer:
         else:
             self.policy_config = policy_config
         self.default_pii_patterns = [re.compile(p, re.IGNORECASE) for p in self.policy_config.default_pii_patterns]
-        for rule in self.policy_config.rules:
-            for condition in rule.conditions:
+        # Store compiled regexes separately instead of modifying Pydantic models
+        self._compiled_regexes: Dict[Tuple[int, int], re.Pattern] = {}
+        for rule_idx, rule in enumerate(self.policy_config.rules):
+            for cond_idx, condition in enumerate(rule.conditions):
                 if condition.operator == 'matches_regex' and isinstance(condition.value, str):
-                    condition._compiled_regex = re.compile(condition.value, re.IGNORECASE)
+                    key = (rule_idx, cond_idx)
+                    self._compiled_regexes[key] = re.compile(condition.value, re.IGNORECASE)
         logger.info(f"Policy Enforcer initialized with {len(self.policy_config.rules)} rules and {len(self.default_pii_patterns)} default PII patterns.")
-    def _evaluate_condition(self, event: Dict[str, Any], condition: "PolicyCondition") -> bool:
+    def _evaluate_condition(self, event: Dict[str, Any], condition: "PolicyCondition", rule_idx: int = 0, cond_idx: int = 0) -> bool:
         field_value = self._get_field_value(event, condition.field)
         if field_value is None: return False
         if condition.operator == 'equals': return field_value == condition.value
         elif condition.operator == 'contains': return isinstance(field_value, str) and isinstance(condition.value, str) and condition.value in field_value
         elif condition.operator == 'matches_regex':
-            if isinstance(field_value, str) and hasattr(condition, '_compiled_regex'): return bool(condition._compiled_regex.search(field_value))
+            if isinstance(field_value, str):
+                regex_key = (rule_idx, cond_idx)
+                compiled_regex = self._compiled_regexes.get(regex_key)
+                if compiled_regex:
+                    return bool(compiled_regex.search(field_value))
             return False
         elif condition.operator == 'is_in': return field_value in condition.value if isinstance(condition.value, list) else False
         elif condition.operator == 'greater_than': return field_value > condition.value if isinstance(field_value, (int, float)) and isinstance(condition.value, (int, float)) else False
@@ -436,7 +513,7 @@ class PolicyEnforcer:
         if self.policy_config.allowed_event_types is not None and event_type not in self.policy_config.allowed_event_types: return False, f"Event type '{event_type}' not in allowed list.", event
         if self.policy_config.disallowed_event_types is not None and event_type in self.policy_config.disallowed_event_types: return False, f"Event type '{event_type}' is in disallowed list.", event
         for rule_idx, rule in enumerate(self.policy_config.rules):
-            all_conditions_met = all(self._evaluate_condition(modified_event, condition) for condition in rule.conditions)
+            all_conditions_met = all(self._evaluate_condition(modified_event, condition, rule_idx, cond_idx) for cond_idx, condition in enumerate(rule.conditions))
             if all_conditions_met:
                 if rule.action == 'block': return False, f"Event blocked by policy rule {rule_idx} (target_field: {rule.target_field or 'event-level'}).", event
                 elif rule.action == 'mask' and rule.target_field:
@@ -663,6 +740,8 @@ class GenericSIEMIntegrationPlugin:
                 logger.error(f"Health check for {siem_type} failed with unexpected error: {e}", exc_info=True)
                 return siem_type, False, f"Health check failed with unexpected exception: {e}"
     async def send_siem_event(self, event_type: str, event_details: Dict[str, Any], siem_type_override: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Validate event_type for security
+        event_type = self.validate_event_type(event_type)
         with TRACER.start_as_current_span(f"siem_event.send.{event_type}") as span:
             span.set_attribute("event.type", event_type)
             span.set_attribute("siem.target_override", siem_type_override)
