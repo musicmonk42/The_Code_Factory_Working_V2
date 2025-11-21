@@ -142,10 +142,12 @@ gh workflow run ci.yml
    - Static code analysis
    - Security vulnerability detection
    - SARIF report generation
+   - Gracefully continues on error if code scanning is not enabled in repository settings
 
 4. **Docker Security**
    - Trivy container scanning
    - Critical and high severity focus
+   - SARIF upload continues on error if code scanning is not enabled
 
 5. **SAST Analysis**
    - Bandit security linter
@@ -161,6 +163,12 @@ gh workflow run ci.yml
 # Or manually:
 gh workflow run security.yml
 ```
+
+**Note on Code Scanning Setup:**
+To fully utilize CodeQL and SARIF report uploads, GitHub Code Scanning must be enabled in repository settings:
+1. Navigate to repository Settings → Security & analysis
+2. Enable "Code scanning" feature
+3. The workflow will continue to run without errors even if code scanning is not enabled, but SARIF uploads will be skipped
 
 ### 3. Continuous Deployment (`.github/workflows/cd.yml`)
 
