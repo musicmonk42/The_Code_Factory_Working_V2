@@ -126,45 +126,10 @@ agent_evolutions_total = get_or_create_prom_counter(
 active_arbiters = get_or_create_prom_gauge('arena_active_arbiters', 'Number of active arbiters in the arena')
 arena_ops_total = get_or_create_prom_counter("arena_ops_total", "Total arena operations", ["operation"])
 arena_errors_total = get_or_create_prom_counter("arena_errors_total", "Total arena errors", ["error_type"])
-_metrics_lock = threading.Lock()
 
-def get_or_create_counter(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
-    with _metrics_lock:
-        try:
-            collector = REGISTRY._names_to_collectors.get(name)
-            if collector and isinstance(collector, Counter):
-                return collector
-            return Counter(name, documentation, labelnames=labelnames)
-        except ValueError:
-            logger.warning(f"Metric '{name}' already registered. Reusing existing instance.")
-            return REGISTRY._names_to_collectors[name]
-        except Exception as e:
-            logger.error(f"Error getting or creating Counter '{name}': {e}")
-            raise
+# Fixed: Removed duplicate _metrics_lock and get_or_create_counter/gauge definitions (lines 129-157)
+# The functions are already imported from arbiter.metrics and wrapped above
 
-def get_or_create_gauge(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
-    with _metrics_lock:
-        try:
-            collector = REGISTRY._names_to_collectors.get(name)
-            if collector and isinstance(collector, Gauge):
-                return collector
-            return Gauge(name, documentation, labelnames=labelnames)
-        except ValueError:
-            logger.warning(f"Metric '{name}' already registered. Reusing existing instance.")
-            return REGISTRY._names_to_collectors[name]
-        except Exception as e:
-            logger.error(f"Error getting or creating Gauge '{name}': {e}")
-            raise
-
-# Use idempotent and thread-safe metric creation
-scan_repair_cycles_total = get_or_create_counter('scan_repair_cycles_total', 'Total scan/repair cycles executed')
-defects_found_total = get_or_create_counter('defects_found_total', 'Total number of defects found in the codebase', ['defect_type'])
-repairs_attempted_total = get_or_create_counter('repairs_attempted_total', 'Total number of repair attempts by arbiters', ['arbiter_name', 'repair_strategy'])
-repairs_successful_total = get_or_create_counter('repairs_successful_total', 'Total successful repairs', ['arbiter_name', 'repair_strategy'])
-agent_evolutions_total = get_or_create_counter('agent_evolutions_total', 'Total number of agent evolution/mutation events', ['arbiter_name'])
-active_arbiters = get_or_create_gauge('arena_active_arbiters', 'Number of active arbiters in the arena')
-arena_ops_total = get_or_create_counter("arena_ops_total", "Total arena operations", ["operation"])
-arena_errors_total = get_or_create_counter("arena_errors_total", "Total arena errors", ["error_type"])
 
 def require_auth(func: Callable) -> Callable:
     """

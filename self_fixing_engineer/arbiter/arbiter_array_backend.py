@@ -310,7 +310,13 @@ class ConcreteArrayBackend(ArrayBackend):
     # ---------- FIX: Add a __del__ method for safe garbage collection ----------
     def __del__(self):
         """Ensure resources are cleaned up when the object is destroyed."""
-        self.stop()
+        # Fixed: Only clean up synchronous resources in __del__
+        # Async cleanup should be done via __aexit__ or explicit close() calls
+        if self.executor:
+            try:
+                self.executor.shutdown(wait=False)
+            except Exception:
+                pass  # Best effort cleanup in __del__
     # ---------- end FIX ----------
     
     async def __aenter__(self):

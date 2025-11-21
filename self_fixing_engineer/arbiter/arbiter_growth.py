@@ -977,7 +977,19 @@ class KafkaStorageBackend:
 
         # Sort events by canonical offset if needed (important for replay, especially if partitions were read in parallel)
         # Assuming canonical_offset "partition:offset" can be sorted as strings, or convert to tuples (int, int)
-        events_with_offsets.sort(key=lambda x: tuple(map(int, x["canonical_offset"].split(':'))))
+        # Fixed: Add type checking for canonical_offset before splitting
+        def safe_offset_key(event):
+            offset = event.get("canonical_offset", "0:0")
+            # Handle numeric offsets from SQLite or malformed strings
+            if isinstance(offset, (int, float)):
+                return (int(offset), 0)
+            try:
+                parts = str(offset).split(':')
+                return tuple(map(int, parts)) if len(parts) > 0 else (0, 0)
+            except (ValueError, AttributeError):
+                return (0, 0)
+        
+        events_with_offsets.sort(key=safe_offset_key)
 
         return events_with_offsets
     
