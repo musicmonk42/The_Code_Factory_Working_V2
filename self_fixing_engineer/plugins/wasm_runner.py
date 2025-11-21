@@ -258,7 +258,7 @@ class WasmRunner:
                 logger.info(f"[{self.plugin_name}] Fuel-based runtime limiting enabled")
                 audit_logger.log_event("wasm_resource_limit_set", plugin=self.plugin_name, resource="runtime_seconds", limit=limits["runtime_seconds"])
             except AttributeError as e:
-                raise WasmStartupError(f"wasmtime version doesn't support fuel limiting: {e}") from e
+                raise WasmStartupError(f"Failed to enable fuel-based limiting (config attribute not available): {e}") from e
 
         # Memory cap (best-effort; also validate module memories at load)
         mem = limits.get("memory")
