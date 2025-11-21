@@ -21,6 +21,7 @@ sys.modules['security_config'] = MagicMock()
 # Mock settings and return values
 mock_settings = MagicMock()
 mock_settings.DATABASE_URL = "sqlite:///test.db"
+mock_settings.DB_PATH = "sqlite:///test.db"  # ArbiterConfig uses DB_PATH
 mock_settings.REDIS_URL = "redis://localhost:6379/0"
 mock_settings.ENCRYPTION_KEY = MagicMock()
 mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' 
@@ -71,9 +72,9 @@ with (
 
 ):
     # Import the module under test now that its dependencies are mocked
-    from omnicore_engineaudit import ExplainAudit
+    from omnicore_engine.audit import ExplainAudit
     # Import Database for setup, ensuring it can be resolved now that security_utils/config are mocked
-    from omnicore_enginedatabase import Database
+    from omnicore_engine.database import Database
     
     # Define a simple Mock Merkle Tree class required by ExplainAudit initialization
     class MockMerkleTree:

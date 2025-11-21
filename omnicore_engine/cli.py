@@ -541,7 +541,6 @@ def main():
 
         # BenchmarkingEngine already imported at top with fallback mock
         # No need for duplicate import here
-            sys.exit(EXIT_CODE_INITIALIZATION_ERROR)
 
         profiles = [
             BenchmarkProfile(
