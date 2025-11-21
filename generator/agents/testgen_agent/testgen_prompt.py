@@ -35,7 +35,7 @@ import chromadb
 from chromadb.utils import embedding_functions
 import requests
 from dotenv import load_dotenv
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 import tiktoken # Imported for token counting
@@ -452,7 +452,10 @@ class AdaptivePromptDirector:
         self.conversation_history = []
         self.multi_vdb = multi_vdb
         self.tracker = tracker
-        self.env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)  # Enable autoescape for XSS protection
+        self.env = Environment(
+            loader=FileSystemLoader(TEMPLATE_DIR),
+            autoescape=select_autoescape(['html', 'xml', 'htm', 'j2', 'jinja2'])
+        )  # Enable selective autoescape for XSS protection
         self.human_review_callback: Optional[Callable[[str], Union[bool, Awaitable[bool]]]] = None
 
     def set_human_review_callback(self, callback: Callable[[str], Union[bool, Awaitable[bool]]]):
