@@ -83,8 +83,9 @@ def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None) -> Any:
     if hasattr(obj, 'dict') and callable(obj.dict):
         return obj.dict()
     try:
+        result = str(obj)
         _seen.remove(obj_id)
-        return str(obj)
+        return result
     except Exception:
         _seen.remove(obj_id)
         return f"<unserializable object of type {type(obj)}>"
