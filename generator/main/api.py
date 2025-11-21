@@ -308,7 +308,8 @@ logger = logging.getLogger(__name__)
 # --- OpenTelemetry Tracer Configuration ---
 # Configure Tracer
 trace.set_tracer_provider(TracerProvider())
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter())) # Use ConsoleExporter for local dev
+span_exporter = ConsoleSpanExporter()
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(span_exporter)) # Use ConsoleExporter for local dev
 tracer = trace.get_tracer(__name__)
 
 # --- Security Configuration ---
