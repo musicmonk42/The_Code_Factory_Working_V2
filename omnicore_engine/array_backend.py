@@ -1462,4 +1462,3 @@ class ArrayBackend:
 
 
 # --- End of File ---
-        return self.benchmarker.get_results()

@@ -38,7 +38,7 @@ import shutil
 import logging
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any, Union
-from jinja2 import Environment, meta, TemplateSyntaxError # meta for template parsing
+from jinja2 import Environment, meta, TemplateSyntaxError, select_autoescape # meta for template parsing
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.console import Console
 from rich.logging import RichHandler
@@ -199,7 +199,7 @@ def lint_template(prompt_content: str) -> Optional[str]:
     Returns:
         Optional[str]: An error message if a syntax error is found, otherwise None.
     """
-    env = Environment()
+    env = Environment(autoescape=select_autoescape(['html', 'xml', 'htm', 'j2', 'jinja2']))
     try:
         env.parse(prompt_content)
         return None
