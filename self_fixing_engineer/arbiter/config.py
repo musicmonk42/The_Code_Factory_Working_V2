@@ -744,6 +744,11 @@ class ArbiterConfig(BaseSettings):
             CONFIG_ERRORS.labels(error_type="health_check_fail").inc()
             return {"status": "unhealthy", "error": str(e)}
 
+    @property
+    def DATABASE_URL(self) -> str:
+        """Alias for DB_PATH for backward compatibility."""
+        return self.DB_PATH
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def load_persona_dict() -> Dict[str, str]:

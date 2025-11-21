@@ -360,11 +360,7 @@ def main():
     args = parser.parse_args()
     
     # Initialize FeedbackManager and PolicyEngine for CLI context
-    feedback_manager_cli = FeedbackManager(
-        db_dsn=settings.DATABASE_URL,
-        redis_url=settings.REDIS_URL,
-        encryption_key=settings.ENCRYPTION_KEY.get_secret_value()
-    )
+    feedback_manager_cli = FeedbackManager(config=settings)
     policy_engine_cli = PolicyEngine(settings=settings)
 
     # Initialize MerkleTree for CLI audit operations

@@ -48,7 +48,7 @@ class TestUtilityFunctions:
         
         assert os.environ['TEST_PASSWORD'] == '[REDACTED]'
         assert os.environ['API_KEY'] == '[REDACTED]'
-        assert os.environ['NORMAL_VAR'] == '[REDACTED]'  # Contains 'KEY'
+        assert os.environ['NORMAL_VAR'] == 'normal_value'  # Doesn't contain sensitive keywords
         
         # Cleanup
         del os.environ['TEST_PASSWORD']
