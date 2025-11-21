@@ -34,16 +34,24 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-# --- Mock/Plausholder Implementations for Standalone Operation ---
-logger.warning("Using mock/placeholder implementations for external components.")
-class MockSimulationModule:
-    @staticmethod
-    def get_tools(): return {"mock_auto_fixer": lambda x: "fixed"}
-    @staticmethod
-    def is_available(): return True
-    async def run_simulation(self, *args, **kwargs):
-        return {"status": "mock_sim_complete"}
-SimulationModule = MockSimulationModule
+# --- Import External Components with Fallbacks ---
+try:
+    from simulation.simulation_module import SimulationEngine
+    SIMULATION_AVAILABLE = True
+    logger.info("SimulationEngine successfully imported")
+except ImportError as e:
+    logger.warning(f"SimulationEngine not available ({e}), using fallback")
+    # Fallback implementation
+    class SimulationEngine:
+        @staticmethod
+        def get_tools():
+            return {"fallback_fixer": lambda x: f"fallback_fixed_{x}"}
+        @staticmethod
+        def is_available():
+            return False
+        async def run_simulation(self, *args, **kwargs):
+            return {"status": "fallback_complete", "warning": "Using fallback simulation"}
+    SIMULATION_AVAILABLE = False
 
 # Import core components with ABSOLUTE PATHS
 from arbiter.config import ArbiterConfig
@@ -218,8 +226,17 @@ class ArbiterArena:
         # NEW: Storing the intent capture engine for later use
         self.intent_capture_engine = intent_capture_engine
         
-        # Replace mock with a pluggable component from the registry
-        self.simulation_module = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, "simulation_module") or SimulationModule()
+        # Initialize SimulationEngine with proper fallback
+        try:
+            sim_from_registry = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, "simulation_module")
+            self.simulation_module = sim_from_registry if sim_from_registry else SimulationEngine()
+            if SIMULATION_AVAILABLE:
+                logger.info("SimulationEngine initialized successfully")
+            else:
+                logger.warning("Using fallback SimulationEngine")
+        except Exception as e:
+            logger.error(f"Failed to initialize SimulationEngine: {e}")
+            self.simulation_module = SimulationEngine()  # Use fallback
         if not self.simulation_module:
             logger.error("SimulationModule not found in plugin registry. Falling back to mock.")
             self.simulation_module = MockSimulationModule()
