@@ -24,12 +24,10 @@ WORKDIR /app
 # Copy only requirements first for better layer caching
 COPY requirements.txt* master_requirements.txt* ./
 
-# Copy subdirectory requirements if they exist
-# Using wildcard patterns to make these optional
-COPY generator/requirements.tx[t] generator/ 2>/dev/null || :
-COPY omnicore_engine/requirements.tx[t] omnicore_engine/ 2>/dev/null || :
-COPY self_fixing_engineer/requirements.tx[t] self_fixing_engineer/ 2>/dev/null || :
-COPY pyproject.tom[l] setup.p[y] ./ 2>/dev/null || :
+# Copy subdirectory requirements if they exist for better layer caching
+# generator doesn't have requirements.txt, omnicore and sfe do
+COPY omnicore_engine/requirements.txt omnicore_engine/requirements.txt
+COPY self_fixing_engineer/requirements.txt self_fixing_engineer/requirements.txt
 
 # Upgrade packaging tools and install dependencies if found
 RUN pip install --upgrade pip setuptools wheel \
