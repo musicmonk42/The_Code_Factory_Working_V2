@@ -150,6 +150,7 @@ class OmniCoreOmega:
         self._is_initialized = False
         self.arbiters = []
         self.num = num_arbiters
+        self.logger = logging.getLogger("OmniCoreOmega")
 
     @classmethod
     def create_and_initialize(cls):

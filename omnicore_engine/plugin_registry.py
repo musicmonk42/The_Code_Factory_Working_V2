@@ -44,7 +44,6 @@ import hashlib
 try:
     from arbiter.config import ArbiterConfig
     from arbiter import __path__ as assistant_pkg_path
-    from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind, PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
 except ImportError:
     class ArbiterConfig:
         def __init__(self):
@@ -53,6 +52,12 @@ except ImportError:
             self.PLUGIN_DIR = 'plugins'
             self.PLUGIN_EXECUTION_TIMEOUT = 30
             self.PLUGINS_ENABLED = True
+
+try:
+    from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind, PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
+except ImportError:
+    ArbiterPlugInKind = None
+    ARBITER_PLUGIN_REGISTRY = None
             self.PLUGIN_SIGNING_KEY = 'insecure_default_key'
     class ArbiterPlugInKind(str, Enum):
         pass

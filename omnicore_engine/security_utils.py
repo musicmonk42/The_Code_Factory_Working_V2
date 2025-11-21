@@ -662,7 +662,7 @@ class EnterpriseSecurityUtils:
     High-level facade aggregating security helpers used throughout the engine.
     """
 
-    def __init__(self, *, secret: _t.Union[str, bytes] | None = None, session_ttl_seconds: int = 3600):
+    def __init__(self, *, secret: _t.Optional[_t.Union[str, bytes]] = None, session_ttl_seconds: int = 3600):
         self._secret = secret or os.environ.get("OMNICORE_SECRET", "omnicore-default-secret")
         self.audit = SecurityAuditLogger()
         self.sessions = SecureSessionManager(self._secret, ttl_seconds=session_ttl_seconds)
@@ -734,7 +734,7 @@ class EnterpriseSecurityUtils:
 
 # Singleton pattern
 _LOCK = threading.Lock()
-_SINGLETON: EnterpriseSecurityUtils | None = None
+_SINGLETON: _t.Optional[EnterpriseSecurityUtils] = None
 
 def get_security_utils() -> EnterpriseSecurityUtils:
     global _SINGLETON

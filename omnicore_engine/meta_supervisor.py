@@ -2,8 +2,11 @@ import asyncio
 import logging
 import uuid
 import json
+import random
+import time
 import torch
 import numpy as np
+import sqlalchemy
 from typing import Dict, Any, List, Optional, Callable, Union
 from aiolimiter import AsyncLimiter
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -24,6 +27,40 @@ try:
 except ImportError:
     ArrayBackend = None
 from redis.asyncio import redis, RedisError
+
+# Import Policy and Knowledge Graph components
+try:
+    from arbiter.policy.core import PolicyEngine
+except ImportError:
+    class PolicyEngine:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def should_auto_learn(self, *args, **kwargs):
+            return True, "Mock policy"
+
+try:
+    from arbiter.knowledge_graph import KnowledgeGraph
+except ImportError:
+    class KnowledgeGraph:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def query(self, *args, **kwargs):
+            return []
+
+try:
+    from arbiter.explainable_reasoner.explainable_reasoner import ExplainableReasonerPlugin
+except ImportError:
+    class ExplainableReasonerPlugin:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def explain(self, *args, **kwargs):
+            return "Mock explanation"
+
+try:
+    from omnicore_engine.audit import record_meta_audit_event
+except ImportError:
+    async def record_meta_audit_event(*args, **kwargs):
+        pass
 
 logger = logging.getLogger("MetaSupervisor")
 # Ensure logger is configured
