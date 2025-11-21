@@ -210,3 +210,23 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Code Factory specific
+*.db
+*.db-shm
+*.db-wal
+*.jsonl
+audit.log.json
+chroma_db/
+.prom_multiproc/
+validator_performance.json
+test_metrics_snapshot.json
+coverage_history.json
+meta_learning.pkl
+results.json
+call_args/
+reasoner_data/
+test_checkpoints/
+test_log.txt
+exceptions.log.*
+reasoner.log.*
