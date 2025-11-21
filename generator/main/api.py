@@ -516,7 +516,7 @@ async def get_user_by_username_from_db(db: Session, username: str) -> Optional[U
     """Retrieves a user from the database by username."""
     try:
         # Use asyncio.to_thread for synchronous DB operation in async context
-        user = await asyncio.to_thread(db.query(User).filter(User.username == username).first)
+        user = await asyncio.to_thread(lambda: db.query(User).filter(User.username == username).first())
         return user
     except OperationalError as e:
         logger.error(f"Database operational error fetching user {username}: {e}", exc_info=True)
@@ -536,7 +536,7 @@ async def get_api_key_by_hashed_key_from_db(db: Session, api_key: str) -> Option
     """Retrieves an API key from the database by verifying its hash."""
     try:
         # Fetch all active API keys and verify hash
-        api_keys = await asyncio.to_thread(db.query(APIKey).filter(APIKey.is_active == True).all)
+        api_keys = await asyncio.to_thread(lambda: db.query(APIKey).filter(APIKey.is_active == True).all())
         for api_key_obj in api_keys:
             if pwd_context.verify(api_key, api_key_obj.hashed_api_key):
                 return api_key_obj
@@ -980,7 +980,7 @@ async def delete_api_key(api_key_id: str, db: Session = Depends(get_db)):
     Deletes an API key by its public ID. Only accessible by admins.
     """
     with tracer.start_as_current_span("delete_api_key") as span:
-        api_key_to_delete = await asyncio.to_thread(db.query(APIKey).filter(APIKey.api_key_id == api_key_id).first)
+        api_key_to_delete = await asyncio.to_thread(lambda: db.query(APIKey).filter(APIKey.api_key_id == api_key_id).first())
         if not api_key_to_delete:
             logger.warning(f"API Key deletion failed: API Key '{api_key_id}' not found.")
             span.set_status(Status(StatusCode.NOT_FOUND, "API Key not found")) # FIX: Use Status object
