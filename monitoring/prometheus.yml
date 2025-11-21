@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'codefactory'
+    environment: 'production'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'generator'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['generator:8001']
+        labels:
+          service: 'generator'
+          component: 'api'
+
+  - job_name: 'omnicore'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['omnicore:8001']
+        labels:
+          service: 'omnicore'
+          component: 'engine'
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+        labels:
+          service: 'redis'
+          component: 'cache'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+        labels:
+          service: 'postgres'
+          component: 'database'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - 'alerts/*.yml'
