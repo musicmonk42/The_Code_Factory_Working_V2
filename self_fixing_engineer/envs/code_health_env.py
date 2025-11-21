@@ -508,9 +508,13 @@ class CodeHealthEnv(gym.Env):
             if key in self.config.observation_keys:
                 idx = self.config.observation_keys.index(key)
                 
-                # Normalize latency if needed
+                # Normalize latency if needed, with safety check for division by zero
                 if key == "latency":
-                    normalized_value = np.clip(state[idx] / self.config.latency_normalization_factor, 0.0, 1.0)
+                    if self.config.latency_normalization_factor <= 0:
+                        logger.error("latency_normalization_factor must be positive, defaulting to 10000.0")
+                        normalized_value = np.clip(state[idx] / 10000.0, 0.0, 1.0)
+                    else:
+                        normalized_value = np.clip(state[idx] / self.config.latency_normalization_factor, 0.0, 1.0)
                 else:
                     normalized_value = state[idx]
                 
