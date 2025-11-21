@@ -648,7 +648,7 @@ class AuditLogger:
                             continue
                         
                         sig = signer.sign(entry_hash.encode())
-                        entry["signatures"].append({"key_id": key_id, "signature": sig.hex(), "status": "signed"})
+                        entry["signatures"].append({"key_id": key_id, "signature": base64.b64encode(sig).decode('utf-8'), "status": "signed"})
                         logger.debug(sanitize_log(f"Audit entry signed by key: {key_id[:8]}..."), extra=log_context)
                     except Exception as e:
                         logger.error(sanitize_log(f"Error signing audit entry: {e}"), exc_info=True, extra=log_context)
@@ -817,17 +817,22 @@ class AuditLogger:
                 signatures = []
                 for private_key in self.signers:
                     try:
+                        # Ed25519 sign method only takes the data (removed RSA PSS padding parameters)
                         sig = private_key.sign(
-                            entry_hash.encode('utf-8'),
-                            padding.PSS(
-                                mgf=padding.MGF1(hashes.SHA256()),
-                                salt_length=padding.PSS.MAX_LENGTH
-                            ),
-                            hashes.SHA256()
+                            entry_hash.encode('utf-8')
                         )
+                        
+                        # Generate a key_id from the public key bytes using SHA256 hash for Ed25519
+                        # (Ed25519 doesn't have public_numbers() like RSA keys)
+                        public_key_bytes = private_key.public_key().public_bytes(
+                            encoding=serialization.Encoding.Raw,
+                            format=serialization.PublicFormat.Raw
+                        )
+                        key_id = hashlib.sha256(public_key_bytes).hexdigest()[:16]
+                        
                         signatures.append({
                             "signature": base64.b64encode(sig).decode('utf-8'),
-                            "key_id": str(private_key.public_key().public_numbers().n)[:16],
+                            "key_id": key_id,
                             "status": "signed"
                         })
                     except Exception as e:
@@ -964,7 +969,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                         break
                                     try:
                                         pub_key.verify(
-                                            bytes.fromhex(sig_data["signature"]),
+                                            base64.b64decode(sig_data["signature"]),
                                             entry["hash"].encode()
                                         )
                                         logger.debug(f"Signature verified for key {key_id} in entry {i}.", extra=log_context)
