@@ -1,10 +1,10 @@
 LLM Plugin Manager Technical Documentation
 
-Proprietary Software of Unexpected Innovations Inc.
+Proprietary Software of Novatrax Labs LLC
 
-This document provides detailed technical specifications for the LLM Plugin Manager, a production-grade system for managing multiple Large Language Model (LLM) providers with dynamic loading, hot-reloading, security, observability, and robust error handling. This software is proprietary technology owned by Unexpected Innovations Inc. Unauthorized use, reproduction, distribution, or modification is strictly prohibited without prior written consent.
+This document provides detailed technical specifications for the LLM Plugin Manager, a production-grade system for managing multiple Large Language Model (LLM) providers with dynamic loading, hot-reloading, security, observability, and robust error handling. This software is proprietary technology owned by Novatrax Labs LLC Unauthorized use, reproduction, distribution, or modification is strictly prohibited without prior written consent.
 
-Intended Audience: Internal developers and system operators at Unexpected Innovations Inc.Contact: For inquiries, contact \[insert contact information].
+Intended Audience: Internal developers and system operators at Novatrax Labs LLCContact: For inquiries, contact \[insert contact information].
 
 
 
@@ -1118,7 +1118,7 @@ License
 
 Proprietary Software
 
-This software is proprietary technology owned by Unexpected Innovations Inc. All rights reserved. Unauthorized use, reproduction, distribution, or modification of this software, in whole or in part, is strictly prohibited without prior written consent from Unexpected Innovations Inc.
+This software is proprietary technology owned by Novatrax Labs LLC All rights reserved. Unauthorized use, reproduction, distribution, or modification of this software, in whole or in part, is strictly prohibited without prior written consent from Novatrax Labs LLC
 
-For licensing inquiries, please contact Unexpected Innovations Inc. at \[insert contact information].
+For licensing inquiries, please contact Novatrax Labs LLC at \[insert contact information].
 

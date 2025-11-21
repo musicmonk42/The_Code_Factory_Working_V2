@@ -450,5 +450,5 @@ Configure prometheus.yml to scrape metrics from your app (default port: 8000 for
 
 License
 Proprietary Software
-This software is proprietary technology owned by Unexpected Innovations Inc. All rights reserved. Unauthorized use, reproduction, distribution, or modification of this software, in whole or in part, is strictly prohibited without prior written consent from Unexpected Innovations Inc.
-For licensing inquiries, please contact Unexpected Innovations Inc. at [insert contact information].
+This software is proprietary technology owned by Novatrax Labs LLC All rights reserved. Unauthorized use, reproduction, distribution, or modification of this software, in whole or in part, is strictly prohibited without prior written consent from Novatrax Labs LLC
+For licensing inquiries, please contact Novatrax Labs LLC at [insert contact information].

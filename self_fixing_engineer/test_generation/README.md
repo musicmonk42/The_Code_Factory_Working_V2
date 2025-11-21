@@ -4,7 +4,7 @@
 **Last Updated:** August 10, 2025  
 **Security Posture:** Zero-Trust, Audit-Logged, Production-Ready  
 **Location:** Fairhope, Alabama, USA  
-**Maintainer:** Unexpected Innovations Inc  
+**Maintainer:** Novatrax Labs LLC  
 **Platform:** Python 3.8+ (Pluggable for Multi-Language Support)  
 **Test Coverage:** ~85–90% (Unit, Integration, End-to-End)  
 **Dependencies:** Managed via `requirements.txt` (Pinned Recommendations Included)  
@@ -400,13 +400,13 @@ Full changelog in `CHANGELOG.md`.
 - **Issues:** GitHub Issues or internal tracker
 - **Security:** Report privately, disable prod mode, review audits
 - **Community:** Email maintainer / Slack (if available)
-- **Enterprise:** Contact Unexpected Innovations for integration
+- **Enterprise:** Contact Novatrax Labs for integration
 
 ---
 
 ## ⚖️ License
 
-**Proprietary Technology by Unexpected Innovations Inc.**  
+**Proprietary Technology by Novatrax Labs LLC**  
 _All rights reserved._
 
 

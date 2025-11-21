@@ -2,7 +2,7 @@
 
 Fabric Chaincode v1.0.0 - The "Immutable Ledger" Edition  
 
-\*\*Proprietary Technology by Unexpected Innovations\*\*
+\*\*Proprietary Technology by Novatrax Labs\*\*
 
 
 
@@ -780,7 +780,7 @@ go test ./... \&\& pytest --cov=plugins.dlt\_backend
 
 
 
-Contact Unexpected Innovations’ support at \*\*support@unexpectedinnovations.com\*\*  
+Contact Novatrax Labs’ support at \*\*support@novatraxlabs.com\*\*  
 
 File issues at `<enterprise-repo-url>/issues` (enterprise access required)
 
@@ -794,7 +794,7 @@ File issues at `<enterprise-repo-url>/issues` (enterprise access required)
 
 
 
-\*\*Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.\*\*
+\*\*Proprietary and Confidential © 2025 Novatrax Labs. All rights reserved.\*\*
 
 
 
@@ -802,7 +802,7 @@ Fabric Chaincode and Self-Fixing Engineer™ are proprietary technologies.
 
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.  
 
-For commercial licensing or evaluation inquiries, contact \*\*support@unexpectedinnovations.com\*\*.
+For commercial licensing or evaluation inquiries, contact \*\*support@novatraxlabs.com\*\*.
 
 
 

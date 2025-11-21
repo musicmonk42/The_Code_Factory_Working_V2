@@ -1,6 +1,6 @@
 # Proto Module - Self-Fixing Engineer (SFE) 🚀  
 gRPC API v1.0.0 - The "Golden Contract" Edition  
-**Proprietary Technology by Unexpected Innovations**
+**Proprietary Technology by Novatrax Labs**
 
 Define robust gRPC APIs for SFE’s self-healing, refactoring, and governance workflows.
 
@@ -420,17 +420,17 @@ pytest --cov=plugins.refactor --cov-report=html
 
 ## Support
 
-Contact Unexpected Innovations’ support at **support@unexpectedinnovations.com**  
+Contact Novatrax Labs’ support at **support@novatraxlabs.com**  
 File issues at `<enterprise-repo-url>/issues` (enterprise access required)
 
 ---
 
 ## License
 
-**Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.**
+**Proprietary and Confidential © 2025 Novatrax Labs. All rights reserved.**
 
 Proto Module and Self-Fixing Engineer™ are proprietary technologies.  
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.  
-For commercial licensing or evaluation inquiries, contact **support@unexpectedinnovations.com**.
+For commercial licensing or evaluation inquiries, contact **support@novatraxlabs.com**.
 
 Connect SFE with Proto’s robust gRPC APIs.

@@ -8,7 +8,7 @@ What is SFE and the Self-Healing Import Fixer?
 
 
 
-SFE Overview: SFE is a self-healing AI system that fixes code bugs, optimizes performance, and evolves software autonomously. It's built by Unexpected Innovations Inc. and includes modules like arbiter (orchestration), guardrails (safety), and this one.
+SFE Overview: SFE is a self-healing AI system that fixes code bugs, optimizes performance, and evolves software autonomously. It's built by Novatrax Labs LLC and includes modules like arbiter (orchestration), guardrails (safety), and this one.
 
 Self-Healing Import Fixer: Scans Python code for import problems (e.g., cycles, missing dependencies), fixes them, and validates changes with tools like Ruff, Mypy, and pytest. It uses AI for complex refactors and logs actions for compliance (e.g., EU AI Act, NIST AI RMF).
 

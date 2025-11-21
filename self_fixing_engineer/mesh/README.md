@@ -1,6 +1,6 @@
 # Mesh Module – Self-Fixing Engineer (SFE) 🚀
 **Mesh v2.1.0 – The "Distributed Harmony" Edition**  
-**Proprietary Technology by Unexpected Innovations Inc.**  
+**Proprietary Technology by Novatrax Labs LLC**  
 **All Rights Reserved**
 
 > Orchestrate distributed, agentic workflows with secure, scalable event mesh and checkpointing.
@@ -381,19 +381,19 @@ Set `LOG_LEVEL=DEBUG`, enable tracing, monitor metrics, inspect DLQ files.
 ## Support
 
 Questions?  
-Email: [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com)  
+Email: [support@novatraxlabs.com](mailto:support@novatraxlabs.com)  
 File issues: `<enterprise-repo-url>/issues` (enterprise access required)
 
 ---
 
 ## License
 
-**Proprietary and Confidential © 2025 Unexpected Innovations Inc. All rights reserved.**  
+**Proprietary and Confidential © 2025 Novatrax Labs LLC All rights reserved.**  
 Mesh Module and Self-Fixing Engineer™ are proprietary technologies.
 
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.
 
-For commercial licensing or evaluation, contact [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com).
+For commercial licensing or evaluation, contact [support@novatraxlabs.com](mailto:support@novatraxlabs.com).
 
 ---
 

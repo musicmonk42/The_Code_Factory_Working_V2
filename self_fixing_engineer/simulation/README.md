@@ -2,11 +2,11 @@
 
 ## Overview
 
-The **Simulation module** is a core component of the Self-Fixing Engineer (SFE) platform, developed by **Unexpected Innovations Inc.** as of **September 10, 2025**. It orchestrates AI-driven simulations for autonomous code evolution, testing, and verification, with robust support for parallel execution, quantum computing, and secure sandboxing. The module integrates with SFE components like `arbiter`, `intent_capture`, `agent_orchestration`, `guardrails`, `proto`, `fabric_chaincode`, `evm_chaincode`, `envs`, and `ci_cd`, enabling enterprise-grade automation pipelines. It complies with 2025 AI regulations (e.g., EU AI Act, NIST AI RMF 2.1) through tamper-evident auditing and policy enforcement.
+The **Simulation module** is a core component of the Self-Fixing Engineer (SFE) platform, developed by **Novatrax Labs LLC** as of **September 10, 2025**. It orchestrates AI-driven simulations for autonomous code evolution, testing, and verification, with robust support for parallel execution, quantum computing, and secure sandboxing. The module integrates with SFE components like `arbiter`, `intent_capture`, `agent_orchestration`, `guardrails`, `proto`, `fabric_chaincode`, `evm_chaincode`, `envs`, and `ci_cd`, enabling enterprise-grade automation pipelines. It complies with 2025 AI regulations (e.g., EU AI Act, NIST AI RMF 2.1) through tamper-evident auditing and policy enforcement.
 
 **Version**: 2.0 (stable)  
 **SPDX-License-Identifier**: Apache-2.0  
-**Copyright**: © 2025 Unexpected Innovations Inc.
+**Copyright**: © 2025 Novatrax Labs LLC
 
 ### ✨ Core Features
 - **Agentic Simulations**: Executes self-evolving agents (`agentic.py`) with genetic algorithms and RL (Ray RLlib).
@@ -162,12 +162,12 @@ Future: Dynamic scheduling, enhanced quantum.
 
 Support
 
-Email: support@unexpectedinnovations.com
+Email: support@novatraxlabs.com
 GitHub: <enterprise-repo-url>/issues</enterprise-repo-url>
 Discord: https://discord.gg/sfe-community (new users welcome!)
 Wiki: <enterprise-repo-url>/wiki</enterprise-repo-url>
 
 
 License
-Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.
-For licensing: support@unexpectedinnovations.com.
+Proprietary and Confidential © 2025 Novatrax Labs. All rights reserved.
+For licensing: support@novatraxlabs.com.

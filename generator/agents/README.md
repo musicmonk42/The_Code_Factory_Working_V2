@@ -650,5 +650,5 @@ Security Reports: Send sensitive issues to security@codefactory.com for private 
 
 License
 
-Unexpected Innovations Inc all rights reserved
+Novatrax Labs LLC all rights reserved
 

@@ -1,6 +1,6 @@
 # Arbiter Growth Module
 
-**Version:** 1.0.0 | **License:** Proprietary © 2025 Unexpected Innovations
+**Version:** 1.0.0 | **License:** Proprietary © 2025 Novatrax Labs
 
 ## TL;DR
 
@@ -284,8 +284,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/company/repo/issues)
-- **Email**: support@unexpectedinnovations.com
+- **Email**: support@novatraxlabs.com
 
 ## License
 
-Proprietary © 2025 Unexpected Innovations. See [LICENSE](LICENSE) for details.
+Proprietary © 2025 Novatrax Labs. See [LICENSE](LICENSE) for details.

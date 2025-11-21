@@ -1,6 +1,6 @@
 # Agent Orchestration Module – Self-Fixing Engineer (SFE) 🚀
 **Agent Orchestration v1.0.0 – The "Universal Crew" Edition**  
-Proprietary Technology by Unexpected Innovations
+Proprietary Technology by Novatrax Labs
 
 Orchestrate dynamic AI, human, and plugin agents for self-healing, compliant, and scalable workflows.
 
@@ -9,8 +9,8 @@ Crafted with precision in Fairhope, Alabama, USA.
 > **Unleash your SFE workflows with Agent Orchestration’s universal crew.**
 
 **Version:** 1.0.0 (August 19, 2025)  
-**License:** Proprietary (© 2025 Unexpected Innovations)  
-**Contact:** [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com)  
+**License:** Proprietary (© 2025 Novatrax Labs)  
+**Contact:** [support@novatraxlabs.com](mailto:support@novatraxlabs.com)  
 **Issues:** `<enterprise-repo-url>/issues` (enterprise access required)
 
 ---
@@ -451,7 +451,7 @@ jobs:
 
 ## Support
 
-- **Email:** [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com)
+- **Email:** [support@novatraxlabs.com](mailto:support@novatraxlabs.com)
 - **Issues:** `<enterprise-repo-url>/issues`
 - **SLA:** Enterprise 24/7 support
 
@@ -459,11 +459,11 @@ jobs:
 
 ## License
 
-**Proprietary and Confidential © 2025 Unexpected Innovations. All rights reserved.**  
+**Proprietary and Confidential © 2025 Novatrax Labs. All rights reserved.**  
 Agent Orchestration and Self-Fixing Engineer™ are proprietary technologies.  
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.
 
-For commercial licensing or evaluation, contact [support@unexpectedinnovations.com](mailto:support@unexpectedinnovations.com).
+For commercial licensing or evaluation, contact [support@novatraxlabs.com](mailto:support@novatraxlabs.com).
 
 ---
 

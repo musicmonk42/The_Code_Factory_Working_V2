@@ -14,7 +14,7 @@ Unmaintainable code due to import spaghetti
 
 This tool will find it, fix it, and prove what it did.
 For new users: If you're new to the Self-Fixing Engineer (SFE) platform or Code Factory, start with GETTING_STARTED.md for basics and DEMO_GUIDE.md to run your first demo.
-Version: 1.0 (stable as of September 10, 2025)SPDX-License-Identifier: MITCopyright: © 2025 Unexpected Innovations Inc.
+Version: 1.0 (stable as of September 10, 2025)SPDX-License-Identifier: MITCopyright: © 2025 Novatrax Labs LLC
 💡 Key Features (No Hype, Just Facts)
 
 Comprehensive Static Analysis
@@ -249,7 +249,7 @@ License
 MIT License. See LICENSE.
 Support
 
-Email: support@unexpectedinnovations.com
+Email: support@novatraxlabs.com
 Slack: #ops-alerts
 Discord: https://discord.gg/sfe-community
 Wiki: /wiki
