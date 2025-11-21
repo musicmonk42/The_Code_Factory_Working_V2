@@ -9,7 +9,6 @@ import time
 import traceback
 from functools import wraps
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Protocol, Set, Tuple, Union, ClassVar
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Protocol, Set, Tuple, Union
 from datetime import datetime, timezone
 import json
 from contextlib import asynccontextmanager
@@ -1672,10 +1671,10 @@ class Arbiter:
                 logging.getLogger(__name__).warning(f"[{self.name}] {name} plugin not available.")
         
         if AIOREDIS_AVAILABLE:
-            self.redis_pool = aioredis.from_url(self.settings.REDIS_URL, max_connections=self.settings.REDIS_MAX_CONNECTIONS)
+            self.redis_pool = redis.from_url(self.settings.REDIS_URL, max_connections=self.settings.REDIS_MAX_CONNECTIONS)  # Fixed: use 'redis' instead of 'aioredis'
             self.peer_listener_task = asyncio.create_task(self.listen_for_peers())
         else:
-            logging.warning("aioredis not available. Peer-to-peer communication will be disabled.")
+            logging.warning("redis.asyncio not available. Peer-to-peer communication will be disabled.")  # Fixed: updated warning message
 
 
     async def work_cycle(self) -> Dict[str, Any]:
@@ -2014,8 +2013,8 @@ class Arbiter:
     async def coordinate_with_peers(self, message: Dict[str, Any]):
         """Publishes a message to other agents via Redis pub/sub."""
         if not AIOREDIS_AVAILABLE:
-            logging.warning("aioredis is not available. Skipping peer coordination.")
-            return {"status": "skipped", "details": "aioredis not available"}
+            logging.warning("redis.asyncio is not available. Skipping peer coordination.")  # Fixed: updated reference
+            return {"status": "skipped", "details": "redis.asyncio not available"}  # Fixed: updated reference
         try:
             async with self.redis_pool as redis:
                 message_id = hashlib.md5(json.dumps(message).encode()).hexdigest()
@@ -2030,7 +2029,7 @@ class Arbiter:
     async def listen_for_peers(self):
         """Linstens for messages from other agents on a Redis channel."""
         if not AIOREDIS_AVAILABLE:
-            logging.warning("aioredis is not available. Peer listener will not start.")
+            logging.warning("redis.asyncio is not available. Peer listener will not start.")  # Fixed: updated reference
             return
         try:
             async with self.redis_pool as redis:

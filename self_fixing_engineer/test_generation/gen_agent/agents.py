@@ -12,7 +12,7 @@ import time
 import hashlib
 import html
 from typing import Dict, Any, TypedDict, Optional, Callable, Awaitable, cast
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import functools
 import importlib.util
@@ -487,7 +487,7 @@ async def planner_agent(state: TestAgentState, llm: Optional[Any], config: Optio
     logger.info("Executing Planner Agent...")
     if not _is_llm_available(llm):
         state['plan'] = {"features": ["baseline"], "reason": "LLM not available, using trivial plan."}
-        state['plan_generated_at'] = datetime.utcnow().isoformat()
+        state['plan_generated_at'] = datetime.now(timezone.utc).isoformat()  # Fixed: replaced deprecated utcnow()
         _metric_labels(agent_runs_total, agent_name="planner", status="skipped").inc()
         logger.info("Planner agent skipped: LLM not available")
         return state
@@ -526,7 +526,7 @@ Output only the JSON object."""
             state['plan'] = {"error": f"LLM response was not valid JSON: {e}.", "message": "Failed to generate plan."}
         
         state.setdefault('plan', {"features": [], "data_strategy": "", "test_suite_structure": "", "ambiguities": ""})
-        state['plan_generated_at'] = datetime.utcnow().isoformat()
+        state['plan_generated_at'] = datetime.now(timezone.utc).isoformat()  # Fixed: replaced deprecated utcnow()
         
         try:
             await audit_logger.log_event(
