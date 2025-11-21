@@ -1,5 +1,4 @@
 import pytest
-from omnicore_engineengines import OmniCoreOmega
 from omnicore_engine.engines import OmniCoreOmega
 from omnicore_engine.plugin_registry import PluginRegistry, plugin, PlugInKind
 from unittest.mock import AsyncMock, MagicMock

@@ -50,8 +50,6 @@ CUPY_AVAILABLE = False
 cp = None  # Explicitly define cp as None initially for test patching
 try:
     import cupy as cp  # type: ignore
-try:
-    import cupy as cp
     CUPY_AVAILABLE = True
 except ImportError:
     pass
@@ -285,9 +283,7 @@ class Benchmarker:
         logger.debug(f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}")
 
     def get_results(self) -> Dict[str, List[float]]:
-        raise ValueError("Object arrays are not allowed due to security concerns.")
-    
-    return arr
+        return dict(self.results)
 
 
 class BackendBenchmarker:
@@ -975,9 +971,7 @@ class ArrayBackend:
         elif self.mode == 'dask' and DASK_AVAILABLE:
             return a.compute()
         return np.asarray(a)
-    A class to manage array computations across multiple backends (NumPy, CuPy, Dask, PyTorch, Qiskit, NengoLoihi).
-    Includes auto-benchmarking and enhanced logging.
-    """
+
     def __init__(self, mode="numpy", use_gpu=False, use_dask=False, use_quantum=False, use_neuromorphic=False, logger: Optional[logging.Logger] = None):
         """
         Initialize the ArrayBackend with the specified mode and hardware preferences.
@@ -1397,11 +1391,6 @@ class ArrayBackend:
         
         if hasattr(a, "astype"):
             return a.astype(dtype)
-        logger.warning(f"Astype operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
-            self.benchmarker.run_benchmark(self.xp, "astype_operation", lambda: self.astype(self.xp.array([1,2,3]), 'float32'))
-        
-        if hasattr(a, "astype"):
-            return a.astype(dtype)
         self.logger.warning(f"Astype operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
         return self.asnumpy(a).astype(dtype)
 
@@ -1418,11 +1407,6 @@ class ArrayBackend:
             # FIX: Call a non-recursive operation for benchmarking
             self.benchmarker.run_benchmark(self.xp, "reshape_operation", lambda: self.xp.arange(100).reshape((10,10)))
         
-        if hasattr(a, "reshape"):
-            return a.reshape(newshape)
-        logger.warning(f"Reshape operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
-            self.benchmarker.run_benchmark(self.xp, "reshape_operation", lambda: self.reshape(self.array(np.arange(100)), (10,10)))
-
         if hasattr(a, "reshape"):
             return a.reshape(newshape)
         self.logger.warning(f"Reshape operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
