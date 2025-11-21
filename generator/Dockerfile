@@ -15,7 +15,6 @@ LABEL maintainer="xAI Team <team@x.ai>" \
       org.opencontainers.image.documentation="https://docs.x.ai/ai-generator"
 
 # ARGs for extensibility (configurable at build time)
-ARG API_PORT=8000
 ARG EXTRA_DEPS=""
 ARG CONFIG_PATH="/app/config.yaml"
 
@@ -62,13 +61,11 @@ RUN sphinx-build -b html docs docs/_build/html  # Assuming Sphinx in 'docs/' dir
 FROM python:3.11-slim AS runtime
 
 # Reuse ARGs from build stage
-ARG API_PORT=8000
 ARG CONFIG_PATH
 
 # Environment variables for runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    API_PORT=${API_PORT} \
     CONFIG_PATH=${CONFIG_PATH} \
     # Observability envs
     PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus \
