@@ -423,9 +423,9 @@ class RedisStreamsStorageBackend:
                 except InvalidToken:
                     logger.warning("Skipping undecryptable event ID %s in stream '%s'.", msg_id.decode('utf-8'), stream_key)
             # Advance past the last seen entry to avoid re-reading it (Streams are inclusive)
-            last_raw = entries[-1][0]
+            last_id_raw = entries[-1][0]
             # Convert bytes to string if needed
-            last_id_str = last_raw.decode('utf-8') if isinstance(last_raw, bytes) else last_raw
+            last_id_str = last_id_raw.decode('utf-8') if isinstance(last_id_raw, bytes) else last_id_raw
             # Increment the sequence number part of the stream ID to avoid re-reading
             # Stream IDs are in format "timestamp-sequence", we need to move past the last one
             if '-' in last_id_str:

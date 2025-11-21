@@ -278,11 +278,11 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
         
         # VideoFileClip expects a file path, not a BytesIO object
         # Write to a temporary file first
-        temp_file_path = None  # Initialize before try block
+        temp_file_path = None  # Initialize to None; only set after file is created
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
                 temp_file.write(item.data)
-                temp_file_path = temp_file.name
+                temp_file_path = temp_file.name  # Only set if write succeeds
             
             with VideoFileClip(temp_file_path) as clip:
                 duration = clip.duration

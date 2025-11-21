@@ -18,9 +18,17 @@ from contextlib import asynccontextmanager
 if sys.version_info >= (3, 11):
     from asyncio import timeout as async_timeout
 else:
-    # For Python < 3.11, a proper implementation would be needed
-    # using asyncio.wait_for or similar. This project requires Python 3.11+
-    raise RuntimeError("Python 3.11 or higher is required for asyncio.timeout support")
+    # Provide a fallback that raises error only when used
+    from contextlib import asynccontextmanager
+    
+    @asynccontextmanager
+    async def async_timeout(seconds):
+        """Fallback that raises error when timeout is used with Python < 3.11"""
+        raise RuntimeError(
+            "asyncio.timeout is not available in Python < 3.11. "
+            "Please upgrade to Python 3.11 or higher."
+        )
+        yield  # pragma: no cover (unreachable)
 
 # Langchain imports
 from langchain.memory import ConversationBufferWindowMemory
