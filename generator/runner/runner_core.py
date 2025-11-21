@@ -228,11 +228,22 @@ async def run_tests_in_sandbox(
         Dictionary with test results and coverage data
     """
     try:
+        # Validate input files
+        if not test_files and not code_files:
+            return {
+                "status": "failed",
+                "error": "No test files or code files provided",
+                "coverage_percentage": 0.0,
+                "pass_count": 0,
+                "fail_count": 0
+            }
+        
         # Create a runner config for sandbox execution
         config = RunnerConfig(
-            backend_type="local",  # Use local backend for sandbox
-            timeout_seconds=300,
-            enable_metrics=False  # Disable metrics for sandbox runs
+            backend="local",  # Correct attribute name
+            framework="pytest",  # Required field
+            instance_id=f"sandbox_{uuid.uuid4().hex[:8]}",  # Required field
+            timeout=300  # Correct attribute name
         )
         runner = Runner(config)
         
@@ -299,11 +310,20 @@ async def run_stress_tests(
     try:
         stress_config = config or {}
         
+        # Validate input files
+        if not test_files and not code_files:
+            return {
+                "status": "failed",
+                "error": "No test files or code files provided",
+                "metrics": {}
+            }
+        
         # Create a runner config for stress testing
         runner_config = RunnerConfig(
-            backend_type="local",
-            timeout_seconds=stress_config.get("timeout", 600),
-            enable_metrics=True  # Enable metrics for performance tracking
+            backend="local",  # Correct attribute name
+            framework="pytest",  # Required field
+            instance_id=f"stress_{uuid.uuid4().hex[:8]}",  # Required field
+            timeout=stress_config.get("timeout", 600)  # Correct attribute name
         )
         runner = Runner(runner_config)
         
@@ -396,6 +416,7 @@ class Runner(ABC):
 
         # Task status tracking (in-memory map for live state, needs persistence for crash recovery)
         self.task_status_map: Dict[str, TaskResult] = {}
+        self._status_lock = asyncio.Lock()  # Add lock for thread-safe status updates
         
         # [NEW] Background task references
         self._monitor_task: Optional[asyncio.Task] = None
@@ -911,16 +932,24 @@ class Runner(ABC):
                 if os.path.exists(queue_file):
                     os.remove(queue_file)
     
-    def _update_task_status(self, task_id: str, status: str, **kwargs: Any) -> None:
-        """Updates the status of a task in the in-memory map and emits a metric."""
+    def _update_task_status_sync(self, task_id: str, status: str, **kwargs: Any) -> None:
+        """Synchronous wrapper for _update_task_status for backwards compatibility."""
+        try:
+            loop = asyncio.get_running_loop()
+            # If there's a running loop, schedule the coroutine
+            asyncio.create_task(self._update_task_status(task_id, status, **kwargs))
+        except RuntimeError:
+            # No running loop, call synchronously without lock (acceptable for single-threaded use)
+            self._update_task_status_unlocked(task_id, status, **kwargs)
+    
+    def _update_task_status_unlocked(self, task_id: str, status: str, **kwargs: Any) -> None:
+        """Internal implementation without lock for sync contexts."""
         if task_id not in self.task_status_map:
             explicit_started_at = kwargs.pop('started_at', None)
 
             if status == 'running':
                 started_at = explicit_started_at or time.time()
             else:
-                # Use explicit_started_at if provided; otherwise fall back to current time
-                # to satisfy non-optional numeric field in TaskResult.
                 started_at = explicit_started_at if explicit_started_at is not None else time.time()
 
             self.task_status_map[task_id] = TaskResult(
@@ -941,31 +970,31 @@ class Runner(ABC):
             
             task_result.status = status
             
-            # [CHANGE C START] Normalize error to a dict for reliable inspection
             if status in ['completed', 'failed', 'timed_out']:
                 task_result.finished_at = kwargs.pop('finished_at', time.time())
                 task_result.results = kwargs.pop('results', task_result.results)
 
                 error_val = kwargs.pop('error', task_result.error)
 
-                # Normalise error into a dict so tests (and callers) can reliably inspect it.
                 if isinstance(error_val, RunnerError):
                     error_val = error_val.as_dict()
                 elif isinstance(error_val, dict) or error_val is None:
-                    # already in desired shape or not provided
                     pass
                 else:
-                    # Treat anything else (e.g., string) as a message.
                     error_val = {"error_code": str(error_val)}
 
                 task_result.error = error_val
-            # [CHANGE C END]
             elif status == 'running' and task_result.started_at is None:
                 task_result.started_at = kwargs.pop('started_at', time.time())
             
             for k, v in kwargs.items():
                 if hasattr(task_result, k):
                     setattr(task_result, k, v)
+    
+    async def _update_task_status(self, task_id: str, status: str, **kwargs: Any) -> None:
+        """Updates the status of a task in the in-memory map and emits a metric (async with lock)."""
+        async with self._status_lock:
+            self._update_task_status_unlocked(task_id, status, **kwargs)
         
         logger.info(json.dumps({
             "event": "task_status_update",

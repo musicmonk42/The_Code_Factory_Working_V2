@@ -447,6 +447,8 @@ def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) ->
     config_path = Path(config_file)
     
     # Check if file should exist (not a test scenario with overrides)
+    # Note: We check `is None` rather than `not overrides` because an empty dict {} is valid
+    # and means "load from file with no overrides", while None means "use defaults if no file"
     if not config_path.exists() and overrides is None:
         raise ConfigurationError(
             "CONFIGURATION_ERROR",

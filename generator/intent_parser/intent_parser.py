@@ -85,12 +85,24 @@ except ImportError:
     logging.warning("OpenTelemetry not installed. Tracing will be disabled.")
     
     # Create a no-op tracer for when OpenTelemetry is not available
+    from contextlib import contextmanager
+    
+    class NoOpSpan:
+        """No-op span context manager."""
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+        def set_status(self, *args, **kwargs):
+            pass
+        def set_attribute(self, *args, **kwargs):
+            pass
+    
     class NoOpTracer:
+        @contextmanager
         def start_as_current_span(self, name):
-            """No-op decorator/context manager for tracing when OpenTelemetry is not available."""
-            def decorator(func):
-                return func
-            return decorator
+            """No-op context manager for tracing when OpenTelemetry is not available."""
+            yield NoOpSpan()
     
     tracer = NoOpTracer()
 

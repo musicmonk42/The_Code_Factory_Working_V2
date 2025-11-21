@@ -246,7 +246,7 @@ class FileSink(FeedbackSink):
             if self._fh:
                 try:
                     self._fh.close()
-                except:
+                except (OSError, IOError):
                     pass
                 self._fh = None
 
