@@ -198,8 +198,7 @@ httpx-sse==0.4.1
 huggingface-hub==0.34.4
 hvac==2.3.0
 idna==3.10
-importlib-metadata==6.11.0
-importlib_metadata==7.1.0
+importlib-metadata==7.1.0
 importlib_resources==6.5.2
 influxdb-client==1.49.0
 iniconfig==2.1.0

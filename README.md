@@ -98,14 +98,18 @@ Getting Started
 
 Prerequisites
 
-OS: Linux, macOS, or Windows 10/11
-Python: 3.11+ (3.10+ supported)
-Docker & Docker Compose: For containerized deployment (recommended)
-Make: For simplified commands (optional but recommended)
-Git: For version control
+- **OS**: Linux, macOS, or Windows 10/11
+- **Python**: 3.11+ (required - Python 3.10 and below are not supported)
+- **Docker & Docker Compose**: For containerized deployment (recommended)
+- **Make**: For simplified commands (optional but recommended)
+- **Git**: For version control
 
 Dependencies: Install via requirements.txt for each component:
+```
 pip install -r requirements.txt
+```
+
+> **Note**: Python 3.11+ is required. Earlier versions are not supported due to dependency requirements.
 
 
 API Keys: At least one LLM provider:
@@ -475,14 +479,17 @@ Development: Use make ci-local before committing to catch issues early.
 
 
 CI/CD Pipeline
-The platform includes comprehensive CI/CD pipelines using GitHub Actions:
-Continuous Integration (.github/workflows/ci.yml):
+The platform includes a consolidated CI/CD pipeline using GitHub Actions with intelligent path-based filtering:
 
-Linting with Black, Ruff, and Flake8
-Testing all components (Generator, OmniCore, SFE)
-Integration tests
-Docker image builds
-Code coverage reporting
+**Continuous Integration (`.github/workflows/ci.yml`)**:
+
+- **Path-Based Filtering**: Jobs run only when relevant files change, reducing CI time and resource usage
+- **Change Detection**: Automatically detects which components (Generator, OmniCore, SFE) have changed
+- **Linting**: Black, Ruff, and Flake8 with strict error checking (no error suppression)
+- **Component Tests**: Runs tests for Generator, OmniCore, and SFE independently
+- **Integration Tests**: End-to-end platform testing
+- **Docker Builds**: Automated container image builds
+- **Code Coverage**: Comprehensive coverage reporting with Codecov
 
 
 Security Scanning (.github/workflows/security.yml):
@@ -512,14 +519,18 @@ Outdated package reporting
 
 
 Running CI Checks Locally:
-# Run all CI checks
+```bash
+# Run all CI checks (recommended before committing)
 make ci-local
 
 # Individual checks
-make lint
-make type-check
-make security-scan
-make test
+make lint              # Black, Ruff, Flake8 (strict - will fail on errors)
+make type-check        # mypy type checking (strict)
+make security-scan     # Bandit, Safety (strict)
+make test              # All component tests (strict)
+```
+
+> **Important**: All linting and testing commands now enforce strict checking. Errors will cause failures instead of being suppressed, ensuring code quality.
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
 
