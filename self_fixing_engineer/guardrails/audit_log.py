@@ -83,12 +83,29 @@ logger = logging.getLogger(__name__)
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa, padding
+    from cryptography.hazmat.primitives import hashes
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
     Ed25519PrivateKey = None
     Ed25519PublicKey = None
     logging.getLogger(__name__).warning("cryptography library not found. Digital signing will be disabled.")
+
+# --- For OpenTelemetry Tracing ---
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import Status, StatusCode
+    TRACING_AVAILABLE = True
+except ImportError:
+    TRACING_AVAILABLE = False
+    # Create dummy classes
+    class Status:
+        def __init__(self, status_code, description=""): pass
+    class StatusCode:
+        ERROR = "ERROR"
+        OK = "OK"
+    logging.getLogger(__name__).warning("opentelemetry library not found. Tracing will be disabled.")
 
 # --- For Async File I/O ---
 try:
@@ -474,7 +491,11 @@ class AuditLogger:
         self._io_executor = ThreadPoolExecutor(max_workers=1)
 
         self._load_last_hashes()
-        self._initialize_dlt_backend_on_startup()
+        # Schedule DLT initialization as a background task if needed
+        # Do not call async function from sync __init__
+        if self.dlt_backend_enabled:
+            # Log a message that DLT will be initialized later
+            logger.info("DLT backend will be initialized on first use", extra={"context": "init"})
 
         log_context = {"context": "init"}
         logger.info(f"AuditLogger initialized. Log path: {self.log_path}, DLT enabled: {self.dlt_backend_enabled}", extra=log_context)
@@ -768,27 +789,63 @@ class AuditLogger:
         
 
     def log_event(self, event_type: str, details: Dict[str, Any], agent_id: str = "system", correlation_id: Optional[str] = None):
-        """Synchronous wrapper for add_entry - FIXED VERSION"""
+        """Synchronous wrapper for add_entry with proper audit chain"""
         # Don't do anything in test mode
         if os.environ.get('PYTEST_CURRENT_TEST'):
             return
     
-        # Don't create event loops - just log synchronously
-        entry = {
-            "timestamp": current_utc_iso(),
-            "event_type": event_type,
-            "details": details,
-            "agent_id": agent_id,
-            "correlation_id": correlation_id
-        }
+        # Implement proper audit chain with hash and signature
+        with AUDIT_LOCK:
+            previous_log_hash = _last_hashes.get(agent_id, "genesis_hash")
+            
+            entry = {
+                "timestamp": current_utc_iso(),
+                "event_type": event_type,
+                "details": {k: sanitize_log(str(v)) for k, v in details.items()},
+                "host": socket.gethostname(),
+                "agent_id": agent_id,
+                "correlation_id": correlation_id or str(uuid.uuid4()),
+                "previous_log_hash": previous_log_hash,
+            }
+            
+            # Compute entry hash
+            entry_hash = hash_entry(entry, self.hash_algo)
+            entry["hash"] = entry_hash
+            
+            # Sign entry if signers are available
+            if self.signers and CRYPTO_AVAILABLE:
+                signatures = []
+                for private_key in self.signers:
+                    try:
+                        sig = private_key.sign(
+                            entry_hash.encode('utf-8'),
+                            padding.PSS(
+                                mgf=padding.MGF1(hashes.SHA256()),
+                                salt_length=padding.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256()
+                        )
+                        signatures.append({
+                            "signature": base64.b64encode(sig).decode('utf-8'),
+                            "key_id": str(private_key.public_key().public_numbers().n)[:16],
+                            "status": "signed"
+                        })
+                    except Exception as e:
+                        logger.error(f"Failed to sign audit entry: {e}")
+                
+                if signatures:
+                    entry["signatures"] = signatures
+            
+            # Update last hash
+            _last_hashes[agent_id] = entry_hash
     
+        # Write to file
         try:
-            # Simple synchronous write
             with open(self.log_path, 'a') as f:
                 json.dump(entry, f)
                 f.write('\n')
         except Exception as e:
-            logger.debug(f"Could not write audit log: {e}")
+            logger.error(f"Could not write audit log: {e}")
 
 
     async def get_last_audit_hash(self, arbiter_id: str) -> str:
@@ -878,13 +935,13 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                             if entry.get('hash') != current_entry_hash:
                                 logger.error(f"Hash mismatch at entry {i}. Expected {current_entry_hash}, got {entry.get('hash')}.", extra=log_context)
                                 is_valid = False
-                                span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Hash mismatch"))
+                                span.set_status(Status(StatusCode.ERROR, description="Hash mismatch"))
                                 break
 
                             if entry.get("previous_log_hash") != last_hash_in_chain:
                                 logger.error(f"Chain broken at entry {i}. Prev hash mismatch. Expected '{last_hash_in_chain[:10]}', got '{entry.get('previous_log_hash', '')[:10]}'.", extra=log_context)
                                 is_valid = False
-                                span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Previous hash mismatch"))
+                                span.set_status(Status(StatusCode.ERROR, description="Previous hash mismatch"))
                                 break
 
                             if entry.get("signatures") and CRYPTO_AVAILABLE:
@@ -897,13 +954,13 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                     if key_id in REVOKED_KEYS:
                                         logger.error(f"Signature with revoked key {key_id} in entry {i}.", extra=log_context)
                                         is_valid = False
-                                        span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Revoked key"))
+                                        span.set_status(Status(StatusCode.ERROR, description="Revoked key"))
                                         break
                                     pub_key = PUBLIC_KEY_STORE.get(key_id)
                                     if not pub_key:
                                         logger.error(f"Public key {key_id} not found for entry {i}.", extra=log_context)
                                         is_valid = False
-                                        span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Missing public key"))
+                                        span.set_status(Status(StatusCode.ERROR, description="Missing public key"))
                                         break
                                     try:
                                         pub_key.verify(
@@ -914,7 +971,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                     except Exception as e:
                                         logger.error(f"Signature verification failed for entry {i}: {e}", exc_info=True, extra=log_context)
                                         is_valid = False
-                                        span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Invalid signature"))
+                                        span.set_status(Status(StatusCode.ERROR, description="Invalid signature"))
                                         break
                                 if not is_valid:
                                     break
@@ -923,7 +980,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                         except (json.JSONDecodeError, KeyError) as e:
                             logger.error(f"Corrupted data at entry {i}: {e}. Line: {line.strip()[:100]}...", extra=log_context)
                             is_valid = False
-                            span.set_status(TRACER.Status(TRACER.StatusCode.ERROR, description="Corrupted data"))
+                            span.set_status(Status(StatusCode.ERROR, description="Corrupted data"))
                             break
                         if not is_valid:
                             break
