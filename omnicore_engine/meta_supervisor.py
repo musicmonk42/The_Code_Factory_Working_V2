@@ -9,20 +9,20 @@ from aiolimiter import AsyncLimiter
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from omnicore_engine.metrics import get_plugin_metrics, get_test_metrics, API_REQUESTS, \
     plugin_execution_duration_seconds, plugin_errors_total # Import new metrics
-from app.omnicore_engine.plugin_registry import PLUGIN_REGISTRY # Corrected import path
-from app.config.legal_tender_settings import settings
-from app.audit import record_meta_audit_event
-from app.omnicore_engine.database import Database # Corrected import path, no get_recent_config_changes directly here
-# get_recent_config_changes should be a method of Database or an audit query
-# For now, will assume it's part of the audit system or a dedicated config manager
-from app.omnicore_engine.database import rollback_config # Corrected import path
-from app.test_all_engines import run_all_tests
-from app.omnicore_engine.array_backend import ArrayBackend # Corrected import path
-from app.ai_assistant.policy.policy_engine import PolicyEngine
-from app.ai_assistant.explainable_reasoner import ExplainableReasonerPlugin
-from app.ai_assistant.knowledge_graph import KnowledgeGraph
-# REMOVED: from app.multiverse_simulation_coordinator_ultra import MultiverseSimulationCoordinatorUltra
-# REMOVED: from app.ai_assistant.dream_mode import DreamModePlugin
+try:
+    from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+except ImportError:
+    PLUGIN_REGISTRY = None
+from arbiter.config import ArbiterConfig
+settings = ArbiterConfig()
+try:
+    from omnicore_engine.database.database import Database
+except ImportError:
+    Database = None
+try:
+    from omnicore_engine.array_backend import ArrayBackend
+except ImportError:
+    ArrayBackend = None
 from redis.asyncio import redis, RedisError
 
 logger = logging.getLogger("MetaSupervisor")
@@ -1339,12 +1339,29 @@ if __name__ == "__main__":
 
             # Dummy implementations for core dependencies needed by MetaSupervisor.
             # In a real setup, these would be proper instances.
-            from app.omnicore_engine.database import Database as DummyDatabase
-            from app.audit import ExplainAudit as DummyExplainAudit
-            from app.utils.merkle_tree import MerkleTree as DummyMerkleTree
-            from app.omnicore_engine.plugin_registry import PLUGIN_REGISTRY as DummyPluginRegistry
-            from app.omnicore_engine.plugin_registry import PluginMeta, PlugInKind
-            from app.omnicore_engine.array_backend import ArrayBackend as DummyArrayBackend
+            try:
+                from omnicore_engine.database.database import Database as DummyDatabase
+            except ImportError:
+                DummyDatabase = None
+            try:
+                from omnicore_engine.audit import ExplainAudit as DummyExplainAudit
+            except ImportError:
+                DummyExplainAudit = None
+            try:
+                from omnicore_engine.merkle_tree import MerkleTree as DummyMerkleTree
+            except ImportError:
+                DummyMerkleTree = None
+            try:
+                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as DummyPluginRegistry
+                from omnicore_engine.plugin_registry import PluginMeta, PlugInKind
+            except ImportError:
+                DummyPluginRegistry = None
+                PluginMeta = None
+                PlugInKind = None
+            try:
+                from omnicore_engine.array_backend import ArrayBackend as DummyArrayBackend
+            except ImportError:
+                DummyArrayBackend = None
             from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
             from sqlalchemy.ext.declarative import declarative_base
             from sqlalchemy import text # Import text for raw SQL

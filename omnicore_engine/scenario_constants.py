@@ -5,7 +5,10 @@ import logging
 from multiprocessing import Lock as ProcessSafeLock # To avoid name collision with standard Lock
 
 if TYPE_CHECKING:
-    from app.metrics import Counter # This import is for type checking only
+    try:
+        from omnicore_engine.metrics import Counter
+    except ImportError:
+        Counter = None
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -72,7 +75,12 @@ class TrackedDict(Mapping):
 
     def __getitem__(self, key: str) -> Any:
         # Delayed import to avoid circular dependency and ensure metrics are initialized
-        from app.metrics import get_or_create_counter
+        try:
+            from omnicore_engine.metrics import get_or_create_counter
+        except ImportError:
+            # If metrics module is not available, just return the data without tracking
+            return self._data[key]
+        
         with self._lock:  # Ensure process-safe Counter initialization
             if self._is_metrics:
                 if self._metrics_counter is None:

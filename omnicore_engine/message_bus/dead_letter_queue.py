@@ -22,14 +22,9 @@ from .resilience import CircuitBreaker
 
 # External project imports
 from omnicore_engine.core import safe_serialize
-# --- FIX 1: Corrected import path for Database ---
-from omnicore_engine.database import Database
-# --- FIX 2: Corrected import path for settings ---
+from omnicore_engine.database.database import Database
 from arbiter.config import ArbiterConfig
 settings = ArbiterConfig()
-from omnicore_engine.utils import safe_serialize
-from app.omnicore_engine.database import Database
-from app.config.legal_tender_settings import settings
 
 if TYPE_CHECKING:
     from .sharded_message_bus import ShardedMessageBus

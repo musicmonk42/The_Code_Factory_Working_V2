@@ -43,13 +43,18 @@ from fastapi_csrf_protect.exceptions import CsrfProtectError
 
 # Corrected imports to use the centralized OmniCore Engine singletons
 from omnicore_engine.core import logger, safe_serialize, omnicore_engine, settings
-from omnicore_engine.database import Database
+from omnicore_engine.database.database import Database
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PluginMeta, PlugInKind, PluginMarketplace
 from omnicore_engine.meta_supervisor import MetaSupervisor
-from omnicore_engine.config.legal_tender_settings import settings as ArbiterConfig
-from simulations.simulation_module import UnifiedSimulationModule
-from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
+try:
+    from simulations.simulation_module import UnifiedSimulationModule
+except ImportError:
+    UnifiedSimulationModule = None
+try:
+    from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
+except ImportError:
+    AIManager = None
 from omnicore_engine.message_bus.message_types import Message
 from omnicore_engine.metrics import API_REQUESTS, API_ERRORS
 

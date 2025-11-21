@@ -118,8 +118,6 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
         "gossip": "arbiter.plugins.gossip_plugin",
         "chat": "arbiter.plugins.chat_plugin",
         "craft": "arbiter.plugins.craft_plugin",
-        # Domain-specific/autonomous plugins
-        "legal_tender_explorer": "arbiter.legal_tender_explorer.LegalTenderAutonomousExplorer",
         # Universal package manager (future development)
         # "universal_manager": "arbiter.upm.plugin.UniversalManagerPlugin",
         # Semantic code refactoring (future development)
