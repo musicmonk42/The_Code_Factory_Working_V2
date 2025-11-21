@@ -850,9 +850,9 @@ def refresh_session_proxy(sid: str) -> Session:
 
 
 # Public names (proxy to singleton)
-sanitize_html = sanitize_html
-hash_password = hash_password
-verify_password = verify_password
+sanitize_html = sanitize_html_proxy
+hash_password = hash_password_proxy
+verify_password = verify_password_proxy
 generate_token = generate_token
 verify_token = verify_token
 encrypt = encrypt

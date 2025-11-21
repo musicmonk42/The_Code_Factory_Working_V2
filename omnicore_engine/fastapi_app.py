@@ -136,7 +136,7 @@ system_audit_merkle_tree: MerkleTree = None
 app = FastAPI(
     title="OmniCore Omega Pro Engine API",
     description="Universal orchestration engine with audit and AI integration",
-    version=settings.LOG_LEVEL,
+    version="1.0.0",
     docs_url=None,
     redoc_url=None
 )

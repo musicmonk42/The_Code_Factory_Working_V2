@@ -16,6 +16,7 @@ import ssl
 import os
 import logging
 import json
+import ipaddress
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -199,11 +200,22 @@ class FirewallRules:
         if not self.allowed_ip_ranges:
             return True
         
-        # Check against allowed IP ranges
-        # Note: This is a simplified check. In production, use ipaddress module
-        for allowed_range in self.allowed_ip_ranges:
-            if allowed_range == "0.0.0.0/0":  # Allow all
-                return True
+        # Check against allowed IP ranges using ipaddress module
+        try:
+            ip = ipaddress.ip_address(ip_address)
+            for allowed_range in self.allowed_ip_ranges:
+                if allowed_range == "0.0.0.0/0":  # Allow all
+                    return True
+                try:
+                    network = ipaddress.ip_network(allowed_range, strict=False)
+                    if ip in network:
+                        return True
+                except ValueError:
+                    logger.warning(f"Invalid IP range: {allowed_range}")
+                    continue
+        except ValueError:
+            logger.warning(f"Invalid IP address: {ip_address}")
+            return False
         
         return False
 

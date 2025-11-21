@@ -26,23 +26,23 @@ def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):
         Decorated function with retry logic
     """
     def decorator(func):
-        @wraps(func)
         @tenacity_retry(
             stop=stop_after_attempt(tries),
             wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** tries)),
             retry=retry_if_exception_type(exceptions),
             reraise=True
         )
+        @wraps(func)
         async def async_wrapper(*args, **kwargs):
             return await func(*args, **kwargs)
         
-        @wraps(func)
         @tenacity_retry(
             stop=stop_after_attempt(tries),
             wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** tries)),
             retry=retry_if_exception_type(exceptions),
             reraise=True
         )
+        @wraps(func)
         def sync_wrapper(*args, **kwargs):
             return func(*args, **kwargs)
         

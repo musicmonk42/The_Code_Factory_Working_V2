@@ -240,19 +240,6 @@ def validate_array_size(shape):
     if total_elements > MAX_ARRAY_SIZE:
         raise ValueError(f"Array too large: {total_elements} elements")
 
-def sanitize_array_input(data: Any) -> xp.ndarray:
-    """
-    Sanitizes and validates array input data to prevent security vulnerabilities.
-    """
-    if not isinstance(data, (list, tuple, xp.ndarray, int, float)):
-        raise TypeError("Invalid array input type. Must be a list, tuple, number or array.")
-    
-    # Convert and validate
-    arr = xp.asarray(data)
-    total_elements = np.prod(shape)
-    if total_elements > MAX_ARRAY_SIZE:
-        raise ValueError(f"Array too large: {total_elements} elements")
-
 def sanitize_array_input(data: Any) -> np.ndarray:
     """
     Sanitizes and validates array input data to prevent security vulnerabilities.
@@ -1424,15 +1411,12 @@ class ArrayBackend:
         if self.enable_benchmarking:
             # FIX: Call a non-recursive operation for benchmarking
             self.benchmarker.run_benchmark(self.xp, "sum_operation", lambda: self.xp.sum(self.xp.random.rand(100,100), axis=0))
-        
-            self.benchmarker.run_benchmark(self.xp, "sum_operation", lambda: self.sum(self.array(np.random.rand(100,100)), axis=0))
 
         if hasattr(self.xp, "sum"):
             if self.mode == "torch" and TORCH_AVAILABLE:
                 return self.xp.sum(a, dim=axis) if axis is not None else self.xp.sum(a)
             return self.xp.sum(a, axis=axis)
         
-        logger.warning(f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
         self.logger.warning(f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
         return self.asnumpy(a).sum(axis=axis)
 

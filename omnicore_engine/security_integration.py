@@ -45,7 +45,7 @@ from sqlalchemy.sql import text
 from pydantic import BaseModel, Field, validator, EmailStr
 
 # Security imports
-from security_config import get_security_config, EnterpriseSecurityConfig, SecurityLevel
+from omnicore_engine.security_config import get_security_config, EnterpriseSecurityConfig, SecurityLevel
 from omnicore_engine.security_utils import (
     get_security_utils, EnterpriseSecurityUtils,
     SecurityException, AuthenticationError, AuthorizationError,
@@ -167,7 +167,7 @@ class SecurityIntegrationManager:
             message_bus: Message bus instance
         """
         self.config = config or get_security_config()
-        self.security_utils = get_security_utils(self.config.dict())
+        self.security_utils = get_security_utils()
         self.db = db
         self.audit = audit
         self.message_bus = message_bus

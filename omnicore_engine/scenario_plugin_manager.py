@@ -14,7 +14,10 @@ from cryptography.fernet import Fernet
 from arbiter.config import ArbiterConfig
 
 # Import the plugins file to ensure plugins are registered at startup
-import self_fixing_engineer.test_generation.gen_plugins
+try:
+    import self_fixing_engineer.test_generation.gen_plugins
+except ImportError:
+    logging.warning("self_fixing_engineer.test_generation.gen_plugins module not found. Some plugins may not be available.")
 
 logger = logging.getLogger(__name__)
 
