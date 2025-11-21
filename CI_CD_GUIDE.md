@@ -398,7 +398,15 @@ test-generator:
 - Update dependencies if needed
 - Add exceptions if truly false positive
 
-**4. Deployment failures**
+**4. CodeQL/Code Scanning configuration errors**
+- Error: "Code scanning is not enabled for this repository"
+  - Solution: Enable Code Scanning in repository Settings → Security & analysis
+  - Note: The workflow will continue without errors even if disabled (uses `continue-on-error`)
+- Error: "No url found for submodule path"
+  - Solution: Remove broken submodule entries with `git rm --cached <submodule_path>`
+  - Or add valid URL to `.gitmodules` file if submodule is needed
+
+**5. Deployment failures**
 - Verify secrets are configured
 - Check target environment health
 - Review deployment logs
