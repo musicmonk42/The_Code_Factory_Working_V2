@@ -1222,26 +1222,46 @@ class Arbiter:
         """
         plugin_name = "generate_tests"
         
-        # Fixed: The original code referenced PlugInKind.EXECUTION which doesn't exist.
-        # PLUGIN_REGISTRY is actually a registry object with a get_plugin method, not a nested dict.
-        # We should use an appropriate PlugInKind or directly call the test generation functionality.
-        # For now, we'll use the CORE_SERVICE kind as a reasonable alternative.
+        plugin_instance = None
+        # Try a comprehensive lookup across known kinds to avoid false negatives
         try:
-            plugin_instance = PLUGIN_REGISTRY.get_plugin(PlugInKind.CORE_SERVICE, plugin_name)
-        except (AttributeError, KeyError):
-            # Fallback: If get_plugin doesn't exist or fails, try direct registry access
+            # Get all available PlugInKind enum members
+            possible_kinds = list(PlugInKind.__members__.values())
+            for kind in possible_kinds:
+                try:
+                    candidate = PLUGIN_REGISTRY.get_plugin(kind, plugin_name)
+                    if candidate:
+                        plugin_instance = candidate
+                        break
+                except Exception:
+                    # Continue trying other kinds
+                    continue
+        except Exception:
             plugin_instance = None
         
         if not plugin_instance:
             logging.getLogger(__name__).error(f"Test generation plugin '{plugin_name}' not found in registry.")
             return {"status": "error", "error": f"Test generation plugin '{plugin_name}' not found."}
 
+        # Validate minimal interface before invoking
+        if not (hasattr(plugin_instance, "execute") or callable(plugin_instance)):
+            logging.getLogger(__name__).error("Found plugin lacks required callable interface.")
+            return {"status": "error", "error": "Test generation plugin interface invalid."}
+
         try:
             async with asyncio.timeout(self.settings.AI_API_TIMEOUT):
                 start_time = time.time()
-                result = await plugin_instance(code=code, language=language, config=config or {})
+                payload = {"code": code, "language": language, "config": config or {}}
+                if hasattr(plugin_instance, "execute"):
+                    result = await plugin_instance.execute(**payload)
+                else:
+                    # Callable plugin
+                    if asyncio.iscoroutinefunction(plugin_instance):
+                        result = await plugin_instance(**payload)
+                    else:
+                        result = plugin_instance(**payload)
                 plugin_execution_time.labels(plugin="generate_tests").observe(time.time() - start_time)
-            return result
+            return result if isinstance(result, dict) else {"status": "ok", "result": result}
         except asyncio.TimeoutError:
             logging.getLogger(__name__).error(f"In-process test generation timed out.")
             return {"status": "error", "error": "In-process plugin call timed out."}

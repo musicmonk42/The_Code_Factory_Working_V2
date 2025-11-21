@@ -84,8 +84,11 @@ except ImportError:
             visited = set()
             queue = [(start_node, [start_node])]
             
-            while queue and len(visited) < max_depth:
+            while queue:
                 current, path = queue.pop(0)
+                # Check path depth, not visited count
+                if len(path) > max_depth:
+                    continue
                 if current in visited:
                     continue
                     

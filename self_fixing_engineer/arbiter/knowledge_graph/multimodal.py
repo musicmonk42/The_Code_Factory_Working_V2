@@ -3,6 +3,8 @@ import datetime
 import base64
 import hashlib
 import asyncio
+import tempfile
+import os
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import logging
@@ -109,10 +111,38 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
                 self._logger.warning(f"Failed to initialize Redis client: {e}. Proceeding without cache.")
                 self.redis_client = None
 
-        # Initialize transformers pipelines if available
-        self.image_captioner = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base") if self._transformers_available else None
-        self.audio_transcriber = pipeline("automatic-speech-recognition", model="openai/whisper-tiny") if self._transformers_available else None
-        self.text_summarizer = pipeline("summarization", model="facebook/bart-large-cnn") if self._transformers_available else None
+        # Initialize transformers pipelines if available (lazy-loaded to avoid blocking)
+        # These will be initialized on first use to prevent blocking during __init__
+        self.image_captioner = None
+        self.audio_transcriber = None
+        self.text_summarizer = None
+        self._models_initialized = False
+
+    async def _ensure_models_initialized(self):
+        """Lazy-load transformer models on first use to avoid blocking during __init__."""
+        if self._models_initialized or not self._transformers_available:
+            return
+        
+        try:
+            # Run model initialization in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            self.image_captioner = await loop.run_in_executor(
+                None, 
+                lambda: pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
+            )
+            self.audio_transcriber = await loop.run_in_executor(
+                None,
+                lambda: pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
+            )
+            self.text_summarizer = await loop.run_in_executor(
+                None,
+                lambda: pipeline("summarization", model="facebook/bart-large-cnn")
+            )
+            self._models_initialized = True
+            self._logger.info("Transformer models initialized successfully.")
+        except Exception as e:
+            self._logger.warning(f"Failed to initialize transformer models: {e}. Proceeding without them.")
+            self._models_initialized = True  # Mark as attempted to avoid retrying
 
     async def summarize(self, item: MultiModalData) -> Dict[str, Any]:
         """
@@ -124,6 +154,8 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
         Returns:
             A dictionary containing the processing status and summary.
         """
+        # Ensure models are loaded before processing
+        await self._ensure_models_initialized()
         self._logger.debug(f"Starting to summarize multi-modal item: {item.data_type} with size {len(item.data)} bytes. Trace ID: {trace_id_var.get()}")
         
         data_hash = hashlib.sha256(item.data).hexdigest()
@@ -244,8 +276,15 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
                 self._logger.warning(f"Failed to log audit event: {e}")
             return {"status": "skipped", "summary": "Video processing not available.", "data_hash": data_hash}
         
+        # VideoFileClip expects a file path, not a BytesIO object
+        # Write to a temporary file first
+        temp_file_path = None  # Initialize to None; only set after file is created
         try:
-            with VideoFileClip(io.BytesIO(item.data)) as clip:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+                temp_file.write(item.data)
+                temp_file_path = temp_file.name  # Only set if write succeeds
+            
+            with VideoFileClip(temp_file_path) as clip:
                 duration = clip.duration
                 summary = f"Video: {duration:.2f} seconds."
                 
@@ -257,6 +296,13 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
             return {"status": "success", "summary": summary, "data_hash": data_hash}
         except Exception as e:
             return {"status": "failed", "summary": f"Failed to process video: {e}", "data_hash": data_hash}
+        finally:
+            # Clean up temporary file
+            if temp_file_path is not None:
+                try:
+                    os.unlink(temp_file_path)
+                except Exception:
+                    pass
 
     async def _process_text_file(self, item: MultiModalData) -> Dict[str, Any]:
         data_hash = hashlib.sha256(item.data).hexdigest()

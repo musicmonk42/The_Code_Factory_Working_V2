@@ -18,26 +18,17 @@ from contextlib import asynccontextmanager
 if sys.version_info >= (3, 11):
     from asyncio import timeout as async_timeout
 else:
-    # Fallback for Python < 3.11
+    # Provide a fallback that raises error only when used
+    from contextlib import asynccontextmanager
+    
     @asynccontextmanager
     async def async_timeout(seconds):
-        """Compatibility wrapper for asyncio.timeout in Python < 3.11"""
-        loop = asyncio.get_event_loop()
-        deadline = loop.time() + seconds
-        
-        async def _timeout_handler():
-            await asyncio.sleep(seconds)
-            raise asyncio.TimeoutError()
-        
-        timeout_task = asyncio.create_task(_timeout_handler())
-        try:
-            yield
-        finally:
-            timeout_task.cancel()
-            try:
-                await timeout_task
-            except asyncio.CancelledError:
-                pass
+        """Fallback that raises error when timeout is used with Python < 3.11"""
+        raise RuntimeError(
+            "asyncio.timeout is not available in Python < 3.11. "
+            "Please upgrade to Python 3.11 or higher."
+        )
+        yield  # pragma: no cover (unreachable)
 
 # Langchain imports
 from langchain.memory import ConversationBufferWindowMemory
@@ -280,14 +271,16 @@ class InMemoryStateBackend(StateBackend):
             try:
                 async with self._lock:
                     data = self._store.get(session_id)
-                if data:
-                    AGENT_METRICS["state_backend_operations_total"].labels(operation="load", backend_type="inmemory").inc()
-                    AGENT_METRICS["state_backend_latency_seconds"].labels(operation="load", backend_type="inmemory").observe(time.monotonic() - start_time)
-                    logger.debug(f"Loaded state for session {session_id} from InMemory. Trace ID: {trace_id_var.get()}")
-                    return data
-                else:
-                    logger.info(f"No state found for session {session_id} in InMemory. Trace ID: {trace_id_var.get()}")
-                    return None
+                    if data:
+                        AGENT_METRICS["state_backend_operations_total"].labels(operation="load", backend_type="inmemory").inc()
+                        AGENT_METRICS["state_backend_latency_seconds"].labels(operation="load", backend_type="inmemory").observe(time.monotonic() - start_time)
+                        logger.debug(f"Loaded state for session {session_id} from InMemory. Trace ID: {trace_id_var.get()}")
+                        # Return a deep copy to prevent race conditions after lock release
+                        import copy
+                        return copy.deepcopy(data)
+                    else:
+                        logger.info(f"No state found for session {session_id} in InMemory. Trace ID: {trace_id_var.get()}")
+                        return None
             except Exception as e:
                 AGENT_METRICS["state_backend_errors_total"].labels(operation="load", backend_type="inmemory", error_code="inmemory_load_failed").inc()
                 span.record_exception(e)
@@ -604,15 +597,20 @@ class CollaborativeAgent:
         # Caching check
         cache_key = f"predict:{hashlib.sha256(user_input.encode('utf-8')).hexdigest()}"
         cached_result = None
+        redis_client = None  # Initialize to avoid undefined variable errors
         if Config.REDIS_URL and RedisClient:
             try:
                 redis_client = RedisClient(Config.REDIS_URL)
+                # Connect to Redis asynchronously if needed
+                if hasattr(redis_client, 'connect') and asyncio.iscoroutinefunction(redis_client.connect):
+                    await redis_client.connect()
                 cached_result = await redis_client.get(cache_key)
                 if cached_result:
                     logger.info(f"Cache hit for input. Session: {self.session_id}. Trace ID: {current_trace_id}")
                     return json.loads(cached_result)
             except Exception as e:
                 logger.warning(f"Failed to check Redis cache: {e}. Trace ID: {current_trace_id}")
+                redis_client = None  # Reset on error
         
         try:
             async with async_timeout(timeout):
@@ -732,7 +730,7 @@ class CollaborativeAgent:
                 )
                 
                 # Cache result
-                if Config.REDIS_URL and RedisClient:
+                if Config.REDIS_URL and RedisClient and redis_client is not None:
                     try:
                         await redis_client.setex(cache_key, Config.CACHE_EXPIRATION_SECONDS, json.dumps(result))
                         logger.debug(f"Result cached for key: {cache_key}. Trace ID: {current_trace_id}")

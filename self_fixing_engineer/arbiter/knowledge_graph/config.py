@@ -87,14 +87,14 @@ class MetaLearningConfig(BaseSettings):
     )
 
     # Data Lake Configuration
-    DATA_LAKE_PATH: FilePath = Field(default="data/meta_learning_data.jsonl", description="Local file path for data lake fallback.")
+    DATA_LAKE_PATH: str = Field(default="data/meta_learning_data.jsonl", description="Local file path for data lake fallback.")
     DATA_LAKE_S3_BUCKET: str = Field(default="my-meta-learning-data-bucket", description="S3 bucket name for data lake.")
     DATA_LAKE_S3_PREFIX: str = Field(default="meta_learning/records/", description="S3 prefix for data lake objects.")
     USE_S3_DATA_LAKE: bool = Field(default=False, description="Enable S3 as data lake.")
 
     # Audit Log Configuration
     AUDIT_LEDGER_URL: AnyUrl = Field(default="http://localhost:8000/audit_ledger", description="URL for the audit ledger service.")
-    LOCAL_AUDIT_LOG_PATH: FilePath = Field(default="data/meta_learning_audit.jsonl", description="Local file path for audit log fallback.")
+    LOCAL_AUDIT_LOG_PATH: str = Field(default="data/meta_learning_audit.jsonl", description="Local file path for audit log fallback.")
     AUDIT_ENCRYPTION_KEY: Optional[SensitiveValue] = Field(default=None, description="Fernet encryption key for audit logs.")
     AUDIT_SIGNING_PRIVATE_KEY: Optional[SensitiveValue] = Field(default=None, description="ECDSA private key for signing audit logs (PEM format).")
     AUDIT_SIGNING_PUBLIC_KEY: Optional[SensitiveValue] = Field(default=None, description="ECDSA public key for verifying audit logs (PEM format).")
@@ -161,13 +161,13 @@ class MetaLearningConfig(BaseSettings):
     # Dynamic Configuration Reloading
     CONFIG_RELOAD_INTERVAL_SECONDS: int = Field(default=300, ge=0, description="Interval to check for config reloads (e.g., from Etcd). Set to 0 to disable.")
     CONFIG_SOURCE: str = Field(default="env", description="Source for dynamic configuration (e.g., 'env', 'file', 'etcd').")
-    CONFIG_FILE_PATH: Optional[FilePath] = Field(default=None, description="Path to a configuration file if CONFIG_SOURCE is 'file'.")
+    CONFIG_FILE_PATH: Optional[str] = Field(default=None, description="Path to a configuration file if CONFIG_SOURCE is 'file'.")
     ETCD_HOST: Optional[str] = Field(default=None, description="Etcd host for dynamic configuration.")
     ETCD_PORT: Optional[int] = Field(default=2379, description="Etcd port for dynamic configuration.")
     ETCD_PREFIX: Optional[str] = Field(default="/config/meta-learning", description="Etcd prefix for configuration keys.")
 
-    @field_validator("DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", mode="before")
-    def validate_file_paths(cls, v):
+    @field_validator("DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before")
+    def validate_file_paths(cls, v, info: ValidationInfo):
         """Ensures that file paths are valid and their parent directories exist."""
         if v:
             path = Path(v)
@@ -175,12 +175,14 @@ class MetaLearningConfig(BaseSettings):
                 parent_dir = path.parent
                 if parent_dir and not parent_dir.exists():
                     parent_dir.mkdir(parents=True, exist_ok=True)
-                # Create empty file if it doesn't exist
-                if not path.exists():
+                # Create empty file if it doesn't exist, but skip for CONFIG_FILE_PATH
+                # since it's optional and may not need to be created
+                field_name = info.field_name if info else None
+                if not path.exists() and field_name != 'CONFIG_FILE_PATH':
                     path.touch()
             except Exception as e:
                 raise ValueError(f"Invalid file path or cannot create directory/file for {v}: {e}")
-            return path  # Return the Path object
+            return str(path)  # Return as string since we changed the type
         return v
 
     @field_validator("AUDIT_ENCRYPTION_KEY", "AUDIT_SIGNING_PRIVATE_KEY", "AUDIT_SIGNING_PUBLIC_KEY", mode="before")

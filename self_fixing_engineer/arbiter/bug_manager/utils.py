@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional, Union, Callable, Coroutine, List, get_or
 from collections import deque
 
 from prometheus_client import Counter, REGISTRY
+from ..models.common import Severity
 
 # Configure logging for metric debugging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -381,20 +382,3 @@ class MLRemediationError(BugManagerError):
     def __init__(self, message: str, model_endpoint: Optional[str] = None, **kwargs: Any):
         super().__init__(message, **kwargs)
         self.model_endpoint = model_endpoint
-
-class Severity(enum.Enum):
-    """Enumeration for bug severity levels."""
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    INFO = "info"
-
-    @classmethod
-    def from_string(cls, s: str) -> 'Severity':
-        """Converts a string to a Severity enum member."""
-        try:
-            return cls[s.upper()]
-        except KeyError:
-            logger.warning(f"Invalid severity string '{s}', defaulting to MEDIUM.")
-            return cls.MEDIUM
