@@ -14,7 +14,7 @@ try:
         CrewManager,
         CrewAgentBase,
         ResourceError,
-        PermissionError,
+        CrewPermissionError,
         AgentError,
         structured_log,
         sanitize_dict,
@@ -26,7 +26,7 @@ try:
         'CrewManager',
         'CrewAgentBase',
         'ResourceError',
-        'PermissionError',
+        'CrewPermissionError',
         'AgentError',
         'structured_log',
         'sanitize_dict',
@@ -41,7 +41,7 @@ except ImportError as e:
     CrewManager = None
     CrewAgentBase = None
     ResourceError = Exception
-    PermissionError = Exception
+    CrewPermissionError = Exception
     AgentError = Exception
     
     __all__ = []

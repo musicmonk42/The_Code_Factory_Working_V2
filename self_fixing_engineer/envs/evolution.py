@@ -297,9 +297,31 @@ class FitnessEvaluator:
     
         # Use actual config space if available
         if hasattr(self, 'config_space') and self.config_space:
+            # Validate individual length before mapping
+            expected_gene_count = len(self.config_space.parameters)
+            if len(individual) < expected_gene_count:
+                logger.warning(
+                    f"Individual has {len(individual)} genes but expected {expected_gene_count}. "
+                    f"Using defaults for missing parameters."
+                )
+            
             for param_name, param_info in self.config_space.parameters.items():
                 if gene_idx >= len(individual):
-                    break
+                    # Use default value or midpoint for missing genes
+                    min_val = param_info["min"]
+                    max_val = param_info["max"]
+                    param_type = param_info["type"]
+                    
+                    if param_type == "int":
+                        config[param_name] = int((min_val + max_val) / 2)
+                    elif param_type == "bool":
+                        config[param_name] = True
+                    else:  # float
+                        config[param_name] = (min_val + max_val) / 2.0
+                    
+                    logger.warning(f"Using default value for missing gene: {param_name}")
+                    gene_idx += 1
+                    continue
                 
                 gene = np.clip(individual[gene_idx], 0.0, 1.0)
                 min_val = param_info["min"]
@@ -613,6 +635,23 @@ class GeneticOptimizer:
         self.evolution_history = checkpoint["evolution_history"]
         
         logger.info(f"Checkpoint loaded from {filepath}")
+    
+    def __del__(self):
+        """Clean up DEAP creator classes to prevent memory leaks"""
+        try:
+            # Remove creator classes to prevent memory leaks
+            if hasattr(self, '_creator_id'):
+                fitness_name = f"FitnessMax_{self._creator_id}"
+                individual_name = f"Individual_{self._creator_id}"
+                
+                # Remove from creator if they exist
+                if hasattr(creator, fitness_name):
+                    delattr(creator, fitness_name)
+                if hasattr(creator, individual_name):
+                    delattr(creator, individual_name)
+        except Exception as e:
+            # Don't raise exceptions in __del__
+            logger.debug(f"Error cleaning up DEAP creator classes: {e}")
 
 
 def evolve_configs(configs):

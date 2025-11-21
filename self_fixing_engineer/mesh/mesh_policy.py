@@ -461,7 +461,7 @@ class MeshPolicyBackend:
             breaker = breakers[self.backend_type].breaker
             
             # Check if circuit breaker is open
-            if breaker.current_state == 'open':
+            if breaker.state == 'open':
                 raise CircuitBreakerError("Circuit breaker open.")
             
             # Perform the actual save operation
@@ -525,7 +525,7 @@ class MeshPolicyBackend:
         breaker = None
         if CircuitBreaker and self.backend_type in breakers:
             breaker = breakers[self.backend_type].get_or_create_breaker()
-            if breaker and breaker.current_state != 'closed':
+            if breaker and breaker.state != 'closed':
                 raise CircuitBreakerError("Circuit breaker open.")
 
         async def _do_load():

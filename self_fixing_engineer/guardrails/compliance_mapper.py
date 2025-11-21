@@ -19,11 +19,21 @@ try:
     from prometheus_client import Counter, Gauge
     # Use a specific, unique prefix to prevent conflicts in multi-service deployments
     METRIC_PREFIX = "self_healing_"
-    if 'self_healing_compliance_block_total' not in locals():
+    
+    # Use try-except to prevent duplicate metric registration errors
+    try:
         self_healing_compliance_block_total = Counter(f'{METRIC_PREFIX}compliance_block_total', 'Total number of actions blocked by compliance enforcement')
         self_healing_compliance_gap_alerts_total = Counter(f'{METRIC_PREFIX}compliance_gap_alerts_total', 'Total number of compliance gap alerts triggered')
         self_healing_compliance_required_controls_not_enforced = Gauge(f'{METRIC_PREFIX}compliance_required_controls_not_enforced', 'Number of required compliance controls not enforced', ['control_id'])
         self_healing_config_load_failures = Counter(f'{METRIC_PREFIX}config_load_failures', 'Total number of config load failures')
+    except ValueError as e:
+        # Metrics already registered, retrieve them
+        from prometheus_client import REGISTRY
+        self_healing_compliance_block_total = REGISTRY._collector_to_names.get(f'{METRIC_PREFIX}compliance_block_total')
+        self_healing_compliance_gap_alerts_total = REGISTRY._collector_to_names.get(f'{METRIC_PREFIX}compliance_gap_alerts_total')
+        self_healing_compliance_required_controls_not_enforced = REGISTRY._collector_to_names.get(f'{METRIC_PREFIX}compliance_required_controls_not_enforced')
+        self_healing_config_load_failures = REGISTRY._collector_to_names.get(f'{METRIC_PREFIX}config_load_failures')
+    
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     print("Prometheus client not installed. Metrics will not be exported.")
@@ -331,8 +341,8 @@ def main_cli():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument('--health-check', action='store_true', help='Run health check and output status.')
-    # P1: Config Path - Remove CLI argument and use ENV only
-    args = parser.parse_args([]) # Pass an empty list to avoid parsing sys.argv
+    # Parse actual command-line arguments
+    args = parser.parse_args()
 
     config_path_to_use = os.environ.get("CREW_CONFIG_PATH", DEFAULT_CREW_CONFIG_PATH)
 
@@ -360,7 +370,7 @@ def main_cli():
         # P1: CLI Hardening - Exit codes
         if not all_enforced:
             logger.error("CLI: Exiting with non-zero status due to compliance gaps in required controls.")
-            exit(1)
+            sys.exit(1)
 
     except PermissionError as e:
         logger.critical(f"CLI Critical Error (Permission): {e}")

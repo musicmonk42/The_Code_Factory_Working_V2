@@ -334,6 +334,14 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
         async def wrapper(*args, **kwargs):
             # Check circuit breaker BEFORE tenacity retry wrapper
             if BREAKER:
+                # Check circuit state before calling
+                if BREAKER.state == 'open':
+                    raise CheckpointBackendError(
+                        "Circuit breaker is open",
+                        context={"function": func.__name__},
+                        error_code=CheckpointErrorCode.CIRCUIT_OPEN
+                    )
+                
                 try:
                     # Create the tenacity-wrapped function
                     @retry(
@@ -342,21 +350,30 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
                         retry_error_cls=CheckpointRetryableError
                     )
                     async def retryable_func(*inner_args, **inner_kwargs):
-                        return await func(*inner_args, **inner_kwargs)
+                        try:
+                            result = await func(*inner_args, **inner_kwargs)
+                            # Record success
+                            BREAKER.call(lambda: None)
+                            return result
+                        except Exception as e:
+                            # Record failure
+                            try:
+                                BREAKER.call(lambda: (_ for _ in ()).throw(e))
+                            except:
+                                pass
+                            raise
                     
-                    # Call through circuit breaker
-                    return await BREAKER.call_async(retryable_func, *args, **kwargs)
+                    return await retryable_func(*args, **kwargs)
                 except Exception as e:
-                    # Check if this is a circuit breaker error
-                    # PyBreaker raises CircuitBreakerError when open
-                    if PYBREAKER_AVAILABLE and CircuitBreakerError and isinstance(e, CircuitBreakerError):
+                    if BREAKER.state == 'open':
                         raise CheckpointBackendError(
                             "Circuit breaker is open",
                             context={"function": func.__name__},
                             error_code=CheckpointErrorCode.CIRCUIT_OPEN
                         ) from e
-                    # Also check string for compatibility
-                    elif "Circuit open" in str(e):
+                    # Check if this is a circuit breaker error
+                    # PyBreaker raises CircuitBreakerError when open
+                    if PYBREAKER_AVAILABLE and CircuitBreakerError and isinstance(e, CircuitBreakerError):
                         raise CheckpointBackendError(
                             "Circuit breaker is open",
                             context={"function": func.__name__},
