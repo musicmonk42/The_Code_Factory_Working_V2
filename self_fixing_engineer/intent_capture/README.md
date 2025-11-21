@@ -9,7 +9,7 @@ Transform requirements into reality with Intent Agent’s intelligent orchestrat
 
 > **Note:** This technology is proprietary and not open-sourced. All rights reserved by Novatrax Labs LLC  
 > Unauthorized use, distribution, or reverse engineering is strictly prohibited.  
-> For licensing inquiries, contact [licensing@unexpectedinnovations.com](mailto:licensing@unexpectedinnovations.com).
+> For licensing inquiries, contact [licensing@novatraxlabs.com](mailto:licensing@novatraxlabs.com).
 
 ---
 
@@ -352,7 +352,7 @@ _For logs: `tail -f cli.log | jq`_
 
 ## Contribution Guidelines
 
-- **Contributions require NDA.** Contact [contrib@unexpectedinnovations.com](mailto:contrib@unexpectedinnovations.com)
+- **Contributions require NDA.** Contact [contrib@novatraxlabs.com](mailto:contrib@novatraxlabs.com)
 - **Style:** PEP8, Ruff/Black
 - **Tests:** 100% coverage for new code
 - **Docs:** Update Sphinx, commit examples
@@ -387,6 +387,6 @@ Intent Agent and Self-Fixing Engineer™ are proprietary technologies.
 
 Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited.
 
-For commercial licensing or evaluation, contact [commercial@unexpectedinnovations.com](mailto:commercial@unexpectedinnovations.com).
+For commercial licensing or evaluation, contact [commercial@novatraxlabs.com](mailto:commercial@novatraxlabs.com).
 
 _Capture intent with precision using Intent Agent’s AI-driven orchestration._
