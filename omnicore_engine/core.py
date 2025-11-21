@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from typing import Any, Dict, Optional, List, Type, Set
+from typing import Any, Dict, Optional, List, Type, Set, Union
 from abc import ABC, abstractmethod
 import json
 import hashlib
@@ -199,7 +199,7 @@ class MerkleTree:
         self.logger = logger
         self.logger.info("MerkleTree placeholder initialized.")
 
-    def add_leaf(self, data: bytes):
+    def add_leaf(self, data: Union[str, bytes]):
         # Ensure data is bytes
         if isinstance(data, str):
             data = data.encode('utf-8')
@@ -227,7 +227,7 @@ class MerkleTree:
         self.root = current_level[0]
         self.logger.debug(f"Merkle root recalculated: {self.root[:10]}...")
 
-    def verify_proof(self, leaf_data: bytes, root: str, proof: List[str]) -> bool:
+    def verify_proof(self, leaf_data: Union[str, bytes], root: str, proof: List[str]) -> bool:
         # Ensure leaf_data is bytes
         if isinstance(leaf_data, str):
             leaf_data = leaf_data.encode('utf-8')
@@ -240,7 +240,7 @@ class MerkleTree:
                 current_hash = hashlib.sha256((current_hash + p).encode('utf-8')).hexdigest()
         return current_hash == root
 
-    def get_proof(self, leaf_data: bytes) -> List[str]:
+    def get_proof(self, leaf_data: Union[str, bytes]) -> List[str]:
         # Ensure leaf_data is bytes
         if isinstance(leaf_data, str):
             leaf_data = leaf_data.encode('utf-8')
