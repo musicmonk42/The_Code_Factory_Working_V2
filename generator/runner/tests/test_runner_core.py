@@ -108,10 +108,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.patch_backoff = patch('runner.runner_core.backoff.on_exception', return_value=lambda *a, **kw: lambda f: f)
         self.patch_backoff.start()
 
-        # FIX: Patch subprocess_wrapper, which is what run_tests actually calls
-        # CORRECTED PATH: 'runner.core' -> 'runner.runner_core'
-        self.patch_subprocess = patch('runner.runner_core.subprocess_wrapper', new=AsyncMock())
-        self.mock_subprocess = self.patch_subprocess.start()
+        # FIX: Removed unused subprocess_wrapper patch - tests now use backend.execute()
         
         # FIX: Patch _load_persisted_queue to prevent state leak between tests
         self.patch_load_queue = patch('runner.runner_core.Runner._load_persisted_queue', new=MagicMock())
@@ -125,7 +122,6 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.patch_save_files.stop()
         self.patch_log_action.stop()
         self.patch_backoff.stop()
-        self.patch_subprocess.stop()
         self.patch_log_audit.stop()
         self.patch_load_queue.stop() # Stop the queue patch
 
@@ -152,17 +148,8 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         await runner.shutdown_services()
 
     async def test_run_tests_success(self):
-        # FIX: Mock the subprocess_wrapper, not the backend.execute
-        self.mock_subprocess.return_value = {
-            "success": True,
-            "stdout": """<testsuites name="Mocha Tests" tests="1" failures="0" errors="0" time="0.001">
-<testsuite name="test" tests="1" failures="0" errors="0" time="0.001">
-<testcase classname="test" name="test_ok" time="0.001"/>
-</testsuite>
-</testsuites>""",
-            "stderr": "",
-            "returncode": 0
-        }
+        # FIX: backend.execute is already configured in setUp() to return success
+        # Just need to mock the parser
         
         # Mock the parser to return a valid schema object
         mock_success_parser = AsyncMock(return_value=MagicMock(
