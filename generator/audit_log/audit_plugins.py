@@ -538,9 +538,23 @@ async def sandboxed_execute(plugin: AuditPlugin, entry: Dict[str, Any], event: s
              result_or_exception = e # Use the exception caught
 
     finally:
-        # Ensure the process is joined only if it hasn't timed out
-        if p.is_alive() and not timed_out:
-            p.join(timeout=1)
+        # Ensure the process is properly cleaned up
+        if p.is_alive():
+            if not timed_out:
+                # Try graceful join first
+                p.join(timeout=1)
+            
+            # If still alive after join timeout, terminate it
+            if p.is_alive():
+                logger.warning(f"Plugin process still alive after join timeout, terminating...")
+                p.terminate()
+                p.join(timeout=2)
+                
+                # Last resort: kill if terminate didn't work
+                if p.is_alive():
+                    logger.error(f"Plugin process didn't respond to terminate, killing...")
+                    p.kill()
+                    p.join(timeout=1)
         # --- END: FIX 3 ---
         
         # --- STATE SYNCHRONIZATION AND RESULT EXTRACTION ---

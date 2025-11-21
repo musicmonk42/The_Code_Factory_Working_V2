@@ -414,9 +414,18 @@ class AuditMetrics:
             try:
                 # We need the current value for the rate calculation.
                 # In Prometheus client, ._value is often the only accessible way for non-collected data
-                # FIX: Use safe access for counter values
-                error_value = LOG_ERRORS.collect()[0].samples[0].value if LOG_ERRORS.collect()[0].samples else 0
-                write_value = LOG_WRITES.collect()[0].samples[0].value if LOG_WRITES.collect()[0].samples else 1
+                # FIX: Use safe access for counter values with proper bounds checking
+                try:
+                    error_metrics = LOG_ERRORS.collect()
+                    error_value = error_metrics[0].samples[0].value if error_metrics and error_metrics[0].samples else 0
+                except (IndexError, AttributeError):
+                    error_value = 0
+                
+                try:
+                    write_metrics = LOG_WRITES.collect()
+                    write_value = write_metrics[0].samples[0].value if write_metrics and write_metrics[0].samples else 1
+                except (IndexError, AttributeError):
+                    write_value = 1
                 
                 # Simple error rate check (non-zero denominator protected)
                 error_rate = error_value / write_value

@@ -433,7 +433,18 @@ class AuditLog:
 
             # Wait with a hard timeout of 5 seconds
             if valid_tasks:
-                await asyncio.wait(valid_tasks, timeout=5, return_when=asyncio.ALL_COMPLETED)
+                done, pending = await asyncio.wait(valid_tasks, timeout=5, return_when=asyncio.ALL_COMPLETED)
+                
+                # Cancel any pending tasks that didn't complete
+                for task in pending:
+                    if isinstance(task, asyncio.Task):
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                        except Exception as e:
+                            logger.warning(f"Task raised exception during cancellation: {e}")
                 
             # Log any remaining tasks that failed to stop
             for t in valid_tasks:
