@@ -200,6 +200,9 @@ class MerkleTree:
         self.logger.info("MerkleTree placeholder initialized.")
 
     def add_leaf(self, data: bytes):
+        # Ensure data is bytes
+        if isinstance(data, str):
+            data = data.encode('utf-8')
         hashed_data = hashlib.sha256(data).hexdigest()
         self.leaves.append(hashed_data)
         self._recalculate_root()
@@ -225,6 +228,9 @@ class MerkleTree:
         self.logger.debug(f"Merkle root recalculated: {self.root[:10]}...")
 
     def verify_proof(self, leaf_data: bytes, root: str, proof: List[str]) -> bool:
+        # Ensure leaf_data is bytes
+        if isinstance(leaf_data, str):
+            leaf_data = leaf_data.encode('utf-8')
         hashed_leaf = hashlib.sha256(leaf_data).hexdigest()
         current_hash = hashed_leaf
         for p in proof:
@@ -235,6 +241,9 @@ class MerkleTree:
         return current_hash == root
 
     def get_proof(self, leaf_data: bytes) -> List[str]:
+        # Ensure leaf_data is bytes
+        if isinstance(leaf_data, str):
+            leaf_data = leaf_data.encode('utf-8')
         hashed_leaf = hashlib.sha256(leaf_data).hexdigest()
         if hashed_leaf not in self.leaves:
             raise ValueError("Leaf not found in tree.")
