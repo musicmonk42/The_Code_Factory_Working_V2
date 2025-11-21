@@ -1,8 +1,3 @@
-{
-type: uploaded file
-fileName: test_gui.py
-fullContent:
-# test_gui.py
 """
 Comprehensive unit tests for gui.py
 Tests Textual TUI application, API interactions, and UI components.
@@ -762,4 +757,3 @@ class TestIntegrationWithAPI:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
-}

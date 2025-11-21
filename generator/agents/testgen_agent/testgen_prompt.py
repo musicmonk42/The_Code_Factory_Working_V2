@@ -452,7 +452,7 @@ class AdaptivePromptDirector:
         self.conversation_history = []
         self.multi_vdb = multi_vdb
         self.tracker = tracker
-        self.env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+        self.env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)  # Enable autoescape for XSS protection
         self.human_review_callback: Optional[Callable[[str], Union[bool, Awaitable[bool]]]] = None
 
     def set_human_review_callback(self, callback: Callable[[str], Union[bool, Awaitable[bool]]]):

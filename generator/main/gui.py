@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: gui.py
-fullContent:
 # main/gui.py
 import sys
 import gettext
@@ -1055,4 +1051,3 @@ if __name__ == "__main__":
         sys.exit(1)
     app = MainApp()
     app.run()
-}

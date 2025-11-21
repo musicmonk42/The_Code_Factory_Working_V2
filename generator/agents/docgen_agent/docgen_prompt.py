@@ -340,7 +340,7 @@ class PromptTemplateRegistry:
         """Creates and configures the Jinja2 environment with custom filters."""
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir, exist_ok=True)
-        env = Environment(loader=FileSystemLoader(self.plugin_dir), enable_async=True) # Enable async rendering
+        env = Environment(loader=FileSystemLoader(self.plugin_dir), autoescape=True, enable_async=True) # Enable async rendering with autoescape for XSS protection
         
         # Register custom asynchronous filters
         # REFACTORED: Point 'get_commits' to the imported runner function
