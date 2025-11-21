@@ -253,7 +253,8 @@ class InMemoryBreakerStateManager:
         self._state = {
             "failures": 0,
             "last_failure_time": datetime.min.replace(tzinfo=timezone.utc),
-            "next_try_after": datetime.min.replace(tzinfo=timezone.utc)
+            "next_try_after": datetime.min.replace(tzinfo=timezone.utc),
+            "circuit_state": "closed"  # explicit state: "closed", "half-open", "open"
         }
         self._lock = asyncio.Lock()
 
@@ -809,7 +810,7 @@ async def is_llm_policy_circuit_breaker_open(provider: str = "default", config: 
                 else:
                     # Half-open state: allow one test request to check recovery
                     logger.debug("LLM policy API circuit breaker for '%s' is in half-open state. Allowing one request to check for recovery.", _sanitize_provider(provider))
-                    state["next_try_after"] = datetime.now(timezone.utc) + timedelta(days=365) # Prevent other requests from entering half-open state
+                    state["circuit_state"] = "half-open"  # explicit state tracking
                     await breaker_state_manager.set_state(state)
                     LLM_CIRCUIT_BREAKER_TRANSITIONS.labels(provider=provider, from_state=current_state_str, to_state="half-open").inc()
                     span.set_attribute("breaker_state", "half-open")

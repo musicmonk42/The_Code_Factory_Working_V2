@@ -46,6 +46,8 @@ import json
 import logging
 import os
 import re
+import errno
+import shutil
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -363,9 +365,13 @@ class PolicyManager:
             # Replace atomically (best-effort across platforms)
             try:
                 tmp.replace(self.policy_file)
-            except Exception:
-                # Windows may fail replace() across different drives; fallback to rename
-                os.replace(str(tmp), str(self.policy_file))
+            except OSError as e:
+                if e.errno == errno.EXDEV:  # Cross-device link
+                    # Copy then delete instead
+                    shutil.copy2(tmp, self.policy_file)
+                    tmp.unlink()
+                else:
+                    raise
             span.set_attribute("status", "ok")
             policy_file_write_latency.labels(operation=_sanitize_label("write")).observe(
                 asyncio.get_running_loop().time() - start

@@ -199,14 +199,21 @@ def get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[Hi
                 # Return a dummy counter as fallback
                 return Counter(f"{name}_fallback", documentation, labelnames=labelnames)
 
-# Get config for bucket settings and update global variables
-try:
-    from .config import get_config
-    config_instance = get_config()
-    _min_refresh_interval = getattr(config_instance, 'CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL', 30.0)
-    _error_log_interval = getattr(config_instance, 'CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL', 300.0)
-except ImportError:
-    config_instance = ArbiterConfig()
+# Global config instance for lazy initialization
+_config_instance: Optional[Any] = None
+_min_refresh_interval: float = 30.0  # Default value
+
+def _get_config():
+    """Lazy initialization of config instance."""
+    global _config_instance, _min_refresh_interval
+    if _config_instance is None:
+        try:
+            from .config import get_config
+            _config_instance = get_config()
+            _min_refresh_interval = getattr(_config_instance, 'CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL', 30.0)
+        except ImportError:
+            _config_instance = ArbiterConfig()
+    return _config_instance
 
 # Create metrics with error handling
 policy_decision_total = get_or_create_metric(

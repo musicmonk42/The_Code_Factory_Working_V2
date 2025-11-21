@@ -180,13 +180,11 @@ class ArbiterConfig(BaseSettings):
 
         # If pydantic passes the entire environment as a dict, reject it
         if isinstance(v, dict):
-            # Check if it looks like a polluted environment dict
-            env_pollution_keys = {"REDIS_URL", "NEO4J_URL", "LLM_API_KEY", "OPENAI_API_KEY", "APP_ENV", "ENVIRONMENT"}
-            # If there are more than 10 keys and any known env var key is present, it's bad
-            if (len(v) > 10 and any(key in v for key in env_pollution_keys)):
-                raise ValueError("DECISION_OPTIMIZER_SETTINGS was set from environment as a dict of all env vars; unset this env var or fix your test harness.")
-            # Optionally, you can filter out only the keys you expect here
-
+            # Check if it's actually the environment dict by looking for definitive markers
+            # Unix and Windows environment markers
+            if all(k in v for k in ["PATH", "HOME"]) or all(k in v for k in ["PATH", "SYSTEMROOT"]):
+                raise ValueError("DECISION_OPTIMIZER_SETTINGS appears to be the full environment dict")
+            # Otherwise, assume it's a valid settings dict
             return v
 
         if isinstance(v, str):

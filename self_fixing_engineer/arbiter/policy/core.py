@@ -373,7 +373,7 @@ class PolicyEngine:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError, ImportError)),
         before_sleep=lambda retry_state: logger.debug(f"Retrying LLMClient creation: attempt {retry_state.attempt_number}")
     )
     def _create_llm_client(self):
