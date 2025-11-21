@@ -139,7 +139,9 @@ class OpenAIProvider(LLMProvider):
         else:
             completion = await self._api_call(model, messages, stream=False, **kwargs)
             
-            content = completion.choices[0].message.content
+            if not completion.choices:
+                raise LLMError(detail="Empty response from OpenAI", provider=self.name)
+            content = completion.choices[0].message.content or ""
             
             # --- FIX: RETURN A DICTIONARY ---
             return {"content": content, "model": model}

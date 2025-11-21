@@ -36,6 +36,8 @@ import json
 import difflib
 import shutil
 import logging
+import sys
+import uuid
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Any, Union
 from jinja2 import Environment, meta, TemplateSyntaxError, select_autoescape # meta for template parsing
@@ -116,6 +118,8 @@ def generate_loader_code(template_dir: str) -> str:
     # Ensure template_dir is relative to the calling script or absolute for FileSystemLoader.
     return f"""
 import os
+import sys
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 # Gold Standard: Use followlinks=False for security to prevent directory traversal via symlinks
@@ -152,22 +156,25 @@ class PromptReplacer(ast.NodeTransformer):
     """
     AST transformer to replace the PROMPT_TEMPLATES dict assignment with loader code.
     """
-    def __init__(self, dict_node_to_replace: ast.Dict, loader_code: str):
-        self.dict_node_to_replace = dict_node_to_replace
+    def __init__(self, loader_code: str):
         self.loader_code_ast = ast.parse(loader_code.strip()).body
         self.replaced = False
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         self.generic_visit(node)
-        if not self.replaced and node.value == self.dict_node_to_replace:
-            # Replace the assignment node with the loader code
-            self.replaced = True
-            # The loader code might be multiple statements. Insert them directly.
-            # If loader_code_ast is list, return as list.
-            # If it's a single statement, just replace the node.
-            if len(self.loader_code_ast) == 1:
-                return self.loader_code_ast[0]
-            return self.loader_code_ast
+        # Check if this is the PROMPT_TEMPLATES assignment
+        if not self.replaced:
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == 'PROMPT_TEMPLATES':
+                    if isinstance(node.value, ast.Dict):
+                        # Replace the assignment node with the loader code
+                        self.replaced = True
+                        # The loader code might be multiple statements. Insert them directly.
+                        # If loader_code_ast is list, return as list.
+                        # If it's a single statement, just replace the node.
+                        if len(self.loader_code_ast) == 1:
+                            return self.loader_code_ast[0]
+                        return self.loader_code_ast
         return node
 
 def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_code: str) -> str:
@@ -175,7 +182,7 @@ def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_
     Replaces the PROMPT_TEMPLATES dict in the original code with generated loader code.
     Args:
         original_code (str): The content of the original Python file.
-        dict_node (ast.Dict): The AST node of the PROMPT_TEMPLATES dictionary to be replaced.
+        dict_node (ast.Dict): The AST node of the PROMPT_TEMPLATES dictionary (not used, kept for compatibility).
         loader_code (str): The Python code string for the new loader.
     Returns:
         str: The modified Python code.
@@ -183,7 +190,7 @@ def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_
         PromptMigrationError: If the dict node cannot be found or replaced in the code.
     """
     tree = ast.parse(original_code)
-    transformer = PromptReplacer(dict_node, loader_code)
+    transformer = PromptReplacer(loader_code)
     new_tree = transformer.visit(tree)
     if not transformer.replaced:
         raise PromptMigrationError("Failed to find and replace PROMPT_TEMPLATES dict in the code.")
@@ -206,7 +213,7 @@ def lint_template(prompt_content: str) -> Optional[str]:
     except TemplateSyntaxError as e:
         return str(e)
 
-async def migrate_file(source_file: Path, dest_dir: Path, dry_run: bool = False, verbose: bool = True, backup: bool = True) -> Dict[str, Any]:
+def migrate_file(source_file: Path, dest_dir: Path, dry_run: bool = False, verbose: bool = True, backup: bool = True) -> Dict[str, Any]:
     """
     Migrates a single Python file's prompt dict to .j2 templates.
     Args:
@@ -316,7 +323,7 @@ async def migrate_file(source_file: Path, dest_dir: Path, dry_run: bool = False,
 
     return report
 
-async def migrate_dir(source_dir: Path, dest_dir: Path, recursive: bool = False, dry_run: bool = False, verbose: bool = True, backup: bool = True) -> List[Dict[str, Any]]:
+def migrate_dir(source_dir: Path, dest_dir: Path, recursive: bool = False, dry_run: bool = False, verbose: bool = True, backup: bool = True) -> List[Dict[str, Any]]:
     """
     Walks source_dir for Python files and migrates all prompt dicts.
     Args:
@@ -351,7 +358,7 @@ async def migrate_dir(source_dir: Path, dest_dir: Path, recursive: bool = False,
             # will all go into the *same* `dest_dir`.
             # This is acceptable if all prompts are unique across files.
             # If not, a more complex `dest_dir` strategy (e.g., mirroring source folder structure) is needed.
-            report = await migrate_file(py_file, dest_dir, dry_run, verbose, backup)
+            report = migrate_file(py_file, dest_dir, dry_run, verbose, backup)
             reports.append(report)
             
             if report['status'] == 'success': progress.columns[3].fields['successes'] += 1
@@ -413,8 +420,8 @@ def generate_summary_report(reports: List[Dict[str, Any]]) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate inline prompt dicts to .j2 template files.")
-    parser.add_argument("--source", required=True, help="Source .py file or directory")
-    parser.add_argument("--dest", required=True, help="Destination directory for .j2 templates")
+    parser.add_argument("--source", help="Source .py file or directory")
+    parser.add_argument("--dest", help="Destination directory for .j2 templates")
     parser.add_argument("--recursive", action='store_true', help="Recursively scan directories for .py files.")
     parser.add_argument("--dry-run", action='store_true', help="Preview changes, do not write files.")
     parser.add_argument("--no-backup", action='store_true', help="Do not backup original files before modification.")
@@ -467,7 +474,7 @@ def some_other_function():
                 sys.stdout = self._original_stdout # Restore stdout
                 shutil.rmtree(self.test_dir)
 
-            async def test_find_prompt_dict(self):
+            def test_find_prompt_dict(self):
                 tree = ast.parse(self.initial_content)
                 dict_node = find_prompt_dict(tree)
                 self.assertIsNotNone(dict_node)
@@ -483,7 +490,7 @@ def some_other_function():
                 tree_non_dict = ast.parse(non_dict_content)
                 self.assertIsNone(find_prompt_dict(tree_non_dict))
 
-            async def test_extract_prompts_from_dict(self):
+            def test_extract_prompts_from_dict(self):
                 tree = ast.parse(self.initial_content)
                 dict_node = find_prompt_dict(tree)
                 prompts = extract_prompts_from_dict(dict_node)
@@ -496,13 +503,13 @@ def some_other_function():
                 prompts_non_string = extract_prompts_from_dict(dict_node_non_string)
                 self.assertEqual(prompts_non_string, []) # Should extract nothing
 
-            async def test_lint_template(self):
+            def test_lint_template(self):
                 self.assertIsNone(lint_template("Hello {{ name }}!"))
                 self.assertIsNotNone(lint_template("{% for item in items %}{{ item %}}")) # Missing endfor
                 self.assertIsNotNone(lint_template("{{ invalid filter | }"))
 
-            async def test_migrate_file_success(self):
-                report = await migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
+            def test_migrate_file_success(self):
+                report = migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
                 self.assertEqual(report['status'], 'success')
                 self.assertEqual(report['prompts_migrated'], 2)
                 self.assertTrue(self.test_file_bak.exists())
@@ -511,28 +518,28 @@ def some_other_function():
                 self.assertIn("load_prompt_templates_from_disk()", self.test_file.read_text())
                 self.assertNotIn("PROMPT_TEMPLATES = {", self.test_file.read_text())
 
-            async def test_migrate_file_dry_run(self):
-                report = await migrate_file(self.test_file, self.dest_dir, dry_run=True, verbose=True, backup=True)
+            def test_migrate_file_dry_run(self):
+                report = migrate_file(self.test_file, self.dest_dir, dry_run=True, verbose=True, backup=True)
                 self.assertEqual(report['status'], 'success')
                 self.assertEqual(report['prompts_migrated'], 2)
                 self.assertFalse(self.test_file_bak.exists()) # No backup in dry run
                 self.assertFalse((self.dest_dir / 'key_one.j2').exists()) # No template created in dry run
                 self.assertEqual(self.test_file.read_text(), self.initial_content) # Original file untouched
 
-            async def test_migrate_file_no_prompts(self):
+            def test_migrate_file_no_prompts(self):
                 self.test_file.write_text("VAR = {'not_prompts': 1}")
-                report = await migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
+                report = migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
                 self.assertEqual(report['status'], 'no_prompts_found')
                 self.assertEqual(report['prompts_migrated'], 0)
                 self.assertEqual(self.test_file.read_text(), "VAR = {'not_prompts': 1}") # File untouched
 
-            async def test_migrate_file_with_lint_error(self):
+            def test_migrate_file_with_lint_error(self):
                 self.test_file.write_text("""
 PROMPT_TEMPLATES = {
     'bad_key': 'Hello {{ name }' # Malformed Jinja2
 }
 """)
-                report = await migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
+                report = migrate_file(self.test_file, self.dest_dir, dry_run=False, verbose=True, backup=True)
                 self.assertEqual(report['status'], 'partial_success')
                 self.assertIn("Syntax error in Jinja2 template", report['errors'][0])
                 self.assertEqual(report['prompts_migrated'], 0) # No prompts migrated due to error
@@ -588,13 +595,19 @@ PROMPT_TEMPLATES = {
 
     else:
         # Standard script execution
-        async def main():
+        if not args.source or not args.dest:
+            parser.error("--source and --dest are required when not running tests")
+        
+        source_path = Path(args.source)
+        dest_path = Path(args.dest)
+        
+        def main():
             if source_path.is_dir():
-                reports = await migrate_dir(source_path, dest_path, args.recursive, args.dry_run, args.verbose, not args.no_backup)
+                reports = migrate_dir(source_path, dest_path, args.recursive, args.dry_run, args.verbose, not args.no_backup)
             else:
-                reports = [await migrate_file(source_path, dest_path, args.dry_run, args.verbose, not args.no_backup)]
+                reports = [migrate_file(source_path, dest_path, args.dry_run, args.verbose, not args.no_backup)]
 
             summary = generate_summary_report(reports)
             print(summary)
         
-        asyncio.run(main())
+        main()
