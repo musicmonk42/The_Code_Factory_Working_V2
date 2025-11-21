@@ -189,14 +189,21 @@ class MessageQueueService:
         if encryption_key:
             if not CRYPTOGRAPHY_AVAILABLE:
                 raise BackendNotAvailableError("cryptography library is required for encryption.")
+            # Fixed: Validate Fernet key format before using it
             if isinstance(encryption_key, str):
                 encryption_key = encryption_key.encode('utf-8')
-            self._cipher = Fernet(encryption_key)
+            try:
+                self._cipher = Fernet(encryption_key)
+            except Exception as e:
+                raise ValueError(f"Invalid Fernet encryption key format. Key must be 32 url-safe base64-encoded bytes: {e}") from e
         elif self.config.ENCRYPTION_KEY and CRYPTOGRAPHY_AVAILABLE:
             key = self.config.ENCRYPTION_KEY.get_secret_value()
             if isinstance(key, str):
                 key = key.encode('utf-8')
-            self._cipher = Fernet(key)
+            try:
+                self._cipher = Fernet(key)
+            except Exception as e:
+                raise ValueError(f"Invalid Fernet encryption key format in config. Key must be 32 url-safe base64-encoded bytes: {e}") from e
 
         self._redis_client: Optional[redis.Redis] = None
         self._kafka_producer: Optional[AIOKafkaProducer] = None

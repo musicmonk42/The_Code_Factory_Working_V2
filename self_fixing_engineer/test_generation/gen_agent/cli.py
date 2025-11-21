@@ -345,7 +345,7 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
     # These are patched to no-op in tests; in real runs they prep dependencies.
     try:
         await run_dependency_check()
-        llm = await init_llm()
+        llm = init_llm()  # Fixed: init_llm() is synchronous, not async
     except Exception as e:
         logger.warning(f"Failed to initialize LLM: {e}")
         # In constrained test environments we allow falling back to a mock LLM.

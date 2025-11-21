@@ -42,15 +42,20 @@ def _register_metric(factory, *args, **kwargs):
     if not _PROM_OK:
         return _NoopMetric()
     metric_name = args[0] if args else "<unknown>"
-    if REGISTRY._names_to_collectors.get(metric_name):
-        # FIX: Directly return the existing metric to prevent registration warnings.
-        if metric_name not in _warned_metrics:
-            logger.debug(
-                "Prometheus metric '%s' already registered. Returning existing.",
-                metric_name
-            )
-            _warned_metrics.add(metric_name)
-        return REGISTRY._names_to_collectors.get(metric_name)
+    # Fixed: Use safer approach to check for existing metrics
+    try:
+        if hasattr(REGISTRY, '_names_to_collectors') and REGISTRY._names_to_collectors.get(metric_name):
+            # FIX: Directly return the existing metric to prevent registration warnings.
+            if metric_name not in _warned_metrics:
+                logger.debug(
+                    "Prometheus metric '%s' already registered. Returning existing.",
+                    metric_name
+                )
+                _warned_metrics.add(metric_name)
+            return REGISTRY._names_to_collectors.get(metric_name)
+    except AttributeError:
+        # If _names_to_collectors doesn't exist in future versions, continue with registration
+        pass
     try:
         # Always bind to the default REGISTRY explicitly to avoid surprises
         return factory(*args, registry=REGISTRY, **kwargs)

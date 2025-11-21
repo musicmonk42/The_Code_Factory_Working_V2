@@ -455,7 +455,8 @@ class PluginRegistry:
             start_time = time.time()
             with trace.get_tracer(__name__).start_as_current_span(f"register_plugin_{kind.value}_{name}"):
                 asyncio_lock = self._kind_locks[kind]
-                if not asyncio_lock.locked():
+                # Fixed: Use proper lock acquisition instead of inverted check
+                async with asyncio_lock:
                     self._validate_plugin_class(plugin_class, meta)
                     self._verify_signature(plugin_class, meta)
                     
@@ -508,7 +509,8 @@ class PluginRegistry:
         )
 
         asyncio_lock = self._kind_locks[kind]
-        if not asyncio_lock.locked():
+        # Fixed: Use proper lock acquisition instead of inverted check
+        async with asyncio_lock:
             if not isinstance(instance, PluginBase):
                 raise TypeError(f"Plugin instance [{kind.value}:{name}] must inherit from PluginBase.")
             
