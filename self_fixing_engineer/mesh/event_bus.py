@@ -857,7 +857,9 @@ async def subscribe_event(
             try:
                 # Reliability Fix: Check redelivery count before processing
                 pending_info = await r.xpending_range(stream_name, consumer_group, min=msg_id, max=msg_id, count=1)
-                delivered_times = pending_info[0]['delivered'] if pending_info else 0
+                delivered_times = (pending_info[0]['delivered'] 
+                                   if pending_info and len(pending_info) > 0 
+                                   else 0)
                 if delivered_times > 3:  # Example threshold
                     logger.warning(f"Max redeliveries exceeded for {msg_id_str}. Moving to DLQ.")
                     await _write_to_dlq(event_type, json.dumps({k.decode(): v.decode() for k, v in fields.items()}), "Max redeliveries exceeded", msg_id_str)

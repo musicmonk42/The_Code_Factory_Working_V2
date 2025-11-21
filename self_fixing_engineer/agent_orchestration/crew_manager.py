@@ -181,8 +181,12 @@ class ResourceError(Exception):
     """Custom exception for resource-related failures."""
     pass
 
-class PermissionError(Exception):
+class CrewPermissionError(Exception):
     """Custom exception for RBAC failures."""
+    pass
+
+class AgentError(Exception):
+    """Custom exception for agent-related failures."""
     pass
 
 class CrewManager:
@@ -267,7 +271,7 @@ class CrewManager:
         self._sandbox_runner = sandbox_runner
         self._agent_health_poller = agent_health_poller
         self._agent_stop_commander = agent_stop_commander
-        self.redis_pool: Optional[aioredis.Redis] = None
+        self.redis_pool: Optional[redis.Redis] = None
         self._max_agents = MAX_AGENTS
 
         if not self._sandbox_runner:
@@ -366,7 +370,7 @@ class CrewManager:
             ResourceError: If the maximum number of agents is reached.
         """
         if not await self._check_rbac("add_agent", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
 
         # A. Security & Secrets: Validate Inputs
         if not NAME_REGEX.match(name):
@@ -418,11 +422,13 @@ class CrewManager:
                 loop = None
 
             if loop and loop.is_running():
-                # A. Security: In a multi-threaded context, run it in a new event loop
-                # This is a dangerous pattern, a better approach is to use a thread pool
-                # This is for demo purposes only
+                # Cannot call asyncio.run() from within a running event loop
+                # Instead, create a task and wait for it using run_until_complete
                 logger.critical("sync_add_agent called from an already running event loop. This can cause deadlocks.")
-                return asyncio.run(self.add_agent(*args, **kwargs))
+                # Create a future and use asyncio.ensure_future to schedule it
+                future = asyncio.ensure_future(self.add_agent(*args, **kwargs))
+                # Note: This will still block but won't raise RuntimeError
+                return asyncio.get_event_loop().run_until_complete(future)
             else:
                 return asyncio.run(self.add_agent(*args, **kwargs))
 
@@ -435,7 +441,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("remove_agent", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         # Check if we need to stop the agent first
         needs_stop = False
@@ -504,7 +510,7 @@ class CrewManager:
             ValueError: If the agent does not exist.
         """
         if not await self._check_rbac("start_agent", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         agent_info = self.agents.get(name)
         if not agent_info:
@@ -606,7 +612,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("stop_agent", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         agent_info = self.agents.get(name)
         if not agent_info:
@@ -683,7 +689,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("terminate_all", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         # Get list of agents to terminate (with lock)
         async with self._lock:
@@ -708,7 +714,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("shutdown", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         await self.terminate_all(timeout=timeout, caller_role=caller_role)
         await self.close()
@@ -724,7 +730,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("reload_agent", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         agent_info = self.agents.get(name)
         if agent_info:
@@ -748,7 +754,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("start_all", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
 
         # Get list of agents to start (with lock)
         async with self._lock:
@@ -772,7 +778,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("stop_all", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
         
         # Get list of agents to stop (with lock)
         async with self._lock:
@@ -795,7 +801,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("reload_all", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
 
         # Get list of agents to reload (with lock)
         async with self._lock:
@@ -925,7 +931,7 @@ class CrewManager:
             caller_role: The role of the caller for RBAC checks.
         """
         if not await self._check_rbac("scale", caller_role):
-            raise PermissionError("Unauthorized operation")
+            raise CrewPermissionError("Unauthorized operation")
 
         agents_to_add = []
         agents_to_remove = []
@@ -1031,7 +1037,7 @@ class CrewManager:
         if self.state_backend == "redis" and _AIOREDIS_AVAILABLE:
             try:
                 # D. Plugin/Integrations: Use connection pooling
-                self.redis_pool = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost"))
+                self.redis_pool = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost"))
                 await self.redis_pool.ping()
                 logger.info("Redis connection pool established.")
             except Exception as e:
@@ -1063,7 +1069,6 @@ class CrewManager:
                 pass
         if self.redis_pool:
             await self.redis_pool.close()
-            await self.redis_pool.wait_closed()
         structured_log("crew_closed")
 
     async def status(self) -> Dict[str, Any]:

@@ -65,9 +65,9 @@ except ImportError:
 # ---- Conditional Imports for Backends and Enhancements ----
 try:
     import redis.asyncio as redis
-    from aioredis.exceptions import ConnectionError as RedisConnectionError
+    from redis.exceptions import ConnectionError as RedisConnectionError
 except ImportError:
-    aioredis = None
+    redis = None
 
 try:
     import nats
@@ -435,12 +435,12 @@ class MeshPubSub:
             span.set_attribute("backend", self.backend_type)
             try:
                 if self.backend_type == "redis":
-                    if not aioredis: raise ImportError("aioredis not installed")
+                    if not redis: raise ImportError("redis not installed")
                     if PROD_MODE and not self.backend_url.startswith("rediss://"):
                         raise RuntimeError("Redis URL must use SSL (rediss://) in production.")
-                    # Use the modern aioredis API (v2.0+)
+                    # Use the modern redis.asyncio API (v5.0+)
                     # SSL is handled automatically based on the URL scheme
-                    self._client = await aioredis.from_url(
+                    self._client = await redis.from_url(
                         self.backend_url,
                         max_connections=100,
                         decode_responses=False  # We handle encoding/decoding ourselves
