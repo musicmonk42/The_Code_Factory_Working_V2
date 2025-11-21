@@ -6,7 +6,9 @@
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install build tools for any packages that need compiling
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -18,20 +20,31 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-# Copy the whole repository (simplifies layout differences)
-COPY . /app
+
+# Copy only requirements first for better layer caching
+COPY requirements.txt* master_requirements.txt* ./
+
+# Copy subdirectory requirements if they exist
+# Using wildcard patterns to make these optional
+COPY generator/requirements.tx[t] generator/ 2>/dev/null || :
+COPY omnicore_engine/requirements.tx[t] omnicore_engine/ 2>/dev/null || :
+COPY self_fixing_engineer/requirements.tx[t] self_fixing_engineer/ 2>/dev/null || :
+COPY pyproject.tom[l] setup.p[y] ./ 2>/dev/null || :
 
 # Upgrade packaging tools and install dependencies if found
 RUN pip install --upgrade pip setuptools wheel \
  && if [ -f requirements.txt ]; then \
         pip install --no-cache-dir -r requirements.txt; \
-    elif [ -f Generator/requirements.txt ]; then \
-        pip install --no-cache-dir -r Generator/requirements.txt; \
+    elif [ -f generator/requirements.txt ]; then \
+        pip install --no-cache-dir -r generator/requirements.txt; \
     elif [ -f pyproject.toml ]; then \
         pip install --no-cache-dir .; \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi
+
+# Copy the rest of the application
+COPY . /app
 
 ###############################################
 # Runtime stage: minimal image, non-root user
@@ -59,18 +72,18 @@ COPY --from=builder /app /app
 RUN chown -R appuser:appuser /app /opt/venv
 USER appuser
 
-# The Generator README indicates a FastAPI server at :8000 via deploy_llm_call
+# The generator README indicates a FastAPI server at :8000 via deploy_llm_call
 EXPOSE 8000
 
 # Start the API server if present; otherwise provide a helpful fallback
-# Tries (in order): Generator.deploy_llm_call, deploy_llm_call, or prints help.
+# Tries (in order): generator.deploy_llm_call, deploy_llm_call, or prints help.
 CMD ["/bin/sh", "-c", "\
-  if [ -f Generator/deploy_llm_call.py ]; then \
-    python -m Generator.deploy_llm_call --server; \
+  if [ -f generator/deploy_llm_call.py ]; then \
+    python -m generator.deploy_llm_call --server; \
   elif [ -f deploy_llm_call.py ]; then \
     python -m deploy_llm_call --server; \
   else \
     echo 'No server entrypoint found (deploy_llm_call). Override CMD or adjust paths.' && \
-    python -c 'import sys; print(\"Repo mounted at /app. Try: python -m Generator.deploy_llm_call --server\")'; \
+    python -c 'import sys; print(\"Repo mounted at /app. Try: python -m generator.deploy_llm_call --server\")'; \
   fi \
 "]

@@ -15,6 +15,7 @@ env/
 # Repo and tooling noise
 .git/
 .gitignore
+.github/
 .idea/
 .vscode/
 .DS_Store
@@ -24,3 +25,23 @@ env/
 .cache/
 pip-log.txt
 demo_output/
+
+# Database and test files
+*.db
+*.db-shm
+*.db-wal
+chroma_db/
+audit*.json
+*_log.json
+test_metrics_snapshot.json
+validator_performance.json
+deploy_agent_history.db
+mock_history.db*
+agentic_audit_integrity.json
+dlt_audit*.json*
+
+# Documentation and audit files
+*.md
+!README.md
+LICENSE
+patent_doc.md
