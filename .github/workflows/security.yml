@@ -203,9 +203,6 @@ jobs:
           
       - name: Check licenses
         run: |
-          # Define approved licenses (permissive open-source licenses)
-          APPROVED_LICENSES="MIT;Apache-2.0;Apache Software License;BSD;BSD-3-Clause;BSD-2-Clause;ISC;Python Software Foundation License;PSF;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;Zope Public License;HPND;Historical Permission Notice and Disclaimer (HPND);Public Domain;Unlicense;CC0;Creative Commons Zero v1.0 Universal;WTFPL;Do What The F*ck You Want To Public License"
-          
           # Track if we found any issues
           HAS_ISSUES=0
           
@@ -217,9 +214,9 @@ jobs:
               # Generate license report
               pip-licenses --format=markdown --output-file=licenses-$(basename $req_file).md || continue
               
-              # Check for GPL, AGPL, or unknown licenses (which could be restrictive)
+              # Check for GPL, AGPL, LGPL, or unknown licenses (which could be restrictive)
               echo "Checking for restrictive licenses in $req_file..."
-              RESTRICTIVE=$(pip-licenses --format=plain --with-license-file --no-license-path 2>/dev/null | grep -iE "GPL|AGPL|UNKNOWN|LGPL" | grep -v "Approved" || true)
+              RESTRICTIVE=$(pip-licenses --format=plain --with-license-file --no-license-path 2>/dev/null | grep -iE "AGPL|LGPL|GPL|UNKNOWN" | grep -v "Approved" || true)
               
               if [ -n "$RESTRICTIVE" ]; then
                 echo "⚠️  WARNING: Found potentially restrictive or unknown licenses in $req_file:"
