@@ -417,12 +417,10 @@ async def cleanup_compliance_metrics() -> None:
             stale_controls = registered_controls - current_controls
             for control_id in stale_controls:
                 sanitized_control_id = _sanitize_label(control_id)
-                COMPLIANCE_CONTROL_STATUS.remove(sanitized_control_id, ".*", ".*")
-                COMPLIANCE_CONTROL_ACTIONS_TOTAL.remove(sanitized_control_id, ".*", ".*")
-                COMPLIANCE_VIOLATIONS_TOTAL.remove(sanitized_control_id, ".*")
-                logger.debug(f"Removed stale compliance metric for {sanitized_control_id}")
-                span.set_attribute(f"control.{sanitized_control_id}.removed", True)
-            span.set_attribute("stale_controls_removed", len(stale_controls))
+                # Prometheus metrics cannot be easily removed. Log and let them persist.
+                logger.debug(f"Control {sanitized_control_id} is stale (metrics persist)")
+                span.set_attribute(f"control.{sanitized_control_id}.stale", True)
+            span.set_attribute("stale_controls_detected", len(stale_controls))
             
             # Clean up Redis connection pool if used
             if hasattr(load_compliance_map, '_redis_pool'):

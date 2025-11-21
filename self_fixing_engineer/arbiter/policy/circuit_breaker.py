@@ -684,8 +684,11 @@ def start_cleanup_task() -> None:
     global _cleanup_task
     with _cleanup_task_lock:
         if _cleanup_task is None or _cleanup_task.done():
-            _cleanup_task = asyncio.create_task(cleanup_breaker_states())
-            logger.info("Started circuit breaker cleanup task.")
+            try:
+                _cleanup_task = asyncio.create_task(cleanup_breaker_states())
+                logger.info("Started circuit breaker cleanup task.")
+            except RuntimeError:
+                logger.error("Cannot start cleanup task: no running event loop")
         else:
             logger.debug("Circuit breaker cleanup task already running.")
 

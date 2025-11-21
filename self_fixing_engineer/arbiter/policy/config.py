@@ -335,11 +335,19 @@ class ArbiterConfig(BaseSettings):
             with tracer.start_as_current_span("validate_redis_url") as span:
                 try:
                     conn = redis.Redis.from_url(url)
-                    pong = asyncio.run(conn.ping())
-                    if not pong:
-                        raise ValueError("Redis ping failed")
-                    logger.info("Redis URL validated successfully.")
-                    span.set_attribute("redis_validation_status", "valid")
+                    try:
+                        # Check if we're in an async context
+                        loop = asyncio.get_running_loop()
+                        # We're already in async - skip ping or schedule it
+                        logger.debug("Skipping Redis ping in validator (async context)")
+                        span.set_attribute("redis_validation_status", "skipped_async_context")
+                    except RuntimeError:
+                        # No running loop - safe to use asyncio.run
+                        pong = asyncio.run(conn.ping())
+                        if not pong:
+                            raise ValueError("Redis ping failed")
+                        logger.info("Redis URL validated successfully.")
+                        span.set_attribute("redis_validation_status", "valid")
                 except Exception as e:
                     logger.error(f"Invalid REDIS_URL: {e}")
                     CONFIG_ERRORS.labels(error_type='invalid_redis_url').inc()
@@ -355,9 +363,8 @@ class ArbiterConfig(BaseSettings):
         """Reloads configuration from environment variables and .env file."""
         with tracer.start_as_current_span("reload_config") as span:
             try:
-                # Re-initialize to load from .env and env vars again
-                new_config_data = self.model_config.env_file_reader(self.model_config.env_file)
-                new_config = type(self)(**new_config_data)
+                # Re-read from environment and .env file using proper Pydantic V2 pattern
+                new_config = type(self)(_env_file=self.model_config.get('env_file'))
 
                 # Atomically update all fields from the reloaded config
                 for field in self.model_fields:
