@@ -11,10 +11,9 @@ from .bug_manager import BugManager
 from .audit_log import AuditLogManager
 from .notifications import NotificationService
 
+# Fixed: Removed non-existent exports and corrected class names
 __all__ = [
     'BugManager',
-    'AuditLog', 
-    'NotificationManager',
-    'NotificationService',
-    'RemediationEngine',
+    'AuditLogManager',  # Fixed: was 'AuditLog'
+    'NotificationService',  # Fixed: removed 'NotificationManager' and 'RemediationEngine'
 ]
