@@ -167,7 +167,7 @@ class MetaLearningConfig(BaseSettings):
     ETCD_PREFIX: Optional[str] = Field(default="/config/meta-learning", description="Etcd prefix for configuration keys.")
 
     @field_validator("DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before")
-    def validate_file_paths(cls, v):
+    def validate_file_paths(cls, v, info: ValidationInfo):
         """Ensures that file paths are valid and their parent directories exist."""
         if v:
             path = Path(v)
@@ -175,9 +175,10 @@ class MetaLearningConfig(BaseSettings):
                 parent_dir = path.parent
                 if parent_dir and not parent_dir.exists():
                     parent_dir.mkdir(parents=True, exist_ok=True)
-                # Create empty file if it doesn't exist (for non-CONFIG_FILE_PATH fields)
-                # CONFIG_FILE_PATH may not need creation, so we skip if it's None
-                if not path.exists() and v != cls.model_fields.get('CONFIG_FILE_PATH', {}).get('default'):
+                # Create empty file if it doesn't exist, but skip for CONFIG_FILE_PATH
+                # since it's optional and may not need to be created
+                field_name = info.field_name if info else None
+                if not path.exists() and field_name != 'CONFIG_FILE_PATH':
                     path.touch()
             except Exception as e:
                 raise ValueError(f"Invalid file path or cannot create directory/file for {v}: {e}")

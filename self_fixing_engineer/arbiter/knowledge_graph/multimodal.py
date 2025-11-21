@@ -278,7 +278,7 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
         
         # VideoFileClip expects a file path, not a BytesIO object
         # Write to a temporary file first
-        temp_file = None
+        temp_file_path = None  # Initialize before try block
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
                 temp_file.write(item.data)
@@ -298,7 +298,7 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
             return {"status": "failed", "summary": f"Failed to process video: {e}", "data_hash": data_hash}
         finally:
             # Clean up temporary file
-            if temp_file is not None:
+            if temp_file_path is not None:
                 try:
                     os.unlink(temp_file_path)
                 except Exception:

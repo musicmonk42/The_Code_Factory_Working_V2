@@ -49,7 +49,12 @@ class Severity(str, Enum):
             KeyError: If the string doesn't match any severity level
         """
         try:
+            # Try by name first (uppercase)
             return cls[s.upper()]
         except KeyError:
-            logger.warning(f"Invalid severity string '{s}', defaulting to MEDIUM.")
-            return cls.MEDIUM
+            try:
+                # Try by value (lowercase)
+                return cls(s.lower())
+            except ValueError:
+                logger.warning(f"Invalid severity string '{s}', defaulting to MEDIUM.")
+                return cls.MEDIUM

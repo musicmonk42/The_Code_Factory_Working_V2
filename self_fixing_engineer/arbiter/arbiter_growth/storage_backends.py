@@ -424,15 +424,16 @@ class RedisStreamsStorageBackend:
                     logger.warning("Skipping undecryptable event ID %s in stream '%s'.", msg_id.decode('utf-8'), stream_key)
             # Advance past the last seen entry to avoid re-reading it (Streams are inclusive)
             last_raw = entries[-1][0]
-            last_id = f"{last_raw.decode('utf-8') if isinstance(last_raw, bytes) else last_raw}"
+            # Convert bytes to string if needed
+            last_id_str = last_raw.decode('utf-8') if isinstance(last_raw, bytes) else last_raw
             # Increment the sequence number part of the stream ID to avoid re-reading
             # Stream IDs are in format "timestamp-sequence", we need to move past the last one
-            if '-' in last_id:
-                timestamp, seq = last_id.rsplit('-', 1)
+            if '-' in last_id_str:
+                timestamp, seq = last_id_str.rsplit('-', 1)
                 last_id = f"{timestamp}-{int(seq) + 1}"
             else:
                 # If no sequence part, append -1 to move past it
-                last_id = f"{last_id}-1"
+                last_id = f"{last_id_str}-1"
         return events
 
     @STORAGE_LATENCY_SECONDS.labels(backend="redis", operation="save_audit_log").time()
