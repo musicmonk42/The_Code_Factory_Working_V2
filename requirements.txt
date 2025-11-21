@@ -60,8 +60,3 @@ pyyaml>=6.0.1,<7
 python-dotenv>=1.0,<2
 circuitbreaker>=1.3.2,<2
 opencv-python-headless>=4.8,<5  # prefer headless for servers
-# Utilities
-pyyaml
-python-dotenv
-circuitbreaker
-opencv-python

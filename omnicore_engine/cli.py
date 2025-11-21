@@ -49,17 +49,25 @@ import re
 import shlex
 
 # OmniCore imports
-from app.config.legal_tender_settings import settings
-from app.omnicore_engine.core import logger, safe_serialize # Import logger and safe_serialize from core
-from app.omnicore_engine.core import omnicore_engine as OmniCoreOmega_instance # Import the singleton instance
-from app.omnicore_engine.database import Database
-from app.omnicore_engine.audit import ExplainAudit
-from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
-from app.omnicore_engine.message_bus.message_types import Message
+from omnicore_engine.core import logger, safe_serialize, settings # Import logger, safe_serialize, and settings from core
+try:
+    from omnicore_engine.core import omnicore_engine as OmniCoreOmega_instance # Import the singleton instance
+except ImportError:
+    OmniCoreOmega_instance = None
+from omnicore_engine.database.database import Database
+try:
+    from omnicore_engine.audit import ExplainAudit
+except ImportError:
+    ExplainAudit = None
+try:
+    from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
+except ImportError:
+    AIManager = None
+from omnicore_engine.message_bus.message_types import Message
 
 # Import the message_bus_cli from message_bus.py
 try:
-    from app.message_bus import message_bus_cli, RICH_CLI_AVAILABLE
+    from omnicore_engine.message_bus import message_bus_cli, RICH_CLI_AVAILABLE
     if not RICH_CLI_AVAILABLE:
         logger.warning("Rich CLI tools not available. Message bus CLI commands will be disabled.")
 except ImportError:

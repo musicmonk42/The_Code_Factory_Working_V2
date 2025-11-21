@@ -13,7 +13,6 @@ def expected_plugins():
         "gossip": "arbiter.plugins.gossip_plugin",
         "chat": "arbiter.plugins.chat_plugin",
         "craft": "arbiter.plugins.craft_plugin",
-        "legal_tender_explorer": "arbiter.legal_tender_explorer.LegalTenderAutonomousExplorer",
     }
 
 # Test that get_plugins returns a copy of the internal dictionary

@@ -12,14 +12,25 @@ from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime
 from pydantic import BaseModel, Field, ValidationError, SecretStr
 
-from app.config.legal_tender_settings import settings
-from app.feedback_manager.feedback_manager import FeedbackManager, FeedbackType
-from app.omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PluginPerformanceTracker, ShadowDeployManager, PluginVersionManager 
-from app.omnicore_engine.database import Database
-from app.omnicore_engine.metrics import AUDIT_RECORDS, AUDIT_ERRORS, AUDIT_RECORDS_PROCESSED_TOTAL, AUDIT_BUFFER_SIZE_CURRENT
-from app.ai_assistant.policy import PolicyEngine
-from app.omnicore_engine.core import KnowledgeGraph, safe_serialize
 from arbiter.config import ArbiterConfig
+settings = ArbiterConfig()
+try:
+    from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PluginPerformanceTracker, ShadowDeployManager, PluginVersionManager
+except ImportError:
+    PLUGIN_REGISTRY = None
+    PluginPerformanceTracker = None
+    ShadowDeployManager = None
+    PluginVersionManager = None
+try:
+    from omnicore_engine.database.database import Database
+except ImportError:
+    Database = None
+from omnicore_engine.metrics import AUDIT_RECORDS, AUDIT_ERRORS, AUDIT_RECORDS_PROCESSED_TOTAL, AUDIT_BUFFER_SIZE_CURRENT
+try:
+    from omnicore_engine.core import KnowledgeGraph, safe_serialize
+except ImportError:
+    from omnicore_engine.core import safe_serialize
+    KnowledgeGraph = None
 import aiohttp
 
 try:

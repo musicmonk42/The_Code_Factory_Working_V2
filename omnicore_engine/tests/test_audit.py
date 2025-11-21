@@ -5,41 +5,23 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from pathlib import Path
 import hashlib
 import sys
-import os # <-- os import is crucial here
+import os
 
-# --- FIX: Add current directory to sys.path for package imports (Crucial fix for ModuleNotFoundError) ---
-# This ensures that when the test file tries to import/patch 'omnicore_engine.audit',
-# Python can find the 'omnicore_engine' package itself.
-# We modify this to add the parent directory for relative imports to work when run outside a module context
+# Add current directory to sys.path for package imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# ------------------------------------------------------------------
 
-# --- 1. Mock 'app' package imports ---
-app_mock = MagicMock()
-sys.modules['app'] = app_mock
-sys.modules['app.config'] = MagicMock()
-sys.modules['app.config.legal_tender_settings'] = MagicMock()
-sys.modules['app.feedback_manager'] = MagicMock()
-sys.modules['app.feedback_manager.feedback_manager'] = MagicMock()
-# Added necessary sub-modules to sys.modules to prevent nested ModuleNotFoundErrors
-sys.modules['app.omnicore_engine'] = MagicMock()
-sys.modules['app.omnicore_engine.plugin_registry'] = MagicMock()
-sys.modules['app.omnicore_engine.database'] = MagicMock()
-sys.modules['app.omnicore_engine.metrics'] = MagicMock()
-sys.modules['app.omnicore_engine.core'] = MagicMock()
-sys.modules['app.ai_assistant'] = MagicMock()
-sys.modules['app.ai_assistant.policy'] = MagicMock()
+# Mock arbiter module
+sys.modules['arbiter'] = MagicMock()
+sys.modules['arbiter.config'] = MagicMock()
 
-# --- FIX: Mock 'security_utils' and 'security_config' modules to resolve ModuleNotFoundErrors ---
+# Mock security modules
 sys.modules['security_utils'] = MagicMock()
 sys.modules['security_config'] = MagicMock()
-# --- END FIX ---
 
-# --- 2. Mock settings and return values ---
+# Mock settings and return values
 mock_settings = MagicMock()
 mock_settings.DATABASE_URL = "sqlite:///test.db"
 mock_settings.REDIS_URL = "redis://localhost:6379/0"
-# NOTE: The missing 'database_path' attribute is NOT set here. It will be patched locally.
 mock_settings.ENCRYPTION_KEY = MagicMock()
 mock_settings.ENCRYPTION_KEY.get_secret_value.return_value = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' 
 mock_settings.KAFKA_BOOTSTRAP_SERVERS = 'localhost:9092'
@@ -64,8 +46,8 @@ mock_settings.PolicyEngine.return_value = MagicMock()
 mock_settings.KnowledgeGraph = MagicMock()
 mock_settings.KnowledgeGraph.return_value = MagicMock()
 
-# Link the mocked settings object to the 'app' package mock path
-sys.modules['app.config.legal_tender_settings'].settings = mock_settings
+# Link the mocked settings object
+sys.modules['arbiter.config'].ArbiterConfig = MagicMock(return_value=mock_settings)
 
 # --- 3. Patching the imports and importing the module under test ---
 # The patch targets MUST be updated to reflect the new relative import structure within the package.
