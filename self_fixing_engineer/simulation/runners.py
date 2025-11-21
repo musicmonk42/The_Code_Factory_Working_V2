@@ -101,6 +101,10 @@ if not runners_logger.hasHandlers():
     runners_logger.addHandler(handler)
 
 
+# Configuration constants
+ASYNC_EXECUTION_TIMEOUT_SECONDS = int(os.getenv("RUNNER_ASYNC_EXECUTION_TIMEOUT", "300"))  # Default 5 minutes
+
+
 def alert_operator(message: str, level: str = "CRITICAL"):
     runners_logger.critical(f"[OPS ALERT - {level}] {message}")
 
@@ -529,8 +533,8 @@ def run_agent(agent_config: Dict[str, Any]) -> Dict[str, Any]:
                  # Run the coroutine in the existing loop and wait for the result
                  # This is the correct pattern for calling async code from sync context with an active loop
                  future = asyncio.run_coroutine_threadsafe(_execute_with_audit(), loop)
-                 # Wait for the future with a reasonable timeout
-                 return future.result(timeout=300)  # 5 minute timeout
+                 # Wait for the future with a configurable timeout
+                 return future.result(timeout=ASYNC_EXECUTION_TIMEOUT_SECONDS)
             else:
                  # Loop exists but isn't running, use run_until_complete
                  return loop.run_until_complete(_execute_with_audit())

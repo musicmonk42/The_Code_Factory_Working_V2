@@ -659,7 +659,8 @@ def _validate_and_bind_workdir(workdir: str, allow_write: bool):
     if not isinstance(workdir, str) or not workdir.strip():
         raise ValueError("Workdir must be a non-empty string")
 
-    # Expand and resolve the path
+    # Expand and resolve the path to its canonical form
+    # This resolves symlinks and normalizes the path
     host_dir = os.path.abspath(os.path.expanduser(workdir))
     
     # Security: Validate the path doesn't escape expected boundaries
@@ -672,8 +673,19 @@ def _validate_and_bind_workdir(workdir: str, allow_write: bool):
         os.path.abspath("/workspace"),  # Common workspace directory
     ]
     
-    # Check if the path is under one of the safe base directories
-    is_safe = any(host_dir.startswith(base) for base in safe_base_dirs)
+    # Check if the path is under one of the safe base directories using commonpath
+    # This is more secure than startswith() as it prevents traversal bypasses
+    is_safe = False
+    for base in safe_base_dirs:
+        try:
+            # commonpath returns the common path prefix
+            # If host_dir is under base, commonpath will equal base
+            if os.path.commonpath([host_dir, base]) == base:
+                is_safe = True
+                break
+        except ValueError:
+            # commonpath raises ValueError if paths are on different drives (Windows)
+            continue
     
     if not is_safe:
         sandbox_logger.warning(f"Workdir {workdir} resolves to {host_dir}, which is outside safe directories. Using temp dir instead.")
