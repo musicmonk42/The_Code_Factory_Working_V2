@@ -10,7 +10,16 @@ import atexit
 import threading
 import sys
 import re
-import docker # Import the docker library for sandboxing
+
+# Import docker with try-except for graceful degradation
+try:
+    import docker
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None
+    logger.warning("Docker library not available. Sandboxing will be disabled.")
+
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, Callable, List
 from datetime import datetime, timezone
@@ -242,7 +251,7 @@ class InputValidator:
 
             # Apply PII masking if enabled
             if security_config.mask_pii_in_logs:
-                for pattern in security_config.pii_patterns:
+                for pattern in security_config.pii_patterns.values():
                     data = re.sub(pattern, '[PII_MASKED]', data)
                 logger.debug("PII masking applied to text input.")
 
@@ -322,6 +331,9 @@ class SandboxExecutor:
                 raise MultiModalException(f"Error during execution: {e}") from e
         
         # Real sandboxing implementation using docker-py
+        if not DOCKER_AVAILABLE:
+            raise ConfigurationError("Docker library not available. Sandboxing cannot be enabled.")
+        
         try:
             client = docker.from_env()
             
@@ -330,20 +342,29 @@ class SandboxExecutor:
 
             # The Docker command will execute a Python one-liner to deserialize input,
             # run the function, and serialize the output.
-            # NOTE: This assumes the target function's module is available in the container.
-            # For production, this logic would be more sophisticated with pre-built images.
+            # NOTE: This sandboxing approach has limitations:
+            # - Relative imports won't work in container
+            # - Function module might not be available in container
+            # - No way to pass actual function code to container
+            # For production, use pre-built images with required dependencies.
             docker_cmd = f"python -c 'import json; from .multimodal.interface import {func.__name__}; data = json.loads(input()); result = {func.__name__}(*data[\"args\"], **data[\"kwargs\"]); print(json.dumps(result.model_dump()))'"
 
             # Run the container with restricted permissions
+            # Note: docker-py does not support 'input' parameter. Use stdin instead.
             container = client.containers.run(
                 image="python:3.9-slim", # Or a more specific image with required dependencies
                 command=["/bin/sh", "-c", docker_cmd],
                 network_mode="none",
                 read_only=True,
-                input=input_data, # Pass input data via stdin
+                stdin_open=True,
                 detach=True,
                 remove=True # Clean up container after it exits
             )
+            
+            # Write input data to container stdin
+            sock = container.attach_socket(params={'stdin': 1, 'stream': 1})
+            sock._sock.sendall(input_data.encode('utf-8'))
+            sock.close()
 
             # Wait for the container to finish and get its logs
             result = container.wait(timeout=30) # Wait for a max of 30 seconds
