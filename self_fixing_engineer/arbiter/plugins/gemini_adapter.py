@@ -169,7 +169,7 @@ class GeminiAdapter:
         # --- Circuit Breaker State Check ---
         # Before making the API call, check the circuit breaker state.
         if self.circuit_breaker_state == "open":
-            if asyncio.get_event_loop().time() - self.circuit_breaker_last_failure_time > self.circuit_breaker_timeout:
+            if time.monotonic() - self.circuit_breaker_last_failure_time > self.circuit_breaker_timeout:
                 self.logger.warning(f"Circuit breaker timeout reached. Transitioning to 'half-open' state. [Correlation ID: {correlation_id}]")
                 self.circuit_breaker_state = "half-open"
             else:
@@ -179,7 +179,7 @@ class GeminiAdapter:
                 ).inc()
                 raise CircuitBreakerOpenError("Circuit breaker is open due to repeated failures.")
 
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.monotonic()
         error_type = "unknown"
         sanitized_prompt = self._sanitize_prompt(prompt)
         prompt_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
@@ -270,7 +270,7 @@ class GeminiAdapter:
 
         finally:
             # Record latency and error metrics regardless of call outcome.
-            end_time = asyncio.get_event_loop().time()
+            end_time = time.monotonic()
             latency = end_time - start_time
             gemini_call_latency_seconds.labels(
                 provider=self.provider, model=self.model, correlation_id=correlation_id
@@ -326,7 +326,7 @@ class GeminiAdapter:
                 self.circuit_breaker_failures = 0
         else: # On failure
             self.circuit_breaker_failures += 1
-            self.circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
+            self.circuit_breaker_last_failure_time = time.monotonic()
             self.logger.warning(
                 f"Gemini API call failed. Consecutive failures: {self.circuit_breaker_failures}/{self.circuit_breaker_threshold}."
             )

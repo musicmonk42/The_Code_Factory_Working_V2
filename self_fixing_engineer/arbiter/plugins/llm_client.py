@@ -86,15 +86,19 @@ def get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[Hi
     
     with _metrics_lock:
         try:
-            if check_name in REGISTRY._names_to_collectors:
-                existing_metric = REGISTRY._names_to_collectors[check_name]
-                if isinstance(existing_metric, metric_class):
+            # Try to get existing collector using public API
+            try:
+                existing_metric = REGISTRY._collector_to_names.get(check_name)
+                if existing_metric is not None and isinstance(existing_metric, metric_class):
                     return existing_metric
-                else:
+                elif existing_metric is not None:
                     # If a metric with the same name exists but is of a different type,
                     # unregister it to avoid conflicts, especially in environments with hot-reloading.
                     REGISTRY.unregister(existing_metric)
                     logger.warning(f"Unregistered mismatched metric '{name}'. Recreating.")
+            except (KeyError, AttributeError):
+                # Metric doesn't exist or registry structure changed - proceed with creation
+                pass
         except Exception as e:
             logger.error(f"Error checking/unregistering metric {name}: {e}")
 
@@ -498,7 +502,9 @@ class LLMClient:
                 full_response_text = ""
                 async for line in resp.content:
                     try: full_response_text += json.loads(line.decode('utf-8')).get("response", "")
-                    except json.JSONDecodeError: pass 
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Skipping non-JSON line in Ollama response: {e}")
+                        pass 
                 result = full_response_text.strip()
         else:
             raise ValueError(f"Invalid provider: {self.provider}")
@@ -587,7 +593,9 @@ class LLMClient:
                     try:
                         json_line = json.loads(line.decode('utf-8'))
                         if "response" in json_line: yield json_line["response"]
-                    except json.JSONDecodeError: pass
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Skipping non-JSON line in Ollama response: {e}")
+                        pass
         else:
             raise ValueError(f"Invalid provider: {self.provider}")
 

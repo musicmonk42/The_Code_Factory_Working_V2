@@ -576,8 +576,8 @@ class MultiModalPlugin:
         if state == "open":
             last_failure_time = self._circuit_breaker_last_failure_time.get(modality, 0.0)
             timeout = self.config.circuit_breaker_config.timeout_seconds
-            # Use asyncio's event loop time for consistency in async context
-            if asyncio.get_event_loop().time() - last_failure_time > timeout:
+            # Use time.monotonic() for consistent monotonic time measurement
+            if time.monotonic() - last_failure_time > timeout:
                 # Transition to half-open
                 self._circuit_breaker_states[modality] = "half-open"
                 logger.warning(f"Circuit breaker for {modality} is now 'half-open'.")
@@ -595,13 +595,13 @@ class MultiModalPlugin:
             self._circuit_breaker_failures[modality] += 1
             if self._circuit_breaker_states.get(modality) == "half-open":
                 self._circuit_breaker_states[modality] = "open"
-                # Use asyncio's event loop time for consistency in async context
-                self._circuit_breaker_last_failure_time[modality] = asyncio.get_event_loop().time()
+                # Use time.monotonic() for consistent monotonic time measurement
+                self._circuit_breaker_last_failure_time[modality] = time.monotonic()
                 logger.error(f"Circuit breaker for {modality} failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures.get(modality) >= self.config.circuit_breaker_config.threshold:
                 self._circuit_breaker_states[modality] = "open"
-                # Use asyncio's event loop time for consistency in async context
-                self._circuit_breaker_last_failure_time[modality] = asyncio.get_event_loop().time()
+                # Use time.monotonic() for consistent monotonic time measurement
+                self._circuit_breaker_last_failure_time[modality] = time.monotonic()
                 logger.error(f"Circuit breaker for {modality} is now 'open' after {self._circuit_breaker_failures.get(modality)} consecutive failures.")
 
     async def _process_data(self, modality: str, data: Any, processor: Any) -> ProcessingResult:

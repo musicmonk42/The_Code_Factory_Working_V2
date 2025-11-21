@@ -114,7 +114,7 @@ class OllamaAdapter:
         Raises LLMClientError if the circuit is open and the timeout has not been reached.
         """
         if self._circuit_breaker_state == "open":
-            if asyncio.get_event_loop().time() - self._circuit_breaker_last_failure_time > self._circuit_breaker_timeout:
+            if time.monotonic() - self._circuit_breaker_last_failure_time > self._circuit_breaker_timeout:
                 self._circuit_breaker_state = "half-open"
                 self.circuit_breaker_state_gauge.set(1) # 1 for "half-open"
                 self.logger.warning("Circuit breaker is now 'half-open'.")
@@ -135,12 +135,12 @@ class OllamaAdapter:
             self._circuit_breaker_failures += 1
             if self._circuit_breaker_state == "half-open":
                 self._circuit_breaker_state = "open"
-                self._circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
+                self._circuit_breaker_last_failure_time = time.monotonic()
                 self.circuit_breaker_state_gauge.set(2) # 2 for "open"
                 self.logger.error(f"Circuit breaker failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_state = "open"
-                self._circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
+                self._circuit_breaker_last_failure_time = time.monotonic()
                 self.circuit_breaker_state_gauge.set(2) # 2 for "open"
                 self.logger.error(f"Circuit breaker is now 'open' after {self._circuit_breaker_failures} failures.")
 
@@ -189,7 +189,7 @@ class OllamaAdapter:
         # Mask PII in prompt before processing
         masked_prompt = prompt
         if self.security_config.get("mask_pii_in_logs", False):
-            for pattern in self.security_config.get("pii_patterns", []):
+            for pattern in self.security_config.get("pii_patterns", {}).values():
                 masked_prompt = re.sub(pattern, '[PII_MASKED]', masked_prompt)
             self.logger.debug("PII masking applied to prompt.")
 

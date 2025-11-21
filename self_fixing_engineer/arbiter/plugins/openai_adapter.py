@@ -105,7 +105,7 @@ class OpenAIAdapter:
         Raises an APIError if the circuit is open.
         """
         if self._circuit_breaker_state == "open":
-            if asyncio.get_event_loop().time() - self._circuit_breaker_last_failure_time > self._circuit_breaker_timeout:
+            if time.monotonic() - self._circuit_breaker_last_failure_time > self._circuit_breaker_timeout:
                 self._circuit_breaker_state = "half-open"
                 self.circuit_breaker_state_gauge.set(1)
                 self.logger.warning("Circuit breaker is now 'half-open'.")
@@ -127,12 +127,12 @@ class OpenAIAdapter:
             if self._circuit_breaker_state == "half-open":
                 self._circuit_breaker_state = "open"
                 self.circuit_breaker_state_gauge.set(2)
-                self._circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
+                self._circuit_breaker_last_failure_time = time.monotonic()
                 self.logger.error("Circuit breaker failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_state = "open"
                 self.circuit_breaker_state_gauge.set(2)
-                self._circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
+                self._circuit_breaker_last_failure_time = time.monotonic()
                 self.logger.error(f"Circuit breaker is now 'open' after {self._circuit_breaker_failures} failures.")
 
     async def __aenter__(self):
@@ -193,12 +193,12 @@ class OpenAIAdapter:
         """
         # Check circuit breaker to prevent cascading failures
         self._check_circuit_breaker()
-        start_time = asyncio.get_event_loop().time()
+        start_time = time.monotonic()
 
         # Mask PII in prompt before processing
         masked_prompt = prompt
         if self.security_config.get("mask_pii_in_logs", False):
-            for pattern in self.security_config.get("pii_patterns", []):
+            for pattern in self.security_config.get("pii_patterns", {}).values():
                 masked_prompt = re.sub(pattern, '[PII_MASKED]', masked_prompt)
             self.logger.debug("PII masking applied to prompt.")
 
@@ -212,14 +212,14 @@ class OpenAIAdapter:
             )
             self._update_circuit_breaker(success=True)
             self.requests_total.labels(status='success', correlation_id=correlation_id or 'none').inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(time.monotonic() - start_time)
             self.logger.info(f"OpenAI generation successful for correlation_id: {correlation_id}")
             return response_text
 
         except LLMClientError as e:
             self._update_circuit_breaker(success=False)
             self.requests_total.labels(status='failure', correlation_id=correlation_id or 'none').inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(time.monotonic() - start_time)
 
             original_exception = e.__cause__ if e.__cause__ else e
             # Handle timeout, authentication, and API errors
@@ -240,6 +240,6 @@ class OpenAIAdapter:
         except Exception as e:
             self._update_circuit_breaker(success=False)
             self.requests_total.labels(status='failure', correlation_id=correlation_id or 'none').inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or 'none').observe(time.monotonic() - start_time)
             self.logger.critical(f"A critical, unhandled error occurred in OpenAIAdapter: {e} [Correlation ID: {correlation_id}]", exc_info=True)
             raise APIError(f"Critical unhandled error in OpenAIAdapter: {e}") from e
