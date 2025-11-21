@@ -246,10 +246,10 @@ from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 
 ### After Audit:
 - **Critical Risk:** 0 (all fixed)
-- **High Risk:** Reduced from 5 to 0 (critical issues fixed)
-- **Medium Risk:** 190 (documented for future work)
+- **High Risk:** 0 (all critical XSS/XXE vulnerabilities fixed)
+- **Medium Risk:** 190 (documented for future work - primarily host binding issues)
 
-### Overall Risk Reduction: ~95% of critical/high risks mitigated
+### Overall Risk Reduction: 100% of critical/high-severity execution-blocking and injection risks mitigated
 
 ---
 
