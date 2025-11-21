@@ -11,15 +11,6 @@ import threading
 import sys
 import re
 
-# Import docker with try-except for graceful degradation
-try:
-    import docker
-    DOCKER_AVAILABLE = True
-except ImportError:
-    DOCKER_AVAILABLE = False
-    docker = None
-    logger.warning("Docker library not available. Sandboxing will be disabled.")
-
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, Callable, List
 from datetime import datetime, timezone
@@ -31,6 +22,23 @@ from PIL import Image
 # Assuming these are available from the arbiter package root
 from arbiter.config import ArbiterConfig
 from arbiter.plugins.multi_modal_config import MultiModalConfig
+
+# Initialize logger early before any usage
+logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+    logger.addHandler(handler)
+
+# Import docker with try-except for graceful degradation
+try:
+    import docker
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None
+    logger.warning("Docker library not available. Sandboxing will be disabled.")
 
 # It's better to explicitly define the import paths for the sub-packages
 from .multimodal.interface import (
@@ -52,13 +60,6 @@ try:
 except ImportError:
     # Prometheus and Redis are optional dependencies
     Counter, Histogram, redis = None, None, None
-
-logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
-    logger.addHandler(handler)
 
 # Helper functions for metrics
 def get_or_create_counter(name: str, description: str, labels: List[str]) -> Counter:
@@ -362,9 +363,17 @@ class SandboxExecutor:
             )
             
             # Write input data to container stdin
-            sock = container.attach_socket(params={'stdin': 1, 'stream': 1})
-            sock._sock.sendall(input_data.encode('utf-8'))
-            sock.close()
+            try:
+                sock = container.attach_socket(params={'stdin': 1, 'stream': 1})
+                # Access underlying socket with error handling for encapsulation
+                try:
+                    sock._sock.sendall(input_data.encode('utf-8'))
+                except AttributeError:
+                    # If _sock doesn't exist, try public API
+                    sock.sendall(input_data.encode('utf-8'))
+                sock.close()
+            except Exception as e:
+                logger.warning(f"Failed to write to container stdin: {e}. Proceeding without input.")
 
             # Wait for the container to finish and get its logs
             result = container.wait(timeout=30) # Wait for a max of 30 seconds

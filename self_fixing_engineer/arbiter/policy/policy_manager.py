@@ -366,7 +366,7 @@ class PolicyManager:
             try:
                 tmp.replace(self.policy_file)
             except OSError as e:
-                if e.errno == errno.EXDEV:  # Cross-device link
+                if getattr(e, 'errno', None) == errno.EXDEV:  # Cross-device link
                     # Copy then delete instead
                     shutil.copy2(tmp, self.policy_file)
                     tmp.unlink()
