@@ -412,7 +412,7 @@ try:
     # This prevents the ModuleNotFoundError from being raised and allows the fallback logic to be tested.
     class MockAnalyzerCoreUtils:
         alert_operator = MagicMock()
-        scrub_secrets = MagicMock(return_value=lambda x: x)
+        scrub_secrets = MagicMock(side_effect=lambda x: x)
     
     class MockAnalyzerCoreAudit:
         get_audit_logger = MagicMock(return_value=MagicMock())

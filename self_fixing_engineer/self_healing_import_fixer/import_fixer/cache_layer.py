@@ -72,7 +72,8 @@ except Exception:
     def retry_if_exception_type(*a, **k):
         class _P:
             def __or__(self, other):
-                return self
+                # Return a new instance that combines both predicates
+                return _P()
 
         return _P()
 

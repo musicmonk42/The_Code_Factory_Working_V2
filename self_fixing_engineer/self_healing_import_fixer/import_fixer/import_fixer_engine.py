@@ -422,7 +422,15 @@ class UnifiedSimulationModule:
             # FIX: histogram label requirement
             SIM_MODULE_METRICS["simulation_duration_seconds"].labels(type=sim_type).observe(duration)
             # FIX: audit failure only once across retries for the same simulation id
-            sim_id = str(sim_config.get("id", "<unknown>"))
+            # Use hash of sim_config if no id is present to distinguish different simulations
+            sim_id = sim_config.get("id")
+            if sim_id is None:
+                # Generate a unique identifier based on the simulation config
+                import hashlib
+                config_str = str(sorted(sim_config.items()))
+                sim_id = f"<hash:{hashlib.md5(config_str.encode()).hexdigest()[:8]}>"
+            else:
+                sim_id = str(sim_id)
             key = ("execute", sim_id)
             if key not in self._fail_audit_once:
                 self._fail_audit_once.add(key)
@@ -608,7 +616,7 @@ async def run_import_healer(
         ):
             try:
                 return importlib.import_module(cand)
-            except Exception:
+            except (ImportError, ModuleNotFoundError):
                 pass
         raise ImportError(f"Unable to import {mod_name}")
 
