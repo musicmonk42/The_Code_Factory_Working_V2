@@ -229,8 +229,8 @@ class CryptoProvider(ABC):
                 cancel = getattr(task, "cancel", None)
                 if callable(cancel):
                     cancel()
-                # Only await real asyncio Futures/Tasks
-                if isinstance(task, asyncio.Task) or isinstance(task, asyncio.Future):
+                # Only await real asyncio Futures/Tasks (Task is a subclass of Future)
+                if isinstance(task, asyncio.Future):
                     await asyncio.gather(task, return_exceptions=True)
             except Exception as e:
                 # Avoid accessing get_name() on non-Tasks
@@ -1325,9 +1325,13 @@ class HSMCryptoProvider(CryptoProvider):
                 from pkcs11.constants import Mechanism as _Mech
                 _ckm = getattr(_Mech, "EDDSA", getattr(_Mech, "CKM_EDDSA", None))
                 
-                # Fallback check to top-level import if _Mech fails
-                if _ckm is None and 'CKM_EDDSA' in globals():
-                    _ckm = CKM_EDDSA
+                # Fallback check to module-level import if _Mech doesn't have it
+                if _ckm is None:
+                    try:
+                        # CKM_EDDSA was imported at module level
+                        _ckm = CKM_EDDSA
+                    except NameError:
+                        pass
 
                 if _ckm is None:
                         raise AttributeError("EDDSA mechanism missing in constants")

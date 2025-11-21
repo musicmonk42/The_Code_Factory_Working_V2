@@ -297,33 +297,31 @@ class FileSystemKeyStorageBackend:
                     self.logger.error(f"File system backend: Corrupted JSON for key '{key_id}': {e}. Content preview: {content[:100]}...", exc_info=True)
                     raise self._CryptoOperationError(f"Corrupted key file for {key_id}: Invalid JSON.") from e
 
-
-            # --- FIX 3: Move validation logic outside the I/O try block ---
-            # This ensures validation errors (ValueError) are not wrapped into CryptoOperationError
-
-            # Basic validation of loaded metadata
-            required_meta_fields = ["encrypted_payload_b64", "algo", "creation_time", "key_id", "status"]
-            if not all(k in metadata for k in required_meta_fields):
-                missing_fields = [f for f in required_meta_fields if f not in metadata]
-                error_msg = f"Missing essential metadata in file for key '{key_id}'. Missing: {missing_fields}"
-                self.logger.error(error_msg, extra={"operation": "load_key_missing_metadata", "key_id": key_id, "missing_fields": missing_fields})
-                raise ValueError(error_msg)
-            if metadata["key_id"] != key_id:
-                error_msg = f"Key ID mismatch in metadata for '{key_id}'. Expected '{key_id}', got '{metadata['key_id']}'."
-                self.logger.error(error_msg, extra={"operation": "load_key_id_mismatch", "key_id": key_id, "metadata_key_id": metadata["key_id"]})
-                raise ValueError(error_msg)
-
-            return metadata
-        
-        except (ValueError, TypeError): # Catch validation errors explicitly
-            raise # Re-raise them so they are not wrapped
         except Exception as e:
+            # Only wrap I/O errors, not validation errors
             self.logger.error(f"File system backend: Failed to load key data for '{key_id}': {e}", exc_info=True)
             if isinstance(e, self._CryptoOperationError): # Don't re-wrap
                 raise
             raise self._CryptoOperationError(f"File system backend load failed for key {key_id}: {e}") from e
         finally:
             await self._release_lock(filepath)
+
+        # --- FIX 3: Validation logic is now truly outside the I/O try block ---
+        # This ensures validation errors (ValueError) are raised directly without wrapping
+
+        # Basic validation of loaded metadata
+        required_meta_fields = ["encrypted_payload_b64", "algo", "creation_time", "key_id", "status"]
+        if not all(k in metadata for k in required_meta_fields):
+            missing_fields = [f for f in required_meta_fields if f not in metadata]
+            error_msg = f"Missing essential metadata in file for key '{key_id}'. Missing: {missing_fields}"
+            self.logger.error(error_msg, extra={"operation": "load_key_missing_metadata", "key_id": key_id, "missing_fields": missing_fields})
+            raise ValueError(error_msg)
+        if metadata["key_id"] != key_id:
+            error_msg = f"Key ID mismatch in metadata for '{key_id}'. Expected '{key_id}', got '{metadata['key_id']}'."
+            self.logger.error(error_msg, extra={"operation": "load_key_id_mismatch", "key_id": key_id, "metadata_key_id": metadata["key_id"]})
+            raise ValueError(error_msg)
+
+        return metadata
 
 
     async def list_key_metadata(self) -> List[Dict[str, Any]]:
