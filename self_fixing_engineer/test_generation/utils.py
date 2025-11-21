@@ -17,7 +17,8 @@ used across the ATCO pipeline. Its production-ready posture is built upon:
 import os
 import subprocess
 import shutil
-import xml.etree.ElementTree as ET
+# Security fix: Use defusedxml to prevent XXE attacks
+import defusedxml.ElementTree as ET
 import json
 import venv
 import sys

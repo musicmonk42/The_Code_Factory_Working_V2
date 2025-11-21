@@ -36,7 +36,8 @@ import ast
 import subprocess
 import tempfile
 import os
-import xml.etree.ElementTree as ET
+# Security fix: Use defusedxml to prevent XXE attacks
+import defusedxml.ElementTree as ET
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any, List, Tuple
 import asyncio

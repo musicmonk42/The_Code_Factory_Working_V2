@@ -1,6 +1,9 @@
 # requirements.txt (modernized, with conservative version ranges)
 # Python >= 3.10
 
+# Security
+defusedxml>=0.7.1,<1  # Secure XML parsing to prevent XXE attacks
+
 # Core Application & Web Framework
 fastapi>=0.116,<0.120
 pydantic>=2.6,<3

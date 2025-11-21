@@ -35,7 +35,7 @@ import glob
 from importlib import import_module, reload # Added import_module for dynamic loading
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type # For retries on external calls
 
-from jinja2 import Environment, FileSystemLoader, Template # Jinja2 for templating
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape  # Jinja2 for templating
 from sentence_transformers import SentenceTransformer, util # For embedding and semantic search
 from watchdog.observers import Observer # For file system monitoring (hot-reload)
 from watchdog.events import FileSystemEventHandler # For file system events (hot-reload)
@@ -340,7 +340,11 @@ class PromptTemplateRegistry:
         """Creates and configures the Jinja2 environment with custom filters."""
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir, exist_ok=True)
-        env = Environment(loader=FileSystemLoader(self.plugin_dir), enable_async=True) # Enable async rendering
+        env = Environment(
+            loader=FileSystemLoader(self.plugin_dir),
+            autoescape=select_autoescape(['html', 'xml', 'htm', 'j2', 'jinja2']),
+            enable_async=True
+        )  # Enable async rendering with selective autoescape for XSS protection
         
         # Register custom asynchronous filters
         # REFACTORED: Point 'get_commits' to the imported runner function

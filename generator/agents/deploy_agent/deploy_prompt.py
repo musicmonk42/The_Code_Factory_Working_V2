@@ -21,7 +21,7 @@ import aiofiles  # needed for async file IO used below
 from typing import List, Dict, Any, Union, AsyncGenerator, Optional, Callable, Awaitable, Tuple
 import glob
 from importlib import reload
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 
 # Make sentence_transformers optional
 try:
@@ -386,7 +386,11 @@ class PromptTemplateRegistry:
         """Creates and configures the Jinja2 environment with custom filters."""
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
-        env = Environment(loader=FileSystemLoader(self.template_dir), enable_async=True) # Enable async rendering
+        env = Environment(
+            loader=FileSystemLoader(self.template_dir),
+            autoescape=select_autoescape(['html', 'xml', 'htm', 'j2', 'jinja2']),
+            enable_async=True
+        )  # Enable async rendering with selective autoescape for XSS protection
         
         # Register custom asynchronous filters
         env.filters['get_commits'] = get_commits
