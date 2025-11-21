@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 import smtplib
 from email.message import EmailMessage
+from email.utils import parsedate_to_datetime
 import requests
 from logging.handlers import RotatingFileHandler
 import sys
@@ -14,6 +15,7 @@ import random
 import ssl
 import json
 from collections import deque
+from datetime import datetime, timezone
 from hashlib import sha256
 import atexit
 from os import path as _ospath
@@ -170,7 +172,18 @@ class AlertDispatcher(threading.Thread):
                     jitter = random.uniform(0, 1.0)
                     if r.status_code == 429:
                         retry_after = r.headers.get("Retry-After")
-                        base = float(retry_after) if retry_after and retry_after.isdigit() else (2 ** i)
+                        if retry_after:
+                            if retry_after.isdigit():
+                                base = float(retry_after)
+                            else:
+                                # Try parsing as HTTP date (RFC 2616)
+                                try:
+                                    retry_time = parsedate_to_datetime(retry_after)
+                                    base = max(0, (retry_time - datetime.now(timezone.utc)).total_seconds())
+                                except Exception:
+                                    base = (2 ** i)
+                        else:
+                            base = (2 ** i)
                         sleep = min(60, max(0, base)) + jitter
                     else:
                         sleep = min(30, (2 ** i)) + jitter

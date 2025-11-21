@@ -89,14 +89,14 @@ def invalid_schema_config_path(tmp_path):
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function"""
-    with patch('self_healing_import_fixer.analyzer.core_utils.alert_operator') as mock:
+    with patch('self_fixing_engineer.plugins.core_utils.alert_operator') as mock:
         yield mock
 
 @pytest.fixture
 def mock_audit_logger():
     """Mock the audit_logger"""
     mock_logger = MagicMock()
-    with patch('self_healing_import_fixer.analyzer.analyzer.audit_logger', mock_logger):
+    with patch('self_fixing_engineer.plugins.core_audit.audit_logger', mock_logger):
         yield mock_logger
 
 @pytest.fixture

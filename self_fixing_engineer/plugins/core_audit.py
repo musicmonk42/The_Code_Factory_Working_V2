@@ -143,11 +143,8 @@ class _SafeHandler(logging.Handler):
         except Exception:
             pass
         if self.strict:
-            try:
-                # Use a severe exit code to signal a critical software error
-                os._exit(70)
-            except Exception:
-                pass
+            # Raise an exception for graceful shutdown instead of immediate process termination
+            raise IOError(f"Audit handler {self.name} failed: {err}")
 
 
 class AuditLogger:

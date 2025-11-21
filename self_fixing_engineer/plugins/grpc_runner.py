@@ -74,6 +74,11 @@ except ImportError as e:
             return None
     SECRETS_MANAGER = _MockSecrets()
 
+# Early exit if dependencies are missing
+if MISSING_DEPS:
+    logger.critical("Cannot run gRPC runner without core dependencies")
+    sys.exit(1)
+
 
 # --- Custom Exceptions ---
 class AnalyzerCriticalError(Exception):
