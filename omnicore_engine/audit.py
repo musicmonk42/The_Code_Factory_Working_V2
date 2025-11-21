@@ -7,7 +7,7 @@ import asyncio
 import time
 from typing import Dict, Any, List, Optional, Type, Coroutine, Union
 from circuitbreaker import circuit
-from retry import retry
+from omnicore_engine.retry_compat import retry
 from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime
 from pydantic import BaseModel, Field, ValidationError, SecretStr

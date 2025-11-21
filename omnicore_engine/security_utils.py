@@ -58,12 +58,14 @@ except Exception:  # pragma: no cover - if not available, we still allow module 
 __all__ = [
     # Exceptions
     "SecurityError",
+    "SecurityException",
     "AuthenticationError",
     "AuthorizationError",
     "TokenExpiredError",
     "EncryptionError",
     "DecryptionError",
     "RateLimitError",
+    "ValidationError",
     # Enums / dataclasses
     "HashAlgorithm",
     "EncryptionAlgorithm",
@@ -128,6 +130,10 @@ class DecryptionError(SecurityError):
 
 class RateLimitError(SecurityError):
     """Raised when a rate limiter blocks an action."""
+
+
+class ValidationError(SecurityError):
+    """Raised when input validation fails."""
 
 
 # ---------------------------------------------------------------------------
