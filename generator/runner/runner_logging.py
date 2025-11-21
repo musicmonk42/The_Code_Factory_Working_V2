@@ -14,12 +14,10 @@ import sys
 import aiohttp
 import psutil
 import contextlib # [NEW] Added for stop_logging_services
-import sys # [FIX] Import sys for stderr logging
-import typing # FIX: Added for TYPE_CHECKING
 from opentelemetry import trace
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, Union, List, Callable, Deque, Tuple
+from typing import Dict, Any, Optional, Union, List, Callable, Deque, Tuple, TYPE_CHECKING
 from collections import deque
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -118,7 +116,7 @@ except Exception:
 
 # --- FIX: SPLIT CIRCULAR IMPORT ---
 from runner.runner_config import SecretStr # Import SecretStr for runtime checks
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from runner.runner_config import RunnerConfig # Import RunnerConfig for type hinting only
     # FIX: Moved error imports here to break circular dependency
     from runner.runner_errors import RunnerError, ConfigurationError, PersistenceError, error_codes # Import relevant error types
