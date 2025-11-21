@@ -14,6 +14,7 @@ Key design:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import sys
@@ -426,9 +427,8 @@ class UnifiedSimulationModule:
             sim_id = sim_config.get("id")
             if sim_id is None:
                 # Generate a unique identifier based on the simulation config
-                import hashlib
                 config_str = str(sorted(sim_config.items()))
-                sim_id = f"<hash:{hashlib.md5(config_str.encode()).hexdigest()[:8]}>"
+                sim_id = f"<hash:{hashlib.sha256(config_str.encode()).hexdigest()[:8]}>"
             else:
                 sim_id = str(sim_id)
             key = ("execute", sim_id)
