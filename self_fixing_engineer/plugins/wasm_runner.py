@@ -9,6 +9,7 @@ import hmac
 import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable, Tuple, Literal
+from packaging import version
 
 from omnicore_engine.plugin_registry import plugin, PlugInKind
 
@@ -206,7 +207,7 @@ class WasmRunner:
 
         self.wasm_filepath = os.path.join(self.plugins_dir, self.plugin_name, f"{self.plugin_name}.wasm")
 
-        if not (self.manifest.min_core_version <= self.core_version <= self.manifest.max_core_version):
+        if not (version.parse(self.manifest.min_core_version) <= version.parse(self.core_version) <= version.parse(self.manifest.max_core_version)):
             audit_logger.log_event("wasm_plugin_load_failure", plugin=self.plugin_name, reason="core_version_incompatibility", plugin_version=self.manifest.version, core_version=self.core_version)
             alert_operator(f"CRITICAL: WASM plugin '{self.plugin_name}' incompatible with core version. Aborting.", level="CRITICAL")
             raise WasmStartupError(f"Plugin {self.plugin_name} is incompatible with core version {self.core_version}")
@@ -253,11 +254,11 @@ class WasmRunner:
         # Fuel-based runtime limiting if specified
         if limits.get("runtime_seconds"):
             try:
-                setattr(self.config, "consume_fuel", True)
+                self.config.consume_fuel = True  # Use direct attribute access
                 logger.info(f"[{self.plugin_name}] Fuel-based runtime limiting enabled")
                 audit_logger.log_event("wasm_resource_limit_set", plugin=self.plugin_name, resource="runtime_seconds", limit=limits["runtime_seconds"])
-            except Exception as e:
-                raise WasmStartupError(f"Failed to enable fuel-based limiting: {e}") from e
+            except AttributeError as e:
+                raise WasmStartupError(f"Failed to enable fuel-based limiting (config attribute not available): {e}") from e
 
         # Memory cap (best-effort; also validate module memories at load)
         mem = limits.get("memory")
@@ -406,7 +407,11 @@ class WasmRunner:
                     # Optional: attempt to drain leftover fuel if API supports it
                     # (Some versions expose fuel_remaining/consume_fuel; guard if absent)
                     if hasattr(self.store, "add_fuel"):
-                        fuel_budget = int(float(runtime_limit_seconds) * 1_000_000)  # tune as needed
+                        # Fuel budget calculation: 1_000_000 fuel units per second
+                        # This is a tunable multiplier based on wasmtime's fuel consumption rate.
+                        # Wasmtime fuel is consumed at approximately 1 unit per simple instruction.
+                        # Adjust this multiplier based on your specific WASM module's complexity.
+                        fuel_budget = int(float(runtime_limit_seconds) * 1_000_000)
                         self.store.add_fuel(fuel_budget)
                 except Exception as e:
                     logger.warning(f"[{self.plugin_name}] Unable to add fuel: {e}")
