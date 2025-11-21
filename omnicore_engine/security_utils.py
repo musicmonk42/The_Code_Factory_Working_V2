@@ -102,6 +102,10 @@ class SecurityError(Exception):
     """Base class for security related errors."""
 
 
+# Alias for backward compatibility
+SecurityException = SecurityError
+
+
 class AuthenticationError(SecurityError):
     """Raised when authentication is required but missing/invalid."""
 
