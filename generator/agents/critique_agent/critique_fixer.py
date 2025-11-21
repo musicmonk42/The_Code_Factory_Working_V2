@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -37,7 +38,7 @@ try:
     from runner.summarize_utils import check_owasp_compliance # Assuming this is a shared utility location
     
     # Assuming this is the canonical path provided by the user for the test runner sandbox
-    from agents.runner import run_tests_in_sandbox 
+    from runner.runner_core import run_tests as run_tests_in_sandbox 
     
     # Placeholder for configuration and mock external tools (these should ideally be passed in or removed)
     # NOTE: The CritiqueConfig and get_plugin are remnants of a V0 system. Removing local defs.
@@ -303,9 +304,18 @@ async def safety_check_fix(code_files: Dict[str, str], test_files: Dict[str, str
             return True
             
         # Unified test runner call via runner utility
-        # CritqueConfig() is passed to satisfy the stub's signature if TESTING=1
+        # Build payload to match runner_run_tests signature
         temp_dir = Path(tempfile.gettempdir())
-        result = await run_tests_in_sandbox(test_files, code_files, temp_dir, lang, CritiqueConfig())
+        payload = {
+            "test_files": test_files,
+            "code_files": code_files,
+            "output_path": str(temp_dir),
+            "config": {
+                "language": lang,
+                "timeout": 300
+            }
+        }
+        result = await run_tests_in_sandbox(payload)
         
         pass_rate = result.get('pass_rate', 0.0) 
         
