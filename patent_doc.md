@@ -92,21 +92,27 @@ This invention relates to:
 
 \### 5. Summary of the Invention
 
-
+**Key Terminology:**
+- **LLM**: Large Language Model (AI systems like GPT, Claude, etc.)
+- **RL**: Reinforcement Learning (machine learning technique for optimization)
+- **DLQ**: Dead Letter Queue (storage for failed message handling)
+- **PII**: Personally Identifiable Information (protected data like names, SSNs)
+- **RBAC**: Role-Based Access Control (permission system)
+- **ABAC**: Attribute-Based Access Control (context-aware permissions)
 
 \*\*The Code Factory\*\* is a unified platform that:
 
 \- \*\*Reads high-level intent\*\* (e.g. a README, spec, requirements) and turns it into a living, testable, auditable codebase.
 
-\- Is \*\*driven by a central orchestrator\*\* (the Omnicore Omega Pro engine) that coordinates plugins, scenarios, LLMs, feedback, and compliance.
+\- Is \*\*driven by a central orchestrator\*\* (the Omnicore Omega Pro engine) that coordinates plugins, scenarios, LLMs (Large Language Models), feedback, and compliance.
 
 \- Provides a \*\*distributed, sharded, resilient message bus\*\* for all events, requests, and artifacts.
 
 \- \*\*Generates, tests, deploys, monitors, and self-repairs\*\* software systems in a continuous feedback loop.
 
-\- \*\*Enforces compliance, audit, and security\*\* at every stage: PII redaction, encryption, retention, and right-to-erasure.
+\- \*\*Enforces compliance, audit, and security\*\* at every stage: PII (Personally Identifiable Information) redaction, encryption, retention, and right-to-erasure.
 
-\- Leverages \*\*self-healing, RL/anomaly-driven meta-supervision\*\* for automated rollback, plugin hot-swap, and emergent optimization.
+\- Leverages \*\*self-healing, RL (Reinforcement Learning) / anomaly-driven meta-supervision\*\* for automated rollback, plugin hot-swap, and emergent optimization.
 
 \- Provides \*\*full provenance, rollback, and regulatory proof bundles\*\* for all artifacts and operations.
 
@@ -316,9 +322,9 @@ This invention relates to:
 
 \- Scenario/workflow as pluggable, versioned, auditable modules.
 
-\- Distributed, sharded, context-propagating message bus with DLQ, deduplication, and circuit breaking.
+\- Distributed, sharded, context-propagating message bus with DLQ (Dead Letter Queue), deduplication, and circuit breaking.
 
-\- RL/anomaly-based meta-supervisor for self-healing, rollback, and automated test/plugin synthesis.
+\- RL (Reinforcement Learning) / anomaly-based meta-supervisor for self-healing, rollback, and automated test/plugin synthesis.
 
 \- Continuous feedback loop from deployment and user/system feedback to plugin and workflow selection.
 
@@ -1102,11 +1108,27 @@ Educational institution needs custom learning management system.
 Plugins implement standard interface:
 ```python
 class PluginBase:
-    async def initialize(self, config: Dict[str, Any]) -> None
-    async def execute(self, context: PluginContext) -> PluginResult
-    async def shutdown(self) -> None
-    def health_check(self) -> HealthStatus
-    def get_metrics(self) -> Dict[str, Any]
+    """Base class for all plugins in the Code Factory system."""
+    
+    async def initialize(self, config: Dict[str, Any]) -> None:
+        """Initialize plugin with configuration settings."""
+        pass
+    
+    async def execute(self, context: PluginContext) -> PluginResult:
+        """Execute the plugin's main functionality."""
+        pass
+    
+    async def shutdown(self) -> None:
+        """Clean up resources and shutdown gracefully."""
+        pass
+    
+    def health_check(self) -> HealthStatus:
+        """Return current health status of the plugin."""
+        pass
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Return performance metrics for the plugin."""
+        pass
 ```
 
 Required plugin metadata:
@@ -1305,11 +1327,32 @@ The Code Factory Platform is a system for automated software development and mai
 
 #### Independent Claim 1: Automated Software Generation System
 A system for automated software development comprising:
-- A central orchestrator configured to receive high-level software requirements in natural language or structured format, decompose the requirements into actionable tasks using artificial intelligence, and coordinate execution of the tasks through a plurality of specialized agents;
-- A plurality of specialized AI agents including at least a code generation agent, a test generation agent, a deployment agent, and a documentation agent, each configured to generate specific artifacts required for a complete software application;
-- A distributed message bus configured to facilitate communication between the central orchestrator and the plurality of specialized agents using consistent hashing for dynamic message routing, backpressure management for load control, and cryptographic signatures for message authentication;
-- A plugin registry configured to dynamically load, version, and hot-reload executable plugins without system restart, each plugin implementing a standardized interface for initialization, execution, shutdown, health checking, and metrics collection;
-- An audit system configured to generate cryptographically signed audit entries for every system operation, chain the entries using cryptographic hashing, and periodically compute Merkle tree roots for batch integrity verification;
+
+- A central orchestrator configured to:
+  - Receive high-level software requirements in natural language or structured format,
+  - Decompose the requirements into actionable tasks using artificial intelligence, and
+  - Coordinate execution of the tasks through a plurality of specialized agents;
+
+- A plurality of specialized AI agents including at least:
+  - A code generation agent,
+  - A test generation agent,
+  - A deployment agent, and
+  - A documentation agent,
+  - Each configured to generate specific artifacts required for a complete software application;
+
+- A distributed message bus configured to facilitate communication between the central orchestrator and the plurality of specialized agents, using:
+  - Consistent hashing for dynamic message routing,
+  - Backpressure management for load control, and
+  - Cryptographic signatures for message authentication;
+
+- A plugin registry configured to:
+  - Dynamically load, version, and hot-reload executable plugins without system restart,
+  - Each plugin implementing a standardized interface for initialization, execution, shutdown, health checking, and metrics collection;
+
+- An audit system configured to:
+  - Generate cryptographically signed audit entries for every system operation,
+  - Chain the entries using cryptographic hashing, and
+  - Periodically compute Merkle tree roots for batch integrity verification;
 
 whereby the system automatically transforms high-level requirements into production-ready code, tests, deployment configurations, and documentation while maintaining tamper-evident audit trail of all operations.
 
