@@ -380,6 +380,13 @@ def _hash_key(path: str) -> Tuple[int, int]:
 
 @lru_cache(maxsize=128)
 def _compute_hash_cached(path: str, algo: str, chunk_size: int, mtime_ns: int, size: int) -> str:
+    """
+    Compute file hash with caching based on mtime and size.
+    
+    Note: Cache is invalidated based on mtime_ns and size. If file permissions change
+    without modifying the file, the cache won't invalidate. This is acceptable as
+    permission errors will be raised and propagated to the caller.
+    """
     p = Path(path)
     try:
         h = hashlib.new(algo)

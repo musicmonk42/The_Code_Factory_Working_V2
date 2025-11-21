@@ -653,11 +653,32 @@ def _validate_and_bind_workdir(workdir: str, allow_write: bool):
     """
     Ensure the host workdir exists; if it doesn't, create it (or fall back to a safe temp dir).
     Return a (volumes_dict, container_workdir) tuple.
+    
+    Security: Validates path to prevent traversal attacks.
     """
     if not isinstance(workdir, str) or not workdir.strip():
         raise ValueError("Workdir must be a non-empty string")
 
+    # Expand and resolve the path
     host_dir = os.path.abspath(os.path.expanduser(workdir))
+    
+    # Security: Validate the path doesn't escape expected boundaries
+    # This prevents path traversal attacks like "../../../../etc"
+    # Define safe base directories (adjust based on your security requirements)
+    safe_base_dirs = [
+        os.path.abspath(os.path.expanduser("~")),  # User home directory
+        os.path.abspath("/tmp"),  # Temp directory
+        os.path.abspath(os.getcwd()),  # Current working directory
+        os.path.abspath("/workspace"),  # Common workspace directory
+    ]
+    
+    # Check if the path is under one of the safe base directories
+    is_safe = any(host_dir.startswith(base) for base in safe_base_dirs)
+    
+    if not is_safe:
+        sandbox_logger.warning(f"Workdir {workdir} resolves to {host_dir}, which is outside safe directories. Using temp dir instead.")
+        host_dir = tempfile.mkdtemp(prefix="sandbox_workdir_")
+    
     try:
         os.makedirs(host_dir, exist_ok=True)
     except Exception:

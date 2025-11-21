@@ -523,18 +523,19 @@ def run_agent(agent_config: Dict[str, Any]) -> Dict[str, Any]:
         # This implementation assumes it might be called from an existing loop or needs to start one.
         try:
             loop = asyncio.get_running_loop()
-            # If a loop is running, we can't run_until_complete, so we create a task.
-            # This makes the top-level function effectively async, which might not be intended.
-            # A better pattern in a mixed-codebase is often to use asyncio.run() from sync contexts.
-            # For this fix, we'll assume the original logic of trying to run it is what's desired.
+            # If a loop is running, we can't use run_until_complete or asyncio.run()
+            # We need to use run_coroutine_threadsafe and wait for the result
             if loop.is_running():
-                 # This will return a Task object, not the result. The caller must handle it.
-                 # This is likely a bug in the original code's design.
-                 # Let's run it in a thread-safe way to get the result back in this sync function.
-                 return asyncio.run_coroutine_threadsafe(_execute_with_audit(), loop).result()
+                 # Run the coroutine in the existing loop and wait for the result
+                 # This is the correct pattern for calling async code from sync context with an active loop
+                 future = asyncio.run_coroutine_threadsafe(_execute_with_audit(), loop)
+                 # Wait for the future with a reasonable timeout
+                 return future.result(timeout=300)  # 5 minute timeout
             else:
+                 # Loop exists but isn't running, use run_until_complete
                  return loop.run_until_complete(_execute_with_audit())
         except RuntimeError: # No running loop
+            # No loop exists, create a new one with asyncio.run()
             return asyncio.run(_execute_with_audit())
 
     except Exception as e:

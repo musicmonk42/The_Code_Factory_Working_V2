@@ -369,11 +369,7 @@ class UnifiedSimulationModule:
             _with_labels(SIM_MODULE_METRICS["simulation_run_total"], type=sim_type, status="success").inc()
             # Labeled observe (real metrics)
             _with_labels(SIM_MODULE_METRICS["simulation_duration_seconds"], type=sim_type).observe(duration)
-            # Root observe (test compatibility / unlabeled deployments)
-            try:
-                SIM_MODULE_METRICS["simulation_duration_seconds"].observe(duration)
-            except Exception:
-                pass
+            # Note: Removed unlabeled observe() call as it fails on labeled Histograms
 
             await self.db.save_audit_record({
                 "event_type": "simulation_completed",
@@ -387,11 +383,7 @@ class UnifiedSimulationModule:
             _with_labels(SIM_MODULE_METRICS["simulation_run_total"], type=sim_type, status="failed").inc()
             # Labeled observe (real metrics)
             _with_labels(SIM_MODULE_METRICS["simulation_duration_seconds"], type=sim_type).observe(duration)
-            # Root observe (test compatibility / unlabeled deployments)
-            try:
-                SIM_MODULE_METRICS["simulation_duration_seconds"].observe(duration)
-            except Exception:
-                pass
+            # Note: Removed unlabeled observe() call as it fails on labeled Histograms
 
             # audit once per simulation id across retries
             sim_id = str(sim_config.get("id", "<unknown>"))
