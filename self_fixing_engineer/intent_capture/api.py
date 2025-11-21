@@ -268,8 +268,24 @@ def create_app() -> FastAPI:
     # FIX: Uncomment this line if you want AgentError to return 500 instead of 400
     # app.add_exception_handler(AgentError, agent_error_handler)
 
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+    # SECURITY: Configure CORS with specific allowed origins
+    # Use environment variable API_CORS_ORIGINS for production
+    cors_origins = os.getenv('API_CORS_ORIGINS', 'http://localhost:3000,http://localhost:8080').split(',')
+    cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+    
+    app.add_middleware(
+        CORSMiddleware, 
+        allow_origins=cors_origins,  # Specific origins only, not wildcard
+        allow_credentials=True, 
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods
+        allow_headers=["*"]
+    )
+    
+    # SECURITY: Configure TrustedHostMiddleware with specific hosts
+    trusted_hosts = os.getenv('TRUSTED_HOSTS', 'localhost,127.0.0.1').split(',')
+    trusted_hosts = [host.strip() for host in trusted_hosts if host.strip()]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+    
     app.add_middleware(AuditLoggingMiddleware)
 
     Instrumentator().instrument(app).expose(app)

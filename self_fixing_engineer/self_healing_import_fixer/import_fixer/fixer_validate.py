@@ -1004,7 +1004,9 @@ async def main():
     test_file_path.write_text("import os\n\n# A comment\ndef my_function():\n    x = 1\n    return x\n")
 
     bad_security_file = test_project_root / "bad_security.py"
-    bad_security_file.write_text("password = 'mysecretpassword'\nimport subprocess\nsubprocess.call('ls') # nosec\n")
+    # INTENTIONAL: Creating test file with security issues to test the scanner
+    # nosec: This hardcoded password is for testing security detection only
+    bad_security_file.write_text("password = 'mysecretpassword'\nimport subprocess\nsubprocess.call('ls') # nosec\n")  # nosec - test data
 
     syntax_error_file = test_project_root / "syntax_error.py"
     syntax_error_file.write_text("def bad_syntax:\n") # Missing parentheses
@@ -1059,7 +1061,9 @@ async def main():
     # --- Test Single File Validation (Security Issue) ---
     print("\n--- Testing Single File Validation (Security Issue) ---")
     original_security_ok = bad_security_file.read_text()
-    new_security_bad = "password = 'hardcoded'\n"
+    # INTENTIONAL: Test data with hardcoded password for security scanner testing
+    # nosec: This is test data only
+    new_security_bad = "password = 'hardcoded'\n"  # nosec - test data
 
     try:
         report_security = await code_validator.validate_and_commit_file(
