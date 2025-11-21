@@ -133,7 +133,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'  # Fail the build if CRITICAL or HIGH vulnerabilities are found
           
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -149,7 +149,7 @@ jobs:
           scan-ref: '.'
           format: 'table'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'  # Fail the build if CRITICAL or HIGH vulnerabilities are found
 
   sast-analysis:
     name: SAST with Bandit
@@ -203,13 +203,45 @@ jobs:
           
       - name: Check licenses
         run: |
+          # Define approved licenses (permissive open-source licenses)
+          APPROVED_LICENSES="MIT;Apache-2.0;Apache Software License;BSD;BSD-3-Clause;BSD-2-Clause;ISC;Python Software Foundation License;PSF;Mozilla Public License 2.0 (MPL 2.0);MPL-2.0;Zope Public License;HPND;Historical Permission Notice and Disclaimer (HPND);Public Domain;Unlicense;CC0;Creative Commons Zero v1.0 Universal;WTFPL;Do What The F*ck You Want To Public License"
+          
+          # Track if we found any issues
+          HAS_ISSUES=0
+          
           for req_file in requirements.txt generator/requirements.txt omnicore_engine/requirements.txt self_fixing_engineer/requirements.txt; do
             if [ -f "$req_file" ]; then
               echo "Checking licenses for $req_file"
-              pip install -r "$req_file" || true
-              pip-licenses --format=markdown --output-file=licenses-$(basename $req_file).md || true
+              pip install -r "$req_file" || continue
+              
+              # Generate license report
+              pip-licenses --format=markdown --output-file=licenses-$(basename $req_file).md || continue
+              
+              # Check for GPL, AGPL, or unknown licenses (which could be restrictive)
+              echo "Checking for restrictive licenses in $req_file..."
+              RESTRICTIVE=$(pip-licenses --format=plain --with-license-file --no-license-path 2>/dev/null | grep -iE "GPL|AGPL|UNKNOWN|LGPL" | grep -v "Approved" || true)
+              
+              if [ -n "$RESTRICTIVE" ]; then
+                echo "⚠️  WARNING: Found potentially restrictive or unknown licenses in $req_file:"
+                echo "$RESTRICTIVE"
+                HAS_ISSUES=1
+              fi
             fi
           done
+          
+          # Fail if restrictive licenses were found
+          if [ "$HAS_ISSUES" -eq 1 ]; then
+            echo ""
+            echo "❌ License compliance check failed!"
+            echo "Found packages with GPL, AGPL, LGPL, or UNKNOWN licenses."
+            echo "Please review the license reports and either:"
+            echo "  1. Replace packages with restrictive licenses with permissive alternatives"
+            echo "  2. Remove unused dependencies"
+            echo "  3. Update the approved licenses list if the license is acceptable"
+            exit 1
+          fi
+          
+          echo "✅ License compliance check passed!"
           
       - name: Upload license reports
         uses: actions/upload-artifact@v4
