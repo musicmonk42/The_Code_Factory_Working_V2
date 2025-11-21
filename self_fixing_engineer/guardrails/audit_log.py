@@ -817,12 +817,13 @@ class AuditLogger:
                 signatures = []
                 for private_key in self.signers:
                     try:
-                        # Ed25519 sign method only takes the data
+                        # Ed25519 sign method only takes the data (removed RSA PSS padding parameters)
                         sig = private_key.sign(
                             entry_hash.encode('utf-8')
                         )
                         
-                        # Generate a key_id from the public key bytes for Ed25519
+                        # Generate a key_id from the public key bytes using SHA256 hash for Ed25519
+                        # (Ed25519 doesn't have public_numbers() like RSA keys)
                         public_key_bytes = private_key.public_key().public_bytes(
                             encoding=serialization.Encoding.Raw,
                             format=serialization.PublicFormat.Raw
