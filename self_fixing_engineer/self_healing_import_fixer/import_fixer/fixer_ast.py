@@ -335,7 +335,7 @@ class CycleHealer:
             elif isinstance(node, ast.ImportFrom) and node.module is not None:
                 absolute_import_module = node.module
                 if node.level > 0:
-                    base_parts = self.current_module_path.split('.')
+                    base_parts = self.current_module_name.split('.')
                     source_parts = base_parts[:len(base_parts) - node.level]
                     if node.module:
                         source_parts.append(node.module)

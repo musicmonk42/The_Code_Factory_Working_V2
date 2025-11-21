@@ -41,10 +41,7 @@ try:
     from self_healing_import_fixer.import_fixer.cache_layer import get_cache
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for fixer_ai: {e}.")
-    try:
-        alert_operator(f"CRITICAL: AI features missing core dependency: {e}.", level="CRITICAL")
-    except Exception:
-        pass
+    # Cannot call alert_operator here as it wasn't successfully imported
     raise AnalyzerCriticalError(f"Missing core dependency: {e}")
 
 # --- Caching: Redis Client Initialization ---
@@ -373,11 +370,10 @@ def _run_async_in_sync(coro):
     """
     try:
         loop = asyncio.get_running_loop()
-        if loop.is_running():
-            return asyncio.run_coroutine_threadsafe(coro, loop).result()
-        else:
-            return asyncio.run(coro)
+        # If we got here, a loop is running. Use run_coroutine_threadsafe.
+        return asyncio.run_coroutine_threadsafe(coro, loop).result()
     except RuntimeError:
+        # No running loop, so we can safely use asyncio.run()
         return asyncio.run(coro)
 
 

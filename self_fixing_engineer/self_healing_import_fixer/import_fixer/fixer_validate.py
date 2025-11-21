@@ -303,8 +303,8 @@ class CodeValidator:
                     stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
                 except asyncio.TimeoutError:
                     if os.name != "nt":
-                        import signal, os as _os
-                        try: _os.killpg(process.pid, signal.SIGKILL)
+                        import signal
+                        try: os.killpg(process.pid, signal.SIGKILL)
                         except Exception: process.kill()
                     else:
                         process.kill()
