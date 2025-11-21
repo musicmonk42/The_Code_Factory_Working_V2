@@ -21,22 +21,34 @@ ARG CONFIG_PATH="/app/config.yaml"
 # Environment variables (non-sensitive)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    CONFIG_PATH=${CONFIG_PATH}
+    CONFIG_PATH=${CONFIG_PATH} \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
 # Install system dependencies (minimal for build)
+# Update ca-certificates first to avoid SSL issues with pip
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && update-ca-certificates \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install dependencies
+# Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
 COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt ${EXTRA_DEPS} \
-    && pip cache purge  # Clean up pip cache for smaller image
+RUN pip install --upgrade pip || \
+    pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip
+
+RUN pip install -r requirements.txt ${EXTRA_DEPS} || \
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt ${EXTRA_DEPS}
+
+RUN pip cache purge  # Clean up pip cache for smaller image
 
 # Copy source code
 COPY . .
