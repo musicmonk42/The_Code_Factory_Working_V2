@@ -483,7 +483,9 @@ if __name__ == "__main__":
     test_project_root = "test_security_project"
     os.makedirs(test_project_root, exist_ok=True)
     with open(os.path.join(test_project_root, "bad_code.py"), "w") as f:
-        f.write("password = 'mysecretpassword'\n")
+        # INTENTIONAL: Creating test file with security issues to test the scanner
+        # nosec: This hardcoded password is for testing security detection only
+        f.write("password = 'mysecretpassword'\n")  # nosec - test data
         f.write("import os\n")
         f.write("os.system('ls') # nosec\n")
     with open(os.path.join(test_project_root, "requirements.txt"), "w") as f:

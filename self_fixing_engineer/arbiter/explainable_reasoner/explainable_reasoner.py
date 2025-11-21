@@ -1369,7 +1369,9 @@ if __name__ == '__main__':
 
             print("\n--- Testing Sensitive Action (Purge History) ---")
             # NOTE: This will fail without a valid JWT token. This is expected.
-            purge_result = await plugin_instance.execute(action="purge_history", auth_token="dummy-token-for-testing")
+            # Use environment variable for testing token
+            test_token = os.getenv("TEST_AUTH_TOKEN", "test-only-no-production-use")
+            purge_result = await plugin_instance.execute(action="purge_history", auth_token=test_token)
             print(json.dumps(purge_result, indent=2))
 
         except ReasonerError as e:

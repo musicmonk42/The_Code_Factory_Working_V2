@@ -228,7 +228,7 @@ def setup_mocks():
 # Setup all mocks before import
 mocks, arbiter_mocks = setup_mocks()
 
-# Now import arbiter.arbiter specifically
+# Now import arbiter module specifically
 from arbiter import arbiter
 
 # ===== TEST FIXTURES =====

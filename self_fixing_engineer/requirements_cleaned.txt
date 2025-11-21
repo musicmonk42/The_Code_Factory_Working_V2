@@ -440,5 +440,3 @@ yarl==1.20.1
 zipp==3.23.0
 zstandard==0.24.0
 zstd==1.5.6.2
-
-# Special entries
