@@ -8,7 +8,7 @@ from sqlalchemy import text, func, Column, Integer, String, JSON, DateTime, sele
 from sqlalchemy.orm import sessionmaker
 from typing import Dict, Optional, Any, List, Coroutine, Set, TypeVar, Callable, Union
 from circuitbreaker import circuit
-from retry import retry
+from omnicore_engine.retry_compat import retry
 import hashlib
 import uuid
 from cryptography.fernet import Fernet, InvalidToken

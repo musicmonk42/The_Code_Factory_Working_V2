@@ -12,6 +12,11 @@ from typing import Any, Callable, Optional, Type, Dict, List
 from .plugin_registry import PLUGIN_REGISTRY
 from .plugin_event_handler import PluginEventHandler as plugin_event_handler
 
+# Note: Other modules (audit, core, cli, engines, etc.) should be imported
+# directly when needed, not at package level, to avoid circular imports.
+# Example: from omnicore_engine import audit
+#          or: from omnicore_engine.audit import ExplainAudit
+
 
 # ---- Logging Configuration (simple for __init__.py) ----
 logger = logging.getLogger("omnicore_engine_init")

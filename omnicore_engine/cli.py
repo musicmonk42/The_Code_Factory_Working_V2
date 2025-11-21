@@ -42,7 +42,7 @@ import hashlib
 import redis.asyncio as redis
 from datetime import datetime
 from circuitbreaker import circuit
-from retry import retry
+from omnicore_engine.retry_compat import retry
 import uuid
 import logging
 import re
