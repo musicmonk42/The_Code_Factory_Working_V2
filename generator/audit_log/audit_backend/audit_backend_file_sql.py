@@ -31,11 +31,11 @@ class FileBackend(LogBackend):
         os.makedirs(self.dir_path, exist_ok=True)
 
     async def start(self):
-        """Starts base tasks."""
+        """Starts base tasks after WAL recovery."""
+        # Recover WAL before starting any background tasks to avoid race conditions
+        await self.recover_wal()
         await super().start()
         # FileBackend has no extra init tasks (like connections)
-        # WAL recovery is handled by _atomic_context
-        await self.recover_wal() # Run WAL recovery on start
 
     async def close(self):
         """Closes the FileBackend."""

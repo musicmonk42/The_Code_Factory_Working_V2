@@ -674,12 +674,21 @@ class KafkaBackend(LogBackend):
         self.producer: Optional[aiokafka.AIOKafkaProducer] = None
         self._es_init_task: Optional[asyncio.Task] = None
 
+        # --- FIX: Initialize transaction flag ---
+        self._txn_started_for_current_flush = False
+        # --- END FIX ---
+
         # --- FIX: Removed all asyncio.create_task calls. Moved to start() ---
 
         self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(backend=self.__class__.__name__).set(0)
 
-        # --- START FIX 3: DLQ Dedupe Set ---
+        # --- START FIX 3: DLQ Dedupe Set with memory management ---
+        # Using collections.deque with maxlen to prevent unbounded memory growth
+        from collections import deque
+        self._dlq_seen_batches_deque = deque(maxlen=10000)  # Keep last 10k batch keys
+        # For fast lookup, maintain a set (will be rebuilt from deque periodically)
         self._dlq_seen_batches: Set[Any] = set()
+        self._dlq_cleanup_counter = 0  # Track when to rebuild set from deque
         # --- END FIX 3 ---
 
     # --- START: FIX (Moved task creation from __init__ to start) ---
@@ -717,9 +726,11 @@ class KafkaBackend(LogBackend):
 
     # --- START FIX 3: DLQ Dedupe Helpers ---
     def _batch_key(self, prepared_entries):
-        # stable fingerprint of this batch
+        # Use SHA256 for better collision resistance instead of CRC32
         try:
-            return zlib.crc32(json.dumps(prepared_entries, sort_keys=True).encode("utf-8"))
+            import hashlib
+            data = json.dumps(prepared_entries, sort_keys=True).encode("utf-8")
+            return hashlib.sha256(data).hexdigest()
         except Exception:
             # extremely defensive: fall back to UUID if something unexpected in payload
             return str(uuid.uuid4())
@@ -730,7 +741,17 @@ class KafkaBackend(LogBackend):
             logger.debug("KafkaBackend: DLQ dedupe skipped (already enqueued this batch).",
                          extra={"backend_type": self.__class__.__name__, "operation": "dlq_dedupe"})
             return
+        
+        # Add to both deque and set
+        self._dlq_seen_batches_deque.append(key)
         self._dlq_seen_batches.add(key)
+        
+        # Periodically rebuild set from deque to prevent memory bloat
+        self._dlq_cleanup_counter += 1
+        if self._dlq_cleanup_counter >= 1000:
+            self._dlq_seen_batches = set(self._dlq_seen_batches_deque)
+            self._dlq_cleanup_counter = 0
+        
         await self._dlq.enqueue(prepared_entries, failure_reason=reason)
     # --- END FIX 3 ---
 
@@ -1296,6 +1317,12 @@ class SplunkBackend(LogBackend):
         await self._init_task # Wait for session to be ready
     # --- END: FIX ---
 
+    def _parse_timestamp(self, timestamp_str: str) -> datetime.datetime:
+        """Parse ISO format timestamp with Python < 3.11 compatibility."""
+        # Handle 'Z' suffix which is only supported in fromisoformat() from Python 3.11+
+        if timestamp_str.endswith('Z'):
+            timestamp_str = timestamp_str[:-1] + '+00:00'
+        return datetime.datetime.fromisoformat(timestamp_str)
 
     async def _init_session(self):
         """Initializes Splunk HEC and Search API aiohttp session."""
@@ -1586,9 +1613,8 @@ class SplunkBackend(LogBackend):
                 "source": self.source,
                 "sourcetype": self.sourcetype,
                 "index": self.index,
-                # --- FIX: Remove .replace('Z', '+00:00') ---
-                # The timestamp is now a correct isoformat string (e.g., ...+00:00)
-                "time": datetime.datetime.fromisoformat(entry["timestamp"]).timestamp()
+                # --- FIX: Handle 'Z' suffix for Python < 3.11 compatibility ---
+                "time": self._parse_timestamp(entry["timestamp"]).timestamp()
                 # --- END FIX ---
             }
             event_json_bytes = json.dumps(hec_event, sort_keys=True).encode('utf-8')
