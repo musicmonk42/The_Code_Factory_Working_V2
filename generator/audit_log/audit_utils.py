@@ -472,9 +472,13 @@ def sign_entry(data: Dict[str, Any], key_id: str) -> bytes:
         if IS_PRODUCTION:
             raise RuntimeError("Cannot sign entry. No real cryptographic signer has been registered.")
         else:
-            logger.warning("Using DUMMY sign_entry. A real signer should be set for production.")
-            # FIX: Return bytes for the dummy signature
-            return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).digest()
+            logger.warning("Using DUMMY sign_entry for dev/test. This provides NO cryptographic security!")
+            # FIX: Add a clear warning that this is NOT a cryptographic signature
+            # This is intentionally insecure for dev/test environments only
+            # A real HMAC or digital signature MUST be used in production
+            dummy_hash = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).digest()
+            # Prepend marker to indicate this is NOT a real signature
+            return b'INSECURE_DEV_ONLY:' + dummy_hash
 
     if not key_id:
         raise ValueError("Key ID must be explicitly provided for signing.")

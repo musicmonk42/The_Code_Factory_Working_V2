@@ -470,8 +470,22 @@ class FileBackedRetryQueue(PersistentRetryQueue):
         )
         self.logger = logging.getLogger(f"{__name__}.{backend_name}.FileBackedDLQ") # Specific logger for this implementation
         
-        # --- Add reload logic back into FileBacked implementation ---
-        asyncio.create_task(self._reload_from_persistence())
+        # --- Add reload logic with exception handling ---
+        task = asyncio.create_task(self._reload_from_persistence())
+        task.add_done_callback(self._handle_reload_task_completion)
+
+    def _handle_reload_task_completion(self, task: asyncio.Task):
+        """Handle completion of reload task and log any exceptions."""
+        try:
+            if not task.cancelled():
+                exc = task.exception()
+                if exc:
+                    self.logger.error(f"DLQ reload task failed with exception: {exc}",
+                                    exc_info=exc,
+                                    extra={"backend_type": self.backend_name, "operation": "dlq_reload_error"})
+        except Exception as e:
+            self.logger.error(f"Error handling reload task completion: {e}",
+                            extra={"backend_type": self.backend_name})
 
     async def _reload_from_persistence(self):
         """Loads unprocessed items from the persistence file into the queue."""

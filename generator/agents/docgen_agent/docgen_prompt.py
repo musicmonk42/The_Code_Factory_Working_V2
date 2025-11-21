@@ -26,7 +26,7 @@ import subprocess
 import hashlib # For prompt hashing
 import ast # For parsing Python AST for imports
 import tiktoken # For token counting
-from datetime import datetime # *** FIX: Added missing import ***
+from datetime import datetime, timezone # *** FIX: Added timezone for Python 3.12+ compatibility ***
 import aiofiles # <--- ADDED FIX
 from pathlib import Path # <--- ADDED FIX
 
@@ -666,7 +666,7 @@ class DocGenPromptAgent:
                 'repo_path': str(self.repo_path),
                 'context': context_data,
                 'required_sections': required_sections or [],
-                'timestamp_utc': datetime.utcnow().isoformat() + "Z"
+                'timestamp_utc': datetime.now(timezone.utc).isoformat() + "Z"
             }
             
             try:
@@ -788,7 +788,7 @@ class DocGenPromptAgent:
                 ab_results_final[template_name] = {
                     'prompt': current_prompt_string, 'length': len(current_prompt_string), 'hash': 'N/A', 
                     'rationale': f"Prompt generation failed for this variant.", 
-                    'provenance': f"Timestamp: {datetime.utcnow().isoformat()}Z", 'score': 0.0
+                    'provenance': f"Timestamp: {datetime.now(timezone.utc).isoformat()}Z", 'score': 0.0
                 }
                 self.record_feedback(doc_type, template_name, 0.0)
             else:
@@ -796,7 +796,7 @@ class DocGenPromptAgent:
                     'prompt': current_prompt_string, 'length': len(current_prompt_string),
                     'hash': hashlib.sha256(current_prompt_string.encode()).hexdigest(),
                     'rationale': f"Generated for A/B test variant '{template_name}'.",
-                    'provenance': f"Timestamp: {datetime.utcnow().isoformat()}Z", 'score': None
+                    'provenance': f"Timestamp: {datetime.now(timezone.utc).isoformat()}Z", 'score': None
                 }
                 prompts_for_scoring.append((template_name, current_prompt_string))
 

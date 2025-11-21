@@ -44,10 +44,9 @@ import asyncio
 from aiohttp import web
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import time # For LLM latency
-import inspect # ADDED for async compatibility
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
@@ -173,7 +172,7 @@ class ResponseParser(ABC):
                 "strategy": "regex_code_blocks",
                 "recovered_count": len(recovered_files),
                 "language": language,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "trigger": "parse_failure"
             })
             return recovered_files
@@ -227,7 +226,7 @@ Return only the corrected response with proper file names and code structure.
                             "language": language,
                             "original_error": error,
                             "healed_files_count": len(healed_files),
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                             "trigger": "llm_auto_heal"
                         })
                         return healed_files
@@ -263,7 +262,7 @@ class DefaultResponseParser(ResponseParser):
             "language": language,
             "response_length": len(response),
             "response_hash": hashlib.sha256(response.encode()).hexdigest(),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "parse_llm_response"
         })
         
@@ -550,7 +549,7 @@ class DefaultResponseParser(ResponseParser):
                 "files_count": len(test_files),
                 "total_issues": total_issues,
                 "validation_results": validation_results,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "trigger": "validate_test_files"
             })
             
@@ -773,7 +772,7 @@ class DefaultResponseParser(ResponseParser):
             "action": "Metadata Extracted",
             "metadata": metadata,
             "language": language,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "extract_metadata"
         })
         return metadata
@@ -813,7 +812,7 @@ class ParserRegistry:
         """Reloads parser plugins."""
         PARSERS['default'] = DefaultResponseParser() 
         logger.info("Parser plugins reloaded successfully (or default re-initialized).")
-        add_provenance({"action": "ParserReload", "timestamp": datetime.utcnow().isoformat(), "trigger": "hot_reload"})
+        add_provenance({"action": "ParserReload", "timestamp": datetime.now(timezone.utc).isoformat(), "trigger": "hot_reload"})
 
     async def close(self):
         """Closes the registry and stops observer."""
@@ -858,7 +857,7 @@ async def parse_llm_response(response: str, language: str = 'python', parser_typ
             "action": "Metadata Extracted",
             "metadata": metadata,
             "language": language,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "parse_llm_response"
         })
         return test_files
@@ -875,7 +874,7 @@ async def parse_llm_response(response: str, language: str = 'python', parser_typ
                     "action": "Metadata Extracted After Healing",
                     "metadata": metadata,
                     "language": language,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "trigger": "llm_auto_heal_success"
                 })
                 return healed_files
@@ -899,11 +898,11 @@ async def startup():
     logger.info("Initializing TestGen Response Handler components...")
     asyncio.create_task(start_health_server())
     logger.info("TestGen Response Handler components initialized.")
-    add_provenance({"action": "Startup", "timestamp": datetime.utcnow().isoformat()})
+    add_provenance({"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 async def shutdown():
     """Closes resources on shutdown."""
     logger.info("Shutting down TestGen Response Handler components...")
     await parser_registry.close()
     logger.info("TestGen Response Handler components shut down.")
-    add_provenance({"action": "Shutdown", "timestamp": datetime.utcnow().isoformat()})
+    add_provenance({"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()})

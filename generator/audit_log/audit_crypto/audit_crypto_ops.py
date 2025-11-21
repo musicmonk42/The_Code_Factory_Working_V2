@@ -617,10 +617,10 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = '') -> 
     if not isinstance(prev_hash, str):
         raise TypeError("Previous hash must be a string.")
 
-    # --- FIX: Read settings inside the function ---
-    max_fallback_disable = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE", 20)
-    max_fallback_alert = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT", 5)
-    fallback_alert_interval = settings.get("FALLBACK_ALERT_INTERVAL_SECONDS", 300)
+    # --- FIX: Read settings inside the function with proper None handling ---
+    max_fallback_disable = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE") or 20
+    max_fallback_alert = settings.get("MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT") or 5
+    fallback_alert_interval = settings.get("FALLBACK_ALERT_INTERVAL_SECONDS") or 300
     # --- END OF FIX ---
     
     # Get the current primary crypto provider instance from the factory

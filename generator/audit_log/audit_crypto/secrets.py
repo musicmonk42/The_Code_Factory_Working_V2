@@ -479,9 +479,10 @@ def get_fallback_hmac_secret() -> Optional[bytes]:
     try:
         return loop.run_until_complete(aget_fallback_hmac_secret())
     except SecretError as e:
-        # Catch SecretError from the async function and log it, but return None
+        # Catch SecretError from the async function and raise it
+        # Don't return None silently as this is a critical security function
         logger.critical(f"Error in sync get_fallback_hmac_secret: {e}", exc_info=True)
-        return None
+        raise SecretError(f"Failed to get fallback HMAC secret: {e}") from e
 
 
 def get_kms_master_key_ciphertext_blob() -> bytes:

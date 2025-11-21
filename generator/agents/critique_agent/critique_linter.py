@@ -751,7 +751,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description="Run linter pipeline")
     parser.add_argument('--code-dir', required=True, help='Directory containing code files to lint.')
-    parser.addGUMENT('--lang', default='python', help='Programming language of the code files (e.g., python, javascript).')
+    parser.add_argument('--lang', default='python', help='Programming language of the code files (e.g., python, javascript).')
     parser.add_argument('--project-dir', default=None, help='Optional: The root directory of the project for linter context (e.g., where pyproject.toml is). If not provided, a temporary directory is used.')
     args = parser.parse_args()
 

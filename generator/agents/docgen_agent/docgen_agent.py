@@ -1581,18 +1581,6 @@ class DocGenAgent:
         """
         return getattr(self, '_test_approval_result', True)
 
-    async def _human_approval(self, result: Dict[str, Any]) -> tuple:
-        """
-        Enhanced human approval with test compatibility.
-        """
-        # FIX: Call the real _human_approval logic if a webhook is set, otherwise use mock.
-        if self.slack_webhook or os.getenv('DOCGEN_APPROVAL_WEBHOOK_URL'):
-            return await self.__class__._human_approval(self, result)
-        else:
-            approval = await self._request_approval(result)
-            comments = "Test approval" if approval else "Test rejection"
-            return approval, comments
-
     async def generate_documentation_batch(
         self,
         batch_requests: List[Dict[str, Any]]

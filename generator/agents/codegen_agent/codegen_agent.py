@@ -789,7 +789,7 @@ else:
                     status, feedback = ('approved', None)
 
                 # --- Audit/Logging Change: Use log_audit_event ---
-                    log_audit_event("Code Generation Completed", {"files": list(code_files.keys()), "model": backend_used})
+                log_audit_event("Code Generation Completed", {"files": list(code_files.keys()), "model": backend_used})
                 # --- End Audit/Logging Change ---
                 return code_files
 
