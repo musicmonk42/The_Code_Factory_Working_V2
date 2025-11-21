@@ -756,14 +756,22 @@ def backend_operation(operation: str):
                 try:
                     # Execute with circuit breaker if available and not mocked
                     if backend in circuit_breakers and circuit_breakers.get(backend):
-                        # Check if circuit breaker has call_async method
-                        if hasattr(circuit_breakers[backend], 'call_async'):
-                            result = await circuit_breakers[backend].call_async(
-                                func, manager, *args, **kwargs
-                            )
-                        else:
-                            # Fallback to direct call if circuit breaker doesn't support async
+                        breaker = circuit_breakers[backend]
+                        # Check circuit breaker state before calling
+                        if breaker.state == 'open':
+                            raise CheckpointBackendError(f"Circuit breaker is open for {backend}")
+                        
+                        try:
                             result = await func(manager, *args, **kwargs)
+                            # Record success (this resets failure count)
+                            breaker.call(lambda: None)
+                        except Exception as e:
+                            # Record failure
+                            try:
+                                breaker.call(lambda: (_ for _ in ()).throw(e))
+                            except:
+                                pass
+                            raise
                     else:
                         # If no circuit breaker, implement basic retry logic for transient errors
                         max_retries = Config.MAX_RETRIES

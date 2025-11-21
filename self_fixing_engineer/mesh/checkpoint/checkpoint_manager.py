@@ -56,7 +56,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Awaitable, Type, Union, Tuple
 from functools import wraps
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from logging.handlers import RotatingFileHandler
 
 # ---- Local Application Imports ----
@@ -326,7 +326,6 @@ if TRACING_AVAILABLE:
         )
         provider.add_span_processor(BatchSpanProcessor(exporter))
     
-    # --- Start of Fix ---
     # Guard against re-initializing the provider, which logs a warning.
     current_provider = trace.get_tracer_provider()
     if not isinstance(current_provider, TracerProvider):
@@ -334,27 +333,12 @@ if TRACING_AVAILABLE:
     
     tracer = trace.get_tracer(__name__, __version__)
 
-    # Adapter to make the synchronous OpenTelemetry tracer compatible with 'async with'
-    class _AsyncTracerAdapter:
-        def __init__(self, inner_tracer):
-            self._inner = inner_tracer
-
-        @asynccontextmanager
-        async def start_as_current_span(self, name: str, **kwargs):
-            # Wrap the synchronous context manager so 'async with' works everywhere.
-            with self._inner.start_as_current_span(name, **kwargs) as span:
-                yield span
-
-    # Replace the raw tracer with the async-capable wrapper.
-    tracer = _AsyncTracerAdapter(tracer)
-    # --- End of Fix ---
-
 else:
     # Null tracer for when OpenTelemetry is not available
     class NullTracer:
-        @asynccontextmanager
-        async def start_as_current_span(self, name: str, **kwargs):
-            # This context manager now correctly yields an object that behaves like a span.
+        @contextmanager
+        def start_as_current_span(self, name: str, **kwargs):
+            # This context manager returns a synchronous context that behaves like a span.
             class NullSpan:
                 def set_attribute(self, key: str, value: Any) -> None:
                     pass
@@ -567,7 +551,7 @@ class CheckpointManager:
         if self._initialized:
             return
         
-        async with tracer.start_as_current_span("checkpoint.initialize") as span:
+        with tracer.start_as_current_span("checkpoint.initialize") as span:
             span.set_attribute("backend", self.backend_type)
             
             try:
@@ -683,13 +667,13 @@ class CheckpointManager:
         # Check circuit breaker if available
         if circuit_breakers and 'save' in circuit_breakers:
             breaker = circuit_breakers['save']
-            if breaker.current_state == 'open':
+            if breaker.state == 'open':
                 raise CheckpointBackendError("Circuit breaker is open - too many recent failures")
         
         self._operation_id = str(uuid.uuid4())
         start_time = time.time()
         
-        async with tracer.start_as_current_span("checkpoint.save") as span:
+        with tracer.start_as_current_span("checkpoint.save") as span:
             span.set_attribute("checkpoint.name", name)
             span.set_attribute("operation.id", self._operation_id)
             
@@ -847,7 +831,7 @@ class CheckpointManager:
         if PROMETHEUS_AVAILABLE:
             CACHE_MISSES.labels(operation='load', tenant=Environment.TENANT).inc()
         
-        async with tracer.start_as_current_span("checkpoint.load") as span:
+        with tracer.start_as_current_span("checkpoint.load") as span:
             span.set_attribute("checkpoint.name", name)
             span.set_attribute("checkpoint.version", str(version or "latest"))
             span.set_attribute("operation.id", self._operation_id)
@@ -962,7 +946,7 @@ class CheckpointManager:
         
         self._operation_id = str(uuid.uuid4())
         
-        async with tracer.start_as_current_span("checkpoint.rollback") as span:
+        with tracer.start_as_current_span("checkpoint.rollback") as span:
             span.set_attribute("checkpoint.name", name)
             span.set_attribute("checkpoint.version", str(version))
             span.set_attribute("dry_run", dry_run)
@@ -1035,7 +1019,7 @@ class CheckpointManager:
         if cache_key in self._metadata_cache:
             return self._metadata_cache[cache_key]
         
-        async with tracer.start_as_current_span("checkpoint.list_versions") as span:
+        with tracer.start_as_current_span("checkpoint.list_versions") as span:
             span.set_attribute("checkpoint.name", name)
             
             try:
@@ -1077,7 +1061,7 @@ class CheckpointManager:
         if not self._initialized:
             await self.initialize()
         
-        async with tracer.start_as_current_span("checkpoint.diff") as span:
+        with tracer.start_as_current_span("checkpoint.diff") as span:
             span.set_attribute("checkpoint.name", name)
             span.set_attribute("version1", str(version1 or "latest"))
             span.set_attribute("version2", str(version2 or "latest"))
@@ -1109,7 +1093,7 @@ class CheckpointManager:
         if not self._initialized:
             await self.initialize()
         
-        async with tracer.start_as_current_span("checkpoint.status") as span:
+        with tracer.start_as_current_span("checkpoint.status") as span:
             span.set_attribute("checkpoint.name", name)
             
             try:
@@ -1153,7 +1137,7 @@ class CheckpointManager:
         if cache_key in self._metadata_cache:
             return self._metadata_cache[cache_key]
         
-        async with tracer.start_as_current_span("checkpoint.available") as span:
+        with tracer.start_as_current_span("checkpoint.available") as span:
             try:
                 if self.backend_type == 'local':
                     checkpoints = await self._local_available()
