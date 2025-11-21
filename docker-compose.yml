@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # Redis for message bus and caching
+  redis:
+    image: redis:7-alpine
+    container_name: codefactory-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # PostgreSQL database (optional - uncomment if needed)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: codefactory-postgres
+  #   environment:
+  #     POSTGRES_DB: codefactory
+  #     POSTGRES_USER: codefactory
+  #     POSTGRES_PASSWORD: changeme
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U codefactory"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+
+  # Generator component
+  generator:
+    build:
+      context: ./generator
+      dockerfile: Dockerfile
+    container_name: codefactory-generator
+    environment:
+      - APP_ENV=development
+      - GROK_API_KEY=${GROK_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./generator:/app
+      - generator-output:/app/output
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: python main.py --interface api
+
+  # OmniCore Engine
+  omnicore:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codefactory-omnicore
+    environment:
+      - APP_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
+      - AUDIT_LOG_PATH=/app/audit_trail.log
+    ports:
+      - "8001:8000"
+      - "8002:8001"  # Metrics port
+    volumes:
+      - ./omnicore_engine:/app/omnicore_engine
+      - ./self_fixing_engineer:/app/self_fixing_engineer
+      - omnicore-output:/app/output
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: python -m uvicorn omnicore_engine.fastapi_app:app --host 0.0.0.0 --port 8000
+
+  # Prometheus for metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: codefactory-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: codefactory-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:
+  generator-output:
+  omnicore-output:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: codefactory-network

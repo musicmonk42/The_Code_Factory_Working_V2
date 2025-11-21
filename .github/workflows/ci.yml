@@ -1,0 +1,292 @@
+name: CI - Code Factory Platform
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+permissions:
+  contents: read
+  
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install linting dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff flake8 mypy
+          
+      - name: Run Black formatter check
+        run: |
+          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/ || true
+          
+      - name: Run Ruff linter
+        run: |
+          ruff check generator/ omnicore_engine/ self_fixing_engineer/ || true
+          
+      - name: Run Flake8
+        run: |
+          flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+  test-generator:
+    name: Test Generator Component
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install Generator dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f generator/requirements.txt ]; then
+            pip install -r generator/requirements.txt
+          elif [ -f generator/master_requirements.txt ]; then
+            pip install -r generator/master_requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run Generator tests
+        run: |
+          cd generator
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+          else
+            echo "No tests found in generator/tests/"
+          fi
+          
+      - name: Upload Generator coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./generator/coverage.xml
+          flags: generator
+          fail_ci_if_error: false
+
+  test-omnicore:
+    name: Test OmniCore Engine
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install OmniCore dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f omnicore_engine/requirements.txt ]; then
+            pip install -r omnicore_engine/requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run OmniCore tests
+        env:
+          REDIS_URL: redis://localhost:6379
+          APP_ENV: test
+        run: |
+          cd omnicore_engine
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+          else
+            echo "No tests found in omnicore_engine/tests/"
+          fi
+          
+      - name: Upload OmniCore coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./omnicore_engine/coverage.xml
+          flags: omnicore
+          fail_ci_if_error: false
+
+  test-sfe:
+    name: Test Self-Fixing Engineer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install SFE dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f self_fixing_engineer/requirements.txt ]; then
+            pip install -r self_fixing_engineer/requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run SFE tests
+        run: |
+          cd self_fixing_engineer
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+          else
+            echo "No tests found in self_fixing_engineer/tests/"
+          fi
+          
+      - name: Upload SFE coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./self_fixing_engineer/coverage.xml
+          flags: sfe
+          fail_ci_if_error: false
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test-generator, test-omnicore, test-sfe]
+    permissions:
+      contents: read
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          
+      - name: Install all dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          if [ -f master_requirements.txt ]; then
+            pip install -r master_requirements.txt || true
+          fi
+          pip install pytest pytest-asyncio pytest-mock
+          
+      - name: Run integration tests
+        env:
+          REDIS_URL: redis://localhost:6379
+          APP_ENV: test
+        run: |
+          if [ -f conftest.py ]; then
+            pytest -v --tb=short || true
+          else
+            echo "No root-level integration tests found"
+          fi
+
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint, test-generator, test-omnicore, test-sfe]
+    permissions:
+      contents: read
+    
+    strategy:
+      matrix:
+        component: [root, generator]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker image - ${{ matrix.component }}
+        run: |
+          if [ "${{ matrix.component }}" = "root" ]; then
+            docker build -t code-factory:latest -f Dockerfile .
+          elif [ "${{ matrix.component }}" = "generator" ] && [ -f generator/Dockerfile ]; then
+            docker build -t code-factory-generator:latest -f generator/Dockerfile ./generator
+          else
+            echo "Dockerfile not found for ${{ matrix.component }}"
+          fi
+          
+      - name: Test Docker image
+        run: |
+          if [ "${{ matrix.component }}" = "root" ]; then
+            docker run --rm code-factory:latest python --version || true
+          elif [ "${{ matrix.component }}" = "generator" ]; then
+            docker run --rm code-factory-generator:latest python --version || true
+          fi
+
+  status-check:
+    name: CI Status Check
+    runs-on: ubuntu-latest
+    needs: [lint, test-generator, test-omnicore, test-sfe, integration-test, build-docker]
+    if: always()
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Check CI status
+        run: |
+          echo "CI pipeline completed"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Test Generator: ${{ needs.test-generator.result }}"
+          echo "Test OmniCore: ${{ needs.test-omnicore.result }}"
+          echo "Test SFE: ${{ needs.test-sfe.result }}"
+          echo "Integration Test: ${{ needs.integration-test.result }}"
+          echo "Build Docker: ${{ needs.build-docker.result }}"

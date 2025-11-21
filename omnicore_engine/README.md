@@ -1,5 +1,21 @@
 # OmniCore Omega Pro Engine
 
+> **Quick Start**: See [QUICKSTART.md](../QUICKSTART.md) for platform-wide setup, or use `make run-omnicore` from the root directory.
+
+## Quick Commands
+
+```bash
+# From root directory
+make run-omnicore            # Start OmniCore Engine API
+make test-omnicore           # Run OmniCore tests
+docker-compose up omnicore   # Run with Docker
+
+# From omnicore_engine directory
+python -m uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload  # Start API
+python -m omnicore_engine.cli --help                                    # CLI help
+pytest tests/ -v                                                        # Run tests
+```
+
 ## Overview
 
 The OmniCore Omega Pro Engine is a modular, extensible orchestration and simulation framework for AI-driven applications, built for reliability, transparency, and integration within the Code_Factory ecosystem. It features dynamic plugin management, distributed messaging, enterprise security, compliance auditing, and automated self-healing.

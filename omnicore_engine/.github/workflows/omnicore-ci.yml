@@ -1,0 +1,97 @@
+name: OmniCore Engine CI
+
+on:
+  push:
+    paths:
+      - 'omnicore_engine/**'
+      - '.github/workflows/omnicore-ci.yml'
+  pull_request:
+    paths:
+      - 'omnicore_engine/**'
+  workflow_dispatch:
+
+jobs:
+  test-omnicore:
+    name: Test OmniCore Engine
+    runs-on: ubuntu-latest
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          cd omnicore_engine
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run tests
+        env:
+          REDIS_URL: redis://localhost:6379
+          APP_ENV: test
+        run: |
+          cd omnicore_engine
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v
+          else
+            echo "No tests directory found"
+            exit 0
+          fi
+          
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./omnicore_engine/coverage.xml
+          flags: omnicore
+          fail_ci_if_error: false
+
+  lint-omnicore:
+    name: Lint OmniCore Engine
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff flake8
+          
+      - name: Run Black
+        run: |
+          black --check omnicore_engine/ || true
+          
+      - name: Run Ruff
+        run: |
+          ruff check omnicore_engine/ || true
+          
+      - name: Run Flake8
+        run: |
+          flake8 omnicore_engine/ --count --select=E9,F63,F7,F82 --show-source --statistics || true

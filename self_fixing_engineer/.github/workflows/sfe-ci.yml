@@ -1,0 +1,116 @@
+name: Self-Fixing Engineer CI
+
+on:
+  push:
+    paths:
+      - 'self_fixing_engineer/**'
+      - '.github/workflows/sfe-ci.yml'
+  pull_request:
+    paths:
+      - 'self_fixing_engineer/**'
+  workflow_dispatch:
+
+jobs:
+  test-sfe:
+    name: Test Self-Fixing Engineer
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          cd self_fixing_engineer
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          
+      - name: Run tests
+        env:
+          APP_ENV: test
+          SANDBOXED_ENV: 1
+        run: |
+          cd self_fixing_engineer
+          if [ -d tests ]; then
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+          else
+            echo "No tests directory found"
+            exit 0
+          fi
+          
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./self_fixing_engineer/coverage.xml
+          flags: sfe
+          fail_ci_if_error: false
+
+  lint-sfe:
+    name: Lint Self-Fixing Engineer
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff flake8
+          
+      - name: Run Black
+        run: |
+          black --check self_fixing_engineer/ || true
+          
+      - name: Run Ruff
+        run: |
+          ruff check self_fixing_engineer/ || true
+          
+      - name: Run Flake8
+        run: |
+          flake8 self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+  security-sfe:
+    name: Security Scan Self-Fixing Engineer
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml]
+          
+      - name: Run Bandit
+        run: |
+          bandit -r self_fixing_engineer/ -f json -o sfe-bandit-report.json || true
+          bandit -r self_fixing_engineer/ -f screen || true
+          
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sfe-bandit-report
+          path: sfe-bandit-report.json

@@ -7,11 +7,18 @@ Version: 1.0.0 (August 24, 2025)License: Proprietary (© 2025 Novatrax Labs LLC)
 
 Table of Contents
 
+**Quick Links**
+- [QUICKSTART.md](./QUICKSTART.md) - Get started in 5 minutes
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment guide
+- [Makefile Commands](#makefile-commands) - Common development commands
+
 Features
 Architecture
 Getting Started
 Prerequisites
 Installation
+Quick Start (Recommended)
+Manual Installation
 Configuration
 Environment Variables
 
@@ -22,6 +29,7 @@ API Usage
 Demo Workflow
 
 
+Makefile Commands
 Extending Code Factory
 Custom Plugins
 Custom Agents
@@ -32,6 +40,7 @@ Key Components
 Tests
 Troubleshooting
 Best Practices
+CI/CD Pipeline
 Contribution Guidelines
 Roadmap
 Support
@@ -83,35 +92,109 @@ SFE analyzes, fixes, and optimizes code, storing checkpoints (CheckpointContract
 
 
 Getting Started
+
+⚡ **Quick Start**: See [QUICKSTART.md](./QUICKSTART.md) for a 5-minute setup guide.
+📦 **Deployment**: See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
+
 Prerequisites
 
-OS: Windows 10/11 (uses D:\ paths), Linux, or macOS.
-Python: 3.10+.
-Dependencies: Install via requirements.txt for each component:pip install pydantic prometheus_client opentelemetry-sdk opentelemetry-exporter-otlp sqlalchemy aiohttp tenacity cerberus pyyaml
+OS: Linux, macOS, or Windows 10/11
+Python: 3.11+ (3.10+ supported)
+Docker & Docker Compose: For containerized deployment (recommended)
+Make: For simplified commands (optional but recommended)
+Git: For version control
+
+Dependencies: Install via requirements.txt for each component:
+pip install -r requirements.txt
 
 
-Optional: Redis, Kafka, Fabric/EVM nodes, SIEM (AWS CloudWatch, Azure Sentinel), Tesseract OCR (input_utils.py).
-Hardware: 8GB RAM, 4-core CPU (16GB/8-core recommended for SFE simulations).
+API Keys: At least one LLM provider:
+
+xAI Grok (recommended)
+OpenAI
+Google Gemini
+Anthropic Claude
+Local LLM (Ollama)
+
+
+Optional: Redis, Kafka, PostgreSQL, Fabric/EVM nodes, SIEM integration.
+Hardware: 8GB RAM, 4-core CPU minimum (16GB/8-core recommended for SFE simulations).
 
 Installation
+Quick Start (Recommended)
+The fastest way to get started using Make and Docker:
 
-Clone Repository (or access enterprise repo):
-git clone <enterprise-repo-url>
-cd D:\Code_Factory
+# Clone repository
+git clone https://github.com/musicmonk42/The_Code_Factory_Working_V2.git
+cd The_Code_Factory_Working_V2
+
+# Initial setup (creates .env file)
+make setup
+
+# Edit .env with your API keys
+nano .env  # or use your favorite editor
+
+# Start all services with Docker
+make docker-up
+
+# Access services:
+# - Generator API: http://localhost:8000
+# - OmniCore API: http://localhost:8001
+# - Grafana: http://localhost:3000
+# - Prometheus: http://localhost:9090
+
+
+See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
+Manual Installation
+For development without Docker:
+
+Clone Repository:
+git clone https://github.com/musicmonk42/The_Code_Factory_Working_V2.git
+cd The_Code_Factory_Working_V2
+
+
+Create Environment Configuration:
+cp .env.example .env
+# Edit .env and add your API keys
 
 
 Install Dependencies:
-cd D:\Code_Factory\Generator && pip install -r requirements.txt
-cd D:\Code_Factory\omnicore_engine && pip install -r requirements.txt
-cd D:\Code_Factory\self_fixing_engineer && pip install -r requirements.txt
+# Install all dependencies
+make install-dev
+
+# Or manually:
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r generator/requirements.txt
+pip install -r omnicore_engine/requirements.txt
+pip install -r self_fixing_engineer/requirements.txt
+
+
+Start Redis (required):
+# Using Docker
+docker run -d -p 6379:6379 redis:7-alpine
+
+# Or install locally
+# macOS: brew install redis && brew services start redis
+# Ubuntu: sudo apt-get install redis-server
+
+
+Run Services:
+# Terminal 1 - Generator
+make run-generator
+
+# Terminal 2 - OmniCore
+make run-omnicore
 
 
 Setup DLT (optional, for checkpoint_chaincode.go, CheckpointContract.sol):
 
-Deploy Hyperledger Fabric test network:./network.sh up  # From Fabric samples
+Deploy Hyperledger Fabric test network:
+./network.sh up  # From Fabric samples
 
 
-Deploy EVM contract on Ethereum/Polygon:npx hardhat deploy --network <network>
+Deploy EVM contract on Ethereum/Polygon:
+npx hardhat deploy --network <network>
 
 
 
@@ -119,9 +202,38 @@ Deploy EVM contract on Ethereum/Polygon:npx hardhat deploy --network <network>
 
 Configuration
 
-RCG: Configure D:\Code_Factory\Generator\config.yaml with LLM providers (e.g., Grok, OpenAI).
-OmniCore: Set D:\Code_Factory\omnicore_engine\config.yaml for message bus and database.
-SFE: Update D:\Code_Factory\self_fixing_engineer\agent_orchestration\crew_config.yaml:version: 10.0.0
+Environment Variables: Copy .env.example to .env and configure:
+cp .env.example .env
+
+
+Key variables to configure in .env:
+# Application
+APP_ENV=development  # or production
+DEBUG=true
+
+# LLM API Keys (add at least one)
+GROK_API_KEY=your-grok-api-key
+OPENAI_API_KEY=your-openai-api-key
+
+# Infrastructure
+REDIS_URL=redis://localhost:6379
+DATABASE_URL=sqlite:///./dev.db
+
+# Security
+SECRET_KEY=your-secret-key
+JWT_SECRET_KEY=your-jwt-secret
+
+# Observability
+LOG_LEVEL=INFO
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+
+Component Configuration:
+
+Generator: Configure generator/config.yaml with LLM providers
+OmniCore: Set omnicore_engine/config.yaml for message bus and database
+SFE: Update self_fixing_engineer/agent_orchestration/crew_config.yaml:
+version: 10.0.0
 id: self_fixing_engineer_crew
 agents:
   - id: refactor
@@ -132,27 +244,41 @@ agents:
         status: enforced
 
 
-Environment Variables:export APP_ENV=production
-export REDIS_URL=redis://localhost:6379
-export CREW_CONFIG_PATH=D:/Code_Factory/self_fixing_engineer/crew_config.yaml
-export AUDIT_LOG_PATH=D:/Code_Factory/audit_trail.log
-
-
 
 Environment Variables
 
-APP_ENV: production or development (default: development).
-REDIS_URL: Redis backend for mesh/event_bus.py.
-CREW_CONFIG_PATH: Path to crew_config.yaml.
-AUDIT_LOG_PATH: Path for audit logs.
-CHECKPOINT_BACKEND_TYPE: fs, s3, or fabric for checkpoints (configs/config.json).
+See .env.example for all available configuration options.
+
+Core Variables:
+
+APP_ENV: production or development (default: development)
+REDIS_URL: Redis backend for mesh/event_bus.py
+CREW_CONFIG_PATH: Path to crew_config.yaml
+AUDIT_LOG_PATH: Path for audit logs
+CHECKPOINT_BACKEND_TYPE: fs, s3, or fabric for checkpoints
+
+API Keys:
+
+GROK_API_KEY: xAI Grok API key
+OPENAI_API_KEY: OpenAI API key
+GOOGLE_API_KEY: Google Gemini API key
+ANTHROPIC_API_KEY: Anthropic Claude API key
+
+Observability:
+
+PROMETHEUS_MULTIPROC_DIR: Prometheus metrics directory
+OTEL_EXPORTER_OTLP_ENDPOINT: OpenTelemetry collector endpoint
+LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 
 Usage
 CLI Usage
 Trigger a workflow with a README:
-cd D:\Code_Factory\omnicore_engine
-python -m omnicore_engine.cli --code-factory-workflow --input-file D:/Code_Factory/input_readme.md
+cd omnicore_engine
+python -m omnicore_engine.cli --code-factory-workflow --input-file ../input_readme.md
+
+# Or using the Makefile
+make run-cli
 
 Sample Input README:
 # Flask To-Do App
@@ -161,23 +287,77 @@ Sample Input README:
 - Port: 8080.
 - Include Dockerfile, tests, docs.
 
-Output: app.py, test_app.py, Dockerfile, README.md in D:/Code_Factory/omnicore_engine/output.
+Output: app.py, test_app.py, Dockerfile, README.md in omnicore_engine/output.
 API Usage
 Start FastAPI server:
-cd D:\Code_Factory\omnicore_engine
-python -m uvicorn fastapi_app:app --host 0.0.0.0 --port 8000
+# Using Make
+make run-omnicore
+
+# Or manually
+cd omnicore_engine
+python -m uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
 
 Trigger workflow via API:
 curl -X POST http://localhost:8000/code-factory-workflow \
 -H "Content-Type: application/json" \
 -d '{"requirements": "Create a Flask app with /todo endpoint"}'
 
+View API documentation:
+# Generator API docs
+http://localhost:8000/docs
+
+# OmniCore API docs
+http://localhost:8001/docs
+
 Demo Workflow
 
-Prepare Input: Save a README at D:/Code_Factory/input_readme.md.
-Run CLI: python -m omnicore_engine.cli --code-factory-workflow --input-file input_readme.md.
+Prepare Input: Save a README at input_readme.md in the project root.
+Run CLI: python -m omnicore_engine.cli --code-factory-workflow --input-file input_readme.md
 Check Outputs: Verify output/ for artifacts.
 Monitor SFE: SFE analyzes and fixes code, logs events to audit_trail.log.
+
+Or run the demo:
+cd generator
+python demo_investor.py
+
+
+Makefile Commands
+The platform includes a comprehensive Makefile for common tasks:
+Development:
+make help              # Show all available commands
+make setup             # Initial setup for new developers
+make install           # Install production dependencies
+make install-dev       # Install with development tools
+make run-generator     # Run Generator service
+make run-omnicore      # Run OmniCore Engine
+
+Testing:
+make test              # Run all tests
+make test-generator    # Test Generator only
+make test-omnicore     # Test OmniCore only
+make test-sfe          # Test Self-Fixing Engineer only
+make test-coverage     # Run tests with coverage report
+
+Code Quality:
+make lint              # Run all linters
+make format            # Format code with Black
+make type-check        # Run type checking
+make security-scan     # Run security scans
+make ci-local          # Run all CI checks locally
+
+Docker:
+make docker-build      # Build Docker images
+make docker-up         # Start all services
+make docker-down       # Stop all services
+make docker-logs       # View logs
+make docker-clean      # Clean Docker resources
+
+Maintenance:
+make clean             # Clean generated files and caches
+make clean-all         # Deep clean (includes Docker and databases)
+make health-check      # Check service health
+
+See Makefile for all available commands.
 
 
 Extending Code Factory
@@ -247,12 +427,29 @@ envs/code_health_env.py: RL optimization.
 
 Tests
 
-RCG: D:\Code_Factory\Generator\tests (e.g., test_clarifier_updater.py).
-OmniCore: D:\Code_Factory\omnicore_engine\tests.
-SFE: D:\Code_Factory\self_fixing_engineer\tests, test_generation/tests, agent_orchestration/test_crew_manager.py.
-Run:pytest -v D:\Code_Factory\Generator\tests
-pytest -v D:\Code_Factory\omnicore_engine\tests
-pytest -v D:\Code_Factory\self_fixing_engineer\tests
+Test Locations:
+
+Generator: generator/tests/
+OmniCore: omnicore_engine/tests/
+SFE: self_fixing_engineer/tests/, test_generation/tests/
+
+
+Run Tests:
+# Run all tests
+make test
+
+# Run specific component tests
+make test-generator
+make test-omnicore
+make test-sfe
+
+# Run with coverage
+make test-coverage
+
+# Or manually
+pytest -v generator/tests/
+pytest -v omnicore_engine/tests/
+pytest -v self_fixing_engineer/tests/
 
 
 
@@ -273,14 +470,67 @@ Auditing: Enable guardrails/audit_log.py for compliance.
 Monitoring: Set up Prometheus/Grafana (metrics.py).
 Backups: Store configs in S3 (configs/config.json).
 Testing: Achieve 90%+ coverage with pytest-cov.
+Environment: Always use .env for configuration, never commit secrets.
+Development: Use make ci-local before committing to catch issues early.
 
+
+CI/CD Pipeline
+The platform includes comprehensive CI/CD pipelines using GitHub Actions:
+Continuous Integration (.github/workflows/ci.yml):
+
+Linting with Black, Ruff, and Flake8
+Testing all components (Generator, OmniCore, SFE)
+Integration tests
+Docker image builds
+Code coverage reporting
+
+
+Security Scanning (.github/workflows/security.yml):
+
+Dependency vulnerability scanning (safety, pip-audit)
+Secret scanning (TruffleHog)
+Static analysis (CodeQL, Bandit)
+Docker image scanning (Trivy)
+License compliance checks
+
+
+Continuous Deployment (.github/workflows/cd.yml):
+
+Automated builds on main branch
+Docker image publishing to GHCR
+Staging and production deployments
+Rollback capabilities
+Deployment notifications
+
+
+Dependency Management (.github/workflows/dependency-updates.yml):
+
+Weekly dependency update checks
+Automated pull requests for updates
+Outdated package reporting
+
+
+
+Running CI Checks Locally:
+# Run all CI checks
+make ci-local
+
+# Individual checks
+make lint
+make type-check
+make security-scan
+make test
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
 
 Contribution Guidelines
 
-Code Style: PEP 8, use black, ruff.
+Code Style: PEP 8, use black, ruff for formatting and linting.
 Tests: Add to tests/ with 90%+ coverage.
-Docs: Update README.md, crew_config.yaml.
+Docs: Update README.md, QUICKSTART.md, and component docs.
 PRs: Use feature/<name> branches, include changelog.
+Pre-commit: Run make ci-local before committing.
+Security: Never commit secrets, use .env files (excluded from git).
 
 
 Roadmap

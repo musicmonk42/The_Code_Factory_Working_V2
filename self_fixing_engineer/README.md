@@ -1,5 +1,23 @@
 Self-Fixing Engineer (SFE) Platform
-Version: 1.0.0Last Updated: August 22, 2025License: MITHomepage: https://github.com/musicmonk42/self_fixing_engineerAuthors: musicmonk42, Infinite Open Source Collective, Universal AI Swarm, The Oracle Consortium  
+
+Version: 1.0.0 | Last Updated: August 22, 2025 | License: MIT
+
+> **Quick Start**: See [QUICKSTART.md](../QUICKSTART.md) for platform-wide setup, or use `make test-sfe` from the root directory.
+
+## Quick Commands
+
+```bash
+# From root directory
+make test-sfe                # Run SFE tests
+docker-compose up            # Run full platform with Docker
+
+# From self_fixing_engineer directory
+python run_sfe.py            # Run SFE workflow
+python cli.py --help         # CLI help
+pytest tests/ -v             # Run tests
+python run_tests.py          # Run specific test suite
+```
+
 Overview
 The Self-Fixing Engineer (SFE) platform is an innovative, AI-driven DevOps automation framework designed to autonomously analyze, test, fix, and optimize software systems. Built for enterprise-grade scalability, security, and reliability, SFE leverages a modular architecture to orchestrate AI agents, enforce compliance, and integrate with modern DevOps tools. Its self-healing capabilities, driven by reinforcement learning (RL), genetic algorithms, and blockchain-based audit logging, position SFE as a unique solution for reducing mean time to resolution (MTTR), improving code quality, and ensuring compliance in complex software environments.
 SFE targets the high-value 2025 DevOps market, competing with tools like GitLab’s AI features, CrewAI, and Motia, by offering a unified platform for end-to-end software lifecycle automation. Key features include:
