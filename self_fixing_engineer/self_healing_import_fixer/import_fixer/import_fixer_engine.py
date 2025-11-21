@@ -427,7 +427,7 @@ class UnifiedSimulationModule:
             sim_id = sim_config.get("id")
             if sim_id is None:
                 # Generate a unique identifier based on the simulation config
-                config_str = str(sorted(sim_config.items()))
+                config_str = json.dumps(sim_config, sort_keys=True, default=str)
                 sim_id = f"<hash:{hashlib.sha256(config_str.encode()).hexdigest()[:8]}>"
             else:
                 sim_id = str(sim_id)
