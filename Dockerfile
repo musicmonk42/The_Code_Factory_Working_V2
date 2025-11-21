@@ -8,11 +8,18 @@ FROM python:3.11-slim AS builder
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 
 # Install build tools for any packages that need compiling
+# Update ca-certificates first to avoid SSL issues with pip
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates \
+    ca-certificates \
+ && update-ca-certificates \
+ && apt-get install -y --no-install-recommends \
+    build-essential git \
  && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment for dependencies
@@ -30,13 +37,28 @@ COPY omnicore_engine/requirements.txt omnicore_engine/requirements.txt
 COPY self_fixing_engineer/requirements.txt self_fixing_engineer/requirements.txt
 
 # Upgrade packaging tools and install dependencies if found
-RUN pip install --upgrade pip setuptools wheel \
- && if [ -f requirements.txt ]; then \
-        pip install --no-cache-dir -r requirements.txt; \
+# Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
+# Note: The || fallback catches any pip failure including SSL errors. This is intentional
+# to handle corporate proxies and development environments with SSL inspection.
+RUN pip install --upgrade pip setuptools wheel || \
+    (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
+     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
+
+# Install project dependencies
+# Note: --trusted-host bypasses SSL verification as a fallback for environments with
+# SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
+RUN if [ -f requirements.txt ]; then \
+        pip install --no-cache-dir -r requirements.txt || \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
     elif [ -f generator/requirements.txt ]; then \
-        pip install --no-cache-dir -r generator/requirements.txt; \
+        pip install --no-cache-dir -r generator/requirements.txt || \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt); \
     elif [ -f pyproject.toml ]; then \
-        pip install --no-cache-dir .; \
+        pip install --no-cache-dir . || \
+        (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi
@@ -54,7 +76,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:${PATH}"
 
 # Optional: curl for debugging and healthchecks
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# Install ca-certificates first for SSL support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+ && update-ca-certificates \
+ && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
