@@ -17,9 +17,11 @@ Get up and running with the Code Factory Platform in minutes!
 
 ### Required
 
-- **Python 3.11+** - [Download](https://www.python.org/downloads/)
+- **Python 3.11+** - [Download](https://www.python.org/downloads/) (Python 3.10 and below are not supported)
 - **Git** - [Download](https://git-scm.com/downloads)
 - **Docker & Docker Compose** (for containerized setup) - [Download](https://www.docker.com/get-started)
+
+> **Important**: Python 3.11 or higher is required. Earlier versions are not supported due to dependency requirements.
 
 ### Optional
 
@@ -229,12 +231,14 @@ make test-coverage     # Run with coverage report
 ### Code Quality
 
 ```bash
-make lint              # Run linters
-make format            # Format code
-make type-check        # Run type checking
-make security-scan     # Run security scans
-make ci-local          # Run all CI checks locally
+make lint              # Run linters (strict - will fail on errors)
+make format            # Format code with Black
+make type-check        # Run type checking (strict)
+make security-scan     # Run security scans (strict)
+make ci-local          # Run all CI checks locally (strict)
 ```
+
+> **Note**: All code quality checks now enforce strict checking. Errors will cause command failures instead of being suppressed, ensuring code quality standards are met.
 
 ## Troubleshooting
 
@@ -332,9 +336,11 @@ docker-compose build --no-cache
 
 1. Create a feature branch: `git checkout -b feature/my-feature`
 2. Make changes and test: `make test`
-3. Run quality checks: `make ci-local`
+3. Run quality checks: `make ci-local` (runs strict linting, type checking, security scans, and tests)
 4. Commit and push: `git commit -am "Add feature" && git push`
 5. Create a pull request
+
+> **Tip**: Always run `make ci-local` before pushing to catch issues early. All checks run with strict error checking.
 
 ### Contributing
 
