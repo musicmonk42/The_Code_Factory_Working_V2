@@ -150,12 +150,12 @@ class TestBase:
 class TestMetricsFunctions:
     """Test plugin and test metrics functions"""
     
-    @patch('omnicore_engine.core.actual_get_plugin_metrics')
-    def test_get_plugin_metrics_success(self, mock_metrics):
+    def test_get_plugin_metrics_success(self):
         """Test successful plugin metrics retrieval"""
-        mock_metrics.return_value = {"metric1": 10, "metric2": 20}
+        mock_metrics_func = Mock(return_value={"metric1": 10, "metric2": 20})
+        mock_metrics_module = Mock(get_plugin_metrics=mock_metrics_func)
         
-        with patch.dict('sys.modules', {'omnicore_engine.metrics': Mock(get_plugin_metrics=mock_metrics)}):
+        with patch.dict('sys.modules', {'omnicore_engine.metrics': mock_metrics_module}):
             result = get_plugin_metrics()
             assert result == {"metric1": 10, "metric2": 20}
     
@@ -166,12 +166,12 @@ class TestMetricsFunctions:
             assert "error" in result
             assert "Metrics module not available" in result["error"]
     
-    @patch('omnicore_engine.core.actual_get_test_metrics')
-    def test_get_test_metrics_success(self, mock_metrics):
+    def test_get_test_metrics_success(self):
         """Test successful test metrics retrieval"""
-        mock_metrics.return_value = {"tests_run": 100, "tests_passed": 95}
+        mock_metrics_func = Mock(return_value={"tests_run": 100, "tests_passed": 95})
+        mock_metrics_module = Mock(get_test_metrics=mock_metrics_func)
         
-        with patch.dict('sys.modules', {'omnicore_engine.metrics': Mock(get_test_metrics=mock_metrics)}):
+        with patch.dict('sys.modules', {'omnicore_engine.metrics': mock_metrics_module}):
             result = get_test_metrics()
             assert result == {"tests_run": 100, "tests_passed": 95}
 
@@ -184,8 +184,10 @@ class TestExplainableAI:
         """Test successful initialization of ExplainableAI"""
         mock_reasoner = Mock()
         mock_reasoner.initialize = AsyncMock()
+        mock_reasoner_class = Mock(return_value=mock_reasoner)
+        mock_module = Mock(ExplainableReasonerPlugin=mock_reasoner_class)
         
-        with patch('omnicore_engine.core.ExplainableReasonerPlugin', return_value=mock_reasoner):
+        with patch.dict('sys.modules', {'omnicore_engine.explainable_reasoner': mock_module}):
             ai = ExplainableAI()
             await ai.initialize()
             
@@ -435,7 +437,8 @@ class TestOmniCoreEngine:
         mock_comp2 = Mock()
         mock_comp2.health_check = AsyncMock(return_value={"status": "unhealthy"})
         
-        mock_comp3 = Mock()  # No health_check method
+        # Create a mock without health_check using spec
+        mock_comp3 = Mock(spec=['some_other_method'])
         
         engine.components = {
             "comp1": mock_comp1,
