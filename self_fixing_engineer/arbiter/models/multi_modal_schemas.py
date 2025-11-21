@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from html import escape
 from typing_extensions import Literal, Annotated
+from .common import Severity
 
 # Pinning pydantic<2 for explicit V1 API usage.
 
@@ -37,13 +38,6 @@ class Sentiment(str, Enum):
     NEGATIVE = "negative"
     MIXED = "mixed"
     UNKNOWN = "unknown"
-
-class Severity(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-    INFO = "info"
 
 class BaseConfig(BaseModel):
     """

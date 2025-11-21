@@ -3,6 +3,8 @@ import datetime
 import base64
 import hashlib
 import asyncio
+import tempfile
+import os
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import logging
@@ -244,8 +246,15 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
                 self._logger.warning(f"Failed to log audit event: {e}")
             return {"status": "skipped", "summary": "Video processing not available.", "data_hash": data_hash}
         
+        # VideoFileClip expects a file path, not a BytesIO object
+        # Write to a temporary file first
+        temp_file = None
         try:
-            with VideoFileClip(io.BytesIO(item.data)) as clip:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+                temp_file.write(item.data)
+                temp_file_path = temp_file.name
+            
+            with VideoFileClip(temp_file_path) as clip:
                 duration = clip.duration
                 summary = f"Video: {duration:.2f} seconds."
                 
@@ -257,6 +266,13 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
             return {"status": "success", "summary": summary, "data_hash": data_hash}
         except Exception as e:
             return {"status": "failed", "summary": f"Failed to process video: {e}", "data_hash": data_hash}
+        finally:
+            # Clean up temporary file
+            if temp_file is not None:
+                try:
+                    os.unlink(temp_file_path)
+                except Exception:
+                    pass
 
     async def _process_text_file(self, item: MultiModalData) -> Dict[str, Any]:
         data_hash = hashlib.sha256(item.data).hexdigest()

@@ -206,7 +206,7 @@ class PluginRegistry:
     _instance: Optional['PluginRegistry'] = None
     _lock = threading.Lock()
     _event_hook: Optional[Callable[[Dict[str, Any]], None]] = None
-    _kind_locks: Dict[PlugInKind, asyncio.Lock]
+    _kind_locks: Dict[PlugInKind, threading.RLock]
     
     def __new__(cls, persist_path: str = "plugins.json"):
         with cls._lock:
@@ -214,7 +214,7 @@ class PluginRegistry:
                 cls._instance = super().__new__(cls)
                 cls._instance._plugins = {}
                 cls._instance._meta = {}
-                cls._instance._kind_locks = {kind: asyncio.Lock() for kind in PlugInKind}
+                cls._instance._kind_locks = {kind: threading.RLock() for kind in PlugInKind}
                 
                 # Check for test mode and use a temp file if testing
                 if os.getenv('TESTING', 'false').lower() == 'true':
@@ -454,9 +454,9 @@ class PluginRegistry:
         def decorator(plugin_class: Type[PluginBase]):
             start_time = time.time()
             with trace.get_tracer(__name__).start_as_current_span(f"register_plugin_{kind.value}_{name}"):
-                asyncio_lock = self._kind_locks[kind]
-                # Fixed: Use proper lock acquisition instead of inverted check
-                async with asyncio_lock:
+                lock = self._kind_locks[kind]
+                # Use proper lock acquisition with threading.RLock
+                with lock:
                     self._validate_plugin_class(plugin_class, meta)
                     self._verify_signature(plugin_class, meta)
                     
@@ -508,9 +508,9 @@ class PluginRegistry:
             plugin_type="instance"
         )
 
-        asyncio_lock = self._kind_locks[kind]
-        # Fixed: Use proper lock acquisition instead of inverted check
-        async with asyncio_lock:
+        lock = self._kind_locks[kind]
+        # Use proper lock acquisition with threading.RLock
+        with lock:
             if not isinstance(instance, PluginBase):
                 raise TypeError(f"Plugin instance [{kind.value}:{name}] must inherit from PluginBase.")
             
@@ -580,7 +580,7 @@ class PluginRegistry:
         # if not self.check_permission("admin", "write"):
         #     raise PermissionError("Write permission required for plugin unregistration")
 
-        async with self._kind_locks[kind]:
+        with self._kind_locks[kind]:
             plugin = self.get(kind, name)
             meta = self.get_metadata(kind, name)
             
@@ -610,7 +610,7 @@ class PluginRegistry:
                 except Exception:
                     pass
 
-        async with self._kind_locks[kind]:
+        with self._kind_locks[kind]:
             self._plugins.get(kind, {}).pop(name, None)
             self._meta.get(kind, {}).pop(name, None)
         
@@ -639,7 +639,7 @@ class PluginRegistry:
         Returns:
             True if reload was successful, False otherwise.
         """
-        async with self._kind_locks[kind]:
+        with self._kind_locks[kind]:
             plugin_class_or_instance = self.get(kind, name)
             meta = self.get_metadata(kind, name)
             if not (plugin_class_or_instance and meta):

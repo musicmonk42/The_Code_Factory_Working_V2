@@ -410,7 +410,8 @@ class RedisStreamsStorageBackend:
             # Fixed: Check if we got any messages properly
             if not response or not response[0][1]:
                 break
-            for msg_id, msg_data in response[0][1]:
+            entries = response[0][1]
+            for msg_id, msg_data in entries:
                 try:
                     events.append({
                         "type": msg_data[b'type'].decode('utf-8'),
@@ -421,8 +422,17 @@ class RedisStreamsStorageBackend:
                     })
                 except InvalidToken:
                     logger.warning("Skipping undecryptable event ID %s in stream '%s'.", msg_id.decode('utf-8'), stream_key)
-            # Removed redundant check that would never trigger
-            last_id = response[0][1][-1][0]
+            # Advance past the last seen entry to avoid re-reading it (Streams are inclusive)
+            last_raw = entries[-1][0]
+            last_id = f"{last_raw.decode('utf-8') if isinstance(last_raw, bytes) else last_raw}"
+            # Increment the sequence number part of the stream ID to avoid re-reading
+            # Stream IDs are in format "timestamp-sequence", we need to move past the last one
+            if '-' in last_id:
+                timestamp, seq = last_id.rsplit('-', 1)
+                last_id = f"{timestamp}-{int(seq) + 1}"
+            else:
+                # If no sequence part, append -1 to move past it
+                last_id = f"{last_id}-1"
         return events
 
     @STORAGE_LATENCY_SECONDS.labels(backend="redis", operation="save_audit_log").time()

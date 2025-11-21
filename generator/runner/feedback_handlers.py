@@ -29,7 +29,20 @@ from typing import Any, Dict, Optional, List, TextIO
 import os
 import uuid
 import warnings 
-from urllib import request 
+from urllib import request
+
+# Import canonical Severity from arbiter
+try:
+    from self_fixing_engineer.arbiter.models.common import Severity
+except ImportError:
+    # Fallback if running in isolation without self_fixing_engineer installed
+    class Severity(str, Enum):
+        """Event severity levels (fallback)."""
+        DEBUG = "debug"
+        INFO = "info"
+        WARN = "warn"
+        ERROR = "error"
+        CRITICAL = "critical" 
 # -------------------------
 
 # --------------------------------------------------------------------------- #
@@ -63,15 +76,6 @@ def _get_event_id() -> str:
 # --------------------------------------------------------------------------- #
 # Public schema (pure dataclasses)
 # --------------------------------------------------------------------------- #
-class Severity(str, Enum):
-    """Event severity levels."""
-    DEBUG = "debug"
-    INFO = "info"
-    WARN = "warn"
-    ERROR = "error"
-    CRITICAL = "critical"
-
-
 @dataclass(frozen=True)
 class FeedbackEvent:
     """
