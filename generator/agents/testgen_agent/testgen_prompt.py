@@ -27,7 +27,7 @@ import random
 import tempfile
 from typing import Any, Dict, Optional, List, Callable, Union, Awaitable
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from aiohttp import web
 
 # Gold Standard Imports
@@ -148,7 +148,7 @@ class MultiVectorDBManager:
                 "action": "VectorDBUpdate",
                 "collection": collection_name,
                 "file_count": len(files),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "trigger": "add_files"
             })
         except Exception as e:
@@ -180,7 +180,7 @@ class MultiVectorDBManager:
             "action": "VectorDBQuery",
             "collections": collections,
             "query_length": len(query_text),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "query_relevant_context"
         })
         return contexts
@@ -189,7 +189,7 @@ class MultiVectorDBManager:
         """Closes any resources held by the vector DB manager."""
         self.collections.clear()
         logger.info("MultiVectorDBManager resources cleared.")
-        add_provenance({"action": "VectorDBClosed", "timestamp": datetime.utcnow().isoformat()})
+        add_provenance({"action": "VectorDBClosed", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 # 2. Prompt Analytics & Template Versioning/Rollback
 class AdvancedTemplateTracker:
@@ -239,7 +239,7 @@ class AdvancedTemplateTracker:
             self.data["performance"][template_hash]["total_scores"][key] = current_total + value
         self.data["performance"][template_hash]["history"].append({
             "scores": scores,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         if len(self.data["performance"][template_hash]["history"]) > 100:
             self.data["performance"][template_hash]["history"].pop(0)
@@ -250,7 +250,7 @@ class AdvancedTemplateTracker:
             "action": "TemplatePerformanceLogged",
             "template_hash": template_hash,
             "scores": scores,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "log_performance"
         })
 
@@ -284,7 +284,7 @@ class AdvancedTemplateTracker:
             "template_name": template_name,
             "version": version,
             "content_hash": content_hash,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "version_template"
         })
         return version
@@ -309,7 +309,7 @@ class AdvancedTemplateTracker:
                 "template_name": template_name,
                 "version": to_version,
                 "content_hash": content_hash,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "trigger": "rollback_template"
             })
         else:
@@ -334,7 +334,7 @@ class AdvancedTemplateTracker:
             "action": "TemplateEvolutionPromptSanitized",
             "pre_hash": pre_hash,
             "post_hash": post_hash,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "auto_evolve_template"
         })
 
@@ -342,7 +342,7 @@ class AdvancedTemplateTracker:
             add_provenance({
                 "action": "ComplianceSensitiveData",
                 "scrubbed_fields": {"prompt": {"pre_hash": pre_hash, "post_hash": post_hash}},
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
 
         model = "gpt-4o" # Use a strong model for refinement
@@ -394,7 +394,7 @@ class AdvancedTemplateTracker:
                     "new_score": new_scores.get(primary_metric, 0),
                     "avg_score": avg_score,
                     "rollback_version": best_version,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "trigger": "check_for_regression"
                 })
 
@@ -429,7 +429,7 @@ class AdvancedTemplateTracker:
         try:
             self.data = self._load()
             logger.info("Templates reloaded successfully.")
-            add_provenance({"action": "TemplateReload", "timestamp": datetime.utcnow().isoformat(), "trigger": "hot_reload"})
+            add_provenance({"action": "TemplateReload", "timestamp": datetime.now(timezone.utc).isoformat(), "trigger": "hot_reload"})
         except Exception as e:
             logger.error(f"Failed to reload templates: {e}", exc_info=True)
 
@@ -440,7 +440,7 @@ class AdvancedTemplateTracker:
             self.observer.join()
         self._save()
         logger.info("AdvancedTemplateTracker resources saved and closed.")
-        add_provenance({"action": "TemplateTrackerClosed", "timestamp": datetime.utcnow().isoformat()})
+        add_provenance({"action": "TemplateTrackerClosed", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 # 3. Self-Adaptive Chains & Rich Context Injection
 class AdaptivePromptDirector:
@@ -462,7 +462,7 @@ class AdaptivePromptDirector:
         """Sets a callback for human-in-the-loop review (sync or async)."""
         self.human_review_callback = callback
         logger.info("Human review callback set.")
-        add_provenance({"action": "HumanReviewCallbackSet", "timestamp": datetime.utcnow().isoformat()})
+        add_provenance({"action": "HumanReviewCallbackSet", "timestamp": datetime.now(timezone.utc).isoformat()})
 
     def _get_template_content(self, template_name: str) -> str:
         """
@@ -530,7 +530,7 @@ class AdaptivePromptDirector:
         add_provenance({
             "action": "RichContextGenerated",
             "contexts": list(contexts.keys()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "get_rich_context"
         })
         return contexts
@@ -547,7 +547,7 @@ class AdaptivePromptDirector:
             "action": "ChainAdapted",
             "prior_quality": prior_quality,
             "chain": chain,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "adapt_chain"
         })
         return chain
@@ -557,7 +557,7 @@ class AdaptivePromptDirector:
         await self.multi_vdb.close()
         await self.tracker.close()
         logger.info("AdaptivePromptDirector resources closed.")
-        add_provenance({"action": "DirectorClosed", "timestamp": datetime.utcnow().isoformat()})
+        add_provenance({"action": "DirectorClosed", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 # Plugin Registration
 def register_prompt_builder(name: str, builder_class: type):
@@ -597,14 +597,14 @@ class AgenticPromptBuilder(abc.ABC):
             "action": "TextSanitized",
             "pre_hash": pre_hash,
             "post_hash": post_hash,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "advanced_sanitize"
         })
         if COMPLIANCE_MODE:
             add_provenance({
                 "action": "ComplianceSensitiveData",
                 "scrubbed_fields": {"text": {"pre_hash": pre_hash, "post_hash": post_hash}},
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
         return text
 
@@ -735,7 +735,7 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
             "template_hash": template_hash,
             "context_hashes": context_hashes,
             "chain_steps": chain_steps,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "trigger": "build_prompt"
         })
         return prompt
@@ -810,7 +810,7 @@ def initialize_codebase_for_rag(repo_path: str):
             "dependencies": len(dep_files),
             "historical_failures": len(failure_logs)
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "trigger": "initialize_codebase_for_rag"
     })
 
@@ -819,14 +819,14 @@ async def startup():
     logger.info("Initializing TestGen Prompt service components...")
     asyncio.create_task(start_health_server()) 
     logger.info("TestGen Prompt service components initialized.")
-    add_provenance({"action": "Startup", "timestamp": datetime.utcnow().isoformat()})
+    add_provenance({"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 async def shutdown():
     """Closes all connections and cleans up resources on application shutdown."""
     logger.info("Shutting down TestGen Prompt service components...")
     await director.close()
     logger.info("TestGen Prompt service components shut down.")
-    add_provenance({"action": "Shutdown", "timestamp": datetime.utcnow().isoformat()})
+    add_provenance({"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 async def example_human_review(prompt: str) -> bool:
     """

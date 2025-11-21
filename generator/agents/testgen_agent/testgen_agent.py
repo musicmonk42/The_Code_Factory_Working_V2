@@ -489,6 +489,9 @@ Agent --> Dev : Deliver Report
         Orchestrates the generation, validation, critique, and refinement of tests.
         Returns a final report of the process.
         """
+        # Store policy for use in _call_llm_with_retry
+        self.policy = policy
+        
         with tracer.start_as_current_span("generate_tests_agent_run") as span:
             run_id = f"testgen-run-{uuid.uuid4().hex[:8]}-{int(time.time())}"
             log_extra = {"run_id": run_id, "language": language}

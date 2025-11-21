@@ -31,7 +31,7 @@ import tempfile
 import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, List, Union, Callable, Awaitable
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import hashlib
 import uuid # For unique module names during hot reload
@@ -113,7 +113,7 @@ async def start_health_server():
     logger.info("Health endpoint server started on port 8082.")
     # REFACTORED: Use add_provenance (fire and forget)
     try:
-        asyncio.create_task(add_provenance("HealthServerStarted", {"port": 8082, "timestamp": datetime.utcnow().isoformat()}))
+        asyncio.create_task(add_provenance("HealthServerStarted", {"port": 8082, "timestamp": datetime.now(timezone.utc).isoformat()}))
     except RuntimeError:
         # No event loop, skip
         pass
@@ -147,7 +147,7 @@ class ValidatorRegistry:
         logger.info(f"Registered validator: {name}")
         # REFACTORED: Use add_provenance (fire and forget in sync context)
         try:
-            asyncio.create_task(add_provenance("ValidatorRegistered", {"name": name, "timestamp": datetime.utcnow().isoformat()}))
+            asyncio.create_task(add_provenance("ValidatorRegistered", {"name": name, "timestamp": datetime.now(timezone.utc).isoformat()}))
         except RuntimeError:
             # No event loop in sync context, skip
             pass
@@ -203,7 +203,7 @@ class ValidatorRegistry:
 
         # REFACTORED: Use add_provenance
         try:
-            await add_provenance("ValidatorPluginsReloaded", {"count": len(VALIDATORS), "timestamp": datetime.utcnow().isoformat()})
+            await add_provenance("ValidatorPluginsReloaded", {"count": len(VALIDATORS), "timestamp": datetime.now(timezone.utc).isoformat()})
         except Exception:
             # Ignore provenance errors
             pass
@@ -290,7 +290,7 @@ class CoverageValidator(TestValidator):
         """Saves performance metrics atomically."""
         self.performance_data.setdefault("coverage", []).append({
             "metrics": metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         if len(self.performance_data["coverage"]) > 100:
             self.performance_data["coverage"].pop(0)
@@ -387,7 +387,7 @@ class MutationValidator(TestValidator):
         """Saves performance metrics atomically."""
         self.performance_data.setdefault("mutation", []).append({
             "metrics": metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         if len(self.performance_data["mutation"]) > 100:
             self.performance_data["mutation"].pop(0)
@@ -485,7 +485,7 @@ class PropertyBasedValidator(TestValidator):
         """Saves performance metrics atomically."""
         self.performance_data.setdefault("property_based", []).append({
             "metrics": metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         if len(self.performance_data["property_based"]) > 100:
             self.performance_data["property_based"].pop(0)
@@ -569,7 +569,7 @@ class StressPerformanceValidator(TestValidator):
         """Saves performance metrics atomically."""
         self.performance_data.setdefault("stress_performance", []).append({
             "metrics": metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         if len(self.performance_data["stress_performance"]) > 100:
             self.performance_data["stress_performance"].pop(0)
@@ -660,7 +660,7 @@ async def validate_test_quality(
             "validation_type": validation_type,
             "metrics": metrics,
             "language": language,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     except Exception:
         # Ignore provenance errors
@@ -676,7 +676,7 @@ async def startup():
     asyncio.create_task(start_health_server())
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance("Startup", {"timestamp": datetime.utcnow().isoformat()})
+        await add_provenance("Startup", {"timestamp": datetime.now(timezone.utc).isoformat()})
     except Exception:
         pass
 
@@ -685,7 +685,7 @@ async def shutdown():
     await validator_registry.close()
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance("Shutdown", {"timestamp": datetime.utcnow().isoformat()})
+        await add_provenance("Shutdown", {"timestamp": datetime.now(timezone.utc).isoformat()})
     except Exception:
         pass
 
