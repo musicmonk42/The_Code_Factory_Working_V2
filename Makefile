@@ -58,15 +58,15 @@ test: ## Run all tests
 
 test-generator: ## Run Generator tests
 	@echo "$(BLUE)Running Generator tests...$(NC)"
-	cd generator && pytest tests/ -v --tb=short || true
+	cd generator && pytest tests/ -v --tb=short
 
 test-omnicore: ## Run OmniCore Engine tests
 	@echo "$(BLUE)Running OmniCore Engine tests...$(NC)"
-	cd omnicore_engine && pytest tests/ -v --tb=short || true
+	cd omnicore_engine && pytest tests/ -v --tb=short
 
 test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
-	cd self_fixing_engineer && pytest tests/ -v --tb=short || true
+	cd self_fixing_engineer && pytest tests/ -v --tb=short
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
@@ -85,11 +85,11 @@ test-watch: ## Run tests in watch mode (requires pytest-watch)
 lint: ## Run all linters
 	@echo "$(BLUE)Running linters...$(NC)"
 	@echo "$(YELLOW)Running Black...$(NC)"
-	black --check generator/ omnicore_engine/ self_fixing_engineer/ || true
+	black --check generator/ omnicore_engine/ self_fixing_engineer/
 	@echo "$(YELLOW)Running Ruff...$(NC)"
-	ruff check generator/ omnicore_engine/ self_fixing_engineer/ || true
+	ruff check generator/ omnicore_engine/ self_fixing_engineer/
 	@echo "$(YELLOW)Running Flake8...$(NC)"
-	flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+	flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics
 	@echo "$(GREEN)Linting complete!$(NC)"
 
 format: ## Format code with Black
@@ -99,15 +99,15 @@ format: ## Format code with Black
 
 type-check: ## Run type checking with mypy
 	@echo "$(BLUE)Running type checks...$(NC)"
-	mypy generator/ omnicore_engine/ self_fixing_engineer/ || true
+	mypy generator/ omnicore_engine/ self_fixing_engineer/
 	@echo "$(GREEN)Type checking complete!$(NC)"
 
 security-scan: ## Run security scans
 	@echo "$(BLUE)Running security scans...$(NC)"
 	@echo "$(YELLOW)Running Bandit...$(NC)"
-	bandit -r generator/ omnicore_engine/ self_fixing_engineer/ || true
+	bandit -r generator/ omnicore_engine/ self_fixing_engineer/
 	@echo "$(YELLOW)Running Safety...$(NC)"
-	safety check -r requirements.txt || true
+	safety check -r requirements.txt
 	@echo "$(GREEN)Security scan complete!$(NC)"
 
 # =============================================================================
@@ -278,8 +278,23 @@ setup-monitoring: ## Setup monitoring stack (Prometheus, Grafana)
 
 install-hooks: ## Install git hooks for pre-commit checks
 	@echo "$(BLUE)Installing git hooks...$(NC)"
-	echo '#!/bin/sh\nmake lint\nmake test' > .git/hooks/pre-commit
-	chmod +x .git/hooks/pre-commit
+	@if [ -f .git/hooks/pre-commit ]; then \
+		echo "$(YELLOW)Pre-commit hook already exists, appending commands...$(NC)"; \
+		if ! grep -q "make lint" .git/hooks/pre-commit; then \
+			echo "" >> .git/hooks/pre-commit; \
+			echo "# Added by Code Factory Makefile" >> .git/hooks/pre-commit; \
+			echo "make lint" >> .git/hooks/pre-commit; \
+		fi; \
+		if ! grep -q "make test" .git/hooks/pre-commit; then \
+			echo "make test" >> .git/hooks/pre-commit; \
+		fi; \
+		chmod +x .git/hooks/pre-commit; \
+	else \
+		echo '#!/bin/sh' > .git/hooks/pre-commit; \
+		echo 'make lint' >> .git/hooks/pre-commit; \
+		echo 'make test' >> .git/hooks/pre-commit; \
+		chmod +x .git/hooks/pre-commit; \
+	fi
 	@echo "$(GREEN)Git hooks installed!$(NC)"
 
 # =============================================================================

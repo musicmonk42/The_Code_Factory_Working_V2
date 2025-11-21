@@ -14,9 +14,43 @@ permissions:
   contents: read
   
 jobs:
+  # Detect which paths have changed
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      generator: ${{ steps.changes.outputs.generator }}
+      omnicore: ${{ steps.changes.outputs.omnicore }}
+      sfe: ${{ steps.changes.outputs.sfe }}
+      workflows: ${{ steps.changes.outputs.workflows }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Check for changes
+        uses: tj-actions/changed-files@v44
+        id: changes
+        with:
+          files_yaml: |
+            generator:
+              - 'generator/**'
+            omnicore:
+              - 'omnicore_engine/**'
+            sfe:
+              - 'self_fixing_engineer/**'
+            workflows:
+              - '.github/workflows/**'
+
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.omnicore == 'true' || needs.changes.outputs.sfe == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     
@@ -37,19 +71,21 @@ jobs:
           
       - name: Run Black formatter check
         run: |
-          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/ || true
+          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/
           
       - name: Run Ruff linter
         run: |
-          ruff check generator/ omnicore_engine/ self_fixing_engineer/ || true
+          ruff check generator/ omnicore_engine/ self_fixing_engineer/
           
       - name: Run Flake8
         run: |
-          flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+          flake8 generator/ omnicore_engine/ self_fixing_engineer/ --count --select=E9,F63,F7,F82 --show-source --statistics
 
   test-generator:
     name: Test Generator Component
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     
@@ -77,9 +113,10 @@ jobs:
         run: |
           cd generator
           if [ -d tests ]; then
-            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v
           else
-            echo "No tests found in generator/tests/"
+            echo "Error: No tests directory found. Failing the build."
+            exit 1
           fi
           
       - name: Upload Generator coverage
@@ -93,6 +130,8 @@ jobs:
   test-omnicore:
     name: Test OmniCore Engine
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.omnicore == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     
@@ -132,9 +171,10 @@ jobs:
         run: |
           cd omnicore_engine
           if [ -d tests ]; then
-            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v
           else
-            echo "No tests found in omnicore_engine/tests/"
+            echo "Error: No tests directory found. Failing the build."
+            exit 1
           fi
           
       - name: Upload OmniCore coverage
@@ -148,6 +188,8 @@ jobs:
   test-sfe:
     name: Test Self-Fixing Engineer
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.sfe == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     
@@ -173,9 +215,10 @@ jobs:
         run: |
           cd self_fixing_engineer
           if [ -d tests ]; then
-            pytest tests/ --cov --cov-report=xml --cov-report=term -v || true
+            pytest tests/ --cov --cov-report=xml --cov-report=term -v
           else
-            echo "No tests found in self_fixing_engineer/tests/"
+            echo "Error: No tests directory found. Failing the build."
+            exit 1
           fi
           
       - name: Upload SFE coverage
@@ -189,7 +232,11 @@ jobs:
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [test-generator, test-omnicore, test-sfe]
+    needs: [changes, test-generator, test-omnicore, test-sfe]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.generator == 'true' || needs.changes.outputs.omnicore == 'true' || needs.changes.outputs.sfe == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     
@@ -231,7 +278,7 @@ jobs:
           APP_ENV: test
         run: |
           if [ -f conftest.py ]; then
-            pytest -v --tb=short || true
+            pytest -v --tb=short
           else
             echo "No root-level integration tests found"
           fi
@@ -239,7 +286,11 @@ jobs:
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [lint, test-generator, test-omnicore, test-sfe]
+    needs: [changes, lint, test-generator, test-omnicore, test-sfe]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.changes.outputs.generator == 'true' || needs.changes.outputs.omnicore == 'true' || needs.changes.outputs.sfe == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     
