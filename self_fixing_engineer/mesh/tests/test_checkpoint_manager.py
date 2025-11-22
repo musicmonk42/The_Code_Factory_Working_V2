@@ -17,13 +17,13 @@ import tempfile
 import time
 import shutil
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, PropertyMock
+from unittest.mock import patch, AsyncMock, Mock
 from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 # Test configuration
 TEST_DIR = Path(tempfile.mkdtemp(prefix="checkpoint_manager_test_"))

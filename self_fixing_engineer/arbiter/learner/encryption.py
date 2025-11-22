@@ -1,6 +1,5 @@
 # D:\SFE\self_fixing_engineer\arbiter\learner\encryption.py
 import os
-import logging
 import json
 import structlog
 import boto3

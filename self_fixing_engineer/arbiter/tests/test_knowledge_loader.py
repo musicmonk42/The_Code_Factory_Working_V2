@@ -1,14 +1,9 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open, ANY
+from unittest.mock import patch, mock_open, ANY
 import os
 import json
-import asyncio
-import tempfile
-import sys
 import logging
 import threading
-from typing import Dict, Any, Optional, Union
-from copy import deepcopy
 from knowledge_loader import merge_dict, save_knowledge_atomic, load_knowledge, KnowledgeLoader
 from unittest.mock import AsyncMock
 

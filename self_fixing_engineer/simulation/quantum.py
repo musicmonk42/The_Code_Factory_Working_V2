@@ -8,8 +8,7 @@ import time
 import json
 import hashlib
 import datetime
-from typing import Dict, Any, List, Optional, Tuple, Callable, Union
-import re
+from typing import Dict, Any, List, Optional
 import asyncio
 from abc import ABC, abstractmethod
 
@@ -261,7 +260,7 @@ class EnvCredentialProvider(CredentialProvider):
 class FileCredentialProvider(CredentialProvider):
     """File-based credential provider (for development)."""
     async def get_credentials(self, key: str) -> Dict[str, Any]:
-        file_path = os.environ.get("QUANTUM_CRED_FILE_PATH", f"~/.quantum/creds.json")
+        file_path = os.environ.get("QUANTUM_CRED_FILE_PATH", "~/.quantum/creds.json")
         path = os.path.expanduser(file_path)
         if os.path.exists(path):
             with open(path, 'r') as f:
@@ -636,7 +635,6 @@ async def run_quantum_mutation(code_file: str, backend: str = "auto", config: Op
     try:
         params_class = RunMutationCircuitParams if PYDANTIC_AVAILABLE else RunMutationCircuitParams
         params = params_class(code_file=code_file, backend=backend, **(config or {}))
-        validated_config = params.backend_config
         n_qubits = params.n_qubits
         n_vars = params.n_vars
     except (ValidationError, ValueError) as e:

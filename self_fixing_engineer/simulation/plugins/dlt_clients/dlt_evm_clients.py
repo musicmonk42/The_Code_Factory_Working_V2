@@ -18,7 +18,6 @@ import os
 import asyncio
 import json
 import time
-import uuid
 import re
 import inspect
 import sys
@@ -44,8 +43,6 @@ from .dlt_base import (
     TRACER,
     Status,
     StatusCode,
-    alert_operator,
-    SECRETS_MANAGER,
     AUDIT,
     PRODUCTION_MODE,
 )

@@ -18,7 +18,7 @@ import logging
 import traceback
 import tempfile
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Dict, Any
 import textwrap
 import html  # For sanitization
 import random
@@ -26,9 +26,7 @@ import asyncio
 import re
 from importlib.metadata import version
 import time
-from contextlib import contextmanager
 from packaging.version import Version
-import inspect
 from test_generation.utils import atomic_write, maybe_await
 from pathlib import Path
 
@@ -85,7 +83,7 @@ else:
             registry=_registry
         )
         METRICS_AVAILABLE = True
-    except Exception as e:
+    except Exception:
         METRICS_AVAILABLE = False
         report_generation_duration = DummyMetric()
         report_generation_errors = DummyMetric()

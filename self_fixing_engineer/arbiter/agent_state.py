@@ -21,11 +21,9 @@ import json
 import asyncio
 import logging
 import sys
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List, Union
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, Index, CheckConstraint, 
-    event, Text, UniqueConstraint
+    event, Text
 )
 from sqlalchemy.orm import declarative_base, validates
 from sqlalchemy.sql import func
@@ -292,14 +290,14 @@ class AgentState(Base):
         try:
             # Check if we're in an async context
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # We're in an async context but can't use asyncio.run
                 # Just do synchronous validation for deep schema checks
                 AgentState._validate_fields_sync(target)
             except RuntimeError:
                 # No running loop, safe to use asyncio.run
                 asyncio.run(AgentState._validate_json_fields(mapper, connection, target))
-        except Exception as e:
+        except Exception:
             # Fallback to sync validation if async fails
             AgentState._validate_fields_sync(target)
 
@@ -410,7 +408,7 @@ class AgentMetadata(Base):
         """Synchronous validation wrapper for SQLAlchemy events."""
         try:
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 AgentMetadata._validate_fields_sync(target)
             except RuntimeError:
                 asyncio.run(AgentMetadata._validate_json_fields(mapper, connection, target))

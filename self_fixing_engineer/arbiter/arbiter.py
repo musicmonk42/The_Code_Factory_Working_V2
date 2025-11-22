@@ -6,16 +6,14 @@ import os
 import random
 import sys
 import time
-import traceback
 from functools import wraps
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Protocol, Set, Tuple, Union, ClassVar
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, ClassVar
 from datetime import datetime, timezone
 import json
-from contextlib import asynccontextmanager
 import httpx
-from sqlalchemy import Column, Integer, String, Float, Text, select, update, BigInteger, DateTime, text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, String, Text, select, update, BigInteger, DateTime
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import BaseModel, HttpUrl, SecretStr, Field, validator
 from pydantic_settings import BaseSettings
@@ -23,7 +21,7 @@ from dotenv import load_dotenv, dotenv_values
 from tenacity import retry, stop_after_attempt, wait_exponential
 from collections import deque
 import numpy as np
-from prometheus_client import Counter, Gauge, generate_latest, REGISTRY, push_to_gateway, Summary
+from prometheus_client import REGISTRY, push_to_gateway
 from arbiter.metrics import get_or_create_counter, get_or_create_gauge, get_or_create_summary
 from logging.handlers import RotatingFileHandler
 from cryptography.fernet import Fernet
@@ -1263,7 +1261,7 @@ class Arbiter:
                 plugin_execution_time.labels(plugin="generate_tests").observe(time.time() - start_time)
             return result if isinstance(result, dict) else {"status": "ok", "result": result}
         except asyncio.TimeoutError:
-            logging.getLogger(__name__).error(f"In-process test generation timed out.")
+            logging.getLogger(__name__).error("In-process test generation timed out.")
             return {"status": "error", "error": "In-process plugin call timed out."}
         except Exception as e:
             logging.getLogger(__name__).error(f"Error calling in-process test generation plugin: {e}", exc_info=True)
@@ -1470,7 +1468,7 @@ class Arbiter:
 
                             crawl_results = await self.explorer.execute("crawl_frontend", urls=frontend_urls)
                             self.state_manager.energy -= 5
-                            await self.log_social_event(f"explored a new area", "environment", 1)
+                            await self.log_social_event("explored a new area", "environment", 1)
                             outcome["crawl_results"] = crawl_results
                             await self.coordinate_with_peers({"agent": self.name, "action": "explored", "urls": frontend_urls})
                         else:

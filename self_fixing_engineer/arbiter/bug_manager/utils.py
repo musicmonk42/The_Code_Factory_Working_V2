@@ -1,19 +1,13 @@
 import os
-import sys
 import datetime
 import logging
-import enum
 import hashlib
-import time
-import functools
-import collections
 import re
 import json
-from typing import Any, Dict, Optional, Union, Callable, Coroutine, List, get_origin, get_args
+from typing import Any, Dict, Optional, Union, List, get_origin, get_args
 from collections import deque
 
 from prometheus_client import Counter, REGISTRY
-from ..models.common import Severity
 
 # Configure logging for metric debugging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

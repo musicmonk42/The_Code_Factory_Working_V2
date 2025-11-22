@@ -1,12 +1,7 @@
 # test_multi_modal_plugin.py
 import pytest
-import asyncio
 import json
-import hashlib
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
-from datetime import datetime, timezone
-from typing import Dict, Any
-import tempfile
+from unittest.mock import Mock, AsyncMock, patch
 import os
 
 from arbiter.plugins.multi_modal_plugin import (
@@ -17,15 +12,11 @@ from arbiter.plugins.multi_modal_plugin import (
     InputValidator,
     OutputValidator,
     SandboxExecutor,
-    MultiModalProcessor,
     ProcessingResult,
     InvalidInputError,
-    ConfigurationError,
-    ProviderNotAvailableError,
     ProcessingError,
     MultiModalException
 )
-from arbiter.plugins.multi_modal_config import MultiModalConfig
 
 
 class TestAuditLogger:
@@ -398,7 +389,7 @@ class TestMultiModalPlugin:
                     "data": {"cached": True}
                 })
                 
-                result2 = await plugin.process_text("test")
+                await plugin.process_text("test")
                 # Should get cached result without processing
 
     def test_get_supported_providers(self, plugin):

@@ -4,15 +4,14 @@ import asyncio
 import logging
 import signal
 import sys
-import os
 import json
 import time
 import uuid
 import hashlib
 from functools import partial
-from typing import Any, Dict, Callable, Optional, Union
+from typing import Any, Dict, Callable, Optional
 from aiohttp import web
-from prometheus_client import start_http_server, Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import start_http_server, Counter, Histogram, REGISTRY
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # --- Initialize logger early before any usage ---
@@ -81,8 +80,10 @@ if not SFE_CORE_AVAILABLE:
     class DummyTracer:
         def start_as_current_span(self, *a, **k): return DummySpan()
     tracer = DummyTracer()
-    meter = lambda: None
-    propagator = lambda: None
+    def meter():
+        return None
+    def propagator():
+        return None
 
     class MockCallTracker:
         """Helper class to track method calls for testing."""
@@ -178,8 +179,10 @@ if SFE_CORE_AVAILABLE:
         class DummyTracer:
             def start_as_current_span(self, *a, **k): return DummySpan()
         tracer = DummyTracer()
-        meter = lambda: None
-        propagator = lambda: None
+        def meter():
+            return None
+        def propagator():
+            return None
 
 # --- Prometheus Metrics ---
 def _get_metric(mt, name, doc, labels=(), buckets=None):

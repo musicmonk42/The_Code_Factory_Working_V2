@@ -1,9 +1,6 @@
 # test_explainable_reasoner.py
-import os
 import asyncio
-import json
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
-from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch, AsyncMock, MagicMock
 import sys
 from pathlib import Path
 
@@ -405,8 +402,6 @@ async def test_health_check_degraded_no_models(reasoner_instance):
 @pytest.mark.asyncio
 async def test_shutdown_success(reasoner_instance):
     # Store references before shutdown
-    history_mock = reasoner_instance.history
-    audit_mock = reasoner_instance.audit_ledger_client
     
     # Create a new shutdown without the fixture's automatic cleanup
     reasoner = ExplainableReasoner(config=reasoner_instance.config)

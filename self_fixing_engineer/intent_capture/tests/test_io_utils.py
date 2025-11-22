@@ -1,19 +1,11 @@
 # tests/test_io_utils.py
-import os
-import json
 import time
 import asyncio
-import hashlib
-import tempfile
-import shutil
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, ANY
-from contextlib import contextmanager
+from datetime import datetime, timedelta
+from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 import pytest
-from pytest_asyncio import fixture
 
 # Import the module under test
-import intent_capture.io_utils as io_utils_module
 from intent_capture.io_utils import (
     FileManager,
     ScalableProvenanceLogger,
@@ -23,14 +15,6 @@ from intent_capture.io_utils import (
     log_audit_event,
     prune_audit_logs,
     startup_validation,
-    # Constants
-    WORKSPACE_DIR,
-    PROD_MODE,
-    AIOHTTP_AVAILABLE,
-    AIOBREAKER_AVAILABLE,
-    REDIS_AVAILABLE,
-    PROMETHEUS_AVAILABLE,
-    OTEL_AVAILABLE,
 )
 
 # --- Test Fixtures ---
@@ -381,7 +365,6 @@ def test_prune_audit_logs(mock_boto3, monkeypatch):
     monkeypatch.setenv("AWS_SECRET_KEY", "test_secret")
     
     # Create a real datetime object for old_date
-    from datetime import datetime, timedelta
     old_date = datetime.now() - timedelta(days=100)
     
     # Mock S3 response with old objects

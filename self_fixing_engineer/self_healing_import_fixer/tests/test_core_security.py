@@ -2,7 +2,7 @@ import pytest
 import os
 import json
 import subprocess
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 from self_healing_import_fixer.analyzer.core_security import (
     SecurityAnalyzer,
@@ -186,7 +186,6 @@ def test_run_subprocess_safely_file_not_found(
 def test_run_bandit_success_no_issues(
     monkeypatch, test_security_project, mock_audit_logger_security
 ):
-    from self_healing_import_fixer.analyzer import core_security
 
     def fake_run(cmd, *args, **kwargs):
         if (cmd[0] == "/usr/bin/bandit" and "-f" in cmd and "json" in cmd):
@@ -210,7 +209,6 @@ def test_run_bandit_with_issues(
     mock_audit_logger_security,
     mock_alert_operator_security,
 ):
-    from self_healing_import_fixer.analyzer import core_security
     bandit_output = {
         "results": [
             {"issue_severity": "MEDIUM", "issue_text": "Weak password detected."},

@@ -3,11 +3,8 @@
 # Requires: pytest, pytest-asyncio, unittest.mock
 # Run with: pytest test_prompt_strategies.py -v --cov=prompt_strategies --cov-report=html
 
-import os
 import json
-import time
-import logging
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 
 import pytest
 

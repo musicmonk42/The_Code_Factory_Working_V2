@@ -1,29 +1,17 @@
 # tests/test_siem_integration_plugin.py
 
 import pytest
-import asyncio
 import os
-import json
-import uuid
-import sys
-import tempfile
-import shutil
 from unittest.mock import patch, MagicMock, AsyncMock
 from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
-from collections import deque
-import re
-import datetime
-import hashlib
 import time
 
 # Use absolute import path assuming tests are run from the project root
 from simulation.plugins.siem_integration_plugin import (
     GenericSIEMIntegrationPlugin,
-    SIEMClientError, SIEMClientConfigurationError,
     PolicyEnforcer, PluginGlobalConfig, PolicyConfig, PolicyRule, PolicyCondition,
     SIEM_SEND_ERRORS_TOTAL, SIEM_EVENTS_SENT_TOTAL,
-    _audit_event,
 )
 
 # A minimal Pydantic model for the config since the real one is now correctly mocked
@@ -67,7 +55,7 @@ def mock_external_dependencies():
          patch(f'{plugin_path}.get_siem_client', side_effect=lambda t, c: mock_registry[t]), \
          patch(f'{plugin_path}.redis') as mock_redis, \
          patch(f'{plugin_path}.QUERY_PARSER_AVAILABLE', True), \
-         patch(f'{plugin_path}.SiemQueryLanguageParser') as mock_query_parser_class, \
+         patch(f'{plugin_path}.SiemQueryLanguageParser'), \
          patch(f'{plugin_path}._sfe_audit_logger.add_entry', new=AsyncMock()) as mock_audit_add_entry, \
          patch.dict(os.environ, {
              "SIEM_DEFAULT_TYPE": "splunk",
@@ -192,7 +180,6 @@ async def test_send_siem_event_success(mock_external_dependencies):
     assert "Event sent" in send_result['reason']
     assert mock_external_dependencies['mock_splunk_client'].send_log.call_count == 1
     # Re-import metrics locally as they are patched per-test
-    from simulation.plugins.siem_integration_plugin import SIEM_EVENTS_SENT_TOTAL, SIEM_SEND_ERRORS_TOTAL
     assert SIEM_EVENTS_SENT_TOTAL.labels(siem_type='splunk', status='success')._value.get() == 1
     assert SIEM_SEND_ERRORS_TOTAL.labels(siem_type='splunk', error_type='backend_not_found')._value.get() == 0
 
@@ -219,7 +206,6 @@ async def test_send_siem_event_policy_blocked(mock_external_dependencies):
     assert send_result['success'] is False
     assert "blocked by policy rule" in send_result['reason']
     assert mock_external_dependencies['mock_splunk_client'].send_log.call_count == 0
-    from simulation.plugins.siem_integration_plugin import SIEM_SEND_ERRORS_TOTAL
     assert SIEM_SEND_ERRORS_TOTAL.labels(siem_type='splunk', error_type='policy_blocked')._value.get() == 1
 
 @pytest.mark.asyncio
@@ -259,5 +245,4 @@ async def test_query_siem_logs_success(mock_external_dependencies):
     assert query_result['success'] is True
     assert len(query_result['results']) == 1
     assert query_result['results'][0]['result'] == 'mock'
-    from simulation.plugins.siem_integration_plugin import SIEM_EVENTS_SENT_TOTAL
     assert SIEM_EVENTS_SENT_TOTAL.labels(siem_type='splunk', status='query_success')._value.get() == 1

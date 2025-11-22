@@ -42,12 +42,11 @@ import os
 import time
 
 import redis.asyncio as redis
-from contextlib import contextmanager
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Import all prometheus_client types at once at the top
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
@@ -223,7 +222,7 @@ def get_global_connection_pool(config: 'ArbiterConfig') -> Optional[redis.Connec
                 test_client = redis.Redis(connection_pool=_global_connection_pool)
                 # Check if we're in an async context
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # We're already in an async context, can't use asyncio.run
                     logger.debug("Skipping Redis ping check - already in async context")
                 except RuntimeError:

@@ -2,14 +2,11 @@ import os
 import sys
 import json
 import logging
-import asyncio
-import time
 import hashlib
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any, List
+from unittest.mock import MagicMock, patch
+from typing import Dict
 from pathlib import Path
-import wasmtime
 
 # Assuming these are available in a file named wasm_runner.py
 # and we are mocking them for the purpose of testing this file in isolation.

@@ -4,15 +4,10 @@ import time
 import json
 import logging
 import sys
-import re
-import hmac
-import hashlib
-import getpass
 import datetime
 import redis.asyncio as redis
 
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable, Literal
-from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional, List
 
 # --- OpenTelemetry Tracing ---
 try:
@@ -53,7 +48,7 @@ if not logger.handlers:
             logger.error(f"CRITICAL: Failed to configure file logging to {LOG_FILE_PATH}: {e}. Falling back to stdout.", exc_info=True)
             # Do not use alert_operator here, as it may not be ready. Fall back to stdout and alert on that channel.
             handler = logging.StreamHandler(sys.stdout)
-            sys.stderr.write(f"CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.\n")
+            sys.stderr.write("CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.\n")
             sys.exit(1)
         
         class JsonFormatter(logging.Formatter):
@@ -108,7 +103,7 @@ try:
     from google.oauth2 import service_account
 except ImportError as e:
     logger.critical(f"CRITICAL: google-cloud-pubsub not found. Pub/Sub plugin functionality is critical. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: google-cloud-pubsub missing. Pub/Sub plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: google-cloud-pubsub missing. Pub/Sub plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 try:
@@ -116,14 +111,14 @@ try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(f"CRITICAL: pydantic or pydantic-settings not found. Schema validation is critical. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: pydantic missing. Pub/Sub plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: pydantic missing. Pub/Sub plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, generate_latest, CollectorRegistry
 except ImportError as e:
     logger.critical(f"CRITICAL: prometheus_client not found. Metrics are mandatory. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: prometheus_client missing. Pub/Sub plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: prometheus_client missing. Pub/Sub plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 # --- Caching: Redis Client Initialization ---
@@ -288,7 +283,7 @@ try:
     logger.info("Prometheus metrics initialized.")
 except Exception as e:
     logger.critical(f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.", exc_info=True)
-    alert_operator(f"CRITICAL: Prometheus metrics initialization failed. Pub/Sub plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: Prometheus metrics initialization failed. Pub/Sub plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 # ---- 3. Validated Event Schema (REQUIRED) ----

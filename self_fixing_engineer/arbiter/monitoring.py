@@ -10,13 +10,11 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from hashlib import sha256
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential
 from cryptography.fernet import Fernet
 from sqlalchemy import Column, String, JSON, DateTime
 from sqlalchemy.orm import declarative_base
 import collections
-from prometheus_client import Counter, Histogram, REGISTRY
-import base64
+from prometheus_client import Counter
 
 # Import the centralized tracer configuration
 try:

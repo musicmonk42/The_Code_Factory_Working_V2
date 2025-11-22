@@ -4,8 +4,8 @@ import json
 import hashlib
 import threading
 import time
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Callable, Union, Tuple, Type
+from datetime import datetime
+from typing import Dict, Any, Optional, List
 import logging
 import asyncio
 import socket
@@ -537,7 +537,6 @@ class AuditLogger:
             return
 
         with AUDIT_LOCK:
-            last_line = None
             try:
                 with open(self.log_path, 'r', encoding='utf-8') as f:
                     for line in f:

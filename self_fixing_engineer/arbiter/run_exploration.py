@@ -4,21 +4,15 @@ import sys
 import signal
 import json
 import logging
-import threading
-from typing import Dict, List, Any, Optional, Union, Callable
+from typing import Dict, List, Any, Optional
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
-import aiohttp
 from aiohttp import web
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, REGISTRY
+from prometheus_client import Counter
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import aiofiles
 import yaml
 import importlib
 import pkgutil
-import traceback
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi import HTTPException, Depends
 
 # Mock/Plausholder imports for a self-contained fix
 try:
@@ -360,7 +354,7 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                  agent_tasks.extend([{} for _ in range(config['num_arbiters'] - len(agent_tasks))])
             
             # Use a semaphore to limit concurrent Arbiter executions
-            semaphore = asyncio.Semaphore(config.get('max_concurrent_arbiters', 5))
+            asyncio.Semaphore(config.get('max_concurrent_arbiters', 5))
 
             for i, arbiter in enumerate(arena.arbiters):
                 if shutdown_event.is_set():

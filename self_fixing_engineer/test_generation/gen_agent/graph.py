@@ -5,7 +5,6 @@ import cProfile
 from typing import Dict, Any, Callable, Optional, TypedDict, Awaitable
 from functools import partial
 import inspect
-import importlib
 
 # -----------------------------------------------------------------------------
 # Optional Tenacity (retries are no-op if not installed)
@@ -63,7 +62,6 @@ from test_generation.gen_agent.agents import (
     planner_agent, generator_agent, judge_agent, refiner_agent,
     adaptive_test_executor_agent, security_agent, performance_agent
 )
-from .runtime import init_llm
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +248,8 @@ def build_graph(llm: Any, checkpointer: Optional[Any] = None) -> Any:
 
         workflow = StateGraph(TestAgentState)
 
-        _bind = lambda f: partial(f, llm=llm) if not _stategraph_is_mock else f
+        def _bind(f):
+            return partial(f, llm=llm) if not _stategraph_is_mock else f
 
         workflow.add_node("planner", _bind(planner_agent))
         workflow.add_node("generate", _bind(generator_agent))

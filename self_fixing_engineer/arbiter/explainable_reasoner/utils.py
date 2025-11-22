@@ -2,12 +2,11 @@ import collections
 import json
 import logging
 import re
-import random
 import time
 import asyncio
 from datetime import datetime, date, time as dt_time
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, Union, Callable, Type, ParamSpec, Awaitable
+from typing import Dict, Any, Optional, List, Union, Callable, ParamSpec, Awaitable
 from functools import wraps
 
 from pydantic import BaseModel
@@ -224,7 +223,7 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
         max_size_bytes = config.sanitization_options.get("max_size_bytes", 4096)
         if len(context_json.encode('utf-8')) > max_size_bytes:
             _utils_logger.warning(f"Context size exceeds max_size ({max_size_bytes} bytes).")
-            return {"_truncated_context_error": f"Original context too large."}
+            return {"_truncated_context_error": "Original context too large."}
 
         METRICS["reasoner_sanitization_latency_seconds"].observe(time.monotonic() - start_time)
         return json.loads(context_json)

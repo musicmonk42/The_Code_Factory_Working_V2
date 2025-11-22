@@ -1,17 +1,14 @@
 # Restored on August 20, 2025
-import datetime
 import logging
 import json
 import uuid
 import time
 import re
-import collections
-import contextvars
 import asyncio
 import hashlib
 import sys
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, List, Optional, Callable, Union, Awaitable
+from typing import Dict, Any, Tuple, List, Optional
 from contextlib import asynccontextmanager
 
 # Python version compatibility for asyncio.timeout
@@ -34,7 +31,7 @@ else:
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationChain
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import messages_from_dict, messages_to_dict, HumanMessage, AIMessage
+from langchain_core.messages import messages_from_dict, messages_to_dict, HumanMessage
 
 # LLM Provider Imports
 try:
@@ -53,7 +50,6 @@ except ImportError:
 
 # For MetaLearning model persistence
 import pickle
-from collections import Counter
 from ratelimit import limits, sleep_and_retry
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -105,7 +101,7 @@ except ImportError:
 # Local imports
 from .config import Config, load_persona_dict, SensitiveValue, MultiModalData
 from .utils import (
-    datetime_now, async_with_retry, _sanitize_user_input, _sanitize_context,
+    async_with_retry, _sanitize_user_input, _sanitize_context,
     AgentErrorCode, AgentCoreException, AGENT_METRICS, trace_id_var,
     logger
 )

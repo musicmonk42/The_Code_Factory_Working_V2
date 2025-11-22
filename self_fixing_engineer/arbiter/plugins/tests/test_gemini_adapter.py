@@ -1,8 +1,7 @@
 # test_gemini_adapter.py
 import pytest
 import asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 
 # Import the adapter and related exceptions
@@ -417,7 +416,7 @@ class TestGeminiAdapter:
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close failed"))
             
-            async with GeminiAdapter(valid_settings) as adapter:
+            async with GeminiAdapter(valid_settings):
                 pass  # Should not raise even if close fails
 
     # --- Metrics Tests ---

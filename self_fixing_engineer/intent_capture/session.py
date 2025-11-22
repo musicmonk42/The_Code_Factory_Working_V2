@@ -308,7 +308,7 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
         log_action("session_loaded", {"session_id": session_name, "path": session_path, "size_bytes": await aiofiles.os.path.getsize(session_path), "latency_seconds": latency})
         logger.info(f"Session '{session_name}' loaded successfully from {session_path}.")
         return validated_session_state.model_dump(mode='json')
-    except (FileNotFoundError, ValueError) as e:
+    except (FileNotFoundError, ValueError):
         logger.warning(f"Session '{session_name}' not found at {_get_session_path(session_name)}. Returning None.")
         log_action("session_load_failed", {"session_id": session_name, "reason": "not_found"})
         return None

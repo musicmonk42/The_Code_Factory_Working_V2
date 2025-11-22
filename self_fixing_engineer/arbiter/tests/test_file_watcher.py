@@ -1,35 +1,9 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open, ANY, Mock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 import asyncio
-import os
-import sys
-import json
-import logging
-import threading
-from typing import List, Dict, Optional, Any, Callable, Coroutine, Union
-from pathlib import Path
-from datetime import datetime, timedelta
 import yaml
-import aiohttp
 from aiolimiter import AsyncLimiter
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
-from tenacity import retry, stop_after_attempt, wait_exponential
-import aiofiles
-import redis.asyncio as redis
-from pydantic import BaseModel, Field, validator
-import typer
 from typer.testing import CliRunner
-from prometheus_client import start_http_server, Counter, Gauge, Histogram, generate_latest, REGISTRY
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from aiohttp import web
-import boto3
-import aiosmtplib
-from email.mime.text import MIMEText
-from dotenv import load_dotenv
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi import HTTPException, Depends
 
 # Fix: Import from arbiter.file_watcher instead of file_watcher
 import arbiter.file_watcher as file_watcher_module
@@ -43,10 +17,8 @@ from arbiter.file_watcher import (
     deploy_code,
     notify_changes,
     process_file,
-    batch_process,
     CodeChangeHandler,
     MetricsAndHealthServer,
-    start_watch,
     app,
     Config,
     SMTPConfig,
@@ -230,13 +202,13 @@ async def test_send_email_alert_failure(valid_config, caplog):
 @pytest.mark.asyncio
 async def test_send_slack_alert():
     result = await send_slack_alert("Message")
-    assert result == True  # Placeholder function returns True
+    assert result  # Placeholder function returns True
 
 # Test send_pagerduty_alert (simplified version)
 @pytest.mark.asyncio
 async def test_send_pagerduty_alert():
     result = await send_pagerduty_alert("Title", "Details")
-    assert result == True  # Placeholder function returns True
+    assert result  # Placeholder function returns True
 
 # Test summarize_code_changes
 @pytest.mark.asyncio
@@ -291,7 +263,7 @@ async def test_deploy_code_success():
         mock_subprocess.return_value = mock_proc
         
         result = await deploy_code("echo deploy")
-        assert result["success"] == True
+        assert result["success"]
         assert result["output"] == "output"
 
 # Test deploy_code failure
@@ -304,7 +276,7 @@ async def test_deploy_code_failure():
         mock_subprocess.return_value = mock_proc
         
         result = await deploy_code("echo deploy")
-        assert result["success"] == False
+        assert not result["success"]
         assert result["error"] == "error"
 
 # Test notify_changes
@@ -313,9 +285,9 @@ async def test_notify_changes(valid_config):
     file_watcher_module.config = valid_config
     file_watcher_module.email_limiter = AsyncLimiter(1, 1)
     
-    with patch('arbiter.file_watcher.send_email_alert', new_callable=AsyncMock) as mock_email:
-        with patch('arbiter.file_watcher.send_slack_alert', new_callable=AsyncMock) as mock_slack:
-            with patch('arbiter.file_watcher.send_pagerduty_alert', new_callable=AsyncMock) as mock_pd:
+    with patch('arbiter.file_watcher.send_email_alert', new_callable=AsyncMock):
+        with patch('arbiter.file_watcher.send_slack_alert', new_callable=AsyncMock):
+            with patch('arbiter.file_watcher.send_pagerduty_alert', new_callable=AsyncMock):
                 await notify_changes("file.py", "diff", "summary", {"success": True})
                 # These are called but may fail, which is handled
                 assert True  # Just verify no exceptions
@@ -346,7 +318,7 @@ async def test_code_change_handler_on_modified():
     event.src_path = "file.py"
     event.is_directory = False
     
-    with patch.object(handler, 'process_file', new_callable=AsyncMock) as mock_process:
+    with patch.object(handler, 'process_file', new_callable=AsyncMock):
         handler.on_modified(event)
         # Give the event loop time to run the task
         await asyncio.sleep(0.1)
@@ -365,7 +337,7 @@ async def test_metrics_health_server(valid_config):
     
     # Patch all the web-related classes before instantiation
     with patch('aiohttp.web.Application', return_value=mock_app):
-        with patch('aiohttp.web.AppRunner', return_value=mock_runner) as mock_runner_class:
+        with patch('aiohttp.web.AppRunner', return_value=mock_runner):
             with patch('aiohttp.web.TCPSite', return_value=mock_site) as mock_site_class:
                 # Now create the server with mocked dependencies
                 server = MetricsAndHealthServer(valid_config)

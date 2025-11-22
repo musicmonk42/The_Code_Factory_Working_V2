@@ -70,7 +70,7 @@ import os
 import re
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 from contextlib import contextmanager # <--- ADDED contextlib IMPORT
 
 # --- Production-Grade Library Imports ---
@@ -82,8 +82,6 @@ from dotenv import load_dotenv
 # --- LangChain & AI Core Components ---
 from langchain.memory import VectorStoreRetrieverMemory
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage,
                                      messages_from_dict, messages_to_dict)
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -117,7 +115,7 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server
 
 # FIX: Make the OTLP exporter import optional to prevent startup failure
 try:
@@ -325,7 +323,7 @@ def sanitize_input(input_text: str) -> str:
     """Hardened sanitizer against prompt injection, SSRF (CVE-2025-2828), and XSS."""
     if re.search(r'\b(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)\b', input_text):
         # UPGRADE: Log security events for monitoring
-        logger.warning(f"Potential SSRF attempt blocked: input contained internal IP pattern.")
+        logger.warning("Potential SSRF attempt blocked: input contained internal IP pattern.")
         raise ValueError("Input contains a potentially malicious pattern (internal IP).")
     return clean(input_text, tags=[], attributes={}, strip=True).strip()
 
@@ -417,7 +415,7 @@ class CollaborativeAgent:
             ("user", "CONTEXT:\n{context}\n\nQUESTION:\n{input}"),
         ])
 
-        chain = (
+        (
             RunnablePassthrough.assign(
                 context=self._get_rag_context
             )
@@ -465,9 +463,9 @@ class CollaborativeAgent:
         AGENT_CYCLE_COUNT.labels(agent_id=self.agent_id).inc()
 
         # UPGRADE: Add detailed tracing for each step
-        with tracer.start_as_current_span("self_correction_cycle") if tracer else open(os.devnull, 'w') as f:
+        with tracer.start_as_current_span("self_correction_cycle") if tracer else open(os.devnull, 'w'):
             # 1. Initial Response
-            with tracer.start_as_current_span("initial_response") if tracer else open(os.devnull, 'w') as f:
+            with tracer.start_as_current_span("initial_response") if tracer else open(os.devnull, 'w'):
                 initial_response_msg: AgentResponse = await llm_breaker.call_async(
                     asyncio.wait_for, self._runnable.ainvoke({"input": user_input}), timeout=timeout
                 )

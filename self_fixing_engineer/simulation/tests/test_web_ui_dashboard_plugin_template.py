@@ -3,15 +3,12 @@
 import pytest
 import asyncio
 import os
-import json
-import uuid
 from urllib.parse import quote
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 
 # Import the plugin from the parent directory
@@ -19,12 +16,10 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'plugins')))
 from web_ui_dashboard_plugin_template import (
     DashboardConfig, get_dashboard_router, get_dashboard_state,
-    update_dashboard_state, get_example_metric_panel,
-    validate_component_name, _scrub_secrets,
-    DASHBOARD_API_CALLS, WEBSOCKET_CONNECTIONS, DASHBOARD_STATE_UPDATES,
+    update_dashboard_state, validate_component_name, DASHBOARD_API_CALLS, WEBSOCKET_CONNECTIONS, DASHBOARD_STATE_UPDATES,
     DASHBOARD_COMPONENT_RENDERS,
 )
-from web_ui_dashboard_plugin_template import _DASHBOARD_MEMORY_STATE, CONFIG, UI_COMPONENTS
+from web_ui_dashboard_plugin_template import CONFIG, UI_COMPONENTS
 
 # ==============================================================================
 # Pytest Fixtures for mocking external dependencies and environment
@@ -302,7 +297,7 @@ async def test_rapid_state_updates(api_client, mock_external_dependencies):
 
 def test_component_registry_operations():
     """Test UI component registration and retrieval."""
-    from web_ui_dashboard_plugin_template import register_ui_component, UI_COMPONENTS
+    from web_ui_dashboard_plugin_template import register_ui_component
     
     # Define a test component
     def test_component(data):
@@ -326,7 +321,6 @@ def test_config_environment_override(mock_external_dependencies):
     """Test that environment variables override config file settings."""
     # The mock_external_dependencies fixture sets DASHBOARD_WS_INTERVAL=0.1
     # This test verifies that the environment variable was applied
-    from web_ui_dashboard_plugin_template import CONFIG
     # Note: CONFIG is loaded at module import time, so we can't easily test
     # the override mechanism here without reloading the module
     assert CONFIG is not None
@@ -334,7 +328,6 @@ def test_config_environment_override(mock_external_dependencies):
 def test_redis_fallback_to_memory():
     """Test that the system falls back to memory storage when Redis is unavailable."""
     import asyncio
-    from web_ui_dashboard_plugin_template import get_dashboard_state, update_dashboard_state
     
     async def test_fallback():
         # With our mock, Redis is "unavailable" (returns None)

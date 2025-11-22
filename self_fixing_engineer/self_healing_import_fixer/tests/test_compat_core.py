@@ -7,32 +7,22 @@ Covers initialization, fallbacks, audit logging, metrics, tracing, and health ch
 import json
 import logging
 import os
-import sys
-import time
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 import pytest
 import hmac
 import hashlib
 
 # Import using the full package path
 from self_healing_import_fixer.import_fixer.compat_core import (
-    CoreModuleStatus,
-    _initialize_core_modules,
     alert_operator,
     audit_logger,
     get_core_health,
     logger,
-    scrub_secrets,
     verify_audit_log,
     SECRETS_MANAGER,
     ENVIRONMENT,
     PRODUCTION_MODE,
-    _fallback_audit_logger_instance,
-    _fallback_secrets_manager_instance,
     core_statuses,
-    _core_initialized,
-    _core_init_error,
     _NoOpMetric,
 )
 

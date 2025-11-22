@@ -111,8 +111,7 @@ def test_log_event_hmac_signature(logger, secrets):
         lines = f.readlines()
     found = [json.loads(line) for line in lines if "signed_event" in line]
     assert "signature" in found[0]
-    import hmac, hashlib
-    body = json.dumps(found[0], sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8")
+    json.dumps(found[0], sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8")
     # The signature is calculated before adding "signature" itself, so here we just check it exists and is hex.
     assert all(c in "0123456789abcdef" for c in found[0]["signature"])
 

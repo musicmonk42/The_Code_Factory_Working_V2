@@ -20,16 +20,10 @@ import sys
 import asyncio
 import uuid
 import time
-import json
-import re
 import logging
 import datetime
-import tempfile
-import hashlib
-import hmac
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Union, Callable
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from typing import Dict, Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -439,7 +433,7 @@ async def test_rate_limiting(siem_config, metrics_collector):
             *[client.send_log(entry) for entry in log_entries],
             return_exceptions=True
         )
-        elapsed_time = time.time() - start_time
+        time.time() - start_time
         
         # Verify all operations succeeded
         for result in results:
@@ -454,7 +448,6 @@ async def test_rate_limiting(siem_config, metrics_collector):
 async def test_retry_logic(aws_client, monkeypatch):
     """Test that operations are retried on transient failures."""
     # Store the original method
-    original_func = aws_client._perform_send_log_logic
     retry_counter = {"count": 0}
     
     async def mock_send_with_failures(log_entry):

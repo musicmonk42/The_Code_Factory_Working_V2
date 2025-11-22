@@ -1,15 +1,14 @@
 import pytest
-from pydantic import ValidationError, BaseModel
+from pydantic import ValidationError
 from datetime import datetime, timezone, timedelta
 import logging
 import json
-from typing import Dict, Any, Union, List
 
 # Import from the correct module
 from multi_modal_schemas import (
     BaseConfig, ImageOCRResult, ImageCaptioningResult, ImageAnalysisResult,
     AudioTranscriptionResult, AudioAnalysisResult, VideoSummaryResult,
-    VideoAnalysisResult, Sentiment, Severity, to_camel, MultiModalAnalysisResult
+    VideoAnalysisResult, Sentiment, Severity, to_camel
 )
 
 # Configure logging for tests

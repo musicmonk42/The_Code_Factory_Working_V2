@@ -2,16 +2,13 @@ import asyncio
 import json
 import logging
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, MagicMock
 import hashlib
 import pytest_asyncio
 import aiofiles
-import os # Imported os
 
 # Assuming all modules are in a discoverable path
 from arbiter.arbiter_growth.config_store import ConfigStore, TokenBucketRateLimiter
-from arbiter.arbiter_growth.metrics import CONFIG_FALLBACK_USED
 
 # --- Fixtures ---
 

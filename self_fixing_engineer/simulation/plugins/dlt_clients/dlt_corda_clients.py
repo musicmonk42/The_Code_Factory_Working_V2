@@ -16,7 +16,6 @@ import time
 import uuid
 import sys
 from typing import Any, Dict, Optional, Tuple, Union
-from urllib.parse import urlparse
 from datetime import datetime
 
 import aiohttp
@@ -43,7 +42,6 @@ from .dlt_base import (
     TRACER,
     Status,
     StatusCode,
-    alert_operator,
     SECRETS_MANAGER,
     AUDIT,
     PRODUCTION_MODE,

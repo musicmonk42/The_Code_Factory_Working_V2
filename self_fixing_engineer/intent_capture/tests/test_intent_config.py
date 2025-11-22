@@ -1,15 +1,8 @@
-import os
 import json
-import time
 import logging
-import copy
-import sys
-import tempfile
 from unittest.mock import patch, MagicMock, mock_open
 import pytest
-from pytest_asyncio import fixture
 from pydantic import ValidationError
-import requests
 
 # Import the module under test
 import intent_capture.config as config_module  # Import the module itself to patch its internals
@@ -28,14 +21,6 @@ from intent_capture.config import (
     log_audit_event,
     prune_audit_logs,
     startup_validation,
-    # These are constants/variables
-    PROD_MODE,
-    CUSTOM_CONFIG_PATH,
-    CRYPTOGRAPHY_AVAILABLE,
-    PYBREAKER_AVAILABLE,
-    REDIS_AVAILABLE,
-    WATCHDOG_AVAILABLE,
-    PROMETHEUS_AVAILABLE,
 )
 
 # --- Test Fixtures ---
@@ -61,7 +46,7 @@ def mock_hvac():
     mock_client = MagicMock()
     mock_client.is_authenticated.return_value = True
     mock_client.secrets.kv.read_secret_version.return_value = {"data": {"data": {"TEST_SECRET": "vault_value"}}}
-    with patch('intent_capture.config.hvac.Client', return_value=mock_client) as mock:
+    with patch('intent_capture.config.hvac.Client', return_value=mock_client):
         yield mock_client
 
 @pytest.fixture
@@ -85,7 +70,7 @@ def mock_requests():
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"INTENT_AGENT_REDIS_URL": "redis://test:6379/0"}
     mock_resp.raise_for_status = MagicMock()
-    with patch('intent_capture.config.requests.get', return_value=mock_resp) as mock:
+    with patch('intent_capture.config.requests.get', return_value=mock_resp):
         yield mock_resp
 
 @pytest.fixture
@@ -269,7 +254,7 @@ def test_global_config_manager_reload(mock_env, mock_requests, mock_logger):
     """Test GlobalConfigManager reload."""
     # Reset the singleton
     GlobalConfigManager._instance = None
-    config = GlobalConfigManager.get_config()
+    GlobalConfigManager.get_config()
     
     # Set last reload time in the past
     GlobalConfigManager._last_reload_time = 0

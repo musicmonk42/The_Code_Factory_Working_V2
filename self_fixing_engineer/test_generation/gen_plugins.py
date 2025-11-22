@@ -25,7 +25,6 @@ import hashlib
 from functools import lru_cache
 from typing import List, Dict, Optional, Union, Any
 from collections import defaultdict
-from unittest.mock import patch
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +186,7 @@ class PythonTestGenerator(BaseTestGenerator):
                         
                         if node.args.args:
                             body.append(f"    def test_{sanitized_fname}_edge_case(self):")
-                            body.append(f"        with self.assertRaises(TypeError):")
+                            body.append("        with self.assertRaises(TypeError):")
                             body.append(f"            {fname}({', '.join(['None'] * len(node.args.args))})")
                         
                         if any(a.arg == "num" for a in node.args.args):
@@ -206,7 +205,7 @@ class PythonTestGenerator(BaseTestGenerator):
                         
                         if needs_mocking:
                             body.append(f"    def test_{sanitized_fname}_mocked_api(self):")
-                            body.append(f"        with patch('requests.get', return_value=MockResponse()):")
+                            body.append("        with patch('requests.get', return_value=MockResponse()):")
                             body.append(f"            self.assertIsNotNone({fname}())")
                         
                         test_blocks[fname].append("\n".join(body))

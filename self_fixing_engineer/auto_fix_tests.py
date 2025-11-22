@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Auto-fix common test issues"""
 
-import os
 import re
 from pathlib import Path
 

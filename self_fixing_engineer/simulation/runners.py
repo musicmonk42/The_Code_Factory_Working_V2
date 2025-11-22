@@ -5,8 +5,7 @@ import sys
 import threading
 import time
 import json
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
-import shutil
+from typing import Any, Callable, Dict, List, Optional
 import asyncio
 from contextlib import contextmanager
 

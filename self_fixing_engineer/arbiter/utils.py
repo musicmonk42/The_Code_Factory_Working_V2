@@ -4,12 +4,11 @@ import aiohttp
 import asyncio
 import os
 import logging
-import threading
-from typing import Dict, Any, Optional, Callable, Awaitable, List, Type, Union
+from typing import Dict, Any, List
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from aiolimiter import AsyncLimiter
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import Counter
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
@@ -18,7 +17,6 @@ from arbiter.otel_config import get_tracer
 try:
     # FIXED: Correctly import PluginBase from the appropriate registry module
     from arbiter_plugin_registry import registry, PlugInKind, PluginBase 
-    from arbiter_plugin_registry import registry, PlugInKind
     from arbiter.logging_utils import PIIRedactorFilter
 except ImportError:
     class registry:

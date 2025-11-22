@@ -6,8 +6,8 @@ Tests the core growth tracking and management functionality.
 
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
@@ -16,16 +16,12 @@ from arbiter.arbiter_growth.exceptions import (
     RateLimitError,
     CircuitBreakerOpenError,
     AuditChainTamperedError,
-    ArbiterGrowthError,
 )
 from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
-from arbiter.arbiter_growth.models import GrowthEvent, ArbiterState
+from arbiter.arbiter_growth.models import GrowthEvent
 from arbiter.arbiter_growth.metrics import (
-    GROWTH_EVENTS,
     GROWTH_SAVE_ERRORS,
-    GROWTH_PENDING_QUEUE,
     GROWTH_ANOMALY_SCORE,
-    GROWTH_OPERATION_EXECUTION_LATENCY,
 )
 from pybreaker import CircuitBreakerListener
 

@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 import asyncio
 from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
-from prometheus_client.metrics import MetricWrapperBase
 
 from arbiter.arbiter_growth.config_store import ConfigStore
 from arbiter.arbiter_growth.metrics import get_or_create_metric
@@ -169,7 +168,7 @@ def test_get_or_create_uses_custom_buckets_from_config(mock_config_store, isolat
 def test_get_or_create_handles_unregister_failure(isolated_registry):
     """Tests that unregister failures are handled gracefully."""
     # Create a Counter
-    counter = get_or_create_metric(
+    get_or_create_metric(
         Counter, "test_metric", "Test metric", registry=isolated_registry
     )
     

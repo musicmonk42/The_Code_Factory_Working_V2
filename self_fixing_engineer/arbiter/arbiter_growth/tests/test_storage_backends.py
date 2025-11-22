@@ -7,8 +7,7 @@ Tests SQLite, Redis, and Kafka storage backends.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 import os
@@ -17,12 +16,7 @@ import base64
 # Set the encryption key environment variable for tests
 os.environ["ARBITER_ENCRYPTION_KEY"] = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8')
 
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from redis.exceptions import RedisError
-from aiokafka.errors import KafkaError
-from pybreaker import CircuitBreakerError
 from cryptography.fernet import InvalidToken
 
 from arbiter.arbiter_growth.exceptions import ArbiterGrowthError, AuditChainTamperedError
@@ -30,9 +24,6 @@ from arbiter.arbiter_growth.models import (
     ArbiterState,
     GrowthEvent,
     Base,
-    GrowthSnapshot,
-    GrowthEventRecord,
-    AuditLog,
 )
 from arbiter.arbiter_growth.storage_backends import (
     SQLiteStorageBackend,
@@ -40,7 +31,6 @@ from arbiter.arbiter_growth.storage_backends import (
     KafkaStorageBackend,
     storage_backend_factory,
     REDIS_BREAKER,
-    SQL_BREAKER,
 )
 
 
@@ -515,7 +505,7 @@ async def test_redis_consumer_group(redis_backend, mock_redis_client):
 async def test_kafka_offset_management(kafka_backend, mock_kafka_producer):
     """Test that event offsets are correctly managed and returned from Kafka."""
     # Mock the consumer to return a specific event
-    mock_consumer = AsyncMock()
+    AsyncMock()
     
     # Mock the load_events method to return a specific payload
     async def mock_load_events(*args, **kwargs):

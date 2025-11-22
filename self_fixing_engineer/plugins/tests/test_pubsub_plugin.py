@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import logging
@@ -6,7 +5,7 @@ import asyncio
 import time
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any, List
+from typing import Dict
 from google.cloud import pubsub_v1
 from google.api_core import exceptions as google_exceptions
 from pydantic import ValidationError

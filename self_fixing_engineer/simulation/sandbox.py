@@ -33,20 +33,17 @@ import json
 import time
 import asyncio
 import getpass
-from typing import Dict, Any, List, Optional, Callable, Awaitable
+from typing import Dict, Any, List, Optional, Callable
 import ctypes
 import shutil
 import hmac
 import hashlib
 from datetime import datetime, timedelta
 import psutil
-import backoff
-from tenacity import retry, stop_after_attempt, wait_exponential
 import atexit
 import types
 import tempfile
 import secrets
-import shlex
 from pathlib import Path
 
 # Function to alert operators - properly implement this for your environment
@@ -706,8 +703,6 @@ def _validate_and_bind_workdir(workdir: str, allow_write: bool):
 def _apply_kernel_sandboxing_preexec(policy: SandboxPolicy, resource_limits: Optional[Dict[str, Any]] = None):
     def preexec():
         import os
-        import pwd
-        import grp
         if os.name != 'posix':
             sandbox_logger.warning("Skipping kernel-level sandboxing on non-POSIX system.")
             return
@@ -1203,7 +1198,7 @@ async def run_chaos_experiment(app: str, experiment_type: str) -> dict:
         raise RuntimeError("Gremlin SDK not available.")
     client = Client()
     experiment_spec = {"target": app, "attack": experiment_type}
-    result = await asyncio.to_thread(client.run_experiment, experiment_spec)
+    await asyncio.to_thread(client.run_experiment, experiment_spec)
     return {"status": "STARTED", "result": {"experiment_id": secrets.token_hex(8)}}
 
 

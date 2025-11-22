@@ -9,13 +9,10 @@ from email.mime.text import MIMEText
 from typing import Any, Callable, Dict, List, Optional, Union, Awaitable
 from datetime import datetime, timezone
 import random
-import statistics
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 import aiohttp # For Slack notifications
 from tenacity import retry, stop_after_attempt, wait_exponential
-from aiolimiter import AsyncLimiter
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
 from arbiter.otel_config import get_tracer
 from arbiter.arbiter_plugin_registry import register, PlugInKind, registry as arbiter_registry
 

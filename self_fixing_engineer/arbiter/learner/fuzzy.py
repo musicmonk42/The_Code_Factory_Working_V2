@@ -3,7 +3,6 @@
 import os
 import json
 import time
-import logging
 import structlog
 import hashlib
 import asyncio

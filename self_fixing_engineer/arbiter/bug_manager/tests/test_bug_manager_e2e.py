@@ -1,19 +1,15 @@
 import asyncio
-import json
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import aioresponses
 from prometheus_client import REGISTRY
-from prometheus_client.metrics import MetricWrapperBase
 
 # Import all necessary components from the application modules
 from arbiter.bug_manager.bug_manager import (
     BugManager, Settings, Severity, RateLimitExceededError,
-    BUG_AUTO_FIX_SUCCESS, BUG_AUTO_FIX_ATTEMPT,
-    BUG_NOTIFICATION_DISPATCH
+    BUG_AUTO_FIX_SUCCESS, BUG_AUTO_FIX_ATTEMPT
 )
 from arbiter.bug_manager.remediations import BugFixerRegistry, RemediationPlaybook, RemediationStep
 from arbiter.bug_manager.utils import SecretStr

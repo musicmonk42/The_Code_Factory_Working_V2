@@ -15,7 +15,6 @@ import json
 import time
 from typing import Any, Dict, Optional, Type, List, Literal, Final
 import atexit
-import warnings
 import os
 from pydantic import BaseModel, Field, validator, ValidationError
 from datetime import datetime
@@ -23,7 +22,7 @@ from datetime import datetime
 from .dlt_base import (
     BaseDLTClient, BaseOffChainClient, DLTClientConfigurationError, DLTClientError,
     DLTClientLoggerAdapter, scrub_secrets,
-    alert_operator, SECRETS_MANAGER, AUDIT, PRODUCTION_MODE
+    alert_operator, AUDIT, PRODUCTION_MODE
 )
 from .dlt_base import _base_logger
 

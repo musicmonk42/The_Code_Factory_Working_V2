@@ -13,12 +13,10 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import pathlib
 import sys
-import types
-from typing import Any, Dict, List, Tuple
+from typing import Any, List
 from unittest.mock import Mock, AsyncMock
 import subprocess
 import shutil

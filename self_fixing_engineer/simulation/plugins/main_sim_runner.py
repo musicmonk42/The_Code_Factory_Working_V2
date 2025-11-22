@@ -10,7 +10,6 @@ import asyncio
 import tempfile
 import uuid
 import time
-import contextlib  # used for nullcontext when OTEL disabled
 from typing import Dict, Any, Callable, List, Optional
 import hashlib
 import ast
@@ -323,7 +322,6 @@ def validate_deployment_or_exit(remote: bool = False):
     Validates required environment/infrastructure. Remote=True will validate Kubernetes, Docker, S3 etc.
     Local mode skips heavy checks unless overridden.
     """
-    import shutil
 
     log_path = os.environ.get("VALIDATION_LOG_PATH", "validation.log")
     skip_local = os.environ.get("SIM_RUNNER_SKIP_VALIDATION_FOR_LOCAL", "true").lower() in ("1", "true", "yes")

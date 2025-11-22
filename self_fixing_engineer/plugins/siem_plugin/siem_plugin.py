@@ -12,7 +12,7 @@ import re
 import gzip
 import sys
 import ssl
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable, Protocol
+from typing import Dict, Any, Optional, List, Callable, Awaitable, Protocol
 from contextlib import asynccontextmanager
 from collections import deque
 from logging.handlers import RotatingFileHandler
@@ -34,7 +34,7 @@ try:
     from core_utils import alert_operator
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
-except ImportError as e:
+except ImportError:
     import logging
 
     def alert_operator(message: str, level: str):
@@ -133,7 +133,7 @@ try:
     OPENTELEMETRY_AVAILABLE = True
     AsyncioInstrumentor().instrument()
     main_logger.info("OpenTelemetry initialized and configured.")
-except ImportError as e:
+except ImportError:
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
             @asynccontextmanager
@@ -316,7 +316,7 @@ class SIEMEvent(BaseModel):
             elif isinstance(data, str):
                 for pattern in cls.SENSITIVE_PATTERNS:
                     if pattern.search(data):
-                        audit_logger.critical(f"Detected and scrubbed sensitive pattern from string.")
+                        audit_logger.critical("Detected and scrubbed sensitive pattern from string.")
                         return "[REDACTED]"
                 return data
             else:
@@ -620,7 +620,7 @@ class SIEMGateway:
         }):
             try: self.circuit_breaker.check()
             except ConnectionAbortedError:
-                main_logger.warning(f"Batch dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
+                main_logger.warning("Batch dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
                 for event in deduped_batch: await self._handle_dead_letter(event, "circuit_breaker_open")
                 return False
 
@@ -736,7 +736,7 @@ class SIEMGateway:
             elif avg_queue < self.global_settings.queue_size_per_worker * 0.5 and len(active_workers) > self.global_settings.min_workers:
                 self._scale_down_timer += 10
                 if self._scale_down_timer >= 30:
-                    worker_to_stop = active_workers.pop()
+                    active_workers.pop()
                     main_logger.info(f"Queue empty, scaling down worker for {self.target_config.name} to {len(active_workers)}")
                     audit_logger.info("worker_scale_down", extra={"context": {"target": self.target_config.name, "new_worker_count": len(active_workers)}})
                     await self._event_queue.put(None)
@@ -819,14 +819,14 @@ class SIEMGatewayManager:
                 try:
                     serializer_class = entry_point.load()
                     self.register_serializer(entry_point.name, serializer_class())
-                except Exception as e:
+                except Exception:
                     raise AnalyzerCriticalError(f"Failed to load serializer plugin '{entry_point.name}'.")
         except TypeError:
              for entry_point in importlib.metadata.entry_points().get(group, []):
                 try:
                     serializer_class = entry_point.load()
                     self.register_serializer(entry_point.name, serializer_class())
-                except Exception as e:
+                except Exception:
                     raise AnalyzerCriticalError(f"Failed to load serializer plugin '{entry_point.name}'.")
 
     def register_serializer(self, name: str, serializer: Serializer):

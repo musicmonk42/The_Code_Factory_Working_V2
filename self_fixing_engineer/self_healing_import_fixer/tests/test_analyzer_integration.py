@@ -1,9 +1,6 @@
 # tests/test_analyzer_integration.py
-import os
-import sys
 import json
 import time
-import types
 import asyncio
 import subprocess
 from pathlib import Path
@@ -79,7 +76,7 @@ def import_module_with_fallback() -> Any:
 
 def find_click_root_command(mod) -> Any:
     try:
-        import click
+        pass
     except Exception:
         return None
     # Heuristically pick the first click Group/Command defined at module level

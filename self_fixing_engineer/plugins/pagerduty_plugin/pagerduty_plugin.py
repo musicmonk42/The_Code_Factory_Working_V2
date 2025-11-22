@@ -11,8 +11,7 @@ import datetime
 import contextlib
 import random
 
-from typing import Dict, Any, Optional, Literal, List, Union, Callable, Awaitable
-from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional, Literal, List
 
 # --- Custom Exceptions (defined early for immediate use) ---
 class StartupCriticalError(Exception):
@@ -234,7 +233,7 @@ try:
     logger.info("Prometheus metrics initialized on the default registry.")
 except Exception as e:
     logger.critical(f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.", exc_info=True)
-    alert_operator(f"CRITICAL: Prometheus metrics initialization failed. PagerDuty plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: Prometheus metrics initialization failed. PagerDuty plugin aborted.", level="CRITICAL")
     raise StartupCriticalError("Failed to initialize Prometheus metrics.")
 
 

@@ -8,13 +8,9 @@ import json
 import logging
 import os
 import sys
-import shutil
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Add the parent directories to the path to allow direct imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -27,10 +23,8 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 # Now import the knowledge_graph_db module directly
 import knowledge_graph_db
 from knowledge_graph_db import (
-    Neo4jKnowledgeGraph, KnowledgeGraphError, ConnectionError, QueryError,
-    SchemaValidationError, NodeNotFoundError,
-    KG_OPS_TOTAL, KG_OPS_LATENCY, KG_CONNECTIONS, KG_ERRORS,
-    KG_REGISTRY, ImmutableAuditLogger
+    Neo4jKnowledgeGraph, ConnectionError, SchemaValidationError, KG_OPS_TOTAL, KG_CONNECTIONS, KG_ERRORS,
+    ImmutableAuditLogger
 )
 
 # Configure logging for tests
@@ -176,7 +170,6 @@ async def test_connect_success(kg_client):
 async def test_connect_idempotent(kg_client):
     """Test connect is idempotent - reconnects if already connected."""
     await kg_client.connect()
-    first_driver = kg_client._driver
     await kg_client.connect()
     # The implementation closes and recreates the driver
     assert kg_client._driver is not None
@@ -457,7 +450,7 @@ async def test_audit_logging(kg_client, tmp_path):
     
     client = Neo4jKnowledgeGraph(audit_logger=audit_logger)
     await client.connect()
-    node_id = await client.add_node("AuditTest", {"prop": "value"})
+    await client.add_node("AuditTest", {"prop": "value"})
     await client.disconnect()
     
     # Wait for audit logger to flush

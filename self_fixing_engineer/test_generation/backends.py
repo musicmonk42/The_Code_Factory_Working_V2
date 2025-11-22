@@ -3,22 +3,18 @@ import asyncio
 import shutil
 import random
 import time
-import sys
 import traceback
 import importlib
 import hashlib
 import threading
-from typing import Dict, Any, Optional, Protocol, Type, Tuple, TYPE_CHECKING, List, Callable, Awaitable
+from typing import Dict, Any, Optional, Protocol, Type, Tuple, TYPE_CHECKING, List
 from datetime import datetime
-import json
 import logging
 import re
-from functools import wraps
 import types
-from pathlib import Path
-from contextlib import asynccontextmanager, suppress
+from contextlib import suppress
 from dataclasses import dataclass, field
-from packaging.version import Version, InvalidVersion
+from packaging.version import Version
 import platform
 import subprocess
 
@@ -34,8 +30,8 @@ try:
     from typing import runtime_checkable  # type: ignore
 except ImportError:
     if TYPE_CHECKING:
-        from typing import Protocol as _Protocol
-        runtime_checkable = lambda x: x
+        def runtime_checkable(x):
+            return x
     else:
         def runtime_checkable(cls):  # type: ignore
             return cls
@@ -383,7 +379,7 @@ class PynguinBackend:
 
     def reload_config(self, new_config: Dict[str, Any]):
         self.config = new_config
-        logger.info(f"PynguinBackend config reloaded.")
+        logger.info("PynguinBackend config reloaded.")
 
     async def generate_tests(self, target_module: str, output_path_relative: str, params: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
         timeout = int(params.get("timeout", _get_timeout(self.config, "pynguin", 60)))
@@ -415,7 +411,7 @@ class PynguinBackend:
                     capture_output=True,
                     text=True
                 )
-                logger.info(f"Pynguin dependencies installed successfully.")
+                logger.info("Pynguin dependencies installed successfully.")
             except Exception as e:
                 error_msg = f"Pynguin dependency installation failed: {e}"
                 logger.error(error_msg, exc_info=True)
@@ -708,7 +704,6 @@ class JestLLMBackend:
             f"Output only the test code.\n\n```{'ts' if is_ts else 'js'}\n{source_code}\n```"
         )
 
-        last_err = None
         for i in range(1, max_attempts + 1):
             try:
                 response = await self._invoke_llm(prompt, timeout)
@@ -760,7 +755,6 @@ class JestLLMBackend:
                 return False, msg, None
             
             except Exception as e:
-                last_err = e
                 logger.warning(
                     f"Attempt {i}/{max_attempts} failed with {type(e).__name__}: {e}",
                     extra={"correlation_id": correlation_id}
@@ -785,7 +779,7 @@ class DiffblueBackend:
 
     def reload_config(self, new_config: Dict[str, Any]):
         self.config = new_config
-        logger.info(f"DiffblueBackend config reloaded.")
+        logger.info("DiffblueBackend config reloaded.")
 
     def _deterministic_chance(self, key: str) -> float:
         h = hashlib.sha256(key.encode("utf-8")).digest()
@@ -1001,7 +995,7 @@ class GoBackend:
         success = False
         error_msg = ""
         generated_file_path = None
-        start_time = time.time()
+        time.time()
 
         source_code_path = os.path.join(self.project_root, target_file_path)
         source_code = ""

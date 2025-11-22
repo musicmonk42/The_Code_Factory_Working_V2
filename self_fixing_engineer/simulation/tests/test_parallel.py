@@ -1,33 +1,20 @@
 import pytest
 import asyncio
-import os
 import json
 import yaml
-import sys
 import time
-import uuid
-import numpy as np
-import threading
-from unittest.mock import patch, MagicMock, mock_open
-from datetime import datetime
-from typing import Dict, Any
+from unittest.mock import patch, MagicMock
 from simulation.parallel import (
     get_or_create_metric,
     ParallelConfig,
     RayRLlibConcurrencyTuner,
     get_available_resources,
-    auto_tune_concurrency,
     auto_tune_concurrency_heuristic,
     ProgressReporter,
     execute_local_asyncio,
     execute_kubernetes,
     execute_aws_batch,
-    run_parallel_simulations,
-    GLOBAL_PARALLEL_CONFIG,
-    PARALLEL_METRICS,
-    RL_TUNER,
-    _parallel_backends,
-    _backend_availability
+    run_parallel_simulations
 )
 
 try:

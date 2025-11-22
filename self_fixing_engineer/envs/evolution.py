@@ -12,17 +12,12 @@ import json
 import time
 import os
 import tempfile
-import signal
 import hashlib
-from typing import Dict, Any, Optional, Tuple, List, Union, Callable
+from typing import Dict, Any, Optional, Tuple, List, Callable
 from dataclasses import dataclass, field, asdict
-from enum import Enum
-from collections import OrderedDict
-from functools import lru_cache
 import threading
 from queue import Queue, Empty
 import pickle
-from pathlib import Path
 
 # Configure module logging
 logging.basicConfig(
@@ -584,7 +579,7 @@ class GeneticOptimizer:
             )
         
         if verbose:
-            print(f"\nEvolution complete!")
+            print("\nEvolution complete!")
             print(f"Best fitness: {self.best_fitness:.2f}")
             print(f"Total evaluations: {self.evaluator.evaluation_count}")
             print(f"Cache hits: {len(self.evaluator.evaluation_cache)}")
@@ -748,7 +743,7 @@ def run_evolution_demonstration():
     
     # Run evolution
     print("Starting evolution process...\n")
-    best_config = optimizer.evolve(
+    optimizer.evolve(
         test_function=test_function,
         verbose=True
     )
@@ -762,7 +757,7 @@ def run_evolution_demonstration():
     print(f"\nBest Fitness: {summary['best_fitness']:.2f}")
     print(f"Total Evaluations: {summary['total_evaluations']}")
     print(f"Cache Hits: {summary['cache_size']}")
-    print(f"\nBest Configuration:")
+    print("\nBest Configuration:")
     for key, value in summary['best_config'].items():
         print(f"  {key}: {value}")
     

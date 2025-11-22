@@ -7,7 +7,6 @@ from functools import lru_cache
 from typing import Dict, Any, Optional, DefaultDict, Set
 import shutil
 import asyncio
-import traceback
 from collections import defaultdict
 from pathlib import Path
 import tempfile

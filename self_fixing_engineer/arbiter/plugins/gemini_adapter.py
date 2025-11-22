@@ -2,7 +2,7 @@ import logging
 import asyncio
 import re
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 import hashlib
 
 # Import custom exceptions and LLMClient from the shared client module
@@ -181,7 +181,7 @@ class GeminiAdapter:
 
         start_time = time.monotonic()
         error_type = "unknown"
-        sanitized_prompt = self._sanitize_prompt(prompt)
+        self._sanitize_prompt(prompt)
         prompt_hash = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
         
         compliance_frameworks = self.security_config.get("compliance_frameworks", [])

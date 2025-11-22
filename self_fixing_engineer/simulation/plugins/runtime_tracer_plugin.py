@@ -10,9 +10,7 @@ import uuid
 import sys
 import subprocess
 import shutil
-import threading
 import platform
-import linecache
 import shlex
 from typing import Dict, Any, Optional, Tuple, Callable, List, Union
 
@@ -52,7 +50,6 @@ if not logger.handlers:
 HAS_FCNTL = False
 if platform.system().lower().startswith(("linux", "darwin")):
     try:
-        import fcntl  # type: ignore
         HAS_FCNTL = True
     except Exception:
         HAS_FCNTL = False

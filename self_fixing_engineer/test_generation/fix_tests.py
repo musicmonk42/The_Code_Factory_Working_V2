@@ -1,4 +1,5 @@
-import os, re, sys
+import os
+import re
 
 ROOT = os.getcwd()
 PKG = "test_generation"

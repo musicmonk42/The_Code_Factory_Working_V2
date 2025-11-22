@@ -1,17 +1,7 @@
 import pytest
-import os
-import sys
-import json
 import yaml
-import asyncio
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock
-from datetime import datetime
-from typing import Dict, Any
-import getpass
-import time
-import re
+from unittest.mock import MagicMock
 import logging
-from logging.handlers import RotatingFileHandler
 from simulation.core import (
     load_config,
     load_rbac_policy,
@@ -21,20 +11,13 @@ from simulation.core import (
     CircuitBreaker,
     NotificationManager,
     generate_correlation_id,
-    set_correlation_id,
-    clear_correlation_id,
     correlated,
     execute_remotely,
     run_job,
     watch_mode,
     main,
-    APP_CONFIG,
-    RBAC_POLICY,
-    CURRENT_USER,
     validate_file,
-    UNDER_PYTEST,
-    KUBERNETES_AVAILABLE,
-    RAY_AVAILABLE
+    KUBERNETES_AVAILABLE
 )
 
 # Mark all tests as unit tests for selective running

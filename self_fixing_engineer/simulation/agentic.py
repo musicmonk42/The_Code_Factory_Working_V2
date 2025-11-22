@@ -4,21 +4,17 @@ import asyncio
 import logging
 import uuid
 import json
-import pickle
 import functools
 import io
 import argparse
 import hmac
 import hashlib
-import threading
 import random
-import time
-import requests
 import atexit
 from contextlib import suppress
 
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Callable, List, Optional, Tuple
+from typing import Dict, Any, Callable, List, Optional
 
 import numpy as np
 
@@ -85,7 +81,6 @@ except ImportError:
     agentic_logger.warning("DLTLogger or SecretsManager not available. Audit logging will be disabled.")
 
 if opentelemetry:
-    from opentelemetry import trace
     from arbiter.otel_config import get_tracer
     tracer = get_tracer(__name__)
 else:

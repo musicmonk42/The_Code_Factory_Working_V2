@@ -1,28 +1,13 @@
-import os
 import json
-import time
-import asyncio
-import difflib
-import re
-import logging
-import importlib
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, PropertyMock, create_autospec
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
-from pytest_asyncio import fixture
-from tenacity import Retrying, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 import requests
-import uuid
-import hashlib
-from datetime import datetime, timezone
 import nltk
-import jsonschema
-from langchain_core.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 
 # Import the module under test
 import intent_capture.spec_utils as spec_utils_module
 from intent_capture.spec_utils import (
-    get_tracing_context,
     load_ambiguous_words,
     register_spec_handler,
     validate_spec,
@@ -30,7 +15,6 @@ from intent_capture.spec_utils import (
     detect_ambiguity,
     auto_fix_spec,
     TraceableArtifact,
-    _generate_downstream_artifact,
     generate_code_stub,
     generate_test_stub,
     generate_security_review,
@@ -39,14 +23,7 @@ from intent_capture.spec_utils import (
     refine_spec,
     review_spec,
     diff_specs,
-    _load_locales,
     get_localized_prompt,
-    tracer,
-    logger,
-    SPEC_GEN_TOTAL,
-    SPEC_GEN_LATENCY_SECONDS,
-    SPEC_VALIDATION_TOTAL,
-    SPEC_AUTO_FIX_TOTAL,
     SPEC_HANDLERS,
 )
 
@@ -405,7 +382,7 @@ async def test_auto_fix_spec_failure(mock_llm, temp_locales):
 # --- Tests for Traceable Artifact ---
 def test_traceable_artifact_persistence(mock_requests):
     """Test artifact persistence."""
-    artifact = TraceableArtifact("content", "type", "source", "prompt")
+    TraceableArtifact("content", "type", "source", "prompt")
     # Check that post was called (it's mocked so won't actually fail)
     mock_requests['post'].assert_called()
 

@@ -1,7 +1,6 @@
 # tests/test_gremlin_chaos_plugin.py
 
 import pytest
-import asyncio
 import os
 import sys
 from unittest.mock import patch, MagicMock, AsyncMock, call

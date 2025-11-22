@@ -1,13 +1,12 @@
 import os
 import sys
-import json
 import logging
 import pytest
 import importlib.util
 import importlib
 import re
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any
+from typing import Dict
 
 # Dynamically import the plugin to be tested
 try:
@@ -22,7 +21,6 @@ from plugins.demo_python_plugin import (
     PLUGIN_MANIFEST,
     plugin_health,
     PLUGIN_API,
-    NonCriticalError,
     logger
 )
 

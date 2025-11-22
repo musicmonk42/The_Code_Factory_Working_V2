@@ -587,7 +587,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             self.requests_total.labels(modality='image', status='success').inc()
             self.processing_latency_seconds.labels(modality='image').observe(time.monotonic() - start_time)
             return result
-        except Exception as e:
+        except Exception:
             self.requests_total.labels(modality='image', status='failure').inc()
             self.processing_latency_seconds.labels(modality='image').observe(time.monotonic() - start_time)
             raise
@@ -618,7 +618,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             self.requests_total.labels(modality='audio', status='success').inc()
             self.processing_latency_seconds.labels(modality='audio').observe(time.monotonic() - start_time)
             return result
-        except Exception as e:
+        except Exception:
             self.requests_total.labels(modality='audio', status='failure').inc()
             self.processing_latency_seconds.labels(modality='audio').observe(time.monotonic() - start_time)
             raise
@@ -651,7 +651,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             self.requests_total.labels(modality='video', status='success').inc()
             self.processing_latency_seconds.labels(modality='video').observe(time.monotonic() - start_time)
             return result
-        except Exception as e:
+        except Exception:
             self.requests_total.labels(modality='video', status='failure').inc()
             self.processing_latency_seconds.labels(modality='video').observe(time.monotonic() - start_time)
             raise
@@ -684,7 +684,7 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             self.requests_total.labels(modality='text', status='success').inc()
             self.processing_latency_seconds.labels(modality='text').observe(time.monotonic() - start_time)
             return result
-        except Exception as e:
+        except Exception:
             self.requests_total.labels(modality='text', status='failure').inc()
             self.processing_latency_seconds.labels(modality='text').observe(time.monotonic() - start_time)
             raise

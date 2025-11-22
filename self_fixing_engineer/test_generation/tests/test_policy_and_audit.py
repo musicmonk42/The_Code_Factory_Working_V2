@@ -1,9 +1,7 @@
 import pytest
 import os
 import json
-import asyncio
 import tempfile
-import logging
 from unittest.mock import patch, AsyncMock, MagicMock
 
 # Import objects that are safe to load at the module level
@@ -11,10 +9,8 @@ from test_generation.policy_and_audit import (
     redact_sensitive,
     PolicyEngine,
     AuditLogger,
-    EventBus,
-    METRICS_AVAILABLE
+    EventBus
 )
-from test_generation.audit_log import AuditLogger as DLTLogger
 
 
 # Mark all tests as unit tests for selective running
@@ -181,7 +177,6 @@ async def test_policy_engine_requires_pr_for_integration_local_not_required(mock
 async def test_policy_engine_metrics(mock_policy_file, temp_project_root):
     """Test Prometheus metrics for policy evaluations."""
     # Fix: Import metric inside the function to avoid circular dependency
-    from test_generation.policy_and_audit import policy_evaluations_total
 
     engine = PolicyEngine("atco_policies.json", temp_project_root)
     
@@ -293,7 +288,6 @@ async def test_event_bus_publish_slack(mock_config):
 async def test_event_bus_publish_metrics_failure(mock_config):
     """Test metrics increment on notification failure."""
     # Fix: Import metric inside the function to avoid circular dependency
-    from test_generation.policy_and_audit import notification_failures_total
 
     mock_config["slack_events"] = ["test_event"]
     bus = EventBus(mock_config)

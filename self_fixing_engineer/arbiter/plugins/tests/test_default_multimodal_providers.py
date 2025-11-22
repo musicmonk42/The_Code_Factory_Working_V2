@@ -1,11 +1,7 @@
 # test_default_multimodal_providers.py
 import pytest
-import asyncio
 import base64
-import uuid
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from typing import Dict, Any
-import random
+from unittest.mock import Mock, patch
 
 from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
     PluginRegistry,
@@ -19,16 +15,9 @@ from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
     DefaultTextProcessorConfig,
 )
 from arbiter.plugins.multimodal.interface import (
-    ProcessingResult,
-    ImageProcessor,
-    AudioProcessor,
-    VideoProcessor,
-    TextProcessor,
     MultiModalException,
-    InvalidInputError,
     ConfigurationError,
-    ProviderNotAvailableError,
-    ProcessingError
+    ProviderNotAvailableError
 )
 from pydantic import ValidationError
 

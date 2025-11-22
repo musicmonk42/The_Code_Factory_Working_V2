@@ -17,12 +17,11 @@ from .idempotency import IdempotencyStore
 from .models import GrowthEvent, ArbiterState
 from .metrics import (
     GROWTH_EVENTS, GROWTH_SAVE_ERRORS, GROWTH_PENDING_QUEUE, GROWTH_SKILL_IMPROVEMENT,
-    GROWTH_SNAPSHOTS, GROWTH_EVENT_PUSH_LATENCY, GROWTH_OPERATION_QUEUE_LATENCY,
-    GROWTH_OPERATION_EXECUTION_LATENCY, GROWTH_CIRCUIT_BREAKER_TRIPS, GROWTH_AUDIT_ANCHORS_TOTAL,
-    GROWTH_ANOMALY_SCORE
+    GROWTH_SNAPSHOTS, GROWTH_OPERATION_QUEUE_LATENCY,
+    GROWTH_OPERATION_EXECUTION_LATENCY, GROWTH_CIRCUIT_BREAKER_TRIPS, GROWTH_ANOMALY_SCORE
 )
 from .exceptions import (
-    ArbiterGrowthError, OperationQueueFullError, RateLimitError,
+    OperationQueueFullError, RateLimitError,
     CircuitBreakerOpenError, AuditChainTamperedError
 )
 from .config_store import ConfigStore, TokenBucketRateLimiter

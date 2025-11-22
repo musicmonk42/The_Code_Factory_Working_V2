@@ -5,9 +5,6 @@
 
 import os
 import json
-import logging
-import traceback
-from typing import Dict, Any, Optional
 from unittest.mock import patch, MagicMock
 
 import pytest

@@ -6,15 +6,14 @@ import sys
 import tempfile
 import yaml
 import json
-from unittest.mock import patch, call, MagicMock
-from pydantic import ValidationError
+from unittest.mock import patch, MagicMock
 
 # Add parent directory to path
 import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 # Import from the correct location - analyzer.analyzer
-from self_healing_import_fixer.analyzer.analyzer import main, load_config, AnalyzerCriticalError, AnalyzerConfig
+from self_healing_import_fixer.analyzer.analyzer import main, load_config, AnalyzerCriticalError
 
 # Add test fixtures that are missing
 @pytest.fixture

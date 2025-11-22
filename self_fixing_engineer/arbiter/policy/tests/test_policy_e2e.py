@@ -1,11 +1,9 @@
-import asyncio
 import tempfile
 import json
 import os
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock
 import pytest
 
-from arbiter.policy.config import get_config
 from arbiter.policy.core import (
     initialize_policy_engine, 
     should_auto_learn, 

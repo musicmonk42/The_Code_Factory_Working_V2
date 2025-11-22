@@ -8,9 +8,7 @@ import pytest
 import asyncio
 import hashlib
 import time
-import json
-from unittest.mock import AsyncMock, patch, MagicMock, Mock, call, PropertyMock
-from typing import Dict, Any
+from unittest.mock import AsyncMock, patch, MagicMock, Mock
 
 # Fix the import path - add the import_fixer directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,13 +83,10 @@ from fixer_ai import (
     get_ai_suggestions,
     get_ai_patch,
     AnalyzerCriticalError,
-    NonCriticalError,
     _sanitize_prompt,
     _sanitize_response,
     _redis_alert_on_failure,
-    _reset_redis_failure_counter,
-    _run_async_in_sync,
-    _get_ai_manager_instance
+    _reset_redis_failure_counter
 )
 
 # --- Fixtures ---
@@ -260,7 +255,6 @@ def test_production_mode_forbids_auto_apply(mock_core_dependencies):
 
 def test_sanitize_prompt_valid():
     """Test that valid prompts pass sanitization."""
-    import fixer_ai
     
     def fixed_sanitize_prompt(prompt):
         """Fixed version without empty pattern"""
@@ -421,12 +415,12 @@ def test_redis_failure_alerting(mock_core_dependencies):
         _redis_alert_on_failure(Exception("Redis error"))
     
     assert fixer_ai._redis_failure_count == 6
-    assert fixer_ai._redis_failure_alerted == True
+    assert fixer_ai._redis_failure_alerted
     
     # Reset should clear state
     _reset_redis_failure_counter()
     assert fixer_ai._redis_failure_count == 0
-    assert fixer_ai._redis_failure_alerted == False
+    assert not fixer_ai._redis_failure_alerted
 
 
 if __name__ == "__main__":

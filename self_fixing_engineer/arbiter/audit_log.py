@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import json
 import hashlib
@@ -9,7 +8,7 @@ import asyncio
 import gzip
 import base64
 import secrets
-from typing import Dict, Any, Optional, Iterator, Tuple, List, Callable, Awaitable
+from typing import Dict, Any, Optional, Iterator, Tuple, List, Callable
 from dataclasses import dataclass, field
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
@@ -466,7 +465,7 @@ class TamperEvidentLogger:
         if self.config.valid_event_types and event_type not in self.config.valid_event_types:
             raise ValueError(f"Invalid event_type: {event_type}. Must be one of {self.config.valid_event_types}")
 
-        now = datetime.utcnow().isoformat() + "Z"
+        datetime.utcnow().isoformat() + "Z"
         trace_id, span_id = self._get_trace_ids()
 
         try:

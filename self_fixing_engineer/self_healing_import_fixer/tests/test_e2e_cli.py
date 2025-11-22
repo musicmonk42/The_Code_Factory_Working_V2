@@ -1,6 +1,4 @@
 # tests/test_e2e_cli.py
-import os
-import re
 import json
 import time
 import asyncio
@@ -207,7 +205,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
     # 4) Discover click group & subcommands
     # -----------------------------
     try:
-        import click
+        pass
     except Exception:
         raise AssertionError("click is required for the CLI E2E test")
 

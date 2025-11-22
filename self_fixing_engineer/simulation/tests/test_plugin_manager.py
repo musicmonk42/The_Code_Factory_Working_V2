@@ -1,9 +1,7 @@
 # tests/test_plugin_manager.py
 
 import pytest
-import asyncio
 import os
-import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -31,8 +29,6 @@ def add_health_method_to_plugin_manager():
         async def health(self, name: str):
             """Mock health method for testing."""
             import asyncio
-            import traceback
-            from typing import Dict, Any
             
             with self._registry_lock:
                 if name not in self.registry:

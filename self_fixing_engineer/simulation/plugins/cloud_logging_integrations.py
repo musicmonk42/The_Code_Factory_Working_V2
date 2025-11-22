@@ -187,7 +187,7 @@ class CloudWatchLogger(BaseCloudLogger):
             event_str = json.dumps(event)
             # AWS CloudWatch max event size is 256KB, minus a small overhead.
             if len(event_str.encode('utf-8')) > (256 * 1024 - 26):
-                raise CloudLoggingError(f"Log event size exceeds 256KB limit", self.cloud_type)
+                raise CloudLoggingError("Log event size exceeds 256KB limit", self.cloud_type)
             self._log_buffer.append(event)
         except TypeError as e:
             raise CloudLoggingError(f"Log event is not JSON serializable: {e}", self.cloud_type, e)
@@ -279,7 +279,7 @@ class CloudWatchLogger(BaseCloudLogger):
                     raise CloudLoggingQueryError(f"Query {status.lower()}", self.cloud_type)
                 if time.time() - started > self.max_query_wait_seconds:
                     await self._to_thread(lambda: client.stop_query(queryId=query_id))
-                    raise CloudLoggingQueryError(f"Query timed out", self.cloud_type)
+                    raise CloudLoggingQueryError("Query timed out", self.cloud_type)
                 await asyncio.sleep(1)
         except AWSClientError as e:
             raise CloudLoggingQueryError(f"AWS query error: {e}", self.cloud_type, e)

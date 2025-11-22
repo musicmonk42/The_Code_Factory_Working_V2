@@ -1,10 +1,6 @@
 # test_interface.py
 import pytest
-import asyncio
-import datetime
-import json
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any, List
+from unittest.mock import Mock, patch
 
 from arbiter.plugins.multimodal.interface import (
     ProcessingResult,
@@ -13,7 +9,6 @@ from arbiter.plugins.multimodal.interface import (
     VideoProcessor,
     TextProcessor,
     AnalysisResultType,
-    MultiModalAnalysisResult,
     ImageAnalysisResult,
     AudioAnalysisResult,
     VideoAnalysisResult,

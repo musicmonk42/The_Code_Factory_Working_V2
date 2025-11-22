@@ -1,7 +1,6 @@
 import signal as signal_module
 import asyncio
 import logging
-import traceback
 import os
 import threading
 from typing import Callable, Any, Optional, Dict, Set, Iterable, List, Tuple
@@ -766,5 +765,5 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         _log(logging.INFO, "KeyboardInterrupt caught, but shutdown should have been handled by the signal handler.")
-    except Exception as e:
+    except Exception:
         _log(logging.ERROR, "An unexpected error occurred in the main event loop", exc_info=True)

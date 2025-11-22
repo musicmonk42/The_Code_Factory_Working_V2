@@ -2,9 +2,7 @@
 Test critical bug fixes for the consolidated changes.
 """
 import pytest
-import asyncio
 import threading
-from unittest.mock import MagicMock, Mock, patch
 import sys
 import os
 

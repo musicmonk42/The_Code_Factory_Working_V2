@@ -1,13 +1,9 @@
 # tests/test_cross_repo_refactor_plugin.py
 
 import pytest
-import asyncio
 import os
-import json
-import uuid
 import tempfile
-import shutil
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 import sys
 

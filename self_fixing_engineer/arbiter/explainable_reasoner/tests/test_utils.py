@@ -3,14 +3,10 @@
 # Requires: pytest, pytest-asyncio, unittest.mock
 # Run with: pytest test_utils.py -v --cov=utils --cov-report=html
 
-import os
-import asyncio
 import json
-import logging
 import time
 from datetime import datetime, date, time as dt_time
 from pathlib import Path
-from typing import Dict, Any
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
@@ -23,7 +19,6 @@ from arbiter.explainable_reasoner.utils import (
     _format_multimodal_for_prompt,
     rate_limited,
 )
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 # --- Fixtures ---

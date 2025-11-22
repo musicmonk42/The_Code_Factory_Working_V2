@@ -3,14 +3,11 @@
 import os
 import sys
 import asyncio
-import json
 import shutil
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, Mock, create_autospec
-from typing import Dict, Any, List
+from unittest.mock import patch, MagicMock, AsyncMock, Mock
 import types
-import getpass
 
 # --- Add simulation and plugins directories to the Python path ---
 TEST_DIR = Path(__file__).parent
@@ -224,7 +221,7 @@ async def test_simulation_module_end_to_end(setup_test_environment):
     """
     create_mock_core_functions()
     
-    sim_dir = setup_test_environment["simulation_dir"]
+    setup_test_environment["simulation_dir"]
     plugins_dir = setup_test_environment["plugins_dir"]
     
     print("\nStarting Comprehensive E2E Test...")

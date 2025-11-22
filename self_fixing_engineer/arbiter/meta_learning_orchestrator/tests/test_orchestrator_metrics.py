@@ -2,9 +2,8 @@ import logging
 import os
 import pytest
 from pytest_mock import MockerFixture
-from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from typing import Dict
-import importlib
 import sys
 
 # Configure logging for tests
@@ -113,7 +112,6 @@ def get_metrics_for_test():
         ML_INGESTION_COUNT, ML_TRAINING_TRIGGER_COUNT, ML_TRAINING_SUCCESS_COUNT,
         ML_TRAINING_FAILURE_COUNT, ML_EVALUATION_COUNT, ML_DEPLOYMENT_TRIGGER_COUNT,
         ML_DEPLOYMENT_SUCCESS_COUNT, ML_DEPLOYMENT_FAILURE_COUNT, ML_ORCHESTRATOR_ERRORS,
-        ML_TRAINING_LATENCY, ML_EVALUATION_LATENCY, ML_DEPLOYMENT_LATENCY,
         ML_CURRENT_MODEL_VERSION, ML_DATA_QUEUE_SIZE, ML_DEPLOYMENT_RETRIES_EXHAUSTED,
         ML_LEADER_STATUS, ML_AUDIT_EVENTS_TOTAL, ML_AUDIT_HASH_MISMATCH,
         ML_AUDIT_SIGNATURE_MISMATCH

@@ -1,18 +1,13 @@
 # tests/test_onboard.py
 
 import pytest
-import asyncio
 import os
 import json
-import shutil
 import tempfile
 import argparse
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, create_autospec
-from pydantic import ValidationError
+from unittest.mock import patch, MagicMock, AsyncMock
 from cryptography.fernet import Fernet
-import requests
-import sys
 
 # Import the onboard module from the correct path
 import simulation.plugins.onboard as onboard_module
@@ -20,7 +15,6 @@ from simulation.plugins.onboard import (
     onboard, _get_user_input, _generate_secure_config,
     _load_secure_config, _run_health_checks, _run_basic_onboarding_tests,
     _safe_mode_profile, _reset_to_safe_mode,
-    ONBOARDING_ERRORS_TOTAL, ONBOARDING_STEPS_TOTAL,
 )
 
 # ==============================================================================
@@ -50,13 +44,13 @@ def mock_external_dependencies():
         onboard_module.MeshPubSub = mock_mesh_pubsub
     else:
         # If it exists, save the original to restore later
-        original_mesh = getattr(onboard_module, 'MeshPubSub', None)
+        getattr(onboard_module, 'MeshPubSub', None)
         onboard_module.MeshPubSub = mock_mesh_pubsub
     
     if not hasattr(onboard_module, 'CheckpointManager'):
         onboard_module.CheckpointManager = mock_checkpoint_manager
     else:
-        original_checkpoint = getattr(onboard_module, 'CheckpointManager', None)
+        getattr(onboard_module, 'CheckpointManager', None)
         onboard_module.CheckpointManager = mock_checkpoint_manager
     
     # Create patches list that we'll apply

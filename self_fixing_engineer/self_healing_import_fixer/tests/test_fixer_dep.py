@@ -50,7 +50,6 @@ from import_fixer.fixer_dep import (
     init_dependency_healing_module,
     _get_py_files,
     _get_all_imports_async,
-    _parse_file_imports,
     AnalyzerCriticalError,   # alias exported by fixer_dep
 )
 

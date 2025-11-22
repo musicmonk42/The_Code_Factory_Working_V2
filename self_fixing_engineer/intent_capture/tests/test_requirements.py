@@ -1,17 +1,8 @@
-import os
 import json
-import time
 import asyncio
-import threading
 import uuid
-import io
-import re
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, PropertyMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
-from pytest_asyncio import fixture
-from tenacity import Retrying, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-import pandas as pd
-from langchain_core.language_models.base import BaseLanguageModel
 
 # Import asyncpg types for mocking
 try:
@@ -52,10 +43,6 @@ from intent_capture.requirements import (
     DOMAIN_SPECIFIC,
     CUSTOM_CHECKLISTS_FILE,
     COVERAGE_HISTORY_FILE,
-    logger,
-    _file_lock,
-    _model_lock,
-    _EMBEDDING_MODEL,
     DB_AVAILABLE,
     REDIS_AVAILABLE,
     ML_ENABLED,
@@ -254,7 +241,7 @@ async def test_get_db_conn_pool_missing_vars(monkeypatch):
     # The code will use default "localhost" for REQ_DB_HOST
     
     # Mock asyncpg.create_pool to prevent actual connection attempts
-    with patch('intent_capture.requirements.asyncpg.create_pool', AsyncMock()) as mock_create_pool:
+    with patch('intent_capture.requirements.asyncpg.create_pool', AsyncMock()):
         with pytest.raises(SystemExit):
             await get_db_conn_pool()
 

@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import datetime
 import logging
 import traceback
@@ -19,16 +18,15 @@ from pydantic import BaseModel
 
 # Assuming these local modules exist and provide the necessary components
 from .utils import (
-    parse_bool_env, redact_pii, Severity, validate_input_details, apply_settings_validation,
-    NotificationError, CircuitBreakerOpenError, RateLimitExceededError, AuditLogError,
-    get_or_create_metric
+    redact_pii, Severity, validate_input_details, apply_settings_validation,
+    NotificationError, RateLimitExceededError, get_or_create_metric
 )
 from .notifications import NotificationService
 from .audit_log import AuditLogManager
 from .remediations import (
-    MLRemediationModel, RemediationPlaybook, RemediationStep, BugFixerRegistry
+    MLRemediationModel, BugFixerRegistry
 )
-from ..arbiter_plugin_registry import PluginRegistry, PlugInKind
+from ..arbiter_plugin_registry import PlugInKind
 
 # Create register decorator
 def register(kind):
@@ -491,7 +489,7 @@ class BugManagerArena(BugManager):
         Schedules the report as a task if a loop is running, otherwise creates a new loop.
         """
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             asyncio.create_task(super().report(error, **kwargs))
             logger.debug("Bug report scheduled as an asyncio task.")
         except RuntimeError:

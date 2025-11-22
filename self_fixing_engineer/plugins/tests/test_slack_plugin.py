@@ -5,11 +5,8 @@ import logging
 import asyncio
 import time
 import pytest
-import uuid
-import hashlib
-from unittest.mock import MagicMock, patch, AsyncMock, Mock, PropertyMock
-from typing import Dict, Any, List
-from pathlib import Path
+from unittest.mock import MagicMock, patch, AsyncMock
+from typing import Dict
 from cryptography.fernet import Fernet
 
 # Set critical environment variables before importing slack_plugin
@@ -51,15 +48,13 @@ sys.modules['aiofiles.threadpool.binary'] = MagicMock()
 
 # Import from the correct module path
 from plugins.slack_plugin.slack_plugin import (
-    PROD_MODE, main_logger, audit_logger, SECRETS_MANAGER, 
-    SlackTarget, SlackGatewaySettings, SlackMetrics,
+    main_logger, audit_logger, SlackTarget, SlackGatewaySettings, SlackMetrics,
     SlackBlockKitSerializer, PersistentWALQueue, CircuitBreaker, 
     TokenBucket, SlackGateway, SlackGatewayManager, 
     dead_letter_to_file, SlackEvent
 )
 
 from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
 
 # Mock the global constants and functions from the original module for testing purposes
 class AnalyzerCriticalError(RuntimeError):

@@ -1,24 +1,18 @@
 # tests/test_dlt_main_unit.py
 
 import pytest
-import asyncio
 import json
-import os
 import logging
 import click
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, patch
 from click.testing import CliRunner
 
 # Import the CLI and core components
-from simulation.plugins.dlt_clients.dlt_main import cli, main, _run_async
+from simulation.plugins.dlt_clients.dlt_main import cli
 from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientError,
     DLTClientConfigurationError,
-    SECRETS_MANAGER,
-    PRODUCTION_MODE,
-    alert_operator,
-    scrub_secrets,
     _base_logger
 )
 

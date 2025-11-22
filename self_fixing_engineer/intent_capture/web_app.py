@@ -7,10 +7,8 @@ import os
 import importlib.util
 import re  # For input validation
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List, Callable, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import time
 
 # P6: Retries for Redis/Agent calls
 from tenacity import (
@@ -26,15 +24,15 @@ import bcrypt
 from streamlit_autorefresh import st_autorefresh
 
 # UPGRADE: Observability - Prometheus & OpenTelemetry
-from prometheus_client import start_http_server, Counter, Gauge, Histogram
+from prometheus_client import start_http_server, Counter
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 # Import custom modules - Fixed to use absolute imports
-from intent_capture.agent_core import get_or_create_agent, CollaborativeAgent, RedisStateBackend
-from intent_capture.spec_utils import generate_spec_from_memory, generate_gaps, refine_spec, review_spec, diff_specs
+from intent_capture.agent_core import get_or_create_agent, RedisStateBackend
+from intent_capture.spec_utils import generate_spec_from_memory
 from intent_capture.requirements import get_coverage_history, generate_coverage_report
 from intent_capture.config import Config, PluginManager
 
@@ -236,11 +234,6 @@ def init_session_state():
             @st.cache_resource(ttl=3600)  # Cache agent for 1 hour
             def get_cached_agent(session_id: str):
                 app_config = Config()
-                llm_config = {
-                    "provider": app_config.LLM_PROVIDER,
-                    "model": app_config.LLM_MODEL,
-                    "temperature": app_config.LLM_TEMPERATURE,
-                }
 
                 # Prefer Redis state if available
                 state_backend = None

@@ -10,9 +10,7 @@ import hmac
 import hashlib
 import asyncio
 import importlib.util
-from pathlib import Path
 from unittest.mock import patch, Mock, AsyncMock
-from datetime import datetime
 
 # --- Windows event loop compatibility for asyncio.run in pytest ---
 if sys.platform == "win32":
@@ -196,7 +194,7 @@ def test_init_with_valid_policy_succeeds(policy_file_with_signature, mock_audit_
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         core_policy_module._last_good_policy = None
         core_policy_module._compiled_patterns = {}
-        manager = PolicyManager(policy_file_with_signature, enable_hot_reload=False)
+        PolicyManager(policy_file_with_signature, enable_hot_reload=False)
         assert core_policy_module._last_good_policy is not None
         assert core_policy_module._last_good_policy.version == "1.0"
         calls = mock_audit_logger_policy.log_event.call_args_list

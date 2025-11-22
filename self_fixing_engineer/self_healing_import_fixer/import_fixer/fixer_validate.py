@@ -18,7 +18,7 @@ import tempfile
 import ast
 import re
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Callable, Tuple, TYPE_CHECKING
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 
@@ -285,7 +285,8 @@ class CodeValidator:
 
                 kwargs = {}
                 if os.name != "nt":
-                    import signal, os as _os
+                    import signal
+                    import os as _os
                     kwargs["preexec_fn"] = _os.setsid
                 else:
                     kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -895,7 +896,7 @@ class CodeValidator:
             raise
         finally:
             if not validation_passed:
-                logger.error(f"Batch validation FAILED. Rolling back all changes in this batch.")
+                logger.error("Batch validation FAILED. Rolling back all changes in this batch.")
                 for file_path in files_to_validate_obj:
                     self.rollback_change(file_path, original_contents.get(str(file_path), ""), is_critical_failure=False)
                 try:

@@ -12,18 +12,17 @@ Tests cover:
 import asyncio
 import json
 import os
-import platform
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
+from unittest.mock import patch, AsyncMock
 from datetime import datetime, timezone
 import importlib
 
 import pytest
 import pytest_asyncio
-from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, ValidationError
+from cryptography.fernet import Fernet
+from pydantic import BaseModel
 
 # Test configuration
 TEST_DIR = Path(tempfile.mkdtemp(prefix="checkpoint_test_"))
@@ -162,7 +161,7 @@ class TestCoreOperations:
         versions = []
         for i in range(3):
             test_state["counter"] = i
-            hash_val = await checkpoint_manager.save(f"versioned", test_state)
+            hash_val = await checkpoint_manager.save("versioned", test_state)
             versions.append(hash_val)
         
         # List versions

@@ -2,38 +2,26 @@ import asyncio
 import json
 import logging
 import os
-import time
-import uuid
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List
-from tenacity import RetryError
-from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram, Summary
+from prometheus_client import CollectorRegistry
 from arbiter.otel_config import get_tracer
-import signal
 import aiofiles
-import aioboto3
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer, TopicPartition
+from aiokafka import AIOKafkaProducer
 import redis.asyncio as aioredis
-import aiohttp
 
 # Import the orchestrator and related components
-from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator, create_task_with_supervision
+from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator
 from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
-from arbiter.meta_learning_orchestrator.models import LearningRecord, ModelVersion, DataIngestionError, ModelDeploymentError, LeaderElectionError
+from arbiter.meta_learning_orchestrator.models import ModelVersion, DataIngestionError
 from arbiter.meta_learning_orchestrator.clients import MLPlatformClient, AgentConfigurationService
 from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
 # Import metrics
 from arbiter.meta_learning_orchestrator.metrics import (
-    ML_INGESTION_COUNT, ML_TRAINING_TRIGGER_COUNT, ML_TRAINING_SUCCESS_COUNT,
-    ML_TRAINING_FAILURE_COUNT, ML_EVALUATION_COUNT, ML_DEPLOYMENT_TRIGGER_COUNT,
-    ML_DEPLOYMENT_SUCCESS_COUNT, ML_DEPLOYMENT_FAILURE_COUNT, ML_ORCHESTRATOR_ERRORS,
-    ML_TRAINING_LATENCY, ML_EVALUATION_LATENCY, ML_DEPLOYMENT_LATENCY,
-    ML_CURRENT_MODEL_VERSION, ML_DATA_QUEUE_SIZE, ML_DEPLOYMENT_RETRIES_EXHAUSTED,
-    ML_LEADER_STATUS, ML_AUDIT_EVENTS_TOTAL, ML_AUDIT_HASH_MISMATCH
+    ML_INGESTION_COUNT, ML_LEADER_STATUS
 )
 
 # Configure logging for tests
@@ -161,7 +149,6 @@ async def mock_agent_config_service(mocker: MockerFixture):
 @pytest_asyncio.fixture
 async def mock_kafka_producer(mocker: MockerFixture):
     """Fixture for mocked AIOKafkaProducer."""
-    from aiokafka import AIOKafkaProducer
     producer = mocker.MagicMock(spec=AIOKafkaProducer)
     producer.start = mocker.AsyncMock()
     producer.send_and_wait = mocker.AsyncMock()
@@ -174,7 +161,6 @@ async def mock_kafka_producer(mocker: MockerFixture):
 @pytest_asyncio.fixture
 async def mock_redis_client(mocker: MockerFixture):
     """Fixture for mocked aioredis.Redis."""
-    import redis.asyncio as aioredis
     redis_client = mocker.MagicMock(spec=aioredis.Redis)
     redis_client.set = mocker.AsyncMock(return_value=True)
     redis_client.get = mocker.AsyncMock(return_value=None)

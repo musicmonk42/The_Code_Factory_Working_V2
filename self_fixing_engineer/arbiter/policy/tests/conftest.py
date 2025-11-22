@@ -2,7 +2,7 @@ import os
 import sys
 import pytest
 import logging
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 
 def pytest_configure(config):
     """Configure pytest environment before tests run."""

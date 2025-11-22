@@ -10,8 +10,7 @@ import ast
 import networkx as nx
 import hashlib
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock, Mock, call
-from typing import Any
+from unittest.mock import patch, MagicMock, Mock
 
 # Fix the import path - add the import_fixer directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +37,6 @@ from fixer_ast import (
     CycleHealer,
     DynamicImportHealer,
     AnalyzerCriticalError,
-    NonCriticalError,
     get_ai_refactoring_suggestion,
     _run_async_in_sync
 )
@@ -166,7 +164,7 @@ def test_import_resolver_init(test_project_setup, mock_core_dependencies):
     
     assert resolver.current_module_path == "my_package.sub_module.analyzer"
     assert resolver.project_root == test_project_setup["project_root"]
-    assert resolver.modified == False
+    assert not resolver.modified
 
 
 def test_import_resolver_converts_relative_imports(test_project_setup, mock_core_dependencies):
@@ -184,7 +182,7 @@ def test_import_resolver_converts_relative_imports(test_project_setup, mock_core
     
     new_tree = resolver.visit(tree)
     
-    assert resolver.modified == True
+    assert resolver.modified
     
     # Check that relative imports were converted
     new_code = ast.unparse(new_tree)

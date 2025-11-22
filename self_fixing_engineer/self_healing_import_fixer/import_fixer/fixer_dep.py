@@ -1258,14 +1258,14 @@ def main():
     except (ConfigError, SecurityViolationError, FilesystemAccessError) as e:
         logger.critical(f"A critical error occurred: {e}")
         sys.exit(1)
-    except Exception as e:
+    except Exception:
         logger.exception("An unexpected error occurred during dependency healing.")
         sys.exit(1)
     finally:
         end_time = time.monotonic()
         if HEAL_METRICS:
             _metrics["total_seconds"] = end_time - start_time
-            print(f"\n--- Metrics ---")
+            print("\n--- Metrics ---")
             for k, v in _metrics.items():
                 print(f"# HELP fixer_dep_{k} {k.replace('_', ' ')}")
                 print(f"# TYPE fixer_dep_{k} gauge")

@@ -29,18 +29,15 @@
 # UPGRADE: Sphinx Docs - [Date: August 19, 2025]
 # sphinx-apidoc -o docs . && sphinx-build -b html docs docs/html
 
-import contextlib
-import copy
 import datetime
 import json
 import logging
 import logging.handlers
 import os
 import re
-import sys
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # --- Production-Grade Library Imports ---
 import requests
@@ -152,7 +149,7 @@ class PluginManager:
         if os.getenv('VERIFY_PLUGINS', 'true').lower() != 'true':
             return True
         if not CRYPTOGRAPHY_AVAILABLE or not os.getenv('PLUGIN_PUBLIC_KEY'):
-            config_logger.warning(f"Signature verification is disabled or cryptography not available.")
+            config_logger.warning("Signature verification is disabled or cryptography not available.")
             return True
         try:
             with open(config_path, 'rb') as f:

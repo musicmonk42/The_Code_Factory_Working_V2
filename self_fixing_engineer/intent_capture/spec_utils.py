@@ -11,7 +11,7 @@ import hashlib
 import time # For performance metrics
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Callable
 
 # P6: Tenacity for retries
@@ -207,7 +207,7 @@ def validate_spec(spec: str, format: str, version: str = "1.0", schema: Optional
     Returns:
         A tuple: (is_valid, validation_message).
     """
-    start_time = time.perf_counter()
+    time.perf_counter()
     format_lower = format.lower()
     logger.info(f"Starting validation for format: {format_lower} (version {version})")
 
@@ -381,7 +381,7 @@ async def auto_fix_spec(spec: str, llm: BaseChatModel, format: str, issues: List
                     else:
                         logger.warning(f"Auto-fix attempt {attempt+1} failed validation: {valid_msg}. Response length: {len(response)}.")
                         if OPENTELEMETRY_AVAILABLE:
-                            span.add_event(f"auto_fix_attempt_failed", {"attempt": attempt + 1, "validation_message": valid_msg, "response_length": len(response)})
+                            span.add_event("auto_fix_attempt_failed", {"attempt": attempt + 1, "validation_message": valid_msg, "response_length": len(response)})
             except Exception as e:
                 logger.error(f"Auto-fix generation failed: {e}", exc_info=True)
                 if OPENTELEMETRY_AVAILABLE:

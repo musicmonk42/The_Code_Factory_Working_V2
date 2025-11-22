@@ -2,12 +2,9 @@
 import asyncio
 import json
 import logging
-import os
 import time
-import threading
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from typing import Dict, Any, Optional, List
+from unittest.mock import AsyncMock, MagicMock, Mock
 from agent_orchestration.crew_manager import (
     CrewManager,
     CrewAgentBase,
@@ -15,7 +12,6 @@ from agent_orchestration.crew_manager import (
     PermissionError,
     structured_log,
     sanitize_dict,
-    NAME_REGEX,
     MAX_CONFIG_SIZE
 )
 
@@ -36,7 +32,7 @@ except ImportError:
         _AIOREDIS_AVAILABLE = False
 
 if _PSUTIL_AVAILABLE:
-    import psutil
+    pass
 
 @pytest.fixture
 def mock_policy():

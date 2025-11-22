@@ -4,7 +4,7 @@ import logging
 import hmac
 import hashlib
 import asyncio
-from typing import Dict, Any, List, Optional, Union, Protocol, Type
+from typing import Dict, Any, List, Optional, Union, Protocol
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 

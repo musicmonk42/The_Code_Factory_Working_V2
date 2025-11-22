@@ -7,7 +7,6 @@ import atexit # For cleanup of shared resources
 import threading # For thread-safe metric creation
 import re # For PII masking
 from typing import Optional, Dict, Any, AsyncGenerator, List, Tuple, Union, Awaitable, Callable, Type
-from collections import defaultdict
 import os
 import hashlib # For prompt hashing
 
@@ -17,7 +16,6 @@ import openai
 from openai import AsyncOpenAI
 import anthropic 
 from anthropic import AsyncAnthropic
-from anthropic import APIStatusError 
 import google.api_core.exceptions as google_exceptions 
 import google.generativeai as genai 
 import aiohttp 
@@ -25,7 +23,7 @@ import json
 from prometheus_client import start_http_server
 
 # Tenacity for retries
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed, retry_if_exception
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_exception
 
 # Logger setup
 logger = logging.getLogger(__name__)
@@ -80,9 +78,9 @@ def get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[Hi
     labelnames = labelnames or ()
     # For Histogram and Summary, check '_sum' sub-metric to detect existence
     if metric_class in (Histogram, Summary):
-        check_name = name + '_sum'
+        name + '_sum'
     else:
-        check_name = name
+        pass
     
     with _metrics_lock:
         try:
@@ -312,9 +310,12 @@ class LLMClient:
         )
 
         # Define predicates for specific SDK transient errors
-        is_anthropic_transient = lambda e: isinstance(e, anthropic.APIStatusError) and (e.status_code == 429 or e.status_code >= 500)
-        is_google_transient = lambda e: isinstance(e, google_exceptions.GoogleAPICallError) and (e.code == 429 or e.code >= 500)
-        is_aiohttp_transient = lambda e: isinstance(e, aiohttp.ClientResponseError) and (e.status == 429 or e.status >= 500)
+        def is_anthropic_transient(e):
+            return isinstance(e, anthropic.APIStatusError) and (e.status_code == 429 or e.status_code >= 500)
+        def is_google_transient(e):
+            return isinstance(e, google_exceptions.GoogleAPICallError) and (e.code == 429 or e.code >= 500)
+        def is_aiohttp_transient(e):
+            return isinstance(e, aiohttp.ClientResponseError) and (e.status == 429 or e.status >= 500)
 
         @retry(
             stop=stop_after_attempt(self.retry_attempts),
@@ -375,7 +376,7 @@ class LLMClient:
         try:
             return await _call_with_retry()
         except Exception as final_e: 
-            error_type = type(final_e).__name__
+            type(final_e).__name__
             status_code = getattr(final_e, "status_code", getattr(final_e, "code", getattr(final_e, "status", None)))
             final_log_message = f"LLM call {self.provider}/{self.model} ultimately failed after retries: {final_e}"
             if status_code:
@@ -472,7 +473,8 @@ class LLMClient:
         sanitized_prompt = self._sanitize_prompt(prompt)
         messages_for_llm = [{"role": "user", "content": sanitized_prompt}] 
         
-        coro_producer = lambda: self._generate_core(messages_for_llm, max_tokens, temperature)
+        def coro_producer():
+            return self._generate_core(messages_for_llm, max_tokens, temperature)
         return await self._handle_llm_call(coro_producer, prompt, is_streaming=False, correlation_id=correlation_id)
 
     async def _generate_core(self, messages: List[Dict[str, str]], max_tokens: int, temperature: float) -> str:
@@ -801,11 +803,12 @@ class LoadBalancedLLMClient:
             current_attempt += 1 
             try:
                 # Coroutine producer for non-streaming generation
-                coro_producer = lambda: selected_provider._generate_core(
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                )
+                def coro_producer():
+                    return selected_provider._generate_core(
+                                    messages=[{"role": "user", "content": prompt}],
+                                    max_tokens=max_tokens,
+                                    temperature=temperature
+                                )
                 response = await selected_provider._handle_llm_call(coro_producer, prompt, is_streaming=False, correlation_id=correlation_id)
                 self._update_provider_status(selected_provider.provider, success=True)
                 return response
@@ -1008,7 +1011,6 @@ async def main():
         
         print(f"\n--- First active provider ({failing_provider_client.provider}) will now simulate non-retryable failure ---")
         prompt_fail_ns = "What is the largest ocean on Earth?"
-        corr_id_fail_ns = "test_fail_ns_1"
         try:
             response_fail_ns = await lb_client.generate_text(prompt_fail_ns, max_tokens=20, correlation_id=corr_id_ns)
             print(f"Fallback Non-Streaming Response ({corr_id_ns}): {response_fail_ns}")
@@ -1022,7 +1024,6 @@ async def main():
 
         print(f"\n--- First active provider ({failing_provider_client.provider}) will simulate non-retryable streaming failure ---")
         prompt_stream_fail_s = "Describe the solar system in brief."
-        corr_id_fail_s = "test_fail_s_1"
         try:
             print(f"Fallback Streaming Response ({corr_id_s}):")
             full_stream_response_fail_s = ""

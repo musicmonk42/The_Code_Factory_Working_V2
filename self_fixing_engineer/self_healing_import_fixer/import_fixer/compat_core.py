@@ -18,17 +18,15 @@ import json
 import logging
 import os
 import re
-import secrets
 import sys
 import threading
 import time
-import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
-from typing import Any, Callable, Dict, Generator, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 from unittest.mock import MagicMock
 
 # POSIX-only: guard resource import for Windows
@@ -138,7 +136,7 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info: log_record['exception'] = self.formatException(record.exc_info)
         return json.dumps(log_record)
 
-logger = logging.getLogger(__name__);
+logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.setLevel(LOG_LEVEL); _handler = logging.StreamHandler(); _handler.setFormatter(JSONFormatter()); logger.addHandler(_handler)
 
@@ -263,8 +261,8 @@ class S3RotatingFileHandler(RotatingFileHandler):
 
 _audit_fallback_logger = logging.getLogger('audit_fallback')
 if not _audit_fallback_logger.handlers:
-    _audit_fallback_logger.setLevel(logging.INFO);
-    _audit_handler = S3RotatingFileHandler('audit_fallback.log', maxBytes=10*1024*1024, backupCount=5);
+    _audit_fallback_logger.setLevel(logging.INFO)
+    _audit_handler = S3RotatingFileHandler('audit_fallback.log', maxBytes=10*1024*1024, backupCount=5)
     _audit_handler.setFormatter(logging.Formatter('%(message)s')); _audit_fallback_logger.addHandler(_audit_handler)
 
 _SIGNING_REENTRANT = False

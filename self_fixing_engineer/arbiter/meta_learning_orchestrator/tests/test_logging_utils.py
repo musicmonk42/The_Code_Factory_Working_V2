@@ -4,9 +4,6 @@ import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 import json
-import re
-from typing import Dict, Any
-from opentelemetry import trace
 from opentelemetry.trace import SpanContext, TraceFlags, TraceState
 
 # Use centralized OpenTelemetry configuration

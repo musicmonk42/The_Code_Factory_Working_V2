@@ -20,9 +20,8 @@ Author: SFE Platform Team
 import asyncio
 import logging
 import time
-import json
 import os
-from typing import List, Dict, Any, Optional, Type, Union, Tuple, Final
+from typing import List, Dict, Any, Optional, Type, Union, Tuple
 from datetime import datetime
 from pydantic import BaseModel, Field, ValidationError, validator
 
@@ -310,7 +309,7 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
     async def list_records(self, filter_by: Optional[Dict[str, Any]] = None) -> List[MetaLearningRecord]:
         op = "list_records"
         start = time.monotonic()
-        with tracer.start_as_current_span(f"meta_learning_{op}") as span:
+        with tracer.start_as_current_span(f"meta_learning_{op}"):
             MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 async with self._lock:
@@ -549,7 +548,7 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
     async def list_records(self, filter_by: Optional[Dict[str, Any]] = None) -> List[MetaLearningRecord]:
         op = "list_records"
         start = time.monotonic()
-        with tracer.start_as_current_span(f"meta_learning_{op}") as span:
+        with tracer.start_as_current_span(f"meta_learning_{op}"):
             MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 all_records_data = await self._redis.hgetall(self.redis_hash_key)

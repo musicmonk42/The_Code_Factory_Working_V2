@@ -18,7 +18,7 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
+from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 import subprocess
 import sys
@@ -44,7 +44,7 @@ except ImportError:
             return {"user": "test_user", "mfa_verified": True}
     jwt = MockJWT()
 
-from cryptography.fernet import Fernet, MultiFernet
+from cryptography.fernet import Fernet
 from pydantic import BaseModel, Field
 
 # Test configuration
@@ -217,7 +217,7 @@ class TestBackends:
         mock_client.put_object.assert_called_once()
         
         # Load policy
-        loaded = await backend.load("test_policy")
+        await backend.load("test_policy")
         mock_client.get_object.assert_called_once()
     
     @pytest.mark.asyncio
@@ -316,7 +316,7 @@ class TestPolicyOperations:
         
         # Modify and save again
         test_policy["allow"] = ["write", "delete"]
-        v2 = await local_backend.save("rollback_test", test_policy)
+        await local_backend.save("rollback_test", test_policy)
         
         # Rollback to v1
         await local_backend.rollback("rollback_test", v1)
@@ -430,7 +430,7 @@ class TestPolicyEnforcement:
         await policy_enforcer.load_policy()
         
         # Simulate multiple failures
-        failure_key = f"test_policy:read"
+        failure_key = "test_policy:read"
         failure_cache[failure_key] = 3  # Max redeliveries
         
         # Should be rejected
@@ -561,12 +561,12 @@ class TestPerformance:
         # First load - cache miss
         start = time.perf_counter()
         loaded1 = await local_backend.load("cache_test")
-        first_time = time.perf_counter() - start
+        time.perf_counter() - start
         
         # Second load - cache hit
         start = time.perf_counter()
         loaded2 = await local_backend.load("cache_test")
-        cached_time = time.perf_counter() - start
+        time.perf_counter() - start
         
         assert loaded1 == loaded2
         # Just verify cache works, don't test exact timing

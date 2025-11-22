@@ -3,15 +3,11 @@
 import os
 import sys
 import pytest
-import asyncio
-import json
 import io
 import argparse
 import warnings
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock, call
+from unittest.mock import patch, MagicMock, mock_open
 import tempfile
-import shutil
-import logging
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="simulation.registry")
@@ -386,7 +382,7 @@ class TestEnforcement:
     
     def test_enforce_kernel_sandboxing_with_apparmor(self):
         """Test sandboxing with AppArmor profile."""
-        with patch('subprocess.check_call') as mock_check:
+        with patch('subprocess.check_call'):
             enforce_kernel_sandboxing(None, apparmor_profile="test-profile")
             # May or may not call check_call depending on implementation
 
@@ -414,7 +410,7 @@ class TestIntegration:
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
         with patch('simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints'):
             with patch('sys.argv', ['main_sim_runner.py', '--validate']):
-                with patch('simulation.plugins.main_sim_runner.validate_deployment_or_exit') as mock_validate:
+                with patch('simulation.plugins.main_sim_runner.validate_deployment_or_exit'):
                     with pytest.raises(SystemExit):
                         main()
                     # Validate should be called

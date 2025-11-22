@@ -1,22 +1,20 @@
 import json
 import hashlib
-import logging
 import asyncio
-import random
 import os
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional, List
 
 import httpx
 import tenacity
-from pydantic import BaseModel, HttpUrl, ValidationError
-from prometheus_client import Counter, Histogram, REGISTRY
+from pydantic import HttpUrl, ValidationError
+from prometheus_client import Counter, Histogram
 
 # Real internal imports (enforce)
 from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
-from arbiter.explainable_reasoner.metrics import METRICS, get_or_create_metric
+from arbiter.explainable_reasoner.metrics import get_or_create_metric
 from arbiter.explainable_reasoner.utils import redact_pii
 
 # Structured logging

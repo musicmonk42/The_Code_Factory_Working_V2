@@ -1,15 +1,11 @@
 # tests/test_import_fixer_integration.py
 import os
-import re
-import json
-import time
 import asyncio
 import importlib
 import importlib.util
-import subprocess
 import types
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import sys
 
 import pytest
@@ -279,8 +275,8 @@ async def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
 
     # --- Import modules (now that core stubs are installed)
     mods = load_import_fixer_modules(Path(__file__).resolve().parent)
-    engine = mods["engine"]; validate = mods["validate"]; plugins = mods["plugins"]
-    dep = mods["dep"]; astfix = mods["ast"]; ai = mods["ai"]
+    engine = mods["engine"]; mods["validate"]; mods["plugins"]
+    mods["dep"]; mods["ast"]; mods["ai"]
 
     # --- Patch infra (Redis & AI hooks)
     _patch_infra(monkeypatch, mods)

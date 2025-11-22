@@ -4,10 +4,6 @@ CLI module for the Self-Fixing Engineer platform
 import asyncio
 import sys
 import subprocess
-import signal
-import os
-from typing import Optional
-from pathlib import Path
 
 class SFEPlatform:
     def __init__(self):
@@ -107,7 +103,7 @@ async def check_status():
     try:
         from arbiter.config import ArbiterConfig
         config = ArbiterConfig.initialize()
-        print(f"✓ Configuration loaded")
+        print("✓ Configuration loaded")
         print(f"  - Environment: {config.APP_ENV}")
         print(f"  - Database: {config.DATABASE_URL}")
         print(f"  - Arena Port: {config.ARENA_PORT}")
@@ -121,13 +117,11 @@ async def check_status():
         print(f"✗ Configuration error: {e}")
     
     try:
-        from arbiter.arena import ArbiterArena
         print("✓ Arbiter Arena module available")
     except Exception as e:
         print(f"✗ Arena module error: {e}")
     
     try:
-        from arbiter.codebase_analyzer import CodebaseAnalyzer
         print("✓ CodebaseAnalyzer module available")
     except Exception as e:
         print(f"✗ Analyzer module error: {e}")
@@ -156,7 +150,7 @@ async def simple_scan():
         # Scan the arbiter directory
         results = await analyzer.scan_codebase(scan_path)
         
-        print(f"\n✓ Scan Results:")
+        print("\n✓ Scan Results:")
         print(f"  - Files scanned: {results.get('files', 0)}")
         print(f"  - Defects found: {len(results.get('defects', []))}")
         print(f"  - Complexity issues: {len(results.get('complexity', []))}")
@@ -178,7 +172,7 @@ async def simple_scan():
     except Exception as e:
         print(f"✗ Scan error: {e}")
         # Don't print full traceback for cleaner output
-        print(f"  Try running from the project root directory")
+        print("  Try running from the project root directory")
     
     print("\nScan complete.\n")
 

@@ -1,11 +1,8 @@
 import os
 import sys
-import json
 import tempfile
 import asyncio
-import hashlib
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
+from unittest.mock import Mock, AsyncMock, patch
 import pytest
 import logging
 
@@ -15,12 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + '/..'))
 from registry import (
     AuditLogger, FallbackAuditLogger, DltAuditLogger, get_audit_logger,
     MetricsProvider, DummyMetricsProvider, PrometheusMetricsProvider, get_metrics_provider,
-    OutputRefiner, NoOpOutputRefiner, LangChainOutputRefiner, get_output_refiner,
-    generate_file_hash, sanitize_path, redact_sensitive,
-    RunnerPlugin, DltClientPlugin, validate_manifest, check_plugin_dependencies,
+    NoOpOutputRefiner, LangChainOutputRefiner, generate_file_hash, sanitize_path, redact_sensitive,
+    validate_manifest, check_plugin_dependencies,
     SIM_REGISTRY, get_registry, _is_allowed, register_plugin,
-    discover_and_register_all, refine_plugin_output, run_plugin,
-    audit_logger, metrics_provider, output_refiner
+    discover_and_register_all, refine_plugin_output, run_plugin
 )
 
 

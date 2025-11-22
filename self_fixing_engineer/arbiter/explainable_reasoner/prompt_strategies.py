@@ -4,7 +4,6 @@ import json
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Union, Type
-from functools import lru_cache
 
 from pydantic import BaseModel
 from opentelemetry import trace

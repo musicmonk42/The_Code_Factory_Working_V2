@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-import ssl
 import hmac
 import hashlib
 
@@ -75,7 +74,7 @@ except ImportError as e:
     class _MockSecrets:
         def get_secret(self, key, required=False):
             if PRODUCTION_MODE or required:
-                raise ImportError(f"core_secrets.SECRETS_MANAGER is required but missing")
+                raise ImportError("core_secrets.SECRETS_MANAGER is required but missing")
             logger.warning("SECRETS_MANAGER.get_secret called but core_secrets is missing.")
             return None
     SECRETS_MANAGER = _MockSecrets()

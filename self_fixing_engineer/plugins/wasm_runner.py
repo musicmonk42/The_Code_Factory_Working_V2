@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable, Tuple, Literal
 from packaging import version
 
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -64,13 +63,13 @@ except ImportError as e:
 try:
     import wasmtime
 except ImportError as e:
-    alert_operator(f"CRITICAL: wasmtime-py missing. WASM runner aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: wasmtime-py missing. WASM runner aborted.", level="CRITICAL")
     raise WasmStartupError(f"wasmtime-py is not installed: {e}") from e
 
 try:
     from pydantic import BaseModel, ValidationError, Field, validator
 except ImportError as e:
-    alert_operator(f"CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL")
     raise WasmStartupError(f"pydantic is not installed: {e}") from e
 
 # --- Manifest Schema Validation (MANDATORY) ---

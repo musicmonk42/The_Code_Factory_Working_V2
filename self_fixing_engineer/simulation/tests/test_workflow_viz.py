@@ -1,13 +1,10 @@
 # tests/test_workflow_viz.py
 
 import pytest
-import asyncio
 import os
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-from pydantic import ValidationError
+from unittest.mock import patch, MagicMock, mock_open
 from prometheus_client import CollectorRegistry
 
 # Import the module - workflow_viz.py is in simulation/plugins directory
@@ -268,7 +265,7 @@ async def test_batch_export_panels_success(mock_external_dependencies, mock_resu
     if 'viz' in sys.modules and hasattr(sys.modules['viz'], 'get_registered_viz_panels'):
         # If viz module exists and has the function, test it properly
         with patch('viz.get_registered_viz_panels') as mock_get_panels, \
-             patch('builtins.open', new_callable=mock_open) as mock_file_open:
+             patch('builtins.open', new_callable=mock_open):
             
             mock_get_panels.return_value = {
                 "flakiness_trend": {
@@ -326,7 +323,7 @@ def test_dashboard_api_methods():
         # Test button
         mock_st.button.return_value = True
         result = api.button("Click me")
-        assert result == True
+        assert result
         mock_st.button.assert_called_once_with("Click me", key=None)
         
         # Test that success method doesn't exist (known issue in workflow_viz.py)

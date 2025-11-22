@@ -22,10 +22,9 @@ Requires:
 """
 
 import os
-import tempfile
 import threading
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 from pydantic import ValidationError, SecretStr
 
 # The test file assumes 'arbiter.policy.config' is in the path.
@@ -112,7 +111,6 @@ def test_env_loading_and_override(monkeypatch, tmp_path):
 def test_secret_redaction_to_dict():
     """Validates that secret values are redacted in the to_dict() output."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -224,7 +222,6 @@ def test_invalid_field_type(monkeypatch):
 def test_public_api_symbols():
     """Confirms that essential public symbols are available and have the correct type."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -238,7 +235,6 @@ def test_public_api_symbols():
 def test_no_secrets_in_repr():
     """Ensures that __repr__ does not leak secret values."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -269,7 +265,6 @@ def test_bad_env_file(monkeypatch, tmp_path):
 def test_model_reload_and_mutation(tmp_path):
     """Tests that config values can be mutated after instantiation."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -286,7 +281,6 @@ def test_model_reload_and_mutation(tmp_path):
 def test_to_dict_all_branches():
     """Ensures all branches of the to_dict method, especially redaction, are covered."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -324,7 +318,6 @@ def test_to_dict_all_branches():
 def test_all_public_fields_present():
     """Checks that all expected public fields are present in the model."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     
@@ -345,7 +338,6 @@ def test_all_public_fields_present():
 def test_new_config_fields_present():
     """Tests the presence and default values of newly added config fields."""
     # Clean up env vars
-    import os
     os.environ.pop("LLM_MODEL", None)
     os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
     

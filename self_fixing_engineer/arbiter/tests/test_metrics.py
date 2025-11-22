@@ -2,14 +2,12 @@ import pytest
 from unittest.mock import patch, MagicMock, Mock
 import threading
 import os
-import logging
 import sys
 from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY, generate_latest
 from fastapi import HTTPException, Response
 import starlette
 # PATCH: Resolve metaclass conflict between starlette and aiohttp
 starlette.testclient.WebSocketTestSession = None
-from fastapi.testclient import TestClient
 from arbiter.metrics import (
     get_or_create_counter,
     get_or_create_gauge,
@@ -18,10 +16,7 @@ from arbiter.metrics import (
     get_or_create_metric,
     metrics_handler,
     register_dynamic_metric,
-    _metrics_logger,
-    _METRICS_LOCK,
-    METRIC_REGISTRATION_ERRORS,
-    METRIC_REGISTRATION_TIME
+    _metrics_logger
 )
 
 # Fixture to clear Prometheus registry before each test
@@ -56,7 +51,7 @@ def test_multiprocess_mode(mock_logger):
         if metrics_module:
             importlib.reload(metrics_module)
         else:
-            import arbiter.metrics
+            pass
     finally:
         pass
     # Check if the info was logged (might have been logged during initial import)

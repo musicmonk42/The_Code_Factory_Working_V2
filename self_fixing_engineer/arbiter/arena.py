@@ -8,18 +8,14 @@ import aiohttp
 import jwt
 import os
 import signal
-import time
 import threading
-from typing import List, Dict, Any, Optional, Callable, Coroutine, Tuple
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from fastapi import FastAPI, Request, HTTPException, APIRouter, Depends
 from fastapi.responses import JSONResponse
 # REMOVED: Direct import from prometheus_client (PromCounter, PromGauge, REGISTRY)
-from prometheus_client import Counter, Gauge, REGISTRY
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
-from tenacity import retry, stop_after_attempt, wait_exponential
 import secrets
 from functools import wraps
 
@@ -729,7 +725,7 @@ def run_arena():
     db_path = settings.DB_PATH
     db_file = urlparse(db_path).path if db_path.startswith("sqlite") else db_path
     
-    logger.info(f"Starting Code Guardian Arena test setup...")
+    logger.info("Starting Code Guardian Arena test setup...")
     if os.path.exists(db_file):
         try:
             os.remove(db_file)

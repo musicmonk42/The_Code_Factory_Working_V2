@@ -8,8 +8,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 import re
-from typing import Any, Dict, Optional, List, Callable, Tuple
-from datetime import datetime, date, time, timedelta, timezone
+from typing import Any, Dict, Optional, List, Callable
+from datetime import datetime, date, time
 import collections.abc
 import asyncio
 import uuid
@@ -197,7 +197,7 @@ def get_or_create_metric(metric_type, name, documentation, labelnames=None, buck
             else:
                 metric = metric_type(name, documentation, labelnames or [])
             return metric
-    except Exception as e:
+    except Exception:
         # Fallback for testing
         return DummyMetric()
 

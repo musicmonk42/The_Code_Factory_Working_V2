@@ -6,21 +6,13 @@ Tests all critical functionality including alerting, circuit breakers, rate limi
 caching, security features, and operational utilities.
 """
 
-import os
 import sys
 import json
 import time
-import asyncio
 import threading
-import hashlib
-from datetime import datetime, timedelta
-from unittest.mock import Mock, MagicMock, patch, call, AsyncMock, mock_open
-from typing import Dict, Any, List
+from unittest.mock import MagicMock, patch
 import pytest
-import tempfile
 from pathlib import Path
-import base64
-import uuid
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,11 +23,9 @@ from self_healing_import_fixer.analyzer.core_utils import (
     scrub_secrets,
     AlertLevel,
     AlertChannel,
-    AlertConfig,
     CircuitBreaker,
     RateLimiter,
     get_circuit_breaker,
-    get_rate_limiter,
     timing_context,
     retry_with_backoff,
     cached,
@@ -45,7 +35,6 @@ from self_healing_import_fixer.analyzer.core_utils import (
     secure_hash,
     verify_hash,
     sanitize_path,
-    distributed_lock,
     encode_for_logging,
     SERVICE_NAME,
     _alert_config,

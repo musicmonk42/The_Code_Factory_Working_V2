@@ -153,5 +153,4 @@ def test_import_guard():
     Ensures that the GenerationOrchestrator class can be imported without error.
     This serves as a guard against import chain failures.
     """
-    from test_generation.orchestrator.orchestrator import GenerationOrchestrator
     assert GenerationOrchestrator is not None

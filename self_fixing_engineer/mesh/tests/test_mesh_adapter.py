@@ -17,13 +17,12 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, PropertyMock, call
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 from datetime import datetime
 
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet, MultiFernet
-import redis.asyncio as aioredis
 
 # Test configuration
 TEST_DIR = Path(tempfile.mkdtemp(prefix="mesh_adapter_test_"))
@@ -492,7 +491,7 @@ class TestReliability:
         if "redis" in circuit_breakers and circuit_breakers["redis"].breaker:
             # The circuit breaker might already be open from failures
             # We'll test that it prevents further calls
-            original_state = circuit_breakers["redis"].breaker.current_state
+            circuit_breakers["redis"].breaker.current_state
             
             # Simulate failures
             failure_count = 0
@@ -582,7 +581,6 @@ class TestProductionMode:
     def test_prod_mode_requirements(self):
         """Test production mode security requirements."""
         import sys
-        import importlib
         
         # Save original values
         original_prod_mode = os.environ.get("PROD_MODE", "false")
@@ -600,7 +598,7 @@ class TestProductionMode:
                 try:
                     from mesh.mesh_adapter import MeshPubSub
                     # Try to create adapter with localhost
-                    adapter = MeshPubSub("redis://localhost:6379")
+                    MeshPubSub("redis://localhost:6379")
                     # If we get here, check if exit was called
                     mock_exit.assert_called_with(1)
                 except SystemExit:

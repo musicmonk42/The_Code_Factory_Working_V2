@@ -1,18 +1,12 @@
 import pytest
-import asyncio
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
-from unittest.mock import AsyncMock as TAsyncMock # Use TAsyncMock to avoid conflict with unittest.mock.AsyncMock
 # Updated for renamed GenerationOrchestrator to avoid pytest collection
 from test_generation.orchestrator.orchestrator import GenerationOrchestrator 
 from test_generation.orchestrator.cli import main as cli_main
-from test_generation.orchestrator.config import CONFIG, load_config, AUDIT_LOG_FILE
+from test_generation.orchestrator.config import CONFIG
 from test_generation.orchestrator import sanitize_path # sanitize_path from orchestrator init re-export.
-from test_generation.orchestrator.console import log, configure_logging, audit_logger_instance
-from test_generation.orchestrator.audit import _audit, RUN_ID
-from test_generation.orchestrator.metrics import METRICS_AVAILABLE
-from test_generation.utils import run_pytest_and_coverage, SecurityScanner, PRCreator, MutationTester
+from test_generation.utils import SecurityScanner, PRCreator, MutationTester
 from test_generation.policy_and_audit import PolicyEngine
 import json
 import argparse

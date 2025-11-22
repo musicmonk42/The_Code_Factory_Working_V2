@@ -10,13 +10,12 @@ Key features:
 - Comprehensive error handling with typed exceptions.
 """
 
-import os
 import asyncio
 import json
 import time
 import uuid
 import sys
-from typing import Any, Dict, Optional, Tuple, Callable, Union, List, Set
+from typing import Any, Dict, Optional, Tuple, Union, List
 from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
@@ -32,7 +31,6 @@ from .dlt_base import (
     DLTClientAuthError,
     DLTClientTransactionError,
     DLTClientQueryError,
-    DLTClientResourceError,
     DLTClientTimeoutError,
     DLTClientCircuitBreakerError,
     DLTClientError,
@@ -40,7 +38,6 @@ from .dlt_base import (
     TRACER,
     Status,
     StatusCode,
-    alert_operator,
     SECRETS_MANAGER,
     AUDIT,
     PRODUCTION_MODE,

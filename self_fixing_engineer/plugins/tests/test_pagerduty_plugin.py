@@ -1,16 +1,11 @@
 import os
 import sys
-import json
 import logging
 import asyncio
-import time
-import hashlib
 import pytest
-import hmac
-from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
-from typing import Dict, Any, List
+from unittest.mock import MagicMock, patch, AsyncMock
+from typing import Dict
 import aiohttp
-from datetime import datetime
 
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
 if sys.platform.startswith("win"):
@@ -362,7 +357,7 @@ async def test_send_request_success(mock_aiohttp_session, gateway):
         payload=payload
     )
     
-    pagerduty_plugin.logger.debug(f"Starting send_request_success test")
+    pagerduty_plugin.logger.debug("Starting send_request_success test")
     await gateway._send_request(request)
     mock_post.assert_called_once()
     pagerduty_plugin.logger.debug(f"Send request completed, circuit state: {gateway._circuit_state}")
@@ -394,7 +389,7 @@ async def test_send_request_permanent_failure(mock_aiohttp_session, gateway):
         payload=payload
     )
     
-    pagerduty_plugin.logger.debug(f"Starting permanent failure test")
+    pagerduty_plugin.logger.debug("Starting permanent failure test")
     await gateway._send_request(request)
     pagerduty_plugin.logger.debug(f"Failure count: {gateway._failure_count}, Circuit state: {gateway._circuit_state}")
     
@@ -435,7 +430,7 @@ async def test_send_request_circuit_breaker(mock_aiohttp_session, gateway, monke
         payload=payload
     )
     
-    pagerduty_plugin.logger.debug(f"Starting circuit breaker test")
+    pagerduty_plugin.logger.debug("Starting circuit breaker test")
     for _ in range(gateway.settings.circuit_breaker_threshold):
         try:
             await gateway._send_request(request)

@@ -337,7 +337,6 @@ async def run_scala_tests(
 
     # Setup temp project if build.sbt missing
     temp_sbt_dir_context = None
-    generated_minimal_project = False
     if not os.path.exists(os.path.join(sbt_project_root, 'build.sbt')):
         # Create a temp SBT project under project_root/atco_artifacts/<nonce>
         base_artifacts = os.path.join(project_root, "atco_artifacts")
@@ -347,7 +346,6 @@ async def run_scala_tests(
         temp_sbt_dir = temp_dir_obj.name
         temp_sbt_dir_context = temp_dir_obj
         result["temp_dirs_used"].append(temp_sbt_dir)
-        generated_minimal_project = True
 
         os.makedirs(temp_sbt_dir, exist_ok=True)
         os.makedirs(os.path.join(temp_sbt_dir, "project"), exist_ok=True)

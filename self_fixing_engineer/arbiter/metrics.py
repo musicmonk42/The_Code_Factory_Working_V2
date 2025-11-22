@@ -3,9 +3,8 @@ import logging
 import threading
 import sys
 import secrets
-from typing import Optional, Tuple, List, Any, Type, Dict, Union
+from typing import Optional, Tuple, Any, Type, Dict
 from time import time
-from contextlib import contextmanager
 
 from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY, generate_latest
 from fastapi import HTTPException, Depends, Response
@@ -150,7 +149,7 @@ def get_or_create_metric(
                     except Exception as e:
                         METRIC_REGISTRATION_ERRORS.labels(metric_type=metric_type.__name__, error_type=type(e).__name__).inc()
                         raise
-            except Exception as e:
+            except Exception:
                 # Record failed registration time as well
                 elapsed_time = time() - start_time
                 METRIC_REGISTRATION_TIME.labels(metric_name=full_name, metric_type=metric_type.__name__).observe(elapsed_time)

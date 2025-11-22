@@ -1,7 +1,6 @@
 # tests/test_signal.py
 import os
 import signal
-import sys
 import time
 from unittest.mock import patch, MagicMock
 
@@ -9,7 +8,6 @@ import pytest
 
 # Fix: Change the import to the correct module name
 from test_generation.gen_agent import atco_signal as signal_mod
-import faulthandler
 
 
 @pytest.fixture(autouse=True)
@@ -133,7 +131,7 @@ def test_debounce_per_signal(monkeypatch):
         handler(signal.SIGINT, None)
     
     assert signal_mod._signal_count == 1
-    assert signal_mod._shutting_down == True
+    assert signal_mod._shutting_down
     assert fake_event.set.call_count == 0
 
 # Completed for syntactic validity.

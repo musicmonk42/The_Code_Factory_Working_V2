@@ -1,14 +1,9 @@
-import os
 import sys
-import json
 import logging
 import asyncio
-import time
-import uuid
 import pytest
-import hashlib
-from unittest.mock import MagicMock, patch, AsyncMock, Mock, PropertyMock
-from typing import Dict, Any, List
+from unittest.mock import MagicMock, patch, AsyncMock
+from typing import Dict
 import aiohttp
 
 # Mock the core modules before any imports
@@ -53,9 +48,7 @@ sys.modules['plugins.core_utils'] = mock_core_utils
 
 # Now we can safely import from the plugin
 from plugins.azure_eventgrid_plugin.azure_eventgrid_plugin import (
-    PRODUCTION_MODE, logger, NonCriticalError,
-    PLUGIN_MANIFEST, AzureEventGridAuditHook, EventGridPermanentError,
-    AnalyzerCriticalError
+    logger, PLUGIN_MANIFEST, AzureEventGridAuditHook, AnalyzerCriticalError
 )
 
 # --- Test Setup ---
@@ -222,7 +215,7 @@ async def test_audit_hook_success():
     assert hook._event_queue.qsize() == 1
     
     # Get the event but don't remove it from queue
-    event = await asyncio.wait_for(hook._event_queue.get(), timeout=1.0)
+    await asyncio.wait_for(hook._event_queue.get(), timeout=1.0)
     hook._event_queue.task_done()
     
     # Check that the event was logged
@@ -430,7 +423,7 @@ async def test_close_external_session(mock_aiohttp_session):
     
     # External session should not be closed by the hook
     # The hook sets _own_session = False when a session is provided
-    assert hook._own_session == False
+    assert not hook._own_session
     # The mock close() should not have been called
     mock_session.close.assert_not_called()
 

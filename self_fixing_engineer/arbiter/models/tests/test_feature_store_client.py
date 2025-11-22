@@ -1,14 +1,11 @@
 import asyncio
-import json
 import logging
 import os
-import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Import centralized OpenTelemetry configuration for testing
 from arbiter.otel_config import get_tracer
@@ -24,8 +21,7 @@ from arbiter.models.feature_store_client import (
 
 # Import metrics directly from the module
 from arbiter.models.feature_store_client import (
-    FS_CALLS_TOTAL, FS_CALLS_ERRORS, FS_CALL_LATENCY_SECONDS,
-    FS_FEATURE_FRESHNESS_SECONDS, FS_REDACTIONS_TOTAL, FS_AUDIT_LOGS_TOTAL
+    FS_CALLS_TOTAL, FS_CALLS_ERRORS, FS_REDACTIONS_TOTAL
 )
 
 # Configure logging for tests

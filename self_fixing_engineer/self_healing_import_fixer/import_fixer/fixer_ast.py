@@ -11,13 +11,10 @@ import logging
 import networkx as nx  # For graph operations in CycleHealer
 import sys  # For sys.exit
 import asyncio  # For running async methods in a sync context
-import json
 import hashlib
-from typing import Dict, List, Set, Optional, Tuple, Any, Callable
+from typing import List, Set, Optional, Tuple, Any
 from ast import NodeTransformer
 import threading
-import queue
-import time
 from pathlib import Path
 
 # --- Guard POSIX-only imports ---
@@ -76,7 +73,7 @@ try:
 except ImportError as e:
     logger.critical(f"CRITICAL: fixer_ai module not found: {e}. AI-powered refactoring suggestions are a critical feature and cannot be disabled in production. Aborting startup.")
     try:
-        alert_operator(f"CRITICAL: fixer_ai module missing. AI healing disabled. Aborting.", level="CRITICAL")
+        alert_operator("CRITICAL: fixer_ai module missing. AI healing disabled. Aborting.", level="CRITICAL")
     except Exception:
         pass
     raise RuntimeError(f"[CRITICAL][AST] Missing fixer_ai dependency: {e}")

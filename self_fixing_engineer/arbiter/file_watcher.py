@@ -2,11 +2,10 @@ import os
 import time
 import logging
 import asyncio
-import subprocess
 import difflib
 import json
 import threading
-from typing import List, Dict, Optional, Any, Callable, Coroutine, Union
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 from datetime import datetime, timedelta
 import yaml
@@ -19,7 +18,7 @@ import aiofiles
 import redis.asyncio as redis
 from pydantic import BaseModel, Field, validator
 import typer
-from prometheus_client import start_http_server, Counter, Gauge, Histogram, generate_latest, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, REGISTRY
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from aiohttp import web
@@ -28,8 +27,6 @@ import aiosmtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import sys
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi import HTTPException, Depends
 from arbiter.arbiter_plugin_registry import register, PlugInKind
 
 # Try to import LLMClient
@@ -680,9 +677,9 @@ async def summarize_code_changes(diff: str, prompt_template: str) -> str:
         # Try to import a shared config if your module uses one.
         # If file_watcher already has a module-level `config`, reuse it.
         try:
-            from arbiter.policy.config import ArbiterConfig  # optional, for typing/structure only
+            pass  # optional, for typing/structure only
         except Exception:
-            ArbiterConfig = None  # type: ignore
+            pass  # type: ignore
 
         # Try module-level config first, else synthesize a minimal one
         cfg = globals().get("config", None)

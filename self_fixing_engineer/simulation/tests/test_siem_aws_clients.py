@@ -9,13 +9,8 @@ import json
 import os
 import sys
 import time
-import uuid
-import base64
-from datetime import datetime, timedelta
-from typing import Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock, patch, call, Mock
+from unittest.mock import MagicMock, patch
 import pytest
-from botocore.exceptions import ClientError, BotoCoreError
 
 # Mock the modules before importing
 sys.modules['simulation.plugins.siem_base'] = MagicMock()

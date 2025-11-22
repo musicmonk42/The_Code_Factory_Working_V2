@@ -1,14 +1,7 @@
 import os
-import sys
-import asyncio
 import json
-import logging
 import pytest
-import types
-import re
-import tempfile
-import shutil
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import dlt_backend
 
@@ -187,8 +180,8 @@ async def test_rollback_and_diff(monkeypatch, redis_mock, scrub_patch):
     cm = dlt_backend.CheckpointManager()
     s1 = {"value": 1, "timestamp": "2022-01-01T00:00:00Z", "metadata": {"foo": "a"}}
     s2 = {"value": 2, "timestamp": "2022-01-02T00:00:00Z", "metadata": {"foo": "b"}}
-    tx1 = await cm.save("rolltest", s1, metadata={})
-    tx2 = await cm.save("rolltest", s2, metadata={})
+    await cm.save("rolltest", s1, metadata={})
+    await cm.save("rolltest", s2, metadata={})
     diff = await cm.diff("rolltest", 1, 2)
     assert isinstance(diff, dict)
     assert "value" in diff and diff["value"] == (1, 2)
@@ -261,7 +254,8 @@ async def test_maybe_sign_checkpoint_and_verify(monkeypatch):
     sig = dlt_backend._maybe_sign_checkpoint(data)
     # Manually verify
     payload = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    import hmac, hashlib
+    import hmac
+    import hashlib
     manual = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     assert sig == manual
 

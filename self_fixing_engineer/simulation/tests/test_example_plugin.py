@@ -6,9 +6,7 @@ import pytest
 import json
 import shutil
 import tempfile
-import re
-from unittest.mock import patch, MagicMock, mock_open, PropertyMock
-from datetime import datetime
+from unittest.mock import patch, MagicMock
 
 # Fix the import path - add the plugins directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'plugins')))

@@ -110,7 +110,7 @@ import hashlib
 import logging
 from typing import Dict, Any, Callable, Awaitable, List, Optional, Type
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from queue import Queue, Empty
 from threading import Thread
 
@@ -265,7 +265,6 @@ class AsyncSafeLogger:
     
     def error(self, msg: str, exc_info=False, **kwargs):
         if exc_info:
-            import traceback
             kwargs['exc_info'] = True
         self._log(logging.ERROR, msg, **kwargs)
     
@@ -639,7 +638,7 @@ async def publish_event(
                     wait_time = RETRY_DELAY * (2**i) + random.uniform(0, 0.1) # Add jitter
                     logger.error(f"Publish retry {i+1}/{MAX_RETRIES} failed for {event_type}: {e}. Retrying in {wait_time:.2f}s...", exc_info=True)
                     await _set_gauge(BUS_LIVENESS, 0)
-                    span.add_event(f"publish_retry", {"error": str(e), "attempt": i + 1})
+                    span.add_event("publish_retry", {"error": str(e), "attempt": i + 1})
                     if i < MAX_RETRIES - 1:
                         await asyncio.sleep(wait_time)
                 except Exception as e:

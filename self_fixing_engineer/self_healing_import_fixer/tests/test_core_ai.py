@@ -1,8 +1,7 @@
 import pytest
-import asyncio
 import os
 import sys
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 # Get the absolute path to self_healing_import_fixer directory
 test_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,9 +15,7 @@ if parent_dir not in sys.path:
 from analyzer.core_ai import (
     AIManager, 
     get_ai_suggestions,  # These are async functions that exist
-    get_ai_patch,
-    NonCriticalError,  # Not AnalyzerCriticalError
-    get_ai_manager_instance  # Not _get_ai_manager_instance
+    get_ai_patch  # Not _get_ai_manager_instance
 )
 
 # Mark all tests in this module to be run with the pytest-asyncio fixture
@@ -189,7 +186,6 @@ async def test_ai_manager_init_auto_apply_in_prod_exits(valid_ai_config, mock_al
 # --- Core LLM API Call Logic Tests ---
 async def test_call_llm_api_success(mock_llm_client, mock_audit_logger_ai, mock_secrets_manager, valid_ai_config):
     """Verifies that a successful API call is handled correctly and audited."""
-    from unittest.mock import AsyncMock
     # Mock both httpx and OpenAI to avoid initialization issues
     with patch('analyzer.core_ai.httpx.AsyncClient'):
         with patch('analyzer.core_ai.AsyncOpenAI', return_value=mock_llm_client):

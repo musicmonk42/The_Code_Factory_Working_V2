@@ -2,12 +2,11 @@
 import asyncio
 import os
 import signal
-import sys
 import tempfile
 import uuid
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, Mock, Mock as MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner

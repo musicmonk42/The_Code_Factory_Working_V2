@@ -48,7 +48,6 @@ import os
 import re
 import errno
 import shutil
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -131,7 +130,7 @@ try:
         from sqlalchemy import JSON as _JSONType  # cross-dialect JSON
     except Exception:  # very old SQLAlchemy
         from sqlalchemy.dialects.postgresql import JSONB as _JSONType  # type: ignore
-except Exception as e:  # pragma: no cover - DB is optional; only needed if DATABASE_URL set
+except Exception:  # pragma: no cover - DB is optional; only needed if DATABASE_URL set
     declarative_base = None  # type: ignore
     Mapped = None  # type: ignore
     mapped_column = None  # type: ignore
@@ -414,7 +413,7 @@ class PolicyManager:
     async def save_policies(self) -> None:
         """Persist current policies to encrypted file and upsert DB (if configured)."""
         async with self._lock:
-            with tracer.start_as_current_span("save_policies") as span:
+            with tracer.start_as_current_span("save_policies"):
                 if self.policies is None:
                     raise ValueError("No policies in memory. Call set_policies() or load_policies() first.")
                 payload = self.policies.model_dump()
@@ -486,7 +485,7 @@ class PolicyManager:
         if len(new_key_b64.encode("utf-8")) != 44:
             raise ValueError("new_key_b64 must be a 32-byte base64-encoded Fernet key (44 chars)")
         async with self._lock:
-            with tracer.start_as_current_span("rotate_key") as span:
+            with tracer.start_as_current_span("rotate_key"):
                 # ensure we can load current payload
                 if self.policies is None:
                     await self.load_policies()

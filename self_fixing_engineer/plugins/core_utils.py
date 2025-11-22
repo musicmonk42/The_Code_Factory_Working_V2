@@ -1,7 +1,7 @@
 import logging
 import re
 import threading
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 from pathlib import Path
 import smtplib
 from email.message import EmailMessage

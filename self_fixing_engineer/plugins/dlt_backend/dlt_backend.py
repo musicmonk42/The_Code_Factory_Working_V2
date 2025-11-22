@@ -26,7 +26,7 @@ import io
 import gzip
 import datetime
 import redis.asyncio as redis
-from typing import Dict, Any, Optional, Tuple, Callable, List
+from typing import Dict, Any, Optional, Tuple
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
@@ -120,7 +120,7 @@ try:
 except ImportError as e:
     if PRODUCTION_MODE:
         logger.critical(f"CRITICAL: OpenTelemetry not found. Tracing is mandatory in PRODUCTION_MODE. Aborting startup: {e}.")
-        alert_operator(f"CRITICAL: OpenTelemetry missing. DLT backend aborted.", level="CRITICAL")
+        alert_operator("CRITICAL: OpenTelemetry missing. DLT backend aborted.", level="CRITICAL")
         sys.exit(1)
     else:
         logger.warning("OpenTelemetry not found. Tracing will be disabled.")
@@ -232,7 +232,7 @@ try:
 except ImportError as e:
     if PRODUCTION_MODE:
         logger.critical(f"CRITICAL: S3OffChainClient not found. Off-chain storage is critical. Aborting startup: {e}.")
-        alert_operator(f"CRITICAL: S3OffChainClient missing. DLT backend aborted.", level="CRITICAL")
+        alert_operator("CRITICAL: S3OffChainClient missing. DLT backend aborted.", level="CRITICAL")
         sys.exit(1)
     else:
         logger.warning("S3OffChainClient not found. Using dummy for off-chain storage.")
@@ -259,7 +259,7 @@ try:
 except ImportError as e:
     if PRODUCTION_MODE:
         logger.critical(f"CRITICAL: FabricClientWrapper not found. DLT client is critical. Aborting startup: {e}.")
-        alert_operator(f"CRITICAL: FabricClientWrapper missing. DLT backend aborted.", level="CRITICAL")
+        alert_operator("CRITICAL: FabricClientWrapper missing. DLT backend aborted.", level="CRITICAL")
         sys.exit(1)
     else:
         logger.warning("FabricClientWrapper not found. Using dummy for DLT client.")

@@ -11,11 +11,9 @@ import json
 import yaml
 import shutil
 import tempfile
-import asyncio
-import time
 import glob
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import patch
 import pytest
 import logging
 
@@ -46,12 +44,8 @@ sys.modules['analyzer.core_audit'] = mock_audit_module
 from analyzer import (
     analyzer,
     core_graph,
-    core_policy,
-    core_security,
     core_report,
-    core_utils,
-    core_secrets,
-    core_ai
+    core_utils
 )
 
 # Configure logging
@@ -242,7 +236,7 @@ def helper():
         """Test error handling and recovery"""
         # Test with non-existent project directory
         with pytest.raises(Exception):
-            graph_analyzer = core_graph.ImportGraphAnalyzer("/non/existent/path")
+            core_graph.ImportGraphAnalyzer("/non/existent/path")
         
         # Test with malformed config  
         bad_config = os.path.join(self.config_dir, "bad_config.yaml")
@@ -251,7 +245,7 @@ def helper():
         
         # This should raise an error due to invalid YAML
         with pytest.raises(Exception):
-            config = analyzer.load_config(bad_config)
+            analyzer.load_config(bad_config)
     
     def test_secrets_management(self):
         """Test secrets management and scrubbing"""

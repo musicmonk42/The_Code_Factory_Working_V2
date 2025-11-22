@@ -35,8 +35,6 @@ import functools
 from contextlib import asynccontextmanager
 import aiofiles
 import aiofiles.os
-import re
-import filelock
 import types
 from types import SimpleNamespace
 from dotenv import load_dotenv
@@ -44,7 +42,7 @@ from pathlib import Path
 import inspect
 # FIX: Break circular import by moving sanitize_path import inside TYPE_CHECKING
 if TYPE_CHECKING:
-    from test_generation.orchestrator.venvs import sanitize_path
+    pass
 
 # --- Pkg_resources migration imports
 from importlib.metadata import version, PackageNotFoundError
@@ -158,7 +156,7 @@ except ImportError:
     
 # AFTER trying to import prometheus_client and defining real counters,
 # ensure this exists even if prometheus is unavailable:
-if not 'METRICS_AVAILABLE' in globals() or not METRICS_AVAILABLE:
+if 'METRICS_AVAILABLE' not in globals() or not METRICS_AVAILABLE:
     try:
         from prometheus_client import Counter  # type: ignore
         file_operations_total = Counter(
@@ -770,8 +768,8 @@ class MutationTester:
         if not self.config.get('mutation_testing', {}).get('enabled', False):
             return True, -1.0, "Mutation testing not enabled."
 
-        full_source_path = validate_and_resolve_path(self.project_root, source_file_relative)
-        full_test_path = validate_and_resolve_path(self.project_root, test_file_relative)
+        validate_and_resolve_path(self.project_root, source_file_relative)
+        validate_and_resolve_path(self.project_root, test_file_relative)
 
         logger.info(f"Conceptual: Running mutation tests on {source_file_relative} with {test_file_relative} ({language})...")
         await asyncio.sleep(random.uniform(1, 3))
@@ -1202,7 +1200,7 @@ async def run_junit_and_coverage(
             "gradlew" if sys.platform == "win32" else "./gradlew",
             "test",
             "jacocoTestReport",
-            f"--tests", f"{target_class_identifier}"
+            "--tests", f"{target_class_identifier}"
         ]
 
     test_passed = False
@@ -1371,7 +1369,7 @@ async def parse_coverage_delta(coverage_report_full_path: str, target_identifier
                     try:
                         line_parts = line[3:].split(',')
                         if len(line_parts) >= 2:
-                            line_number, hits = line_parts[0], line_parts[1]
+                            _line_number, hits = line_parts[0], line_parts[1]
                             if current_file and target in current_file:
                                 total += 1
                                 if int(hits) > 0:
@@ -1502,7 +1500,7 @@ async def prioritize_test_targets(coverage_report_path: str, project_root: str, 
         full_coverage_xml_path = validate_and_resolve_path(project_root, coverage_report_path)
         try:
             if not os.path.exists(full_coverage_xml_path):
-                logger.error(f"Coverage XML file not found for prioritization. Cannot calculate line rates.")
+                logger.error("Coverage XML file not found for prioritization. Cannot calculate line rates.")
                 return []
             if AIOFILES_AVAILABLE:
                 async with aiofiles.open(full_coverage_xml_path, 'r', encoding='utf-8') as f:

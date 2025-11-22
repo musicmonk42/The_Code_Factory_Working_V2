@@ -1,17 +1,12 @@
 # File: test_custom_llm_provider_plugin.py
 """Test cases for custom_llm_provider_plugin.py."""
 
-import asyncio
-import json
 import os
 import sys
-import time
-from typing import Any, Dict, List, Iterable
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import aiohttp
-from pydantic import ValidationError  # Keep for old tests if needed
 
 # Add the parent directory of 'simulation' to the path for correct imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -374,7 +369,7 @@ class TestPluginFunctions:
             call_count += 1
             return f"key-{call_count}"
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider, get_vault_key
+        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         # Patch the module-level function
         monkeypatch.setattr('simulation.plugins.custom_llm_provider_plugin.get_vault_key', mock_get_vault_key)
@@ -400,7 +395,7 @@ class TestPluginFunctions:
             call_count += 1
             raise Exception("Vault unavailable")
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider, get_vault_key
+        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         monkeypatch.setattr('simulation.plugins.custom_llm_provider_plugin.get_vault_key', mock_failing_vault)
 

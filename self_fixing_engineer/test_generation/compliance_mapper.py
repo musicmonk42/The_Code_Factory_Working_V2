@@ -28,9 +28,9 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Dict, List, Optional, Callable
 import importlib.metadata
 from datetime import datetime, timezone
 from functools import wraps
@@ -136,8 +136,10 @@ except ImportError:
                 return await func(*args, **kwargs)
             return wrapper
         return decorator
-    stop_after_attempt = lambda x: None
-    wait_exponential = lambda *args, **kwargs: None
+    def stop_after_attempt(x):
+        return None
+    def wait_exponential(*args, **kwargs):
+        return None
 
 try:
     from cryptography.fernet import Fernet
@@ -309,7 +311,7 @@ class GDPRDataProtectionRule(ComplianceRule):
             r"\b\d{3}-\d{2}-\d{4}\b": "SSN",
             r"\b\d{4}-\d{4}-\d{4}-\d{4}\b": "credit_card"
         }
-        fernet = Fernet(config.encryption_key.encode()) if config.encryption_key and CRYPTOGRAPHY_AVAILABLE else None
+        Fernet(config.encryption_key.encode()) if config.encryption_key and CRYPTOGRAPHY_AVAILABLE else None
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         for line_num, line in enumerate(content.splitlines(), 1):
             for pattern, issue_type in sensitive_patterns.items():
@@ -858,7 +860,7 @@ if __name__ == "__main__":
 
         except ValueError as e:
             logger.error({"message": f"Configuration error: {repr(e)}"})
-        except Exception as e:
+        except Exception:
             logger.exception({"message": "Unexpected error during report generation"})
 
     asyncio.run(main())

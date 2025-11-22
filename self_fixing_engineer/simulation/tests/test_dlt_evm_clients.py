@@ -1,38 +1,18 @@
 # tests/test_dlt_evm_clients.py
 
 import pytest
-import asyncio
 import json
-import uuid
 import os
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from eth_account import Account
-from pydantic import ValidationError
+from unittest.mock import AsyncMock, MagicMock
 
 from simulation.plugins.dlt_clients.dlt_evm_clients import (
-    EthereumClientWrapper,
-    EVMConfig,
-    AWSSecretsBackend,
-    AzureKeyVaultBackend,
-    GCPSecretManagerBackend
+    EthereumClientWrapper
 )
 from simulation.plugins.dlt_clients.dlt_base import (
-    BaseOffChainClient,
     DLTClientConfigurationError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientAuthError,
-    DLTClientResourceError,
-    DLTClientTimeoutError,
     DLTClientValidationError,
-    DLTClientConnectivityError,
-    DLTClientCircuitBreakerError,
-    DLTClientError,
-    PRODUCTION_MODE,
     _base_logger,
-    SECRETS_MANAGER,
-    AUDIT,
-    scrub_secrets
+    SECRETS_MANAGER
 )
 
 # A mock off-chain client that can be passed to the DLT client

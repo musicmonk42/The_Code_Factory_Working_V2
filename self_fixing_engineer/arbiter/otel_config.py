@@ -21,18 +21,16 @@ Version: 2.0.0
 
 import os
 import sys  # Added missing import
-import ssl
 import socket
 import logging
 import threading
-import time
 import json
 import hashlib
 import asyncio  # Added for async detection in trace_operation decorator
 from enum import Enum
-from typing import Optional, Dict, Any, List, Callable, Union
+from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
-from functools import wraps, lru_cache
+from functools import wraps
 from contextlib import contextmanager
 from opentelemetry.sdk.resources import Resource
 import urllib.parse
@@ -51,7 +49,6 @@ try:
 except ImportError:
     ETCD_AVAILABLE = False
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from circuitbreaker import circuit
 
 # OpenTelemetry imports with comprehensive fallback

@@ -6,14 +6,13 @@ Tests configuration validation, health checks, log sending, and querying.
 
 import pytest
 import asyncio
-import os
 import sys
 import time
 import datetime
 import json
 import re
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from typing import Dict, Any, List, Tuple, Optional, Callable
+from unittest.mock import AsyncMock, MagicMock
+from typing import Any
 
 # Mock modules before importing
 sys.modules['simulation.plugins.siem_base'] = MagicMock()
@@ -400,7 +399,7 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                 status = data.get('status', 'unknown')
                 if status in ['green', 'yellow']:
                     return True, f"Elasticsearch cluster is healthy ({status} status)."
-            raise SIEMClientConnectivityError(f"Health check failed", self.client_type)
+            raise SIEMClientConnectivityError("Health check failed", self.client_type)
     
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
         success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)
@@ -522,7 +521,7 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
         async with response:
             if response.status in [200, 202, 400]:
                 return True, "Datadog Logs intake URL is reachable."
-            raise SIEMClientConnectivityError(f"Health check failed", self.client_type)
+            raise SIEMClientConnectivityError("Health check failed", self.client_type)
     
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
         success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)

@@ -1,25 +1,18 @@
 # D:\SFE\self_fixing_engineer\arbiter\policy\core.py
 
 import asyncio
-import collections
 import logging
 import json
 import os
 import re
 import sys
 import time
-import sqlite3
-import aiofiles
-from typing import Dict, Any, Optional, List, Union, Tuple, Awaitable, Callable
+from typing import Dict, Any, Optional, List, Tuple, Awaitable, Callable
 from datetime import datetime, timezone, timedelta
 import threading
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import hashlib
 import random
-from functools import wraps
-from opentelemetry import trace, metrics
-from opentelemetry.context import attach, detach
-from opentelemetry.propagate import get_global_textmap, inject, extract, set_global_textmap
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
@@ -28,7 +21,7 @@ from arbiter.otel_config import get_tracer
 from ..plugins.llm_client import LLMClient
 from .config import ArbiterConfig, get_config
 from .circuit_breaker import is_llm_policy_circuit_breaker_open, record_llm_policy_api_success, record_llm_policy_api_failure
-from .metrics import policy_decision_total, policy_file_reload_count, policy_last_reload_timestamp, feedback_processing_time, LLM_CALL_LATENCY, get_or_create_metric, Histogram, Counter
+from .metrics import policy_decision_total, policy_file_reload_count, policy_last_reload_timestamp, LLM_CALL_LATENCY, get_or_create_metric, Histogram, Counter
 from guardrails.audit_log import audit_log_event_async as audit_log
 from guardrails.compliance_mapper import load_compliance_map
 
@@ -457,7 +450,7 @@ class PolicyEngine:
                     loaded_policies = json.load(f)
                     old_policies = self._policies.copy()
                     if not self.validate_policies(loaded_policies):
-                        logger.warning(f"Invalid policy file. Loading default policies.")
+                        logger.warning("Invalid policy file. Loading default policies.")
                         self._policies = self._get_default_policies()
                         span.set_attribute("load_status", "invalid_file")
                     else:
@@ -468,7 +461,7 @@ class PolicyEngine:
                     policy_last_reload_timestamp.set(datetime.now().timestamp())
                     logger.info(f"Policies reloaded from {self.config.POLICY_CONFIG_FILE_PATH}.")
             except FileNotFoundError:
-                logger.warning(f"Policy file not found. Loading default policies.")
+                logger.warning("Policy file not found. Loading default policies.")
                 self._policies = self._get_default_policies()
                 span.set_attribute("load_status", "file_not_found")
             except json.JSONDecodeError as e:

@@ -4,7 +4,6 @@ import os
 import json
 import asyncio
 import tempfile
-import sys
 import logging
 import threading
 from typing import Dict, Any, Optional, Union

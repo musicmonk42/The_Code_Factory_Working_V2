@@ -12,8 +12,6 @@ from typing import Awaitable, Any, Optional
 from importlib.metadata import version as _pkg_version, PackageNotFoundError
 from pathlib import Path
 import uuid
-import inspect
-import functools
 import threading
 
 # --- Optional Dependency Guards and Fallbacks ---
@@ -96,19 +94,15 @@ else:
 
 
 # -------------------------------------------------
-from .io_utils import validate_relative_path
 from .runtime import (
     is_ci_environment,
     setup_logging,
     run_dependency_check,
-    validate_session_inputs,
     ensure_session_file,
     init_llm,
-    TestAgentState,
 )
 from .atco_signal import install_default_handlers
-from test_generation.orchestrator.venvs import sanitize_path
-from test_generation.orchestrator.audit import append_to_feedback_log, FEEDBACK_LOG_FILE
+from test_generation.orchestrator.audit import FEEDBACK_LOG_FILE
 # Corrected import for the graph module
 from test_generation.gen_agent.graph import build_graph, invoke_graph
 
@@ -179,7 +173,7 @@ def run_coro_sync(coro: Awaitable[Any]) -> Any:
     This is for synchronous contexts like CLI commands that need to call async functions.
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
 
@@ -368,7 +362,6 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
             raise
 
     # Build and invoke the agent graph (both patched in tests)
-    from test_generation.gen_agent.graph import build_graph, invoke_graph
     graph = build_graph(llm)
     final_state = await invoke_graph(graph, state)
 

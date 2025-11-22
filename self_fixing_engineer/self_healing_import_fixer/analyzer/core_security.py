@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 import shutil
-from typing import Dict, List, Any, Optional, Tuple, Callable
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from shlex import quote
 import hashlib

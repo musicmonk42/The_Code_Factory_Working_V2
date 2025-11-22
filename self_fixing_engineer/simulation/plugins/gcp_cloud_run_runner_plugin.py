@@ -7,7 +7,6 @@ import logging
 import time
 import tempfile
 import uuid
-import shutil
 import random
 from typing import Dict, Any, Callable, Optional, List
 from pydantic import BaseModel, Field, validator, ValidationError
@@ -670,7 +669,7 @@ async def run_cloud_run_job(
     except QuotaExceeded as e:
         logger.warning(f"Quota exceeded: {e}. Will reduce resources and retry via decorator.")
         # Mutate job_config so that next retry sees reduced values
-        if job_config.get("_reduced_resources_once") != True:
+        if not job_config.get("_reduced_resources_once"):
             if job_config.get("cpu_limit") in ("1000m", "1"):
                 job_config["cpu_limit"] = "500m"
             if job_config.get("memory_limit") in ("1Gi", "1024Mi"):

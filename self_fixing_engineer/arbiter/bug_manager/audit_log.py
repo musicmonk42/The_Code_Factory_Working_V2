@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import portalocker
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 # Assuming a local utils module with these components
 from .utils import AuditLogError, validate_input_details

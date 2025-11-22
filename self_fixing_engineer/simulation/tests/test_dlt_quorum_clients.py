@@ -1,15 +1,10 @@
 # tests/test_dlt_quorum_clients.py
 
 import pytest
-import asyncio
 import json
-import uuid
-import os
 import re
-import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open
 from pydantic import ValidationError
-from contextlib import contextmanager
 
 # Check if web3 is available before importing anything that depends on it
 try:
@@ -36,16 +31,7 @@ except ImportError:
 # Import base classes that don't depend on web3
 from simulation.plugins.dlt_clients.dlt_base import (
     BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientAuthError,
-    DLTClientTimeoutError,
-    DLTClientValidationError,
-    PRODUCTION_MODE,
-    _base_logger,
-    SECRETS_MANAGER,
-    AUDIT
+    SECRETS_MANAGER
 )
 
 # Only import Quorum-specific modules if web3 is available

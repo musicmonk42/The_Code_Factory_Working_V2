@@ -1,8 +1,7 @@
 # test_ollama_adapter.py
 import pytest
 import asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 import aiohttp
 
@@ -13,7 +12,6 @@ from arbiter.plugins.ollama_adapter import (
     RateLimitError
 )
 from arbiter.plugins.llm_client import (
-    LLMClient,
     LLMClientError,
     TimeoutError,
     APIError
@@ -106,7 +104,7 @@ class TestOllamaAdapter:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
             
-            adapter = OllamaAdapter(settings)
+            OllamaAdapter(settings)
             
             mock_client.assert_called_once()
             # Should use "llama3" as default
@@ -376,7 +374,7 @@ class TestOllamaAdapter:
             mock_instance.aclose_session = AsyncMock()
             
             with pytest.raises(ValueError):
-                async with OllamaAdapter(valid_settings) as adapter:
+                async with OllamaAdapter(valid_settings):
                     raise ValueError("Test error")
             
             # Should still close session even with exception

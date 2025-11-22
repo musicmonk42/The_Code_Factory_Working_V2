@@ -18,8 +18,7 @@ import uuid
 from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
 from .dlt_base import (
     DLTClientConfigurationError, DLTClientTransactionError, DLTClientQueryError,
-    DLTClientConnectivityError, DLTClientAuthError, DLTClientValidationError, DLTClientCircuitBreakerError, DLTClientError,
-    DLTClientTimeoutError,
+    DLTClientConnectivityError, DLTClientAuthError, DLTClientValidationError, DLTClientCircuitBreakerError, DLTClientTimeoutError,
     async_retry, TRACER, Status, StatusCode,
     alert_operator, AUDIT, PRODUCTION_MODE
 )
@@ -28,10 +27,9 @@ from .dlt_base import _base_logger, scrub_secrets
 # --- Strict Dependency Check for web3.py ---
 # WEB3_AVAILABLE is now determined by the critical import check in dlt_base.py
 # If it's not available, dlt_base.py would have already aborted.
-import web3  # This import will now be guaranteed by dlt_base.py
-from web3 import Web3, AsyncHTTPProvider
+from web3 import Web3
 from web3.eth import AsyncEth
-from web3.exceptions import TransactionNotFound, ContractCustomError, ContractLogicError, TimeExhausted
+from web3.exceptions import TimeExhausted
 from eth_account import Account
 from web3.middleware import geth_poa_middleware
 

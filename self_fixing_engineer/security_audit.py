@@ -11,12 +11,9 @@ Performs comprehensive security checks including:
 - Dependency vulnerabilities
 """
 
-import os
 import re
-import ast
-import json
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List
 
 class SecurityAuditor:
     def __init__(self, base_path: str):

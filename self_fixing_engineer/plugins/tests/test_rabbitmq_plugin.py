@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import logging
@@ -8,11 +7,10 @@ import pytest
 import hmac
 import hashlib
 from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any, List, Tuple
-from aiormq.exceptions import AMQPConnectionError, ChannelInvalidStateError
+from typing import Dict
+from aiormq.exceptions import AMQPConnectionError
 from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
-import aiormq
 import importlib
 
 # Assuming these are available in a file named rabbitmq_plugin.py
@@ -183,7 +181,7 @@ def mock_aiormq(monkeypatch):
     mock_connection.close = AsyncMock()
     mock_connect = AsyncMock(return_value=mock_connection)
     
-    with patch("aiormq.connect", mock_connect) as connect_patch:
+    with patch("aiormq.connect", mock_connect):
         yield mock_connect, mock_connection
 
 @pytest.fixture

@@ -1,19 +1,11 @@
 import os
 import json
-import time
 import asyncio
-import random
-import re
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, PropertyMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
-from pytest_asyncio import fixture
-import readline
 import logging
-from typing import List, Dict, Any, Optional, Union
-import threading
 
 # Import the module under test - only import what actually exists
-import intent_capture.autocomplete as autocomplete_module
 from intent_capture.autocomplete import (
     JsonFormatter,
     AutocompleteState,
@@ -27,7 +19,6 @@ from intent_capture.autocomplete import (
     execute_macro,
     setup_autocomplete,
     log_audit_event,
-    prune_history,
     is_toxic,
     anonymize_pii,
 )
@@ -180,10 +171,10 @@ def test_is_toxic():
         mock_mdl.return_value = [[{"label": "TOXIC", "score": 0.8}]]
         mock_pipeline.return_value.__enter__.return_value = mock_mdl
         
-        assert is_toxic("bad content") == True
+        assert is_toxic("bad content")
         
         mock_mdl.return_value = [[{"label": "NOT_TOXIC", "score": 0.9}]]
-        assert is_toxic("good content") == False
+        assert not is_toxic("good content")
 
 # --- Tests for History Management ---
 def test_add_to_history(mock_readline):

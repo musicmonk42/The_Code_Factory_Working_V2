@@ -1,12 +1,7 @@
-import os
 import logging
 import asyncio
-import threading
-import importlib
-import importlib.util
-from typing import Dict, Any, Optional, List, Tuple, Type, Final
-from prometheus_client import Counter, Histogram, REGISTRY
-from types import MappingProxyType
+from typing import Dict, Any
+from prometheus_client import Counter
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
@@ -175,13 +170,13 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
                     # Just validate that it's a dotted path with at least 2 parts
                     parts = value.split(".")
                     if len(parts) < 2:
-                        raise ValueError(f"Import path must have at least module.name format")
+                        raise ValueError("Import path must have at least module.name format")
                     # Check if it looks like a valid Python identifier path
                     for part in parts:
                         if not part or not part.replace("_", "").replace("0", "").replace("1", "").replace("2", "").replace("3", "").replace("4", "").replace("5", "").replace("6", "").replace("7", "").replace("8", "").replace("9", "").isalpha():
                             if not (part[0].isalpha() or part[0] == "_"):
                                 raise ValueError(f"Invalid Python identifier: {part}")
-                except (ValueError, AttributeError) as e:
+                except (ValueError, AttributeError):
                     plugin_config_errors_total.labels(operation="validate").inc()
                     raise ValueError(f"Invalid import path for plugin '{key}': {value}")
             plugin_config_ops_total.labels(operation="validate").inc()

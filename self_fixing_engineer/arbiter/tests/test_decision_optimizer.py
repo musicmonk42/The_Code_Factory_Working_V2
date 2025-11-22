@@ -4,7 +4,6 @@ import sys
 import os
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
-import asyncio
 import numpy as np
 from cryptography.fernet import Fernet
 

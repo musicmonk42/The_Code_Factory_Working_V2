@@ -18,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Type, Callable, Union
 from abc import ABC, abstractmethod
-from functools import lru_cache
 
 # --- Logging Setup (Local to this module) ---
 _base_logger = logging.getLogger("simulation.dlt.client")
@@ -84,8 +83,8 @@ try:
     import aiohttp
     AIOHTTP_AVAILABLE = True
 except ImportError:
-    _base_logger.critical(f"CRITICAL: Required dependency 'aiohttp' not found. Aborting startup.")
-    _schedule_alert(f"CRITICAL: Missing required dependency 'aiohttp'. DLT client cannot start.", level="CRITICAL")
+    _base_logger.critical("CRITICAL: Required dependency 'aiohttp' not found. Aborting startup.")
+    _schedule_alert("CRITICAL: Missing required dependency 'aiohttp'. DLT client cannot start.", level="CRITICAL")
     sys.exit(1)
     
 try:
@@ -93,8 +92,8 @@ try:
     from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_random_exponential
     TENACITY_AVAILABLE = True
 except ImportError:
-    _base_logger.critical(f"CRITICAL: Required dependency 'tenacity' not found. Aborting startup.")
-    _schedule_alert(f"CRITICAL: Missing required dependency 'tenacity'. DLT client cannot start.", level="CRITICAL")
+    _base_logger.critical("CRITICAL: Required dependency 'tenacity' not found. Aborting startup.")
+    _schedule_alert("CRITICAL: Missing required dependency 'tenacity'. DLT client cannot start.", level="CRITICAL")
     sys.exit(1)
 
 try:
@@ -299,7 +298,7 @@ class CircuitBreaker:
                     circuit_breaker_status.labels(client_type=self.client_type).set(0)
                     circuit_breaker_failures.labels(client_type=self.client_type).set(0)
             return result
-        except Exception as e:
+        except Exception:
             self.failures += 1
             self.last_failure_time = time.time()
             if PROMETHEUS_AVAILABLE:
@@ -517,7 +516,7 @@ def _get_dlt_audit_hmac_key() -> bytes:
     if _dlt_audit_hmac_key is None:
         key_str = SECRETS_MANAGER.get_secret(AUDIT_HMAC_KEY_ENV, required=PRODUCTION_MODE)
         if not key_str and PRODUCTION_MODE:
-             msg = f"CRITICAL: DLT_AUDIT_HMAC_KEY is required in PRODUCTION_MODE but not found."
+             msg = "CRITICAL: DLT_AUDIT_HMAC_KEY is required in PRODUCTION_MODE but not found."
              _base_logger.critical(msg)
              _schedule_alert(msg, level="CRITICAL")
              sys.exit(1)

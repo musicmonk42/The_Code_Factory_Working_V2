@@ -1,17 +1,13 @@
 import pytest
 import os
-import json
 import asyncio
-import inspect
 from functools import wraps
 from unittest.mock import MagicMock, patch, AsyncMock, Mock
-from asyncio import TimeoutError as AsyncTimeoutError
-from werkzeug.exceptions import BadRequest, TooManyRequests
-from flask.testing import FlaskClient
+from werkzeug.exceptions import TooManyRequests
 
 # Fix: Import all necessary components for mocking from api.py
 with patch.dict(os.environ, {"ENV": "dev", "BEHIND_PROXY": "false", "ENABLE_METRICS": "false", "CORS_ORIGINS": ""}):
-    from test_generation.gen_agent.api import create_app, create_access_token, _run_async, Flask, JWTManager, with_jwt_required, Limiter, BadRequest as FlaskBadRequest, jwt_required as jwt_required_import, _generate_tests_logic
+    from test_generation.gen_agent.api import create_app
 
 async def _mock_invoke_graph(graph, state, config=None, progress_callback=None):
     """A mock implementation for the async invoke_graph function."""
@@ -293,7 +289,7 @@ class TestFailurePath:
         This test simulates a coroutine that takes longer than the timeout.
         """
         # Patch the logic layer to simulate a timeout condition
-        with patch("test_generation.gen_agent.api._generate_tests_logic", new_callable=AsyncMock, side_effect=asyncio.TimeoutError) as mock_logic:
+        with patch("test_generation.gen_agent.api._generate_tests_logic", new_callable=AsyncMock, side_effect=asyncio.TimeoutError):
             payload = {"spec": "test", "language": "Python", "framework": "pytest", "spec_format": "gherkin"}
             response = client.post("/generate-tests", json=payload)
             

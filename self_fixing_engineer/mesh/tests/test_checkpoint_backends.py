@@ -13,19 +13,13 @@ import asyncio
 import json
 import os
 import tempfile
-import time
-import importlib
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, PropertyMock, call
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 from datetime import datetime, timezone
-from dataclasses import dataclass
 
 import pytest
 import pytest_asyncio
-from cryptography.fernet import Fernet, MultiFernet
-import hashlib
-import hmac
-import base64
+from cryptography.fernet import Fernet
 
 # Test configuration
 TEST_DIR = Path(tempfile.mkdtemp(prefix="checkpoint_backends_test_"))
@@ -664,7 +658,7 @@ class TestPerformance:
         
         try:
             # Mock the Redis client initialization to avoid localhost issues
-            with patch("mesh.checkpoint.checkpoint_backends.aioredis.ConnectionPool.from_url") as mock_pool:
+            with patch("mesh.checkpoint.checkpoint_backends.aioredis.ConnectionPool.from_url"):
                 with patch("mesh.checkpoint.checkpoint_backends.aioredis.Redis") as mock_redis:
                     mock_client = AsyncMock()
                     mock_client.ping = AsyncMock()

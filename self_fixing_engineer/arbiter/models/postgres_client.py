@@ -16,7 +16,7 @@ import asyncpg
 from asyncpg.pool import Pool
 from asyncpg import exceptions as asyncpg_exceptions
 
-from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
 

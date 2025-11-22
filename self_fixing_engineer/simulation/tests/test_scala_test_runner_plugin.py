@@ -4,12 +4,9 @@ import pytest
 import asyncio
 import os
 import sys
-import shutil
 import tempfile
-import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-import xml.etree.ElementTree as ET
 
 # Import the plugin from the correct directory
 # Try multiple possible locations for the plugin
@@ -169,15 +166,15 @@ async def test_run_scala_tests_success_full_workflow():
          patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess, \
          patch('os.path.exists') as mock_exists, \
          patch('os.makedirs') as mock_makedirs, \
-         patch('shutil.copy') as mock_copy, \
-         patch('shutil.copy2') as mock_copy2, \
-         patch('shutil.copyfile') as mock_copyfile, \
+         patch('shutil.copy'), \
+         patch('shutil.copy2'), \
+         patch('shutil.copyfile'), \
          patch('scala_test_runner_plugin._parse_junit_xml', return_value={"tests": 1, "failures": 0, "errors": 0, "skipped": 0}), \
          patch('scala_test_runner_plugin._parse_scoverage_xml', return_value=85.50), \
          patch('scala_test_runner_plugin._find_scoverage_xml', return_value="/mock/path/scoverage.xml"), \
          patch('os.listdir', return_value=["TEST-results.xml"]), \
          patch('tempfile.TemporaryDirectory') as mock_temp_dir, \
-         patch('builtins.open', new_callable=mock_open) as mock_file_open:
+         patch('builtins.open', new_callable=mock_open):
 
         # Configure _which to return sbt path
         mock_which.return_value = "/usr/bin/sbt"
@@ -231,7 +228,7 @@ async def test_run_scala_tests_test_failure():
          patch('os.listdir', return_value=["TEST-results.xml"]), \
          patch('os.makedirs'), \
          patch('shutil.copyfile'), \
-         patch('builtins.open', new_callable=mock_open) as mock_file_open:
+         patch('builtins.open', new_callable=mock_open):
 
         # Configure _which to return sbt path
         mock_which.return_value = "/usr/bin/sbt"

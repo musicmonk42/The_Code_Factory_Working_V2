@@ -8,17 +8,14 @@ import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 from datetime import datetime, timezone
-from typing import Dict, Any, List
-from prometheus_client import REGISTRY, CollectorRegistry, Counter
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import ValidationError
-import hashlib
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
 
 # Import modules to be tested
-from arbiter.models.multi_modal_schemas import ImageAnalysisResult, AudioAnalysisResult, Sentiment
+from arbiter.models.multi_modal_schemas import ImageAnalysisResult
 from arbiter.models.redis_client import RedisClient
 from arbiter.models.postgres_client import PostgresClient
 from arbiter.models.audit_ledger_client import AuditLedgerClient
@@ -26,10 +23,7 @@ from arbiter.models.merkle_tree import MerkleTree
 
 # Import exceptions
 from redis.exceptions import ConnectionError as RedisConnectionError
-from asyncpg.exceptions import PostgresError, UndefinedTableError
-from arbiter.models.postgres_client import PostgresClientConnectionError, PostgresClientQueryError
-from arbiter.models.audit_ledger_client import DLTError, DLTConnectionError, DLTTransactionError
-from arbiter.models.merkle_tree import MerkleTreeError, MerkleTreeEmptyError, MerkleProofError
+from asyncpg.exceptions import PostgresError
 
 # Configure logging for E2E tests
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -304,7 +298,7 @@ async def test_e2e_error_handling(setup_e2e_env, mocker: MockerFixture):
     
     # PostgreSQL operation with retry
     try:
-        saved_pg_id = await pg_client.save("feedback", pg_data)
+        await pg_client.save("feedback", pg_data)
         logger.info("E2E Error: PostgreSQL operation completed after retry.")
     except Exception as e:
         logger.warning(f"PostgreSQL operation failed: {e}")
@@ -509,7 +503,7 @@ async def test_e2e_cross_component_transaction(setup_e2e_env):
     pg_client._pool.acquire.return_value.__aenter__.return_value.fetch.return_value = [
         {"id": transaction_id}
     ]
-    pg_id = await pg_client.save("feedback", transaction_data)
+    await pg_client.save("feedback", transaction_data)
     
     # Step 2: Cache in Redis
     await redis_client.set(f"txn:{transaction_id}", transaction_data)

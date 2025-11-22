@@ -1,9 +1,7 @@
 import pytest
 import json
-import os
-import tempfile
 import logging
-from unittest.mock import Mock, MagicMock, AsyncMock, patch, mock_open
+from unittest.mock import Mock, patch, mock_open
 from typing import List
 
 # Import the module components to test
@@ -12,8 +10,6 @@ from arbiter.knowledge_graph.prompt_strategies import (
     DefaultPromptStrategy,
     ConcisePromptStrategy,
     _load_templates,
-    PROMPT_TEMPLATES,
-    PROMPT_TEMPLATES_FALLBACK,
     BASE_AGENT_PROMPT_TEMPLATE,
     REFLECTION_PROMPT_TEMPLATE,
     CRITIQUE_PROMPT_TEMPLATE,
@@ -406,7 +402,7 @@ class TestIntegration:
         """Test strategies with actual prompt templates"""
         mock_logger = Mock(spec=logging.Logger)
         
-        strategy = DefaultPromptStrategy(mock_logger)
+        DefaultPromptStrategy(mock_logger)
         
         # Test with each template type
         templates_to_test = [

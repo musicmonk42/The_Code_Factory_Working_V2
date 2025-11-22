@@ -1,17 +1,12 @@
 import os
 import sys
-import json
 import logging
 import asyncio
 import time
 import pytest
 import gzip
-import hashlib
-import hmac
-import re
-from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock, Mock
-from typing import Dict, Any, List, ClassVar, Optional
-from pathlib import Path
+from unittest.mock import MagicMock, patch, AsyncMock
+from typing import Dict
 import importlib.util
 
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
@@ -98,10 +93,8 @@ os.environ['SIEM_AUDIT_LOG_HMAC_KEY'] = 'test-hmac-key'
 os.environ['SIEM_WAL_HMAC_KEY'] = 'test-wal-hmac-key'
 
 # Now import required libraries
-from pydantic import ValidationError, BaseModel, Field, field_validator
-from prometheus_client import CollectorRegistry
+from pydantic import ValidationError
 import aiohttp
-import psutil
 
 # Fix the SIEM plugin before importing
 test_dir = os.path.dirname(os.path.abspath(__file__))

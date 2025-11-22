@@ -6,7 +6,7 @@ import shutil
 import warnings
 import re
 import traceback
-from typing import Dict, Any, Optional, Tuple, List, Callable, Awaitable, Set
+from typing import Dict, Any, Optional, Tuple, Callable, Awaitable, Set
 from importlib.metadata import version, PackageNotFoundError
 from packaging.version import Version
 from dataclasses import dataclass

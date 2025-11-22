@@ -1,8 +1,6 @@
 import os
-import logging
 from pathlib import Path
-from typing import Dict, Any, Union, Type, Tuple, Optional
-from functools import lru_cache
+from typing import Dict, Any, Type, Tuple, Optional
 
 # The import statement has been corrected to properly group all imported components.
 from prometheus_client import (

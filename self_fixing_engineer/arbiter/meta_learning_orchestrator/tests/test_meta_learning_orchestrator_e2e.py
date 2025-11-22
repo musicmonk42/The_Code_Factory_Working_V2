@@ -2,21 +2,12 @@ import asyncio
 import json
 import logging
 import os
-import time
 import uuid
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List
-from prometheus_client import CollectorRegistry, REGISTRY
-from opentelemetry import trace
-import aiofiles
-import aioboto3
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer, TopicPartition
 import redis.asyncio as aioredis
-import aiohttp
-from unittest.mock import AsyncMock, MagicMock
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
@@ -26,16 +17,11 @@ from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestr
 from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
 from arbiter.meta_learning_orchestrator.clients import MLPlatformClient, AgentConfigurationService
 from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
-from arbiter.meta_learning_orchestrator.models import LearningRecord, ModelVersion, DataIngestionError, ModelDeploymentError, LeaderElectionError
+from arbiter.meta_learning_orchestrator.models import ModelVersion, DataIngestionError
 from arbiter.meta_learning_orchestrator.logging_utils import LogCorrelationFilter, PIIRedactorFilter
 from arbiter.meta_learning_orchestrator.metrics import (
-    ML_INGESTION_COUNT, ML_TRAINING_TRIGGER_COUNT, ML_TRAINING_SUCCESS_COUNT, 
-    ML_AUDIT_EVENTS_TOTAL, ML_AUDIT_HASH_MISMATCH,
-    ML_DATA_QUEUE_SIZE, ML_DEPLOYMENT_SUCCESS_COUNT, ML_CURRENT_MODEL_VERSION,
-    ML_TRAINING_LATENCY, ML_LEADER_STATUS, ML_ORCHESTRATOR_ERRORS, ML_TRAINING_FAILURE_COUNT,
-    ML_DEPLOYMENT_FAILURE_COUNT
+    ML_DATA_QUEUE_SIZE, ML_LEADER_STATUS
 )
-from tenacity import RetryError
 
 
 # Configure logging with filters

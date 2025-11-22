@@ -2,7 +2,6 @@
 
 import os
 import pytest
-import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 from botocore.exceptions import ClientError
 from pydantic import ValidationError

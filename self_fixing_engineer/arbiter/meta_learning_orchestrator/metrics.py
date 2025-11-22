@@ -1,6 +1,5 @@
 import logging
 import os
-import multiprocessing
 from typing import Optional, Tuple, Dict, Any
 
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY

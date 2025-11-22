@@ -5,13 +5,10 @@ import asyncio
 import os
 import sys
 import json
-import uuid
-import shutil
 import tempfile
 from pathlib import Path  # Added missing import
 from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 from prometheus_client import CollectorRegistry
-from typing import Dict, Any, Optional, List
 
 # Import the plugin from the parent directory
 # Try multiple possible locations for the plugin
@@ -66,7 +63,7 @@ def mock_external_dependencies():
          patch('runtime_tracer_plugin.shutil.which') as mock_shutil_which, \
          patch('runtime_tracer_plugin._sfe_audit_logger.log', new=AsyncMock()) as mock_audit_log, \
          patch('runtime_tracer_plugin.os.path.exists', return_value=True), \
-         patch('runtime_tracer_plugin.os.remove') as mock_os_remove, \
+         patch('runtime_tracer_plugin.os.remove'), \
          patch('runtime_tracer_plugin.os.makedirs'), \
          patch('runtime_tracer_plugin.shutil.rmtree'), \
          patch('runtime_tracer_plugin.subprocess.run') as mock_subprocess_run:
@@ -200,9 +197,9 @@ async def test_analyze_runtime_behavior_success(mock_filesystem):
     
     # Get initial metric values
     initial_attempts = get_metric_value(TRACE_ANALYSIS_ATTEMPTS)
-    initial_success = get_metric_value(TRACE_ANALYSIS_SUCCESS)
-    initial_dynamic_calls = get_metric_value(DYNAMIC_CALLS_DETECTED, call_type='eval/exec/__import__')
-    initial_exceptions = get_metric_value(RUNTIME_EXCEPTIONS_CAPTURED, exception_type='ValueError')
+    get_metric_value(TRACE_ANALYSIS_SUCCESS)
+    get_metric_value(DYNAMIC_CALLS_DETECTED, call_type='eval/exec/__import__')
+    get_metric_value(RUNTIME_EXCEPTIONS_CAPTURED, exception_type='ValueError')
     
     with patch('runtime_tracer_plugin._run_target_code_in_subprocess', new=AsyncMock(return_value={
         "return_code": 0, "stdout": "Success", "stderr": "", "duration_seconds": 1.0

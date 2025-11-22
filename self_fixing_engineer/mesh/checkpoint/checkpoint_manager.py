@@ -44,28 +44,21 @@ import json
 import time
 import asyncio
 import logging
-import tempfile
 import hashlib
-import gzip
 import uuid
-import traceback
 import base64
 import re
-from enum import Enum
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable, Awaitable, Type, Union, Tuple
-from functools import wraps
+from typing import Optional, Dict, Any, List, Callable, Awaitable, Type, Union
 from contextlib import asynccontextmanager, contextmanager
 from logging.handlers import RotatingFileHandler
 
 # ---- Local Application Imports ----
 from .checkpoint_exceptions import (
-    CheckpointError,
     CheckpointAuditError,
     CheckpointBackendError,
-    CheckpointValidationError,
-    CheckpointErrorCode
+    CheckpointValidationError
 )
 from .checkpoint_utils import (
     hash_dict,
@@ -456,7 +449,7 @@ class CheckpointManager:
         self._init_backend_registry()
         
         logger.info(
-            f"CheckpointManager initialized",
+            "CheckpointManager initialized",
             extra={
                 "backend": backend_type,
                 "versions": keep_versions,
@@ -1572,7 +1565,7 @@ class CheckpointManager:
                                     logger.warning(f"Auto-heal attempt for version {prev_version} failed: {heal_error}")
                                     continue
                 
-                logger.error(f"Auto-healing failed: No valid previous version found")
+                logger.error("Auto-healing failed: No valid previous version found")
             
             # Re-raise the original exception if auto-heal is disabled or failed
             raise
@@ -1675,8 +1668,8 @@ if __name__ == "__main__":
     print("CheckpointManager module loaded successfully")
     print(f"Version: {__version__}")
     print(f"Environment: {Environment.ENV}")
-    print(f"Backend support available:")
-    print(f"  - Local: Always available")
+    print("Backend support available:")
+    print("  - Local: Always available")
     print(f"  - S3: {'Yes' if 'boto3' in sys.modules else 'No'}")
     print(f"  - Redis: {'Yes' if 'aioredis' in sys.modules else 'No'}")
     print(f"  - PostgreSQL: {'Yes' if 'asyncpg' in sys.modules else 'No'}")

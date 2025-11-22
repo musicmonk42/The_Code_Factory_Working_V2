@@ -1,13 +1,11 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock, call
+from unittest.mock import patch, MagicMock, mock_open, AsyncMock
 import asyncio
 import os
 import sys
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-import importlib
-import pkgutil
 
 # We need to patch imports before importing the module under test
 sys.modules['arbiter.config'] = MagicMock()
@@ -339,7 +337,7 @@ async def test_main_no_args(mock_event, mock_workflow, mock_health,
         mock_load.return_value = {'log_file': 'test.log', 'health_port': 8080}
         
         with patch('asyncio.create_task', return_value=workflow_task):
-            with pytest.raises(SystemExit) as exc:
+            with pytest.raises(SystemExit):
                 await main()
     
         mock_load.assert_called_once_with(None)

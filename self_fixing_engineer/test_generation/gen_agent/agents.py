@@ -11,12 +11,11 @@ import traceback
 import time
 import hashlib
 import html
-from typing import Dict, Any, TypedDict, Optional, Callable, Awaitable, cast
+from typing import Dict, Any, TypedDict, Optional, Callable, Awaitable
 from datetime import datetime, timezone
 from pathlib import Path
 import functools
 import importlib.util
-from contextlib import nullcontext
 import warnings
 import inspect
 from functools import lru_cache
@@ -820,7 +819,7 @@ Execution Results:
                 detail={"error": str(e), "traceback": traceback.format_exc()},
                 agent_id="test_gen_agent", critical=True
             )
-        except Exception as audit_e:
+        except Exception:
             logger.warning(f"Audit logging failed during policy denial logging: {e}")
         
         _metric_labels(agent_runs_total, agent_name="judge", status="failure").inc()

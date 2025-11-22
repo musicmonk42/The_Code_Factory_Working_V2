@@ -45,7 +45,6 @@ import json
 import logging
 import os
 import signal
-import subprocess
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime

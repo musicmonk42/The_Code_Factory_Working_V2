@@ -13,9 +13,7 @@ import uuid
 import datetime
 import hashlib
 import hmac
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, Mock, PropertyMock
+from unittest.mock import MagicMock, patch
 
 # Mock all SIEM modules before importing
 sys.modules['simulation.plugins.siem_base'] = MagicMock()

@@ -5,7 +5,6 @@ import asyncio
 import json
 import time
 import uuid
-import sys
 from typing import Any, Dict, Optional, List, Literal, Final
 from contextlib import suppress
 import atexit
@@ -13,14 +12,12 @@ import tempfile
 from pydantic import BaseModel, Field, validator, ValidationError
 from abc import ABC, abstractmethod
 from datetime import datetime
-from builtins import anext
 
 from .dlt_base import (
     BaseOffChainClient, DLTClientConfigurationError, DLTClientError,
     DLTClientTransactionError, DLTClientQueryError, DLTClientValidationError, DLTClientCircuitBreakerError,
     async_retry, TRACER, Status, StatusCode,
-    alert_operator, AUDIT, PRODUCTION_MODE,
-    scrub_secrets
+    alert_operator, AUDIT, PRODUCTION_MODE
 )
 from .dlt_base import _base_logger
 
@@ -388,7 +385,7 @@ class S3OffChainClient(BaseOffChainClient):
                 raise DLTClientConfigurationError("S3 client not initialized. Call initialize() first.", self.client_type)
             try:
                 async with self._session.client('s3') as client:
-                    response = await client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
+                    await client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
                     span.set_status(Status(StatusCode.OK))
                     self._format_log("info", f"S3 bucket {self.bucket_name} is accessible.", {"correlation_id": str(correlation_id)})
                     return {

@@ -1,24 +1,14 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, ANY, Mock
+from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import logging
-import smtplib
-import json
-import os
-import sys
 import hashlib
-from email.mime.text import MIMEText
-from typing import Any, Callable, Dict, List, Optional, Union, Awaitable
 from datetime import datetime, timezone
-import random
 from pydantic import ValidationError
 
 # Import the actual classes from human_loop.py
 from arbiter.human_loop import (
     HumanInLoop, 
     HumanInLoopConfig, 
-    HumanFeedbackSchema,
-    DecisionRequestSchema,
     FeedbackManager,
     DummyDBClient,
     WebSocketManager,
@@ -130,7 +120,7 @@ async def test_request_approval_valid_decision(hil):
     with patch.object(hil, '_mock_user_approval', side_effect=mock_approval_func):
         result = await hil.request_approval(decision)
         
-        assert result["approved"] == True
+        assert result["approved"]
         assert result["user_id"] == "test_user"
 
 @pytest.mark.asyncio
@@ -142,7 +132,7 @@ async def test_request_approval_invalid_schema(hil):
     with patch.object(hil, '_handle_hook', new_callable=AsyncMock):
         result = await hil.request_approval(decision)
     
-    assert result["approved"] == False
+    assert not result["approved"]
     assert "Invalid request schema" in result["comment"]
 
 @pytest.mark.asyncio
@@ -163,7 +153,7 @@ async def test_request_approval_timeout(hil):
         with patch.object(hil, '_mock_user_approval', side_effect=never_complete):
             result = await hil.request_approval(decision)
     
-    assert result["approved"] == False
+    assert not result["approved"]
     assert "timed out" in result["comment"]
 
 # Test notification channels
@@ -391,7 +381,7 @@ async def test_audit_hook_called(default_config):
     
     with patch.object(hil, '_get_notification_tasks', return_value=[]):
         with patch.object(hil, '_mock_user_approval', side_effect=quick_mock):
-            result = await hil.request_approval(decision)
+            await hil.request_approval(decision)
     
     # Audit hook should be called for approval request
     audit_hook.assert_called()
@@ -445,7 +435,7 @@ async def test_dummy_db_client():
     
     # Test update
     updated = await client.update_feedback_entry({"id": "1"}, {"data": "updated"})
-    assert updated == True
+    assert updated
     
     entries = await client.get_feedback_entries({"id": "1"})
     assert entries[0]["data"] == "updated"

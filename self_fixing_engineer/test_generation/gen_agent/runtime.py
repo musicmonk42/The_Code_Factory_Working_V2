@@ -12,7 +12,7 @@ import asyncio
 import functools
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional, List, TypedDict, Callable, Awaitable
+from typing import Dict, Any, Optional, TypedDict
 from functools import lru_cache
 import logging.handlers
 from pathlib import Path
@@ -181,7 +181,6 @@ def _load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
     return loaded
 
 # Type hints for dynamic module loading
-from types import ModuleType
 
 # Dependency checking flags
 AIOFILES_AVAILABLE = False
@@ -461,7 +460,7 @@ async def run_dependency_check_async(is_ci: bool) -> None:
         if not is_installed:
             logging.warning(f"Required feature dependency '{pkg}' is missing. Functionality will be disabled.")
             if is_ci:
-                logging.critical(f"CI mode requires all dependencies. Aborting.")
+                logging.critical("CI mode requires all dependencies. Aborting.")
                 sys.exit(1)
             all_ok = False
         else:
@@ -547,7 +546,7 @@ async def interactive_session_creator(session_name: str) -> Optional[Dict[str, A
                 temp_path.replace(session_path)
                 break
             except PermissionError:
-                logging.warning(f"Permission error on replacing file. Retrying in 0.5s...")
+                logging.warning("Permission error on replacing file. Retrying in 0.5s...")
                 time.sleep(0.5)
         session_path.chmod(0o600)
         logging.info(f"Successfully created new session file at {session_path}")

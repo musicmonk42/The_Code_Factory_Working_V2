@@ -5,7 +5,7 @@ import json
 import sys
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import random
 import logging
 import traceback
@@ -16,11 +16,10 @@ from unittest.mock import Mock
 import inspect
 import uuid
 from contextlib import asynccontextmanager
-import warnings
 
 # --- Internal Module Imports ---
 from test_generation.orchestrator.config import (
-    AUDIT_LOG_FILE, QUARANTINE_DIR, GENERATED_OUTPUT_DIR, SARIF_EXPORT_DIR,
+    AUDIT_LOG_FILE, QUARANTINE_DIR, SARIF_EXPORT_DIR,
     COVERAGE_REPORTS_DIR, _ensure_artifact_dirs,
 )
 # Import console utilities from same package for logging and UI.
@@ -87,8 +86,6 @@ from test_generation.utils import (
 )
 from ..compliance_mapper import generate_report as generate_compliance_report
 from .stubs import (
-    DummyPolicyEngine, DummyEventBus, DummySecurityScanner,
-    DummyKnowledgeGraphClient, DummyPRCreator, DummyMutationTester,
     DummyTestEnricher
 )
 
@@ -467,7 +464,7 @@ class GenerationOrchestrator:
             else:
                 raise InitializationError("Failed to set up required directories for the pipeline.")
 
-        log(f"Starting integration and validation of generated tests...", level="INFO")
+        log("Starting integration and validation of generated tests...", level="INFO")
         
         integration_tasks = []
         for module_identifier, gen_data in generation_summary.items():
@@ -934,7 +931,7 @@ class GenerationOrchestrator:
                     )
                     issue_success, issue_url = await _maybe_await(res)
                     if issue_success: log(f"Jira ticket created for quarantined test: {issue_url}", level="INFO")
-                    else: log(f"Failed to create Jira ticket for quarantined test.", level="ERROR")
+                    else: log("Failed to create Jira ticket for quarantined test.", level="ERROR")
                 except Exception as e:
                     log(f"Error creating Jira ticket: {e}", level="ERROR")
                     await _maybe_await(audit_event("jira_ticket_creation_failure", {
@@ -1004,7 +1001,7 @@ class GenerationOrchestrator:
                     if pr_success:
                         log(f"PR created or updated: {pr_url}", level="SUCCESS")
                     else:
-                        log(f"Failed to create or update PR. Please review staged test manually.", level="ERROR")
+                        log("Failed to create or update PR. Please review staged test manually.", level="ERROR")
                         result_summary["integration_status"] = "PR_CREATION_FAILED"
                         await _maybe_await(audit_event("pr_creation_failure", {
                             "module": target_identifier,
@@ -1141,7 +1138,7 @@ class GenerationOrchestrator:
             except Exception:
                 pass
         else:
-            result_summary["sarif_artifact_path"] = f"Failed to export: could not write file"
+            result_summary["sarif_artifact_path"] = "Failed to export: could not write file"
             await _maybe_await(audit_event("sarif_export_failure", {
                 "module": target_identifier,
                 "error": "Failed to write SARIF file atomically.",

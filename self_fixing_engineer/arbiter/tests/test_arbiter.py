@@ -4,15 +4,10 @@ This uses extensive mocking to avoid external dependencies.
 """
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, PropertyMock, ANY, create_autospec
-import asyncio
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 import json
 import os
 import sys
-from datetime import datetime, timezone
-import tempfile
-import importlib
-import base64
 from cryptography.fernet import Fernet
 
 # Add parent directory to path to import arbiter

@@ -2,22 +2,12 @@
 import os
 import json
 import hashlib
-import threading
-import time
 import asyncio
-import socket
 import base64
 import sys
-import uuid
-import argparse
 import logging
-import re
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
-from tenacity import retry, stop_after_attempt, wait_exponential
-from logging.handlers import RotatingFileHandler
 import shutil
 
 # Fix import path for audit_log module

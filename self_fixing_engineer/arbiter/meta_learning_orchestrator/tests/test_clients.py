@@ -1,16 +1,13 @@
 import asyncio
-import json
 import logging
 import os
 import pytest
 import pytest_asyncio
 import aiohttp
 from pytest_mock import MockerFixture
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from prometheus_client import CollectorRegistry, Counter, Histogram
-from opentelemetry import trace
-from aiohttp import ClientResponse, ClientError, ClientTimeout
+from aiohttp import ClientResponse, ClientError
 from aiohttp.client_exceptions import ClientResponseError
 from tenacity import RetryError  # Import RetryError here
 
@@ -19,7 +16,6 @@ from arbiter.otel_config import get_tracer
 
 # Import the clients and related components
 from arbiter.meta_learning_orchestrator.clients import (
-    _BaseHTTPClient, 
     MLPlatformClient, 
     AgentConfigurationService
 )

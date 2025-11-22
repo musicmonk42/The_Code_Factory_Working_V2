@@ -8,7 +8,7 @@ import asyncio
 import datetime
 import time
 import cryptography.exceptions
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 from prometheus_client import Counter, Histogram
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes

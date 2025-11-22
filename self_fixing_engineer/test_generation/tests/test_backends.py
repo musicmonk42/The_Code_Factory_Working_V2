@@ -1,17 +1,14 @@
 import pytest
 import os
 import asyncio
-import json
 import tempfile
 import logging
 from unittest.mock import patch, AsyncMock, MagicMock, mock_open
-from typing import Dict, Any, Optional, Tuple
 from test_generation.backends import BackendRegistry, PynguinBackend, JestLLMBackend, DiffblueBackend, _validate_inputs
 from tenacity import RetryError as RetriesExceeded
 import random
 
 # Fix: Added imports for the new backends
-from test_generation.backends import CargoBackend, GoBackend
 
 # Mark all tests as unit tests
 pytestmark = pytest.mark.unit
@@ -184,7 +181,7 @@ async def test_jest_llm_backend_generate_success(mock_config, temp_project_root,
     backend = JestLLMBackend(mock_config, temp_project_root)
     
     with patch.object(backend.llm, "ainvoke") as mock_ainvoke, \
-         patch("builtins.open", mock_open(read_data="source code")) as mock_file:
+         patch("builtins.open", mock_open(read_data="source code")):
         mock_ainvoke.return_value.content = "// Generated test code"
         
         success, err, path = await backend.generate_tests("file.js", "output", {"timeout": 90})

@@ -13,7 +13,7 @@ from redis.asyncio.lock import Lock as RedisLock
 from redis.exceptions import ConnectionError, TimeoutError, DataError, RedisError, LockError
 
 # Import tenacity for retries with exponential backoff
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Prometheus Metrics
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
@@ -92,7 +92,7 @@ class RedisClient:
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
         try:
             parsed = urllib.parse.urlparse(self.redis_url)
-            if not parsed.scheme in ("redis", "rediss") or not parsed.hostname:
+            if parsed.scheme not in ("redis", "rediss") or not parsed.hostname:
                 raise ValueError(f"Invalid REDIS_URL: {self.redis_url}")
         except ValueError as e:
             logger.error(f"Invalid Redis URL: {e}")
@@ -555,7 +555,7 @@ class RedisClient:
                 else:
                     REDIS_LOCK_FAILED_TOTAL.inc()
                 return acquired
-            except Exception as e:
+            except Exception:
                 REDIS_LOCK_FAILED_TOTAL.inc()
                 raise
         

@@ -6,14 +6,10 @@ Focused on essential test coverage with high quality.
 
 import asyncio
 import json
-import os
-import tempfile
 import time
 import uuid
 import hashlib
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
-from collections import OrderedDict
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -29,7 +25,6 @@ from simulation.plugins.dlt_clients.dlt_simple_clients import (
 from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientTransactionError,
-    DLTClientQueryError,
     DLTClientValidationError,
 )
 

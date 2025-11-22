@@ -1,12 +1,11 @@
 import os
 import logging
-import json
 import sys
 import asyncio
 import time
 import httpx
 import tiktoken
-from typing import Dict, List, Any, Optional, Callable, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 import hashlib
 import re
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
@@ -233,7 +232,7 @@ class AIManager:
                 if current_minute_usage + tokens_to_use > self.token_quota_per_minute:
                     logger.critical(f"CRITICAL: LLM token quota overrun after waiting. Current usage: {current_minute_usage}, requested: {tokens_to_use}. Aborting API call.", extra={'current_usage': current_minute_usage, 'requested_tokens': tokens_to_use})
                     audit_logger.log_event("llm_token_quota_overrun_abort", current_usage=current_minute_usage, requested_tokens=tokens_to_use)
-                    alert_operator(f"CRITICAL: LLM token quota overrun after waiting. Aborting API call.", level="CRITICAL")
+                    alert_operator("CRITICAL: LLM token quota overrun after waiting. Aborting API call.", level="CRITICAL")
                     raise RuntimeError("LLM token quota overrun. Aborting API call.")
             self._token_usage_history.append((current_time, tokens_to_use))
 
@@ -437,8 +436,8 @@ async def main_test():
     sys.modules['core_utils'] = sys.modules['__main__']
     sys.modules['core_audit'] = sys.modules['__main__']
     sys.modules['core_secrets'] = sys.modules['__main__']
-    SECRETS_MANAGER = DummySecretsManager()
-    audit_logger = DummyAuditLogger()
+    DummySecretsManager()
+    DummyAuditLogger()
 
     if "OPENAI_API_KEY" not in os.environ:
         os.environ["OPENAI_API_KEY"] = "sk-dummy-test-key"
@@ -464,11 +463,6 @@ async def main_test():
     print(f"Refactoring Suggestion:\n{suggestion}\n")
 
     print("\n--- Testing AI Cycle-Breaking Suggestion ---")
-    sample_cycle_path = ["module_a", "module_b", "module_a"]
-    sample_code_snippets = {
-        "module_a": "import module_b\ndef func_a(): return module_b.func_b()",
-        "module_b": "import module_a\ndef func_b(): return module_a.func_a()"
-    }
     cycle_suggestion = get_ai_patch("Circular import between modules", "some code", ["Extract interfaces"], test_config)
     print(f"Cycle-Breaking Suggestion:\n{cycle_suggestion}\n")
 

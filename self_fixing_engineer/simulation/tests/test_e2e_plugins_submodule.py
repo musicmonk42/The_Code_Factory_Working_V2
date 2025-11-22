@@ -8,11 +8,10 @@ import os
 import sys
 import asyncio
 import json
-import shutil
 import tempfile
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, Mock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # --- CRITICAL: Mock the problematic module BEFORE pytest loads conftest.py ---
 # Create a mock module for custom_llm_provider_plugin
@@ -279,7 +278,7 @@ async def test_plugins_submodule_end_to_end(setup_test_environment, mock_externa
     """
     
     # --- 1. Setup Phase ---
-    base_dir = setup_test_environment["base_dir"]
+    setup_test_environment["base_dir"]
     plugins_dir = setup_test_environment["plugins_dir"]
     
     # --- 2. Plugin Manager Initialization ---

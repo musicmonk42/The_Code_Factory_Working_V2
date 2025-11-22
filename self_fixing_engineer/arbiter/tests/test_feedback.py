@@ -1,35 +1,16 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open, ANY
+from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import collections
-import logging
-import json
-import os
-import sys
-import time
 import threading
-from datetime import datetime, timezone
 import random
-import hashlib
-import statistics
-import traceback
-from typing import Dict, Any, Optional, List, Union, Tuple, Type
 
-import aiofiles
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
+from prometheus_client import Counter, REGISTRY
 
 # Fixed imports - using the actual metric names from feedback.py
 from arbiter.feedback import (
     FeedbackManager, 
     logger, 
     _get_or_create_metric, 
-    feedback_received_total, 
-    feedback_errors_total, 
-    feedback_metrics_recorded_total, 
-    feedback_processing_time,  # Changed from feedback_latency
-    last_feedback_timestamp,   # Changed from feedback_volume
-    human_in_loop_approvals,   # Changed from feedback_approval_rate
-    human_in_loop_denials,     # Added this as it's used in the module
     SQLiteClient               # Import SQLiteClient for testing
 )
 

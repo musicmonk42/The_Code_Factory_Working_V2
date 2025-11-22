@@ -26,19 +26,12 @@ Date: 2025-08-16
 Version: 1.0.0
 """
 
-import os
-import sys
 import json
-import uuid
 import time
 import asyncio
 import logging
 import pytest
-import traceback
-from unittest.mock import MagicMock, AsyncMock, patch, call, ANY
-from typing import Dict, Any, List, Optional, Tuple, Type, Final, Callable
-from datetime import datetime, timedelta
-from pathlib import Path
+from unittest.mock import MagicMock, AsyncMock, patch, ANY
 
 # Configure logging for tests
 logging.basicConfig(
@@ -48,13 +41,9 @@ logging.basicConfig(
 logger = logging.getLogger("simulation-module-tests")
 
 # Import the module under test
-import simulation_module
 from simulation_module import (
     UnifiedSimulationModule,
-    create_simulation_module,
-    run_simulation,
     SIM_MODULE_METRICS,
-    async_retry,
 )
 
 

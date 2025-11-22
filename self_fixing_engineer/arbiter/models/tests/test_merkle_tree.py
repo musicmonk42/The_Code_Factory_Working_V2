@@ -4,11 +4,10 @@ import logging
 import os
 import gzip
 import hashlib
-from typing import List, Dict
+from typing import List
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Import centralized OpenTelemetry configuration for testing
 from arbiter.otel_config import get_tracer
@@ -16,9 +15,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 # Import the MerkleTree client and its exceptions from the correct module
 from merkle_tree import (
-    MerkleTree, MerkleTreeError, MerkleTreeEmptyError, MerkleProofError,
-    MERKLE_OPS_TOTAL, MERKLE_OPS_LATENCY_SECONDS, MERKLE_TREE_SIZE, MERKLE_TREE_DEPTH,
-    METRICS_REGISTRY, _write_compressed_json, _read_compressed_json
+    MerkleTree, MerkleTreeEmptyError, MerkleProofError,
+    MERKLE_OPS_TOTAL, MERKLE_TREE_SIZE, MERKLE_TREE_DEPTH,
+    _write_compressed_json, _read_compressed_json
 )
 
 # Configure logging for tests

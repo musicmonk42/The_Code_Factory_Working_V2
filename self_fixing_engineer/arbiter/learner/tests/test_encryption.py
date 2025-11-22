@@ -3,10 +3,9 @@
 import pytest
 import os
 import json
-from unittest.mock import Mock, patch, MagicMock, PropertyMock
+from unittest.mock import Mock, patch, MagicMock
 from cryptography.fernet import Fernet, InvalidToken
-import boto3
-from botocore.exceptions import NoCredentialsError, ClientError
+from botocore.exceptions import NoCredentialsError
 
 from arbiter.learner.encryption import (
     ArbiterConfig,

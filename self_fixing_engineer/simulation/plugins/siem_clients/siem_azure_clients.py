@@ -16,8 +16,7 @@ from .siem_base import (
     BaseSIEMClient, AiohttpClientMixin, SIEMClientConfigurationError,
     SIEMClientAuthError, SIEMClientConnectivityError,
     SIEMClientQueryError, SIEMClientPublishError, SIEMClientResponseError,
-    alert_operator, SECRETS_MANAGER, PRODUCTION_MODE, AUDIT,
-    _base_logger
+    alert_operator, SECRETS_MANAGER, PRODUCTION_MODE, _base_logger
 )
 from pydantic import BaseModel, Field, ValidationError, HttpUrl, validator
 
@@ -802,7 +801,7 @@ class AzureServiceBusClient(BaseSIEMClient):
             return True, f"Batch of {len(log_entries)} logs sent to Azure Service Bus.", []
         except Exception as e:
             _notify_ops(f"CRITICAL: Azure Service Bus batch log send failed: {e}", level="CRITICAL")
-            failed_logs_batch = [{"log": log, "error": str(e)} for log in log_entries]
+            [{"log": log, "error": str(e)} for log in log_entries]
             raise SIEMClientPublishError(f"Failed to send Azure Service Bus batch: {e}", self.client_type, original_exception=e, details={"batch_size": len(log_entries)}, correlation_id=self.logger.extra.get('correlation_id'))
 
     async def query_logs(self, query_string: str, time_range: str = "24h", limit: int = 100, correlation_id: Optional[str] = None) -> List[Dict[str, Any]]:

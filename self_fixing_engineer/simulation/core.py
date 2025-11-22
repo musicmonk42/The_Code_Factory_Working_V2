@@ -9,7 +9,7 @@ import yaml
 import getpass
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple, Callable
+from typing import Dict, Any, Optional, List, Callable
 import functools
 import traceback
 from logging.handlers import RotatingFileHandler
@@ -81,7 +81,7 @@ except ImportError:
 # Import components from the simulation package
 from simulation.runners import run_agent
 from simulation.agentic import run_simulation_swarm
-from simulation.utils import hash_file, find_files_by_pattern, print_file_diff, summarize_result, save_sim_result
+from simulation.utils import find_files_by_pattern, summarize_result, save_sim_result
 
 # Fix for DLT_LOGGER_AVAILABLE not being defined
 try:
@@ -489,7 +489,7 @@ def correlated(func):
             result = func(*args, **kwargs)
             logger.info(f"Finished {func.__name__} with Correlation ID: {cid}")
             return result
-        except Exception as e:
+        except Exception:
             logger.error(f"Error in {func.__name__} with Correlation ID: {cid}: {traceback.format_exc()}")
             raise
         finally:

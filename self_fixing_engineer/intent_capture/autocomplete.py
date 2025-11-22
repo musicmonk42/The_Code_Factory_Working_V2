@@ -15,11 +15,10 @@ import logging.handlers
 import os
 import re
 import readline
-import sys
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import bleach
 import redis.asyncio as aredis
@@ -192,7 +191,7 @@ def add_to_history(line: str):
     state = asyncio.run(AutocompleteState.instance())
     try:
         if state.encryptor:
-            encrypted = state.encryptor.encrypt(anonymize_pii(line))
+            state.encryptor.encrypt(anonymize_pii(line))
             readline.add_history(anonymize_pii(line))
         else:
             readline.add_history(anonymize_pii(line))

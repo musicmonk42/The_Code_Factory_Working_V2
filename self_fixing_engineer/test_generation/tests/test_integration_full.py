@@ -1,7 +1,6 @@
 # test_generation/tests/test_integration_full.py
 import asyncio
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
@@ -61,7 +60,7 @@ async def test_full_cli_run_with_mocked_agents(tmp_path, runner):
         ]
 
         # Run CLI in a worker thread to avoid "asyncio.run() in running loop"
-        result = await asyncio.to_thread(runner.invoke, cli.cli, args, catch_exceptions=False)
+        await asyncio.to_thread(runner.invoke, cli.cli, args, catch_exceptions=False)
         
         # Since we're patching sys.exit, we need to manually check if it was called with a non-zero code
         if mock_exit.called:

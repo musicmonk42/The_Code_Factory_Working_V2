@@ -2,7 +2,7 @@ import logging
 import asyncio
 import re
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 # Import custom exceptions and LLMClient from the shared client module
 from .llm_client import LLMClient, LLMClientError, AuthError, RateLimitError, TimeoutError, APIError

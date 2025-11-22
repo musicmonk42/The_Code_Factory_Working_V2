@@ -2,18 +2,8 @@ import os
 import sys
 import json
 import logging
-import asyncio
-import time
 import pytest
-import uuid
-import hashlib
-import importlib
-from unittest.mock import MagicMock, patch, AsyncMock, Mock
-from typing import Dict, Any, List
-from pathlib import Path
-import hmac
-import gzip
-import re
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Mock fcntl for Windows
 try:
@@ -21,11 +11,7 @@ try:
 except ImportError:
     fcntl = MagicMock()
 
-import psutil
 from cryptography.fernet import Fernet
-from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
-import aiohttp
 
 # Set up environment before any imports
 os.environ["PROD_MODE"] = "false"

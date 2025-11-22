@@ -6,7 +6,6 @@ Tests basic integration and communication between key engines.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
 
 
 class TestEngineIntegration:

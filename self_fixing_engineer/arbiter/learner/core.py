@@ -2,21 +2,16 @@
 
 import json
 import asyncio
-import logging
 import structlog
 import re
-import sys
 import time
 import os
 import hashlib
-from typing import Any, Dict, Optional, List, Tuple, Callable
+from typing import Any, Dict, Optional, List, Callable
 from datetime import datetime, timezone
 from redis.asyncio import Redis
 from cryptography.fernet import Fernet, InvalidToken
-from prometheus_client import Counter, Histogram
 from opentelemetry import trace, metrics
-from opentelemetry.trace import Span
-from jsonpatch import JsonPatch, JsonPointerException
 
 # Add this import (install with: pip install asyncpg)
 # or mock it for testing:
@@ -86,12 +81,10 @@ except ImportError:
     
     def verify_audit_chain(log_path: str) -> bool:
         """A dummy function that always returns True."""
-        logger.debug(f"Dummy verify_audit_chain called. Returning True.")
+        logger.debug("Dummy verify_audit_chain called. Returning True.")
         return True
 
 # Add this after the imports and before class Arbiter
-from pydantic import BaseModel
-from typing import Optional
 
 class LearningRecord(BaseModel):
     """Model for meta-learning records."""
@@ -259,7 +252,7 @@ class Learner:
         """
         Learn and store new knowledge with validation, encryption, and auditing.
         """
-        with tracer.start_as_current_span("learn_new_thing") as span:
+        with tracer.start_as_current_span("learn_new_thing"):
             async with self.learn_semaphore:
                 start_time = time.monotonic()
                 try:

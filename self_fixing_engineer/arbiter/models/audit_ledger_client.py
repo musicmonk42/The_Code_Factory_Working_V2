@@ -7,7 +7,7 @@ import uuid
 import re
 import hashlib
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Tuple, Type, Final, Set
+from typing import Dict, Any, Optional, List, Union, Type, Final, Set
 from collections import OrderedDict
 
 # requirements.txt (create separately):
@@ -96,7 +96,7 @@ if not HYPERLEDGER_FABRIC_AVAILABLE:
     logging.getLogger(__name__).warning("Hyperledger Fabric SDK is not supported in this version. Operations will raise NotImplementedError.")
 
 # Prometheus Metrics
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram
 
 # OpenTelemetry Tracing - Use centralized configuration
 from opentelemetry.trace import Status, StatusCode

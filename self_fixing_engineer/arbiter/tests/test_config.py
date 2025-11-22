@@ -1,26 +1,15 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open, ANY
+from unittest.mock import patch, MagicMock
 import os
-import logging
-import json
-import yaml
 import threading
-from typing import Dict, Any, Optional, List, Tuple, ClassVar
-from cryptography.fernet import Fernet, InvalidToken
-from datetime import datetime
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
-from pydantic import Field, HttpUrl, SecretStr, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from enum import Enum
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 from arbiter.config import (
     ArbiterConfig, 
     get_or_create_counter, 
     get_or_create_gauge, 
-    get_or_create_histogram, 
-    logger, 
-    load_persona_dict, 
-    ConfigError
+    get_or_create_histogram
 )
 
 # Clear globals fixture

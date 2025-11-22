@@ -4,13 +4,10 @@ import pytest
 import asyncio
 import os
 import sys
-import shutil
 import tempfile
 import json
-import platform
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, call
-import io
+from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 
 # Add parent directory to path to import the plugin
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -159,8 +156,8 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
          patch('simulation.plugins.jest_runner_plugin._get_package_version', new=AsyncMock(return_value="29.5.0")), \
          patch('asyncio.create_subprocess_exec', new=AsyncMock()) as mock_subprocess, \
          patch('shutil.copy2') as mock_copy2, \
-         patch('shutil.copyfile') as mock_copyfile, \
-         patch('simulation.plugins.jest_runner_plugin._copytree_compat') as mock_copytree, \
+         patch('shutil.copyfile'), \
+         patch('simulation.plugins.jest_runner_plugin._copytree_compat'), \
          patch('simulation.plugins.jest_runner_plugin._install_packages', new=AsyncMock(return_value=(True, ''))):
 
         # Mock Jest subprocess output for a successful run

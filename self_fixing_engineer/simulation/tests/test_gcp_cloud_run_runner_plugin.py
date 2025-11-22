@@ -4,11 +4,10 @@ import os
 import sys
 import pytest
 import asyncio
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, PropertyMock, call
+from unittest.mock import patch, AsyncMock, MagicMock
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -286,8 +285,8 @@ class TestJobConfigValidation:
         assert config.max_retries == 0
         assert config.parallelism == 1
         assert config.task_count == 1
-        assert config.cleanup_gcs_input == True
-        assert config.retain_temp_archive == False
+        assert config.cleanup_gcs_input
+        assert not config.retain_temp_archive
 
 # ==============================================================================
 # Unit Tests for Helper Functions
@@ -298,14 +297,14 @@ class TestHelperFunctions:
     
     def test_bucket_valid(self):
         """Test bucket name validation."""
-        assert _bucket_valid("valid-bucket-name") == True
-        assert _bucket_valid("bucket123") == True
-        assert _bucket_valid("bucket.with.dots") == True
+        assert _bucket_valid("valid-bucket-name")
+        assert _bucket_valid("bucket123")
+        assert _bucket_valid("bucket.with.dots")
         
-        assert _bucket_valid("Bucket-Name") == False  # Capital letters
-        assert _bucket_valid("bucket..name") == False  # Double dots
-        assert _bucket_valid("bucket.-name") == False  # Dot-dash
-        assert _bucket_valid("-bucket") == False  # Starts with dash
+        assert not _bucket_valid("Bucket-Name")  # Capital letters
+        assert not _bucket_valid("bucket..name")  # Double dots
+        assert not _bucket_valid("bucket.-name")  # Dot-dash
+        assert not _bucket_valid("-bucket")  # Starts with dash
     
     def test_tar_directory_to_temp(self, temp_project_dir):
         """Test archive creation with exclusions."""
@@ -441,7 +440,7 @@ class TestRunCloudRunJob:
                     output_dir
                 )
         
-        assert result['success'] == True
+        assert result['success']
         assert result['finalStatus'] == 'SUCCEEDED'
         assert 'test-exec' in result['executionName']
     
@@ -504,7 +503,7 @@ class TestRunCloudRunJob:
                     output_dir
                 )
         
-        assert result['success'] == False
+        assert not result['success']
         assert result['finalStatus'] == 'FAILED'
         assert 'Container failed to start' in result['statusReason']
         assert result['raw_log'] is not None
@@ -541,7 +540,7 @@ class TestRunCloudRunJob:
                 with tempfile.TemporaryDirectory() as output_dir:
                     # This should catch the exception and return gracefully
                     try:
-                        result = await run_cloud_run_job(
+                        await run_cloud_run_job(
                             valid_job_config,
                             temp_project_dir,
                             output_dir
@@ -552,7 +551,7 @@ class TestRunCloudRunJob:
                         pass
                     else:
                         # If no exception, check that resources were reduced
-                        assert valid_job_config.get('_reduced_resources_once') == True
+                        assert valid_job_config.get('_reduced_resources_once')
     
     @pytest.mark.asyncio
     @patch('plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE', True)
@@ -608,7 +607,7 @@ class TestRunCloudRunJob:
                 )
         
         # Should succeed but with download failure noted
-        assert result['success'] == False
+        assert not result['success']
         assert 'Output file not found' in result['reason']
     
     @pytest.mark.asyncio
@@ -622,7 +621,7 @@ class TestRunCloudRunJob:
                 output_dir
             )
         
-        assert result['success'] == False
+        assert not result['success']
         assert 'Google Cloud client libraries not found' in result['reason']
 
 # ==============================================================================
@@ -717,7 +716,7 @@ class TestPerformance:
             mock_tar = MagicMock()
             mock_tarfile.return_value.__enter__.return_value = mock_tar
             
-            result = _tar_directory_to_temp(temp_project_dir)
+            _tar_directory_to_temp(temp_project_dir)
             
             # Verify excluded directories weren't added
             added_files = [call[0][0] for call in mock_tar.add.call_args_list]
@@ -817,7 +816,7 @@ class TestEdgeCases:
                     output_dir
                 )
         
-        assert result['success'] == False
+        assert not result['success']
         assert result.get('finalStatus') == 'MONITORING_TIMED_OUT'
         assert 'Monitoring timed out' in result.get('statusReason', '')
     
@@ -839,7 +838,7 @@ class TestEdgeCases:
                 output_dir
             )
         
-        assert result['success'] == False
+        assert not result['success']
         assert 'Invalid job config' in result['reason']
     
     @pytest.mark.asyncio
@@ -878,5 +877,5 @@ class TestEdgeCases:
                     )
             
             # Should have failed due to conflict
-            assert result['success'] == False
+            assert not result['success']
             assert 'Job already exists' in result.get('error', '')

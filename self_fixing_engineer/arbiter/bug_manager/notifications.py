@@ -6,7 +6,6 @@ import aiohttp
 import functools
 import random
 import tenacity
-import os
 import json
 from typing import Callable, Coroutine, Any, Dict, List, Optional
 

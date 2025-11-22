@@ -3,22 +3,16 @@
 import pytest
 import asyncio
 import json
-import os
-import time
-import hashlib
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from typing import List, Dict, Any
 
 # Fix the import path - should import from the learner module, not tests
 from arbiter.learner.fuzzy import (
-    FuzzyParser,
     process_unstructured_data,
     register_fuzzy_parser_hook,
     _learn_batch_with_retry,
     load_parser_priorities,
-    fuzzy_parser_success_total,
-    fuzzy_parser_failure_total,
-    fuzzy_parser_latency_seconds
+    fuzzy_parser_failure_total
 )
 
 

@@ -1,12 +1,8 @@
 import os
 import sys
 import pytest
-import asyncio
-import argparse
-from unittest.mock import patch, MagicMock, call, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
-import json
-import shutil
 from collections import defaultdict
 import tempfile
 
@@ -17,11 +13,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from self_healing_import_fixer.cli import (
     main,
     main_async,
-    create_parser,
-    setup_logging,
     _validate_path_argument,
-    PluginManager,
-    PRODUCTION_MODE
+    PluginManager
 )
 
 # --- Fixtures ---
@@ -344,7 +337,7 @@ def test_selftest_command_runs_diagnostics(mock_plugin_manager, mock_core_depend
     
     with patch('sys.argv', ['self_healing_import_fixer.cli', 'selftest']), \
          patch('self_healing_import_fixer.cli.ImportGraphAnalyzer', create=True, return_value=mock_analyzer), \
-         patch('self_healing_import_fixer.cli.heal_entrypoint', create=True) as mock_heal, \
+         patch('self_healing_import_fixer.cli.heal_entrypoint', create=True), \
          patch('shutil.which', return_value=True), \
          patch('sys.exit') as mock_exit:  # Catch the exit call
         

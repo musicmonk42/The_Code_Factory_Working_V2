@@ -5,22 +5,14 @@ import hashlib
 import json
 import os
 import time
-import itertools
-import atexit
-import threading
 import sys
 import re
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, Callable, List
 from datetime import datetime, timezone
-import io
-import cv2
-from pydub import AudioSegment
-from PIL import Image
 
 # Assuming these are available from the arbiter package root
-from arbiter.config import ArbiterConfig
 from arbiter.plugins.multi_modal_config import MultiModalConfig
 
 # Initialize logger early before any usage
@@ -47,11 +39,7 @@ from .multimodal.interface import (
     MultiModalException, InvalidInputError, ConfigurationError, ProviderNotAvailableError, ProcessingError
 )
 from .multimodal.providers.default_multimodal_providers import (
-    PluginRegistry,
-    DefaultImageProcessor,
-    DefaultAudioProcessor,
-    DefaultVideoProcessor,
-    DefaultTextProcessor
+    PluginRegistry
 )
 
 try:

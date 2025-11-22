@@ -1,7 +1,6 @@
 import pytest
-import json
 from unittest.mock import patch, Mock
-from test_generation.gen_agent.gen_plugins import PythonTestGenerator, generate_tests, _call_ai_for_tests, LANGUAGE_GENERATORS
+from test_generation.gen_agent.gen_plugins import PythonTestGenerator, generate_tests, LANGUAGE_GENERATORS
 
 # Sample code with multiple functions for testing
 code_with_2_funcs = """

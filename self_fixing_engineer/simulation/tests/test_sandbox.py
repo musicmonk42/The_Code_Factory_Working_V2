@@ -1,23 +1,13 @@
 import pytest
 import asyncio
-import os
-import sys
 import json
-import time
-import subprocess
-import getpass
-import hmac
-import hashlib
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
-from datetime import datetime, timedelta
-from typing import Dict, Any
-import psutil
+from unittest.mock import patch, AsyncMock, MagicMock
+from datetime import datetime
 from simulation.sandbox import (
     SandboxPolicy,
     ContainerValidationConfig,
     log_audit,
     verify_audit_log_integrity,
-    _periodic_audit_log_verification,
     _active_sandboxes,
     run_in_docker_sandbox,
     run_in_podman_sandbox,
@@ -26,23 +16,14 @@ from simulation.sandbox import (
     burst_to_cloud,
     run_chaos_experiment,
     cleanup_sandbox,
-    _monitor_sandbox_health,
-    _create_network_policy_for_pod,
-    _validate_pod_manifest_internal,
-    _apply_kernel_sandboxing_preexec,
-    _default_policy,
-    _sandbox_backends,
-    _backend_health_status,
     check_external_services_async,
     _periodic_external_service_check,
     run_in_sandbox,
     _get_audit_hmac_key,
     AUDIT_LOG_FILE,
-    AUDIT_LOG_INTEGRITY_FILE,
     _start_background_tasks
 )
 from pathlib import Path
-import glob
 
 pytestmark = pytest.mark.unit
 

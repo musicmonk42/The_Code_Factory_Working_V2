@@ -3,13 +3,10 @@
 # Requires: pytest, pytest-asyncio, unittest.mock, httpx (for mocks)
 # Run with: pytest test_audit_ledger.py -v --cov=audit_ledger --cov-report=html
 
-import json
-import hashlib
 import logging
-import asyncio
 import os
 from datetime import datetime, timezone
-from unittest.mock import patch, AsyncMock, MagicMock, ANY
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 import httpx
@@ -17,10 +14,8 @@ import httpx
 # Import the module under test
 from arbiter.explainable_reasoner.audit_ledger import (
     AuditLedgerClient,
-    stop_after_attempt_from_self,
 )
 from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)

@@ -1,13 +1,9 @@
 import asyncio
-import json
 import logging
 import os
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
-from datetime import datetime, timezone
-from typing import Dict, List
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import the centralized tracer configuration
@@ -17,7 +13,7 @@ from arbiter.otel_config import get_tracer
 from meta_learning_data_store import (
     get_meta_learning_data_store, MetaLearningRecord, MetaLearningDataStoreError,
     MetaLearningRecordNotFound, MetaLearningRecordValidationError, MetaLearningBackendError,
-    MetaLearningEncryptionError, MLDS_OPS_TOTAL, MLDS_OPS_LATENCY, MLDS_DATA_SIZE
+    MLDS_OPS_TOTAL, MLDS_DATA_SIZE
 )
 
 # Configure logging for tests

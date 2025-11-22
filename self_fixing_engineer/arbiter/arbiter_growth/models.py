@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
-from typing import Dict, Any, Optional, Union
-from datetime import datetime, timezone
+from typing import Dict, Any, Union
+from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, Float, Text, Index, DateTime
 from sqlalchemy.orm import declarative_base

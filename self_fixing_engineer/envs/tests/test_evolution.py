@@ -5,19 +5,14 @@ parallel evaluation, and checkpoint persistence.
 """
 
 import pytest
-import numpy as np
 import json
 import tempfile
 import os
 import sys
-import time
 import threading
-import pickle
 import subprocess
-from unittest.mock import Mock, MagicMock, patch, call
-from typing import List, Dict, Any, Optional, Tuple
-import hashlib
-from pathlib import Path
+from unittest.mock import Mock, patch
+from typing import List
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,8 +29,7 @@ from evolution import (
     EvolutionConfig,
     FitnessEvaluator,
     GeneticOptimizer,
-    run_test_evaluation,
-    DEAP_AVAILABLE as MODULE_DEAP_AVAILABLE
+    run_test_evaluation
 )
 
 
@@ -143,7 +137,7 @@ class TestEvolutionConfig:
         assert config.generations == 10
         assert config.population_size == 20
         assert config.crossover_probability == 0.7
-        assert config.cache_evaluations == True
+        assert config.cache_evaluations
     
     def test_evolution_config_validation(self):
         """Test evolution configuration validation"""
@@ -222,7 +216,7 @@ class TestFitnessEvaluator:
         
         # Different individual
         individual2 = [0.1, 0.2, 0.3]
-        fitness3 = evaluator.evaluate_single(individual2)
+        evaluator.evaluate_single(individual2)
         assert evaluator.evaluation_count == 2
         
         evaluator.cleanup()
@@ -378,7 +372,7 @@ class TestGeneticOptimizer:
         
         optimizer = GeneticOptimizer(evolution_config=config)
         
-        best_config = optimizer.evolve(
+        optimizer.evolve(
             test_function=constant_fitness,
             verbose=False
         )

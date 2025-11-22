@@ -3,9 +3,8 @@
 import pytest
 import asyncio
 import os
-import sys
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, AsyncMock, patch, Mock
+from unittest.mock import MagicMock, patch, Mock
 import gc
 
 # Set test environment variable before ANY imports
@@ -39,12 +38,9 @@ try:
         is_llm_policy_circuit_breaker_open,
         record_llm_policy_api_success,
         record_llm_policy_api_failure,
-        close_all_breaker_states,
         validate_config,
-        get_global_connection_pool,
         _breaker_states,
         _breaker_states_lock,
-        _global_connection_pool,
         _connection_pool_lock,
     )
 finally:

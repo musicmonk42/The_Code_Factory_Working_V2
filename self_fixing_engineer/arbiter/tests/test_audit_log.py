@@ -4,15 +4,11 @@ import json
 import os
 import sys
 import tempfile
-import gzip
-import hashlib
 import base64
-import secrets
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from unittest.mock import Mock, MagicMock, AsyncMock, patch, mock_open, ANY
-from typing import Dict, Any, List
+from unittest.mock import MagicMock, AsyncMock, patch
 
 # Mock third-party dependencies before importing
 sys.modules['cryptography.fernet'] = MagicMock()
@@ -36,8 +32,7 @@ from arbiter.audit_log import (
     CompressionType,
     SizedTimedRotatingFileHandler,
     log_event,
-    verify_log_integrity,
-    load_audit_trail
+    verify_log_integrity
 )
 
 # Fixtures

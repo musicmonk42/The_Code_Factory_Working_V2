@@ -21,16 +21,12 @@ import sys
 import threading
 import time
 import types
-from contextlib import contextmanager
-from typing import Iterator
 from unittest.mock import Mock, patch
 
 import importlib
 import pytest
 
 # FIX: Import LOGGING_CONFIG to resolve NameError
-from test_generation.orchestrator.config import LOGGING_CONFIG
-from test_generation.orchestrator import console as console_module
 
 
 # Ensure module path (adjust if your runner differs)

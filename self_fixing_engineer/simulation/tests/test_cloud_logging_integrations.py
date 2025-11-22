@@ -2,10 +2,9 @@ import os
 import sys
 import pytest
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, Mock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # --- Third-party imports for simulating SDK errors ---
-from google.api_core.exceptions import PermissionDenied
 
 # --- Robustly add the project root to the Python path ---
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -15,7 +14,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from simulation.plugins.cloud_logging_integrations import (
     CloudWatchLogger, GCPLogger, AzureMonitorLogger,
     CloudLoggingAuthError, CloudLoggingConfigurationError, get_cloud_logger,
-    CloudLoggingError, CloudLoggingResponseError
+    CloudLoggingResponseError
 )
 
 class MockAWSClientError(Exception):

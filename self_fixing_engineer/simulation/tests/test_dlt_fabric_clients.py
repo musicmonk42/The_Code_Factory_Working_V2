@@ -2,34 +2,14 @@
 
 import pytest
 import asyncio
-import json
-import uuid
-import os
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from pydantic import ValidationError
+from unittest.mock import AsyncMock, MagicMock
 
 from simulation.plugins.dlt_clients.dlt_fabric_clients import (
-    FabricClientWrapper,
-    FabricConfig,
-    FabricPeerConfig,
-    FabricChannelConfig,
-    FabricOrdererConfig
+    FabricClientWrapper
 )
 from simulation.plugins.dlt_clients.dlt_base import (
-    BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientAuthError,
-    DLTClientTransactionError,
-    DLTClientConnectivityError,
-    DLTClientTimeoutError,
-    DLTClientQueryError,
     DLTClientValidationError,
-    DLTClientCircuitBreakerError,
-    DLTClientError,
-    PRODUCTION_MODE,
-    _base_logger,
-    SECRETS_MANAGER,
-    AUDIT
+    SECRETS_MANAGER
 )
 
 # A mock off-chain client that can be passed to the DLT client

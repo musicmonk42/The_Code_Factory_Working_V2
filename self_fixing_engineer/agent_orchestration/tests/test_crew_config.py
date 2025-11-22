@@ -1,9 +1,8 @@
 # tests/test_crew_config.py
-import os
 import pytest
 import yaml
 from cerberus import Validator
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock
 
 @pytest.fixture
 def temp_yaml(tmp_path):

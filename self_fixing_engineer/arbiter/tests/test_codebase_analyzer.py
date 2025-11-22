@@ -1,27 +1,11 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, ANY, create_autospec
-import asyncio
-import fnmatch
-import importlib
+from unittest.mock import patch, MagicMock, AsyncMock
 import json
-import logging
-import os
-import shutil
 import sys
 import threading
-from concurrent.futures import ProcessPoolExecutor
-from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Callable, Tuple
-from xml.sax.saxutils import escape
-import aiofiles
-import toml
 import yaml
-from datetime import datetime
-import ast
-import traceback
 from typer.testing import CliRunner
-from unittest import mock
 
 # Add the parent directory to the path so the codebase_analyzer module can be found
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -34,16 +18,10 @@ tracer = get_tracer(__name__)
 
 from codebase_analyzer import (
     CodebaseAnalyzer,
-    Defect,
-    Dependency,
     logger,
     app,
     RADON_AVAILABLE,
-    MYPY_AVAILABLE,
-    BANDIT_AVAILABLE,
-    COVERAGE_AVAILABLE,
-    SAFETY_AVAILABLE,
-    PYLINT_AVAILABLE
+    MYPY_AVAILABLE
 )
 
 # Fixture for temp directory

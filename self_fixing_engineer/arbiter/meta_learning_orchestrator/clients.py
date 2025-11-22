@@ -5,13 +5,12 @@ import os
 import re
 import sys
 import time
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional
 from functools import wraps
 
 import aiohttp
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from opentelemetry import trace
-from opentelemetry.trace import Span
 from prometheus_client import Counter, Histogram
 from aiohttp_client_cache import CachedSession, SQLiteBackend
 from aiohttp import ClientTimeout, TCPConnector, ClientResponseError, ClientConnectorError

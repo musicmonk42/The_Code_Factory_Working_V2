@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 from typing import Any, Callable, Dict, List, Optional, Set, Type, Final
 from enum import Enum
-from functools import wraps
 from contextlib import contextmanager
 import re
 from packaging.specifiers import SpecifierSet
@@ -34,7 +33,6 @@ import traceback
 import os
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from networkx import DiGraph, has_path
-import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -582,7 +580,7 @@ class PluginRegistry:
 
         with self._kind_locks[kind]:
             plugin = self.get(kind, name)
-            meta = self.get_metadata(kind, name)
+            self.get_metadata(kind, name)
             
             if plugin is None:
                 logger.warning(f"Plugin [{kind.value}:{name}] not found for unregistration.")
@@ -838,7 +836,7 @@ class PluginRegistry:
                     q.put(("success", result))
                 else:
                     q.put(("error", "Plugin does not have an 'execute' method"))
-            except Exception as e:
+            except Exception:
                 q.put(("error", traceback.format_exc()))
         
         process = multiprocessing.Process(target=run_plugin, args=(queue,))

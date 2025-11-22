@@ -22,7 +22,7 @@ class TestConfigIntegration:
     async def test_all_parsers_loadable(self):
         """Test that all parsers in config can be loaded."""
         # Mock the load_parser_priorities function
-        with patch('arbiter.learner.fuzzy.load_parser_priorities') as mock_load:
+        with patch('arbiter.learner.fuzzy.load_parser_priorities'):
             # Mock the PARSER_PRIORITIES that would be loaded
             mock_priorities = {
                 "SecurityEventParser": {"priority": 1000, "enabled": True},

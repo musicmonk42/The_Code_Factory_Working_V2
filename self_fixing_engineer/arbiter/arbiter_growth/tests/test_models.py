@@ -6,7 +6,6 @@ Tests Pydantic models and SQLAlchemy ORM models.
 
 import json
 from datetime import datetime, timezone
-from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError

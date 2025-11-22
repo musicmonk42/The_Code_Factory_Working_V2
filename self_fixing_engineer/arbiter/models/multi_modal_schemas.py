@@ -11,7 +11,7 @@ ensuring data consistency, validation, and ease of use with LLMs or Knowledge Gr
 import re
 import logging
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator, ValidationError, constr, conlist, AnyUrl, ConfigDict, ValidationInfo
-from typing import List, Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union
 from datetime import datetime, timezone
 from enum import Enum
 from html import escape

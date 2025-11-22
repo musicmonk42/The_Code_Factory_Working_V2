@@ -2,9 +2,7 @@
 import logging
 import sys
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
-import importlib
 
 import pytest
 

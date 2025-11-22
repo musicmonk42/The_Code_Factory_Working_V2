@@ -2,14 +2,12 @@
 
 import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
-from typing import Any
+from unittest.mock import Mock, patch
 
 from prometheus_client import Counter, Gauge, Histogram, Summary, Info, REGISTRY
 
 from arbiter.learner.metrics import (
     _get_or_create_metric,
-    GLOBAL_LABELS,
     get_labels,
     learn_counter,
     learn_error_counter,
@@ -133,7 +131,7 @@ class TestGetOrCreateMetric:
                 mock_histogram = Mock(spec=Histogram)
                 MockHistogram.return_value = mock_histogram
                 
-                metric = _get_or_create_metric(
+                _get_or_create_metric(
                     Histogram,
                     "mismatched_metric",
                     "New metric",

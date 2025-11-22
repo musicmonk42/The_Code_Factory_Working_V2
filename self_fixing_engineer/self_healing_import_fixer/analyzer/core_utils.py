@@ -6,28 +6,24 @@ Provides robust alerting, monitoring, security, and operational utilities.
 """
 
 import os
-import sys
 import json
 import time
 import logging
 import hashlib
-import hmac
 import secrets
 import threading
 import asyncio
 import functools
-import inspect
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union, Callable, TypeVar, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import defaultdict, deque
+from collections import deque
 from contextlib import contextmanager
 import traceback
 import re
 import uuid
 import socket
-import platform
 
 # Third-party imports with graceful fallbacks
 try:
@@ -737,7 +733,6 @@ def verify_hash(data: str, hashed: str) -> bool:
 
 def sanitize_path(path: str) -> str:
     """Sanitize file paths to prevent directory traversal attacks."""
-    original_path = path
 
     # Check if path contains directory traversal attempts
     has_traversal = '..' in path

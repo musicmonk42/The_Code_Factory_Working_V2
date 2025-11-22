@@ -38,22 +38,16 @@ __classification__ = 'CONFIDENTIAL'
 
 # ---- Standard Library Imports ----
 import os
-import sys
 import json
 import time
 import asyncio
 import logging
-import tempfile
 import hashlib
-import gzip
-import io
-import re
 import uuid
 import hmac
-from enum import Enum
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional, Union, Callable, Awaitable, Tuple
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, Callable
 from functools import wraps
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -63,15 +57,13 @@ import base64
 from .checkpoint_exceptions import (
     CheckpointError,
     CheckpointAuditError, 
-    CheckpointBackendError,
-    CheckpointValidationError
+    CheckpointBackendError
 )
 from .checkpoint_utils import (
     hash_dict,
     compress_json,
     decompress_json,
-    scrub_data,
-    deep_diff
+    scrub_data
 )
 
 # ---- Conditional Third-Party Imports ----
@@ -750,7 +742,6 @@ def backend_operation(operation: str):
                 span.set_attribute("operation", operation)
                 span.set_attribute("checkpoint.name", str(name))
                 
-                last_error = None
                 result = None
                 
                 try:
@@ -765,7 +756,7 @@ def backend_operation(operation: str):
                             result = await func(manager, *args, **kwargs)
                             # Record success (this resets failure count)
                             breaker.call(lambda: None)
-                        except Exception as e:
+                        except Exception:
                             # Record failure
                             try:
                                 breaker.call(lambda: (_ for _ in ()).throw(e))
@@ -781,8 +772,7 @@ def backend_operation(operation: str):
                             try:
                                 result = await func(manager, *args, **kwargs)
                                 break  # Success, exit retry loop
-                            except (ConnectionError, TimeoutError, OSError) as e:
-                                last_error = e
+                            except (ConnectionError, TimeoutError, OSError):
                                 if attempt < max_retries:
                                     await asyncio.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
                                     continue
@@ -825,7 +815,7 @@ def backend_operation(operation: str):
                         
                     # Log error
                     logger.error(
-                        f"Backend operation failed",
+                        "Backend operation failed",
                         extra={
                             "backend": backend,
                             "operation": operation,
@@ -1158,7 +1148,7 @@ async def redis_load(manager: Any, name: str, version: Optional[str], **kwargs) 
                 checkpoint_data["metadata"].get("prev_hash")
             )
             if expected_hash != computed_hash:
-                raise CheckpointAuditError(f"Hash mismatch")
+                raise CheckpointAuditError("Hash mismatch")
         
         return checkpoint_data
     except Exception as e:
@@ -1278,7 +1268,7 @@ async def postgres_load(manager: Any, name: str, version: Optional[str], **kwarg
                     checkpoint_data["metadata"].get("prev_hash")
                 )
                 if expected_hash != computed_hash:
-                    raise CheckpointAuditError(f"Hash mismatch")
+                    raise CheckpointAuditError("Hash mismatch")
             
             return checkpoint_data
     except Exception as e:

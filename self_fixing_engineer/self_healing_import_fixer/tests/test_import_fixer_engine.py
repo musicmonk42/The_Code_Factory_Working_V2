@@ -1,14 +1,11 @@
 # tests/test_import_fixer_integration.py
-import os
 import re
 import json
-import time
 import asyncio
 import importlib
 import importlib.util
-import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import types
 import sys
 
@@ -270,7 +267,7 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
                     # If fixer returns patches, collect them (don't mutate files in this dry-run)
                     patches = h.heal()
                     result.setdefault("ast", {})[cls_name] = {"detects": detects, "patches": patches}
-                except Exception as e:
+                except Exception:
                     # Tolerate features that need more context; integration should still proceed
                     result.setdefault("ast", {})[cls_name] = {"detects": [], "patches": []}
 

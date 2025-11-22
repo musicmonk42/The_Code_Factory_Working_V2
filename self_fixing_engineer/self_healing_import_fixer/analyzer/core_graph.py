@@ -9,12 +9,11 @@ import ast
 import graphviz
 import logging
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple, Any, Optional
+from typing import Dict, List, Set, Any, Optional
 import shutil
 import json
 import hashlib
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # --- Guard POSIX-only imports ---
@@ -495,7 +494,6 @@ if __name__ == "__main__":
     
     # We set audit_logger to the dummy one for the main script's execution
     # to avoid the ImportError.
-    from .core_audit import audit_logger as audit_logger_real # This is a trick to make the linter happy but still use the dummy
     audit_logger = DummyAuditLogger()
     
     SECRETS_MANAGER = DummySecretsManager()
@@ -513,7 +511,8 @@ if __name__ == "__main__":
 
     # Since the real Redis client is lazy-loaded, we need to mock the lazy function
     REDIS_CLIENT = DummyRedis()
-    _get_redis_client = lambda: REDIS_CLIENT
+    def _get_redis_client():
+        return REDIS_CLIENT
 
     test_project_root = "test_graph_project"
     os.makedirs(test_project_root, exist_ok=True)

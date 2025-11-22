@@ -16,7 +16,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict
 
-import pytest
 
 # Absolute path per your message; also support running in CI on non-Windows.
 CONFIG_PATHS = [

@@ -5,11 +5,9 @@ import json
 import logging
 import sys
 import datetime
-import getpass
-from typing import Dict, List, Any, Optional, Callable, Literal
+from typing import Dict, List, Any, Optional, Literal
 import uuid
 import shutil
-from functools import lru_cache
 from pathlib import Path
 import io
 import tempfile
@@ -81,9 +79,12 @@ except ImportError:
     FLASK_AVAILABLE = False
     app = None
     JWTManager = None
-    jwt_required = lambda f: f
-    get_jwt = lambda: {}
-    create_access_token = lambda *args, **kwargs: "dummy_token"
+    def jwt_required(f):
+        return f
+    def get_jwt():
+        return {}
+    def create_access_token(*args, **kwargs):
+        return "dummy_token"
 
 if FLASK_AVAILABLE:
     jwt_secret = SECRETS_MANAGER.get_secret("JWT_SECRET_KEY")
@@ -168,7 +169,7 @@ class ReportGenerator:
         if not os.path.exists(self.output_dir):
             try:
                 os.makedirs(self.output_dir, exist_ok=True)
-            except Exception as e:
+            except Exception:
                 raise AnalyzerCriticalError("[CRITICAL][REPORT] Output directory is not writable or accessible.")
         
         if not os.access(self.output_dir, os.W_OK):

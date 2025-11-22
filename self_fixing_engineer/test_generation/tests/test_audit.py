@@ -1,14 +1,10 @@
 import pytest
-import asyncio
-import json
 import logging
 from unittest.mock import Mock, AsyncMock, ANY
-from test_generation.orchestrator.audit import audit_event, AUDIT_LOGGER_AVAILABLE, AuditLogger, RUN_ID
-from test_generation.orchestrator.console import audit_logger_instance, log
+from test_generation.orchestrator.audit import audit_event, RUN_ID
 from pathlib import Path
 
 # Fix: Added missing import.
-import logging 
 
 # Fix: The `_audit` function now requires a `run_id`.
 # The `RUN_ID` is imported from the `audit` module.

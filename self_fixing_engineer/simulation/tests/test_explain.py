@@ -1,14 +1,10 @@
 import pytest
 import pytest_asyncio
-import asyncio
-import os
-import json
 import sqlite3
 from pathlib import Path
 from simulation.explain import ReasonerError
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from datetime import datetime
-from typing import Dict, Any
 from functools import partial
 from simulation.explain import (
     ExplanationResult,
@@ -20,16 +16,7 @@ from simulation.explain import (
     ExplainableReasonerPlugin,
     _sanitize_input,
     _sanitize_context,
-    _rule_based_fallback,
-    _process_prompt,
-    _format_output,
-    _analyze_sentiment,
-    _placeholder_utility,
-    _placeholder_async,
-    _validate_response,
-    METRICS,
-    get_executor_async,
-    shutdown_executor_async
+    _rule_based_fallback
 )
 
 # Mark all tests as unit tests for selective running

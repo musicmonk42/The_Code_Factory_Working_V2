@@ -1,36 +1,24 @@
 # tests/test_dlt_offchain_clients.py
 
 import pytest
-import asyncio
 import json
-import os
-import uuid
 import logging
-import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
-from aiohttp.client_exceptions import ClientResponseError
+from unittest.mock import AsyncMock, MagicMock
 from botocore.exceptions import ClientError as BotoClientError
-from azure.core.exceptions import ResourceNotFoundError as AzureResourceNotFoundError
 
 from simulation.plugins.dlt_clients.dlt_offchain_clients import (
     S3OffChainClient,
     GcsOffChainClient,
     AzureBlobOffChainClient,
     IPFSClient,
-    InMemoryOffChainClient,
-    create_temp_file
+    InMemoryOffChainClient
 )
 from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
     DLTClientValidationError,
-    DLTClientCircuitBreakerError,
-    PRODUCTION_MODE,
     _base_logger,
-    SECRETS_MANAGER,
-    AUDIT
+    SECRETS_MANAGER
 )
 
 # Mock secrets manager to control credential loading

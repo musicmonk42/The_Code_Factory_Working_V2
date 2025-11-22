@@ -13,17 +13,13 @@ import pytest
 import tempfile
 import json
 import os
-import re
-import threading
 import time
 import sys
-from typing import Dict, Any, List, Optional, Tuple
-from unittest.mock import AsyncMock, patch, MagicMock, Mock, call
+from typing import Optional, Tuple
+from unittest.mock import AsyncMock, patch, MagicMock, Mock
 from datetime import datetime, timedelta, timezone
-from contextlib import asynccontextmanager
 import gc
 import weakref
-from pathlib import Path
 
 # Optional: Property-based testing
 try:

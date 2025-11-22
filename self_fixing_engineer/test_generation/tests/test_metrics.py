@@ -1,11 +1,9 @@
 import pytest
-import asyncio
 # Fix: Added missing imports
 from unittest.mock import Mock
 import logging
 
-from test_generation.orchestrator.metrics import METRICS_AVAILABLE, generation_duration, integration_success, integration_failure, _DummyTimerCtx
-from test_generation.orchestrator.console import log
+from test_generation.orchestrator.metrics import generation_duration, integration_success, _DummyTimerCtx
 
 @pytest.mark.asyncio
 async def test_metrics_available(monkeypatch):

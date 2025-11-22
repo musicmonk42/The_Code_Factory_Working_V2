@@ -9,8 +9,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
@@ -376,7 +375,7 @@ class TestAuditLedgerClientEventLogging:
         
         event_details = {"test": "data"}
         
-        tx_hash1 = await audit_client.log_event("test:event", event_details, "operator1")
+        await audit_client.log_event("test:event", event_details, "operator1")
         
         tx_hash2 = await audit_client.log_event("test:event", event_details, "operator1")
         

@@ -31,9 +31,6 @@ import argparse
 import sys
 import logging
 import importlib
-import re
-import getpass
-import uuid
 import asyncio
 from collections import defaultdict
 from typing import Dict, Any, Optional, Callable, List
@@ -46,7 +43,6 @@ import tempfile # For selftest dummy file creation
 import shutil # For path validation and cleanup
 import hmac # For signature verification
 import hashlib # For signature verification
-from termcolor import colored # For colored diffs
 
 # --- Python Version Enforcement ---
 REQUIRED_PYTHON = (3, 10)
@@ -55,7 +51,6 @@ if sys.version_info < REQUIRED_PYTHON:
     sys.exit(1)
 
 # --- Robust import context for both package and "file-loaded" execution ---
-from pathlib import Path
 import sys
 def _bootstrap_import_paths():
     """
@@ -100,7 +95,7 @@ except ModuleNotFoundError:
         # Last chance: after sys.path bootstrapping, try again
         from import_fixer.compat_core import (
             PRODUCTION_MODE, cli_audit_logger, alert_operator, scrub_secrets,
-            get_core_dependencies, load_analyzer
+            load_analyzer
         )
         from analyzer.graph import ImportGraphAnalyzer
 
@@ -348,7 +343,7 @@ def load_analyzer():
         except ImportError as e:
             logger.critical(f"CRITICAL: Analyzer module not found: {e}. Aborting startup.", exc_info=True)
             cli_audit_logger.log_event("module_load", module="analyzer", status="failure", error=str(e))
-            alert_operator(f"CRITICAL: Analyzer module missing. Aborting.", level="CRITICAL")
+            alert_operator("CRITICAL: Analyzer module missing. Aborting.", level="CRITICAL")
             sys.exit(1)
 
 def load_fixer():
@@ -362,7 +357,7 @@ def load_fixer():
         except ImportError as e:
             logger.critical(f"CRITICAL: Fixer module not found: {e}. Aborting startup.", exc_info=True)
             cli_audit_logger.log_event("module_load", module="fixer", status="failure", error=str(e))
-            alert_operator(f"CRITICAL: Fixer module missing. Aborting.", level="CRITICAL")
+            alert_operator("CRITICAL: Fixer module missing. Aborting.", level="CRITICAL")
             sys.exit(1)
 
 def load_requests():
@@ -376,7 +371,7 @@ def load_requests():
         except ImportError as e:
             logger.critical(f"CRITICAL: 'requests' library not found: {e}. Required for network operations. Aborting startup.", exc_info=True)
             cli_audit_logger.log_event("module_load", module="requests", status="failure", error=str(e))
-            alert_operator(f"CRITICAL: 'requests' library missing. Aborting.", level="CRITICAL")
+            alert_operator("CRITICAL: 'requests' library missing. Aborting.", level="CRITICAL")
             sys.exit(1)
 
 # --- Config Management ---
@@ -510,7 +505,7 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
     trigger_parser.add_argument("event", choices=['rescan'], help="The event to trigger.")
     trigger_parser.add_argument("--target", default="http://127.0.0.1:5000/api/trigger", help="The target dashboard API URL.")
 
-    selftest_parser = subparsers.add_parser("selftest", help="Run self-diagnostic and report health of the CLI suite, plugins, and core engine.")
+    subparsers.add_parser("selftest", help="Run self-diagnostic and report health of the CLI suite, plugins, and core engine.")
     return parser
 
 async def main_async():
@@ -606,7 +601,7 @@ async def main_async():
             cli_audit_logger.log_event("command_executed", command="heal", args=scrub_secrets(vars(args)))
         elif args.command == "visualize":
             root_path = _validate_path_argument(args.root, "root", is_dir=True, allowlist=allowlist)
-            output_file = _validate_path_argument(args.output_file, "output_file", is_dir=False, allowlist=allowlist)
+            _validate_path_argument(args.output_file, "output_file", is_dir=False, allowlist=allowlist)
             load_analyzer()
             analyzer = ImportGraphAnalyzer(root_path, config=global_config.get('analyzer', {}))
             export_map = {
@@ -689,7 +684,6 @@ async def main_async():
                     _ = test_analyzer.build_graph()
                     logger.info("Analyzer module loaded and basic graph analysis performed successfully.")
                     # External tool checks (simulated)
-                    import subprocess
                     for tool in ["ruff", "flake8", "mypy", "bandit", "pytest"]:
                         if shutil.which(tool) is None:
                             logger.error(f"Required tool '{tool}' is missing.")

@@ -1,16 +1,13 @@
 # D:\Code_Factory\self_fixing_engineer\arbiter\knowledge_graph\multimodal.py
-import datetime
-import base64
 import hashlib
 import asyncio
 import tempfile
 import os
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 import logging
 import json
 import io
-import numpy as np
 
 # Conditional imports for external libraries
 try:
@@ -56,7 +53,6 @@ from .utils import (
     AgentCoreException,
     AgentErrorCode,
     trace_id_var,
-    logger,  # The logger object is configured in utils.py
     AGENT_METRICS,
     audit_ledger_client,
     async_with_retry

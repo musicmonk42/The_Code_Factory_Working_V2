@@ -38,15 +38,13 @@ import logging
 import json
 import time
 import re
-import random
 import hmac
 import hashlib
 import structlog
 from logging.handlers import TimedRotatingFileHandler
-from typing import Callable, Any, Optional, AsyncGenerator, Dict, Union, List
+from typing import Callable, Any, Optional, AsyncGenerator, Dict
 from functools import wraps
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 # Platform-specific imports for file locking
@@ -943,7 +941,7 @@ class MeshPubSub:
             elif self.backend_type == "nats":
                 if not self._client.is_connected: raise ConnectionError("NATS not connected.")
             elif self.backend_type == "kafka":
-                topics = await self._producer.partitions_for_topic("healthcheck_topic")
+                await self._producer.partitions_for_topic("healthcheck_topic")
             elif self.backend_type == "rabbitmq":
                 if self._rabbitmq_conn.is_closed: raise ConnectionError("RabbitMQ not connected.")
             elif self.backend_type == "aws":

@@ -4,14 +4,9 @@ This test suite is designed to expose what's actually broken in the module
 """
 
 import pytest
-import json
-import hmac
-import hashlib
 import os
 import sys
-import asyncio
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 import importlib.util
 
 # Setup paths
@@ -181,7 +176,7 @@ def test_os_chown_windows_compatibility():
                     
                     config = {"audit_dir": "/tmp/test"}
                     try:
-                        logger = RegulatoryAuditLogger(config)
+                        RegulatoryAuditLogger(config)
                     except AttributeError as e:
                         if 'chown' in str(e):
                             pytest.fail(f"os.chown called on Windows: {e}")
@@ -244,9 +239,9 @@ def test_file_operations_error_handling():
         config = {"audit_dir": "/invalid\0path/test"}  # Invalid path
         
         try:
-            logger = RegulatoryAuditLogger(config)
+            RegulatoryAuditLogger(config)
             # If it doesn't raise an error, check if it handles it gracefully
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError):
             # This is expected
             pass
         except SystemExit:

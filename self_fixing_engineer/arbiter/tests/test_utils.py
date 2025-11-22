@@ -1,8 +1,5 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-import asyncio
-import random
-import psutil
 import aiohttp
 from tenacity import RetryError
 from arbiter.utils import random_chance, get_system_metrics, get_system_metrics_async, check_service_health

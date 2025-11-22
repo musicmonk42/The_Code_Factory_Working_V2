@@ -1,12 +1,10 @@
 import pytest
-import asyncio
 # Fix: Added missing import
 import logging
 from test_generation.orchestrator.stubs import (
     DummyPolicyEngine, DummyEventBus, DummySecurityScanner,
-    DummyKnowledgeGraphClient, DummyPRCreator, DummyMutationTester, DummyTestEnricher
+    DummyPRCreator, DummyMutationTester, DummyTestEnricher
 )
-from test_generation.orchestrator.console import log
 
 @pytest.mark.asyncio
 async def test_dummy_policy_engine(caplog):

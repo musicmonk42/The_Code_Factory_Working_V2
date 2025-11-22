@@ -3,13 +3,9 @@
 Fixed E2E Test Suite - Works without external dependencies
 """
 
-import os
 import sys
-import json
 import asyncio
-import tempfile
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timedelta
 
 import pytest
@@ -177,7 +173,7 @@ async def test_spec_validation():
         # - None if successful
         
         # Just check it doesn't raise an exception
-        assert result is not None or result == (True, "") or result == True
+        assert result is not None or result == (True, "") or result
         
         # Test invalid JSON should return something falsy or raise
         try:

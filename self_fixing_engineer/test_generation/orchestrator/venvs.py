@@ -16,8 +16,6 @@ from __future__ import annotations
 import os
 import asyncio
 import time
-import logging
-import platform
 from typing import List, Optional, AsyncIterator, Sequence, NamedTuple
 from contextlib import asynccontextmanager, suppress
 import json
@@ -29,7 +27,6 @@ import filelock
 import uuid
 import random
 import traceback
-from asyncio import get_running_loop
 import subprocess  # ensure attribute exists as venvs.subprocess
 import secrets
 

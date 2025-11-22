@@ -5,7 +5,7 @@ import json
 import time
 import asyncio
 import logging
-from typing import Dict, Any, Optional, Literal, TypedDict, Callable, Awaitable
+from typing import Dict, Any, Optional, Literal, TypedDict, Callable
 from datetime import datetime
 from flask import Flask, request, jsonify, g, current_app
 from pathlib import Path
@@ -19,9 +19,12 @@ from functools import wraps
 # Guard against optional dependencies at import time with specific logging
 #
 CORS = Limiter = JWTManager = PrometheusMetrics = get_swaggerui_blueprint = None
-jwt_required = lambda *a, **k: (lambda f: f)
-create_access_token = lambda *a, **k: "jwt-disabled"
-get_remote_address = lambda *a, **k: "unknown"
+def jwt_required(*a, **k):
+    return (lambda f: f)
+def create_access_token(*a, **k):
+    return "jwt-disabled"
+def get_remote_address(*a, **k):
+    return "unknown"
 
 try:
     from flask_cors import CORS
@@ -396,14 +399,14 @@ def create_app(config: Dict[str, Any]) -> Flask:
 
     @app.route("/api/docs", methods=["GET"])
     def docs():
-        html = f"""<!doctype html>
+        html = """<!doctype html>
 <html>
   <head>
     <meta charset="utf-8"/>
     <title>API Docs</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script>
-    <style>html,body,#redoc{{height:100%;margin:0;padding:0}}</style>
+    <style>html,body,#redoc{height:100%;margin:0;padding:0}</style>
   </head>
   <body>
     <redoc spec-url="/swagger.json"></redoc>

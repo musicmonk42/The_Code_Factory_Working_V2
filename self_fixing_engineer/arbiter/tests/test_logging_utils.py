@@ -11,9 +11,7 @@ import os
 import sys
 import threading
 import time
-from unittest.mock import Mock, patch, MagicMock, call
-from datetime import datetime, timezone
-from pathlib import Path
+from unittest.mock import Mock
 import re
 
 # Import the module to test

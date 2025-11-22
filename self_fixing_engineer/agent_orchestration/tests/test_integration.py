@@ -1,5 +1,4 @@
 # tests/test_integration.py
-import os
 import pytest
 import yaml
 import asyncio

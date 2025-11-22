@@ -4,15 +4,13 @@ import os
 import json
 import logging
 import re
-import sys
 import hmac
 import hashlib
 import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Set, Callable, Tuple, Literal
+from typing import Dict, List, Any, Optional, Set, Literal
 from pydantic import BaseModel, Field, ValidationError, validator
-from pathlib import Path
 import asyncio
 import threading
 import time
@@ -213,7 +211,7 @@ def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> Architec
         from .core_audit import audit_logger
         audit_logger.log_event("policy_load_failure", reason=reason,
                                expected_signature=stored_signature, calculated_signature=calculated_signature)
-        raise AnalyzerCriticalError(f"Policy integrity check failed (signature mismatch).")
+        raise AnalyzerCriticalError("Policy integrity check failed (signature mismatch).")
     
     if policy_data.get("version") != "1.0":
         raise AnalyzerCriticalError(f"Unsupported policy version: {policy_data.get('version')}.")
@@ -363,7 +361,7 @@ class PolicyManager:
             except Exception as e:
                 logger.warning(f"Failed to cache validated policies: {e}.")
 
-        logger.info(f"Policies loaded and validated successfully.")
+        logger.info("Policies loaded and validated successfully.")
 
     def check_architectural_policies(self,
                                      code_graph: Dict[str, Set[str]],

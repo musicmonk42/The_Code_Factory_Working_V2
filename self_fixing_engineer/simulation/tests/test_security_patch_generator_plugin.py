@@ -1,16 +1,13 @@
 # tests/test_security_patch_generator_plugin.py
 
 import pytest
-import asyncio
 import os
 import sys
 import json
-import uuid
 import tempfile
 import shutil
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
-import re
 
 # Import the plugin from the correct directory
 plugin_paths = [

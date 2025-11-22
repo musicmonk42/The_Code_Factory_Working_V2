@@ -7,9 +7,8 @@ import json
 import uuid
 import asyncio
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, create_autospec
-from cryptography.fernet import Fernet, InvalidToken
+from unittest.mock import patch, AsyncMock, MagicMock
+from cryptography.fernet import Fernet
 
 import pytest
 import pytest_asyncio

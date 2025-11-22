@@ -39,7 +39,7 @@ except ImportError as e:
 
 # --- Optional caching dependency ---
 if TYPE_CHECKING:
-    from .cache_layer import get_cache  # for type checkers only
+    pass  # for type checkers only
 
 def _get_plugin_cache():
     from .cache_layer import get_cache  # runtime import avoids circulars

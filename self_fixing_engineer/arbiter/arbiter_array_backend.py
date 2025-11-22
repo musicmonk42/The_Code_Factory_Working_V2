@@ -31,10 +31,9 @@ import time
 import logging
 import asyncio
 import threading
-from typing import List, Any, Optional, Dict, Union, Callable, Tuple, Type
+from typing import List, Any, Optional, Dict, Union, Callable
 from dataclasses import dataclass, field
-from collections import deque
-from abc import ABC, abstractmethod, ABCMeta
+from abc import abstractmethod, ABCMeta
 from prometheus_client import Counter as PCounter, Histogram as PHistogram, Summary as PSummary, Gauge as PGauge, REGISTRY
 from prometheus_client.metrics import Counter as _Counter, Histogram as _Histogram, Summary as _Summary, Gauge as _Gauge
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
@@ -50,7 +49,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # ---------- Optional dependency shims (test/dev safe) ----------
-import os
 
 # aiolimiter
 try:
@@ -335,7 +333,7 @@ class ConcreteArrayBackend(ArrayBackend):
         """Initializes the array backend, setting up storage and loading data."""
         start_time = time.time()
         async with self._lock:
-            with self._tracer.start_as_current_span(f"array_initialize_{self.name}") as span:
+            with self._tracer.start_as_current_span(f"array_initialize_{self.name}"):
                 try:
                     if self.storage_type == "redis":
                         try:
@@ -583,7 +581,7 @@ class ConcreteArrayBackend(ArrayBackend):
         """
         start_time = time.time()
         async with self._lock:
-            with self._tracer.start_as_current_span(f"array_delete_{self.name}") as span:
+            with self._tracer.start_as_current_span(f"array_delete_{self.name}"):
                 if index is not None:
                     if not (0 <= index < len(self._data)):
                         array_errors_total.labels(backend_name=self.name, error_type="index_out_of_range", backend=self.storage_type).inc()

@@ -3,7 +3,6 @@ Config wrapper to make main.py work with the existing arbiter.config module
 """
 import logging
 import os
-from typing import Any, Optional
 
 # Try to import from arbiter.config if it exists
 try:

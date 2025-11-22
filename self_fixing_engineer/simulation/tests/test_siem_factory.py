@@ -6,9 +6,8 @@ Tests client instantiation, registry management, and availability checking.
 
 import pytest
 import asyncio
-import os
 import sys
-from unittest.mock import MagicMock, patch, AsyncMock, Mock
+from unittest.mock import MagicMock, patch
 from typing import Dict, Any, Type
 
 # Mock modules before importing

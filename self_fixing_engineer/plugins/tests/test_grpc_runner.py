@@ -5,13 +5,10 @@ import logging
 import asyncio
 import pytest
 import importlib
-import re
 import grpc
-from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any
-from grpc_health.v1 import health_pb2, health_pb2_grpc
-from prometheus_client import CollectorRegistry
+from typing import Dict
+from grpc_health.v1 import health_pb2
 
 # We are going to assume a file named grpc_runner.py exists
 # and contains the following functions and variables.
@@ -323,7 +320,7 @@ async def test_connect_retry_failure(mock_secrets_manager, mock_grpc_channel, mo
 @pytest.mark.asyncio
 async def test_run_method_success(mock_grpc_channel):
     """Test successful run_method execution."""
-    mock_channel = MagicMock()
+    MagicMock()
     mock_method = AsyncMock(return_value="response")
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -334,7 +331,7 @@ async def test_run_method_success(mock_grpc_channel):
 @pytest.mark.asyncio
 async def test_run_method_timeout(mock_grpc_channel):
     """Test run_method timeout."""
-    mock_channel = MagicMock()
+    MagicMock()
     mock_method = AsyncMock(side_effect=asyncio.TimeoutError)
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -344,7 +341,7 @@ async def test_run_method_timeout(mock_grpc_channel):
 @pytest.mark.asyncio
 async def test_run_method_grpc_error(mock_grpc_channel, mock_alert_operator):
     """Test run_method with gRPC error."""
-    mock_channel = MagicMock()
+    MagicMock()
     mock_method = AsyncMock(side_effect=grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, "details", "trailers"))
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -358,7 +355,7 @@ async def test_run_method_grpc_error(mock_grpc_channel, mock_alert_operator):
 @pytest.mark.asyncio
 async def test_run_method_unhandled_error(mock_grpc_channel, mock_alert_operator):
     """Test run_method with unhandled exception."""
-    mock_channel = MagicMock()
+    MagicMock()
     mock_method = AsyncMock(side_effect=Exception("Unexpected error"))
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)

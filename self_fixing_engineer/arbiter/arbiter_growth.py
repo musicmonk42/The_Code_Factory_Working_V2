@@ -3,20 +3,17 @@ import asyncio
 import os
 import inspect
 from typing import Dict, Any, List, Optional, Callable, Awaitable, Protocol, Union, Any as AnyType
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy import Column, Integer, String, JSON, Float, Text
-from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy import Column, Integer, String, Float, Text
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
-import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field
 from kazoo.client import KazooClient
 from arbiter.otel_config import get_tracer
-from opentelemetry.context import attach, detach, get_current
-from opentelemetry.propagate import extract, inject, set_global_textmap, get_global_textmap
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import set_global_textmap, get_global_textmap
 import json
 import aiofiles
 from etcd3 import client as etcd_client
@@ -73,7 +70,6 @@ propagator = get_global_textmap()
 set_global_textmap(propagator)
 
 # --- Prometheus Metrics Initialization with Duplication Check ---
-import logging
 logger = logging.getLogger(__name__)
 from prometheus_client import Counter, Histogram, Summary, Gauge, REGISTRY
 from prometheus_client.metrics import Counter as _Counter, Histogram as _Histogram, Summary as _Summary, Gauge as _Gauge
@@ -492,7 +488,6 @@ class RedisStreamsStorageBackend:
         snapshot_key = await self._get_snapshot_key(arbiter_id)
         snapshot_data_bytes = await self.redis.hgetall(snapshot_key)
         if snapshot_data_bytes:
-            snapshot_data = {}
             # Manually decode bytes to string for known fields
             level = int(snapshot_data_bytes.get(b"level", b"1").decode())
             schema_version = float(snapshot_data_bytes.get(b"schema_version", b"1.0").decode())

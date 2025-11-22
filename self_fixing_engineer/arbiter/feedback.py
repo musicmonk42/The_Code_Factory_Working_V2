@@ -4,7 +4,6 @@ import logging
 import json
 import os
 import sys
-import time
 import threading
 from datetime import datetime, timezone, timedelta
 import random
@@ -12,8 +11,8 @@ import hashlib
 import statistics
 import traceback
 from typing import Dict, Any, Optional, List, Union, Tuple, Type
-from sqlalchemy import Column, String, JSON, DateTime, select
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, String, JSON, DateTime
+from sqlalchemy.orm import declarative_base
 import aiofiles
 from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
 from tenacity import retry, stop_after_attempt, wait_exponential

@@ -1,28 +1,13 @@
 import pytest
 import asyncio
-import os
-import json
-import time
-import numpy as np
-import threading
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-from datetime import datetime
-from typing import Dict, Any
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # Assuming prometheus_client is installed for tests, or you can mock it.
 # To handle optional dependencies in tests, you can set the module-level
 # variables before each test.
-from prometheus_client import Histogram, Counter, Gauge
 
 # Import all necessary components for testing
 from simulation.quantum import (
-    get_or_create_metric,
-    QUANTUM_METRICS,
-    QISKIT_AVAILABLE,
-    DWAVE_AVAILABLE,
-    SCIPY_AVAILABLE,
-    DEAP_AVAILABLE,
-    TORCH_RL_AVAILABLE,
     check_any_backend_available,
     alert_operator,
     load_quantum_credentials,
@@ -100,7 +85,7 @@ async def test_load_quantum_credentials_failure(monkeypatch):
     monkeypatch.setattr("simulation.quantum.BOTO3_AVAILABLE", False)
     
     # Re-instantiate credential_manager to apply the monkeypatch
-    from simulation.quantum import CredentialManager, credential_manager
+    from simulation.quantum import CredentialManager
     monkeypatch.setattr("simulation.quantum.credential_manager", CredentialManager())
 
     with pytest.raises(RuntimeError):

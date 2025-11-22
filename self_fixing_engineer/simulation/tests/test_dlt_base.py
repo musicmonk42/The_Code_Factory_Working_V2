@@ -1,15 +1,13 @@
 # tests/test_dlt_base.py
 
 import pytest
-import asyncio
 import json
 import os
 import time
-import uuid
 import hmac
 import hashlib
 from collections import namedtuple
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open
 
 # Import the main file under test
 from simulation.plugins.dlt_clients.dlt_base import (
@@ -18,19 +16,8 @@ from simulation.plugins.dlt_clients.dlt_base import (
     SecretsManager,
     scrub_secrets,
     async_retry,
-    DLTClientConfigurationError,
     DLTClientCircuitBreakerError,
-    DLTClientError,
-    DLTClientValidationError,
-    DLTClientAuthError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    _get_dlt_audit_hmac_key,
-    PRODUCTION_MODE,
-    _base_logger,
-    AUDIT,
-    SECRETS_MANAGER,
-    alert_operator
+    DLTClientQueryError
 )
 
 # Mock external dependencies for isolated testing
@@ -51,9 +38,9 @@ def mock_external_deps(mocker):
     mocker.patch('simulation.plugins.dlt_clients.dlt_base.atexit.register')
 
     # Mock Prometheus metrics to prevent real registration errors during tests
-    MockCounter = namedtuple("MockCounter", ["labels", "inc"])
-    MockHistogram = namedtuple("MockHistogram", ["labels", "observe"])
-    MockGauge = namedtuple("MockGauge", ["labels", "set"])
+    namedtuple("MockCounter", ["labels", "inc"])
+    namedtuple("MockHistogram", ["labels", "observe"])
+    namedtuple("MockGauge", ["labels", "set"])
     mocker.patch('simulation.plugins.dlt_clients.dlt_base.Counter', return_value=MagicMock(labels=MagicMock(return_value=MagicMock())))
     mocker.patch('simulation.plugins.dlt_clients.dlt_base.Histogram', return_value=MagicMock(labels=MagicMock(return_value=MagicMock())))
     mocker.patch('simulation.plugins.dlt_clients.dlt_base.Gauge', return_value=MagicMock(labels=MagicMock(return_value=MagicMock())))

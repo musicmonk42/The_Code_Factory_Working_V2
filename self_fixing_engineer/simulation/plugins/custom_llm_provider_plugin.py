@@ -8,11 +8,10 @@ import time
 import hashlib
 import uuid
 import re
-import ipaddress
 import inspect
 import sys
 from urllib.parse import urlparse
-from typing import Dict, Any, Optional, List, Tuple, Callable, AsyncGenerator, Union, Iterable
+from typing import Dict, Any, Optional, List, Tuple, Callable, AsyncGenerator, Iterable
 
 # Add the module to sys.modules with the flat name for testability
 sys.modules.setdefault("custom_llm_provider_plugin", sys.modules[__name__])
@@ -992,7 +991,7 @@ class CustomLLMChatModel(BaseChatModel):
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> str:
-        from aiohttp.client_exceptions import ClientResponseError, ClientPayloadError, ClientError
+        from aiohttp.client_exceptions import ClientError
 
         async def _attempt_once():
             try:

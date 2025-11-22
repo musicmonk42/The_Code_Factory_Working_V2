@@ -16,14 +16,14 @@ import json
 import re
 import asyncio
 from typing import Dict, Any, Optional
-from pydantic import Field, ValidationError, BaseModel, model_validator, ConfigDict, field_validator, PrivateAttr
+from pydantic import Field, model_validator, field_validator, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
 import redis.asyncio as redis
 from cryptography.fernet import Fernet
 import threading
 import time
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import Counter, Histogram
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
@@ -176,7 +176,6 @@ class ArbiterConfig(BaseSettings):
     @field_validator("DECISION_OPTIMIZER_SETTINGS", mode="before")
     @classmethod
     def parse_optimizer_settings(cls, v):
-        import json
 
         # If pydantic passes the entire environment as a dict, reject it
         if isinstance(v, dict):
@@ -324,7 +323,6 @@ class ArbiterConfig(BaseSettings):
 
     @model_validator(mode='after')
     def validate_redis_url(self):
-        import asyncio
         if os.getenv('ENVIRONMENT') == 'test':
             return self  # Skip ping in tests
         url = self.REDIS_URL
@@ -335,7 +333,7 @@ class ArbiterConfig(BaseSettings):
                     conn = redis.Redis.from_url(url)
                     try:
                         # Check if we're in an async context
-                        loop = asyncio.get_running_loop()
+                        asyncio.get_running_loop()
                         # We're already in async - skip ping or schedule it
                         logger.debug("Skipping Redis ping in validator (async context)")
                         span.set_attribute("redis_validation_status", "skipped_async_context")

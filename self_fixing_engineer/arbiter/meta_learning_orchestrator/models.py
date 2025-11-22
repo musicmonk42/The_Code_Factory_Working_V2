@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, ValidationError, model_validator
 import logging
 
@@ -116,8 +116,8 @@ if __name__ == "__main__":
         # Test immutability
         try:
             record.agent_id = "new-agent"
-        except ValidationError as e:
-            logging.info(f"Caught expected error (immutability): Field is frozen")
+        except ValidationError:
+            logging.info("Caught expected error (immutability): Field is frozen")
         
         # Test invalid event type
         try:

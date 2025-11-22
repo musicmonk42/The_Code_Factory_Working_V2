@@ -1,21 +1,18 @@
 from self_healing_import_fixer.analyzer.core_report import (
     ReportGenerator,
     AnalyzerCriticalError,
-    generate_report as public_generate_report,
-    scrub_secrets,
     app,  # for Flask test client
 )
 
 import pytest
 import os
 import sys
-import io
 from unittest.mock import patch, MagicMock
 
 # --- ReportGenerator Initialization Tests ---
 def test_init_with_valid_dir_succeeds(tmp_path):
     output_dir = tmp_path / "test_reports_approved"
-    generator = ReportGenerator(str(output_dir), approved_report_dirs=[str(tmp_path)])
+    ReportGenerator(str(output_dir), approved_report_dirs=[str(tmp_path)])
     assert os.path.isdir(output_dir)
 
 def test_init_with_unapproved_dir_in_prod_exits(tmp_path):
@@ -133,11 +130,9 @@ def test_public_generate_report_calls_encryption_in_prod(tmp_path, monkeypatch):
         assert called['called']
 
 # --- Dashboard Integration Tests (now using Flask test client) ---
-import flask
 
 @pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
 def test_dashboard_login_success(monkeypatch):
-    from self_healing_import_fixer.analyzer.core_report import audit_logger, SECRETS_MANAGER
     app.config["JWT_SECRET_KEY"] = "jwtsecret"
     monkeypatch.setattr("self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER", MagicMock(get_secret=lambda k: "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"))
     monkeypatch.setattr("self_healing_import_fixer.analyzer.core_report.audit_logger", MagicMock(log_event=MagicMock()))
@@ -148,7 +143,6 @@ def test_dashboard_login_success(monkeypatch):
 
 @pytest.mark.skipif(not hasattr(app, "test_client"), reason="Flask app not available")
 def test_dashboard_login_failure(monkeypatch):
-    from self_healing_import_fixer.analyzer.core_report import audit_logger, SECRETS_MANAGER
     app.config["JWT_SECRET_KEY"] = "jwtsecret"
     monkeypatch.setattr("self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER", MagicMock(get_secret=lambda k: "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"))
     monkeypatch.setattr("self_healing_import_fixer.analyzer.core_report.audit_logger", MagicMock(log_event=MagicMock()))

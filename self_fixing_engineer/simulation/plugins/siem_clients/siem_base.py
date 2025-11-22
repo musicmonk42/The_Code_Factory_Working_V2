@@ -146,7 +146,7 @@ def _check_and_import_critical(package_name: str, module_name: Optional[str] = N
             return importlib.import_module(module_name)
         else:
             return __import__(package_name)
-    except ImportError as e:
+    except ImportError:
         _base_logger.critical(f"CRITICAL: Required dependency '{package_name}' not found.", extra={'client_type': 'SIEM_Base', 'correlation_id': 'N/A'})
         alert_operator(f"CRITICAL: Missing required dependency '{package_name}'. SIEM client cannot start.", level="CRITICAL")
         # Raise ImportError so callers/factory can decide lifecycle
@@ -155,20 +155,17 @@ def _check_and_import_critical(package_name: str, module_name: Optional[str] = N
 # Critical dependencies for the core SIEM client functionality
 aiohttp = _check_and_import_critical("aiohttp")
 tenacity = _check_and_import_critical("tenacity")
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 pydantic = _check_and_import_critical("pydantic")
-from pydantic import BaseModel, Field, ValidationError, Extra
+from pydantic import BaseModel, Field, Extra
 try:
     # pydantic v1 path
-    from pydantic.networks import IPvAnyAddress
+    pass
 except Exception:
     # pydantic v2 compatibility
-    from pydantic import IPvAnyAddress  # type: ignore
+    pass  # type: ignore
 
 opentelemetry = _check_and_import_critical("opentelemetry")
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
 
 # --- PYDANTIC_AVAILABLE Flag ---
 PYDANTIC_AVAILABLE = True  # Set to True since pydantic was successfully imported above

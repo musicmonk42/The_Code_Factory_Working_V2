@@ -5,7 +5,6 @@ Fixed mesh_policy.py with proper circuit breaker implementation
 import os
 import sys
 import json
-import logging
 import asyncio
 import re
 import random
@@ -13,11 +12,9 @@ import time
 import hmac
 import hashlib
 import structlog
-from typing import Dict, Any, Optional, List, Type, Callable, Awaitable, Union
-from functools import wraps
+from typing import Dict, Any, Optional, List, Type
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from datetime import datetime
 from pathlib import Path
 
 # Platform-specific imports
@@ -73,7 +70,8 @@ try:
 except ImportError:
     BaseModel = object
     ValidationError = Exception
-    Field = lambda *args, **kwargs: None
+    def Field(*args, **kwargs):
+        return None
 
 try:
     from cryptography.fernet import MultiFernet, Fernet, InvalidToken
@@ -808,12 +806,12 @@ if __name__ == '__main__':
             
             # Test allowed action
             result = await enforcer.enforce_policy("read")
-            assert result == True
+            assert result
             print("Read action: Allowed")
             
             # Test denied action
             result = await enforcer.enforce_policy("delete")
-            assert result == False
+            assert not result
             print("Delete action: Denied")
             
             print("\nTest harness completed successfully.")

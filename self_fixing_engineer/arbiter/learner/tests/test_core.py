@@ -1,18 +1,15 @@
 # test_core.py
 
 import pytest
-import asyncio
 import json
-import hashlib
 from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, PropertyMock
-from typing import Dict, Any, List
-from cryptography.fernet import Fernet, InvalidToken
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from cryptography.fernet import Fernet
 
 # Import the classes to test
 from arbiter.learner.core import Arbiter, Learner
 from arbiter.learner.encryption import ArbiterConfig
-from arbiter.learner.audit import CircuitBreaker, MerkleTree
+from arbiter.learner.audit import CircuitBreaker
 
 
 class TestArbiter:
@@ -92,7 +89,7 @@ class TestLearner:
         with patch('arbiter.learner.core.PostgresClient') as mock_postgres:
             mock_postgres.return_value = mock_db
             
-            with patch('arbiter.learner.core.LLMClient') as mock_llm:
+            with patch('arbiter.learner.core.LLMClient'):
                 with patch('arbiter.learner.core.AuditLogger') as mock_audit:
                     mock_audit_instance = AsyncMock()
                     mock_audit_instance.log_event = AsyncMock()

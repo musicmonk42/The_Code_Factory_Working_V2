@@ -4,15 +4,12 @@ import io
 import copy
 import unittest
 import tempfile
-from typing import Dict, Any, Tuple
+from typing import Dict, Any
 from types import MappingProxyType
 import logging
 import logging.config
-from contextlib import suppress
 import sys
-import jsonschema
-from jsonschema import validate, ValidationError, SchemaError, Draft7Validator
-import errno
+from jsonschema import SchemaError, Draft7Validator
 
 # --- ATCO Artifacts Directories (Relative to PROJECT_ROOT) ---
 # Hardcoded paths have been moved into DEFAULT_CONFIG for externalization

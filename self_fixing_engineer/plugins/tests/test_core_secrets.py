@@ -1,8 +1,5 @@
 import os
 import threading
-import tempfile
-import shutil
-import json
 import logging
 import pytest
 from pathlib import Path

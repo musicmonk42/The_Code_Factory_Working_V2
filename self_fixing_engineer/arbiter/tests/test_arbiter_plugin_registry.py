@@ -1,22 +1,8 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open, Mock
-import asyncio
-import importlib
-import logging
-import threading
+from unittest.mock import patch, MagicMock
 import time
-import json
 import os
 import sys
-from pathlib import Path
-from abc import ABC, abstractmethod
-from enum import Enum
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Type, Callable, List, Set, Final
-from packaging import version, specifiers
-import multiprocessing
-from contextlib import contextmanager
-from copy import deepcopy
 
 # Add the parent directory to path if needed
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,17 +16,9 @@ from arbiter_plugin_registry import (
     PluginMeta,
     PluginRegistry,
     PlugInKind,
-    PluginError,
     PluginDependencyError,
-    registry,
     PLUGIN_REGISTRY,
     logger,
-    plugin_loads,
-    plugin_unloads,
-    plugin_health_checks,
-    plugin_load_time,
-    plugin_ops_total,
-    plugin_errors_total,
 )
 
 # Fixture to reset the PluginRegistry and plugins.json before each test

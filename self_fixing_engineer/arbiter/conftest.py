@@ -17,7 +17,6 @@ import logging
 import os
 import tempfile
 import shutil
-import json
 import pytest
 import asyncio
 from pathlib import Path
@@ -124,7 +123,6 @@ def _setup_opentelemetry_context():
                 return NoOpSpan()
         
         # Mock the trace functions
-        original_get_tracer = trace.get_tracer
         
         def mock_get_tracer(name, version=None):
             return NoOpTracer()
@@ -160,13 +158,11 @@ def isolate_plugin_registry():
     
     # Ensure the registry uses our test file instead of the production one
     # We need to handle both the case where the singleton exists and where it doesn't
-    original_persist_path = None
     
     # Monkey-patch the default persist path before singleton creation
     if hasattr(registry_module, 'PluginRegistry'):
         # Store original for potential restoration
         if registry_module.PluginRegistry._instance:
-            original_persist_path = registry_module.PluginRegistry._instance._persist_path
             registry_module.PluginRegistry._instance._persist_path = TEST_PLUGIN_FILE
         else:
             # Patch the class default before instantiation
@@ -410,7 +406,6 @@ def _install_inmemory_exporter():
 # Try the standard import first; if it fails or the attribute is absent, install our shim.
 try:
     # Some envs expose it here:
-    from opentelemetry.sdk.trace.export import InMemorySpanExporter as _probe  # type: ignore
     # If import succeeded but attribute missing on the module object, still install shim
     mod = sys.modules.get("opentelemetry.sdk.trace.export")
     if mod is None or not hasattr(mod, "InMemorySpanExporter"):

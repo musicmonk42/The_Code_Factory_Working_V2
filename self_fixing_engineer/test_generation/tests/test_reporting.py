@@ -1,16 +1,13 @@
 import pytest
-import asyncio
 import os
 import json
 from pathlib import Path
 # Fix: Add missing imports for Mock and AsyncMock
 from unittest.mock import Mock, AsyncMock, patch
 # Fix: The test needs to import the HTMLReporter and its config path
-from test_generation.orchestrator.reporting import _write_sarif_atomically, HTMLReporter, report_generation_duration, DummyMetric
+from test_generation.orchestrator.reporting import _write_sarif_atomically, HTMLReporter, DummyMetric
 from test_generation.orchestrator.config import SARIF_EXPORT_DIR, HTML_REPORTS_DIR
 from test_generation.orchestrator import sanitize_path
-from test_generation.orchestrator.console import log
-from test_generation.orchestrator.audit import _audit
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:

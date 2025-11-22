@@ -3,8 +3,7 @@ import os
 import json
 import asyncio
 import tempfile
-import xml.etree.ElementTree as ET
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import patch, AsyncMock
 from test_generation.utils import (
     ATCOConfig,
     generate_file_hash,
@@ -31,9 +30,7 @@ from test_generation.utils import (
     atomic_write, # FIX: Add atomic_write import
 )
 from pathlib import Path
-import shutil
 import sys
-import random
 
 # Mark all tests as unit tests for selective running
 pytestmark = pytest.mark.unit
@@ -305,7 +302,7 @@ async def test_create_and_install_venv_success(temp_project_root):
     """Test successful virtual environment creation and dependency installation."""
     # The production code has a bug where it doesn't return on TimeoutError.
     # The test also has a bug where it fails because it doesn't correctly mock the process.
-    with patch("venv.EnvBuilder.create") as mock_create, \
+    with patch("venv.EnvBuilder.create"), \
          patch("asyncio.create_subprocess_exec") as mock_exec, \
          patch("os.path.exists", return_value=True):
         mock_process = AsyncMock()

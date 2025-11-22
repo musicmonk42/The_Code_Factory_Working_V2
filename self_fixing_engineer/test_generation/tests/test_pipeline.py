@@ -1,20 +1,12 @@
 # test_generation/orchestrator/tests/test_pipeline.py
 import pytest
-import asyncio
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
-from test_generation.orchestrator.orchestrator import GenerationOrchestrator, InitializationError
-from test_generation.orchestrator.config import CONFIG, load_config
+from test_generation.orchestrator.orchestrator import GenerationOrchestrator
+from test_generation.orchestrator.config import CONFIG
 from test_generation.orchestrator import sanitize_path
-from test_generation.orchestrator.console import log, configure_logging
-from test_generation.orchestrator.audit import _audit as audit_event
-from test_generation.orchestrator.metrics import METRICS_AVAILABLE, generation_duration, integration_success, integration_failure
-from test_generation.utils import run_pytest_and_coverage, SecurityScanner, MutationTester, PRCreator
+from test_generation.utils import SecurityScanner, MutationTester, PRCreator
 from test_generation.policy_and_audit import PolicyEngine
-import inspect
-import json
-import shutil
 from contextlib import asynccontextmanager
 
 @pytest.fixture

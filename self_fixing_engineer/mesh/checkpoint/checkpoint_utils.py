@@ -41,21 +41,17 @@ import hmac
 import secrets
 import re
 import base64
-import binascii
 import time
 import uuid
 import logging
 import warnings
-from enum import Enum
-from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import (
     Dict, Any, Union, Optional, List, Tuple, Set,
-    Callable, TypeVar, Generic, Pattern
+    Pattern
 )
-from functools import wraps, lru_cache
+from functools import lru_cache
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 import threading
 from collections import OrderedDict
 
@@ -962,7 +958,7 @@ def scrub_data(
                 if _is_sensitive_field(key):
                     scrubbed[key] = replacement
                     audit_logger.info(
-                        f"Scrubbed sensitive field",
+                        "Scrubbed sensitive field",
                         extra={"field": key}
                     )
                 else:
@@ -1047,7 +1043,7 @@ def anonymize_data(
                     current[field] = original_value[0] + "***" if original_value else ""
             
             audit_logger.info(
-                f"Anonymized field",
+                "Anonymized field",
                 extra={
                     "field": field_path,
                     "method": method

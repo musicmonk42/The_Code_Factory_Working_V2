@@ -66,8 +66,10 @@ try:
     from simulation.utils import get_or_create_metric
     
     # Use the safe metric creation function from simulation.utils
-    _safe_counter = lambda name, doc, labelnames=(): get_or_create_metric(Counter, name, doc, labelnames)
-    _safe_histogram = lambda name, doc, labelnames=(), buckets=None: get_or_create_metric(Histogram, name, doc, labelnames, buckets)
+    def _safe_counter(name, doc, labelnames=()):
+        return get_or_create_metric(Counter, name, doc, labelnames)
+    def _safe_histogram(name, doc, labelnames=(), buckets=None):
+        return get_or_create_metric(Histogram, name, doc, labelnames, buckets)
     
     # Low-cardinality metrics (no refactor_id label to avoid cardinality explosion)
     CROSS_REPO_REFACTOR_ATTEMPTS = _safe_counter(
@@ -613,7 +615,7 @@ async def _process_repo(
         # Clone
         try:
             await repo_manager.clone_repo()
-        except Exception as e:
+        except Exception:
             repo_result["error_type"] = "clone_failed"
             raise
 
@@ -958,7 +960,7 @@ if __name__ == "__main__":
         print("\nLive Run Result:")
         print(json.dumps(live_run_result, indent=2))
         if live_run_result["success"]:
-            print(f"\nSuccessfully refactored! Check your repository for new branch and PR:")
+            print("\nSuccessfully refactored! Check your repository for new branch and PR:")
             for repo_res in live_run_result["results_per_repo"]:
                 print(f"- Repo: {repo_res['repo_url']}")
                 print(f"  Branch: {repo_res.get('pushed_branch')}")

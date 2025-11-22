@@ -6,15 +6,11 @@ Provides secure storage, retrieval, and rotation of sensitive credentials.
 """
 
 import os
-import sys
-import json
 import base64
-import hashlib
-import hmac
 import time
 import logging
 from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 import threading

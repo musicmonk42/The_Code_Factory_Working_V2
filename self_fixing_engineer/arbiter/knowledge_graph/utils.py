@@ -1,8 +1,6 @@
 import datetime
 import logging
 import json
-import uuid
-import time
 import sys
 import re
 import collections
@@ -10,7 +8,7 @@ import contextvars
 import asyncio
 import base64
 from enum import Enum
-from typing import Dict, Any, Tuple, List, Optional, Callable, Union, Awaitable
+from typing import Dict, Any, Tuple, List, Optional, Callable, Awaitable
 from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 from opentelemetry import trace
 from .config import Config, SensitiveValue, MultiModalData

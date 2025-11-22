@@ -3,24 +3,19 @@ Comprehensive test suite for web_app.py - FIXED VERSION
 These tests are designed to reveal actual problems in the implementation
 """
 import os
-import json
 import yaml
 import pytest
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, call
+from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 from datetime import datetime, timedelta
 import sys
-import logging
 
 # Setup test environment
-import sys
 sys.modules['streamlit_autorefresh'] = MagicMock()
 
 # Import real modules where possible
 import bcrypt
 import redis
-from prometheus_client import Counter, Histogram
-import streamlit as st
 
 # Mock only the intent_capture modules that don't exist
 sys.modules['intent_capture.agent_core'] = MagicMock(

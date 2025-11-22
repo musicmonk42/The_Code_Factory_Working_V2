@@ -3,7 +3,6 @@
 # Requires: pytest, unittest.mock
 # Run with: pytest test_utils.py -v --cov=utils
 
-import logging
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -12,16 +11,11 @@ import pytest
 from arbiter.bug_manager.utils import (
     parse_bool_env,
     redact_pii,
-    validate_settings,
     apply_settings_validation,
     validate_input_details,
     BugManagerError,
     NotificationError,
-    CircuitBreakerOpenError,
-    RateLimitExceededError,
-    AuditLogError,
     RemediationError,
-    MLRemediationError,
     Severity,
 )
 from arbiter.bug_manager.utils import SecretStr

@@ -2,7 +2,6 @@
 
 import pytest
 import json
-import os
 from pathlib import Path
 
 class TestExplanationPromptConfig:

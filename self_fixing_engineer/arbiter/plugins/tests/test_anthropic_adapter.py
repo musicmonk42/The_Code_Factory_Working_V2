@@ -1,8 +1,7 @@
 # test_anthropic_adapter.py
 import pytest
-import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 
 # Import the adapter and related exceptions
@@ -323,7 +322,7 @@ class TestAnthropicAdapter:
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close error"))
             
-            async with AnthropicAdapter(valid_settings) as adapter:
+            async with AnthropicAdapter(valid_settings):
                 pass  # Should not raise even if close fails
 
     # --- Metrics Tests ---

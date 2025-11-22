@@ -153,6 +153,5 @@ def test_pipeline_import():
     Tests that the GenerationOrchestrator and its run_pipeline method can be imported and are callable.
     This serves as a guard against import chain failures and ensures the public API is accessible.
     """
-    from test_generation.orchestrator.orchestrator import GenerationOrchestrator
     assert GenerationOrchestrator is not None
     assert callable(getattr(GenerationOrchestrator, "run_pipeline", None))

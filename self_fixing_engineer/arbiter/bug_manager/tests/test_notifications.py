@@ -4,8 +4,7 @@
 # Run with: pytest test_notifications.py -v --cov=notifications
 
 import asyncio
-import time
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 from aiohttp import ClientError

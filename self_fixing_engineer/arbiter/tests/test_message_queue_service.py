@@ -1,14 +1,10 @@
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, ANY
+from unittest.mock import patch, AsyncMock
 import asyncio
 import json
-import logging
-import os
-import sys
 import time
 import threading
 from datetime import datetime
-from typing import Dict, Any, Optional, Callable, List, Coroutine, Union, Tuple, Type
 from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 
 # Define dummy exceptions

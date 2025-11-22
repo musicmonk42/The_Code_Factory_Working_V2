@@ -14,7 +14,6 @@ Run:
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,8 @@ import pytest
 # or repo_root/arbiter/arbiter_array_backend.py without PYTHONPATH.
 # -------------------------------------------------------------------
 def _import_backend():
-    import importlib, sys
+    import importlib
+    import sys
     from importlib.util import spec_from_file_location, module_from_spec
     from pathlib import Path
 

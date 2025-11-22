@@ -6,13 +6,8 @@ Fixed version with import patching before module load
 import pytest
 import os
 import sys
-import shutil
-import logging
-import json
-import asyncio
 import importlib.util
-from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, AsyncMock
+from unittest.mock import patch, Mock, AsyncMock
 
 # Setup paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -322,7 +317,7 @@ def test_max_files_limit(tmp_path, mock_alert_operator_graph):
     
     config = {"max_python_files": 5}
     analyzer = ImportGraphAnalyzer(str(tmp_path), config)
-    graph = analyzer.build_graph()
+    analyzer.build_graph()
     
     # Should have warned about limit
     assert mock_alert_operator_graph.called

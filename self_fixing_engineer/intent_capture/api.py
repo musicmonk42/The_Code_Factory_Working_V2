@@ -41,9 +41,7 @@
 # ------------------------------------------------------------------------------------
 
 import asyncio
-import json
 import logging
-import multiprocessing
 import os
 import re
 import uuid
@@ -83,9 +81,7 @@ from agent_core import (AgentError, ConfigurationError, InvalidSessionError,
                         get_or_create_agent)
 
 # UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
-import boto3
 import hvac
-import pika
 import sentry_sdk
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response, JSONResponse
@@ -221,7 +217,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         request.state.request_id = str(uuid.uuid4())
         response = await call_next(request)
         if os.getenv("ENABLE_AUDIT_LOGGING", "false").lower() == "true":
-            log_data = { "requestId": request.state.request_id, "timestamp": datetime.utcnow().isoformat(), "clientHost": request.client.host, "path": request.url.path, "statusCode": response.status_code }
+            { "requestId": request.state.request_id, "timestamp": datetime.utcnow().isoformat(), "clientHost": request.client.host, "path": request.url.path, "statusCode": response.status_code }
             # s3_client = boto3.client('s3'); s3_client.put_object(Bucket=os.getenv('AUDIT_BUCKET'), Key=f"logs/{request.state.request_id}.json", Body=anonymize_pii(json.dumps(log_data)))
             logger.info(f"Audit log for {request.state.request_id} sent to S3 (simulated).")
         return response

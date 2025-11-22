@@ -22,7 +22,6 @@ import socket
 import logging
 import uuid
 import sys  # For sys.exit
-import re  # For regex validation (reserved)
 import hmac
 import hashlib
 from typing import Optional, Dict, Any, List, Union, Callable, Awaitable
@@ -74,7 +73,7 @@ try:
 except ImportError as e:
     if PRODUCTION_MODE:
         logger.critical(f"CRITICAL: OpenTelemetry not found. Tracing is mandatory in PRODUCTION_MODE. Aborting startup: {e}.")
-        alert_operator(f"CRITICAL: OpenTelemetry missing. Azure Event Grid plugin aborted.", level="CRITICAL")
+        alert_operator("CRITICAL: OpenTelemetry missing. Azure Event Grid plugin aborted.", level="CRITICAL")
         sys.exit(1)
     else:
         logger.warning("OpenTelemetry not found. Tracing will be disabled.")

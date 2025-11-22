@@ -1,20 +1,13 @@
-import os
 import json
-import time
 import asyncio
 import threading
-import signal
 import sys
 import logging
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-from collections import deque
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
-from pytest_asyncio import fixture
 from rich.console import Console
 from rich.prompt import Prompt
 import psutil
-import shlex
-import datetime
 
 # Import the module under test
 import intent_capture.cli as cli_module  # Import the module itself to patch its internals

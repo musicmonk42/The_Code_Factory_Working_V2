@@ -1,8 +1,7 @@
 # test_openai_adapter.py
 import pytest
 import asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 
 # Import the adapter and related exceptions
@@ -13,7 +12,7 @@ from arbiter.plugins.openai_adapter import (
     RateLimitError,
     APIError
 )
-from arbiter.plugins.llm_client import LLMClient, LLMClientError
+from arbiter.plugins.llm_client import LLMClientError
 import openai
 
 
@@ -361,7 +360,7 @@ class TestOpenAIAdapter:
             mock_instance.aclose_session = AsyncMock()
             
             with pytest.raises(ValueError):
-                async with OpenAIAdapter(valid_settings) as adapter:
+                async with OpenAIAdapter(valid_settings):
                     raise ValueError("Test error")
             
             # Should still close session even with exception

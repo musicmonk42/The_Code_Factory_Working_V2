@@ -8,11 +8,8 @@ of external dependencies and comprehensive coverage of functionality.
 import pytest
 import os
 import sys
-import json
-import socket
 import threading
-from unittest.mock import Mock, MagicMock, patch, PropertyMock, call
-from typing import Dict, Any
+from unittest.mock import MagicMock, patch
 import asyncio
 
 # Import the module under test

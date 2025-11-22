@@ -31,7 +31,6 @@ import time
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
-from collections import OrderedDict
 
 # Pydantic for robust data validation
 from pydantic import BaseModel, Field as PydanticField, field_validator
@@ -366,7 +365,7 @@ class FeatureStoreClient:
 
     async def health_check(self) -> bool:
         """Verify connection status."""
-        with tracer.start_as_current_span("feast_health_check") as span:
+        with tracer.start_as_current_span("feast_health_check"):
             FS_CALLS_TOTAL.labels(operation="health_check", status="attempt", **self.metric_labels).inc()
             try:
                 if not self._is_connected or not self._fs:

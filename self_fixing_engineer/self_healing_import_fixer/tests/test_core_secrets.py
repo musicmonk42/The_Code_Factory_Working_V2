@@ -3,7 +3,7 @@
 import os
 import shutil
 import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import patch, MagicMock
 
 import self_healing_import_fixer.analyzer.core_secrets as core_secrets
 from self_healing_import_fixer.analyzer.core_secrets import (

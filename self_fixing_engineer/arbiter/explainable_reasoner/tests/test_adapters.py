@@ -4,12 +4,10 @@
 # Run with: pytest test_adapters.py -v --cov=adapters --cov-report=html
 
 import os
-import asyncio
 import base64
 import logging
 import json
-from typing import Dict, Any
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 import httpx
@@ -23,7 +21,7 @@ from arbiter.explainable_reasoner.adapters import (
     LLMAdapterFactory,
     retry,
 )
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError
 from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 
 # Setup logging for tests

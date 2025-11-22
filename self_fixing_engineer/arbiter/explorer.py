@@ -18,18 +18,16 @@ import time
 import random
 import collections
 import logging
-import traceback
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Callable, Coroutine, Union, Tuple
+from typing import Any, Dict, List, Optional, Callable, Coroutine, Union
 from statistics import mean, median, stdev
 from sqlalchemy import Column, String, JSON, DateTime, select
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import declarative_base
 from tenacity import retry, stop_after_attempt, wait_exponential
 import aiohttp
 from aiolimiter import AsyncLimiter
-from prometheus_client import Counter, Gauge, REGISTRY
+from prometheus_client import Counter
 import os
 
 # Mock/Plausholder imports for a self-contained fix
@@ -336,7 +334,7 @@ class Explorer:
         """
         try:
             experiment_id = self._generate_experiment_id(experiment_config.get("type", "generic"))
-            start_time = time.time()
+            time.time()
             exp_type = experiment_config.get("type", "A/B")
             variants = experiment_config.get("variants", [])
             results = []
@@ -420,7 +418,6 @@ class Explorer:
         Raises:
             ExperimentExecutionError: If crawling fails.
         """
-        from aiolimiter import AsyncLimiter
         limiter = AsyncLimiter(max_rate=10, time_period=60)
         results = []
         async with aiohttp.ClientSession() as session:

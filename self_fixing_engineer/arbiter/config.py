@@ -16,8 +16,6 @@ from pydantic import Field, HttpUrl, SecretStr, field_validator
 from enum import Enum
 import aiofiles
 from tenacity import retry, stop_after_attempt, wait_exponential
-import sys
-import collections
 import pydantic
 
 # Add compatibility layer
@@ -714,7 +712,7 @@ class ArbiterConfig(BaseSettings):
         This operation should be handled with extreme care in a production environment.
         """
         try:
-            old_key = self.ENCRYPTION_KEY.get_secret_value()
+            self.ENCRYPTION_KEY.get_secret_value()
             new_key = Fernet.generate_key()
             self.ENCRYPTION_KEY = SecretStr(new_key.decode())
             # In a real-world scenario, you would need to:

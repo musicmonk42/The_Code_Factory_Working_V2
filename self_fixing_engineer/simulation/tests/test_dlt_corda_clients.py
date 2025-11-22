@@ -3,27 +3,20 @@
 import pytest
 import asyncio
 import json
-import uuid
 import aiohttp
-from unittest.mock import AsyncMock, MagicMock, Mock
-from aiohttp.client_exceptions import ClientResponseError, ClientConnectionError
+from unittest.mock import AsyncMock, MagicMock
+from aiohttp.client_exceptions import ClientResponseError
 
 from simulation.plugins.dlt_clients.dlt_corda_clients import (
-    CordaClientWrapper,
-    CordaConfig
+    CordaClientWrapper
 )
 from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientValidationError,
     DLTClientAuthError,
     DLTClientTransactionError,
     DLTClientConnectivityError,
-    DLTClientTimeoutError,
-    DLTClientCircuitBreakerError,
     BaseOffChainClient,
-    PRODUCTION_MODE,
-    _base_logger,
-    SECRETS_MANAGER,
-    AUDIT
+    SECRETS_MANAGER
 )
 
 # A mock off-chain client that can be passed to the DLT client

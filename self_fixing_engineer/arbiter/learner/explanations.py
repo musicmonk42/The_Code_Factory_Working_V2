@@ -11,7 +11,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 from prometheus_client import Counter, Histogram
 from opentelemetry import trace
 
-from .metrics import learn_error_counter
 
 # Structured logging setup
 structlog.configure(

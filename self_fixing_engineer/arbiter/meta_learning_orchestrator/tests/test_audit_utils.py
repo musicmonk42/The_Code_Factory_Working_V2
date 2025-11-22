@@ -8,16 +8,10 @@ import pytest
 import pytest_asyncio
 import aiofiles
 from pytest_mock import MockerFixture
-from datetime import datetime, timezone
-from typing import Dict, Any
-from prometheus_client import CollectorRegistry, REGISTRY
 from opentelemetry import trace
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
 from cryptography.hazmat.primitives import serialization
-from tenacity import RetryError
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer

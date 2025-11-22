@@ -12,7 +12,7 @@ import importlib.metadata
 import re
 import ssl
 import uuid
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable, Protocol, Literal
+from typing import Dict, Any, Optional, List, Callable, Awaitable, Protocol, Literal
 from contextlib import asynccontextmanager
 from collections import deque
 from logging.handlers import RotatingFileHandler
@@ -354,7 +354,7 @@ class SNSEvent(BaseModel):
             elif isinstance(data, str):
                 for pattern in cls.SENSITIVE_PATTERNS:
                     if pattern.search(data):
-                        audit_logger.critical(f"Detected and scrubbed sensitive pattern from string.")
+                        audit_logger.critical("Detected and scrubbed sensitive pattern from string.")
                         return "[REDACTED]"
                 return data
             else:
@@ -709,7 +709,7 @@ class SNSGateway:
         }):
             try: self.circuit_breaker.check()
             except ConnectionAbortedError:
-                main_logger.warning(f"Batch dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
+                main_logger.warning("Batch dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
                 for event in deduped_batch: await self._handle_dead_letter(event, "circuit_breaker_open")
                 return False
 

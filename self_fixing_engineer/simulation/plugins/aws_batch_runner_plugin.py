@@ -4,7 +4,6 @@ import json
 import logging
 import time
 import tempfile
-import uuid
 import tarfile
 import fnmatch
 import random

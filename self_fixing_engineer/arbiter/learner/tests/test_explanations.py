@@ -4,12 +4,8 @@ import pytest
 import asyncio
 import json
 import os
-import sys
-import time
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-from tenacity import RetryError
-from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
+from unittest.mock import AsyncMock, MagicMock
+from prometheus_client import REGISTRY
 from cryptography.fernet import Fernet
 import logging
 
@@ -38,12 +34,6 @@ from arbiter.learner.explanations import (
     record_explanation_quality,
     get_explanation_quality_report,
     EXPLANATION_PROMPT_TEMPLATES,
-    EXPLANATION_CACHE_REDIS_TTL,
-)
-from arbiter.learner.metrics import (
-    learn_error_counter,
-    explanation_llm_latency_seconds,
-    explanation_llm_failure_total,
 )
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -108,8 +98,6 @@ def setup_env(mocker, tmp_path):
 
 @pytest.fixture(autouse=True)
 def mock_arbiter_config(mocker):
-    from unittest.mock import MagicMock
-    from cryptography.fernet import Fernet
     mock_config = MagicMock()
     mock_config.NEO4J_URL = "bolt://localhost:7687"
     mock_config.NEO4J_USER = "neo4j"

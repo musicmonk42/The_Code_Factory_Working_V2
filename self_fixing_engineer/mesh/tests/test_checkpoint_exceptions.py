@@ -10,18 +10,12 @@ Tests cover:
 - Circuit breaker integration
 """
 
-import asyncio
 import json
 import os
 import time
-import hmac
-import hashlib
-from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock, call
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 # Configure test environment
 os.environ.update({

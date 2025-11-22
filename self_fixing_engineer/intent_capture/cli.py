@@ -49,7 +49,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import bleach
 import jwt
@@ -60,7 +60,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Prompt
 
 # UPGRADE: Sentry and Vault for secrets - [Date: August 19, 2025]
 import contextlib
@@ -84,7 +84,8 @@ try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     BaseModel = object
-    Field = lambda *a, **k: None
+    def Field(*a, **k):
+        return None
     class ValidationError(Exception): pass
 
 try:
@@ -209,7 +210,7 @@ class CollabServer:
         self._server = await websockets.serve(self.handle_client, self.host, self.port, max_size=1 << 20)
         logger.info(f"Collaboration server started on ws://{self.host}:{self.port}")
         token = jwt.encode({"exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)}, JWT_SECRET, algorithm="HS512")
-        CONSOLE.print(f"[green bold]Server running. Share this URI and token with clients:[/green bold]")
+        CONSOLE.print("[green bold]Server running. Share this URI and token with clients:[/green bold]")
         CONSOLE.print(f"URI: [cyan]ws://{self.host}:{self.port}[/cyan]")
         CONSOLE.print(f"Token: [yellow]{token}[/yellow]")
 
@@ -572,7 +573,7 @@ async def main_cli_loop():
             _shutdown_event.set()
         except (ConnectionClosed, asyncio.TimeoutError) as e:
             logger.warning(f"Network error in main loop: {e}")
-            CONSOLE.print(f"[yellow]A network connection was lost.[/yellow]")
+            CONSOLE.print("[yellow]A network connection was lost.[/yellow]")
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
             if sentry_sdk and os.getenv('SENTRY_DSN'): sentry_sdk.capture_exception(e)

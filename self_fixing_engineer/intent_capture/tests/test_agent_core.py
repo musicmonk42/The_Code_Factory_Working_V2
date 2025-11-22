@@ -1,16 +1,8 @@
 import os
 import json
-import time
-import uuid
-import asyncio
 import gc
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List, Union
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open, call, Mock
+from unittest.mock import patch, MagicMock, AsyncMock, Mock
 import pytest
-from pytest_asyncio import fixture
-from tenacity import Retrying, stop_after_attempt
-import traceback
 import datetime
 
 # Import the module under test FIRST
@@ -18,7 +10,6 @@ import intent_capture.agent_core as agent_core_module
 from intent_capture.agent_core import (
     CollaborativeAgent,
     LLMProviderFactory,
-    StateBackend,
     RedisStateBackend,
     get_or_create_agent,
     validate_session_token,
@@ -27,8 +18,6 @@ from intent_capture.agent_core import (
     AgentResponse,
     SafetyGuard,
     AgentError,
-    LLMInitializationError,
-    StateManagementError,
     InvalidSessionError,
     ConfigurationError,
     SafetyViolationError,
@@ -139,7 +128,7 @@ def mock_llm():
     async def mock_ainvoke(*args, **kwargs):
         # Check if config is provided and extract session_id
         config = kwargs.get('config', {})
-        configurable = config.get('configurable', {})
+        config.get('configurable', {})
         
         # The RunnableWithMessageHistory requires session_id in configurable
         # We'll accept any invocation for testing purposes

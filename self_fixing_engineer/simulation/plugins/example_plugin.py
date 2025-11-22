@@ -8,7 +8,7 @@ import re
 import random
 import time
 from datetime import datetime
-from typing import Dict, Any, Callable, List, Optional
+from typing import Dict, Any, Callable, List
 import threading
 import io  # for chunked file reading
 import hashlib
@@ -127,7 +127,7 @@ def _audit_cache_key(path: str) -> str:
 # ---------------------------
 PROMETHEUS_AVAILABLE = False
 try:
-    from prometheus_client import Counter, Gauge, Histogram  # Exposed on default REGISTRY
+    from prometheus_client import Counter, Histogram  # Exposed on default REGISTRY
     PROMETHEUS_AVAILABLE = True
 except Exception as _e:
     plugin_logger.warning(f"Prometheus not available; metrics disabled: {_e}")

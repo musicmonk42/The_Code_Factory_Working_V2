@@ -1,24 +1,19 @@
 import os
-import sys
 import json
 import asyncio
 import collections
 import uuid
 import time
-import base64
 import logging
 import tracemalloc
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union, Callable, AsyncGenerator, Coroutine, Tuple
-from enum import Enum
 from typing_extensions import Self
 import structlog
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from logging.handlers import RotatingFileHandler
-from cryptography.fernet import Fernet
-import secrets
 from PIL import Image
 import io
 import hashlib
@@ -36,7 +31,7 @@ __version__ = "1.2.0"
 from prometheus_client import Gauge, Counter, Histogram
 
 # --- Corrected Internal Imports ---
-from arbiter.explainable_reasoner.metrics import METRICS, get_or_create_metric, get_metrics_content
+from arbiter.explainable_reasoner.metrics import get_or_create_metric, get_metrics_content
 from arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
 from arbiter.explainable_reasoner.history_manager import (
     BaseHistoryManager, SQLiteHistoryManager, PostgresHistoryManager, RedisHistoryManager
@@ -45,7 +40,7 @@ from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
 from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
 from arbiter.explainable_reasoner.utils import (
     _sanitize_context, _simple_text_sanitize, _rule_based_fallback,
-    _format_multimodal_for_prompt, rate_limited, redact_pii
+    _format_multimodal_for_prompt, rate_limited
 )
 from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 

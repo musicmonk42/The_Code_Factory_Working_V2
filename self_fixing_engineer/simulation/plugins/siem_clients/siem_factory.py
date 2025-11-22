@@ -1,14 +1,10 @@
-import sys
-import logging
-import os
-import re
 from typing import Dict, Any, List, Callable, Type, Optional
 
 # Import base/tooling
 from .siem_base import (
     BaseSIEMClient, SIEMClientConfigurationError, SIEMClientError,
-    SECRETS_MANAGER, alert_operator, PRODUCTION_MODE,
-    _base_logger, PYDANTIC_AVAILABLE,
+    alert_operator, PRODUCTION_MODE,
+    _base_logger,
 )
 
 # Attempt to import individual client classes; do not abort on failure.

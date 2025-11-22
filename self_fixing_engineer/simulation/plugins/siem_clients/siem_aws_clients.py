@@ -17,9 +17,7 @@ from .siem_base import (
     BaseSIEMClient, SIEMClientConfigurationError, SIEMClientError,
     SIEMClientAuthError, SIEMClientConnectivityError, SIEMClientQueryError,
     SIEMClientPublishError, SIEMClientResponseError,
-    alert_operator, SECRETS_MANAGER, PRODUCTION_MODE, AUDIT,
-    PYDANTIC_AVAILABLE, GenericLogEvent, scrub_secrets, _global_secret_patterns,
-    _base_logger
+    alert_operator, SECRETS_MANAGER, PRODUCTION_MODE, _base_logger
 )
 from pydantic import BaseModel, Field, ValidationError, validator # Re-import for local schemas
 
@@ -321,7 +319,7 @@ class AwsCloudWatchClient(BaseSIEMClient):
             if 'logGroups' in response:
                 return True, "Successfully connected to AWS CloudWatch Logs."
             else:
-                alert_operator(f"CRITICAL: AWS CloudWatch health check failed: Unexpected response from describe_log_groups.", level="CRITICAL")
+                alert_operator("CRITICAL: AWS CloudWatch health check failed: Unexpected response from describe_log_groups.", level="CRITICAL")
                 raise SIEMClientResponseError("Failed to list log groups in AWS CloudWatch (unexpected response).", self.client_type, 500, str(response), correlation_id=self.logger.extra.get('correlation_id'))
         except AWSClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
@@ -499,7 +497,7 @@ class AwsCloudWatchClient(BaseSIEMClient):
             query_id = query_id_response.get('queryId')
 
             if not query_id:
-                alert_operator(f"CRITICAL: Failed to start CloudWatch Logs query. No queryId returned.", level="CRITICAL")
+                alert_operator("CRITICAL: Failed to start CloudWatch Logs query. No queryId returned.", level="CRITICAL")
                 raise SIEMClientQueryError("Failed to start CloudWatch Logs query.", self.client_type, correlation_id=self.logger.extra.get('correlation_id'))
 
             status = ''

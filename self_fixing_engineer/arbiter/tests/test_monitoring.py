@@ -1,16 +1,13 @@
 import pytest
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 import logging
 import threading
 import os
-import sys
 import json
 from datetime import datetime
-from hashlib import sha256
-from pathlib import Path
 
 # Import from the arbiter package where monitoring.py is located
-from arbiter.monitoring import Monitor, LogFormat, MAX_IN_MEMORY_LOG_SIZE_MB, JSON_LOG_WRITE_LIMIT
+from arbiter.monitoring import Monitor, LogFormat
 
 @pytest.fixture
 def tmp_log_file(tmp_path):
@@ -33,7 +30,7 @@ def test_initialization_defaults():
     assert monitor.format == LogFormat.JSONL
     assert monitor.global_metadata == {}
     assert monitor.observers == []
-    assert monitor.tamper_evident == False
+    assert not monitor.tamper_evident
     assert monitor.action_logs == []
 
 def test_initialization_with_params(tmp_log_file, mock_logger):
@@ -47,7 +44,7 @@ def test_initialization_with_params(tmp_log_file, mock_logger):
     assert monitor.format == LogFormat.JSON
     assert monitor.global_metadata == global_meta
     assert monitor.observers == observers
-    assert monitor.tamper_evident == True
+    assert monitor.tamper_evident
 
 def test_log_action_basic(monitor):
     action = {"type": "test_action", "data": "test_data"}

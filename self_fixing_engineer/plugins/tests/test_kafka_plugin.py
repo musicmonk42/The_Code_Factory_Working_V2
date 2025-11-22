@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import logging
@@ -7,12 +6,11 @@ import time
 import hashlib
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any, List
+from typing import Dict
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaError
 from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
-import importlib
 
 # Assuming these are available in a file named kafka_plugin.py
 # and we are mocking them for the purpose of testing this file in isolation.

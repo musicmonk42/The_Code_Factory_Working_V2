@@ -209,7 +209,11 @@ _project_root_path = os.getenv("PROJECT_ROOT", str(Path(__file__).parent.parent)
 validate_project_root(_project_root_path)
 
 # --- Compat shim: expose top-level plugin as test_generation.gen_agent.gen_plugins ---
-import os, sys, types, importlib.util, logging
+import os
+import sys
+import types
+import importlib.util
+import logging
 
 _pkg_dir = os.path.dirname(__file__)
 

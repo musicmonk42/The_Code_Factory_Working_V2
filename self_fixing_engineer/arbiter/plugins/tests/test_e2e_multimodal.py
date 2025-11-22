@@ -1,24 +1,15 @@
 # test_e2e_multimodal.py
 import pytest
 import asyncio
-import base64
 import tempfile
 import os
-import json
-import yaml
-from unittest.mock import Mock, patch, AsyncMock
-from typing import Dict, Any
-import time
+from unittest.mock import Mock, patch
 
 # Import all the components we need to test
 from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
 from arbiter.plugins.multi_modal_config import MultiModalConfig
 from arbiter.plugins.multimodal.interface import (
     ProcessingResult,
-    ImageAnalysisResult,
-    AudioAnalysisResult,
-    VideoAnalysisResult,
-    TextAnalysisResult,
     DummyMultiModalPlugin
 )
 from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
@@ -165,7 +156,7 @@ class TestE2EMultiModalSystem:
         # Text with PII
         text_with_pii = "Contact john@example.com or call 555-123-4567"
         
-        with patch('arbiter.plugins.multi_modal_plugin.logger') as mock_logger:
+        with patch('arbiter.plugins.multi_modal_plugin.logger'):
             result = await plugin_with_config.process_text(text_with_pii)
             assert result.success is True
             # PII should be masked in logs but not necessarily in results

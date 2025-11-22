@@ -1,7 +1,5 @@
 # tests/test_agents.py
-import asyncio
 import json
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
 import pytest
 

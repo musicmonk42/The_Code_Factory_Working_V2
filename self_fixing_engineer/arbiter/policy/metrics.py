@@ -31,11 +31,10 @@ Environment Variables:
 Notes:
 - All metric labels are sanitized to alphanumeric, underscore, or hyphen characters to prevent corruption.
 """
-from typing import Union, Tuple, Optional, Type, List, Dict, Any
+from typing import Union, Tuple, Optional, Type, Dict, Any
 from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import os
-import sys
 import logging
 import threading
 import asyncio

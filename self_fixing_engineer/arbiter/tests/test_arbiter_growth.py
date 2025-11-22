@@ -8,7 +8,7 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import MagicMock
 
 def create_module_stub(name, attributes=None):
     """Helper to create a stub module with given attributes"""
@@ -150,7 +150,6 @@ import pytest
 
 # Import using direct file loading to avoid package/module conflicts
 import importlib.util
-import os
 
 current_dir = Path(__file__).resolve().parent  # tests/
 arbiter_dir = current_dir.parent  # arbiter/
@@ -762,7 +761,7 @@ async def test_audit_chain_validation_detects_tampering():
     
     # Create valid audit log first
     await storage.save_audit_log("test-arbiter", "op1", {"data": "test"}, "genesis_hash")
-    hash2 = await storage.save_audit_log("test-arbiter", "op2", {"data": "test2"}, storage._last_hash)
+    await storage.save_audit_log("test-arbiter", "op2", {"data": "test2"}, storage._last_hash)
     
     # Tamper with the audit log
     if len(storage.audit_logs) > 1:
@@ -808,7 +807,7 @@ async def test_idempotency():
     # First event
     await mgr.record_growth_event("skill_acquired", event_details)
     await asyncio.sleep(0.1)
-    initial_facts = len(knowledge_graph.facts)
+    len(knowledge_graph.facts)
     
     # Try to record the same event again
     await mgr.record_growth_event("skill_acquired", event_details)

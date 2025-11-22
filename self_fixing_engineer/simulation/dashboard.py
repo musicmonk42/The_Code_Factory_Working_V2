@@ -225,7 +225,7 @@ def display_onboarding_wizard():
         }
         with open(os.path.join(demo_dir, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
-        logger.info(f"Onboarding configuration and demo plugin created.")
+        logger.info("Onboarding configuration and demo plugin created.")
 
 async def _run_health_checks_gui(config: dict):
     """
@@ -242,7 +242,7 @@ async def _run_health_checks_gui(config: dict):
                 health = await mp.healthcheck()
                 st_dash.success(f"Notification backend {notif_type}: {health.get('message', health)}")
             else:
-                st_dash.error(f"MeshPubSub class missing.")
+                st_dash.error("MeshPubSub class missing.")
         cp_cfg = config.get("checkpoint_backend", {})
         cp_type = cp_cfg.get("type")
         if cp_type:
@@ -252,7 +252,7 @@ async def _run_health_checks_gui(config: dict):
                 health = await cm.load()
                 st_dash.success(f"Checkpoint backend {cp_type}: {health.get('status', health)}")
             else:
-                st_dash.error(f"CheckpointManager class missing.")
+                st_dash.error("CheckpointManager class missing.")
     except Exception as e:
         logger.exception(f"Health check error: {e}")
         st_dash.error("Unexpected error during health checks.")

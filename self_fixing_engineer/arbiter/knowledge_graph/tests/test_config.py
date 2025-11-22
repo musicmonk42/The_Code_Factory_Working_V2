@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, mock_open
 from pydantic import ValidationError
 
 # Import the module components
@@ -11,8 +11,7 @@ from arbiter.knowledge_graph.config import (
     SensitiveValue,
     MetaLearningConfig,
     MultiModalData,
-    load_persona_dict,
-    env
+    load_persona_dict
 )
 
 
@@ -119,7 +118,7 @@ class TestMetaLearningConfig:
             'ML_DATA_LAKE_PATH': str(test_path),
             'ML_LOCAL_AUDIT_LOG_PATH': f'{temp_data_dir}/audit.jsonl'
         }):
-            config = MetaLearningConfig()
+            MetaLearningConfig()
             assert test_path.parent.exists()
             assert test_path.exists()
     
@@ -189,7 +188,6 @@ class TestMetaLearningConfig:
             'ML_LOCAL_AUDIT_LOG_PATH': f'{temp_data_dir}/test_audit.jsonl'
         }):
             config = MetaLearningConfig()
-            initial_provider = config.DEFAULT_PROVIDER
             
             # Simulate reload
             config.reload_config()

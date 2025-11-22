@@ -3,8 +3,7 @@ import pytest
 import os
 import tempfile
 import yaml
-import logging
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 from pydantic import ValidationError
 
 from arbiter.plugins.multi_modal_config import (

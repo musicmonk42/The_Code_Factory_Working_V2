@@ -2,24 +2,15 @@
 
 import pytest
 import asyncio
-import json
-import hashlib
-import tempfile
 import os
-import time
-from pathlib import Path
-from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any, List
 from cryptography.fernet import Fernet
 import importlib
 
 # Import all the modules we're testing
 from arbiter.learner.core import Arbiter, Learner
-from arbiter.learner.encryption import ArbiterConfig, encrypt_value, decrypt_value
-from arbiter.learner.validation import DomainNotFoundError
-from arbiter.learner.audit import CircuitBreaker, MerkleTree
-from arbiter.learner.fuzzy import FuzzyParser, load_parser_priorities, PARSER_PRIORITIES
+from arbiter.learner.encryption import ArbiterConfig
+from arbiter.learner.audit import CircuitBreaker
 
 
 class TestEndToEndLearner:

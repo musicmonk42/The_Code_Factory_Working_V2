@@ -1,25 +1,14 @@
 import pytest
-import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 from test_generation.orchestrator.cli import main, _make_run_id, graceful_shutdown, _check_writable, _check_disk_space
-from test_generation.orchestrator import sanitize_path
 import signal
-import uuid
-import os
-import shutil
-import logging
-import types
 from test_generation.orchestrator import orchestrator as orchestrator_module
 
 # Corrected import name for the orchestrator
 from test_generation.orchestrator.orchestrator import GenerationOrchestrator
-from test_generation.orchestrator.audit import audit_event, RUN_ID as AUDIT_RUN_ID
-from test_generation.orchestrator.console import log
-from test_generation.orchestrator.config import load_config
 
 # Import for the corrected mock path
-from test_generation import utils
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
@@ -72,7 +61,6 @@ def test_make_run_id(monkeypatch):
     mock_uuid4 = Mock(return_value="mocked-uuid")
     monkeypatch.setattr("uuid.uuid4", mock_uuid4)
     # The import needs to happen after the patch if the module is already loaded
-    from test_generation.orchestrator.cli import _make_run_id
     run_id = _make_run_id()
     assert run_id == "mocked-uuid"
 
@@ -103,7 +91,6 @@ def test_check_writable(project: Path, monkeypatch):
     assert not _check_writable(non_writable_dir)
 
 def test_orchestrator_import_guard():
-    from test_generation.orchestrator.orchestrator import GenerationOrchestrator
     assert GenerationOrchestrator is not None
 
 def test_oserror_typo_guard():

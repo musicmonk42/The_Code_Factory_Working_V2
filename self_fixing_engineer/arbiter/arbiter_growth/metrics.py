@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, Type, Union
+from typing import Optional, Type, Union
 
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY, CollectorRegistry
 

@@ -1,14 +1,11 @@
 # tests/test_compliance_mapper.py
-import json
 import os
 import sys
 import pytest
 import yaml
 import logging
 import argparse
-from unittest.mock import patch, MagicMock, AsyncMock
-from cerberus import Validator
-import asyncio
+from unittest.mock import patch, MagicMock
 import shutil
 
 # Fix import path for compliance_mapper module
@@ -21,7 +18,6 @@ from compliance_mapper import (
     ComplianceEnforcementError,
     _audit_log_gap,
     main_cli,
-    _log_to_central_audit,
     sanitize_log,
     write_dummy_config,
     PROMETHEUS_AVAILABLE
@@ -238,7 +234,7 @@ async def test_main_cli_health_check(mock_env, monkeypatch, capsys):
     """Test main_cli --health-check option."""
     with patch("argparse.ArgumentParser.parse_args") as mock_parse:
         mock_parse.return_value = argparse.Namespace(health_check=True)
-        with pytest.raises(SystemExit) as exc:
+        with pytest.raises(SystemExit):
             main_cli()
         captured = capsys.readouterr()
         assert "prometheus_available" in captured.out

@@ -1,4 +1,3 @@
-import logging
 import asyncio
 import time
 import base64
@@ -7,7 +6,7 @@ import json
 import os
 import random
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Union, Type, Callable, Tuple, AsyncGenerator
+from typing import Dict, Any, Optional, List, Type, Callable, Tuple, AsyncGenerator
 from functools import lru_cache, wraps
 
 import httpx
@@ -18,8 +17,7 @@ from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, Reasoner
 from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 from arbiter.explainable_reasoner.metrics import METRICS
 from prometheus_client import Counter, Histogram, REGISTRY
-from prometheus_client import Histogram
-from arbiter.explainable_reasoner.utils import redact_pii, rate_limited
+from arbiter.explainable_reasoner.utils import redact_pii
 
 # Structured logging
 import structlog

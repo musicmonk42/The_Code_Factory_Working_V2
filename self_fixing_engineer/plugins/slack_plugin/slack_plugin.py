@@ -11,9 +11,8 @@ import hashlib
 import importlib.metadata
 import re
 import ssl
-import sys
 import uuid
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable, Protocol, Literal, ClassVar
+from typing import Dict, Any, Optional, List, Callable, Awaitable, Protocol, Literal, ClassVar
 from contextlib import asynccontextmanager
 from queue import PriorityQueue
 from collections import deque
@@ -36,7 +35,7 @@ try:
     from core_utils import alert_operator
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
-except ImportError as e:
+except ImportError:
     import logging
     
     def alert_operator(message: str, level: str):
@@ -329,7 +328,7 @@ class SlackEvent(BaseModel):
             elif isinstance(data, str):
                 for pattern in cls.SENSITIVE_PATTERNS:
                     if pattern.search(data):
-                        audit_logger.critical(f"Detected and scrubbed sensitive pattern from string.")
+                        audit_logger.critical("Detected and scrubbed sensitive pattern from string.")
                         return "[REDACTED]"
                 return data
             else:
@@ -707,8 +706,8 @@ class SlackGateway:
             "severity": event.severity
         }):
             try: self.circuit_breaker.check()
-            except ConnectionAbortedError as e:
-                main_logger.warning(f"Event dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
+            except ConnectionAbortedError:
+                main_logger.warning("Event dropped due to circuit breaker being open.", extra={"context": {"target": self.target_config.name}})
                 await self._handle_dead_letter(event, "circuit_breaker_open")
                 return False
 
@@ -924,14 +923,14 @@ class SlackGatewayManager:
                 try:
                     serializer_class = entry_point.load()
                     self.register_serializer(entry_point.name, serializer_class())
-                except Exception as e:
+                except Exception:
                     raise AnalyzerCriticalError(f"Failed to load serializer plugin '{entry_point.name}'.")
         except TypeError: # Pre Python 3.10
             for entry_point in importlib.metadata.entry_points().get(group, []):
                 try:
                     serializer_class = entry_point.load()
                     self.register_serializer(entry_point.name, serializer_class())
-                except Exception as e:
+                except Exception:
                     raise AnalyzerCriticalError(f"Failed to load serializer plugin '{entry_point.name}'.")
 
     def register_serializer(self, name: str, serializer: Serializer):

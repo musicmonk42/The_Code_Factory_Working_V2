@@ -4,9 +4,8 @@ Place this file as: arbiter/knowledge_graph/tests/conftest.py
 """
 
 import sys
-import os
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 # Add the parent directories to Python path

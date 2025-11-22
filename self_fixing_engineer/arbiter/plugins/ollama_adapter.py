@@ -137,7 +137,7 @@ class OllamaAdapter:
                 self._circuit_breaker_state = "open"
                 self._circuit_breaker_last_failure_time = time.monotonic()
                 self.circuit_breaker_state_gauge.set(2) # 2 for "open"
-                self.logger.error(f"Circuit breaker failed in 'half-open' state and is now 'open'.")
+                self.logger.error("Circuit breaker failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_state = "open"
                 self._circuit_breaker_last_failure_time = time.monotonic()

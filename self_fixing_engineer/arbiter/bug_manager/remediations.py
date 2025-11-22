@@ -1,15 +1,13 @@
 import logging
 import asyncio
-import hashlib
 import aiohttp
 import tenacity
-import os
 import json
 from datetime import datetime, timezone
 from importlib import import_module
 from typing import Any, Dict, List, Optional, Callable, Coroutine, Tuple
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram
 from prometheus_client import REGISTRY
 
 from .utils import (  # or from arbiter.bug_manager.utils import (

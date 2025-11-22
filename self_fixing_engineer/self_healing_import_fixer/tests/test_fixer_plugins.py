@@ -3,9 +3,7 @@ import sys
 import pytest
 import hmac
 import hashlib
-import asyncio
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 import types
 
 # ---------------------------------------------------------------------------

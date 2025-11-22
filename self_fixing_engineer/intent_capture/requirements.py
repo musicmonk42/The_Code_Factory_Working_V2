@@ -23,7 +23,7 @@ __version__ = "1.2.0"
 import json
 import os
 import asyncio # For async DB ops and ML model loading
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 import logging
 import datetime
 import threading
@@ -42,7 +42,7 @@ except ImportError:
 
 # P6: Tenacity for retries
 # Install with 'pip install tenacity==9.1.2'
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log, retry_if_exception_type
 
 # P4: Caching for embeddings and DB queries
 # Install with 'pip install cachetools==6.1.0'
@@ -51,7 +51,8 @@ try:
     CACHETOOLS_AVAILABLE = True
 except ImportError:
     TTLCache = None
-    cached = lambda *args, **kwargs: lambda func: func # Dummy decorator
+    def cached(*args, **kwargs):
+        return lambda func: func # Dummy decorator
     CACHETOOLS_AVAILABLE = False
 
 # P5: Observability: Prometheus Metrics

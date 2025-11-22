@@ -20,10 +20,9 @@ import logging
 import time
 import uuid
 import re
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union, TypeVar, cast, AsyncContextManager
+from typing import Dict, Any, Optional, Tuple, Callable, List, TypeVar, AsyncContextManager
 from pathlib import Path
 import functools
-import inspect
 from contextlib import asynccontextmanager
 
 # --- Version ---
@@ -140,7 +139,8 @@ except ImportError:
         def set(self, value: float): pass
         def observe(self, value: float): pass
         def labels(self, *args, **kwargs): return self
-    _get_or_create_metric = lambda *args, **kwargs: DummyMetric()
+    def _get_or_create_metric(*args, **kwargs):
+        return DummyMetric()
 
 try:
     from detect_secrets.core import SecretsCollection
@@ -188,7 +188,8 @@ except ImportError:
         def __exit__(self, *args): pass
     
     SecretsCollection = FallbackSecretsCollection
-    transient_settings = lambda: FallbackTransientSettings()
+    def transient_settings():
+        return FallbackTransientSettings()
 
 try:
     from redis.asyncio import Redis
@@ -1138,7 +1139,7 @@ async def _strategy_prompt_optimization(
     Returns:
         Dict[str, Any]: Result of the optimization strategy
     """
-    optimization_scope = strategy_params.get("optimization_scope", "system_prompt")
+    strategy_params.get("optimization_scope", "system_prompt")
     feedback_window_days = strategy_params.get("feedback_window_days", EVOLUTION_CONFIG.evolution_data_window_days)
     
     # Try to get cached data first

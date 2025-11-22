@@ -4,12 +4,9 @@ import pytest
 import asyncio
 import json
 import os
-import time
 import tempfile
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any, Callable
-import jsonschema
-from jsonschema.exceptions import SchemaError, ValidationError as JsonValidationError
+from jsonschema.exceptions import SchemaError
 from tenacity import RetryError
 
 from arbiter.learner.validation import (
@@ -17,14 +14,9 @@ from arbiter.learner.validation import (
     validate_data,
     register_validation_hook,
     reload_schemas,
-    validation_success_total,
     validation_failure_total,
-    validation_latency_seconds,
     schema_reload_total,
-    schema_reload_latency_seconds,
-    SCHEMA_RELOAD_RETRIES,
-    SCHEMA_CACHE_TTL_SECONDS,
-    SCHEMA_DIR_PERMISSION_CHECK
+    SCHEMA_CACHE_TTL_SECONDS
 )
 
 
@@ -324,7 +316,8 @@ class TestRegisterValidationHook:
     
     def test_register_lambda_hook(self, mock_learner):
         """Test registering a lambda function as hook."""
-        lambda_validator = lambda v: v is not None
+        def lambda_validator(v):
+            return v is not None
         
         register_validation_hook(mock_learner, "TestDomain", lambda_validator)
         

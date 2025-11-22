@@ -4,16 +4,14 @@
 # Run with: pytest test_metrics.py -v --cov=metrics --cov-report=html
 
 import os
-import sys
 import logging
-import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock, call
+from unittest.mock import patch, MagicMock
 import tempfile
 import threading
 
 import pytest
-from prometheus_client import Counter, Gauge, Histogram, Summary, CollectorRegistry, generate_latest
+from prometheus_client import Counter, Gauge, Histogram, Summary, CollectorRegistry
 
 # Import the module under test
 from arbiter.explainable_reasoner.metrics import (
@@ -146,7 +144,7 @@ def test_get_or_create_metric_success(
 def test_get_or_create_metric_caching():
     """Tests that metrics are cached properly."""
     # Create a metric
-    metric1 = get_or_create_metric(Counter, "cache_test_unique", "Doc", ())
+    get_or_create_metric(Counter, "cache_test_unique", "Doc", ())
     
     # Try to create the same metric again
     metric2 = get_or_create_metric(Counter, "cache_test_unique", "Doc", ())

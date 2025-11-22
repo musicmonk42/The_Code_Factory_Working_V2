@@ -12,21 +12,17 @@ import pytest
 import pytest_asyncio
 
 from arbiter.arbiter_growth.exceptions import (
-    ArbiterGrowthError,
     AuditChainTamperedError,
     CircuitBreakerOpenError,
-    OperationQueueFullError,
     RateLimitError,
 )
 from arbiter.arbiter_growth.idempotency import IdempotencyStore
 from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
 from arbiter.arbiter_growth.metrics import (
-    CONFIG_FALLBACK_USED,
     GROWTH_ANOMALY_SCORE,
     GROWTH_EVENTS,
-    GROWTH_SAVE_ERRORS,
 )
-from arbiter.arbiter_growth.models import ArbiterState, GrowthEvent
+from arbiter.arbiter_growth.models import GrowthEvent
 from pybreaker import CircuitBreakerListener
 from arbiter.arbiter_growth.config_store import TokenBucketRateLimiter
 

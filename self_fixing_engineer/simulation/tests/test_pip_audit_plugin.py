@@ -4,25 +4,16 @@ import pytest
 import asyncio
 import os
 import json
-import uuid
-import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import patch, MagicMock, AsyncMock
 from pydantic import ValidationError
-from aiohttp import ClientError
 from prometheus_client import CollectorRegistry
-import subprocess
 import tempfile
-import shutil
-import functools
 
 # Import the plugin from the correct path
 from simulation.plugins.pip_audit_plugin import (
     plugin_health, scan_dependencies,
-    PipAuditConfig, PIP_AUDIT_CONFIG,
-    _load_config, _validate_safe_args,
-    PIP_AUDIT_SCANS_TOTAL, PIP_AUDIT_VULNERABILITIES_DETECTED,
-    PIP_AUDIT_ERRORS_TOTAL,
+    PipAuditConfig, _load_config, _validate_safe_args,
     TransientScanError, # Import the custom exception for testing
 )
 

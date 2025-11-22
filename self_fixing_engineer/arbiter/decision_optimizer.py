@@ -8,11 +8,10 @@ import json
 import uuid
 import hashlib
 import traceback
-from typing import List, Dict, Any, Optional, Callable, Set, Tuple, Type
+from typing import List, Dict, Any, Optional, Callable, Set, Tuple
 from dataclasses import dataclass, field
-from heapq import heappush, heappop
 # from threading import Lock # REMOVED: Replaced with asyncio.Lock
-from collections import defaultdict, Counter
+from collections import Counter
 import networkx as nx
 from cryptography.fernet import Fernet, InvalidToken
 import redis.asyncio as redis
@@ -37,7 +36,7 @@ from arbiter.config import ArbiterConfig
 from arbiter.utils import get_system_metrics_async
 
 # SFE Engine Shared Components
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY, register, PlugInKind
+from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))

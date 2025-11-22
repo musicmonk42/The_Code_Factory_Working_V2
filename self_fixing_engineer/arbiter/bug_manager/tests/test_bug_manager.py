@@ -4,7 +4,6 @@
 # Run with: pytest test_bug_manager.py -v --cov=bug_manager
 
 import asyncio
-import time
 from unittest.mock import patch, MagicMock, AsyncMock, ANY
 
 import pytest
@@ -254,7 +253,7 @@ class TestBugManagerArena:
 
     @pytest.mark.asyncio
     async def test_report_with_no_loop(self):
-        with patch('arbiter.bug_manager.bug_manager.BugManager.report', new_callable=AsyncMock) as mock_super_report:
+        with patch('arbiter.bug_manager.bug_manager.BugManager.report', new_callable=AsyncMock):
             with patch('asyncio.get_running_loop', side_effect=RuntimeError):
                 with patch('asyncio.run') as mock_asyncio_run:
                     arena = BugManagerArena(settings=Settings(ENABLED_NOTIFICATION_CHANNELS=()))

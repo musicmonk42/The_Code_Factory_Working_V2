@@ -9,7 +9,6 @@ import sys
 import subprocess
 import argparse
 import time
-import signal
 from pathlib import Path
 
 def set_environment():
@@ -60,7 +59,7 @@ def run_arena():
     # Check if it's running
     if process.poll() is None:
         print(f"✓ Arena started (PID: {process.pid})")
-        print(f"  HTTP API available at: http://localhost:8000")
+        print("  HTTP API available at: http://localhost:8000")
         print()
     else:
         print("✗ Arena failed to start")

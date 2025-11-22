@@ -5,12 +5,11 @@ import yaml
 import argparse
 import logging
 import sys
-import traceback
 import datetime
 import asyncio
 import re
 import shutil
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Dict, Any, List, Optional, Tuple
 from cerberus import Validator
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 
@@ -26,7 +25,7 @@ try:
         self_healing_compliance_gap_alerts_total = Counter(f'{METRIC_PREFIX}compliance_gap_alerts_total', 'Total number of compliance gap alerts triggered')
         self_healing_compliance_required_controls_not_enforced = Gauge(f'{METRIC_PREFIX}compliance_required_controls_not_enforced', 'Number of required compliance controls not enforced', ['control_id'])
         self_healing_config_load_failures = Counter(f'{METRIC_PREFIX}config_load_failures', 'Total number of config load failures')
-    except ValueError as e:
+    except ValueError:
         # Metrics already registered, retrieve them
         from prometheus_client import REGISTRY
         self_healing_compliance_block_total = REGISTRY._collector_to_names.get(f'{METRIC_PREFIX}compliance_block_total')
@@ -488,7 +487,7 @@ agents:
                 os.remove(test_config_path)
                 if os.path.exists(test_config_dir) and not os.listdir(test_config_dir):
                     os.rmdir(test_config_dir)
-                logger.info(f"Cleaned up dummy crew_config.yaml and directory (if empty).")
+                logger.info("Cleaned up dummy crew_config.yaml and directory (if empty).")
             except Exception as e:
                 logger.warning(f"Failed to clean up dummy config files: {e}", exc_info=True)
                 

@@ -12,19 +12,16 @@ Tests:
 """
 
 import asyncio
-import json
 import os
 import tempfile
-import importlib
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 import pytest
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
 from arbiter.policy.policy_manager import (
-    PolicyManager, PolicyConfig, DomainRule, UserRule, 
-    LLMRules, TrustRules, PolicyORM
+    PolicyManager, PolicyConfig, DomainRule, LLMRules, TrustRules
 )
 from arbiter.policy.config import ArbiterConfig
 
@@ -109,7 +106,7 @@ def test_policy_config_default():
     assert config.file_metadata["compatibility"] == "1.0.0"
     assert isinstance(config.domain_rules, dict)
     assert isinstance(config.llm_rules, LLMRules)
-    assert config.llm_rules.enabled == False
+    assert not config.llm_rules.enabled
 
 def test_policy_config_version_validation():
     """Test version compatibility validation"""
@@ -145,7 +142,7 @@ def test_policy_manager_init_invalid_config():
     # ArbiterConfig converts relative paths to absolute automatically,
     # so we need to test with None instead
     with pytest.raises(ValidationError):
-        bad_config = ArbiterConfig(
+        ArbiterConfig(
             ARBITER_PORT=8080,
             ARBITER_ENGINE_BACKEND="openai",
             ARBITER_BACKEND_LLM_MODEL="gpt-4",
@@ -241,8 +238,8 @@ async def test_save_and_load_policies(policy_manager):
     
     assert policy_manager.policies is not None
     assert "test.com" in policy_manager.policies.domain_rules
-    assert policy_manager.policies.domain_rules["test.com"].allow == True
-    assert policy_manager.policies.llm_rules.enabled == True
+    assert policy_manager.policies.domain_rules["test.com"].allow
+    assert policy_manager.policies.llm_rules.enabled
     assert policy_manager.policies.llm_rules.threshold == 0.9
 
 @pytest.mark.asyncio
@@ -398,7 +395,7 @@ async def test_check_permission_available():
     with patch.dict('sys.modules', {'arbiter.permission_manager': mock_module}):
         result = await manager.check_permission("admin", "write")
         
-        assert result == True
+        assert result
         mock_pm_instance.check.assert_called_once_with("admin", "write")
 
 @pytest.mark.asyncio

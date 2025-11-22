@@ -5,13 +5,11 @@ import importlib.util
 import json
 import logging
 import os
-import shutil
 import sys
 import threading
 from concurrent.futures import ProcessPoolExecutor
-from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Callable, Tuple, Coroutine
+from typing import Any, Dict, List, Optional, TypedDict, Tuple
 from xml.sax.saxutils import escape
 import aiofiles
 import toml
@@ -19,10 +17,9 @@ import typer
 import yaml
 from datetime import datetime
 import ast
-import traceback
 import collections
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from prometheus_client import Counter, Histogram, REGISTRY
+from prometheus_client import Counter
 
 try:
     from arbiter.arbiter_plugin_registry import register as arbiter_register, PlugInKind as ArbiterPlugInKind, registry as arbiter_registry
@@ -881,12 +878,12 @@ class CodebaseAnalyzer:
         for comp in top_complex:
             report += f"- {comp['file']}:{comp['name']} ({comp['type']}): Complexity {comp['complexity']}, MI {comp['maintainability_index']:.2f}\n"
         if summary["coverage"]:
-            report += f"\n## Coverage\n"
+            report += "\n## Coverage\n"
             report += f"- Total Coverage: {summary['coverage']['total_coverage']}%\n"
             # Assuming 'by_module' is a dict of lists of missing lines
             for module, missing_lines in summary["coverage"]["by_module"].items():
                 report += f"- {module}: {len(missing_lines)} lines missing\n"
-        report += f"\n## Dependencies\n"
+        report += "\n## Dependencies\n"
         report += f"- Total Imports: {summary['dependency_summary']['total_imports']}\n"
         report += f"- External: {summary['dependency_summary']['external_imports']}\n"
         report += f"- Local: {summary['dependency_summary']['local_imports']}\n"

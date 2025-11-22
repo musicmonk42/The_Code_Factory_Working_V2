@@ -3,14 +3,12 @@
 # Requires: pytest, pytest-asyncio, aiohttp, tenacity
 # Run with: pytest test_remediations.py -v --cov=remediations
 
-import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 from aiohttp import ClientError
 
 # Import the module to be tested
-from arbiter.bug_manager import remediations
 from arbiter.bug_manager.remediations import (
     MLRemediationModel, RemediationStep, RemediationPlaybook, BugFixerRegistry,
     RemediationError, MLRemediationError

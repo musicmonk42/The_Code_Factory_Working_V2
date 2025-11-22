@@ -5,14 +5,12 @@ End-to-End Integration Tests for Mesh Framework v2.0
 Tests the complete workflow integrating all mesh components.
 """
 
-import asyncio
-import json
 import os
 import sys
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
+from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import contextmanager
 
 import pytest
@@ -74,7 +72,7 @@ sys.modules['redis.asyncio'] = mock_redis_module
 sys.modules['redis'] = MagicMock()
 
 # Import mesh components after environment setup and mocking
-from mesh import event_bus, mesh_policy, mesh_adapter, checkpoint_manager
+from mesh import event_bus, mesh_policy, mesh_adapter
 from mesh.checkpoint import CheckpointManager
 from pydantic import BaseModel
 
@@ -239,7 +237,7 @@ class TestFailureAndRecovery:
                 pass  # Expected to fail
         
         # Step 2: Check DLQ file was created (may not exist in test env)
-        dlq_path = Path(os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl"))
+        Path(os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl"))
         # Note: In test environment, DLQ might not be written to actual file
         
         # Step 3: Test event bus DLQ for failed publication
@@ -277,14 +275,14 @@ class TestSecurityIntegration:
             "data": {"sensitive": "information"}
         }
         
-        hash1 = await services['checkpoint_manager'].save(
+        await services['checkpoint_manager'].save(
             name="encrypted_checkpoint",
             state=checkpoint_data
         )
         
         # Step 2: Simulate key rotation - generate new valid keys
         new_key_1 = generate_test_key()
-        new_key_2 = generate_test_key()
+        generate_test_key()
         old_keys = os.environ.get("CHECKPOINT_ENCRYPTION_KEYS")
         
         # Update environment with new keys (old key should still be in list for decryption)
@@ -305,7 +303,7 @@ class TestSecurityIntegration:
             "data": {"new": "encrypted_data"}
         }
         
-        hash2 = await services['checkpoint_manager'].save(
+        await services['checkpoint_manager'].save(
             name="post_rotation_checkpoint",
             state=new_checkpoint_data
         )

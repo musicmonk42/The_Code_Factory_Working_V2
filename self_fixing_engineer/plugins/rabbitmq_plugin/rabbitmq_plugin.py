@@ -7,12 +7,9 @@ import sys
 import re
 import hmac
 import hashlib
-import getpass
 import datetime
 import redis.asyncio as redis
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable, Literal, Tuple
-from contextlib import asynccontextmanager
-from collections import deque
+from typing import Dict, Any, Optional, List, Literal, Tuple
 
 # --- OpenTelemetry Tracing ---
 try:
@@ -52,7 +49,7 @@ if not logger.handlers:
         except Exception as e:
             logger.error(f"CRITICAL: Failed to configure file logging to {LOG_FILE_PATH}: {e}. Falling back to stdout.", exc_info=True)
             handler = logging.StreamHandler(sys.stdout)
-            sys.stderr.write(f"CRITICAL: RabbitMQ plugin file logging failed. Aborting startup.\n")
+            sys.stderr.write("CRITICAL: RabbitMQ plugin file logging failed. Aborting startup.\n")
             sys.exit(1)
 
         class JsonFormatter(logging.Formatter):
@@ -104,7 +101,7 @@ try:
     from aiormq.exceptions import AMQPConnectionError, ChannelInvalidStateError
 except ImportError as e:
     logger.critical(f"CRITICAL: aiormq not found. RabbitMQ plugin functionality is critical. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: aiormq missing. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: aiormq missing. RabbitMQ plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 try:
@@ -112,14 +109,14 @@ try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(f"CRITICAL: pydantic or pydantic-settings not found. Schema validation is critical. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: pydantic missing. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: pydantic missing. RabbitMQ plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, generate_latest, CollectorRegistry
 except ImportError as e:
     logger.critical(f"CRITICAL: prometheus_client not found. Metrics are mandatory. Aborting startup: {e}.")
-    alert_operator(f"CRITICAL: prometheus_client missing. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: prometheus_client missing. RabbitMQ plugin aborted.", level="CRITICAL")
     sys.exit(1)
     
 try:
@@ -274,7 +271,7 @@ try:
     logger.info("Prometheus metrics initialized.")
 except Exception as e:
     logger.critical(f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.", exc_info=True)
-    alert_operator(f"CRITICAL: Prometheus metrics initialization failed. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator("CRITICAL: Prometheus metrics initialization failed. RabbitMQ plugin aborted.", level="CRITICAL")
     sys.exit(1)
 
 

@@ -17,14 +17,12 @@ if plugins_dir not in sys.path:
 import viz
 
 import pytest
-import asyncio
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import patch, MagicMock
 
 from viz import (
-    VizConfig, _load_config, _scrub_metadata,
+    _load_config, _scrub_metadata,
     validate_panel_id, plot_flakiness_trend,
     plot_coverage_history, plot_metric_trend,
     batch_export_panels, get_registered_viz_panels,
@@ -279,7 +277,7 @@ def test_pre_plot_hooks():
     result = viz.pre_plot_hook("matplotlib", test_data)
     
     assert result["original"] == "data"
-    assert result["modified"] == True
+    assert result["modified"]
 
 def test_post_plot_hooks():
     """Test post-plot hook functionality."""
@@ -298,7 +296,7 @@ def test_post_plot_hooks():
     
     assert result_plot == mock_plot
     assert result_metadata["original"] == "metadata"
-    assert result_metadata["processed"] == True
+    assert result_metadata["processed"]
 
 # ==============================================================================
 # Configuration tests
@@ -355,14 +353,14 @@ def test_dashboard_interface_check():
         def warning(self, text): pass
         def plotly_chart(self, fig, **kwargs): pass
     
-    assert viz.check_dashboard_interface(ValidDashboard()) == True
+    assert viz.check_dashboard_interface(ValidDashboard())
     
     # Invalid dashboard
     class InvalidDashboard:
         def markdown(self, text): pass
     
     with patch.object(viz, 'logger') as mock_logger:
-        assert viz.check_dashboard_interface(InvalidDashboard()) == False
+        assert not viz.check_dashboard_interface(InvalidDashboard())
         mock_logger.error.assert_called()
 
 # ==============================================================================

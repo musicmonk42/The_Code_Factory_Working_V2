@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, ANY, partial
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Fix the import to be an absolute path

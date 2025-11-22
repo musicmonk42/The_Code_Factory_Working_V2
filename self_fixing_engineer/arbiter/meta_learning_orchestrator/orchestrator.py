@@ -4,21 +4,17 @@ import json
 import uuid
 import time
 import os
-import hashlib
 import signal
-import secrets
 import random
-import functools
 import aiofiles
 import aioboto3
 import aiohttp
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Callable, Awaitable, Tuple
-from tenacity import RetryError, retry, stop_after_attempt, wait_fixed, wait_random
+from tenacity import retry, stop_after_attempt, wait_random
 import redis.asyncio as aioredis
 from opentelemetry import trace
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer, TopicPartition
-from prometheus_client import REGISTRY
 
 # --- Assuming these modules exist in the same package ---
 from .config import MetaLearningConfig
@@ -27,8 +23,7 @@ from .metrics import (
     ML_TRAINING_FAILURE_COUNT, ML_EVALUATION_COUNT, ML_DEPLOYMENT_TRIGGER_COUNT,
     ML_DEPLOYMENT_SUCCESS_COUNT, ML_DEPLOYMENT_FAILURE_COUNT, ML_ORCHESTRATOR_ERRORS,
     ML_TRAINING_LATENCY, ML_EVALUATION_LATENCY, ML_DEPLOYMENT_LATENCY,
-    ML_CURRENT_MODEL_VERSION, ML_DATA_QUEUE_SIZE, ML_DEPLOYMENT_RETRIES_EXHAUSTED,
-    ML_LEADER_STATUS, ML_AUDIT_EVENTS_TOTAL, ML_AUDIT_HASH_MISMATCH
+    ML_CURRENT_MODEL_VERSION, ML_DATA_QUEUE_SIZE, ML_LEADER_STATUS
 )
 from .models import (
     LearningRecord, ModelVersion, DataIngestionError, ModelDeploymentError,

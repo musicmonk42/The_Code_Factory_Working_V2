@@ -10,8 +10,7 @@ import logging
 import json
 import pytest
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
-from typing import Dict, Any, List
+from unittest.mock import patch
 import importlib
 import tempfile
 import hmac
@@ -199,7 +198,7 @@ async def test_core_utils_integration():
         assert operator1 is operator2, "AlertOperator should be a singleton"
         
         # Test alert functionality (mocked)
-        with patch('core_utils.AlertDispatcher') as mock_dispatcher:
+        with patch('core_utils.AlertDispatcher'):
             operator = AlertOperator()
             operator.alert("Test message", level="INFO")
             # Verify no exceptions were raised

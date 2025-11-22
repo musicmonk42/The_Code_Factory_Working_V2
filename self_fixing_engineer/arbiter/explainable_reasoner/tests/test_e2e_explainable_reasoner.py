@@ -2,7 +2,7 @@
 import os
 import asyncio
 import json
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock
 import time
 from datetime import datetime, timezone, timedelta
 import sys
@@ -20,7 +20,7 @@ from arbiter.explainable_reasoner.explainable_reasoner import (
     SensitiveValue,
 )
 from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
-from arbiter.explainable_reasoner.metrics import get_metrics_content, METRICS
+from arbiter.explainable_reasoner.metrics import get_metrics_content
 
 # Mock external/optional dependencies for isolation
 @pytest.fixture(scope="function", autouse=True)
@@ -36,7 +36,7 @@ def mock_external_deps():
          patch("arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory") as mock_adapter_factory, \
          patch("arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient") as mock_audit, \
          patch("arbiter.explainable_reasoner.explainable_reasoner.tracemalloc") as mock_tracemalloc, \
-         patch("arbiter.explainable_reasoner.adapters.httpx.AsyncClient") as mock_httpx_client, \
+         patch("arbiter.explainable_reasoner.adapters.httpx.AsyncClient"), \
          patch("arbiter.explainable_reasoner.explainable_reasoner._sanitize_context") as mock_sanitize, \
          patch("arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize") as mock_text_sanitize, \
          patch("arbiter.explainable_reasoner.explainable_reasoner._format_multimodal_for_prompt") as mock_format, \
@@ -89,9 +89,9 @@ def mock_external_deps():
         def mock_get_adapter(config_json):
             # The actual code passes a JSON string to get_adapter due to lru_cache
             if isinstance(config_json, str):
-                config = json.loads(config_json)
+                json.loads(config_json)
             else:
-                config = config_json
+                pass
             return mock_adapter_instance
         
         mock_adapter_factory.get_adapter.side_effect = mock_get_adapter

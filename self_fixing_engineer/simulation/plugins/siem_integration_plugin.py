@@ -12,7 +12,6 @@ import hashlib
 import re
 from collections import deque
 from typing import Dict, Any, Optional, Tuple, Callable, List, Union, Deque
-import functools
 
 # --- Logger Setup ---
 logger = logging.getLogger(__name__)

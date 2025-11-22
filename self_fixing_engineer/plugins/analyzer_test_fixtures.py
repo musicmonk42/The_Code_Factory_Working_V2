@@ -1,7 +1,6 @@
 # Add these fixtures to conftest.py or at the top of test_analyzer.py
 
 import pytest
-import tempfile
 import os
 import yaml
 import json

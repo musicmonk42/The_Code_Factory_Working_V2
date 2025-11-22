@@ -1,12 +1,10 @@
 # tests/test_self_evolution_plugin.py
 
 import pytest
-import asyncio
 import os
 import sys
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock, AsyncMock
 from typing import Tuple
 
 # Import the plugin from the correct directory

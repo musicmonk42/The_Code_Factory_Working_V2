@@ -11,13 +11,10 @@ import pytest
 import time
 import hmac
 import hashlib
-import logging
 import importlib
-import threading
 import atexit
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock, PropertyMock
-from contextlib import contextmanager
+from unittest.mock import patch, AsyncMock, MagicMock
 
 # Set environment BEFORE any imports
 os.environ["PYTEST_CURRENT_TEST"] = "test"

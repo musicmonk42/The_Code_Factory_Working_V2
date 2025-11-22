@@ -11,53 +11,37 @@ sys.modules['gnosis'] = MagicMock()
 sys.modules['gnosis.safe'] = MagicMock()
 
 import pytest
-import asyncio
 import json
-import tempfile
 import os
 import sys
-from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
-from datetime import datetime
 import hashlib
-import base64
 
 # Import knowledge_graph components
 from arbiter.knowledge_graph.core import (
     CollaborativeAgent,
     AgentTeam,
     get_or_create_agent,
-    StateBackend,
     InMemoryStateBackend,
     RedisStateBackend,
-    PostgresStateBackend,
     MetaLearning
 )
 from arbiter.knowledge_graph.multimodal import (
-    MultiModalProcessor,
     DefaultMultiModalProcessor
 )
 from arbiter.knowledge_graph.prompt_strategies import (
-    PromptStrategy,
     DefaultPromptStrategy,
-    ConcisePromptStrategy,
-    BASE_AGENT_PROMPT_TEMPLATE,
-    REFLECTION_PROMPT_TEMPLATE,
-    CRITIQUE_PROMPT_TEMPLATE,
-    SELF_CORRECT_PROMPT_TEMPLATE
+    ConcisePromptStrategy
 )
 from arbiter.knowledge_graph.config import (
-    Config,
     MetaLearningConfig,
     MultiModalData,
     load_persona_dict,
     SensitiveValue
 )
 from arbiter.knowledge_graph.utils import (
-    audit_ledger_client,
     AuditLedgerClient,
     trace_id_var,
-    AGENT_METRICS,
     AgentErrorCode,
     AgentCoreException,
     _sanitize_context,
@@ -409,7 +393,7 @@ class TestKnowledgeGraphE2EWorkflow:
             
             # 1. LLM initialization failure
             with pytest.raises(AgentCoreException) as exc_info:
-                agent = CollaborativeAgent(
+                CollaborativeAgent(
                     agent_id="test",
                     session_id="test",
                     llm_config={

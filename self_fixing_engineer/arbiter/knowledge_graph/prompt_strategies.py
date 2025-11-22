@@ -2,9 +2,8 @@ import os
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
-from langchain_core.prompts import PromptTemplate
-from .config import Config, MultiModalData
+from typing import List, Optional
+from .config import MultiModalData
 
 # Use standard logging for a regular logger instance
 logger = logging.getLogger(__name__)

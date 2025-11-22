@@ -1,14 +1,6 @@
 import pytest
 import asyncio
-import os
-import json
-import pickle
-import hmac
-import hashlib
-import threading
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
-from typing import Dict, Any
-from datetime import datetime, timedelta
+from unittest.mock import MagicMock, mock_open
 from self_fixing_engineer.simulation.agentic import (
     check_and_import,
     AuditLogger,
@@ -23,7 +15,6 @@ from self_fixing_engineer.simulation.agentic import (
     main_async
 )
 from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import SecretsManager
-import numpy as np
 
 pytestmark = pytest.mark.unit
 

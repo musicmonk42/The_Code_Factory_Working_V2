@@ -4,18 +4,15 @@ Focuses on critical functionality: message processing, poison detection, and hea
 """
 
 import pytest
-import asyncio
 import json
-import hashlib
 import sys
-from unittest.mock import Mock, AsyncMock, MagicMock, patch, PropertyMock
-from typing import Dict, Any
+from unittest.mock import Mock, AsyncMock, MagicMock, patch
 from types import ModuleType
 
 # Setup mock modules BEFORE any imports
 def setup_test_environment():
     """Setup all mocks before importing the module under test."""
-    from unittest.mock import AsyncMock, MagicMock, Mock
+    from unittest.mock import MagicMock
     
     # Mock Prometheus metrics
     class MockMetric:
@@ -415,7 +412,7 @@ class TestQueueConsumerWorker:
         worker = queue_consumer_worker.QueueConsumerWorker(settings=mock_settings)
         
         # Mock web app components
-        with patch('aiohttp.web.Application') as mock_app:
+        with patch('aiohttp.web.Application'):
             with patch('aiohttp.web.AppRunner') as mock_runner_class:
                 mock_runner = AsyncMock()
                 mock_runner_class.return_value = mock_runner

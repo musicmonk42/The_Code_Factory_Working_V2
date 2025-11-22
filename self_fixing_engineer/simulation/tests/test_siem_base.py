@@ -10,12 +10,11 @@ import asyncio
 import os
 import sys
 import time
-import json
 import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
-from unittest.mock import AsyncMock, MagicMock, patch, Mock, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 from concurrent.futures import ThreadPoolExecutor
 
 # Mock the siem_base module before importing

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 import uuid
@@ -7,9 +6,7 @@ import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 from datetime import datetime, timezone
-from typing import Dict, List, Any
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
-from opentelemetry import trace
+from typing import Dict
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import the centralized tracer configuration
@@ -17,9 +14,7 @@ from arbiter.otel_config import get_tracer
 
 # Import from the correct module
 from postgres_client import (
-    PostgresClient, PostgresClientConnectionError, PostgresClientQueryError, 
-    PostgresClientSchemaError, PostgresClientTimeoutError,
-    DB_CALLS_TOTAL, DB_CALLS_ERRORS, DB_CALL_LATENCY_SECONDS, DB_CONNECTIONS_CURRENT
+    PostgresClient, PostgresClientConnectionError, DB_CALLS_TOTAL, DB_CALLS_ERRORS, DB_CONNECTIONS_CURRENT
 )
 
 # Configure logging for tests

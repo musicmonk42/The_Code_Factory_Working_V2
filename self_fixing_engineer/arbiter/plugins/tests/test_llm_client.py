@@ -1,27 +1,18 @@
 # test_llm_client.py
 import pytest
-import asyncio
 import time
-import aiohttp
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any, List
-import json
 
 # Import the client and related exceptions
 from arbiter.plugins.llm_client import (
     LLMClient,
     LoadBalancedLLMClient,
     LLMClientError,
-    AuthError,
-    RateLimitError,
-    TimeoutError,
     APIError,
     InputValidationError,
     CircuitBreakerOpenError
 )
-import openai
-import anthropic
-import google.api_core.exceptions as google_exceptions
 
 
 class TestLLMClient:
@@ -448,7 +439,7 @@ class TestLoadBalancedLLMClient:
         lb_client.QUARANTINE_DURATION_SECONDS = 300
         
         # Select provider should attempt recovery
-        provider = lb_client._select_provider()
+        lb_client._select_provider()
         # After timeout, it should try to use the provider again
         assert lb_client.provider_status["openai"]["status"] == "ok"
 
