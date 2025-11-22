@@ -182,7 +182,8 @@ class CollabServer:
 
     async def handle_client(self, websocket, path):
         try:
-            token = path.split('?token=')[1] if '?token=' in path else ''
+            # Parse authentication token from URL query string (not a hardcoded token)
+            token = path.split('?token=')[1] if '?token=' in path else ''  # nosec B105
         except IndexError:
             token = ''
         if not await self._validate_token(token):
@@ -348,7 +349,9 @@ class CommandDispatcher:
             return
         mode = args[0] if args else ""
         if mode == "host":
-            server = CollabServer('0.0.0.0', 8765)
+            # Security: Use environment variable for host binding (default to localhost)
+            collab_host = os.getenv('COLLAB_HOST', '127.0.0.1')
+            server = CollabServer(collab_host, 8765)
             await self.state.set("collab_server", server)
             asyncio.create_task(server.start())
             await self.state.set("collab_mode", "host")

@@ -173,10 +173,11 @@ class PluginManifest(BaseModel, extra=Extra.forbid):
         return v
 
 # --- TLS/Endpoint Security ---
-GRPC_TLS_CERT_PATH_SECRET = "GRPC_TLS_CERT_PATH"  # client cert
-GRPC_TLS_KEY_PATH_SECRET  = "GRPC_TLS_KEY_PATH"   # client key
-GRPC_TLS_CA_PATH_SECRET   = "GRPC_TLS_CA_PATH"    # CA cert for server verify
-GRPC_ENDPOINT_ALLOWLIST_SECRET = "GRPC_ENDPOINT_ALLOWLIST"  # comma-separated host:port
+# These are secret KEY NAMES (not secret values) used to look up credentials from secrets manager
+GRPC_TLS_CERT_PATH_SECRET = "GRPC_TLS_CERT_PATH"  # client cert  # nosec B105
+GRPC_TLS_KEY_PATH_SECRET  = "GRPC_TLS_KEY_PATH"   # client key  # nosec B105
+GRPC_TLS_CA_PATH_SECRET   = "GRPC_TLS_CA_PATH"    # CA cert for server verify  # nosec B105
+GRPC_ENDPOINT_ALLOWLIST_SECRET = "GRPC_ENDPOINT_ALLOWLIST"  # comma-separated host:port  # nosec B105
 
 def _get_tls_credentials() -> Optional[grpc.ChannelCredentials]:
     """Load TLS credentials from secrets manager."""

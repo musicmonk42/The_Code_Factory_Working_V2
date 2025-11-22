@@ -473,13 +473,15 @@ class QueueConsumerWorker:
         logger.info(f"Prometheus metrics at :{metrics_port}")
 
         health_port = getattr(self.settings, 'HEALTH_PORT', 8080)
+        # Security: Use environment variable for host binding (default to localhost)
+        health_host = os.getenv('HEALTH_HOST', '127.0.0.1')
         self.health_app = web.Application()
         self.health_app.router.add_get("/health", health_check_handler)
         self.runner = web.AppRunner(self.health_app)
         await self.runner.setup()
-        site = web.TCPSite(self.runner, "0.0.0.0", health_port)
+        site = web.TCPSite(self.runner, health_host, health_port)
         await site.start()
-        logger.info(f"Health at http://0.0.0.0:{health_port}/health")
+        logger.info(f"Health at http://{health_host}:{health_port}/health")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

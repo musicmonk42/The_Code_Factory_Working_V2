@@ -477,9 +477,11 @@ async def start_health_server(config):
     app.router.add_get("/health", health_handler)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", config['health_port'])
+    # Security: Use environment variable for host binding (default to localhost)
+    health_host = os.getenv('HEALTH_HOST', '127.0.0.1')
+    site = web.TCPSite(runner, health_host, config['health_port'])
     await site.start()
-    logger.info(f"Health server started at http://0.0.0.0:{config['health_port']}/health")
+    logger.info(f"Health server started at http://{health_host}:{config['health_port']}/health")
     return runner
 
 async def health_handler(request: web.Request) -> web.Response:
