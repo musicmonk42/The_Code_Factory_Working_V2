@@ -60,7 +60,6 @@ except ImportError:
 def record_meta_audit_event(*args, **kwargs):
     """Stub function for recording meta audit events when not available."""
     logger.debug(f"record_meta_audit_event stub called with args={args}, kwargs={kwargs}")
-    pass
 
 def run_all_tests(*args, **kwargs):
     """Stub function for running tests when not available."""
@@ -70,7 +69,6 @@ def run_all_tests(*args, **kwargs):
 def rollback_config(*args, **kwargs):
     """Stub function for config rollback when not available."""
     logger.debug("rollback_config stub called")
-    pass
 
 logger = logging.getLogger("MetaSupervisor")
 # Ensure logger is configured
@@ -166,9 +164,9 @@ class MetaSupervisor:
         self._stopped = asyncio.Event() # Event to signal stopping the main loop
         self.backend = ArrayBackend(mode=backend_mode, use_gpu=True, use_dask=True, 
                                  use_quantum=use_quantum, use_neuromorphic=use_neuromorphic)
-        self.policy_engine = PolicyEngine(settings=settings)
-        self.explainer = ExplainableReasonerPlugin(settings=settings)
-        self.knowledge_graph = KnowledgeGraph(settings=settings)
+        self.policy_engine = PolicyEngine(arbiter_instance=None, config=settings)
+        self.explainer = ExplainableReasonerPlugin()
+        self.knowledge_graph = KnowledgeGraph()
         # REMOVED: self.multiverse_simulation_coordinator_ultra = MultiverseSimulationCoordinatorUltra(...)
         # REMOVED: self.dream_mode_plugin = DreamModePlugin(...)
         self.db: Optional[Database] = None # Will be initialized in async initialize
@@ -713,13 +711,21 @@ class MetaSupervisor:
                     pred_buffer = io.BytesIO(bytes.fromhex(model_data['prediction_model']))
                     
                     # Use weights_only=True to prevent arbitrary code execution (PyTorch 1.13+)
-                    # For older PyTorch versions, this parameter is ignored
+                    # SECURITY: Only load from trusted sources. Consider model signatures for production.
                     try:
                         self.rl_model.load_state_dict(torch.load(rl_buffer, weights_only=True))
                         self.prediction_model.load_state_dict(torch.load(pred_buffer, weights_only=True))
+                        self.logger.info("Models loaded securely with weights_only=True")
                     except TypeError:
                         # Fallback for older PyTorch versions that don't support weights_only
-                        logger.warning("PyTorch version does not support weights_only parameter. Using legacy torch.load (potentially unsafe)")
+                        # SECURITY WARNING: This fallback is potentially unsafe. Upgrade to PyTorch >= 1.13
+                        logger.error("SECURITY WARNING: PyTorch version does not support weights_only parameter. "
+                                   "Loading models without security restrictions. Upgrade to PyTorch >= 1.13 for secure model loading. "
+                                   "Only load models from trusted sources!")
+                        # Only proceed if explicitly configured to allow legacy loading
+                        if not getattr(settings, 'ALLOW_LEGACY_MODEL_LOADING', False):
+                            raise RuntimeError("Refusing to load models with legacy torch.load() for security. "
+                                             "Upgrade PyTorch or set ALLOW_LEGACY_MODEL_LOADING=True in config (not recommended for production)")
                         self.rl_model.load_state_dict(torch.load(rl_buffer))
                         self.prediction_model.load_state_dict(torch.load(pred_buffer))
                     self.logger.info(f"Loaded model states for version {model_data.get('version', 'latest')}.")

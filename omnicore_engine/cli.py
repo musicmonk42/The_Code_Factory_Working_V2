@@ -73,11 +73,17 @@ try:
     
     # Define a runner function for message_bus_cli
     def message_bus_cli_runner(args):
-        """Runner function to bridge argparse to click commands."""
-        logger.info("Message bus CLI invoked")
-        # This would need to properly invoke the click command
-        # For now, just log that it was called
-        print("Message bus CLI not fully implemented in argparse bridge")
+        """
+        Runner function to bridge argparse to click commands.
+        
+        Note: This is a stub implementation. Full integration of Click-based
+        message bus CLI with argparse requires additional work. The message bus
+        CLI can still be accessed directly via the click commands.
+        """
+        logger.info("Message bus CLI invoked via argparse bridge")
+        print("Note: Message bus CLI argparse bridge not fully implemented.")
+        print("Use the message bus CLI directly via click commands for full functionality.")
+        return 0
 except ImportError:
     message_bus_cli = None
     message_bus_cli_runner = None
@@ -127,7 +133,7 @@ except ImportError:
 
 # PolicyEngine mock - module doesn't exist
 try:
-    from arbiter.policy.policy_manager import PolicyEngine
+    from arbiter.policy.core import PolicyEngine
 except ImportError:
     logger.warning("PolicyEngine module not found. Policy checks will be unavailable.")
     class PolicyEngine:

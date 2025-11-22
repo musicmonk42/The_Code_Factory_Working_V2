@@ -47,7 +47,9 @@ except ImportError:
     CSRF_AVAILABLE = False
     CsrfProtect = None
     CsrfProtectError = None
-    logger.warning("fastapi_csrf_protect not available. CSRF protection will be disabled.")
+    logger.warning("fastapi_csrf_protect not available. CSRF protection will be disabled. "
+                  "SECURITY WARNING: For production deployments, install fastapi-csrf-protect "
+                  "to enable CSRF protection. Run: pip install fastapi-csrf-protect")
 
 # Corrected imports to use the centralized OmniCore Engine singletons
 from omnicore_engine.core import logger, safe_serialize, omnicore_engine, settings
