@@ -240,7 +240,7 @@ def validate_array_size(shape):
     if total_elements > MAX_ARRAY_SIZE:
         raise ValueError(f"Array too large: {total_elements} elements")
 
-def sanitize_array_input(data: Any, backend_module=None) -> np.ndarray:
+def sanitize_array_input(data: Any, backend_module=None) -> Any:
     """
     Sanitizes and validates array input data to prevent security vulnerabilities.
     
