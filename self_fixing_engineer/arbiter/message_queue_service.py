@@ -374,7 +374,6 @@ class MessageQueueService:
     
     def check_permission(self, role: str, permission: str) -> bool:
         """Checks if a user role has a specific permission."""
-        from arbiter import PermissionManager
         permission_mgr = PermissionManager(self.config)
         return permission_mgr.check_permission(role, permission)
     
