@@ -222,6 +222,341 @@ audit_logger = _init_audit_logger()
 
 
 # -------------------------
+# Simulation Module (optional)
+# -------------------------
+
+_simulation_module = None  # Global instance, initialized during startup
+
+def _init_simulation_module():
+    """Initialize the UnifiedSimulationModule for the SFE platform."""
+    try:
+        from simulation.simulation_module import UnifiedSimulationModule, Database, ShardedMessageBus
+        
+        # Create stub dependencies (simulation module provides its own stubs)
+        db = Database()
+        message_bus = ShardedMessageBus()
+        
+        # Create simulation module with basic config
+        config = {
+            "SIM_MAX_WORKERS": int(os.getenv("SIM_MAX_WORKERS", "4")),
+            "SIM_RETRY_ATTEMPTS": int(os.getenv("SIM_RETRY_ATTEMPTS", "3")),
+        }
+        
+        module = UnifiedSimulationModule(config, db, message_bus)
+        logger.info("Simulation module initialized successfully")
+        return module
+    except Exception as e:
+        logger.warning("Failed to initialize simulation module: %s. Simulation features will be unavailable.", e)
+        return None
+
+
+async def _initialize_simulation_module():
+    """Async initialization of simulation module."""
+    global _simulation_module
+    if _simulation_module is None:
+        _simulation_module = _init_simulation_module()
+    
+    if _simulation_module:
+        try:
+            await _simulation_module.initialize()
+            logger.info("Simulation module async initialization complete")
+        except Exception as e:
+            logger.error("Failed to async initialize simulation module: %s", e, exc_info=True)
+
+
+async def _shutdown_simulation_module():
+    """Gracefully shutdown simulation module."""
+    global _simulation_module
+    if _simulation_module:
+        try:
+            await _simulation_module.shutdown()
+            logger.info("Simulation module shutdown complete")
+        except Exception as e:
+            logger.warning("Error during simulation module shutdown: %s", e)
+
+
+async def _simulation_health_check() -> dict:
+    """Check simulation module health."""
+    if _simulation_module is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        return await _simulation_module.health_check(fail_on_error=False)
+    except Exception as e:
+        logger.error("Simulation health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
+# Test Generation Module (optional)
+# -------------------------
+
+_test_generation_orchestrator = None  # Global instance, initialized during startup
+
+def _init_test_generation():
+    """Initialize the GenerationOrchestrator for the SFE platform."""
+    try:
+        from test_generation.orchestrator.orchestrator import GenerationOrchestrator
+        
+        # Create basic config for test generation
+        config = {
+            "max_parallel_generation": int(os.getenv("TESTGEN_MAX_PARALLEL", "4")),
+            "max_gen_retries": int(os.getenv("TESTGEN_MAX_RETRIES", "2")),
+            "per_lang_concurrency": int(os.getenv("TESTGEN_LANG_CONCURRENCY", "4")),
+        }
+        
+        # Use temporary paths for project_root and suite_dir
+        project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        suite_dir = os.getenv("TESTGEN_SUITE_DIR", "./tests")
+        
+        orchestrator = GenerationOrchestrator(config, project_root, suite_dir)
+        logger.info("Test generation orchestrator initialized successfully")
+        return orchestrator
+    except Exception as e:
+        logger.warning("Failed to initialize test generation orchestrator: %s. Test generation features will be unavailable.", e)
+        return None
+
+
+async def _initialize_test_generation():
+    """Async initialization of test generation module."""
+    global _test_generation_orchestrator
+    if _test_generation_orchestrator is None:
+        _test_generation_orchestrator = _init_test_generation()
+    
+    if _test_generation_orchestrator:
+        logger.info("Test generation orchestrator ready")
+
+
+async def _shutdown_test_generation():
+    """Gracefully shutdown test generation orchestrator."""
+    global _test_generation_orchestrator
+    if _test_generation_orchestrator:
+        try:
+            # Test generation orchestrator doesn't have explicit shutdown method
+            # Clear the reference for proper cleanup
+            _test_generation_orchestrator = None
+            logger.info("Test generation orchestrator shutdown complete")
+        except Exception as e:
+            logger.warning("Error during test generation orchestrator shutdown: %s", e)
+
+
+async def _test_generation_health_check() -> dict:
+    """Check test generation orchestrator health."""
+    if _test_generation_orchestrator is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        # Test generation orchestrator doesn't have health_check method
+        # Verify components are functional by checking their presence and basic properties
+        components_status = {}
+        
+        try:
+            if hasattr(_test_generation_orchestrator, "policy_engine"):
+                # Try to access the policy engine to ensure it's functional
+                pe = _test_generation_orchestrator.policy_engine
+                components_status["policy_engine"] = "initialized" if pe is not None else "missing"
+            else:
+                components_status["policy_engine"] = "missing"
+        except Exception as e:
+            components_status["policy_engine"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_test_generation_orchestrator, "event_bus"):
+                eb = _test_generation_orchestrator.event_bus
+                components_status["event_bus"] = "initialized" if eb is not None else "missing"
+            else:
+                components_status["event_bus"] = "missing"
+        except Exception as e:
+            components_status["event_bus"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_test_generation_orchestrator, "security_scanner"):
+                ss = _test_generation_orchestrator.security_scanner
+                components_status["security_scanner"] = "initialized" if ss is not None else "missing"
+            else:
+                components_status["security_scanner"] = "missing"
+        except Exception as e:
+            components_status["security_scanner"] = f"error: {str(e)}"
+        
+        # Determine overall status
+        initialized_count = sum(1 for v in components_status.values() if v == "initialized")
+        missing_count = sum(1 for v in components_status.values() if v == "missing")
+        error_count = sum(1 for v in components_status.values() if "error" in str(v))
+        
+        if initialized_count == 3:
+            status = "ok"
+        elif initialized_count > 0:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+        
+        return {
+            "status": status,
+            "components": components_status,
+            "available": True
+        }
+    except Exception as e:
+        logger.error("Test generation health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
+# Arbiter Module (optional)
+# -------------------------
+
+_arbiter_instance = None  # Global instance, initialized during startup
+
+def _init_arbiter():
+    """Initialize the Arbiter AI core engine for the SFE platform."""
+    try:
+        from arbiter.arbiter import Arbiter
+        from arbiter.config import ArbiterConfig
+        from sqlalchemy.ext.asyncio import create_async_engine
+        
+        # Get configuration
+        try:
+            config = ArbiterConfig.initialize()
+        except Exception:
+            # Fallback to basic config
+            config = ArbiterConfig()
+        
+        # Create async database engine
+        db_url = config.DATABASE_URL or os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./sfe_arbiter.db")
+        # Convert to async URL if needed
+        if db_url.startswith("sqlite:///"):
+            db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+        elif db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+        
+        db_engine = create_async_engine(db_url, echo=False)
+        
+        # Create engines dict with simulation and test_generation
+        engines = {}
+        if _simulation_module and hasattr(_simulation_module, '_is_initialized') and _simulation_module._is_initialized:
+            engines["simulation"] = _simulation_module
+            logger.info("Connecting simulation engine to Arbiter")
+        if _test_generation_orchestrator:
+            engines["test_generation"] = _test_generation_orchestrator
+            logger.info("Connecting test_generation engine to Arbiter")
+        
+        # Create Arbiter instance
+        arbiter = Arbiter(
+            name=os.getenv("ARBITER_NAME", "main_arbiter"),
+            db_engine=db_engine,
+            settings=config,
+            engines=engines,
+            world_size=int(os.getenv("ARBITER_WORLD_SIZE", "10")),
+            port=int(os.getenv("ARBITER_PORT", "8001")),
+        )
+        
+        logger.info("Arbiter AI engine initialized successfully")
+        return arbiter
+    except Exception as e:
+        logger.warning("Failed to initialize Arbiter AI engine: %s. Arbiter features will be unavailable.", e)
+        return None
+
+
+async def _initialize_arbiter():
+    """Async initialization of Arbiter module."""
+    global _arbiter_instance
+    if _arbiter_instance is None:
+        _arbiter_instance = _init_arbiter()
+    
+    if _arbiter_instance:
+        try:
+            # Arbiter doesn't have explicit async_init, but state_manager might need setup
+            if hasattr(_arbiter_instance, "state_manager"):
+                # State manager initialization happens in __init__
+                pass
+            logger.info("Arbiter AI engine ready")
+        except Exception as e:
+            logger.error("Failed to complete Arbiter initialization: %s", e)
+
+
+async def _shutdown_arbiter():
+    """Gracefully shutdown Arbiter AI engine."""
+    global _arbiter_instance
+    if _arbiter_instance:
+        try:
+            # Close database connections
+            if hasattr(_arbiter_instance, "db_client") and _arbiter_instance.db_client:
+                try:
+                    await _arbiter_instance.db_client.close()
+                except Exception as e:
+                    logger.warning("Error closing Arbiter database: %s", e)
+            _arbiter_instance = None
+            logger.info("Arbiter AI engine shutdown complete")
+        except Exception as e:
+            logger.warning("Error during Arbiter shutdown: %s", e)
+            _arbiter_instance = None  # Ensure reference is cleared even on error
+
+
+async def _arbiter_health_check() -> dict:
+    """Check Arbiter AI engine health."""
+    if _arbiter_instance is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        components_status = {}
+        
+        # Check core components
+        try:
+            if hasattr(_arbiter_instance, "db_client"):
+                db = _arbiter_instance.db_client
+                components_status["database"] = "initialized" if db is not None else "missing"
+            else:
+                components_status["database"] = "missing"
+        except Exception as e:
+            components_status["database"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_arbiter_instance, "state_manager"):
+                sm = _arbiter_instance.state_manager
+                components_status["state_manager"] = "initialized" if sm is not None else "missing"
+            else:
+                components_status["state_manager"] = "missing"
+        except Exception as e:
+            components_status["state_manager"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_arbiter_instance, "feedback"):
+                fb = _arbiter_instance.feedback
+                components_status["feedback"] = "initialized" if fb is not None else "missing"
+            else:
+                components_status["feedback"] = "missing"
+        except Exception as e:
+            components_status["feedback"] = f"error: {str(e)}"
+        
+        try:
+            # Check if engines are connected
+            if hasattr(_arbiter_instance, "engines") and _arbiter_instance.engines:
+                components_status["engines"] = f"{len(_arbiter_instance.engines)} engines"
+            else:
+                components_status["engines"] = "none"
+        except Exception as e:
+            components_status["engines"] = f"error: {str(e)}"
+        
+        # Determine overall status
+        initialized_count = sum(1 for v in components_status.values() if v == "initialized" or "engines" in str(v))
+        
+        if initialized_count >= 2:
+            status = "ok"
+        elif initialized_count > 0:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+        
+        return {
+            "status": status,
+            "components": components_status,
+            "available": True
+        }
+    except Exception as e:
+        logger.error("Arbiter health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -289,6 +624,16 @@ async def startup_validation():
                 details={"message": "SFE platform started", "env": env, "version": VERSION},
                 agent_id="sfe_main",
             )
+            
+            # Initialize simulation module
+            await _initialize_simulation_module()
+            
+            # Initialize test generation orchestrator
+            await _initialize_test_generation()
+            
+            # Initialize Arbiter AI engine (connects simulation & test_generation)
+            await _initialize_arbiter()
+            
             logger.info("Startup validation OK (env=%s)", env)
         except Exception as e:
             logger.error("Startup validation failed: %s", e, exc_info=True)
@@ -419,9 +764,44 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
             redis_ok = await _quick_redis_check(getattr(cfg, "REDIS_URL", ""))
         except Exception:
             pass
+        
+        # Check simulation module health
+        # Note: simulation module is optional, so not_initialized is acceptable
+        simulation_health = await _simulation_health_check()
+        sim_status = simulation_health.get("status")
+        simulation_ok = sim_status in ("ok", "healthy") or (
+            sim_status == "not_initialized" and simulation_health.get("available") is False
+        )
+        
+        # Check test generation orchestrator health
+        # Note: test generation is optional, so not_initialized is acceptable
+        testgen_health = await _test_generation_health_check()
+        tg_status = testgen_health.get("status")
+        testgen_ok = tg_status in ("ok", "healthy", "degraded") or (
+            tg_status == "not_initialized" and testgen_health.get("available") is False
+        )
+        
+        # Check Arbiter AI engine health
+        # Note: Arbiter is optional, so not_initialized is acceptable
+        arbiter_health = await _arbiter_health_check()
+        arb_status = arbiter_health.get("status")
+        arbiter_ok = arb_status in ("ok", "healthy", "degraded") or (
+            arb_status == "not_initialized" and arbiter_health.get("available") is False
+        )
+        
+        overall_status = "ok" if (redis_ok and simulation_ok and testgen_ok and arbiter_ok) else "degraded"
+        
         return {
-            "status": "ok" if redis_ok else "degraded",
-            "checks": {"redis": bool(redis_ok)},
+            "status": overall_status,
+            "checks": {
+                "redis": bool(redis_ok),
+                "simulation": simulation_ok,
+                "simulation_details": simulation_health,
+                "test_generation": testgen_ok,
+                "test_generation_details": testgen_health,
+                "arbiter": arbiter_ok,
+                "arbiter_details": arbiter_health
+            },
             "version": VERSION,
         }
 
@@ -569,6 +949,18 @@ async def main():
         finally:
             sys.exit(1)
     finally:
+        try:
+            await _shutdown_arbiter()
+        except Exception:
+            pass
+        try:
+            await _shutdown_test_generation()
+        except Exception:
+            pass
+        try:
+            await _shutdown_simulation_module()
+        except Exception:
+            pass
         try:
             await audit_logger.close()
         except Exception:
