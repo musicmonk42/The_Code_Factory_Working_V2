@@ -77,27 +77,38 @@ async def plugin_health(channel, plugin_name: str) -> str:
     try:
         # Create a HealthStub and call Check (tests patch this)
         from grpc_health.v1 import health_pb2_grpc, health_pb2
+
         stub = health_pb2_grpc.HealthStub(channel)
         resp = await stub.Check(health_pb2.HealthCheckRequest())
         if resp.status == health_pb2.HealthCheckResponse.SERVING:
             PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(1)
-            PLUGIN_OPERATION_COUNTER.labels(plugin_name=plugin_name, operation_type="health_check").inc()
+            PLUGIN_OPERATION_COUNTER.labels(
+                plugin_name=plugin_name, operation_type="health_check"
+            ).inc()
             return "SERVING"
         else:
             PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(0)
-            PLUGIN_OPERATION_COUNTER.labels(plugin_name=plugin_name, operation_type="health_check_failed").inc()
+            PLUGIN_OPERATION_COUNTER.labels(
+                plugin_name=plugin_name, operation_type="health_check_failed"
+            ).inc()
             return "NOT_SERVING"
     except asyncio.TimeoutError:
         PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(0)
-        PLUGIN_OPERATION_COUNTER.labels(plugin_name=plugin_name, operation_type="health_check_timeout").inc()
+        PLUGIN_OPERATION_COUNTER.labels(
+            plugin_name=plugin_name, operation_type="health_check_timeout"
+        ).inc()
         return "TIMEOUT"
     except grpc.aio.AioRpcError:
         PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(0)
-        PLUGIN_OPERATION_COUNTER.labels(plugin_name=plugin_name, operation_type="health_check_failed").inc()
+        PLUGIN_OPERATION_COUNTER.labels(
+            plugin_name=plugin_name, operation_type="health_check_failed"
+        ).inc()
         return "NOT_SERVING"
     except Exception:
         PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(0)
-        PLUGIN_OPERATION_COUNTER.labels(plugin_name=plugin_name, operation_type="health_check_error").inc()
+        PLUGIN_OPERATION_COUNTER.labels(
+            plugin_name=plugin_name, operation_type="health_check_error"
+        ).inc()
         return "ERROR"
 
 
