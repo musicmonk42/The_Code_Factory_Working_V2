@@ -38,11 +38,20 @@ import time
 import jwt
 import aiohttp
 import functools
-from fastapi_csrf_protect import CsrfProtect
-from fastapi_csrf_protect.exceptions import CsrfProtectError
+
+try:
+    from fastapi_csrf_protect import CsrfProtect
+    from fastapi_csrf_protect.exceptions import CsrfProtectError
+    CSRF_AVAILABLE = True
+except ImportError:
+    CSRF_AVAILABLE = False
+    CsrfProtect = None
+    CsrfProtectError = None
+    logger.warning("fastapi_csrf_protect not available. CSRF protection will be disabled.")
 
 # Corrected imports to use the centralized OmniCore Engine singletons
 from omnicore_engine.core import logger, safe_serialize, omnicore_engine, settings
+from arbiter.config import ArbiterConfig
 from omnicore_engine.database.database import Database
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PluginMeta, PlugInKind, PluginMarketplace

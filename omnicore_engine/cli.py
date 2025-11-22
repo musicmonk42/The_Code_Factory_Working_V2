@@ -70,8 +70,17 @@ try:
     from omnicore_engine.message_bus import message_bus_cli, RICH_CLI_AVAILABLE
     if not RICH_CLI_AVAILABLE:
         logger.warning("Rich CLI tools not available. Message bus CLI commands will be disabled.")
+    
+    # Define a runner function for message_bus_cli
+    def message_bus_cli_runner(args):
+        """Runner function to bridge argparse to click commands."""
+        logger.info("Message bus CLI invoked")
+        # This would need to properly invoke the click command
+        # For now, just log that it was called
+        print("Message bus CLI not fully implemented in argparse bridge")
 except ImportError:
     message_bus_cli = None
+    message_bus_cli_runner = None
     RICH_CLI_AVAILABLE = False
     logger.warning("Message bus CLI commands (click/rich) not available. Install 'rich' and 'click'.")
 
@@ -745,7 +754,6 @@ def main():
         )
         marketplace = PluginMarketplace(
             db=engine_instance.database,
-            version_manager=plugin_version_manager,
             audit_client=engine_instance.audit
         )
         await marketplace.install_plugin(current_args.kind, current_args.name, current_args.version)
@@ -765,7 +773,6 @@ def main():
         )
         marketplace = PluginMarketplace(
             db=engine_instance.database,
-            version_manager=plugin_version_manager,
             audit_client=engine_instance.audit
         )
         
