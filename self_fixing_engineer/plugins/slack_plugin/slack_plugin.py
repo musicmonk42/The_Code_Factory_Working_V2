@@ -37,6 +37,13 @@ from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from cryptography.fernet import Fernet
 import psutil
 
+
+# ---- CUSTOM EXCEPTION CLASSES ----
+class AnalyzerCriticalError(Exception):
+    """Raised for unrecoverable failures in the analyzer/gateway logic."""
+    pass
+
+
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
