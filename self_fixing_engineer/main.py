@@ -222,6 +222,72 @@ audit_logger = _init_audit_logger()
 
 
 # -------------------------
+# Simulation Module (optional)
+# -------------------------
+
+_simulation_module = None  # Global instance, initialized during startup
+
+def _init_simulation_module():
+    """Initialize the UnifiedSimulationModule for the SFE platform."""
+    try:
+        from simulation.simulation_module import UnifiedSimulationModule, Database, ShardedMessageBus
+        
+        # Create stub dependencies (simulation module provides its own stubs)
+        db = Database()
+        message_bus = ShardedMessageBus()
+        
+        # Create simulation module with basic config
+        config = {
+            "SIM_MAX_WORKERS": int(os.getenv("SIM_MAX_WORKERS", "4")),
+            "SIM_RETRY_ATTEMPTS": int(os.getenv("SIM_RETRY_ATTEMPTS", "3")),
+        }
+        
+        module = UnifiedSimulationModule(config, db, message_bus)
+        logger.info("Simulation module initialized successfully")
+        return module
+    except Exception as e:
+        logger.warning("Failed to initialize simulation module: %s. Simulation features will be unavailable.", e)
+        return None
+
+
+async def _initialize_simulation_module():
+    """Async initialization of simulation module."""
+    global _simulation_module
+    if _simulation_module is None:
+        _simulation_module = _init_simulation_module()
+    
+    if _simulation_module:
+        try:
+            await _simulation_module.initialize()
+            logger.info("Simulation module async initialization complete")
+        except Exception as e:
+            logger.error("Failed to async initialize simulation module: %s", e, exc_info=True)
+
+
+async def _shutdown_simulation_module():
+    """Gracefully shutdown simulation module."""
+    global _simulation_module
+    if _simulation_module:
+        try:
+            await _simulation_module.shutdown()
+            logger.info("Simulation module shutdown complete")
+        except Exception as e:
+            logger.warning("Error during simulation module shutdown: %s", e)
+
+
+async def _simulation_health_check() -> dict:
+    """Check simulation module health."""
+    if _simulation_module is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        return await _simulation_module.health_check(fail_on_error=False)
+    except Exception as e:
+        logger.error("Simulation health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -289,6 +355,10 @@ async def startup_validation():
                 details={"message": "SFE platform started", "env": env, "version": VERSION},
                 agent_id="sfe_main",
             )
+            
+            # Initialize simulation module
+            await _initialize_simulation_module()
+            
             logger.info("Startup validation OK (env=%s)", env)
         except Exception as e:
             logger.error("Startup validation failed: %s", e, exc_info=True)
@@ -419,9 +489,20 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
             redis_ok = await _quick_redis_check(getattr(cfg, "REDIS_URL", ""))
         except Exception:
             pass
+        
+        # Check simulation module health
+        simulation_health = await _simulation_health_check()
+        simulation_ok = simulation_health.get("status") in ("ok", "healthy", "not_initialized")
+        
+        overall_status = "ok" if (redis_ok and simulation_ok) else "degraded"
+        
         return {
-            "status": "ok" if redis_ok else "degraded",
-            "checks": {"redis": bool(redis_ok)},
+            "status": overall_status,
+            "checks": {
+                "redis": bool(redis_ok),
+                "simulation": simulation_ok,
+                "simulation_details": simulation_health
+            },
             "version": VERSION,
         }
 
@@ -569,6 +650,10 @@ async def main():
         finally:
             sys.exit(1)
     finally:
+        try:
+            await _shutdown_simulation_module()
+        except Exception:
+            pass
         try:
             await audit_logger.close()
         except Exception:

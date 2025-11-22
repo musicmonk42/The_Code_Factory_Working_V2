@@ -277,7 +277,7 @@ class UnifiedSimulationModule:
     async def initialize(self) -> None:
         if self._is_initialized:
             return
-        self.reasoner_plugin = ExplainableReasonerPlugin(settings=settings)  # type: ignore[arg-type]
+        self.reasoner_plugin = ExplainableReasonerPlugin()
         await self.reasoner_plugin.async_init()
         self.quantum_api = QuantumPluginAPI()
         self._is_initialized = True
