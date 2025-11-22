@@ -1,5 +1,3 @@
-dlt_backend.py
-
 """
 DLT (Blockchain) Backend Plugin for CheckpointManager
 - Async, robust, tamper-evident checkpoint history on DLT (Hyperledger Fabric or similar).
@@ -34,6 +32,31 @@ try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 except ImportError:
     pass
+
+try:
+    from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
+    from plugins.core_audit import audit_logger
+    from plugins.core_secrets import SECRETS_MANAGER
+except ImportError:
+    # Handle missing plugins gracefully
+    alert_operator = None
+    audit_logger = None
+    SECRETS_MANAGER = None
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    OPENTELEMETRY_AVAILABLE = True
+except ImportError:
+    OPENTELEMETRY_AVAILABLE = False
+    trace = None
+    TracerProvider = None
+    Resource = None
+    OTLPSpanExporter = None
+    BatchSpanProcessor = None
 
 HAVE_AESGCM = "AESGCM" in globals()
 
@@ -76,12 +99,6 @@ class HashChainError(Exception):
     pass
 
 
-# --- Centralized Utilities (replacing placeholders) ---
-from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
-from plugins.core_audit import audit_logger
-from plugins.core_secrets import SECRETS_MANAGER
-
-
 # --- Caching: Redis Client Initialization ---
 REDIS_CLIENT = None
 try:
@@ -116,23 +133,18 @@ async def _should_alert(key: str, ttl=60) -> bool:
 
 # --- OpenTelemetry Tracing (MANDATORY) ---
 # OpenTelemetry tracing must be enforced in prod (fail if not present).
-try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
+if OPENTELEMETRY_AVAILABLE:
     tracer = trace.get_tracer(__name__)
     logger.info("OpenTelemetry tracer available for dlt_backend.")
-except ImportError as e:
+else:
     if PRODUCTION_MODE:
         logger.critical(
-            f"CRITICAL: OpenTelemetry not found. Tracing is mandatory in PRODUCTION_MODE. Aborting startup: {e}."
+            "CRITICAL: OpenTelemetry not found. Tracing is mandatory in PRODUCTION_MODE. Aborting startup."
         )
-        alert_operator(
-            "CRITICAL: OpenTelemetry missing. DLT backend aborted.", level="CRITICAL"
-        )
+        if alert_operator:
+            alert_operator(
+                "CRITICAL: OpenTelemetry missing. DLT backend aborted.", level="CRITICAL"
+            )
         sys.exit(1)
     else:
         logger.warning("OpenTelemetry not found. Tracing will be disabled.")
