@@ -71,7 +71,7 @@ logging.disable(logging.CRITICAL)
 
 
 # --- Dummy Config Content (from intent_parser.yaml) ---
-DUMMY_CONFIG_YAML = """
+DUMMY_CONFIG_YAML = r"""
 schema_version: 1.1
 format: auto
 extraction_patterns:
@@ -137,7 +137,7 @@ class TestIntentParser(unittest.TestCase):
         config = IntentParserConfig.model_validate(yaml.safe_load(DUMMY_CONFIG_YAML))
         self.assertEqual(config.format, 'auto')
         self.assertEqual(config.llm_config.model, 'gpt-4o')
-        self.assertEqual(config.multi_language_support.language_patterns['es']['features'], '- *(rasgo|característica):\s*(.+)')
+        self.assertEqual(config.multi_language_support.language_patterns['es']['features'], r'- *(rasgo|característica):\s*(.+)')
         self.assertTrue((self.temp_path / "parser_cache").exists())
 
     def test_config_load_invalid_format(self):
