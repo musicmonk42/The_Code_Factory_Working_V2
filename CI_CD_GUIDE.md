@@ -58,7 +58,7 @@ The Code Factory Platform uses GitHub Actions for continuous integration and dep
 
 **Architecture:**
 
-The CI workflow now uses intelligent path-based filtering to run only relevant jobs when files change, significantly reducing CI time and resource usage.
+The CI workflow uses intelligent path-based filtering to run only relevant jobs when files change, significantly reducing CI time and resource usage. **However, for pull requests targeting `main` or `develop` branches, all tests always run to ensure comprehensive validation before merging critical changes.**
 
 **Jobs:**
 
@@ -67,38 +67,38 @@ The CI workflow now uses intelligent path-based filtering to run only relevant j
    - Detects changes in: generator/, omnicore_engine/, self_fixing_engineer/, .github/workflows/
    - Outputs: generator, omnicore, sfe, workflows
 
-2. **Lint** - Code quality checks (runs if any component changed)
+2. **Lint** - Code quality checks
+   - **Conditional**: Runs if any component changed OR for PRs to main/develop
    - Black formatter check (strict - no error suppression)
    - Ruff linter (strict - no error suppression)
    - Flake8 syntax checks (strict - no error suppression)
-   - Only runs when relevant files have changed
 
 3. **Test Generator** - Generator component tests
-   - **Conditional**: Only runs if generator/ or .github/workflows/ changed
+   - **Conditional**: Runs if generator/ or .github/workflows/ changed OR for PRs to main/develop
    - Unit tests with pytest
    - Coverage reporting
    - **Fails if tests directory is missing** (no longer silently passes)
 
 4. **Test OmniCore** - OmniCore Engine tests
-   - **Conditional**: Only runs if omnicore_engine/ or .github/workflows/ changed
+   - **Conditional**: Runs if omnicore_engine/ or .github/workflows/ changed OR for PRs to main/develop
    - Integration tests with Redis service
    - Coverage reporting
    - **Fails if tests directory is missing** (no longer silently passes)
 
 5. **Test SFE** - Self-Fixing Engineer tests
-   - **Conditional**: Only runs if self_fixing_engineer/ or .github/workflows/ changed
+   - **Conditional**: Runs if self_fixing_engineer/ or .github/workflows/ changed OR for PRs to main/develop
    - Component tests
    - Coverage reporting
    - **Fails if tests directory is missing** (no longer silently passes)
 
 6. **Integration Tests** - End-to-end tests
-   - **Conditional**: Runs if any component changed
+   - **Conditional**: Runs if any component changed OR for PRs to main/develop
    - Full platform integration
    - All services running
    - Strict error checking (no error suppression)
 
 7. **Build Docker** - Container image builds
-   - **Conditional**: Runs if any component changed
+   - **Conditional**: Runs if any component changed OR for PRs to main/develop
    - Multi-component builds
    - Image validation
 
@@ -115,8 +115,9 @@ gh workflow run ci.yml
 ```
 
 **Benefits:**
-- **Reduced CI Time**: Jobs skip when their paths haven't changed
-- **Resource Efficiency**: Only runs necessary tests and builds
+- **Comprehensive PR Testing**: All tests always run for PRs to main/develop branches
+- **Reduced CI Time**: Jobs skip when their paths haven't changed (feature branches only)
+- **Resource Efficiency**: Only runs necessary tests and builds for development work
 - **Clear Feedback**: Know exactly which components were tested
 - **Strict Quality Control**: No error suppression - all issues must be fixed
 
