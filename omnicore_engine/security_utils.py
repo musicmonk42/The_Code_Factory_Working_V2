@@ -240,7 +240,20 @@ def _fallback_sanitize_html(html_text: str) -> str:
       * strips all tags not in the allowed list
       * removes all attributes from allowed tags except a[href|title|target|rel]
       * escapes textual data by default
-    NOTE: This is intentionally conservative.
+    
+    SECURITY WARNING: This is a basic sanitizer and may not catch all XSS vectors.
+    Known limitations:
+      - Only checks href prefix with startswith(), may miss some javascript: variations
+      - Does not handle CSS-based attacks
+      - Does not fully protect against HTML entity encoding tricks
+    
+    RECOMMENDATION: For production use, consider replacing with a well-tested library:
+      - bleach: https://github.com/mozilla/bleach
+      - markupsafe: https://github.com/pallets/markupsafe
+      - html-sanitizer: https://github.com/matthiask/html-sanitizer
+    
+    NOTE: This is intentionally conservative for cases where external dependencies
+    cannot be added.
     """
     # Remove script/style blocks entirely
     html_text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "", html_text)
@@ -265,8 +278,11 @@ def _fallback_sanitize_html(html_text: str) -> str:
                         v = (v or "")
                         if isinstance(v, bytes):
                             v = v.decode("utf-8", "ignore")
-                        v = v.strip()
-                        if v.startswith(("http://", "https://", "#", "mailto:")):
+                        v = v.strip().lower()
+                        # SECURITY: More thorough check for javascript: and data: URIs
+                        # Check for various encodings and obfuscations
+                        if (v.startswith(("http://", "https://", "#", "mailto:")) and
+                            not any(dangerous in v for dangerous in ["javascript:", "data:", "vbscript:"])):
                             safe_attrs.append((k, html.escape(v, quote=True)))
                     elif k in ("title", "target", "rel"):
                         if v is not None:

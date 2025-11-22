@@ -243,7 +243,20 @@ SAFE_BUILTINS = {
 
 def safe_exec_plugin(code: str, filename: str):
     """
-    Safely executes plugin code by restricting imports and dangerous builtins.
+    Attempts to safely execute plugin code by restricting imports and dangerous builtins.
+    
+    SECURITY WARNING: This function has known vulnerabilities:
+    1. AST-based filtering can be bypassed using various Python tricks
+    2. The exec() call itself is inherently dangerous even with restricted globals
+    3. Malicious code can potentially escape the sandbox
+    
+    RECOMMENDATION: This should only be used with code from trusted sources.
+    For untrusted code, consider:
+    - Running in a separate process with strict resource limits
+    - Using a proper sandboxing solution (e.g., PyPy's sandboxlib, docker containers)
+    - Implementing a plugin interface with defined APIs instead of arbitrary code execution
+    
+    DO NOT use this with user-supplied code in production without additional security layers.
     """
     tree = ast.parse(code, filename)
     
@@ -295,6 +308,23 @@ def _all_picklable(*objs) -> bool:
         return False
 
 def safe_execute_plugin(fn: Callable, *args, **kwargs):
+    """
+    Execute a plugin function in a separate process with timeout and resource limits.
+    
+    SECURITY WARNING: This function uses pickle for inter-process communication,
+    which has known security vulnerabilities:
+    1. Pickle can deserialize arbitrary Python objects, allowing code execution
+    2. Malicious pickled data can exploit the unpickling process
+    3. This should NEVER be used with untrusted data
+    
+    RECOMMENDATION: Replace pickle-based IPC with safer alternatives:
+    - JSON for simple data types
+    - Protocol Buffers (protobuf) for structured data
+    - MessagePack for binary serialization
+    - Custom serialization with explicit type checking
+    
+    Only use this function with trusted plugin code and trusted data.
+    """
     """
     Runs a plugin function in an isolated process with restricted imports and a timeout.
     This provides a basic sandboxing mechanism to prevent malicious or buggy code from
@@ -1053,11 +1083,19 @@ class PluginVersionManager:
                         self.logger.error(f"Failed to dynamically load code for plugin {name}:{version}: {compile_err}", exc_info=True)
                         loaded_fn = lambda *args, **kwargs: {"error": f"Dynamic code load failed: {compile_err}"}
                     finally:
-                        try:
-                            if temp_file_path.exists():
+                        # Improved temp file cleanup with multiple attempts
+                        if temp_file_path.exists():
+                            try:
                                 os.remove(temp_file_path)
-                        except OSError as cleanup_err:
-                            self.logger.warning(f"Failed to clean up temporary file {temp_file_path}: {cleanup_err}")
+                            except OSError as cleanup_err:
+                                self.logger.warning(f"Failed to clean up temporary file {temp_file_path}: {cleanup_err}")
+                                # Try to at least mark for deletion on Windows
+                                try:
+                                    if platform.system() == 'Windows':
+                                        import atexit
+                                        atexit.register(lambda p=temp_file_path: p.unlink(missing_ok=True))
+                                except Exception as fallback_err:
+                                    self.logger.debug(f"Fallback cleanup registration failed: {fallback_err}")
                 
                 if loaded_fn is None:
                     loaded_fn = lambda *args, **kwargs: {"error": "Plugin function not available or load failed."}
