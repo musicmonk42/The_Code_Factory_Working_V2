@@ -676,9 +676,7 @@ class PolicyEngine:
                     loaded_policies = json.load(f)
                     old_policies = self._policies.copy()
                     if not self.validate_policies(loaded_policies):
-                        logger.warning(
-                            "Invalid policy file. Loading default policies."
-                        )
+                        logger.warning("Invalid policy file. Loading default policies.")
                         self._policies = self._get_default_policies()
                         span.set_attribute("load_status", "invalid_file")
                     else:

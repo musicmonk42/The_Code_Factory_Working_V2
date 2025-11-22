@@ -168,7 +168,6 @@ async def test_api_call_stream(provider: GeminiProvider) -> None:
     if not HAS_GEMINI:
         pytest.skip("Gemini SDK not installed")
 
-
     mock_client = MagicMock()
 
     async def mock_stream():

@@ -818,9 +818,7 @@ async def publish_event(
                         exc_info=True,
                     )
                     await _set_gauge(BUS_LIVENESS, 0)
-                    span.add_event(
-                        "publish_retry", {"error": str(e), "attempt": i + 1}
-                    )
+                    span.add_event("publish_retry", {"error": str(e), "attempt": i + 1})
                     if i < MAX_RETRIES - 1:
                         await asyncio.sleep(wait_time)
                 except Exception as e:

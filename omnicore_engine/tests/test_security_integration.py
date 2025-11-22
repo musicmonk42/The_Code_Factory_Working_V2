@@ -220,7 +220,6 @@ class TestSecurityIntegrationManager:
         manager._handle_failed_login = AsyncMock()
         manager._audit_security_event = AsyncMock()
 
-
         with pytest.raises(Exception) as exc_info:
             await manager.authenticate(username="testuser", password="wrong_password")
 
@@ -289,7 +288,6 @@ class TestSecurityIntegrationManager:
             expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
             ip_address="192.168.1.1",
         )
-
 
         with pytest.raises(Exception) as exc_info:
             await manager.authorize(session, Permission.DATA_READ)

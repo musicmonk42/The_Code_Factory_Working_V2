@@ -149,9 +149,7 @@ try:
         from sqlalchemy import JSON as _JSONType  # cross-dialect JSON
     except Exception:  # very old SQLAlchemy
         from sqlalchemy.dialects.postgresql import JSONB as _JSONType  # type: ignore
-except (
-    Exception
-):  # pragma: no cover - DB is optional; only needed if DATABASE_URL set
+except Exception:  # pragma: no cover - DB is optional; only needed if DATABASE_URL set
     declarative_base = None  # type: ignore
     Mapped = None  # type: ignore
     mapped_column = None  # type: ignore

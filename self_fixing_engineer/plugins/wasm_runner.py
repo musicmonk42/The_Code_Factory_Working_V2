@@ -82,9 +82,7 @@ except ImportError as e:
 try:
     from pydantic import BaseModel, ValidationError, Field, validator
 except ImportError as e:
-    alert_operator(
-        "CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL"
-    )
+    alert_operator("CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL")
     raise WasmStartupError(f"pydantic is not installed: {e}") from e
 
 

@@ -391,7 +391,6 @@ class TestMetricsCollection:
                 "app_startup_duration_seconds": MagicMock(),
             }
 
-
             metrics = mock_metrics()
 
             assert "app_running_status" in metrics
@@ -543,7 +542,6 @@ class TestOpenTelemetry:
         with patch("generator.main.main.trace") as mock_trace, patch(
             "generator.main.main.TracerProvider"
         ) as MockProvider:
-
 
             # Tracer should be initialized
             assert True  # Module-level initialization

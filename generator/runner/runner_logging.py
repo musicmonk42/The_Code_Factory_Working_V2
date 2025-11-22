@@ -352,7 +352,8 @@ async def start_logging_services():
     # 2. Start Dashboard Streamer
     if (
         (_dashboard_stream_task is None or _dashboard_stream_task.done())
-        and os.getenv("DISABLE_DASHBOARD_STREAMING", "").lower() not in ("true", "1", "yes")
+        and os.getenv("DISABLE_DASHBOARD_STREAMING", "").lower()
+        not in ("true", "1", "yes")
         and not os.getenv("PYTEST_CURRENT_TEST")
     ):
 
