@@ -644,6 +644,21 @@ class SecureSessionManager:
     def revoke(self, sid: str) -> None:
         with self._lock:
             self._store.pop(sid, None)
+    
+    def cleanup_expired(self) -> int:
+        """
+        Clean up expired sessions to prevent memory leak.
+        Should be called periodically.
+        
+        Returns:
+            Number of sessions cleaned up
+        """
+        now = int(time.time())
+        with self._lock:
+            expired_ids = [sid for sid, sess in self._store.items() if now > sess.expires_at]
+            for sid in expired_ids:
+                self._store.pop(sid, None)
+        return len(expired_ids)
 
 
 # ---------------------------------------------------------------------------

@@ -13,13 +13,21 @@ import os
 from cryptography.fernet import Fernet
 from arbiter.config import ArbiterConfig
 
-# Import the plugins file to ensure plugins are registered at startup
-import self_fixing_engineer.test_generation.gen_plugins
-
 logger = logging.getLogger(__name__)
 
 # Initialize the configuration object from arbiter.config
 settings = ArbiterConfig()
+
+# SECURITY: Lazy import to avoid side effects at module load time
+# Import gen_plugins only when needed to prevent circular import issues
+def _ensure_plugins_loaded():
+    """Lazily import gen_plugins to register plugins when needed."""
+    try:
+        import self_fixing_engineer.test_generation.gen_plugins
+        return True
+    except ImportError as e:
+        logger.warning(f"Could not import gen_plugins: {e}")
+        return False
 
 def safe_serialize(obj: Any) -> Any:
     """

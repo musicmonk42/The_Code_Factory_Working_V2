@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, Patt
 from collections import defaultdict
 from pydantic import BaseModel, Field, ValidationError
 import asyncio
+import threading
 import inspect
 import traceback
 from pathlib import Path
@@ -37,6 +38,7 @@ try:
 except ImportError:
     resource = None
 import signal
+import platform
 import hmac
 import hashlib
 
@@ -187,8 +189,17 @@ def timeout_handler(signum, frame):
 
 def execute_with_limits(func, *args, **kwargs):
     """Executes a function with resource limits and a timeout."""
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(getattr(settings, 'PLUGIN_EXECUTION_TIMEOUT', 30))  # 30 second timeout
+    # SECURITY: SIGALRM is not available on Windows
+    # Use signal-based timeout only on Unix-like systems
+    timeout_seconds = getattr(settings, 'PLUGIN_EXECUTION_TIMEOUT', 30)
+    
+    if platform.system() != 'Windows' and hasattr(signal, 'SIGALRM'):
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+    else:
+        # On Windows, we rely on the multiprocessing timeout in safe_execute_plugin
+        # which uses process.join(timeout) instead of signals
+        logger.debug("Signal-based timeout not available on Windows, using process timeout")
 
     # Limit memory usage (e.g., 512MB)
     try:
@@ -200,7 +211,9 @@ def execute_with_limits(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
     finally:
-        signal.alarm(0)
+        # Only cancel alarm on Unix-like systems
+        if platform.system() != 'Windows' and hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
 
 SAFE_BUILTINS = {
     'None': None,
@@ -474,6 +487,8 @@ class PluginRegistry:
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
+        self._init_lock = asyncio.Lock()  # Lock for atomic initialization
+        self._register_lock = threading.Lock()  # Lock for plugin registration
         self.db: Optional[Database] = None
         self.audit_client: Optional[Any] = None
         self.message_bus: Optional[ShardedMessageBus] = None
@@ -501,31 +516,33 @@ class PluginRegistry:
                     plugin.message_bus_adapter.subscribe(topic_to_subscribe, plugin.execute, filter=filter_obj)
 
     async def initialize(self):
-        if self._is_initialized:
-            return
-        
-        self.logger.info("Initializing PluginRegistry...")
-        self._loop = asyncio.get_running_loop()
+        # Atomic initialization check with lock to prevent race conditions
+        async with self._init_lock:
+            if self._is_initialized:
+                return
+            
+            self.logger.info("Initializing PluginRegistry...")
+            self._loop = asyncio.get_running_loop()
 
-        if self.db:
-            self.performance_tracker = PluginPerformanceTracker(db=self.db, audit_client=self.audit_client)
-        
-        await self.load_arbiter_plugins()
-        await self.load_from_directory(settings.PLUGIN_DIR)
-        self.load_ai_assistant_plugins()
-        
-        # CodeHealthEnv
-        if CodeHealthEnv is not None:
-            try:
-                plugin_meta = PluginMeta(name="code_health_env", kind=PlugInKind.CORE_SERVICE.value,
-                                         description="Reinforcement learning environment for code health.")
-                self.register(PlugInKind.CORE_SERVICE.value, "code_health_env",
-                              Plugin(plugin_meta, CodeHealthEnv, performance_tracker=self.performance_tracker))
-                self.logger.info("Registered CodeHealthEnv plugin.")
-            except Exception as e:
-                self.logger.error(f"Failed to register CodeHealthEnv: {e}")
-        else:
-            self.logger.info("CodeHealthEnv not available; skipping.")
+            if self.db:
+                self.performance_tracker = PluginPerformanceTracker(db=self.db, audit_client=self.audit_client)
+            
+            await self.load_arbiter_plugins()
+            await self.load_from_directory(settings.PLUGIN_DIR)
+            self.load_ai_assistant_plugins()
+            
+            # CodeHealthEnv
+            if CodeHealthEnv is not None:
+                try:
+                    plugin_meta = PluginMeta(name="code_health_env", kind=PlugInKind.CORE_SERVICE.value,
+                                             description="Reinforcement learning environment for code health.")
+                    self.register(PlugInKind.CORE_SERVICE.value, "code_health_env",
+                                  Plugin(plugin_meta, CodeHealthEnv, performance_tracker=self.performance_tracker))
+                    self.logger.info("Registered CodeHealthEnv plugin.")
+                except Exception as e:
+                    self.logger.error(f"Failed to register CodeHealthEnv: {e}")
+            else:
+                self.logger.info("CodeHealthEnv not available; skipping.")
 
         # evolve_configs
         if evolve_configs is not None:
@@ -694,9 +711,13 @@ class PluginRegistry:
         config = ArbiterConfig()
         if not config.PLUGINS_ENABLED:
             raise ValueError("Plugins are disabled in ArbiterConfig")
-        if kind not in self._plugins:
-            self._plugins[kind] = {}
-        self._plugins[kind][name] = plugin
+        
+        # SECURITY: Use lock to prevent race conditions during concurrent plugin registration
+        with self._register_lock:
+            if kind not in self._plugins:
+                self._plugins[kind] = {}
+            self._plugins[kind][name] = plugin
+            
         self._attach_bus_adapter_if_any(name, kind, plugin)
         if name == "arbiter":
             self._entrypoints.update({

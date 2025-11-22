@@ -408,6 +408,28 @@ class SecurityIntegrationManager:
             json.dumps(fingerprint_data, sort_keys=True).encode()
         ).hexdigest()
     
+    def cleanup_expired_sessions(self) -> int:
+        """
+        Clean up expired sessions from memory to prevent memory leak.
+        Should be called periodically (e.g., every 5-10 minutes).
+        
+        Returns:
+            Number of sessions cleaned up
+        """
+        now = datetime.now(timezone.utc)
+        expired_sessions = [
+            session_id for session_id, session in self._sessions.items()
+            if now > session.expires_at
+        ]
+        
+        for session_id in expired_sessions:
+            del self._sessions[session_id]
+        
+        if expired_sessions:
+            logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
+        
+        return len(expired_sessions)
+    
     # ================== AUTHORIZATION ==================
     
     async def authorize(
