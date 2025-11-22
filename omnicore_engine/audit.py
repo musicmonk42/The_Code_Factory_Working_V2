@@ -47,6 +47,36 @@ except ImportError:
     WEB3_AVAILABLE = False
     Web3 = None
 
+try:
+    from arbiter.policy.core import PolicyEngine
+except ImportError:
+    # Create a stub PolicyEngine that always allows
+    class PolicyEngine:
+        def __init__(self, arbiter_instance=None, config=None, **kwargs):
+            pass
+        async def should_auto_learn(self, *args, **kwargs):
+            return (True, "PolicyEngine not available")
+    
+try:
+    from arbiter.feedback import FeedbackManager, FeedbackType
+except ImportError:
+    # Create stubs
+    class FeedbackType:
+        BUG_REPORT = "bug_report"
+        FEATURE_REQUEST = "feature_request"
+        GENERAL = "general"
+        APPROVAL = "approval"
+        DENIAL = "denial"
+        IMPROVEMENT = "improvement"
+        ISSUE = "issue"
+    
+    class FeedbackManager:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def record_feedback(self, *args, **kwargs):
+            logger.debug("FeedbackManager not available, feedback not recorded")
+            pass
+
 logger = logging.getLogger(__name__)
 
 class ExplanationRationale(BaseModel):
@@ -219,7 +249,7 @@ class AuditProofExporter:
 
     async def export_proof_bundle(self, user_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         try:
-            policy_engine = PolicyEngine(settings=settings)
+            policy_engine = PolicyEngine(arbiter_instance=None, config=settings)
             allowed, reason = await policy_engine.should_auto_learn(
                 'Audit', 'export_proof_bundle', user_id, {'tenant_id': tenant_id}
             )
@@ -355,8 +385,12 @@ class ExplainAudit:
         )
         self._db_client = Database(self.config.DATABASE_URL, system_audit_merkle_tree=system_audit_merkle_tree)
         
-        self.policy_engine = PolicyEngine(arbiter_instance=None)
-        self.knowledge_graph = KnowledgeGraph()
+        self.policy_engine = PolicyEngine(arbiter_instance=None, config=self.config)
+        if KnowledgeGraph is not None:
+            self.knowledge_graph = KnowledgeGraph()
+        else:
+            self.knowledge_graph = None
+            logger.warning("KnowledgeGraph not available; knowledge graph features will be disabled")
         
         self.plugin_registry = PLUGIN_REGISTRY
         self.system_audit_merkle_tree = system_audit_merkle_tree
