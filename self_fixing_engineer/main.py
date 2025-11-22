@@ -288,6 +288,95 @@ async def _simulation_health_check() -> dict:
 
 
 # -------------------------
+# Test Generation Module (optional)
+# -------------------------
+
+_test_generation_orchestrator = None  # Global instance, initialized during startup
+
+def _init_test_generation():
+    """Initialize the GenerationOrchestrator for the SFE platform."""
+    try:
+        from test_generation.orchestrator.orchestrator import GenerationOrchestrator
+        
+        # Create basic config for test generation
+        config = {
+            "max_parallel_generation": int(os.getenv("TESTGEN_MAX_PARALLEL", "4")),
+            "max_gen_retries": int(os.getenv("TESTGEN_MAX_RETRIES", "2")),
+            "per_lang_concurrency": int(os.getenv("TESTGEN_LANG_CONCURRENCY", "4")),
+        }
+        
+        # Use temporary paths for project_root and suite_dir
+        project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+        suite_dir = os.getenv("TESTGEN_SUITE_DIR", "./tests")
+        
+        orchestrator = GenerationOrchestrator(config, project_root, suite_dir)
+        logger.info("Test generation orchestrator initialized successfully")
+        return orchestrator
+    except Exception as e:
+        logger.warning("Failed to initialize test generation orchestrator: %s. Test generation features will be unavailable.", e)
+        return None
+
+
+async def _initialize_test_generation():
+    """Async initialization of test generation module."""
+    global _test_generation_orchestrator
+    if _test_generation_orchestrator is None:
+        _test_generation_orchestrator = _init_test_generation()
+    
+    if _test_generation_orchestrator:
+        logger.info("Test generation orchestrator ready")
+
+
+async def _shutdown_test_generation():
+    """Gracefully shutdown test generation orchestrator."""
+    global _test_generation_orchestrator
+    if _test_generation_orchestrator:
+        try:
+            # Test generation orchestrator doesn't have explicit shutdown method
+            # Just clear the reference
+            logger.info("Test generation orchestrator shutdown complete")
+        except Exception as e:
+            logger.warning("Error during test generation orchestrator shutdown: %s", e)
+
+
+async def _test_generation_health_check() -> dict:
+    """Check test generation orchestrator health."""
+    if _test_generation_orchestrator is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        # Test generation orchestrator doesn't have health_check method
+        # Just verify components are present
+        has_policy = hasattr(_test_generation_orchestrator, "policy_engine")
+        has_event_bus = hasattr(_test_generation_orchestrator, "event_bus")
+        has_scanner = hasattr(_test_generation_orchestrator, "security_scanner")
+        
+        if has_policy and has_event_bus and has_scanner:
+            return {
+                "status": "ok",
+                "components": {
+                    "policy_engine": "initialized",
+                    "event_bus": "initialized",
+                    "security_scanner": "initialized"
+                },
+                "available": True
+            }
+        else:
+            return {
+                "status": "degraded",
+                "components": {
+                    "policy_engine": "initialized" if has_policy else "missing",
+                    "event_bus": "initialized" if has_event_bus else "missing",
+                    "security_scanner": "initialized" if has_scanner else "missing"
+                },
+                "available": True
+            }
+    except Exception as e:
+        logger.error("Test generation health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -358,6 +447,9 @@ async def startup_validation():
             
             # Initialize simulation module
             await _initialize_simulation_module()
+            
+            # Initialize test generation orchestrator
+            await _initialize_test_generation()
             
             logger.info("Startup validation OK (env=%s)", env)
         except Exception as e:
@@ -498,14 +590,24 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
             sim_status == "not_initialized" and simulation_health.get("available") == False
         )
         
-        overall_status = "ok" if (redis_ok and simulation_ok) else "degraded"
+        # Check test generation orchestrator health
+        # Note: test generation is optional, so not_initialized is acceptable
+        testgen_health = await _test_generation_health_check()
+        tg_status = testgen_health.get("status")
+        testgen_ok = tg_status in ("ok", "healthy", "degraded") or (
+            tg_status == "not_initialized" and testgen_health.get("available") == False
+        )
+        
+        overall_status = "ok" if (redis_ok and simulation_ok and testgen_ok) else "degraded"
         
         return {
             "status": overall_status,
             "checks": {
                 "redis": bool(redis_ok),
                 "simulation": simulation_ok,
-                "simulation_details": simulation_health
+                "simulation_details": simulation_health,
+                "test_generation": testgen_ok,
+                "test_generation_details": testgen_health
             },
             "version": VERSION,
         }
@@ -654,6 +756,10 @@ async def main():
         finally:
             sys.exit(1)
     finally:
+        try:
+            await _shutdown_test_generation()
+        except Exception:
+            pass
         try:
             await _shutdown_simulation_module()
         except Exception:
