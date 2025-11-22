@@ -9,6 +9,7 @@ Key guarantees & upgrades
 * **Exponential back-off** with jitter for transient failures
 * **DLQ publishing** on permanent handler failure (configurable suffix)
 * **Idempotent producer** (enabled by default, requires acks=all + retries>0)
+* **Circuit breaker** integration for resilience
 * Pluggable **(de)serializers** – JSON (UTF-8) by default, custom callable support
 * **Stable key-based partitioning** (murmur2 hash, deterministic)
 * **Prometheus metrics** (optional, import-guarded) + in-memory fall-backs
@@ -81,6 +82,25 @@ try:
     _PROMETHEUS_AVAILABLE = True
 except Exception:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
+
+# Import CircuitBreaker for resilience
+try:
+    from ..resilience import CircuitBreaker  # Assumes resilience.py is available
+except ImportError:  # pragma: no cover
+    # Fallback if not available
+    class CircuitBreaker:  # type: ignore
+        """Fallback CircuitBreaker if resilience module is not available."""
+        def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
+            self.state = "closed"
+        
+        def record_failure(self):
+            pass
+        
+        def record_success(self):
+            pass
+        
+        def can_attempt(self) -> bool:
+            return True
 
 
 logger = logging.getLogger(__name__)
@@ -264,8 +284,9 @@ Handler signature:
 class KafkaBridge:
     """Async Kafka producer/consumer with full observability and resilience."""
 
-    def __init__(self, cfg: KafkaBridgeConfig):
+    def __init__(self, cfg: KafkaBridgeConfig, circuit: Optional[CircuitBreaker] = None):
         self.cfg = cfg
+        self.circuit = circuit or CircuitBreaker(failure_threshold=5, recovery_timeout=60)
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
         self._consume_tasks: List[asyncio.Task] = []
@@ -375,6 +396,7 @@ class KafkaBridge:
             "producer": bool(self._producer),
             "consumer": bool(self._consumer),
             "subscribed_topics": self._subscribed_topics[:],
+            "circuit_state": self.circuit.state,
         }
 
         if self._producer:
@@ -411,6 +433,10 @@ class KafkaBridge:
         await self._ensure_ready()
         if not self._producer:
             raise RuntimeError("Producer not initialized")
+        
+        # Add circuit breaker check
+        if not self.circuit.can_attempt():
+            raise RuntimeError("Kafka circuit is open")
 
         kbytes = self._serialize_key(key) if key is not None else None
         vbytes = self.cfg.serializer.dumps(value) if value is not None else b""
@@ -424,8 +450,10 @@ class KafkaBridge:
             await self._producer.send_and_wait(
                 topic, vbytes, key=kbytes, headers=hlist, **send_kwargs
             )
+            self.circuit.record_success()
             self._metrics.inc_produced(topic)
         except Exception as exc:
+            self.circuit.record_failure()
             logger.exception(
                 "Failed to produce to %s (key=%s): %s", topic, key, exc
             )
