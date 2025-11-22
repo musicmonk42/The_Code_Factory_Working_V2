@@ -2036,7 +2036,8 @@ class Arbiter:
             return {"status": "skipped", "details": "redis.asyncio not available"}  # Fixed: updated reference
         try:
             async with self.redis_pool as redis:
-                message_id = hashlib.md5(json.dumps(message).encode()).hexdigest()
+                # Security: Use SHA-256 instead of MD5 for hashing
+                message_id = hashlib.sha256(json.dumps(message).encode()).hexdigest()
                 await redis.setex(f"arbiter_message:{message_id}", 3600, json.dumps(message))
                 await redis.publish("arbiter_channel", message_id)
                 logging.getLogger(__name__).info(f"[{self.name}] Published message {message_id} to peers.")

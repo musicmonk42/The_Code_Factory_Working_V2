@@ -605,7 +605,9 @@ class ArbiterArena:
 
         try:
             import uvicorn
-            config = uvicorn.Config(self.app, host="0.0.0.0", port=http_port, log_level="info")
+            # Security: Use environment variable for host binding (default to localhost)
+            api_host = os.getenv('API_HOST', '127.0.0.1')
+            config = uvicorn.Config(self.app, host=api_host, port=http_port, log_level="info")
             self.server = uvicorn.Server(config)
             await self.server.serve()
         except ImportError:

@@ -256,7 +256,8 @@ class ArbiterConfig(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
     HEALTH_CHECK_ENDPOINT: str = Field(default="/health", env="HEALTH_CHECK_ENDPOINT")
     HEALTH_CHECK_PORT: int = Field(default=8080, env="HEALTH_CHECK_PORT")
-    API_HOST: str = Field(default="0.0.0.0", env="API_HOST")
+    # Security: Default to localhost; use environment variable to bind to all interfaces if needed
+    API_HOST: str = Field(default="127.0.0.1", env="API_HOST")
     API_PORT: int = Field(default=8000, env="API_PORT")
     RELOAD_VALIDATE_FILES: bool = Field(default=False, env="RELOAD_VALIDATE_FILES")
 

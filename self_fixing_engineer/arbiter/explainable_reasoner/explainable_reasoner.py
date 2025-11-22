@@ -1369,8 +1369,8 @@ if __name__ == '__main__':
 
             print("\n--- Testing Sensitive Action (Purge History) ---")
             # NOTE: This will fail without a valid JWT token. This is expected.
-            # Use environment variable for testing token
-            test_token = os.getenv("TEST_AUTH_TOKEN", "test-only-no-production-use")
+            # Use environment variable for testing token (default is clearly marked as test-only)
+            test_token = os.getenv("TEST_AUTH_TOKEN", "test-only-no-production-use")  # nosec B105
             purge_result = await plugin_instance.execute(action="purge_history", auth_token=test_token)
             print(json.dumps(purge_result, indent=2))
 

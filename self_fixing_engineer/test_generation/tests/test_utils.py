@@ -3,7 +3,8 @@ import os
 import json
 import asyncio
 import tempfile
-import xml.etree.ElementTree as ET
+# Security fix: Use defusedxml to prevent XXE attacks
+import defusedxml.ElementTree as ET
 from unittest.mock import patch, AsyncMock, MagicMock, mock_open
 from test_generation.utils import (
     ATCOConfig,

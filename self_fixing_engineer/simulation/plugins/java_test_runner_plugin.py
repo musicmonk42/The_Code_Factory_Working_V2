@@ -3,7 +3,8 @@ import asyncio
 import shutil
 import logging
 import tempfile
-import xml.etree.ElementTree as ET
+# Security fix: Use defusedxml to prevent XXE attacks
+import defusedxml.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 

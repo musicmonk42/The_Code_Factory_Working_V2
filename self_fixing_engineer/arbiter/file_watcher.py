@@ -876,10 +876,12 @@ class MetricsAndHealthServer:
 
     async def start(self):
         await self.runner.setup()
-        site = web.TCPSite(self.runner, "0.0.0.0", self.config.metrics.prometheus_port)
+        # Security: Use environment variable for host binding (default to localhost)
+        metrics_host = os.getenv('METRICS_HOST', '127.0.0.1')
+        site = web.TCPSite(self.runner, metrics_host, self.config.metrics.prometheus_port)
         await site.start()
-        logger.info(f"Metrics and Health server started on port {self.config.metrics.prometheus_port}")
-        logger.info(f"Health check at http://localhost:{self.config.metrics.prometheus_port}/health")
+        logger.info(f"Metrics and Health server started on {metrics_host}:{self.config.metrics.prometheus_port}")
+        logger.info(f"Health check at http://{metrics_host}:{self.config.metrics.prometheus_port}/health")
     
     async def stop(self):
         await self.runner.cleanup()
