@@ -191,7 +191,8 @@ class FitnessEvaluator:
         """Generate cache key for an individual"""
         # Round to avoid floating point precision issues
         rounded = [round(gene, 6) for gene in individual]
-        return hashlib.md5(str(rounded).encode()).hexdigest()
+        # Security: Use SHA-256 instead of MD5 for hashing
+        return hashlib.sha256(str(rounded).encode()).hexdigest()
     
     def _evaluate_with_function(self, individual: List[float]) -> Tuple[float]:
         """Evaluate using provided test function"""

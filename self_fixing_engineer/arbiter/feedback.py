@@ -188,7 +188,8 @@ class SQLiteClient:
             entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
         if "id" not in entry_copy:
             # Generate a unique ID using a hash of the content to prevent duplicates
-            entry_copy["id"] = hashlib.md5(json.dumps(entry_copy, sort_keys=True).encode('utf-8')).hexdigest()
+            # Security: Use SHA-256 instead of MD5 for hashing
+            entry_copy["id"] = hashlib.sha256(json.dumps(entry_copy, sort_keys=True).encode('utf-8')).hexdigest()
             
         async with aiosqlite.connect(self.db_file) as db:
             await db.execute("""
@@ -362,8 +363,9 @@ class FeedbackManager:
             feedback_errors_total.labels(component='record_metric_invalid_value').inc()
             return
             
+        # Security: Use SHA-256 instead of MD5 for hashing
         metric_entry = {
-            "id": hashlib.md5(f"{name}-{value}-{datetime.now(timezone.utc).isoformat()}-{random.randint(0, 100000)}".encode('utf-8')).hexdigest(),
+            "id": hashlib.sha256(f"{name}-{value}-{datetime.now(timezone.utc).isoformat()}-{random.randint(0, 100000)}".encode('utf-8')).hexdigest(),
             "type": "metric",
             "name": name,
             "value": float(value),

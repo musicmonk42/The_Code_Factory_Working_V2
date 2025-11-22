@@ -163,7 +163,8 @@ class SQLiteClient:
             if "timestamp" not in entry_copy:
                 entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
             if "id" not in entry_copy:
-                entry_copy["id"] = hashlib.md5(json.dumps(entry_copy, sort_keys=True).encode('utf-8') + str(random.random()).encode('utf-8')).hexdigest()
+                # Security: Use SHA-256 instead of MD5 for hashing
+                entry_copy["id"] = hashlib.sha256(json.dumps(entry_copy, sort_keys=True).encode('utf-8') + str(random.random()).encode('utf-8')).hexdigest()
             if "type" not in entry_copy or not isinstance(entry_copy["type"], str):
                 entry_copy["type"] = "unknown"
                 span.set_attribute("type_status", "defaulted")

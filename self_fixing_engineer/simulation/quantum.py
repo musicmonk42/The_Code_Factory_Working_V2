@@ -403,7 +403,8 @@ class BackendClientPool:
 
     def _hash_kwargs(self, kwargs):
         """Create a hash of kwargs for client key."""
-        return hashlib.md5(json.dumps(kwargs, sort_keys=True).encode()).hexdigest()
+        # Security: Use SHA-256 instead of MD5 for hashing
+        return hashlib.sha256(json.dumps(kwargs, sort_keys=True).encode()).hexdigest()
 
     async def close(self):
         """Close all clients and stop cleanup task."""

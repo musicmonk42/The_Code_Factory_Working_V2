@@ -176,7 +176,8 @@ class PIIRedactorFilter(logging.Filter):
             return text
         
         # Check cache
-        text_hash = hashlib.md5(text.encode()).hexdigest()
+        # Security: Use SHA-256 instead of MD5 for hashing
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
         with self._lock:
             if text_hash in self._cache:
                 return self._cache[text_hash]
