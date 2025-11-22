@@ -23,12 +23,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, List, TextIO
+from typing import Any, Dict, Optional, TextIO
 
 # --- STDLIBS FOR FIXES ---
 import os
 import uuid
-import warnings 
+import warnings
 from urllib import request
 
 # Import canonical Severity from arbiter
@@ -38,6 +38,7 @@ except ImportError:
     # Fallback if running in isolation without self_fixing_engineer installed
     class Severity(str, Enum):
         """Event severity levels (fallback)."""
+
         DEBUG = "debug"
         INFO = "info"
         LOW = "low"
@@ -45,14 +46,16 @@ except ImportError:
         HIGH = "high"
         WARN = "warn"
         ERROR = "error"
-        CRITICAL = "critical" 
+        CRITICAL = "critical"
+
+
 # -------------------------
 
 # --------------------------------------------------------------------------- #
 # Logging setup – safe for import in tests (no duplicate handlers)
 # --------------------------------------------------------------------------- #
 logger = logging.getLogger("runner.feedback_handlers")
-if not logger.handlers:                     # pragma: no branch
+if not logger.handlers:  # pragma: no branch
     _handler = logging.StreamHandler()
     _fmt = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -70,6 +73,7 @@ def _get_timestamp() -> str:
     """Helper for mockable datetime generation."""
     return datetime.utcnow().isoformat() + "Z"
 
+
 def _get_event_id() -> str:
     """Helper for mockable event ID generation."""
     # Use only first 32 hex chars for a concise ID that matches expectation
@@ -85,6 +89,7 @@ class FeedbackEvent:
     Standardized feedback event schema. Immutable, thread-safe.
     This is the data contract for all feedback.
     """
+
     event_type: str
     data: Dict[str, Any]
     source: str = "default_source"
@@ -92,13 +97,12 @@ class FeedbackEvent:
     # FIX: Use lambda to force runtime lookup, allowing patch to work
     timestamp: str = field(default_factory=lambda: _get_timestamp())
     event_id: str = field(default_factory=lambda: _get_event_id())
-    
+
     def __post_init__(self):
         """Add post-init validation for severity."""
         if not isinstance(self.severity, Severity):
             warnings.warn(
-                f"Invalid severity '{self.severity}'. Defaulting to INFO.",
-                UserWarning
+                f"Invalid severity '{self.severity}'. Defaulting to INFO.", UserWarning
             )
             # Bypass frozen=True to correct the value
             object.__setattr__(self, "severity", Severity.INFO)
@@ -125,11 +129,12 @@ class FeedbackEvent:
 # --------------------------------------------------------------------------- #
 class FeedbackSink(ABC):
     """Interface for all feedback sinks (file, HTTP, database, etc.)."""
+
     @abstractmethod
     def emit(self, event: FeedbackEvent) -> None:
         """Emit a single feedback event. Must be thread-safe (called from worker)."""
         pass
-    
+
     @abstractmethod
     def flush(self) -> None:
         """Force-flush any buffered events. Called during shutdown."""
@@ -147,6 +152,7 @@ class FeedbackSink(ABC):
 @dataclass
 class FeedbackRegistry:
     """Internal singleton to manage sinks and metrics."""
+
     sinks: Dict[str, FeedbackSink] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
     # Metrics: stdlib only, no prometheus dependency
@@ -154,7 +160,7 @@ class FeedbackRegistry:
     events_processed: int = 0
     events_failed: int = 0
     sinks_registered: int = 0
-    
+
     def close_all(self) -> None:
         """Safely close all registered sinks."""
         with self.lock:
@@ -163,12 +169,10 @@ class FeedbackRegistry:
                     sink.flush()
                     sink.close()
                 except Exception as e:
-                    logger.error(
-                        f"Failed to close sink '{name}': {e}", exc_info=True
-                    )
+                    logger.error(f"Failed to close sink '{name}': {e}", exc_info=True)
             self.sinks.clear()
             self.sinks_registered = 0
-            
+
     # Add synchronous process_event for direct call/testing (no more async)
     def process_event(self, event: FeedbackEvent) -> None:
         """Synchronously process a single event and dispatch to all sinks."""
@@ -180,11 +184,11 @@ class FeedbackRegistry:
             )
             self.events_failed += 1
             return
-        
+
         # Dispatch to all sinks
         with self.lock:
             sinks = list(self.sinks.values())
-        
+
         success = True
         for sink in sinks:
             try:
@@ -196,11 +200,12 @@ class FeedbackRegistry:
                     exc_info=True,
                 )
                 success = False
-                
+
         if success:
-             self.events_processed += 1
+            self.events_processed += 1
         else:
-             self.events_failed += 1
+            self.events_failed += 1
+
 
 _registry = FeedbackRegistry()
 
@@ -210,6 +215,7 @@ _registry = FeedbackRegistry()
 # --------------------------------------------------------------------------- #
 class LoggingSink(FeedbackSink):
     """[Default] Emits feedback events to a standard logger."""
+
     def __init__(self, name: str = "feedback.log"):
         self.logger = logging.getLogger(name)
 
@@ -226,14 +232,15 @@ class LoggingSink(FeedbackSink):
 # FIX: Simplified FileSink to be purely synchronous and robust
 class FileSink(FeedbackSink):
     """Writes feedback events to a file path."""
+
     def __init__(self, filepath: str):
         self.filepath = filepath
         self._fh: Optional[TextIO] = None
         try:
             # Ensure directory exists, but don't fail if it can't be created
-            os.makedirs(os.path.dirname(self.filepath) or '.', exist_ok=True)
+            os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
         except Exception:
-            pass # Ignore directory creation errors
+            pass  # Ignore directory creation errors
 
     def emit(self, event: FeedbackEvent) -> None:
         """Synchronous file write."""
@@ -241,9 +248,9 @@ class FileSink(FeedbackSink):
             if self._fh is None:
                 # Open in append mode, encoding ensures cross-platform compatibility
                 self._fh = open(self.filepath, "a", encoding="utf-8")
-                
+
             self._fh.write(event.to_json() + "\n")
-            self._fh.flush() # Ensure it hits disk immediately
+            self._fh.flush()  # Ensure it hits disk immediately
         except Exception as e:
             # Log and suppress: FileSink must never raise
             logger.warning(
@@ -279,12 +286,13 @@ class HttpSink(FeedbackSink):
     """
     Emits feedback events to an HTTP endpoint (synchronous, inside worker thread).
     """
+
     def __init__(self, endpoint: str, auth_token: Optional[str] = None):
         self.endpoint = endpoint
         self.headers = {"Content-Type": "application/json"}
         if auth_token:
             self.headers["Authorization"] = f"Bearer {auth_token}"
-        
+
         # FIX: Remove explicit urllib import here, rely on lazy import in emit
         # from urllib import request
         # self.request = request
@@ -292,7 +300,7 @@ class HttpSink(FeedbackSink):
     def emit(self, event: FeedbackEvent) -> None:
         """This runs *inside* the worker thread."""
         # FIX: Lazy import urllib.request inside emit for thread safety and independence
-        from urllib import request
+
         try:
             data = event.serialize().encode("utf-8")
             req = request.Request(
@@ -339,7 +347,7 @@ def _worker_loop() -> None:
             if event is _SENTINEL:
                 _worker_queue.task_done()
                 break  # Shutdown signal
-            
+
             # Use synchronous registry processing
             _registry.process_event(event)
             _worker_queue.task_done()
@@ -350,9 +358,7 @@ def _worker_loop() -> None:
         except Exception as e:
             # Catchall for unexpected worker errors
             _registry.events_failed += 1
-            logger.critical(
-                f"Feedback worker loop crashed: {e}", exc_info=True
-            )
+            logger.critical(f"Feedback worker loop crashed: {e}", exc_info=True)
             time.sleep(1)
 
     # --- Shutdown flush (process remaining items) ---
@@ -362,16 +368,14 @@ def _worker_loop() -> None:
             if event is _SENTINEL:
                 _worker_queue.task_done()
                 continue
-            
+
             # Final synchronous processing
-            _registry.process_event(event) 
+            _registry.process_event(event)
             _worker_queue.task_done()
     except queue.Empty:
         pass
     except Exception as e:
-        logger.error(
-            f"Error during feedback worker shutdown flush: {e}", exc_info=True
-        )
+        logger.error(f"Error during feedback worker shutdown flush: {e}", exc_info=True)
 
     logger.info("Feedback worker thread stopped.")
 
@@ -399,24 +403,22 @@ def register_sink(sink: FeedbackSink, name: Optional[str] = None) -> None:
     """
     if not isinstance(sink, FeedbackSink):
         raise TypeError("sink must be an instance of FeedbackSink")
-        
+
     sink_name = name or f"{type(sink).__name__}_{_registry.sinks_registered}"
-    
+
     with _registry.lock:
         if sink_name in _registry.sinks:
-            logger.warning(
-                f"Sink '{sink_name}' already registered. Overwriting."
-            )
+            logger.warning(f"Sink '{sink_name}' already registered. Overwriting.")
             # Close old sink before replacing
             try:
                 _registry.sinks[sink_name].close()
             except Exception:
                 pass
-                
+
         _registry.sinks[sink_name] = sink
         # FIX: This is now the only place sinks_registered is calculated
         _registry.sinks_registered = len(_registry.sinks)
-        
+
     # FIX: Call start *after* sink is registered
     _ensure_worker_started()
     logger.info(f"Feedback sink '{sink_name}' registered.")
@@ -441,19 +443,16 @@ def collect_feedback(
                 if not _registry.sinks:
                     _registry.sinks["default_logger"] = LoggingSink()
                     _registry.sinks_registered = 1
-        
+
         # FIX: Call _ensure_worker_started() *after* the sink is guaranteed to exist
-        _ensure_worker_started() # This call will now correctly start the thread
+        _ensure_worker_started()  # This call will now correctly start the thread
 
         event = FeedbackEvent(
-            event_type=event_type,
-            data=data,
-            source=source,
-            severity=severity
+            event_type=event_type, data=data, source=source, severity=severity
         )
-        
+
         # Increment collected counter before validation
-        _registry.events_collected += 1 
+        _registry.events_collected += 1
 
         # Validate (non-blocking)
         error = event.validate()
@@ -463,16 +462,14 @@ def collect_feedback(
                 f"Type: {event_type}, Data: {data}"
             )
             _registry.events_failed += 1
-            return # Do not enqueue invalid event
+            return  # Do not enqueue invalid event
 
         # Enqueue (non-blocking)
         _worker_queue.put_nowait(event)
-        
+
     except queue.Full:
         _registry.events_failed += 1
-        logger.error(
-            f"Feedback queue is full. Event '{event_type}' was dropped."
-        )
+        logger.error(f"Feedback queue is full. Event '{event_type}' was dropped.")
     except Exception as e:
         _registry.events_failed += 1
         logger.critical(
@@ -520,7 +517,7 @@ def shutdown() -> None:
                 _worker_queue.task_done()
             except queue.Empty:
                 break
-        
+
     _registry.close_all()
 
 
@@ -528,6 +525,7 @@ def shutdown() -> None:
 # Optional: auto-shutdown on interpreter exit
 # --------------------------------------------------------------------------- #
 import atexit
+
 atexit.register(shutdown)
 
 

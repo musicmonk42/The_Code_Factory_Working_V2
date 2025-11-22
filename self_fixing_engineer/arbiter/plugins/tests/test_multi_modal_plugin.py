@@ -1,12 +1,7 @@
 # test_multi_modal_plugin.py
 import pytest
-import asyncio
 import json
-import hashlib
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
-from datetime import datetime, timezone
-from typing import Dict, Any
-import tempfile
+from unittest.mock import Mock, AsyncMock, patch
 import os
 
 from arbiter.plugins.multi_modal_plugin import (
@@ -17,15 +12,11 @@ from arbiter.plugins.multi_modal_plugin import (
     InputValidator,
     OutputValidator,
     SandboxExecutor,
-    MultiModalProcessor,
     ProcessingResult,
     InvalidInputError,
-    ConfigurationError,
-    ProviderNotAvailableError,
     ProcessingError,
-    MultiModalException
+    MultiModalException,
 )
-from arbiter.plugins.multi_modal_config import MultiModalConfig
 
 
 class TestAuditLogger:
@@ -36,7 +27,7 @@ class TestAuditLogger:
         config = Mock()
         config.destination = "console"
         config.log_level = "INFO"
-        
+
         audit_logger = AuditLogger(config)
         assert audit_logger.config == config
         assert audit_logger.audit_log.level == 20  # INFO level
@@ -46,19 +37,19 @@ class TestAuditLogger:
         config = Mock()
         config.destination = "console"
         config.log_level = "INFO"
-        
+
         audit_logger = AuditLogger(config)
-        
-        with patch.object(audit_logger.audit_log, 'info') as mock_info:
+
+        with patch.object(audit_logger.audit_log, "info") as mock_info:
             audit_logger.log_event(
                 user_id="test_user",
                 event_type="test_event",
                 timestamp="2024-01-01T00:00:00",
                 success=True,
                 operation_id="op123",
-                latency_ms=100.5
+                latency_ms=100.5,
             )
-            
+
             mock_info.assert_called_once()
             logged_data = json.loads(mock_info.call_args[0][0])
             assert logged_data["user_id"] == "test_user"
@@ -73,31 +64,31 @@ class TestMetricsCollector:
         """Test MetricsCollector when disabled."""
         config = Mock()
         config.enabled = False
-        
+
         collector = MetricsCollector(config)
         # Should not crash when calling methods
         collector.increment_successful_requests("image")
         collector.increment_failed_requests("text")
         collector.observe_latency("audio", 100)
 
-    @patch('arbiter.plugins.multi_modal_plugin.get_or_create_counter')
-    @patch('arbiter.plugins.multi_modal_plugin.get_or_create_histogram')
+    @patch("arbiter.plugins.multi_modal_plugin.get_or_create_counter")
+    @patch("arbiter.plugins.multi_modal_plugin.get_or_create_histogram")
     def test_metrics_collector_enabled(self, mock_histogram, mock_counter):
         """Test MetricsCollector when enabled."""
         config = Mock()
         config.enabled = True
-        
+
         mock_metric = Mock()
         mock_counter.return_value = mock_metric
         mock_histogram.return_value = mock_metric
-        
+
         collector = MetricsCollector(config)
-        
+
         # Test metric operations
         collector.increment_successful_requests("image")
         collector.increment_cache_hits("text")
         collector.observe_latency("audio", 500)
-        
+
         assert mock_counter.call_count == 3  # requests_total, cache_hits, cache_misses
         assert mock_histogram.call_count == 1  # processing_latency
 
@@ -110,13 +101,13 @@ class TestCacheManager:
         """Test CacheManager when disabled."""
         config = Mock()
         config.enabled = False
-        
+
         cache = CacheManager(config)
         await cache.connect()
-        
+
         result = await cache.get("test_key")
         assert result is None
-        
+
         await cache.set("test_key", {"data": "value"}, 60)
         # Should not crash
 
@@ -128,15 +119,17 @@ class TestCacheManager:
         config.type = "redis"
         config.host = "localhost"
         config.port = 6379
-        
-        with patch('arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis') as mock_redis:
+
+        with patch(
+            "arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis"
+        ) as mock_redis:
             mock_redis_instance = AsyncMock()
             mock_redis.return_value = mock_redis_instance
             mock_redis_instance.ping.side_effect = Exception("Connection failed")
-            
+
             cache = CacheManager(config)
             await cache.connect()
-            
+
             assert cache.config.enabled is False  # Should be disabled after failure
 
     @pytest.mark.asyncio
@@ -147,20 +140,20 @@ class TestCacheManager:
         config.type = "redis"
         config.host = "localhost"
         config.port = 6379
-        
-        with patch('arbiter.plugins.multi_modal_plugin.redis') as mock_redis_module:
+
+        with patch("arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
             mock_redis = AsyncMock()
             mock_redis_module.asyncio.Redis.return_value = mock_redis
             mock_redis.ping.return_value = True
             mock_redis.get.return_value = json.dumps({"cached": "data"})
-            
+
             cache = CacheManager(config)
             await cache.connect()
-            
+
             # Test get
             result = await cache.get("test_key")
             assert result == {"cached": "data"}
-            
+
             # Test set
             await cache.set("test_key", {"new": "data"}, 60)
             mock_redis.setex.assert_called_once()
@@ -175,15 +168,15 @@ class TestInputValidator:
         security_config.input_validation_rules = {"text": {"max_length": 100}}
         security_config.mask_pii_in_logs = False
         security_config.pii_patterns = []
-        
+
         # Valid text
         result = InputValidator.validate("text", "Valid text", security_config)
         assert result == "Valid text"
-        
+
         # Text too long
         with pytest.raises(InvalidInputError, match="exceeds max length"):
             InputValidator.validate("text", "x" * 101, security_config)
-        
+
         # Invalid type
         with pytest.raises(InvalidInputError, match="must be a string"):
             InputValidator.validate("text", 123, security_config)
@@ -192,11 +185,11 @@ class TestInputValidator:
         """Test validation of binary input (image/audio/video)."""
         security_config = Mock()
         security_config.input_validation_rules = {"image": {"max_size": 1024}}
-        
+
         # Valid bytes
         result = InputValidator.validate("image", b"image_data", security_config)
         assert result == b"image_data"
-        
+
         # Bytes too large
         with pytest.raises(InvalidInputError, match="exceeds max size"):
             InputValidator.validate("image", b"x" * 1025, security_config)
@@ -206,8 +199,8 @@ class TestInputValidator:
         security_config = Mock()
         security_config.input_validation_rules = {}
         security_config.mask_pii_in_logs = True
-        security_config.pii_patterns = [r'\b[\w\.-]+@[\w\.-]+\.\w+\b']  # Email pattern
-        
+        security_config.pii_patterns = [r"\b[\w\.-]+@[\w\.-]+\.\w+\b"]  # Email pattern
+
         text = "Contact john@example.com for info"
         result = InputValidator.validate("text", text, security_config)
         assert "[PII_MASKED]" in result
@@ -223,27 +216,19 @@ class TestOutputValidator:
         security_config.output_validation_rules = {
             "text": {"min_confidence": 0.5, "require_success_flag": True}
         }
-        
-        result = {
-            "success": True,
-            "model_confidence": 0.8,
-            "data": {}
-        }
-        
+
+        result = {"success": True, "model_confidence": 0.8, "data": {}}
+
         # Should not raise
         OutputValidator.validate("text", result, security_config)
 
     def test_validate_output_confidence_too_low(self):
         """Test output validation with low confidence."""
         security_config = Mock()
-        security_config.output_validation_rules = {
-            "text": {"min_confidence": 0.9}
-        }
-        
-        result = {
-            "model_confidence": 0.5
-        }
-        
+        security_config.output_validation_rules = {"text": {"min_confidence": 0.9}}
+
+        result = {"model_confidence": 0.5}
+
         with pytest.raises(MultiModalException, match="below threshold"):
             OutputValidator.validate("text", result, security_config)
 
@@ -264,23 +249,25 @@ class TestMultiModalPlugin:
                 "enabled": True,
                 "threshold": 3,
                 "timeout_seconds": 30,
-                "modalities": ["image", "text"]
-            }
+                "modalities": ["image", "text"],
+            },
         }
 
     @pytest.fixture
     async def plugin(self, base_config):
         """Creates and initializes a MultiModalPlugin instance."""
-        with patch('arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor') as mock_get:
+        with patch(
+            "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
+        ) as mock_get:
             mock_processor = AsyncMock()
             mock_processor.process.return_value = ProcessingResult(
                 success=True,
                 data={"result": "processed"},
                 summary="Success",
-                operation_id="test123"
+                operation_id="test123",
             )
             mock_get.return_value = mock_processor
-            
+
             plugin = MultiModalPlugin(base_config)
             await plugin.initialize()
             yield plugin
@@ -290,7 +277,7 @@ class TestMultiModalPlugin:
     async def test_plugin_initialization(self, base_config):
         """Test plugin initialization."""
         plugin = MultiModalPlugin(base_config)
-        
+
         assert plugin.config.image_processing.enabled is True
         assert plugin.config.text_processing.enabled is True
         assert len(plugin._circuit_breaker_states) == 2
@@ -299,7 +286,7 @@ class TestMultiModalPlugin:
     async def test_process_image_success(self, plugin):
         """Test successful image processing."""
         result = await plugin.process_image(b"fake_image_data")
-        
+
         assert result.success is True
         assert result.data == {"result": "processed"}
 
@@ -307,9 +294,9 @@ class TestMultiModalPlugin:
     async def test_process_disabled_modality(self, plugin):
         """Test processing a disabled modality."""
         plugin.config.audio_processing.enabled = False
-        
+
         result = await plugin.process_audio(b"audio_data")
-        
+
         assert result.success is False
         assert "not enabled" in result.error
 
@@ -318,14 +305,14 @@ class TestMultiModalPlugin:
         """Test circuit breaker opening after failures."""
         # Mock processor to always fail
         plugin.image_processor.process.side_effect = ProcessingError("Failed")
-        
+
         # Fail multiple times to trigger circuit breaker
         for _ in range(3):
             result = await plugin.process_image(b"data")
             assert result.success is False
-        
+
         assert plugin._circuit_breaker_states["image"] == "open"
-        
+
         # Next call should fail immediately
         result = await plugin.process_image(b"data")
         assert "Circuit breaker" in result.error
@@ -335,23 +322,23 @@ class TestMultiModalPlugin:
         """Test pre and post processing hooks."""
         pre_hook_called = False
         post_hook_called = False
-        
+
         def pre_hook(data):
             nonlocal pre_hook_called
             pre_hook_called = True
             return data
-        
+
         def post_hook(data):
             nonlocal post_hook_called
             post_hook_called = True
             data["hooked"] = True
             return data
-        
+
         plugin.add_hook("text", pre_hook, "pre")
         plugin.add_hook("text", post_hook, "post")
-        
+
         await plugin.process_text("test text")
-        
+
         assert pre_hook_called
         assert post_hook_called
 
@@ -363,49 +350,51 @@ class TestMultiModalPlugin:
             "type": "redis",
             "host": "localhost",
             "port": 6379,
-            "ttl_seconds": 60
+            "ttl_seconds": 60,
         }
-        
-        with patch('arbiter.plugins.multi_modal_plugin.redis') as mock_redis_module:
+
+        with patch("arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
             mock_redis = AsyncMock()
             mock_redis_module.asyncio.Redis.return_value = mock_redis
             mock_redis.ping.return_value = True
-            
+
             # First call - cache miss
             mock_redis.get.return_value = None
-            
-            with patch('arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor') as mock_get:
+
+            with patch(
+                "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
+            ) as mock_get:
                 mock_processor = AsyncMock()
                 mock_processor.process.return_value = ProcessingResult(
-                    success=True,
-                    data={"result": "processed"}
+                    success=True, data={"result": "processed"}
                 )
                 mock_get.return_value = mock_processor
-                
+
                 plugin = MultiModalPlugin(base_config)
                 await plugin.initialize()
-                
+
                 # Process data - should cache result
                 result1 = await plugin.process_text("test")
                 assert result1.success is True
-                
+
                 # Verify cache was written
                 mock_redis.setex.assert_called_once()
-                
+
                 # Second call - cache hit
-                mock_redis.get.return_value = json.dumps({
-                    "success": True,
-                    "data": {"cached": True}
-                })
-                
+                mock_redis.get.return_value = json.dumps(
+                    {"success": True, "data": {"cached": True}}
+                )
+
                 result2 = await plugin.process_text("test")
                 # Should get cached result without processing
 
     def test_get_supported_providers(self, plugin):
         """Test getting supported providers for a modality."""
-        with patch('arbiter.plugins.multi_modal_plugin.PluginRegistry.get_supported_providers') as mock_get:
+        with patch(
+            "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_supported_providers"
+        ) as mock_get:
             mock_get.return_value = ["provider1", "provider2"]
-            
+
             providers = plugin.get_supported_providers("image")
             assert providers == ["provider1", "provider2"]
 
@@ -422,7 +411,7 @@ class TestMultiModalPlugin:
     @pytest.mark.asyncio
     async def test_context_manager(self, base_config):
         """Test async context manager."""
-        with patch('arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor'):
+        with patch("arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"):
             async with MultiModalPlugin(base_config) as plugin:
                 assert plugin is not None
             # Should have called stop() on exit
@@ -448,9 +437,10 @@ class TestSandboxExecutor:
     @pytest.mark.asyncio
     async def test_sandbox_disabled(self):
         """Test sandbox executor when disabled."""
+
         async def test_func(data):
             return data + "_processed"
-        
+
         with patch.dict(os.environ, {"REAL_SANDBOXING_ENABLED": "false"}):
             result = await SandboxExecutor.execute(test_func, "test")
             assert result == "test_processed"
@@ -458,9 +448,10 @@ class TestSandboxExecutor:
     @pytest.mark.asyncio
     async def test_sandbox_sync_function(self):
         """Test sandbox executor with sync function."""
+
         def sync_func(data):
             return data + "_sync"
-        
+
         with patch.dict(os.environ, {"REAL_SANDBOXING_ENABLED": "false"}):
             result = await SandboxExecutor.execute(sync_func, "test")
             assert result == "test_sync"

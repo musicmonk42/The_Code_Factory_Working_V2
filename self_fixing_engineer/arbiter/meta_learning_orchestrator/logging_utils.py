@@ -16,23 +16,23 @@ REDACTION_ENABLED = os.getenv("LOGGING_REDACTION_ENABLED", "true").lower() == "t
 # --- Custom Log Filter for Correlation ID ---
 class LogCorrelationFilter(logging.Filter):
     """Adds OpenTelemetry Span ID and Trace ID to log records if available."""
-    
+
     def filter(self, record):
         span = trace.get_current_span()
-        
+
         # Handle different span types and contexts properly
         if span:
             try:
                 # Try to get context using the standard method
-                if hasattr(span, 'get_span_context'):
+                if hasattr(span, "get_span_context"):
                     context = span.get_span_context()
-                elif hasattr(span, '_context'):
+                elif hasattr(span, "_context"):
                     # Fallback for NonRecordingSpan in test environments
                     context = span._context
                 else:
                     context = None
-                
-                if context and hasattr(context, 'is_valid') and context.is_valid:
+
+                if context and hasattr(context, "is_valid") and context.is_valid:
                     # Format with proper hex padding
                     record.trace_id = f"{context.trace_id:032x}"
                     record.span_id = f"{context.span_id:016x}"
@@ -44,9 +44,9 @@ class LogCorrelationFilter(logging.Filter):
                 self._set_no_trace_fields(record)
         else:
             self._set_no_trace_fields(record)
-        
+
         return True
-    
+
     def _set_no_trace_fields(self, record):
         """Set default values when no valid trace context is available."""
         record.trace_id = "no-trace"
@@ -57,13 +57,14 @@ class LogCorrelationFilter(logging.Filter):
 # --- Structured JSON Formatter ---
 class JSONFormatter(logging.Formatter):
     """Formats log records as a single line of JSON."""
+
     def format(self, record):
         log_object = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
             "name": record.name,
-            "trace_id": getattr(record, 'trace_id', 'no-trace'),
-            "span_id": getattr(record, 'span_id', 'no-span'),
+            "trace_id": getattr(record, "trace_id", "no-trace"),
+            "span_id": getattr(record, "span_id", "no-span"),
         }
 
         # Attempt to parse the message as JSON; otherwise, treat as a plain string.
@@ -73,13 +74,13 @@ class JSONFormatter(logging.Formatter):
             if isinstance(msg_data, dict):
                 log_object.update(msg_data)
             else:
-                log_object['message'] = msg_data
+                log_object["message"] = msg_data
         except (json.JSONDecodeError, TypeError):
-            log_object['message'] = record.getMessage()
+            log_object["message"] = record.getMessage()
 
         # Add exception info if present
         if record.exc_info:
-            log_object['exception'] = self.formatException(record.exc_info)
+            log_object["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(log_object)
 
@@ -92,22 +93,37 @@ class PIIRedactorFilter(logging.Filter):
     - EXTRA_REGEX_PATTERNS are loaded from PII_EXTRA_REGEX_PATTERNS env var.
     - Redaction can be disabled globally by setting LOGGING_REDACTION_ENABLED=false.
     """
+
     REDACTION_STRING = "[REDACTED]"
     MAX_RECURSION_DEPTH = 20
-    
+
     BASE_PII_REGEX_PATTERNS = [
-        re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
-        re.compile(r'\b(?:\d{3}[-.\s]?){2}\d{4}\b'),
-        re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'),
-        re.compile(r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b'),
-        re.compile(r'\b\d{3}[- ]?\d{2}[- ]?\d{4}\b'),
-        re.compile(r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|6(?:011|5[0-9]{2})[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})\b'),
+        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+        re.compile(r"\b(?:\d{3}[-.\s]?){2}\d{4}\b"),
+        re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+        re.compile(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"),
+        re.compile(r"\b\d{3}[- ]?\d{2}[- ]?\d{4}\b"),
+        re.compile(
+            r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|6(?:011|5[0-9]{2})[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})\b"
+        ),
     ]
 
     DEFAULT_SENSITIVE_KEYS = [
-        "agent_id", "session_id", "user_id", "decision_trace", "user_feedback",
-        "sensitive_info_field", "email", "phone_number", "address", "ssn",
-        "credit_card_number", "ip_address", "password", "api_key", "token"
+        "agent_id",
+        "session_id",
+        "user_id",
+        "decision_trace",
+        "user_feedback",
+        "sensitive_info_field",
+        "email",
+        "phone_number",
+        "address",
+        "ssn",
+        "credit_card_number",
+        "ip_address",
+        "password",
+        "api_key",
+        "token",
     ]
 
     def __init__(self, *args, **kwargs):
@@ -131,7 +147,9 @@ class PIIRedactorFilter(logging.Filter):
 
             keys_str = os.getenv("PII_SENSITIVE_KEYS", "")
             if keys_str:
-                self._sensitive_keys = {k.strip() for k in keys_str.split(",") if k.strip()}
+                self._sensitive_keys = {
+                    k.strip() for k in keys_str.split(",") if k.strip()
+                }
             else:
                 # Use defaults if env var is empty or not set
                 self._sensitive_keys = set(self.DEFAULT_SENSITIVE_KEYS)
@@ -145,12 +163,18 @@ class PIIRedactorFilter(logging.Filter):
                         try:
                             extra_patterns.append(re.compile(pattern))
                         except re.error as e:
-                            logging.getLogger(__name__).warning(f"Invalid regex in PII_EXTRA_REGEX_PATTERNS: '{pattern}'. Error: {e}")
+                            logging.getLogger(__name__).warning(
+                                f"Invalid regex in PII_EXTRA_REGEX_PATTERNS: '{pattern}'. Error: {e}"
+                            )
                 else:
-                    logging.getLogger(__name__).warning("PII_EXTRA_REGEX_PATTERNS must be a JSON list of strings.")
+                    logging.getLogger(__name__).warning(
+                        "PII_EXTRA_REGEX_PATTERNS must be a JSON list of strings."
+                    )
             except json.JSONDecodeError as e:
-                logging.getLogger(__name__).warning(f"Could not parse PII_EXTRA_REGEX_PATTERNS JSON: {e}")
-            
+                logging.getLogger(__name__).warning(
+                    f"Could not parse PII_EXTRA_REGEX_PATTERNS JSON: {e}"
+                )
+
             self._all_regex_patterns = self.BASE_PII_REGEX_PATTERNS + extra_patterns
             self._last_config_load_time = now
             logging.getLogger(__name__).info("PII redaction configuration reloaded.")
@@ -162,9 +186,9 @@ class PIIRedactorFilter(logging.Filter):
         self._load_config()
 
         try:
-            if hasattr(record, 'msg'):
+            if hasattr(record, "msg"):
                 record.msg = self._redact_value(record.msg)
-            if hasattr(record, 'details'):
+            if hasattr(record, "details"):
                 record.details = self._redact_value(record.details)
             if isinstance(record.args, (list, tuple)):
                 record.args = tuple([self._redact_value(arg) for arg in record.args])
@@ -181,7 +205,7 @@ class PIIRedactorFilter(logging.Filter):
         """
         if depth > self.MAX_RECURSION_DEPTH:
             return "[MAX RECURSION DEPTH]"
-        
+
         if seen is None:
             seen = set()
 
@@ -211,7 +235,9 @@ class PIIRedactorFilter(logging.Filter):
             return redacted
         return value
 
-    def _redact_dict(self, data: Dict[str, Any], seen: Set[int], depth: int) -> Dict[str, Any]:
+    def _redact_dict(
+        self, data: Dict[str, Any], seen: Set[int], depth: int
+    ) -> Dict[str, Any]:
         """Recursively redacts sensitive keys and values within a dictionary."""
         redacted_data = {}
         for key, value in data.items():
@@ -233,36 +259,41 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_logger = logging.getLogger("test_logger")
     test_logger.propagate = False
-    
+
     handler = logging.StreamHandler()
     # Use the new JSONFormatter
     handler.setFormatter(JSONFormatter())
-    
+
     handler.addFilter(LogCorrelationFilter())
     handler.addFilter(PIIRedactorFilter())
     test_logger.addHandler(handler)
 
     # Use centralized OpenTelemetry configuration
     from arbiter.otel_config import get_tracer
+
     tracer = get_tracer(__name__)
 
     test_logger.info("--- Starting PII Redaction and Structured Logging Test ---")
 
     with tracer.start_as_current_span("test_span_with_pii"):
         test_logger.info("A simple log message within a trace.")
-        
+
         # Test logging a dictionary, which gets merged by the JSONFormatter
-        test_logger.info(json.dumps({
-            "event": "user_login",
-            "user_id": "user-123",
-            "email": "test@example.com",
-            "ip_address": "192.168.1.1",
-            "details": { "sensitive_info_field": "secret_data" }
-        }))
+        test_logger.info(
+            json.dumps(
+                {
+                    "event": "user_login",
+                    "user_id": "user-123",
+                    "email": "test@example.com",
+                    "ip_address": "192.168.1.1",
+                    "details": {"sensitive_info_field": "secret_data"},
+                }
+            )
+        )
 
         # Test circular reference protection
         test_logger.info("\n--- Testing Circular Reference Protection ---")
         circular_obj = {}
-        circular_obj['a'] = 1
-        circular_obj['myself'] = circular_obj
+        circular_obj["a"] = 1
+        circular_obj["myself"] = circular_obj
         test_logger.info(json.dumps({"event": "circular_test", "data": circular_obj}))

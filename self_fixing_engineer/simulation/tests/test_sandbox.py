@@ -1,23 +1,13 @@
 import pytest
 import asyncio
-import os
-import sys
 import json
-import time
-import subprocess
-import getpass
-import hmac
-import hashlib
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
-from datetime import datetime, timedelta
-from typing import Dict, Any
-import psutil
+from unittest.mock import patch, AsyncMock, MagicMock
+from datetime import datetime
 from simulation.sandbox import (
     SandboxPolicy,
     ContainerValidationConfig,
     log_audit,
     verify_audit_log_integrity,
-    _periodic_audit_log_verification,
     _active_sandboxes,
     run_in_docker_sandbox,
     run_in_podman_sandbox,
@@ -26,38 +16,32 @@ from simulation.sandbox import (
     burst_to_cloud,
     run_chaos_experiment,
     cleanup_sandbox,
-    _monitor_sandbox_health,
-    _create_network_policy_for_pod,
-    _validate_pod_manifest_internal,
-    _apply_kernel_sandboxing_preexec,
-    _default_policy,
-    _sandbox_backends,
-    _backend_health_status,
     check_external_services_async,
     _periodic_external_service_check,
     run_in_sandbox,
     _get_audit_hmac_key,
     AUDIT_LOG_FILE,
-    AUDIT_LOG_INTEGRITY_FILE,
-    _start_background_tasks
+    _start_background_tasks,
 )
 from pathlib import Path
-import glob
 
 pytestmark = pytest.mark.unit
 
 # To ensure the global key is reset between tests
 _audit_hmac_key = None
 
+
 @pytest.fixture
 def temp_dir(tmp_path):
     """Fixture for a temporary directory."""
     return tmp_path
 
+
 @pytest.fixture
 def mock_policy():
     """Fixture for a mock SandboxPolicy."""
     return SandboxPolicy()
+
 
 @pytest.fixture
 def mock_audit_log(temp_dir):
@@ -67,14 +51,15 @@ def mock_audit_log(temp_dir):
     """
     audit_log = temp_dir / "sandbox_audit.log"
     integrity_file = temp_dir / "sandbox_audit_integrity.json"
-    audit_log.write_text("", encoding='utf-8')  # Clear the log file only
-    
+    audit_log.write_text("", encoding="utf-8")  # Clear the log file only
+
     # Clear global audit log to prevent stale entries
     global_audit_log = Path(AUDIT_LOG_FILE)
     if global_audit_log.exists():
-        global_audit_log.write_text("", encoding='utf-8')
-        
+        global_audit_log.write_text("", encoding="utf-8")
+
     return str(audit_log), str(integrity_file)
+
 
 @pytest.fixture(autouse=True)
 def reset_audit_hmac_key():
@@ -83,7 +68,9 @@ def reset_audit_hmac_key():
     _audit_hmac_key = None
     yield
 
+
 # --- Tests for SandboxPolicy ---
+
 
 def test_sandbox_policy_validation_success():
     """Test successful validation of SandboxPolicy."""
@@ -94,9 +81,10 @@ def test_sandbox_policy_validation_success():
         "network_disabled": True,
         "run_as_user": "1000:1000",
         "allow_write": False,
-        "allow_privileged_containers": False
+        "allow_privileged_containers": False,
     }
     SandboxPolicy(**policy)
+
 
 def test_sandbox_policy_run_as_user_not_root():
     """Test validation failure for root user in SandboxPolicy."""
@@ -104,16 +92,21 @@ def test_sandbox_policy_run_as_user_not_root():
     with pytest.raises(ValueError):
         SandboxPolicy(**policy)
 
+
 # --- Tests for ContainerValidationConfig ---
+
 
 def test_container_validation_config_success():
     """Test successful validation of ContainerValidationConfig."""
     config = {
         "image": "python:3.9-slim",
         "command": ["python"],
-        "kubernetes_pod_manifest": {"spec": {"containers": [{"securityContext": {"privileged": False}}]}}
+        "kubernetes_pod_manifest": {
+            "spec": {"containers": [{"securityContext": {"privileged": False}}]}
+        },
     }
     ContainerValidationConfig(**config)
+
 
 def test_container_validation_config_image_not_whitelist():
     """Test validation failure for untrusted image."""
@@ -121,7 +114,9 @@ def test_container_validation_config_image_not_whitelist():
     with pytest.raises(ValueError):
         ContainerValidationConfig(**config)
 
+
 # --- Tests for log_audit ---
+
 
 def test_log_audit(mock_audit_log, monkeypatch):
     """Test logging an audit event."""
@@ -134,35 +129,40 @@ def test_log_audit(mock_audit_log, monkeypatch):
     assert "event" in logged["event"]
     assert "signature" in logged
 
+
 # --- Tests for verify_audit_log_integrity ---
 
-@patch('simulation.sandbox.glob.glob', return_value=[])
+
+@patch("simulation.sandbox.glob.glob", return_value=[])
 def test_verify_audit_log_integrity_recent(mock_glob, mock_audit_log, monkeypatch):
     """Test audit log integrity verification with a recent integrity file."""
     audit_log, integrity_file = mock_audit_log
     monkeypatch.setenv("SANDBOX_AUDIT_HMAC_KEY", "test_key")
     monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_FILE", audit_log)
     monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
-    
-    with open(integrity_file, "w", encoding='utf-8') as f:
+
+    with open(integrity_file, "w", encoding="utf-8") as f:
         json.dump({"last_verification_time": datetime.utcnow().isoformat()}, f)
-        
+
     log_audit({"event": "test"})
-    
+
     assert verify_audit_log_integrity()
 
-@patch('simulation.sandbox.glob.glob', return_value=[])
+
+@patch("simulation.sandbox.glob.glob", return_value=[])
 def test_verify_audit_log_integrity_mismatch(mock_glob, mock_audit_log, monkeypatch):
     """Test audit log integrity verification with signature mismatch."""
     audit_log, integrity_file = mock_audit_log
     monkeypatch.setenv("SANDBOX_AUDIT_HMAC_KEY", "test_key")
     monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_FILE", audit_log)
     monkeypatch.setattr("simulation.sandbox.AUDIT_LOG_INTEGRITY_FILE", integrity_file)
-    with open(audit_log, "w", encoding='utf-8') as f:
+    with open(audit_log, "w", encoding="utf-8") as f:
         f.write(json.dumps({"event": {"event": "test"}, "signature": "invalid"}) + "\n")
     assert not verify_audit_log_integrity()
 
+
 # --- Tests for cleanup_sandbox ---
+
 
 @pytest.mark.asyncio
 async def test_cleanup_sandbox_docker(monkeypatch):
@@ -184,7 +184,9 @@ async def test_cleanup_sandbox_docker(monkeypatch):
     await cleanup_sandbox("test_id")
     assert "test_id" not in _active_sandboxes
 
+
 # --- Tests for run_in_docker_sandbox ---
+
 
 @pytest.mark.asyncio
 async def test_run_in_docker_sandbox_success(monkeypatch):
@@ -198,7 +200,7 @@ async def test_run_in_docker_sandbox_success(monkeypatch):
                     run=MagicMock(
                         return_value=MagicMock(
                             wait=MagicMock(return_value={"StatusCode": 0}),
-                            logs=MagicMock(return_value=b"output")
+                            logs=MagicMock(return_value=b"output"),
                         )
                     )
                 )
@@ -209,7 +211,9 @@ async def test_run_in_docker_sandbox_success(monkeypatch):
     assert result["status"] == "COMPLETED"
     assert "output" in result["stdout"]
 
+
 # --- Tests for run_in_podman_sandbox ---
+
 
 @pytest.mark.asyncio
 async def test_run_in_podman_sandbox_success(monkeypatch):
@@ -223,7 +227,7 @@ async def test_run_in_podman_sandbox_success(monkeypatch):
                     run=MagicMock(
                         return_value=MagicMock(
                             wait=MagicMock(return_value={"StatusCode": 0}),
-                            logs=MagicMock(return_value=b"output")
+                            logs=MagicMock(return_value=b"output"),
                         )
                     )
                 )
@@ -234,7 +238,9 @@ async def test_run_in_podman_sandbox_success(monkeypatch):
     assert result["status"] == "COMPLETED"
     assert "output" in result["stdout"]
 
+
 # --- Tests for deploy_to_kubernetes ---
+
 
 @pytest.mark.asyncio
 async def test_deploy_to_kubernetes_success(monkeypatch):
@@ -273,7 +279,9 @@ async def test_deploy_to_kubernetes_success(monkeypatch):
     assert result["status"] == "COMPLETED"
     assert "output" in result["stdout"]
 
+
 # --- Tests for run_in_local_process_sandbox ---
+
 
 @pytest.mark.asyncio
 async def test_run_in_local_process_sandbox_success(monkeypatch):
@@ -282,8 +290,7 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
         "asyncio.create_subprocess_exec",
         AsyncMock(
             return_value=MagicMock(
-                returncode=0,
-                communicate=AsyncMock(return_value=(b"output", b""))
+                returncode=0, communicate=AsyncMock(return_value=(b"output", b""))
             )
         ),
     )
@@ -302,7 +309,9 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
     assert result["status"] == "COMPLETED"
     assert "output" in result["stdout"]
 
+
 # --- Tests for burst_to_cloud ---
+
 
 @pytest.mark.asyncio
 async def test_burst_to_cloud_aws_success(monkeypatch):
@@ -320,19 +329,25 @@ async def test_burst_to_cloud_aws_success(monkeypatch):
     assert result["status"] == "CLOUD_BURST_INITIATED"
     assert result["provider"] == "aws"
 
+
 # --- Tests for run_chaos_experiment ---
+
 
 @pytest.mark.asyncio
 async def test_run_chaos_experiment_success(monkeypatch):
     """Test successful chaos experiment run."""
     monkeypatch.setattr("simulation.sandbox.GREMLIN_AVAILABLE", True)
-    monkeypatch.setattr("simulation.sandbox.gremlin.GremlinClient", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        "simulation.sandbox.gremlin.GremlinClient", MagicMock(return_value=MagicMock())
+    )
     monkeypatch.setenv("GREMLIN_TEAM_ID", "test")
     monkeypatch.setenv("GREMLIN_API_KEY", "test")
     result = await run_chaos_experiment("test_app", "cpu_hog")
     assert result["status"] == "STARTED"
 
+
 # --- Tests for run_in_sandbox ---
+
 
 @pytest.mark.asyncio
 async def test_run_in_sandbox_success(monkeypatch):
@@ -341,6 +356,7 @@ async def test_run_in_sandbox_success(monkeypatch):
     with patch.dict("simulation.sandbox._sandbox_backends", {"docker": mock_backend}):
         result = await run_in_sandbox("docker", ["echo", "test"], "/tmp")
         assert result["status"] == "COMPLETED"
+
 
 @pytest.mark.asyncio
 async def test_run_in_sandbox_no_backends(monkeypatch):
@@ -352,7 +368,9 @@ async def test_run_in_sandbox_no_backends(monkeypatch):
     result = await run_in_sandbox("docker", ["echo", "test"], "/tmp")
     assert result["status"] == "ERROR"
 
+
 # --- Tests for _get_audit_hmac_key ---
+
 
 def test_get_audit_hmac_key_env(monkeypatch):
     """Test getting audit HMAC key from environment."""
@@ -360,16 +378,23 @@ def test_get_audit_hmac_key_env(monkeypatch):
     key = _get_audit_hmac_key()
     assert key == b"test_key"
 
+
 # --- Tests for check_external_services_async ---
+
 
 @pytest.mark.asyncio
 async def test_check_external_services_async_success(monkeypatch):
     """Test successful external services check."""
     monkeypatch.setattr("simulation.sandbox.DOCKER_AVAILABLE", True)
-    monkeypatch.setattr("simulation.sandbox.docker.from_env", MagicMock(return_value=MagicMock(ping=MagicMock())))
+    monkeypatch.setattr(
+        "simulation.sandbox.docker.from_env",
+        MagicMock(return_value=MagicMock(ping=MagicMock())),
+    )
     await check_external_services_async()  # No exception raised
 
+
 # --- Tests for _periodic_external_service_check ---
+
 
 @pytest.mark.asyncio
 async def test_periodic_external_service_check(monkeypatch):
@@ -379,12 +404,18 @@ async def test_periodic_external_service_check(monkeypatch):
     await asyncio.sleep(2)
     task.cancel()
 
+
 # --- Tests for _start_background_tasks ---
+
 
 @pytest.mark.asyncio
 async def test_start_background_tasks(monkeypatch):
     """Test starting background tasks."""
     monkeypatch.setattr("simulation.sandbox.check_external_services_async", AsyncMock())
-    monkeypatch.setattr("simulation.sandbox._periodic_external_service_check", AsyncMock())
-    monkeypatch.setattr("simulation.sandbox._periodic_audit_log_verification", AsyncMock())
+    monkeypatch.setattr(
+        "simulation.sandbox._periodic_external_service_check", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "simulation.sandbox._periodic_audit_log_verification", AsyncMock()
+    )
     await _start_background_tasks()

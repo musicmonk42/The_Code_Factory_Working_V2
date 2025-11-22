@@ -17,7 +17,7 @@ from .hash_ring import ConsistentHashRing
 from .resilience import RetryPolicy, CircuitBreaker
 
 # FIX: Corrected import source for MessageBusGuardian from 'resilience' to 'guardian'.
-from .guardian import MessageBusGuardian 
+from .guardian import MessageBusGuardian
 
 from .sharded_message_bus import ShardedMessageBus
 from .context import ContextPropagationMiddleware, ExecutionContext
@@ -31,14 +31,24 @@ from .rate_limit import RateLimiter, RateLimitError
 try:
     from .integrations.kafka_bridge import KafkaBridge, KafkaBridgeConfig
 except ImportError:
-    class KafkaBridge: pass
-    class KafkaBridgeConfig: pass
+
+    class KafkaBridge:
+        pass
+
+    class KafkaBridgeConfig:
+        pass
+
 
 try:
     from .integrations.redis_bridge import RedisBridge, RedisBridgeConfig
 except ImportError:
-    class RedisBridge: pass
-    class RedisBridgeConfig: pass
+
+    class RedisBridge:
+        pass
+
+    class RedisBridgeConfig:
+        pass
+
 
 # Additional helper classes (assuming they are siblings or part of a core module)
 try:
@@ -48,16 +58,20 @@ except ImportError:
     class MessageFilter:
         def __init__(self, condition):
             self.condition = condition
+
         def apply(self, payload):
             return self.condition(payload)
+
 
 # Import CLI from second merge-conflicted version
 try:
     from .cli import message_bus_cli
 except ImportError:
+
     def message_bus_cli():
         print("Error: message_bus_cli component not found.")
         logger.warning("message_bus_cli component not found.")
+
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -72,14 +86,12 @@ __all__ = [
     "MessageFilter",
     "ExecutionContext",
     "ContextPropagationMiddleware",
-    
     # Resilience & Guardians
     "RetryPolicy",
     "CircuitBreaker",
     "MessageBusGuardian",
     "BackpressureManager",
     "DeadLetterQueue",
-    
     # Utilities
     "ConsistentHashRing",
     "MessageCache",
@@ -87,13 +99,11 @@ __all__ = [
     "FernetEncryption",
     "RateLimiter",
     "RateLimitError",
-
     # Integrations
     "KafkaBridge",
     "KafkaBridgeConfig",
     "RedisBridge",
     "RedisBridgeConfig",
-    
     # CLI
     "message_bus_cli",
 ]

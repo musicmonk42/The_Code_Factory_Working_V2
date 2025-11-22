@@ -1,33 +1,41 @@
 import asyncio
-import json
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import aioresponses
 from prometheus_client import REGISTRY
-from prometheus_client.metrics import MetricWrapperBase
 
 # Import all necessary components from the application modules
 from arbiter.bug_manager.bug_manager import (
-    BugManager, Settings, Severity, RateLimitExceededError,
-    BUG_AUTO_FIX_SUCCESS, BUG_AUTO_FIX_ATTEMPT,
-    BUG_NOTIFICATION_DISPATCH
+    BugManager,
+    Settings,
+    Severity,
+    RateLimitExceededError,
+    BUG_AUTO_FIX_SUCCESS,
+    BUG_AUTO_FIX_ATTEMPT,
 )
-from arbiter.bug_manager.remediations import BugFixerRegistry, RemediationPlaybook, RemediationStep
+from arbiter.bug_manager.remediations import (
+    BugFixerRegistry,
+    RemediationPlaybook,
+    RemediationStep,
+)
 from arbiter.bug_manager.utils import SecretStr
 from arbiter.bug_manager.notifications import NotificationService
 
 
 # --- Fixtures ---
 
+
 @pytest.fixture(autouse=True)
 def clean_action_registry():
     """Ensures the RemediationStep action registry is clean for each test."""
-    if hasattr(RemediationStep, '_action_registry') and isinstance(RemediationStep._action_registry, dict):
+    if hasattr(RemediationStep, "_action_registry") and isinstance(
+        RemediationStep._action_registry, dict
+    ):
         RemediationStep._action_registry.clear()
     yield
+
 
 @pytest.fixture(autouse=True)
 def clean_bug_fixer_registry():
@@ -40,7 +48,9 @@ def clean_bug_fixer_registry():
     BugFixerRegistry._settings = None
     yield
 
+
 # --- End-to-End Test Cases ---
+
 
 @pytest.mark.asyncio
 async def test_e2e_bug_report_with_successful_fix(tmp_path):
@@ -66,21 +76,24 @@ async def test_e2e_bug_report_with_successful_fix(tmp_path):
         ENABLED_NOTIFICATION_CHANNELS=(),
         AUDIT_LOG_ENABLED=True,
         AUDIT_LOG_FLUSH_INTERVAL_SECONDS=0.1,
-        AUDIT_LOG_BUFFER_SIZE=1
+        AUDIT_LOG_BUFFER_SIZE=1,
     )
 
     # Define and register a mock playbook that the ML model will "predict"
-    mock_action = AsyncMock(return_value=True) # Simulate successful fix
+    mock_action = AsyncMock(return_value=True)  # Simulate successful fix
     RemediationStep.register_action("e2e_restart_auth_service", mock_action)
     playbook = RemediationPlaybook(
         name="RestartAuthService",
-        steps=[RemediationStep(name="Restart", action_name="e2e_restart_auth_service")]
+        steps=[RemediationStep(name="Restart", action_name="e2e_restart_auth_service")],
     )
     BugFixerRegistry.register_playbook(playbook, location="web_app.auth_service")
 
     # Mock the HTTP call to the ML model
     with aioresponses.aioresponses() as m:
-        m.post(settings.ML_MODEL_ENDPOINT, payload={"playbook_name": "RestartAuthService", "confidence": 0.95})
+        m.post(
+            settings.ML_MODEL_ENDPOINT,
+            payload={"playbook_name": "RestartAuthService", "confidence": 0.95},
+        )
         bm = BugManager(settings)
         try:
             # 2. Action: Report a bug that can be fixed
@@ -88,9 +101,9 @@ async def test_e2e_bug_report_with_successful_fix(tmp_path):
                 Exception("Authentication service is unresponsive"),
                 severity=Severity.MEDIUM,
                 location="web_app.auth_service",
-                custom_details={"service": "auth_service"}
+                custom_details={"service": "auth_service"},
             )
-            
+
             # Allow background tasks like flushing to run
             await asyncio.sleep(0.2)
 
@@ -102,7 +115,7 @@ async def test_e2e_bug_report_with_successful_fix(tmp_path):
             assert BUG_AUTO_FIX_SUCCESS._value.get() >= 1
 
             # Skip notification check since channels are disabled
-            
+
             # Audit log should exist and contain the report
             audit_path = Path(settings.AUDIT_LOG_FILE_PATH)
             assert audit_path.exists()
@@ -126,53 +139,64 @@ async def test_e2e_bug_report_with_failed_fix_and_notifications(tmp_path):
             REGISTRY.unregister(collector)
         except Exception:
             pass
-    
+
     # 1. Setup - Mock the apply_settings_validation to bypass the type check
-    with patch('arbiter.bug_manager.bug_manager.apply_settings_validation'):
+    with patch("arbiter.bug_manager.bug_manager.apply_settings_validation"):
         settings = Settings(
             AUDIT_LOG_FILE_PATH=str(tmp_path / "audit.log"),
             AUDIT_DEAD_LETTER_FILE_PATH=str(tmp_path / "dead_letter.log"),
             AUTO_FIX_ENABLED=True,
-            ML_REMEDIATION_ENABLED=False, # Use rule-based fallback
+            ML_REMEDIATION_ENABLED=False,  # Use rule-based fallback
             ENABLED_NOTIFICATION_CHANNELS=("slack", "email"),
             SLACK_WEBHOOK_URL="http://fake-slack/webhook",
-            EMAIL_ENABLED=True, # This was the missing setting
+            EMAIL_ENABLED=True,  # This was the missing setting
             EMAIL_SMTP_SERVER="fake-smtp",
             EMAIL_SMTP_PORT=587,
             EMAIL_SMTP_USERNAME="user",
             EMAIL_SMTP_PASSWORD="pass",  # Keep as string - we're patching validation
             EMAIL_RECIPIENTS=["test@example.com"],
             EMAIL_SENDER="sender@example.com",
-            EMAIL_USE_STARTTLS=True
+            EMAIL_USE_STARTTLS=True,
         )
-        
+
         # Manually set the EMAIL_SMTP_PASSWORD as SecretStr after creation
         # This is needed because the Settings validation expects SecretStr
         settings.EMAIL_SMTP_PASSWORD = SecretStr("pass")
-        
+
         # Define and register a playbook that will fail
         mock_action = AsyncMock(return_value=False)
         RemediationStep.register_action("e2e_restart_cache_service", mock_action)
         playbook = RemediationPlaybook(
             name="RestartCacheService",
-            steps=[RemediationStep(name="RestartCache", action_name="e2e_restart_cache_service")]
+            steps=[
+                RemediationStep(
+                    name="RestartCache", action_name="e2e_restart_cache_service"
+                )
+            ],
         )
         BugFixerRegistry.register_playbook(playbook, location="data.cache_service")
-        
+
         # We will patch the notification service's dispatch methods directly
         # This avoids mocking low-level network calls (aiohttp, aiosmtplib)
-        with patch.object(NotificationService, '_notify_slack_with_decorators', AsyncMock(return_value=True)) as mock_notify_slack, \
-             patch.object(NotificationService, '_notify_email_with_decorators', AsyncMock(return_value=True)) as mock_notify_email:
-            
+        with patch.object(
+            NotificationService,
+            "_notify_slack_with_decorators",
+            AsyncMock(return_value=True),
+        ) as mock_notify_slack, patch.object(
+            NotificationService,
+            "_notify_email_with_decorators",
+            AsyncMock(return_value=True),
+        ) as mock_notify_email:
+
             bm = BugManager(settings)
             try:
                 # 2. Action
                 await bm.report(
                     Exception("Cache service connection error"),
                     severity=Severity.HIGH,
-                    location="data.cache_service"
+                    location="data.cache_service",
                 )
-                await asyncio.sleep(0.1) # Allow tasks to run
+                await asyncio.sleep(0.1)  # Allow tasks to run
 
                 # 3. Assertions
                 # Check that at least one attempt was made
@@ -206,11 +230,12 @@ async def test_e2e_rate_limiting(tmp_path):
         RATE_LIMIT_MAX_REPORTS=2,
         RATE_LIMIT_WINDOW_SECONDS=1,  # Shorten for test
         AUTO_FIX_ENABLED=False,
-        ENABLED_NOTIFICATION_CHANNELS=()
+        ENABLED_NOTIFICATION_CHANNELS=(),
     )
 
     # Initialize the global rate limiter with test settings
     from arbiter.bug_manager import bug_manager
+
     bug_manager.rate_limiter = bug_manager.RateLimiter(settings)
     await bug_manager.rate_limiter.initialize()
 

@@ -6,11 +6,9 @@ import json
 import os
 import glob
 import time
-import sqlite3 # Keep for type hinting if needed, but logic moves
-import aiosqlite # <-- FIX: Add aiosqlite import
+import aiosqlite  # <-- FIX: Add aiosqlite import
 import difflib
 import re
-import tempfile
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Callable, Awaitable
 from abc import ABC, abstractmethod
@@ -30,30 +28,35 @@ from watchdog.events import FileSystemEventHandler
 from opentelemetry.trace import Status, StatusCode
 
 # --- FIX 1: Import the class, not the method ---
-from .deploy_prompt import DeployPromptAgent 
+from .deploy_prompt import DeployPromptAgent
+
 # --- FIX: Import HandlerRegistry to instantiate it ---
 from .deploy_response_handler import handle_deploy_response, HandlerRegistry
 from .deploy_validator import ValidatorRegistry
 
 from runner.llm_client import call_llm_api, call_ensemble_api
 from runner.runner_file_utils import get_commits
+
 # --- FIX: Import log_audit_event and alias it to log_action ---
 from runner.runner_logging import logger, add_provenance, log_audit_event as log_action
 from runner.runner_metrics import (
-    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL, # <-- FIX: Use new name with alias
+    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
     LLM_ERRORS_TOTAL,
     LLM_LATENCY_SECONDS,
 )
 from runner.runner_errors import RunnerError, LLMError
 from runner.runner_security_utils import redact_secrets
+
 # Safe tracer import: works even if runner.tracer is not available
 try:
     from runner import tracer as _runner_tracer  # type: ignore[attr-defined]
+
     tracer = _runner_tracer
 except (ImportError, AttributeError):
     try:
         # fallback to opentelemetry if available
         from opentelemetry import trace as _otel_trace
+
         tracer = _otel_trace.get_tracer(__name__)
     except Exception:
         from contextlib import nullcontext
@@ -116,6 +119,7 @@ DEPLOY_ERRORS = prometheus_client.Counter(
     "Deployment errors",
     ["error_type"],
 )
+
 
 # --- Scrubbing / Logging --------------------------------------------
 def scrub_text(text: str) -> str:
@@ -222,26 +226,14 @@ async def approve_config(request: ApprovalRequest) -> ApprovalResponse:
                 ).inc()
                 raise HTTPException(status_code=500, detail=detail)
     except asyncio.TimeoutError:
-        HUMAN_APPROVAL_STATUS.labels(
-            run_id=request.run_id, status="timeout"
-        ).inc()
-        raise HTTPException(
-            status_code=504, detail="Approval request timed out."
-        )
+        HUMAN_APPROVAL_STATUS.labels(run_id=request.run_id, status="timeout").inc()
+        raise HTTPException(status_code=504, detail="Approval request timed out.")
     except aiohttp.ClientError as e:
-        HUMAN_APPROVAL_STATUS.labels(
-            run_id=request.run_id, status="error"
-        ).inc()
-        raise HTTPException(
-            status_code=503, detail=f"Approval UI unavailable: {e}"
-        )
+        HUMAN_APPROVAL_STATUS.labels(run_id=request.run_id, status="error").inc()
+        raise HTTPException(status_code=503, detail=f"Approval UI unavailable: {e}")
     except Exception as e:  # pragma: no cover
-        HUMAN_APPROVAL_STATUS.labels(
-            run_id=request.run_id, status="error"
-        ).inc()
-        raise HTTPException(
-            status_code=500, detail=f"Internal approval error: {e}"
-        )
+        HUMAN_APPROVAL_STATUS.labels(run_id=request.run_id, status="error").inc()
+        raise HTTPException(status_code=500, detail=f"Internal approval error: {e}")
 
 
 # --- Plugin abstraction / registry ---------------------------------
@@ -255,24 +247,19 @@ class TargetPlugin(ABC):
         instructions: Optional[str],
         context: Dict[str, Any],
         previous_configs: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     @abstractmethod
-    async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        ...
+    async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]: ...
 
     @abstractmethod
-    async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        ...
+    async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]: ...
 
     @abstractmethod
-    async def rollback(self, config: Dict[str, Any]) -> bool:
-        ...
+    async def rollback(self, config: Dict[str, Any]) -> bool: ...
 
     @abstractmethod
-    def health_check(self) -> bool:
-        ...
+    def health_check(self) -> bool: ...
 
 
 class PluginRegistry(FileSystemEventHandler):
@@ -383,10 +370,11 @@ class PluginRegistry(FileSystemEventHandler):
     def on_any_event(self, event) -> None:
         if event.is_directory:
             return
-        if (
-            event.event_type in {"created", "modified", "deleted"}
-            and event.src_path.endswith(".py")
-        ):
+        if event.event_type in {
+            "created",
+            "modified",
+            "deleted",
+        } and event.src_path.endswith(".py"):
             asyncio.create_task(asyncio.to_thread(self.load_plugins))
 
 
@@ -416,24 +404,23 @@ class DeployAgent:
             "java",
         ]
         # --- FIX: Rename and add singleton registries ---
-        self.plugin_registry = PluginRegistry(plugin_dir) # Renamed
+        self.plugin_registry = PluginRegistry(plugin_dir)  # Renamed
         self.validator_registry = ValidatorRegistry()
         self.handler_registry = HandlerRegistry()
         # -------------------------------------------------
-        
+
         self.run_id = str(uuid.uuid4())
         # --- FIX: Pass the event_name to add_provenance (which is an alias for log_audit_event) ---
         add_provenance("provenance", {"run_id": self.run_id, "agent": "DeployAgent"})
 
         self.history: List[Dict[str, Any]] = []
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
-        
+
         # --- FIX 2: Instantiate the agent with paths based on repo_path ---
         template_dir = str(self.repo_path / "deploy_templates")
         few_shot_dir = str(self.repo_path / "few_shot_examples")
         self.prompt_agent_instance = DeployPromptAgent(
-            few_shot_dir=few_shot_dir,
-            template_dir=template_dir
+            few_shot_dir=few_shot_dir, template_dir=template_dir
         )
         self.prompt_agent = self.prompt_agent_instance.build_deploy_prompt
         # ---------------------------------------------------
@@ -477,9 +464,7 @@ class DeployAgent:
         self.pre_gen_hooks: List[
             Callable[[Dict[str, Any], str], Awaitable[Dict[str, Any]]]
         ] = []
-        self.post_gen_hooks: List[
-            Callable[[Any, str], Awaitable[Any]]
-        ] = []
+        self.post_gen_hooks: List[Callable[[Any, str], Awaitable[Any]]] = []
 
         self.last_result: Optional[Dict[str, Any]] = None
 
@@ -497,14 +482,18 @@ class DeployAgent:
                 """
             )
             await db.commit()
+
     # -------------------------------------------
 
     # --- FIX: Convert to async with aiosqlite ---
     async def get_previous_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT result FROM history WHERE id=?", (run_id,)) as cursor:
+            async with db.execute(
+                "SELECT result FROM history WHERE id=?", (run_id,)
+            ) as cursor:
                 row = await cursor.fetchone()
                 return json.loads(row[0]) if row else None
+
     # -------------------------------------------
 
     # --- context ----------------------------------------------------
@@ -531,9 +520,7 @@ class DeployAgent:
                     )
                     continue
                 try:
-                    async with aiofiles.open(
-                        path, "r", encoding="utf-8"
-                    ) as f:
+                    async with aiofiles.open(path, "r", encoding="utf-8") as f:
                         content = await f.read()
                     ctx["file_contents"][rel] = scrub_text(content)
                 except Exception as e:
@@ -553,42 +540,29 @@ class DeployAgent:
                         path.name == "requirements.txt"
                         and "python" in self.languages_supported
                     ):
-                        async with aiofiles.open(
-                            path, "r", encoding="utf-8"
-                        ) as f:
+                        async with aiofiles.open(path, "r", encoding="utf-8") as f:
                             ctx["dependencies"]["python"] = (
                                 await f.read()
                             ).splitlines()
-                    elif (
-                        path.name == "package.json"
-                        and any(
-                            x in self.languages_supported
-                            for x in ["javascript", "typescript"]
-                        )
+                    elif path.name == "package.json" and any(
+                        x in self.languages_supported
+                        for x in ["javascript", "typescript"]
                     ):
-                        async with aiofiles.open(
-                            path, "r", encoding="utf-8"
-                        ) as f:
+                        async with aiofiles.open(path, "r", encoding="utf-8") as f:
                             pkg = json.loads(await f.read())
-                        ctx["dependencies"]["javascript"] = pkg.get(
-                            "dependencies", {}
-                        )
+                        ctx["dependencies"]["javascript"] = pkg.get("dependencies", {})
                         ctx["dependencies"]["dev_javascript"] = pkg.get(
                             "devDependencies", {}
                         )
                     elif path.name == "go.mod" and "go" in self.languages_supported:
-                        async with aiofiles.open(
-                            path, "r", encoding="utf-8"
-                        ) as f:
+                        async with aiofiles.open(path, "r", encoding="utf-8") as f:
                             mod = await f.read()
                         modules = re.findall(
                             r"^\s*(?:require|replace)\s+([^\s]+)\s+([^\s]+)",
                             mod,
                             re.MULTILINE,
                         )
-                        ctx["dependencies"]["go"] = {
-                            m: v for m, v in modules
-                        }
+                        ctx["dependencies"]["go"] = {m: v for m, v in modules}
             except Exception as e:
                 logger.warning(
                     "Dependency parse error: %s",
@@ -630,9 +604,7 @@ class DeployAgent:
     async def validate_configs_final(
         self, config_string: str, target: str
     ) -> Dict[str, Any]:
-        with tracer.start_as_current_span(
-            f"deploy.validate_final.{target}"
-        ) as span:
+        with tracer.start_as_current_span(f"deploy.validate_final.{target}") as span:
             # --- FIX: Use singleton registry ---
             validator = self.validator_registry.get_validator(target)
             # -----------------------------------
@@ -643,9 +615,7 @@ class DeployAgent:
                 }
             return await validator.validate(config_string, target)
 
-    async def compliance_check_final(
-        self, config_string: str
-    ) -> List[str]:
+    async def compliance_check_final(self, config_string: str) -> List[str]:
         # minimal placeholder; full scans live elsewhere
         return []
 
@@ -746,9 +716,7 @@ Respond in plain prose only (no JSON / no code fences).
             {"action": "pipeline_start", "doc_type": doc_type, "targets": targets},
         )
 
-        with tracer.start_as_current_span(
-            "deploy.generate_documentation"
-        ) as span:
+        with tracer.start_as_current_span("deploy.generate_documentation") as span:
             try:
                 context = await self.gather_context(target_files)
                 configs: Dict[str, Any] = {}
@@ -759,9 +727,7 @@ Respond in plain prose only (no JSON / no code fences).
                     for t in targets:
                         nodes.update(nx.ancestors(self.target_graph, t))
                     sub = self.target_graph.subgraph(nodes)
-                    order = [
-                        t for t in nx.topological_sort(sub) if t in targets
-                    ]
+                    order = [t for t in nx.topological_sort(sub) if t in targets]
                 except nx.NetworkXUnfeasible as e:
                     msg = f"Cycle in target dependencies: {e}"
                     span.set_status(Status(StatusCode.ERROR, msg))
@@ -778,12 +744,12 @@ Respond in plain prose only (no JSON / no code fences).
                                     context = await hook(context, t)
 
                                 # --- FIX 3.2: Pass repo_path to prompt agent ---
-                                prompt = await self.prompt_agent( 
-                                    target=t, 
+                                prompt = await self.prompt_agent(
+                                    target=t,
                                     files=target_files,
-                                    repo_path=str(self.repo_path), # <-- ADDED
-                                    instructions=instructions, 
-                                    context=context
+                                    repo_path=str(self.repo_path),  # <-- ADDED
+                                    instructions=instructions,
+                                    context=context,
                                 )
                                 # --------------------------------------------
                                 prompt = scrub_text(prompt)
@@ -813,9 +779,7 @@ Respond in plain prose only (no JSON / no code fences).
                                     ).inc()
                                     LLM_LATENCY_SECONDS.labels(
                                         provider="deploy", model=llm_model
-                                    ).observe(
-                                        time.time() - start_llm
-                                    )
+                                    ).observe(time.time() - start_llm)
                                 except Exception as le:
                                     LLM_ERRORS_TOTAL.labels(
                                         provider="deploy",
@@ -826,12 +790,8 @@ Respond in plain prose only (no JSON / no code fences).
                                         f"LLM call failed for target {t}"
                                     ) from le
 
-                                raw = resp if stream else resp.get(
-                                    "content", ""
-                                )
-                                out_format = (
-                                    t if t != "docs" else "markdown"
-                                )
+                                raw = resp if stream else resp.get("content", "")
+                                out_format = t if t != "docs" else "markdown"
                                 # --- FIX: Pass singleton handler_registry ---
                                 handled = await handle_deploy_response(
                                     raw_response=raw,
@@ -845,15 +805,11 @@ Respond in plain prose only (no JSON / no code fences).
 
                                 # structured validation (strict)
                                 # --- FIX: Use singleton validator_registry ---
-                                validator = (
-                                    self.validator_registry.get_validator(t)
-                                )
+                                validator = self.validator_registry.get_validator(t)
                                 # -------------------------------------------
                                 if validator:
                                     v_report = await validator.validate(
-                                        json.dumps(
-                                            handled["structured_data"]
-                                        ),
+                                        json.dumps(handled["structured_data"]),
                                         t,
                                     )
                                 else:
@@ -864,35 +820,23 @@ Respond in plain prose only (no JSON / no code fences).
                                     }
 
                                 if (
-                                    v_report.get("build_status")
-                                    != "success"
-                                    or v_report.get(
-                                        "compliance_score", 0.0
-                                    )
-                                    < 0.5
+                                    v_report.get("build_status") != "success"
+                                    or v_report.get("compliance_score", 0.0) < 0.5
                                 ):
-                                    VALIDATION_ERRORS.labels(
-                                        run_type=t
-                                    ).inc()
+                                    VALIDATION_ERRORS.labels(run_type=t).inc()
                                     raise RunnerError(
                                         f"Config validation failed for {t}"
                                     )
 
-                                configs[t] = handled[
-                                    "final_config_output"
-                                ]
+                                configs[t] = handled["final_config_output"]
 
                                 for hook in self.post_gen_hooks:
-                                    configs[t] = await hook(
-                                        configs[t], t
-                                    )
+                                    configs[t] = await hook(configs[t], t)
 
                                 tspan.set_status(Status(StatusCode.OK))
                             except Exception as e:
                                 tspan.record_exception(e)
-                                tspan.set_status(
-                                    Status(StatusCode.ERROR, str(e))
-                                )
+                                tspan.set_status(Status(StatusCode.ERROR, str(e)))
                                 raise
 
                 # downstream stages
@@ -916,29 +860,18 @@ Respond in plain prose only (no JSON / no code fences).
                         explanations[t] = "Generation failed."
                         continue
 
-                    validations[t] = await self.validate_configs_final(
-                        cfg, t
-                    )
-                    compliances[t] = await self.compliance_check_final(
-                        cfg
-                    )
-                    simulations[t] = await self.simulate_deployment_final(
-                        cfg, t
-                    )
-                    explanations[t] = (
-                        await self.generate_explanation_final(
-                            cfg,
-                            validations[t],
-                            t,
-                        )
+                    validations[t] = await self.validate_configs_final(cfg, t)
+                    compliances[t] = await self.compliance_check_final(cfg)
+                    simulations[t] = await self.simulate_deployment_final(cfg, t)
+                    explanations[t] = await self.generate_explanation_final(
+                        cfg,
+                        validations[t],
+                        t,
                     )
 
                 badges = await self.generate_badges(
                     list(validations.values()),
-                    [
-                        v if isinstance(v, list) else []
-                        for v in compliances.values()
-                    ],
+                    [v if isinstance(v, list) else [] for v in compliances.values()],
                 )
 
                 if human_approval:
@@ -948,23 +881,15 @@ Respond in plain prose only (no JSON / no code fences).
                         cli_approval=cli_approval,
                     )
                     if not ok:
-                        raise ValueError(
-                            "Configuration rejected by human reviewer"
-                        )
+                        raise ValueError("Configuration rejected by human reviewer")
 
                 duration = time.time() - start
-                GENERATION_DURATION.labels(
-                    run_type=doc_type, model=llm_model
-                ).observe(duration)
-                SUCCESSFUL_GENERATIONS.labels(
-                    run_type=doc_type
-                ).inc()
+                GENERATION_DURATION.labels(run_type=doc_type, model=llm_model).observe(
+                    duration
+                )
+                SUCCESSFUL_GENERATIONS.labels(run_type=doc_type).inc()
                 CONFIG_SIZE.labels(run_type=doc_type).set(
-                    sum(
-                        len(v)
-                        for v in configs.values()
-                        if isinstance(v, str)
-                    )
+                    sum(len(v) for v in configs.values() if isinstance(v, str))
                 )
 
                 result = {
@@ -981,9 +906,9 @@ Respond in plain prose only (no JSON / no code fences).
                         "generated_by": "DeployAgent",
                         "version": "1.0",
                         "duration_seconds": duration,
-                        "config_status": "Approved"
-                        if human_approval
-                        else "Skipped_Approval",
+                        "config_status": (
+                            "Approved" if human_approval else "Skipped_Approval"
+                        ),
                     },
                 }
                 self.last_result = result
@@ -1002,9 +927,7 @@ Respond in plain prose only (no JSON / no code fences).
                     await db.commit()
                 # -------------------------------------------
 
-                span.set_status(
-                    Status(StatusCode.OK, "Pipeline completed")
-                )
+                span.set_status(Status(StatusCode.OK, "Pipeline completed"))
                 return result
 
             except Exception as e:
@@ -1012,9 +935,7 @@ Respond in plain prose only (no JSON / no code fences).
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
 
-                SELF_HEAL_ATTEMPTS.labels(
-                    run_id=self.run_id
-                ).inc()
+                SELF_HEAL_ATTEMPTS.labels(run_id=self.run_id).inc()
                 healed = await self.self_heal(
                     target_files,
                     doc_type,
@@ -1057,27 +978,17 @@ Respond in plain prose only (no JSON / no code fences).
             DEPLOY_RUNS.labels(status="started").inc()
 
             if not target:
-                DEPLOY_ERRORS.labels(
-                    error_type="InvalidTarget"
-                ).inc()
+                DEPLOY_ERRORS.labels(error_type="InvalidTarget").inc()
                 raise ValueError("Target must be non-empty")
             if not isinstance(requirements, dict):
-                DEPLOY_ERRORS.labels(
-                    error_type="InvalidRequirements"
-                ).inc()
-                raise ValueError(
-                    "Requirements must be a dictionary"
-                )
+                DEPLOY_ERRORS.labels(error_type="InvalidRequirements").inc()
+                raise ValueError("Requirements must be a dictionary")
 
             try:
                 plugin = self.plugin_registry.get_plugin(target)
                 if not plugin:
-                    DEPLOY_ERRORS.labels(
-                        error_type="PluginNotFound"
-                    ).inc()
-                    raise ValueError(
-                        f"No plugin found for target: {target}"
-                    )
+                    DEPLOY_ERRORS.labels(error_type="PluginNotFound").inc()
+                    raise ValueError(f"No plugin found for target: {target}")
 
                 context = await self.gather_context([])
 
@@ -1090,30 +1001,24 @@ Respond in plain prose only (no JSON / no code fences).
                 if "generate" in steps:
                     # --- FIX 3.3: Pass repo_path to prompt agent ---
                     prompt = await self.prompt_agent(
-                        target=target, 
+                        target=target,
                         files=[],
-                        repo_path=str(self.repo_path), # <-- ADDED
-                        instructions=None, 
-                        context=context
+                        repo_path=str(self.repo_path),  # <-- ADDED
+                        instructions=None,
+                        context=context,
                     )
                     # --------------------------------------------
                     prompt = scrub_text(prompt)
                     try:
-                        resp = await call_llm_api(
-                            prompt, "gpt-4o", stream=False
-                        )
-                        LLM_CALLS_TOTAL.labels(
-                            provider="deploy", model="gpt-4o"
-                        ).inc()
+                        resp = await call_llm_api(prompt, "gpt-4o", stream=False)
+                        LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
                     except Exception as le:
                         LLM_ERRORS_TOTAL.labels(
                             provider="deploy",
                             model="gpt-4o",
                             error_type=type(le).__name__,
                         ).inc()
-                        raise LLMError(
-                            "LLM call failed during run_deployment"
-                        ) from le
+                        raise LLMError("LLM call failed during run_deployment") from le
                     raw = resp.get("content", "")
                     # --- FIX: Pass singleton handler_registry ---
                     handled = await handle_deploy_response(
@@ -1128,33 +1033,21 @@ Respond in plain prose only (no JSON / no code fences).
                     config_content = handled["final_config_output"]
 
                 if "validate" in steps:
-                    vres = await self.validate_configs_final(
-                        config_content, target
-                    )
+                    vres = await self.validate_configs_final(config_content, target)
                     if not vres.get("valid", False):
-                        DEPLOY_ERRORS.labels(
-                            error_type="ValidationFailed"
-                        ).inc()
-                        raise RunnerError(
-                            f"Validation failed: {vres}"
-                        )
+                        DEPLOY_ERRORS.labels(error_type="ValidationFailed").inc()
+                        raise RunnerError(f"Validation failed: {vres}")
                 else:
                     vres = {"valid": True, "details": "Skipped"}
 
                 if "simulate" in steps:
-                    sres = await self.simulate_deployment_final(
-                        config_content, target
-                    )
+                    sres = await self.simulate_deployment_final(config_content, target)
                     if sres.get("status") not in (
                         "success",
                         "skipped",
                     ):
-                        DEPLOY_ERRORS.labels(
-                            error_type="SimulationFailed"
-                        ).inc()
-                        raise RunnerError(
-                            f"Simulation failed: {sres}"
-                        )
+                        DEPLOY_ERRORS.labels(error_type="SimulationFailed").inc()
+                        raise RunnerError(f"Simulation failed: {sres}")
                 else:
                     sres = {
                         "status": "skipped",
@@ -1202,9 +1095,7 @@ Respond in plain prose only (no JSON / no code fences).
                 return result
 
             except Exception as e:
-                DEPLOY_ERRORS.labels(
-                    error_type=type(e).__name__
-                ).inc()
+                DEPLOY_ERRORS.labels(error_type=type(e).__name__).inc()
                 DEPLOY_LATENCY.observe(time.time() - start)
                 logger.error(
                     "Deployment failed: %s",
@@ -1212,15 +1103,11 @@ Respond in plain prose only (no JSON / no code fences).
                     extra={"run_id": self.run_id},
                     exc_info=True,
                 )
-                span.set_status(
-                    Status(StatusCode.ERROR, str(e))
-                )
+                span.set_status(Status(StatusCode.ERROR, str(e)))
                 raise
 
     # --- legacy helpers kept for compatibility ----------------------
-    async def compliance_check(
-        self, config: Dict[str, Any]
-    ) -> List[str]:
+    async def compliance_check(self, config: Dict[str, Any]) -> List[str]:
         return await self.compliance_check_final(json.dumps(config))
 
     async def simulate_deployment(
@@ -1294,11 +1181,7 @@ Respond in plain prose only (no JSON / no code fences).
                         approved = bool(data.get("approved", False))
                         HUMAN_APPROVAL_STATUS.labels(
                             run_id=self.run_id,
-                            status=(
-                                "approved"
-                                if approved
-                                else "rejected"
-                            ),
+                            status=("approved" if approved else "rejected"),
                         ).inc()
                         return approved
             except Exception as e:  # pragma: no cover
@@ -1328,11 +1211,7 @@ Respond in plain prose only (no JSON / no code fences).
             approved = ans == "y"
             HUMAN_APPROVAL_STATUS.labels(
                 run_id=self.run_id,
-                status=(
-                    "approved_cli"
-                    if approved
-                    else "rejected_cli"
-                ),
+                status=("approved_cli" if approved else "rejected_cli"),
             ).inc()
 
         return approved
@@ -1386,9 +1265,7 @@ Propose corrected configurations as JSON keyed by target.
                             model=llm_model,
                             error_type=type(le).__name__,
                         ).inc()
-                        raise LLMError(
-                            "LLM self-heal failed"
-                        ) from le
+                        raise LLMError("LLM self-heal failed") from le
 
                     fixed = resp.get("config", {})
                     if not isinstance(fixed, dict):
@@ -1404,23 +1281,13 @@ Propose corrected configurations as JSON keyed by target.
                         cfg = fixed.get(t)
                         if not cfg:
                             continue
-                        validations[t] = await self.validate_configs_final(
-                            cfg, t
-                        )
-                        compliances[t] = await self.compliance_check_final(
-                            cfg
-                        )
-                        simulations[t] = (
-                            await self.simulate_deployment_final(
-                                cfg, t
-                            )
-                        )
-                        explanations[t] = (
-                            await self.generate_explanation_final(
-                                cfg,
-                                validations[t],
-                                t,
-                            )
+                        validations[t] = await self.validate_configs_final(cfg, t)
+                        compliances[t] = await self.compliance_check_final(cfg)
+                        simulations[t] = await self.simulate_deployment_final(cfg, t)
+                        explanations[t] = await self.generate_explanation_final(
+                            cfg,
+                            validations[t],
+                            t,
                         )
 
                         if not validations[t].get("valid", False):
@@ -1435,9 +1302,7 @@ Propose corrected configurations as JSON keyed by target.
                         diff = ""
                         if self.last_result:
                             prev_cfg = json.dumps(
-                                self.last_result.get(
-                                    "configs", {}
-                                ),
+                                self.last_result.get("configs", {}),
                                 indent=2,
                                 sort_keys=True,
                             )
@@ -1448,12 +1313,8 @@ Propose corrected configurations as JSON keyed by target.
                             )
                             diff = "".join(
                                 difflib.unified_diff(
-                                    prev_cfg.splitlines(
-                                        keepends=True
-                                    ),
-                                    new_cfg.splitlines(
-                                        keepends=True
-                                    ),
+                                    prev_cfg.splitlines(keepends=True),
+                                    new_cfg.splitlines(keepends=True),
                                     fromfile="previous",
                                     tofile="healed",
                                 )
@@ -1462,9 +1323,7 @@ Propose corrected configurations as JSON keyed by target.
                         badges = await self.generate_badges(
                             list(validations.values()),
                             [
-                                v
-                                if isinstance(v, list)
-                                else []
+                                v if isinstance(v, list) else []
                                 for v in compliances.values()
                             ],
                         )
@@ -1598,6 +1457,7 @@ Propose corrected configurations as JSON keyed by target.
                 },
             )
             return False
+
     # ----------------------------------------------------
 
     # --- misc -------------------------------------------------------
@@ -1607,7 +1467,7 @@ Propose corrected configurations as JSON keyed by target.
     def register_plugin(self, target: str, plugin: TargetPlugin) -> None:
         """Register a plugin and add it to the target dependency graph."""
         self.plugin_registry.register(target, plugin)
-        
+
         # Add node to target dependency graph if it doesn't exist
         if target not in self.target_graph:
             self.target_graph.add_node(target)
@@ -1644,9 +1504,7 @@ Propose corrected configurations as JSON keyed by target.
                 report_lines.append("")
                 report_lines.append("### Explanation")
                 report_lines.append(
-                    explanations.get(
-                        target, "No explanation available."
-                    )
+                    explanations.get(target, "No explanation available.")
                 )
                 report_lines.append("")
                 report_lines.append("### Configuration")
@@ -1656,23 +1514,17 @@ Propose corrected configurations as JSON keyed by target.
                 report_lines.append("")
                 report_lines.append("### Validation Summary")
                 report_lines.append("```json")
-                report_lines.append(
-                    json.dumps(validations.get(target, {}), indent=2)
-                )
+                report_lines.append(json.dumps(validations.get(target, {}), indent=2))
                 report_lines.append("```")
                 report_lines.append("")
                 report_lines.append("### Compliance Issues")
                 report_lines.append("```json")
-                report_lines.append(
-                    json.dumps(compliances.get(target, []), indent=2)
-                )
+                report_lines.append(json.dumps(compliances.get(target, []), indent=2))
                 report_lines.append("```")
                 report_lines.append("")
                 report_lines.append("### Simulation Result")
                 report_lines.append("```json")
-                report_lines.append(
-                    json.dumps(simulations.get(target, {}), indent=2)
-                )
+                report_lines.append(json.dumps(simulations.get(target, {}), indent=2))
                 report_lines.append("```")
                 report_lines.append("")
 

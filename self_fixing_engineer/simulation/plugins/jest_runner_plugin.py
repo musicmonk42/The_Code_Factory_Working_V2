@@ -16,32 +16,44 @@ PLUGIN_MANIFEST = {
     "description": "Provides a robust Jest test runner for JavaScript/TypeScript with coverage, TS/ESM support, timeouts, bounded project discovery, and safer defaults.",
     "author": "Self-Fixing Engineer Team",
     "capabilities": ["test_execution", "coverage_analysis"],
-    "permissions_required": ["filesystem_read", "filesystem_write", "process_execution"],
+    "permissions_required": [
+        "filesystem_read",
+        "filesystem_write",
+        "process_execution",
+    ],
     "compatibility": {
         "min_sim_runner_version": "1.0.0",
-        "max_sim_runner_version": "2.0.0"
+        "max_sim_runner_version": "2.0.0",
     },
     "entry_points": {
         "run_jest_tests": {
             "description": "Executes Jest tests for a given JavaScript/TypeScript file.",
-            "parameters": ["test_file_path", "target_identifier", "project_root", "temp_coverage_report_path_relative"]
+            "parameters": [
+                "test_file_path",
+                "target_identifier",
+                "project_root",
+                "temp_coverage_report_path_relative",
+            ],
         }
     },
     "health_check": "plugin_health",
     "api_version": "v1",
     "license": "MIT",
     "homepage": "",
-    "tags": ["jest", "javascript", "typescript", "test_runner"]
+    "tags": ["jest", "javascript", "typescript", "test_runner"],
 }
 
 # ---------------- Utilities ----------------
 
+
 def _shutil_which(cmd: str) -> Optional[str]:
     try:
         from shutil import which
+
         return which(cmd)
     except Exception:
         return None
+
 
 async def _which(cmd: str) -> Optional[str]:
     """
@@ -55,13 +67,14 @@ async def _which(cmd: str) -> Optional[str]:
             "which" if os.name != "nt" else "where",
             cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         return stdout.decode().strip().splitlines()[0] if proc.returncode == 0 else None
     except Exception as e:
         logger.debug(f"Error finding executable '{cmd}': {e}")
         return None
+
 
 def _is_path_under(base: Path, child: Path) -> bool:
     """
@@ -70,9 +83,12 @@ def _is_path_under(base: Path, child: Path) -> bool:
     try:
         base_res = base.resolve()
         child_res = child.resolve()
-        return child_res == base_res or str(child_res).startswith(str(base_res) + os.sep)
+        return child_res == base_res or str(child_res).startswith(
+            str(base_res) + os.sep
+        )
     except Exception:
         return False
+
 
 def _bound_search_for_package_json(start_dir: Path, stop_at: Path) -> Optional[Path]:
     """
@@ -92,6 +108,7 @@ def _bound_search_for_package_json(start_dir: Path, stop_at: Path) -> Optional[P
         cur = cur.parent
     return None
 
+
 def _copytree_compat(src: Path, dst: Path) -> None:
     """
     Copy a directory tree; allow destination to pre-exist (Py<3.8 fallback).
@@ -107,7 +124,10 @@ def _copytree_compat(src: Path, dst: Path) -> None:
             for f in files:
                 shutil.copy2(Path(root) / f, target_dir / f)
 
-async def _detect_package_manager() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+
+async def _detect_package_manager() -> (
+    Tuple[Optional[str], Optional[str], Optional[str]]
+):
     """
     Detect available Node.js package managers in PATH.
     Returns (npx_path, npm_path, yarn_path).
@@ -117,6 +137,7 @@ async def _detect_package_manager() -> Tuple[Optional[str], Optional[str], Optio
     yarn_path = await _which("yarn")
     return npx_path, npm_path, yarn_path
 
+
 async def _get_package_version(cwd: str, package: str) -> Optional[str]:
     """
     Retrieve version of a Node.js package declared in package.json within cwd or via npx for jest.
@@ -124,29 +145,36 @@ async def _get_package_version(cwd: str, package: str) -> Optional[str]:
     package_json_path = os.path.join(cwd, "package.json")
     if os.path.exists(package_json_path):
         try:
-            with open(package_json_path, 'r', encoding="utf-8") as f:
+            with open(package_json_path, "r", encoding="utf-8") as f:
                 package_json = json.load(f)
-            version = package_json.get("devDependencies", {}).get(package) or \
-                      package_json.get("dependencies", {}).get(package)
+            version = package_json.get("devDependencies", {}).get(
+                package
+            ) or package_json.get("dependencies", {}).get(package)
             if version:
                 return str(version).lstrip("^~=<>")
         except Exception as e:
-            logger.debug(f"Could not parse package.json for {package} version in {cwd}: {e}")
+            logger.debug(
+                f"Could not parse package.json for {package} version in {cwd}: {e}"
+            )
 
     if package == "jest":
         try:
             npx = await _which("npx")
             if npx:
                 proc = await asyncio.create_subprocess_exec(
-                    npx, "jest", "--version",
+                    npx,
+                    "jest",
+                    "--version",
                     cwd=cwd,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, _ = await proc.communicate()
                 return stdout.decode().strip() if proc.returncode == 0 else None
         except Exception as e:
             logger.debug(f"Error running npx jest --version in {cwd}: {e}")
     return None
+
 
 def _read_package_json_field(cwd: str, field: str) -> Optional[Any]:
     """
@@ -162,6 +190,7 @@ def _read_package_json_field(cwd: str, field: str) -> Optional[Any]:
     except Exception:
         return None
 
+
 def _cap_text_tail(s: str, max_bytes: int) -> str:
     if max_bytes <= 0:
         return ""
@@ -170,7 +199,10 @@ def _cap_text_tail(s: str, max_bytes: int) -> str:
         return s
     return encoded[-max_bytes:].decode(errors="replace")
 
-async def _install_packages(cwd: str, packages: List[str], npm_path: Optional[str], yarn_path: Optional[str]) -> Tuple[bool, str]:
+
+async def _install_packages(
+    cwd: str, packages: List[str], npm_path: Optional[str], yarn_path: Optional[str]
+) -> Tuple[bool, str]:
     """
     Install Node.js packages using npm (preferred) or yarn.
     - npm: 'npm ci' if package-lock.json exists and no packages specified, else 'npm install [packages]'
@@ -188,7 +220,12 @@ async def _install_packages(cwd: str, packages: List[str], npm_path: Optional[st
             else:
                 install_command = [npm_path, "install", "--no-audit", "--no-fund"]
         else:
-            install_command = [npm_path, "install", "--no-audit", "--no-fund"] + packages
+            install_command = [
+                npm_path,
+                "install",
+                "--no-audit",
+                "--no-fund",
+            ] + packages
     elif yarn_path:
         manager_name = "yarn"
         if not packages:
@@ -200,13 +237,15 @@ async def _install_packages(cwd: str, packages: List[str], npm_path: Optional[st
         logger.error(error_msg)
         return False, error_msg
 
-    logger.info(f"Installing packages using {manager_name}: {' '.join(install_command)} in {cwd}")
+    logger.info(
+        f"Installing packages using {manager_name}: {' '.join(install_command)} in {cwd}"
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
             *install_command,
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode == 0:
@@ -225,7 +264,9 @@ async def _install_packages(cwd: str, packages: List[str], npm_path: Optional[st
         logger.error(error_msg, exc_info=True)
         return False, error_msg
 
+
 # ---------------- Health Check ----------------
+
 
 async def plugin_health() -> Dict[str, Any]:
     """
@@ -249,14 +290,18 @@ async def plugin_health() -> Dict[str, Any]:
         details.append(f"yarn detected: {yarn_path}")
     else:
         status = "degraded"
-        details.append("npm or yarn not found in PATH. Package installation for Jest may fail.")
+        details.append(
+            "npm or yarn not found in PATH. Package installation for Jest may fail."
+        )
 
     node_path = await _which("node")
     if node_path:
         try:
             proc = await asyncio.create_subprocess_exec(
-                node_path, "--version",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                node_path,
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await proc.communicate()
             details.append(f"Node.js detected: {stdout.decode().strip()}")
@@ -273,25 +318,31 @@ async def plugin_health() -> Dict[str, Any]:
     if jest_version:
         details.append(f"Jest detected in project: version {jest_version}")
     else:
-        details.append("Jest not detected in project package.json; version check failed.")
+        details.append(
+            "Jest not detected in project package.json; version check failed."
+        )
 
     ts_jest_version = await _get_package_version(project_root_env, "ts-jest")
     if ts_jest_version:
         details.append(f"ts-jest detected in project: version {ts_jest_version}")
     else:
-        details.append("ts-jest not detected in project package.json; TypeScript support may be limited.")
+        details.append(
+            "ts-jest not detected in project package.json; TypeScript support may be limited."
+        )
 
     logger.info(f"Jest plugin health: {status}")
     return {"status": status, "details": details}
 
+
 # ---------------- Main Functionality ----------------
+
 
 async def run_jest_tests(
     test_file_path: str,
     target_identifier: str,
     project_root: str,
     temp_coverage_report_path_relative: str,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     Executes Jest tests and analyzes coverage.
@@ -306,7 +357,9 @@ async def run_jest_tests(
     project_root_path = Path(project_root).resolve()
     full_test_file_path = (project_root_path / test_file_path).resolve()
     full_target_path = (project_root_path / target_identifier).resolve()
-    full_coverage_report_path = (project_root_path / temp_coverage_report_path_relative).resolve()
+    full_coverage_report_path = (
+        project_root_path / temp_coverage_report_path_relative
+    ).resolve()
 
     result: Dict[str, Any] = {
         "success": False,
@@ -321,12 +374,14 @@ async def run_jest_tests(
         "numFailedTests": 0,
         "numPendingTests": 0,
         "coverage_report_path": str(full_coverage_report_path),
-        "jest_project_root": ""
+        "jest_project_root": "",
     }
 
     # Path safety validations
-    for label, path in [("test_file_path", full_test_file_path),
-                        ("coverage_output_path", full_coverage_report_path)]:
+    for label, path in [
+        ("test_file_path", full_test_file_path),
+        ("coverage_output_path", full_coverage_report_path),
+    ]:
         if not _is_path_under(project_root_path, path):
             msg = f"Invalid {label} outside project_root: {path}"
             logger.error(msg)
@@ -360,17 +415,27 @@ async def run_jest_tests(
 
     # Determine Jest project root, bounded to project_root
     start_dir = full_test_file_path.parent
-    jest_project_root_path = _bound_search_for_package_json(start_dir, project_root_path) or project_root_path
+    jest_project_root_path = (
+        _bound_search_for_package_json(start_dir, project_root_path)
+        or project_root_path
+    )
 
     # If no package.json within project_root or node_modules missing, set up a temp Jest environment
     temp_dir_obj = None
     using_temp_project = False
-    temp_target_path_abs: Optional[Path] = None  # New absolute path to copied target in temp project (if any)
-    if not (jest_project_root_path / "package.json").exists() or not (jest_project_root_path / "node_modules").exists():
+    temp_target_path_abs: Optional[Path] = (
+        None  # New absolute path to copied target in temp project (if any)
+    )
+    if (
+        not (jest_project_root_path / "package.json").exists()
+        or not (jest_project_root_path / "node_modules").exists()
+    ):
         using_temp_project = True
         artifacts_dir = project_root_path / "atco_artifacts"
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir_obj = tempfile.TemporaryDirectory(prefix="jest_run_", dir=str(artifacts_dir))
+        temp_dir_obj = tempfile.TemporaryDirectory(
+            prefix="jest_run_", dir=str(artifacts_dir)
+        )
         temp_jest_dir = Path(temp_dir_obj.name)
         result["temp_dirs_used"].append(str(temp_jest_dir))
 
@@ -422,10 +487,12 @@ async def run_jest_tests(
                 "jest": "^29.7.0",
                 "jest-junit": "^16.0.0",
                 "ts-jest": "^29.1.1",
-                "@types/jest": "^29.5.12"
-            }
+                "@types/jest": "^29.5.12",
+            },
         }
-        (temp_jest_dir / 'package.json').write_text(json.dumps(package_json_content, indent=2), encoding="utf-8")
+        (temp_jest_dir / "package.json").write_text(
+            json.dumps(package_json_content, indent=2), encoding="utf-8"
+        )
 
         # tsconfig.json for TS runs
         if is_ts_test:
@@ -436,11 +503,13 @@ async def run_jest_tests(
                     "esModuleInterop": True,
                     "jsx": "react-jsx",
                     "sourceMap": True,
-                    "skipLibCheck": True
+                    "skipLibCheck": True,
                 },
-                "include": ["**/*.ts", "**/*.tsx"]
+                "include": ["**/*.ts", "**/*.tsx"],
             }
-            (temp_jest_dir / "tsconfig.json").write_text(json.dumps(tsconfig, indent=2), encoding="utf-8")
+            (temp_jest_dir / "tsconfig.json").write_text(
+                json.dumps(tsconfig, indent=2), encoding="utf-8"
+            )
 
         # ESM awareness (if later toggled to module)
         esm = False  # temp defaults to commonjs
@@ -453,26 +522,25 @@ async def run_jest_tests(
             "coverageDirectory": "<rootDir>/coverage",
             "roots": ["<rootDir>"],
             "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
-            "transform": {}
+            "transform": {},
         }
         if is_ts_test:
             # ts-jest transform; ESM-aware config if needed
             jest_config["preset"] = "ts-jest"
-            jest_config["transform"] = {
-                "^.+\\.(ts|tsx)$": "ts-jest"
-            }
+            jest_config["transform"] = {"^.+\\.(ts|tsx)$": "ts-jest"}
             if esm:
                 jest_config["extensionsToTreatAsEsm"] = [".ts", ".tsx", ".jsx"]
                 jest_config["globals"] = {"ts-jest": {"useESM": True}}
 
         # Save config
-        (temp_jest_dir / 'jest.config.js').write_text(
-            "module.exports = " + json.dumps(jest_config, indent=2),
-            encoding="utf-8"
+        (temp_jest_dir / "jest.config.js").write_text(
+            "module.exports = " + json.dumps(jest_config, indent=2), encoding="utf-8"
         )
 
         # Install dependencies in temp project
-        success, msg = await _install_packages(str(temp_jest_dir), [], npm_path, yarn_path)
+        success, msg = await _install_packages(
+            str(temp_jest_dir), [], npm_path, yarn_path
+        )
         if not success:
             result["reason"] = f"Failed to setup Jest environment: {msg}"
             # Cleanup temp dir via context manager in finally
@@ -497,32 +565,44 @@ async def run_jest_tests(
 
     # Finalize versions and ESM detection for existing or temp project
     result["jest_project_root"] = str(jest_project_root_path)
-    result["jest_version"] = await _get_package_version(str(jest_project_root_path), "jest") or "Unknown"
-    result["ts_jest_version"] = await _get_package_version(str(jest_project_root_path), "ts-jest") or "Unknown"
+    result["jest_version"] = (
+        await _get_package_version(str(jest_project_root_path), "jest") or "Unknown"
+    )
+    result["ts_jest_version"] = (
+        await _get_package_version(str(jest_project_root_path), "ts-jest") or "Unknown"
+    )
     esm_type = _read_package_json_field(str(jest_project_root_path), "type")
-    is_esm = (esm_type == "module")
+    is_esm = esm_type == "module"
 
     # Prepare JSON results output file path inside jest project root
     jest_results_json_path = jest_project_root_path / "jest-results.json"
-    jest_results_json_cli = str(jest_results_json_path).replace("\\", "/")  # normalize for CLI
+    jest_results_json_cli = str(jest_results_json_path).replace(
+        "\\", "/"
+    )  # normalize for CLI
 
     # JUnit reporter availability: only include when temp project or when present
-    use_junit_reporter = using_temp_project or (jest_project_root_path / "node_modules" / "jest-junit").exists()
-    junit_xml_path = (jest_project_root_path / "jest-junit.xml") if use_junit_reporter else None
+    use_junit_reporter = (
+        using_temp_project
+        or (jest_project_root_path / "node_modules" / "jest-junit").exists()
+    )
+    junit_xml_path = (
+        (jest_project_root_path / "jest-junit.xml") if use_junit_reporter else None
+    )
 
     # Build Jest command
     npx = npx_path
     # Normalize paths for Jest CLI on Windows
     test_arg = str(full_test_file_path).replace("\\", "/")
     cmd: List[str] = [
-        npx, "jest",
+        npx,
+        "jest",
         test_arg,
         "--coverage",
         "--reporters=default",
         "--json",
         f"--outputFile={jest_results_json_cli}",
         "--silent",
-        "--forceExit"
+        "--forceExit",
     ]
     if use_junit_reporter:
         # Only add the reporter; configure its output via environment to avoid --outputFile collision
@@ -530,7 +610,9 @@ async def run_jest_tests(
 
     # Collect coverage from target if available
     if collect_coverage_from:
-        rel_target_for_cli = str(collect_coverage_from.relative_to(jest_project_root_path)).replace("\\", "/")
+        rel_target_for_cli = str(
+            collect_coverage_from.relative_to(jest_project_root_path)
+        ).replace("\\", "/")
         cmd.append(f"--collectCoverageFrom={rel_target_for_cli}")
 
     # Add --config if a jest.config.js exists in project root
@@ -547,9 +629,13 @@ async def run_jest_tests(
     timeout_seconds = int(kwargs.get("timeout_seconds", 600))
     log_max_bytes = int(kwargs.get("log_max_bytes", 262_144))
     log_artifact_rel = kwargs.get("log_artifact_path_relative")
-    log_artifact_path: Optional[Path] = (project_root_path / log_artifact_rel).resolve() if log_artifact_rel else None
+    log_artifact_path: Optional[Path] = (
+        (project_root_path / log_artifact_rel).resolve() if log_artifact_rel else None
+    )
     if log_artifact_path and not _is_path_under(project_root_path, log_artifact_path):
-        logger.error(f"Invalid log artifact path outside project_root: {log_artifact_path}")
+        logger.error(
+            f"Invalid log artifact path outside project_root: {log_artifact_path}"
+        )
         log_artifact_path = None
 
     logger.info(f"Running Jest command: {' '.join(cmd)} in {jest_project_root_path}")
@@ -568,12 +654,16 @@ async def run_jest_tests(
             cwd=str(jest_project_root_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env
+            env=env,
         )
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_seconds
+            )
         except asyncio.TimeoutError:
-            logger.warning(f"Jest process timed out after {timeout_seconds}s; terminating...")
+            logger.warning(
+                f"Jest process timed out after {timeout_seconds}s; terminating..."
+            )
             if proc.returncode is None:
                 try:
                     proc.terminate()
@@ -599,7 +689,9 @@ async def run_jest_tests(
                 log_artifact_path.parent.mkdir(parents=True, exist_ok=True)
                 log_artifact_path.write_text(full_log, encoding="utf-8")
             except Exception as e:
-                logger.warning(f"Failed to write log artifact to {log_artifact_path}: {e}")
+                logger.warning(
+                    f"Failed to write log artifact to {log_artifact_path}: {e}"
+                )
 
         # Cap logs in result
         result["raw_log"] = _cap_text_tail(full_log, log_max_bytes)
@@ -611,7 +703,9 @@ async def run_jest_tests(
                 with open(jest_results_json_path, "r", encoding="utf-8") as jf:
                     jest_json_output = json.load(jf)
             except Exception as e:
-                logger.warning(f"Failed to parse Jest JSON results at {jest_results_json_path}: {e}")
+                logger.warning(
+                    f"Failed to parse Jest JSON results at {jest_results_json_path}: {e}"
+                )
 
         # Determine success, counters
         if jest_json_output and isinstance(jest_json_output, dict):
@@ -624,7 +718,9 @@ async def run_jest_tests(
                 result["reason"] = f"Jest tests passed for {target_identifier}."
             else:
                 result["success"] = False
-                result["reason"] = f"Jest tests failed for {target_identifier}: {result['numFailedTests']} failed."
+                result["reason"] = (
+                    f"Jest tests failed for {target_identifier}: {result['numFailedTests']} failed."
+                )
         else:
             # Fallback to exit code
             if proc and proc.returncode == 0:
@@ -632,10 +728,14 @@ async def run_jest_tests(
                 result["reason"] = f"Jest tests passed for {target_identifier}."
             else:
                 result["success"] = False
-                result["reason"] = f"Jest tests failed for {target_identifier}. See raw log for details."
+                result["reason"] = (
+                    f"Jest tests failed for {target_identifier}. See raw log for details."
+                )
 
         # Coverage extraction
-        coverage_final_json_path = jest_project_root_path / "coverage" / "coverage-final.json"
+        coverage_final_json_path = (
+            jest_project_root_path / "coverage" / "coverage-final.json"
+        )
         if coverage_final_json_path.exists():
             try:
                 with open(coverage_final_json_path, "r", encoding="utf-8") as f:
@@ -667,7 +767,9 @@ async def run_jest_tests(
                     entry_path = entry.get("path")
                     if not isinstance(entry_path, str):
                         continue
-                    if (temp_target_path_abs and entry_path == str(temp_target_path_abs)) or entry_path == str(full_target_path):
+                    if (
+                        temp_target_path_abs and entry_path == str(temp_target_path_abs)
+                    ) or entry_path == str(full_target_path):
                         lines = entry.get("lines", {})
                         pct = lines.get("pct")
                         if isinstance(pct, (int, float)):
@@ -677,21 +779,36 @@ async def run_jest_tests(
         # Save coverage report JSON (either coverage-final.json or coverageMap)
         try:
             full_coverage_report_path.parent.mkdir(parents=True, exist_ok=True)
-            if coverage_final_json_path.exists() and result["coverage_increase_percent"] >= 0.0:
-                shutil.copyfile(str(coverage_final_json_path), str(full_coverage_report_path))
-                logger.info(f"Jest coverage report saved to {full_coverage_report_path}")
-            elif jest_json_output and isinstance(jest_json_output, dict) and "coverageMap" in jest_json_output:
+            if (
+                coverage_final_json_path.exists()
+                and result["coverage_increase_percent"] >= 0.0
+            ):
+                shutil.copyfile(
+                    str(coverage_final_json_path), str(full_coverage_report_path)
+                )
+                logger.info(
+                    f"Jest coverage report saved to {full_coverage_report_path}"
+                )
+            elif (
+                jest_json_output
+                and isinstance(jest_json_output, dict)
+                and "coverageMap" in jest_json_output
+            ):
                 with open(full_coverage_report_path, "w", encoding="utf-8") as outf:
                     json.dump(jest_json_output["coverageMap"], outf, indent=2)
                 logger.info(f"Jest coverage map saved to {full_coverage_report_path}")
             else:
                 logger.warning("No coverage report data available to save.")
         except Exception as e:
-            logger.warning(f"Failed to write coverage JSON to {full_coverage_report_path}: {e}")
+            logger.warning(
+                f"Failed to write coverage JSON to {full_coverage_report_path}: {e}"
+            )
             # keep going
 
     except FileNotFoundError:
-        result["reason"] = "npx or jest not found in PATH. Please ensure Node.js and Jest are installed."
+        result["reason"] = (
+            "npx or jest not found in PATH. Please ensure Node.js and Jest are installed."
+        )
         logger.error(result["reason"])
     except asyncio.CancelledError:
         if proc and proc.returncode is None:
@@ -702,10 +819,13 @@ async def run_jest_tests(
         raise
     except Exception as e:
         result["reason"] = f"An unexpected error occurred during Jest execution: {e}"
-        result["raw_log"] = _cap_text_tail(f"Jest STDOUT:\n{stdout_data}\nJest STDERR:\n{stderr_data}", int(kwargs.get("log_max_bytes", 262_144)))
+        result["raw_log"] = _cap_text_tail(
+            f"Jest STDOUT:\n{stdout_data}\nJest STDERR:\n{stderr_data}",
+            int(kwargs.get("log_max_bytes", 262_144)),
+        )
         logger.error(result["reason"], exc_info=True)
     finally:
-        if 'temp_dir_obj' in locals() and temp_dir_obj:
+        if "temp_dir_obj" in locals() and temp_dir_obj:
             try:
                 temp_dir_obj.cleanup()
             except Exception:
@@ -713,7 +833,9 @@ async def run_jest_tests(
 
     return result
 
+
 # ---------------- Registration ----------------
+
 
 def register_plugin_entrypoints(register_func: Callable):
     """
@@ -723,11 +845,14 @@ def register_plugin_entrypoints(register_func: Callable):
     register_func(
         language_or_framework="javascript",
         runner_info={
-            "command": ["npx", "jest"],  # Placeholder; actual execution uses run_jest_tests
+            "command": [
+                "npx",
+                "jest",
+            ],  # Placeholder; actual execution uses run_jest_tests
             "extensions": [".js", ".jsx", ".mjs"],
             "test_discovery": ["test", "spec"],
-            "runner_function": run_jest_tests
-        }
+            "runner_function": run_jest_tests,
+        },
     )
     register_func(
         language_or_framework="typescript",
@@ -735,12 +860,16 @@ def register_plugin_entrypoints(register_func: Callable):
             "command": ["npx", "jest"],
             "extensions": [".ts", ".tsx"],
             "test_discovery": ["test", "spec"],
-            "runner_function": run_jest_tests
-        }
+            "runner_function": run_jest_tests,
+        },
     )
 
+
 if __name__ == "__main__":
-    async def _mock_register_test_runner(lang_or_framework: str, runner_info: Dict[str, Any]):
+
+    async def _mock_register_test_runner(
+        lang_or_framework: str, runner_info: Dict[str, Any]
+    ):
         print(f"Mocked registration for {lang_or_framework}: {runner_info}")
 
     _mock_runners = {}
@@ -759,24 +888,37 @@ if __name__ == "__main__":
             # Create a dummy JS source file
             dummy_source_path_relative = os.path.join("src", "sum.js")
             os.makedirs(os.path.join(temp_dir, "src"), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_source_path_relative), 'w', encoding="utf-8") as f:
+            with open(
+                os.path.join(temp_dir, dummy_source_path_relative),
+                "w",
+                encoding="utf-8",
+            ) as f:
                 f.write("function sum(a, b) { return a + b; }\nmodule.exports = sum;")
 
             # Create a dummy JS test file (preserve directory)
             dummy_test_path_relative = os.path.join("tests", "sum.test.js")
             os.makedirs(os.path.join(temp_dir, "tests"), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_test_path_relative), 'w', encoding="utf-8") as f:
-                f.write("""
+            with open(
+                os.path.join(temp_dir, dummy_test_path_relative), "w", encoding="utf-8"
+            ) as f:
+                f.write(
+                    """
                     const sum = require('../src/sum');
                     describe('sum', () => {
                         test('adds 1 + 2 to equal 3', () => {
                             expect(sum(1, 2)).toBe(3);
                         });
                     });
-                """)
+                """
+                )
 
-            temp_coverage_report_path_relative = os.path.join("atco_artifacts", "coverage_reports", "jest_coverage_output.json")
-            os.makedirs(os.path.join(temp_dir, "atco_artifacts", "coverage_reports"), exist_ok=True)
+            temp_coverage_report_path_relative = os.path.join(
+                "atco_artifacts", "coverage_reports", "jest_coverage_output.json"
+            )
+            os.makedirs(
+                os.path.join(temp_dir, "atco_artifacts", "coverage_reports"),
+                exist_ok=True,
+            )
 
             res = await run_jest_tests(
                 test_file_path=dummy_test_path_relative,
@@ -786,7 +928,9 @@ if __name__ == "__main__":
                 extra_jest_args=["--verbose"],
                 timeout_seconds=120,
                 log_max_bytes=64_000,
-                log_artifact_path_relative=os.path.join("atco_artifacts", "logs", "jest_run.log")
+                log_artifact_path_relative=os.path.join(
+                    "atco_artifacts", "logs", "jest_run.log"
+                ),
             )
 
             print(f"\nTest Result: {'PASS' if res['success'] else 'FAIL'}")
@@ -804,24 +948,39 @@ if __name__ == "__main__":
             # Create a dummy TS source file
             dummy_source_path_relative = os.path.join("src", "sum.ts")
             os.makedirs(os.path.join(temp_dir, "src"), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_source_path_relative), 'w', encoding="utf-8") as f:
-                f.write("export function sum(a: number, b: number): number { return a + b; }")
+            with open(
+                os.path.join(temp_dir, dummy_source_path_relative),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write(
+                    "export function sum(a: number, b: number): number { return a + b; }"
+                )
 
             # Create a dummy TS test file
             dummy_test_path_relative = os.path.join("tests", "sum.test.ts")
             os.makedirs(os.path.join(temp_dir, "tests"), exist_ok=True)
-            with open(os.path.join(temp_dir, "tests", "sum.test.ts"), 'w', encoding="utf-8") as f:
-                f.write("""
+            with open(
+                os.path.join(temp_dir, "tests", "sum.test.ts"), "w", encoding="utf-8"
+            ) as f:
+                f.write(
+                    """
                     import { sum } from '../src/sum';
                     describe('sum', () => {
                         test('adds 1 + 2 to equal 3', () => {
                             expect(sum(1, 2)).toBe(3);
                         });
                     });
-                """)
+                """
+                )
 
-            temp_coverage_report_path_relative = os.path.join("atco_artifacts", "coverage_reports", "jest_coverage_output.json")
-            os.makedirs(os.path.join(temp_dir, "atco_artifacts", "coverage_reports"), exist_ok=True)
+            temp_coverage_report_path_relative = os.path.join(
+                "atco_artifacts", "coverage_reports", "jest_coverage_output.json"
+            )
+            os.makedirs(
+                os.path.join(temp_dir, "atco_artifacts", "coverage_reports"),
+                exist_ok=True,
+            )
 
             res = await run_jest_tests(
                 test_file_path=dummy_test_path_relative,
@@ -829,7 +988,7 @@ if __name__ == "__main__":
                 project_root=temp_dir,
                 temp_coverage_report_path_relative=temp_coverage_report_path_relative,
                 extra_jest_args=["--verbose"],
-                timeout_seconds=180
+                timeout_seconds=180,
             )
 
             print(f"\nTest Result: {'PASS' if res['success'] else 'FAIL'}")

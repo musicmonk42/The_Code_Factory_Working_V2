@@ -5,8 +5,13 @@ from pydantic import ValidationError
 
 # Import the models and custom exceptions
 from arbiter.meta_learning_orchestrator.models import (
-    LearningRecord, ModelVersion, EventType, DeploymentStatus,
-    DataIngestionError, ModelDeploymentError, LeaderElectionError
+    LearningRecord,
+    ModelVersion,
+    EventType,
+    DeploymentStatus,
+    DataIngestionError,
+    ModelDeploymentError,
+    LeaderElectionError,
 )
 
 # Sample data for testing
@@ -17,7 +22,7 @@ SAMPLE_LEARNING_RECORD = {
     "event_type": EventType.ACTION_TAKEN,
     "user_feedback": "positive",
     "lineage_id": "training-run-123",
-    "timestamp": datetime.now(timezone.utc).isoformat()
+    "timestamp": datetime.now(timezone.utc).isoformat(),
 }
 
 SAMPLE_MODEL_VERSION = {
@@ -27,18 +32,21 @@ SAMPLE_MODEL_VERSION = {
     "evaluation_metrics": {"accuracy": 0.92, "precision": 0.88},
     "deployment_status": DeploymentStatus.PENDING,
     "lineage_id": "data-batch-2023-Q2",
-    "metadata": {"framework": "tensorflow", "dataset_size": 10000}
+    "metadata": {"framework": "tensorflow", "dataset_size": 10000},
 }
+
 
 @pytest.fixture
 def learning_record_data():
     """Fixture for a valid LearningRecord data dictionary."""
     return SAMPLE_LEARNING_RECORD.copy()
 
+
 @pytest.fixture
 def model_version_data():
     """Fixture for a valid ModelVersion data dictionary."""
     return SAMPLE_MODEL_VERSION.copy()
+
 
 def test_learning_record_initialization_success(learning_record_data):
     """Test successful initialization of LearningRecord."""
@@ -52,6 +60,7 @@ def test_learning_record_initialization_success(learning_record_data):
     assert isinstance(record.timestamp, str)
     assert "T" in record.timestamp  # ISO format check
 
+
 def test_learning_record_missing_required_fields(learning_record_data):
     """Test validation failure for missing required fields."""
     for field in ["agent_id", "session_id", "decision_trace", "event_type"]:
@@ -61,6 +70,7 @@ def test_learning_record_missing_required_fields(learning_record_data):
             LearningRecord(**invalid_data)
         assert field in str(exc_info.value)
 
+
 def test_learning_record_extra_fields(learning_record_data):
     """Test validation failure for extra fields."""
     invalid_data = learning_record_data.copy()
@@ -68,11 +78,13 @@ def test_learning_record_extra_fields(learning_record_data):
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         LearningRecord(**invalid_data)
 
+
 def test_learning_record_immutability(learning_record_data):
     """Test immutability of LearningRecord."""
     record = LearningRecord(**learning_record_data)
     with pytest.raises(ValidationError, match="frozen"):
         record.agent_id = "new-agent"
+
 
 def test_learning_record_json_serialization(learning_record_data):
     """Test JSON serialization and deserialization of LearningRecord."""
@@ -81,11 +93,12 @@ def test_learning_record_json_serialization(learning_record_data):
     parsed = json.loads(json_str)
     assert parsed["agent_id"] == "agent-001"
     assert parsed["event_type"] == "action_taken"  # Enum serialized as value
-    
+
     # Deserialization
     deserialized = LearningRecord.model_validate_json(json_str)
     assert deserialized.agent_id == record.agent_id
     assert deserialized.event_type == record.event_type
+
 
 def test_learning_record_default_timestamp(learning_record_data):
     """Test default timestamp generation."""
@@ -93,7 +106,8 @@ def test_learning_record_default_timestamp(learning_record_data):
     record = LearningRecord(**learning_record_data)
     assert "T" in record.timestamp  # ISO format
     # Parse to check it's a valid datetime
-    datetime.fromisoformat(record.timestamp.replace('Z', '+00:00'))
+    datetime.fromisoformat(record.timestamp.replace("Z", "+00:00"))
+
 
 def test_learning_record_invalid_event_type():
     """Test validation failure for invalid event_type."""
@@ -102,6 +116,7 @@ def test_learning_record_invalid_event_type():
     with pytest.raises(ValidationError) as exc_info:
         LearningRecord(**invalid_data)
     assert "event_type" in str(exc_info.value)
+
 
 def test_model_version_initialization_success(model_version_data):
     """Test successful initialization of ModelVersion."""
@@ -117,6 +132,7 @@ def test_model_version_initialization_success(model_version_data):
     assert model.retry_count == 0
     assert model.deployment_timestamp is None
 
+
 def test_model_version_missing_required_fields(model_version_data):
     """Test validation failure for missing required fields."""
     for field in ["model_id", "version", "training_timestamp", "evaluation_metrics"]:
@@ -126,6 +142,7 @@ def test_model_version_missing_required_fields(model_version_data):
             ModelVersion(**invalid_data)
         assert field in str(exc_info.value)
 
+
 def test_model_version_extra_fields(model_version_data):
     """Test validation failure for extra fields."""
     invalid_data = model_version_data.copy()
@@ -133,11 +150,13 @@ def test_model_version_extra_fields(model_version_data):
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         ModelVersion(**invalid_data)
 
+
 def test_model_version_immutability(model_version_data):
     """Test immutability of ModelVersion."""
     model = ModelVersion(**model_version_data)
     with pytest.raises(ValidationError, match="frozen"):
         model.model_id = "new-model"
+
 
 def test_model_version_json_serialization(model_version_data):
     """Test JSON serialization and deserialization of ModelVersion."""
@@ -146,11 +165,12 @@ def test_model_version_json_serialization(model_version_data):
     parsed = json.loads(json_str)
     assert parsed["model_id"] == "rl-policy-v1"
     assert parsed["deployment_status"] == "pending"  # Enum serialized as value
-    
+
     # Deserialization
     deserialized = ModelVersion.model_validate_json(json_str)
     assert deserialized.model_id == model.model_id
     assert deserialized.deployment_status == model.deployment_status
+
 
 def test_model_version_deployed_no_accuracy(model_version_data):
     """Test validation failure for deployed model without accuracy metric."""
@@ -161,22 +181,29 @@ def test_model_version_deployed_no_accuracy(model_version_data):
     with pytest.raises(ValueError, match="Deployed models must have 'accuracy'"):
         ModelVersion(**invalid_data)
 
+
 def test_model_version_low_accuracy(model_version_data):
     """Test validation failure for deployed model with low accuracy."""
     invalid_data = model_version_data.copy()
     invalid_data["evaluation_metrics"] = {"accuracy": 0.70, "precision": 0.65}
     invalid_data["deployment_status"] = DeploymentStatus.DEPLOYED
     invalid_data["is_active"] = True
-    with pytest.raises(ValueError, match="Model accuracy.*is below deployment threshold"):
+    with pytest.raises(
+        ValueError, match="Model accuracy.*is below deployment threshold"
+    ):
         ModelVersion(**invalid_data)
+
 
 def test_model_version_deployed_not_active(model_version_data):
     """Test validation failure for deployed model that's not active."""
     invalid_data = model_version_data.copy()
     invalid_data["deployment_status"] = DeploymentStatus.DEPLOYED
     invalid_data["is_active"] = False
-    with pytest.raises(ValueError, match="'deployed' status must also be 'is_active: True'"):
+    with pytest.raises(
+        ValueError, match="'deployed' status must also be 'is_active: True'"
+    ):
         ModelVersion(**invalid_data)
+
 
 def test_model_version_valid_deployed(model_version_data):
     """Test successful validation for deployed model with sufficient accuracy."""
@@ -190,6 +217,7 @@ def test_model_version_valid_deployed(model_version_data):
     # The custom validator in ModelVersion assumes a threshold of 0.8
     assert model.evaluation_metrics["accuracy"] >= 0.8
 
+
 def test_model_version_retry_count_validation(model_version_data):
     """Test validation for retry_count >= 0."""
     invalid_data = model_version_data.copy()
@@ -198,12 +226,14 @@ def test_model_version_retry_count_validation(model_version_data):
         ModelVersion(**invalid_data)
     assert "greater than or equal to 0" in str(exc_info.value)
 
+
 def test_model_version_valid_timestamp(model_version_data):
     """Test that timestamp fields accept valid ISO format strings."""
     valid_data = model_version_data.copy()
     valid_data["training_timestamp"] = "2023-10-15T10:30:00Z"
     model = ModelVersion(**valid_data)
     assert model.training_timestamp == "2023-10-15T10:30:00Z"
+
 
 def test_learning_record_valid_timestamp(learning_record_data):
     """Test that timestamp field accepts valid ISO format strings."""
@@ -212,11 +242,13 @@ def test_learning_record_valid_timestamp(learning_record_data):
     record = LearningRecord(**valid_data)
     assert record.timestamp == "2023-10-15T10:30:00Z"
 
+
 def test_data_ingestion_error():
     """Test DataIngestionError instantiation."""
     error_msg = "Invalid data format"
     error = DataIngestionError(error_msg)
     assert str(error) == error_msg
+
 
 def test_model_deployment_error():
     """Test ModelDeploymentError instantiation."""
@@ -224,11 +256,13 @@ def test_model_deployment_error():
     error = ModelDeploymentError(error_msg)
     assert str(error) == error_msg
 
+
 def test_leader_election_error():
     """Test LeaderElectionError instantiation."""
     error_msg = "Leader lock failed"
     error = LeaderElectionError(error_msg)
     assert str(error) == error_msg
+
 
 def test_invalid_deployment_status():
     """Test validation failure for invalid deployment status."""
@@ -237,6 +271,7 @@ def test_invalid_deployment_status():
     with pytest.raises(ValidationError) as exc_info:
         ModelVersion(**invalid_data)
     assert "deployment_status" in str(exc_info.value)
+
 
 def test_model_version_failed_status(model_version_data):
     """Test model with failed deployment status."""
@@ -248,6 +283,7 @@ def test_model_version_failed_status(model_version_data):
     assert model.retry_count == 3
     assert model.is_active is False
 
+
 def test_model_version_rolled_back_status(model_version_data):
     """Test model with rolled back deployment status."""
     data = model_version_data.copy()
@@ -257,19 +293,21 @@ def test_model_version_rolled_back_status(model_version_data):
     assert model.deployment_status == DeploymentStatus.ROLLED_BACK
     assert model.is_active is False
 
+
 def test_learning_record_all_event_types():
     """Test all valid event types for LearningRecord."""
     base_data = {
         "agent_id": "test-agent",
         "session_id": "test-session",
-        "decision_trace": {"test": "data"}
+        "decision_trace": {"test": "data"},
     }
-    
+
     for event_type in EventType:
         data = base_data.copy()
         data["event_type"] = event_type
         record = LearningRecord(**data)
         assert record.event_type == event_type
+
 
 def test_model_version_empty_metadata(model_version_data):
     """Test ModelVersion with empty metadata."""
@@ -278,27 +316,19 @@ def test_model_version_empty_metadata(model_version_data):
     model = ModelVersion(**data)
     assert model.metadata == {}
 
+
 def test_model_version_complex_metadata(model_version_data):
     """Test ModelVersion with complex nested metadata."""
     data = model_version_data.copy()
     data["metadata"] = {
-        "framework": {
-            "name": "tensorflow",
-            "version": "2.10.0"
-        },
-        "training": {
-            "epochs": 100,
-            "batch_size": 32,
-            "learning_rate": 0.001
-        },
-        "hardware": {
-            "gpu": "NVIDIA A100",
-            "memory": "40GB"
-        }
+        "framework": {"name": "tensorflow", "version": "2.10.0"},
+        "training": {"epochs": 100, "batch_size": 32, "learning_rate": 0.001},
+        "hardware": {"gpu": "NVIDIA A100", "memory": "40GB"},
     }
     model = ModelVersion(**data)
     assert model.metadata["framework"]["name"] == "tensorflow"
     assert model.metadata["training"]["epochs"] == 100
+
 
 def test_learning_record_without_optional_fields():
     """Test LearningRecord with only required fields."""
@@ -306,12 +336,13 @@ def test_learning_record_without_optional_fields():
         "agent_id": "minimal-agent",
         "session_id": "minimal-session",
         "decision_trace": {"action": "test"},
-        "event_type": EventType.DECISION_MADE
+        "event_type": EventType.DECISION_MADE,
     }
     record = LearningRecord(**data)
     assert record.user_feedback is None
     assert record.lineage_id is None
     assert record.timestamp is not None  # Has default value
+
 
 def test_model_version_high_accuracy_not_deployed(model_version_data):
     """Test that high accuracy models can exist without being deployed."""

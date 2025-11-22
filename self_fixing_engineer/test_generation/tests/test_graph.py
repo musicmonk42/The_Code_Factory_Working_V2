@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, ANY, partial
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Fix the import to be an absolute path
@@ -41,6 +41,7 @@ async def test_decide_to_refine_max_repairs_reached():
 @pytest.mark.asyncio
 async def test_step_enforces_timeout():
     """_step should raise asyncio.TimeoutError if func hangs."""
+
     async def slow_func():
         await asyncio.sleep(2)
 
@@ -52,6 +53,7 @@ async def test_step_enforces_timeout():
 @pytest.mark.asyncio
 async def test_step_returns_value():
     """_step should return awaited value."""
+
     async def fast_func(x):
         return x + 1
 
@@ -69,7 +71,9 @@ async def test_build_graph_with_langgraph_available():
     fake_state_graph.compile = MagicMock(return_value="compiled_graph")
 
     # Fix: Correct the mock target from `LangGraphStateGraph` to `StateGraph`.
-    with patch("test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph):
+    with patch(
+        "test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph
+    ):
         g = graph.build_graph(llm=MagicMock())
         assert g == "compiled_graph"
         # Fix: The `partial` wrapper is not needed here; the function is passed directly.
@@ -85,13 +89,28 @@ async def test_build_graph_without_langgraph_falls_back():
         assert asyncio.iscoroutinefunction(g.ainvoke)
         # Run fallback with mocked agents
         state = {}
-        with patch("test_generation.gen_agent.graph.planner_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.generator_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.judge_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.refiner_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.adaptive_test_executor_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.security_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph.performance_agent", AsyncMock(return_value=state)), \
-             patch("test_generation.gen_agent.graph._decide_to_refine", return_value="execute"):
+        with patch(
+            "test_generation.gen_agent.graph.planner_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph.generator_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph.judge_agent", AsyncMock(return_value=state)
+        ), patch(
+            "test_generation.gen_agent.graph.refiner_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph.adaptive_test_executor_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph.security_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph.performance_agent",
+            AsyncMock(return_value=state),
+        ), patch(
+            "test_generation.gen_agent.graph._decide_to_refine", return_value="execute"
+        ):
             result = await g.ainvoke(state, config={})
             assert result == state

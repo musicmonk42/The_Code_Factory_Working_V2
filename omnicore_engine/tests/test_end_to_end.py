@@ -3,9 +3,9 @@ import asyncio
 from fastapi.testclient import TestClient
 from omnicore_engine.fastapi_app import app
 from omnicore_engine.cli import parse_args, command_handlers
-from omnicore_engine.plugin_registry import plugin, PlugInKind, PLUGIN_REGISTRY
+from omnicore_engine.plugin_registry import plugin, PlugInKind
 from unittest.mock import AsyncMock, patch
-from pathlib import Path
+
 
 @pytest.mark.asyncio
 async def test_end_to_end_plugin_api(tmp_path):
@@ -17,7 +17,7 @@ async def test_end_to_end_plugin_api(tmp_path):
     client = TestClient(app)
     test_file = tmp_path / "test.py"
     test_file.write_text("data")
-    
+
     # The fix-imports endpoint is expected to use a FIX kind plugin internally.
     with open(test_file, "rb") as f:
         # Note: This test assumes the FastAPI endpoint routes the fix-imports logic
@@ -27,32 +27,43 @@ async def test_end_to_end_plugin_api(tmp_path):
     assert response.status_code == 200
     assert response.json()["suggestion"]["result"] == "data"
 
+
 @pytest.mark.asyncio
 async def test_end_to_end_plugin_cli(tmp_path):
     # Mock the plugin registry's execute method to simulate the CLI calling a plugin
-    with patch("omnicore_engine.cli.PLUGIN_REGISTRY.execute", AsyncMock(return_value={"result": "test"})):
+    with patch(
+        "omnicore_engine.cli.PLUGIN_REGISTRY.execute",
+        AsyncMock(return_value={"result": "test"}),
+    ):
         test_file = tmp_path / "test.py"
         test_file.write_text("data")
         args = parse_args(["fix-imports", str(test_file)])
         result = await command_handlers["fix-imports"](args)
         assert result == {"suggestion": {"result": "test"}}
 
+
 @pytest.mark.asyncio
 async def test_end_to_end_audit_workflow(tmp_path):
     # Patch the audit client's methods to prevent real database interactions
-    with patch("omnicore_engine.fastapi_app.ExplainAudit.add_entry_async", AsyncMock()), \
-         patch("omnicore_engine.fastapi_app.ExplainAudit.export_proof_bundle", AsyncMock(return_value={"proof": "merkle_proof"})):
-        
+    with patch(
+        "omnicore_engine.fastapi_app.ExplainAudit.add_entry_async", AsyncMock()
+    ), patch(
+        "omnicore_engine.fastapi_app.ExplainAudit.export_proof_bundle",
+        AsyncMock(return_value={"proof": "merkle_proof"}),
+    ):
+
         client = TestClient(app)
-        
+
         # This tests the full API path for exporting an audit bundle.
         # It assumes the `add_entry_async` call happens implicitly.
         response = client.get("/admin/audit/export-proof-bundle?user_id=test_user")
-        
+
         assert response.status_code == 200
         assert "proof" in response.json()["data"]
 
+
 # --- Test Concurrent Plugin Execution ---
+
 
 @pytest.mark.asyncio
 async def test_concurrent_plugin_execution(tmp_path):
@@ -66,21 +77,21 @@ async def test_concurrent_plugin_execution(tmp_path):
     client = TestClient(app)
     test_file = tmp_path / "test.py"
     test_file.write_text("data")
-    
+
     # Define an async function to make a single API request.
     async def make_request():
         with open(test_file, "rb") as f:
             return client.post("/fix-imports/", files={"file": ("test.py", f)})
-    
+
     # Create multiple tasks to make concurrent API requests.
     tasks = [make_request() for _ in range(5)]
-    
+
     # Run all tasks concurrently and wait for them to complete.
     responses = await asyncio.gather(*tasks)
-    
+
     # Assert that all responses were successful.
     assert all(resp.status_code == 200 for resp in responses)
-    
+
     # Assert that the content of the responses is as expected.
     for resp in responses:
         assert resp.json()["suggestion"]["result"] == "data"

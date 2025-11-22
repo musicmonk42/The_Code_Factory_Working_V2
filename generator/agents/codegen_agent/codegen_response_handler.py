@@ -34,7 +34,10 @@ try:  # Prefer real runner logging if available
     # --- FIX: Changed import to be relative ---
     from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
 except ImportError:  # Fallback stub
-    def _runner_log_audit_event(event_type: str, payload: Dict[str, Any] | None = None) -> None:
+
+    def _runner_log_audit_event(
+        event_type: str, payload: Dict[str, Any] | None = None
+    ) -> None:
         logger.warning(
             "Using dummy log_audit_event (runner not available). "
             "event_type=%s payload=%s",
@@ -45,8 +48,11 @@ except ImportError:  # Fallback stub
 
 try:  # Prefer real security utilities if available
     # --- FIX: Changed import to be relative ---
-    from ...runner.runner_security_utils import scan_for_vulnerabilities as _runner_scan_for_vulnerabilities
+    from ...runner.runner_security_utils import (
+        scan_for_vulnerabilities as _runner_scan_for_vulnerabilities,
+    )
 except ImportError:  # Fallback stub
+
     def _runner_scan_for_vulnerabilities(code_files: Dict[str, str]) -> Dict[str, Any]:
         logger.warning(
             "Using dummy scan_for_vulnerabilities (runner not available). "
@@ -148,6 +154,7 @@ DEFAULT_COMMENT_STYLE = ("#", "")
 # --- Tooling Helpers ---
 # ==============================================================================
 
+
 @lru_cache(maxsize=None)
 def _is_tool_available(tool: str) -> bool:
     """
@@ -163,6 +170,7 @@ def _is_tool_available(tool: str) -> bool:
 # ==============================================================================
 # --- Core: LLM Response Parsing ---
 # ==============================================================================
+
 
 def parse_llm_response(response: str, lang: str = "python") -> Dict[str, str]:
     """
@@ -271,6 +279,7 @@ def parse_llm_response(response: str, lang: str = "python") -> Dict[str, str]:
 # ==============================================================================
 # --- Helpers: Cleaning & Syntax Validation ---
 # ==============================================================================
+
 
 def _clean_code_block(code_content: str) -> str:
     """
@@ -430,6 +439,7 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
 # --- Traceability Annotations ---
 # ==============================================================================
 
+
 def _infer_comment_style(lang: str, filename: str) -> Tuple[str, str]:
     """
     Infers the appropriate comment delimiters based on language or file extension.
@@ -460,7 +470,8 @@ def add_traceability_comments(
               - REQ-001: ...
     """
     features = [
-        f for f in (requirements.get("features") or [])
+        f
+        for f in (requirements.get("features") or [])
         if isinstance(f, str) and f.strip()
     ]
 
@@ -496,9 +507,7 @@ def add_traceability_comments(
         # Code files: prepend header if any requirements match
         lower_content = content.lower()
         matched: Dict[str, str] = {
-            rid: text
-            for rid, text in req_map.items()
-            if text.lower() in lower_content
+            rid: text for rid, text in req_map.items() if text.lower() in lower_content
         }
 
         if not matched:
@@ -526,6 +535,7 @@ def add_traceability_comments(
 # --- Security and Monitoring ---
 # ==============================================================================
 
+
 def monitor_and_scan_code(code_files: Dict[str, str]) -> Dict[str, str]:
     """
     Runs lightweight secret detection and delegates to a unified SAST scanner.
@@ -541,7 +551,7 @@ def monitor_and_scan_code(code_files: Dict[str, str]) -> Dict[str, str]:
                 {
                     "file": filename,
                     "detail": "Potential secret-like assignment detected "
-                              "(heuristic: sensitive variable name).",
+                    "(heuristic: sensitive variable name).",
                 },
             )
 

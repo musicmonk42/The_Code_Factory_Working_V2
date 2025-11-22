@@ -48,17 +48,23 @@ GENERATOR_VERSION = "2025.08.24-enterprise.1"
 
 # Optional signing
 try:
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
     from cryptography.hazmat.primitives import serialization
     import base64
+
     HAS_CRYPTO = True
 except ImportError:
     HAS_CRYPTO = False
+
 
 def compute_hash_and_size(filepath):
     with open(filepath, "rb") as f:
         data = f.read()
     return hashlib.sha256(data).hexdigest(), len(data)
+
 
 def load_private_key(path):
     with open(path, "rb") as f:
@@ -67,6 +73,7 @@ def load_private_key(path):
         raise ValueError("Private key must be Ed25519")
     return key
 
+
 def load_public_key(path):
     with open(path, "rb") as f:
         key = serialization.load_pem_public_key(f.read())
@@ -74,28 +81,55 @@ def load_public_key(path):
         raise ValueError("Public key must be Ed25519")
     return key
 
+
 def sign_manifest(manifest_bytes, private_key_path):
     sk = load_private_key(private_key_path)
     signature = sk.sign(manifest_bytes)
     return base64.b64encode(signature).decode("ascii")
+
 
 def verify_signature(manifest_bytes, signature_b64, public_key_path):
     pk = load_public_key(public_key_path)
     signature = base64.b64decode(signature_b64)
     pk.verify(signature, manifest_bytes)  # will raise if invalid
 
+
 def error(msg):
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(2)
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Enterprise plugin manifest generator and verifier")
-    parser.add_argument("plugin_dir", nargs="?", help="Directory containing plugin .py files")
-    parser.add_argument("--sign", metavar="PRIVATE_KEY", help="Sign manifest with Ed25519 private key (PEM)")
-    parser.add_argument("--out", metavar="MANIFEST", default=None, help="Write manifest to given file (default: stdout)")
-    parser.add_argument("--verify", metavar="MANIFEST", help="Verify manifest signature")
-    parser.add_argument("--pubkey", metavar="PUBLIC_KEY", help="Public key (PEM) for signature verification")
-    parser.add_argument("--fail-on-unsigned", action="store_true", help="Fail if manifest is not signed (enforces signature in CI)")
+    parser = argparse.ArgumentParser(
+        description="Enterprise plugin manifest generator and verifier"
+    )
+    parser.add_argument(
+        "plugin_dir", nargs="?", help="Directory containing plugin .py files"
+    )
+    parser.add_argument(
+        "--sign",
+        metavar="PRIVATE_KEY",
+        help="Sign manifest with Ed25519 private key (PEM)",
+    )
+    parser.add_argument(
+        "--out",
+        metavar="MANIFEST",
+        default=None,
+        help="Write manifest to given file (default: stdout)",
+    )
+    parser.add_argument(
+        "--verify", metavar="MANIFEST", help="Verify manifest signature"
+    )
+    parser.add_argument(
+        "--pubkey",
+        metavar="PUBLIC_KEY",
+        help="Public key (PEM) for signature verification",
+    )
+    parser.add_argument(
+        "--fail-on-unsigned",
+        action="store_true",
+        help="Fail if manifest is not signed (enforces signature in CI)",
+    )
     args = parser.parse_args()
 
     if args.verify:
@@ -103,7 +137,9 @@ def main():
         if not args.pubkey:
             error("Verification requires --pubkey argument.")
         if not HAS_CRYPTO:
-            error("cryptography package required for verification. (pip install cryptography)")
+            error(
+                "cryptography package required for verification. (pip install cryptography)"
+            )
         with open(args.verify) as f:
             doc = json.load(f)
         for key in ("manifest", "signed_at", "generator_version", "files"):
@@ -113,16 +149,20 @@ def main():
             if args.fail_on_unsigned:
                 error("Manifest is not signed. Rejected per --fail-on-unsigned.")
             else:
-                print("WARNING: Manifest is not signed. Validation is incomplete.", file=sys.stderr)
+                print(
+                    "WARNING: Manifest is not signed. Validation is incomplete.",
+                    file=sys.stderr,
+                )
                 sys.exit(0)
         manifest_bytes = json.dumps(
             {
                 "manifest": doc["manifest"],
                 "signed_at": doc["signed_at"],
                 "generator_version": doc["generator_version"],
-                "files": doc["files"]
+                "files": doc["files"],
             },
-            sort_keys=True, separators=(",", ":")
+            sort_keys=True,
+            separators=(",", ":"),
         ).encode("utf-8")
         try:
             verify_signature(manifest_bytes, doc["signature"], args.pubkey)
@@ -147,35 +187,38 @@ def main():
             filepath = os.path.join(plugin_dir, fname)
             hashval, fsize = compute_hash_and_size(filepath)
             manifest[modname] = hashval
-            file_meta[modname] = {
-                "filename": fname,
-                "size_bytes": fsize
-            }
+            file_meta[modname] = {"filename": fname, "size_bytes": fsize}
 
     now = datetime.now(timezone.utc)
     output_doc = {
         "manifest": manifest,
         "files": file_meta,
         "signed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "generator_version": GENERATOR_VERSION
+        "generator_version": GENERATOR_VERSION,
     }
 
     if args.sign:
         if not HAS_CRYPTO:
-            error("cryptography package required for signing. (pip install cryptography)")
+            error(
+                "cryptography package required for signing. (pip install cryptography)"
+            )
         manifest_bytes = json.dumps(
             {
                 "manifest": manifest,
                 "signed_at": output_doc["signed_at"],
                 "generator_version": output_doc["generator_version"],
-                "files": file_meta
+                "files": file_meta,
             },
-            sort_keys=True, separators=(",", ":")
+            sort_keys=True,
+            separators=(",", ":"),
         ).encode("utf-8")
         sig = sign_manifest(manifest_bytes, args.sign)
         output_doc["signature"] = sig
     else:
-        print("WARNING: Manifest is NOT SIGNED! This is NOT suitable for regulated production.", file=sys.stderr)
+        print(
+            "WARNING: Manifest is NOT SIGNED! This is NOT suitable for regulated production.",
+            file=sys.stderr,
+        )
         if args.fail_on_unsigned:
             error("Refusing to output unsigned manifest due to --fail-on-unsigned.")
 
@@ -188,6 +231,7 @@ def main():
         print(f"Wrote manifest to {out}")
     else:
         print(output_json)
+
 
 if __name__ == "__main__":
     main()

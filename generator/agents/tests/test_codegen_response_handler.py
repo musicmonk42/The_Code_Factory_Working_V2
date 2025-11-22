@@ -1,7 +1,5 @@
 import json
-import re
 
-import pytest
 
 import agents.codegen_agent.codegen_response_handler as crh
 
@@ -138,10 +136,7 @@ def test_add_traceability_comments_json():
     assert "_traceability" in parsed
     trace = parsed["_traceability"]
     assert isinstance(trace, dict)
-    assert any(
-        "handle payments securely" in str(v).lower()
-        for v in trace.values()
-    )
+    assert any("handle payments securely" in str(v).lower() for v in trace.values())
 
 
 def test_add_traceability_comments_code_headers():
@@ -185,8 +180,7 @@ def test_monitor_and_scan_code_invokes_scan_and_secret_detection(monkeypatch):
     def fake_scan(code_files):
         # simulate one issue in each file
         return {
-            name: {"issues": [{"id": "TEST", "severity": "LOW"}]}
-            for name in code_files
+            name: {"issues": [{"id": "TEST", "severity": "LOW"}]} for name in code_files
         }
 
     def fake_log_action(event_type, payload=None):
@@ -196,9 +190,7 @@ def test_monitor_and_scan_code_invokes_scan_and_secret_detection(monkeypatch):
     monkeypatch.setattr(crh, "log_action", fake_log_action, raising=False)
 
     # Code that resembles a secret to trigger regex-based scanning
-    files = {
-        "main.py": "api_key = 'X' * 40\nprint('ok')"
-    }
+    files = {"main.py": "api_key = 'X' * 40\nprint('ok')"}
 
     out = crh.monitor_and_scan_code(files)
 
@@ -206,16 +198,10 @@ def test_monitor_and_scan_code_invokes_scan_and_secret_detection(monkeypatch):
     assert out == files
 
     # We expect at least one secret scan finding or similar
-    assert any(
-        "Secret Scan" in e[0] or "Secret" in e[0]
-        for e in captured["events"]
-    )
+    assert any("Secret Scan" in e[0] or "Secret" in e[0] for e in captured["events"])
 
     # And a unified SAST completion log
-    assert any(
-        "Unified SAST Scan Complete" in e[0]
-        for e in captured["events"]
-    )
+    assert any("Unified SAST Scan Complete" in e[0] for e in captured["events"])
 
 
 def test_monitor_and_scan_code_handles_scan_exceptions(monkeypatch):
@@ -239,4 +225,6 @@ def test_monitor_and_scan_code_handles_scan_exceptions(monkeypatch):
     out = crh.monitor_and_scan_code(files)
 
     assert out == files
-    assert any("Unified SAST Scan Error" in e[0] or "SAST" in e[0] for e in captured["events"])
+    assert any(
+        "Unified SAST Scan Error" in e[0] or "SAST" in e[0] for e in captured["events"]
+    )

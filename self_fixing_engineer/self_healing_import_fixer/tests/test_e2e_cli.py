@@ -1,6 +1,4 @@
 # tests/test_e2e_cli.py
-import os
-import re
 import json
 import time
 import asyncio
@@ -31,9 +29,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
 
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
     (pkg / "a.py").write_text(
-        "import pkg.b\n"
-        "def greet():\n"
-        "    return 'hi ' + pkg.b.name()\n"
+        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
     )
     (pkg / "b.py").write_text(
         "import requests\n"
@@ -104,35 +100,57 @@ def test_e2e_cli(tmp_path, monkeypatch):
     # -----------------------------
     # Fake Redis
     class FakeRedis:
-        def __init__(self): self._store = {}
-        def setex(self, k, ttl, v): self._store[k] = v; return True
-        def get(self, k): return self._store.get(k)
-        def incr(self, k): self._store[k] = int(self._store.get(k, 0) or 0) + 1; return self._store[k]
+        def __init__(self):
+            self._store = {}
+
+        def setex(self, k, ttl, v):
+            self._store[k] = v
+            return True
+
+        def get(self, k):
+            return self._store.get(k)
+
+        def incr(self, k):
+            self._store[k] = int(self._store.get(k, 0) or 0) + 1
+            return self._store[k]
 
     # Fake LLM
     class FakeLLMClient:
-        async def aclose(self): pass
+        async def aclose(self):
+            pass
+
     class FakeAIManager:
         def __init__(self, *a, **k):
             self.http_client = object()
             self.llm_client = FakeLLMClient()
+
         async def generate_async(self, *a, **k):
-            return {"suggestion": "Move import inside function to break cycle", "confidence": 0.90}
+            return {
+                "suggestion": "Move import inside function to break cycle",
+                "confidence": 0.90,
+            }
+
         def generate_sync(self, *a, **k):
             loop = asyncio.get_event_loop()
             return loop.run_until_complete(self.generate_async(*a, **k))
-        async def aclose(self): await self.llm_client.aclose()
+
+        async def aclose(self):
+            await self.llm_client.aclose()
 
     # Dummy proc for validator tools
     class DummyProc:
         def __init__(self, rc=0, out="", err=""):
-            self.returncode = rc; self._out = out; self._err = err
+            self.returncode = rc
+            self._out = out
+            self._err = err
+
         async def communicate(self, *a, **k):
             await asyncio.sleep(0)
             return (self._out.encode(), self._err.encode())
 
     # Capture audit events
     audit_events: List[Dict[str, Any]] = []
+
     def audit_emit_stub(*a, **k):
         audit_events.append({"args": a, "kwargs": k, "ts": time.time()})
         return True
@@ -160,10 +178,17 @@ def test_e2e_cli(tmp_path, monkeypatch):
         "self_healing_import_fixer.import_fixer.fixer_ai",
     ] + [
         # alt import roots if package name differs
-        "analyzer.core_ai","analyzer.core_audit","analyzer.core_security",
-        "analyzer.core_graph","analyzer.core_policy","analyzer.core_report",
-        "import_fixer.fixer_validate","import_fixer.fixer_plugins",
-        "import_fixer.fixer_dep","import_fixer.fixer_ast","import_fixer.fixer_ai",
+        "analyzer.core_ai",
+        "analyzer.core_audit",
+        "analyzer.core_security",
+        "analyzer.core_graph",
+        "analyzer.core_policy",
+        "analyzer.core_report",
+        "import_fixer.fixer_validate",
+        "import_fixer.fixer_plugins",
+        "import_fixer.fixer_dep",
+        "import_fixer.fixer_ast",
+        "import_fixer.fixer_ai",
     ]
 
     # Apply patches
@@ -178,18 +203,29 @@ def test_e2e_cli(tmp_path, monkeypatch):
         # Security subprocess.run -> minimal JSON outputs
         if name.endswith(".core_security"):
             import subprocess as _sp
-            def fake_run(cmd, timeout=60, capture_output=True, text=True, check=False, **kw):
+
+            def fake_run(
+                cmd, timeout=60, capture_output=True, text=True, check=False, **kw
+            ):
                 joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
                 if "bandit" in joined.lower():
-                    data = {"results": [{"filename": str(pkg / "b.py"),
-                                         "issue_severity": "LOW",
-                                         "issue_text": "Test issue"}]}
+                    data = {
+                        "results": [
+                            {
+                                "filename": str(pkg / "b.py"),
+                                "issue_severity": "LOW",
+                                "issue_text": "Test issue",
+                            }
+                        ]
+                    }
                     return _sp.CompletedProcess(cmd, 0, json.dumps(data), "")
                 if "pip-audit" in joined.lower():
                     data = {"dependencies": [], "vulnerabilities": []}
                     return _sp.CompletedProcess(cmd, 0, json.dumps(data), "")
                 return _sp.CompletedProcess(cmd, 0, "", "")
+
             import importlib as _il
+
             try:
                 m = _il.import_module(name)
                 _safe_patch(name + ".subprocess", "run", fake_run)  # type: ignore[attr-defined]
@@ -199,7 +235,12 @@ def test_e2e_cli(tmp_path, monkeypatch):
         if name.endswith(".fixer_validate"):
             try:
                 m = importlib.import_module(name)
-                monkeypatch.setattr(m.asyncio, "create_subprocess_exec", lambda *a, **k: DummyProc(), raising=False)
+                monkeypatch.setattr(
+                    m.asyncio,
+                    "create_subprocess_exec",
+                    lambda *a, **k: DummyProc(),
+                    raising=False,
+                )
             except Exception:
                 pass
 
@@ -207,7 +248,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
     # 4) Discover click group & subcommands
     # -----------------------------
     try:
-        import click
+        pass
     except Exception:
         raise AssertionError("click is required for the CLI E2E test")
 
@@ -220,6 +261,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
     assert cli_group is not None, "No Click Group/Command found in top-level CLI module"
 
     from click.testing import CliRunner
+
     runner = CliRunner()
 
     # Helper: run a subcommand if present (by exact name or fuzzy match)
@@ -236,7 +278,9 @@ def test_e2e_cli(tmp_path, monkeypatch):
             names = list(subcmds.keys())
             for hint in name_hints:
                 for n in names:
-                    if hint.replace("-", "").replace("_", "") in n.replace("-", "").replace("_", ""):
+                    if hint.replace("-", "").replace("_", "") in n.replace(
+                        "-", ""
+                    ).replace("_", ""):
                         found_name = n
                         break
                 if found_name:
@@ -250,12 +294,18 @@ def test_e2e_cli(tmp_path, monkeypatch):
     # ---- E2E run sequence (best-effort across varying CLIs)
     ran_any = False
     ran_any |= run_if_exists(["analyze"], [str(proj)])
-    ran_any |= run_if_exists(["check-policy","policy","checkpolicy"], ["--policy", str(policy_path), str(proj)])
-    ran_any |= run_if_exists(["security-scan","security","scan"], [str(proj)])
+    ran_any |= run_if_exists(
+        ["check-policy", "policy", "checkpolicy"],
+        ["--policy", str(policy_path), str(proj)],
+    )
+    ran_any |= run_if_exists(["security-scan", "security", "scan"], [str(proj)])
     # import-fixer pipeline: names differ across repos, try several
-    ran_any |= run_if_exists(["heal","fix-imports","fiximports","import-fixer","importfixer"], ["--dry-run", str(proj)])
+    ran_any |= run_if_exists(
+        ["heal", "fix-imports", "fiximports", "import-fixer", "importfixer"],
+        ["--dry-run", str(proj)],
+    )
     # health check if present
-    ran_any |= run_if_exists(["health-check","health","status"], [])
+    ran_any |= run_if_exists(["health-check", "health", "status"], [])
 
     assert ran_any, "No recognized CLI subcommands were found/executed for the E2E path"
 
@@ -271,10 +321,11 @@ def test_e2e_cli(tmp_path, monkeypatch):
     for p in out_dir.rglob("*"):
         if p.is_file():
             wrote_any = True
-            assert str(p.resolve()).startswith(str(out_dir.resolve())), f"Artifact escaped approved dir: {p}"
+            assert str(p.resolve()).startswith(
+                str(out_dir.resolve())
+            ), f"Artifact escaped approved dir: {p}"
     if wrote_any:
         assert True  # explicit
 
     # C) Process stayed alive (i.e., no library called sys.exit())
     # If a library called sys.exit, pytest wouldn't reach this line.
-

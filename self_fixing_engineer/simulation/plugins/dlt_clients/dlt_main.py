@@ -1,8 +1,7 @@
 import asyncio
-import contextlib  
+import contextlib
 import json
 import logging
-import os
 import sys
 import uuid
 import click
@@ -38,7 +37,12 @@ def _load_json_file(path: str) -> dict:
 
 
 @click.group()
-@click.option("--verbose", is_flag=True, default=False, help="Enable verbose (DEBUG) logging for the CLI session.")
+@click.option(
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Enable verbose (DEBUG) logging for the CLI session.",
+)
 def cli(verbose: bool):
     """DLT Clients Package CLI."""
     if verbose:
@@ -47,9 +51,20 @@ def cli(verbose: bool):
 
 
 @cli.command("health-check")
-@click.option("--dlt-type", required=True, type=click.Choice(DLTFactory.list_available_dlt_clients()))
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
-@click.option("--correlation-id", required=False, default=None, help="Optional correlation ID for tracing; auto-generated if omitted.")
+@click.option(
+    "--dlt-type",
+    required=True,
+    type=click.Choice(DLTFactory.list_available_dlt_clients()),
+)
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
+@click.option(
+    "--correlation-id",
+    required=False,
+    default=None,
+    help="Optional correlation ID for tracing; auto-generated if omitted.",
+)
 def health_check_command(dlt_type, config_file, correlation_id):
     """
     Performs a health check on a specified DLT client.
@@ -57,7 +72,11 @@ def health_check_command(dlt_type, config_file, correlation_id):
     correlation_id = correlation_id or str(uuid.uuid4())
     CLI_LOGGER.info(
         f"Starting health-check for DLT type={dlt_type}",
-        extra={"client_type": "CLI", "correlation_id": correlation_id, "config_file": config_file},
+        extra={
+            "client_type": "CLI",
+            "correlation_id": correlation_id,
+            "config_file": config_file,
+        },
     )
 
     async def _impl():
@@ -67,9 +86,14 @@ def health_check_command(dlt_type, config_file, correlation_id):
 
             if PRODUCTION_MODE:
                 # Place for extra production config validation if needed.
-                CLI_LOGGER.debug("Production mode: additional config validations can run here.", extra={"correlation_id": correlation_id})
+                CLI_LOGGER.debug(
+                    "Production mode: additional config validations can run here.",
+                    extra={"correlation_id": correlation_id},
+                )
 
-            dlt_client = await DLTFactory.get_dlt_client(dlt_type, config, correlation_id=correlation_id)
+            dlt_client = await DLTFactory.get_dlt_client(
+                dlt_type, config, correlation_id=correlation_id
+            )
             result = await dlt_client.health_check(correlation_id=correlation_id)
 
             if result.get("status"):
@@ -82,24 +106,42 @@ def health_check_command(dlt_type, config_file, correlation_id):
                 return 1
 
         except DLTClientConfigurationError as e:
-            CLI_LOGGER.critical(f"CLI Configuration Error: {e}", extra={"correlation_id": correlation_id})
-            await alert_operator(f"CRITICAL: CLI Configuration Error for DLT client '{dlt_type}': {e}", level="CRITICAL")
+            CLI_LOGGER.critical(
+                f"CLI Configuration Error: {e}",
+                extra={"correlation_id": correlation_id},
+            )
+            await alert_operator(
+                f"CRITICAL: CLI Configuration Error for DLT client '{dlt_type}': {e}",
+                level="CRITICAL",
+            )
             click.echo(f"Error: {e}")
             return 1
         except DLTClientError as e:
-            CLI_LOGGER.error(f"DLT Client Error: {e}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.error(
+                f"DLT Client Error: {e}", extra={"correlation_id": correlation_id}
+            )
             click.echo(f"DLT Client Error: {e}")
             return 1
         except FileNotFoundError:
-            CLI_LOGGER.critical(f"Configuration file not found at: {config_file}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.critical(
+                f"Configuration file not found at: {config_file}",
+                extra={"correlation_id": correlation_id},
+            )
             click.echo(f"Error: Configuration file not found at {config_file}")
             return 1
         except json.JSONDecodeError:
-            CLI_LOGGER.critical(f"Invalid JSON in configuration file: {config_file}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.critical(
+                f"Invalid JSON in configuration file: {config_file}",
+                extra={"correlation_id": correlation_id},
+            )
             click.echo(f"Error: Invalid JSON in configuration file at {config_file}")
             return 1
         except Exception as e:
-            CLI_LOGGER.critical(f"Unexpected error during health-check: {e}", extra={"correlation_id": correlation_id}, exc_info=True)
+            CLI_LOGGER.critical(
+                f"Unexpected error during health-check: {e}",
+                extra={"correlation_id": correlation_id},
+                exc_info=True,
+            )
             click.echo(f"An unexpected error occurred: {e}")
             return 1
         finally:
@@ -113,22 +155,64 @@ def health_check_command(dlt_type, config_file, correlation_id):
 
 
 @cli.command("write-checkpoint")
-@click.option("--dlt-type", required=True, type=click.Choice(DLTFactory.list_available_dlt_clients()))
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--dlt-type",
+    required=True,
+    type=click.Choice(DLTFactory.list_available_dlt_clients()),
+)
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
-@click.option("--hash", "hash_val", required=True, help="Cryptographic hash of the state.")
-@click.option("--prev-hash", required=False, default="", help="Cryptographic hash of the previous state.")
-@click.option("--metadata", required=False, default="{}", help="On-chain metadata as a JSON string.")
-@click.option("--payload-file", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to the file containing the off-chain payload blob.")
-@click.option("--correlation-id", required=False, default=None, help="Optional correlation ID for tracing; auto-generated if omitted.")
-def write_checkpoint_command(dlt_type, config_file, checkpoint_name, hash_val, prev_hash, metadata, payload_file, correlation_id):
+@click.option(
+    "--hash", "hash_val", required=True, help="Cryptographic hash of the state."
+)
+@click.option(
+    "--prev-hash",
+    required=False,
+    default="",
+    help="Cryptographic hash of the previous state.",
+)
+@click.option(
+    "--metadata",
+    required=False,
+    default="{}",
+    help="On-chain metadata as a JSON string.",
+)
+@click.option(
+    "--payload-file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to the file containing the off-chain payload blob.",
+)
+@click.option(
+    "--correlation-id",
+    required=False,
+    default=None,
+    help="Optional correlation ID for tracing; auto-generated if omitted.",
+)
+def write_checkpoint_command(
+    dlt_type,
+    config_file,
+    checkpoint_name,
+    hash_val,
+    prev_hash,
+    metadata,
+    payload_file,
+    correlation_id,
+):
     """
     Writes a checkpoint to a specified DLT ledger.
     """
     correlation_id = correlation_id or str(uuid.uuid4())
     CLI_LOGGER.info(
         f"Starting write-checkpoint for DLT type={dlt_type}",
-        extra={"client_type": "CLI", "correlation_id": correlation_id, "config_file": config_file, "payload_file": payload_file},
+        extra={
+            "client_type": "CLI",
+            "correlation_id": correlation_id,
+            "config_file": config_file,
+            "payload_file": payload_file,
+        },
     )
 
     async def _impl():
@@ -140,12 +224,14 @@ def write_checkpoint_command(dlt_type, config_file, checkpoint_name, hash_val, p
             except json.JSONDecodeError:
                 click.echo("Error: Invalid JSON format for metadata.")
                 return 1
-            
+
             config = _load_json_file(config_file)
             with open(payload_file, "rb") as f:
                 payload_blob = f.read()
 
-            dlt_client = await DLTFactory.get_dlt_client(dlt_type, config, correlation_id=correlation_id)
+            dlt_client = await DLTFactory.get_dlt_client(
+                dlt_type, config, correlation_id=correlation_id
+            )
 
             tx_id, off_chain_id, version = await dlt_client.write_checkpoint(
                 checkpoint_name=checkpoint_name,
@@ -166,11 +252,18 @@ def write_checkpoint_command(dlt_type, config_file, checkpoint_name, hash_val, p
             click.echo(f"Error: Required file not found: {e}")
             return 1
         except DLTClientError as e:
-            CLI_LOGGER.error(f"DLT Client Error during write-checkpoint: {e}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.error(
+                f"DLT Client Error during write-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+            )
             click.echo(f"DLT Client Error: {e}")
             return 1
         except Exception as e:
-            CLI_LOGGER.critical(f"Unexpected error during write-checkpoint: {e}", extra={"correlation_id": correlation_id}, exc_info=True)
+            CLI_LOGGER.critical(
+                f"Unexpected error during write-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+                exc_info=True,
+            )
             click.echo(f"An unexpected error occurred: {e}")
             return 1
         finally:
@@ -184,27 +277,56 @@ def write_checkpoint_command(dlt_type, config_file, checkpoint_name, hash_val, p
 
 
 @cli.command("read-checkpoint")
-@click.option("--dlt-type", required=True, type=click.Choice(DLTFactory.list_available_dlt_clients()))
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--dlt-type",
+    required=True,
+    type=click.Choice(DLTFactory.list_available_dlt_clients()),
+)
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
-@click.option("--version", required=False, default="latest", help="Version of the checkpoint to read, or 'latest'.")
-@click.option("--output-file", required=False, type=click.Path(dir_okay=False), help="File to save the retrieved payload to.")
-@click.option("--correlation-id", required=False, default=None, help="Optional correlation ID for tracing; auto-generated if omitted.")
-def read_checkpoint_command(dlt_type, config_file, checkpoint_name, version, output_file, correlation_id):
+@click.option(
+    "--version",
+    required=False,
+    default="latest",
+    help="Version of the checkpoint to read, or 'latest'.",
+)
+@click.option(
+    "--output-file",
+    required=False,
+    type=click.Path(dir_okay=False),
+    help="File to save the retrieved payload to.",
+)
+@click.option(
+    "--correlation-id",
+    required=False,
+    default=None,
+    help="Optional correlation ID for tracing; auto-generated if omitted.",
+)
+def read_checkpoint_command(
+    dlt_type, config_file, checkpoint_name, version, output_file, correlation_id
+):
     """
     Reads a checkpoint from a specified DLT ledger.
     """
     correlation_id = correlation_id or str(uuid.uuid4())
     CLI_LOGGER.info(
         f"Starting read-checkpoint for DLT type={dlt_type}",
-        extra={"client_type": "CLI", "correlation_id": correlation_id, "config_file": config_file},
+        extra={
+            "client_type": "CLI",
+            "correlation_id": correlation_id,
+            "config_file": config_file,
+        },
     )
 
     async def _impl():
         dlt_client = None
         try:
             config = _load_json_file(config_file)
-            dlt_client = await DLTFactory.get_dlt_client(dlt_type, config, correlation_id=correlation_id)
+            dlt_client = await DLTFactory.get_dlt_client(
+                dlt_type, config, correlation_id=correlation_id
+            )
 
             result = await dlt_client.read_checkpoint(
                 name=checkpoint_name,
@@ -234,11 +356,18 @@ def read_checkpoint_command(dlt_type, config_file, checkpoint_name, version, out
             return 0
 
         except DLTClientError as e:
-            CLI_LOGGER.error(f"DLT Client Error during read-checkpoint: {e}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.error(
+                f"DLT Client Error during read-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+            )
             click.echo(f"DLT Client Error: {e}")
             return 1
         except Exception as e:
-            CLI_LOGGER.critical(f"Unexpected error during read-checkpoint: {e}", extra={"correlation_id": correlation_id}, exc_info=True)
+            CLI_LOGGER.critical(
+                f"Unexpected error during read-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+                exc_info=True,
+            )
             click.echo(f"An unexpected error occurred: {e}")
             return 1
         finally:
@@ -252,26 +381,47 @@ def read_checkpoint_command(dlt_type, config_file, checkpoint_name, version, out
 
 
 @cli.command("rollback-checkpoint")
-@click.option("--dlt-type", required=True, type=click.Choice(DLTFactory.list_available_dlt_clients()))
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--dlt-type",
+    required=True,
+    type=click.Choice(DLTFactory.list_available_dlt_clients()),
+)
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
-@click.option("--rollback-hash", required=True, help="Hash of the state to roll back to.")
-@click.option("--correlation-id", required=False, default=None, help="Optional correlation ID for tracing; auto-generated if omitted.")
-def rollback_checkpoint_command(dlt_type, config_file, checkpoint_name, rollback_hash, correlation_id):
+@click.option(
+    "--rollback-hash", required=True, help="Hash of the state to roll back to."
+)
+@click.option(
+    "--correlation-id",
+    required=False,
+    default=None,
+    help="Optional correlation ID for tracing; auto-generated if omitted.",
+)
+def rollback_checkpoint_command(
+    dlt_type, config_file, checkpoint_name, rollback_hash, correlation_id
+):
     """
     Rolls back a checkpoint on a specified DLT ledger.
     """
     correlation_id = correlation_id or str(uuid.uuid4())
     CLI_LOGGER.info(
         f"Starting rollback-checkpoint for DLT type={dlt_type}",
-        extra={"client_type": "CLI", "correlation_id": correlation_id, "config_file": config_file},
+        extra={
+            "client_type": "CLI",
+            "correlation_id": correlation_id,
+            "config_file": config_file,
+        },
     )
 
     async def _impl():
         dlt_client = None
         try:
             config = _load_json_file(config_file)
-            dlt_client = await DLTFactory.get_dlt_client(dlt_type, config, correlation_id=correlation_id)
+            dlt_client = await DLTFactory.get_dlt_client(
+                dlt_type, config, correlation_id=correlation_id
+            )
 
             result = await dlt_client.rollback_checkpoint(
                 name=checkpoint_name,
@@ -291,11 +441,18 @@ def rollback_checkpoint_command(dlt_type, config_file, checkpoint_name, rollback
             return 0
 
         except DLTClientError as e:
-            CLI_LOGGER.error(f"DLT Client Error during rollback-checkpoint: {e}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.error(
+                f"DLT Client Error during rollback-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+            )
             click.echo(f"DLT Client Error: {e}")
             return 1
         except Exception as e:
-            CLI_LOGGER.critical(f"Unexpected error during rollback-checkpoint: {e}", extra={"correlation_id": correlation_id}, exc_info=True)
+            CLI_LOGGER.critical(
+                f"Unexpected error during rollback-checkpoint: {e}",
+                extra={"correlation_id": correlation_id},
+                exc_info=True,
+            )
             click.echo(f"An unexpected error occurred: {e}")
             return 1
         finally:

@@ -19,19 +19,27 @@ except ImportError as e:
     warnings.warn(
         f"Import warning: Failed to import a core component: {e}. "
         "Some functionality may be disabled.",
-        RuntimeWarning
+        RuntimeWarning,
     )
     logger.warning(
         f"Import warning: Failed to import a core component: {e}. "
         "Some functionality may be disabled."
     )
+
     # Define dummy functions to prevent NameError
     def sanitize_path(*args, **kwargs):
-        raise NotImplementedError("sanitize_path is not available due to import failure.")
+        raise NotImplementedError(
+            "sanitize_path is not available due to import failure."
+        )
+
     def validate_path(*args, **kwargs):
-        raise NotImplementedError("validate_path is not available due to import failure.")
+        raise NotImplementedError(
+            "validate_path is not available due to import failure."
+        )
+
     class PathError(Exception):
         pass
+
 
 # Define the public API for this package
 __all__ = [

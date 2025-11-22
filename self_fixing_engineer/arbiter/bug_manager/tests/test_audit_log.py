@@ -5,8 +5,6 @@
 
 import asyncio
 import json
-import os
-import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -19,6 +17,7 @@ from arbiter.bug_manager.audit_log import AuditLogManager
 from arbiter.bug_manager.utils import AuditLogError
 
 # --- Fixtures ---
+
 
 @pytest.fixture
 def mock_settings(tmp_path):
@@ -57,6 +56,7 @@ async def manager(mock_settings):
 
 
 # --- Test Cases ---
+
 
 class TestInitializationAndShutdown:
     @pytest.mark.asyncio
@@ -128,7 +128,7 @@ class TestAuditingAndFlushing:
 
         log_lines = Path(manager.log_path).read_text().strip().split("\n")
         assert len(log_lines) == 2
-        
+
         entry_a = json.loads(log_lines[0])
         entry_b = json.loads(log_lines[1])
 
@@ -146,7 +146,7 @@ class TestFileOperations:
         await mgr1.initialize()
         long_string = "a" * 1200
         await mgr1.audit("large_event", {"data": long_string})
-        await mgr1.shutdown() # Flushes the data
+        await mgr1.shutdown()  # Flushes the data
 
         # A new manager should trigger rotation on its first write
         mgr2 = AuditLogManager(settings=mock_settings)
@@ -164,7 +164,7 @@ class TestFileOperations:
         with patch("shutil.disk_usage") as mock_disk_usage:
             # Simulate low disk space (less than MIN_DISK_SPACE_MB)
             mock_disk_usage.return_value = MagicMock(free=50 * 1024 * 1024)
-            
+
             # Write a large log that should trigger rotation
             Path(manager.log_path).write_text("a" * 1200)
 
@@ -180,10 +180,14 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_write_failure_sends_to_dead_letter_queue(self, manager):
         # Patch the sync write method to fail
-        with patch.object(manager, "_sync_atomic_write_with_retry", side_effect=IOError("Disk is full")):
+        with patch.object(
+            manager,
+            "_sync_atomic_write_with_retry",
+            side_effect=IOError("Disk is full"),
+        ):
             with pytest.raises(AuditLogError):
                 await manager.audit("failed_event", {"id": "dlq_test"})
-                await manager._flush_buffer() # Manually trigger flush to see the error
+                await manager._flush_buffer()  # Manually trigger flush to see the error
 
         # Check the dead-letter queue
         dlq_path = Path(manager.dead_letter_log_path)
@@ -195,9 +199,12 @@ class TestErrorHandling:
 
     @pytest.mark.asyncio
     async def test_lock_exception_rebuffers_logs(self, manager):
-        with patch("portalocker.lock", side_effect=audit_log.portalocker.LockException("Could not acquire lock")):
+        with patch(
+            "portalocker.lock",
+            side_effect=audit_log.portalocker.LockException("Could not acquire lock"),
+        ):
             await manager.audit("event_to_rebuffer", {"id": 1})
-            await manager._flush_buffer() # This should fail to write but not raise
+            await manager._flush_buffer()  # This should fail to write but not raise
 
         # The log should be re-added to the buffer for the next attempt
         assert len(manager._log_buffer) == 1
@@ -210,10 +217,10 @@ class TestRemoteIntegration:
         mock_settings.REMOTE_AUDIT_SERVICE_ENABLED = True
         manager = AuditLogManager(settings=mock_settings)
         await manager.initialize()
-        
-        with patch('aiohttp.ClientSession.post', new_callable=AsyncMock) as mock_post:
+
+        with patch("aiohttp.ClientSession.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value.__aenter__.return_value.status = 200
-            
+
             await manager.audit("remote_event", {"id": "remote1"})
             await manager._flush_buffer()
 
@@ -229,16 +236,16 @@ class TestRemoteIntegration:
         manager = AuditLogManager(settings=mock_settings)
         await manager.initialize()
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = MagicMock()
             mock_response = MagicMock()
             mock_response.status = 500
             mock_response.text = AsyncMock(return_value="Internal Server Error")
-        
+
             mock_context = MagicMock()
             mock_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_context.__aexit__ = AsyncMock(return_value=None)
-        
+
             mock_session.post.return_value = mock_context
             mock_session_class.return_value = mock_session
             manager._session = mock_session
@@ -259,7 +266,7 @@ class TestRemoteIntegration:
         manager = AuditLogManager(settings=mock_settings)
         await manager.initialize()
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = MagicMock()
             mock_response = MagicMock()
             mock_response.status = 500
@@ -268,14 +275,14 @@ class TestRemoteIntegration:
             mock_context = MagicMock()
             mock_context.__aenter__ = AsyncMock(return_value=mock_response)
             mock_context.__aexit__ = AsyncMock(return_value=None)
-            
+
             mock_session.post.side_effect = ClientError("Connection refused")
             mock_session_class.return_value = mock_session
             manager._session = mock_session
 
             await manager.audit("remote_net_fail", {"id": "net_fail"})
             await manager._flush_buffer()
-        
+
         dlq_path = Path(manager.dead_letter_log_path)
         assert dlq_path.exists()
         dlq_content = dlq_path.read_text()

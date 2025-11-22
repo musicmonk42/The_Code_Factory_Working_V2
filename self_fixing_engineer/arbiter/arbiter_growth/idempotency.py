@@ -18,12 +18,15 @@ tracer = trace.get_tracer(__name__)
 IDEMPOTENCY_HITS_TOTAL = Counter(
     "idempotency_hits_total",
     "Total number of idempotency check hits and misses.",
-    ["arbiter", "hit"]
+    ["arbiter", "hit"],
 )
+
 
 class IdempotencyStoreError(Exception):
     """Custom exception for IdempotencyStore errors."""
+
     pass
+
 
 class IdempotencyStore:
     """
@@ -36,6 +39,7 @@ class IdempotencyStore:
     It supports standard Redis connections, SSL/TLS (rediss://), and Redis Cluster.
     The Redis client is initialized lazily upon calling the start() method.
     """
+
     def __init__(
         self,
         *,
@@ -43,7 +47,7 @@ class IdempotencyStore:
         namespace: str = "app:idempotency",
         default_ttl: int = 3600,
         arbiter_name: str = "default",
-        cluster_mode: bool = False
+        cluster_mode: bool = False,
     ):
         """
         Initializes the IdempotencyStore.
@@ -75,7 +79,6 @@ class IdempotencyStore:
             raise IdempotencyStoreError(err_msg)
         self._redis_url = _redis_url
 
-
     async def check_and_set(self, key: str, ttl: Optional[int] = None) -> bool:
         """
         Atomically checks if a key exists and sets it if it does not.
@@ -95,7 +98,9 @@ class IdempotencyStore:
             IdempotencyStoreError: If there is an error communicating with Redis or if the store is not started.
         """
         if self.redis is None:
-            raise IdempotencyStoreError("IdempotencyStore is not started. Please call start() before use.")
+            raise IdempotencyStoreError(
+                "IdempotencyStore is not started. Please call start() before use."
+            )
 
         if not key:
             raise ValueError("Idempotency key cannot be empty.")
@@ -103,35 +108,47 @@ class IdempotencyStore:
         effective_ttl = ttl if ttl is not None else self.default_ttl
         namespaced_key = f"{self.namespace}:{key}"
 
-        with tracer.start_as_current_span("idempotency_check", attributes={"idempotency.key": namespaced_key}):
+        with tracer.start_as_current_span(
+            "idempotency_check", attributes={"idempotency.key": namespaced_key}
+        ):
             span = trace.get_current_span()
             try:
                 # Atomically set the key if it does not exist (nx=True)
                 # with the specified expiration (ex=effective_ttl).
-                result = await self.redis.set(namespaced_key, "processed", nx=True, ex=effective_ttl)
+                result = await self.redis.set(
+                    namespaced_key, "processed", nx=True, ex=effective_ttl
+                )
 
                 if result:
                     # Cache miss - key was set successfully
                     span.set_attribute("idempotency.hit", False)
-                    IDEMPOTENCY_HITS_TOTAL.labels(arbiter=self.arbiter_name, hit="false").inc()
+                    IDEMPOTENCY_HITS_TOTAL.labels(
+                        arbiter=self.arbiter_name, hit="false"
+                    ).inc()
                     logger.debug("Idempotency key set successfully: %s", namespaced_key)
                     return True
                 else:
                     # Cache hit - key already existed
                     span.set_attribute("idempotency.hit", True)
-                    IDEMPOTENCY_HITS_TOTAL.labels(arbiter=self.arbiter_name, hit="true").inc()
+                    IDEMPOTENCY_HITS_TOTAL.labels(
+                        arbiter=self.arbiter_name, hit="true"
+                    ).inc()
                     logger.debug("Idempotency key hit (duplicate): %s", namespaced_key)
                     return False
 
             except RedisError as e:
-                logger.error("Redis error during check_and_set for key '%s': %s", namespaced_key, e)
+                logger.error(
+                    "Redis error during check_and_set for key '%s': %s",
+                    namespaced_key,
+                    e,
+                )
                 span.record_exception(e)
-                raise IdempotencyStoreError(f"Failed to check/set idempotency key '{namespaced_key}'") from e
+                raise IdempotencyStoreError(
+                    f"Failed to check/set idempotency key '{namespaced_key}'"
+                ) from e
 
     @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(min=2, max=10),
-        reraise=True
+        stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=10), reraise=True
     )
     async def start(self):
         """
@@ -151,15 +168,19 @@ class IdempotencyStore:
             # The `from_url` method transparently handles connection pooling.
             # It also supports SSL/TLS via 'rediss://' protocol and authentication.
             if self.cluster_mode:
-                 self.redis = RedisCluster.from_url(self._redis_url, decode_responses=True)
+                self.redis = RedisCluster.from_url(
+                    self._redis_url, decode_responses=True
+                )
             else:
-                 self.redis = redis.from_url(self._redis_url, decode_responses=True)
-            
+                self.redis = redis.from_url(self._redis_url, decode_responses=True)
+
             await self.redis.ping()
             logger.debug("Ping successful.")
             logger.info("Successfully connected to IdempotencyStore Redis.")
         except (RedisError, Exception) as e:
-            logger.error("Failed to connect to IdempotencyStore Redis on attempt: %s", e)
+            logger.error(
+                "Failed to connect to IdempotencyStore Redis on attempt: %s", e
+            )
             # Ensure redis client is reset to None on failure to allow retry logic to work correctly
             self.redis = None
             raise IdempotencyStoreError("Failed to connect to Redis") from e
@@ -173,10 +194,14 @@ class IdempotencyStore:
         """
         if not self.redis:
             return
-            
+
         logger.info("Closing connection to IdempotencyStore Redis.")
         try:
             await self.redis.close()
             self.redis = None
         except RedisError as e:
-            logger.warning("An error occurred while closing the Redis connection: %s", e, exc_info=True)
+            logger.warning(
+                "An error occurred while closing the Redis connection: %s",
+                e,
+                exc_info=True,
+            )

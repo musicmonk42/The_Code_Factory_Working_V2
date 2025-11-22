@@ -10,28 +10,30 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from hashlib import sha256
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential
 from cryptography.fernet import Fernet
 from sqlalchemy import Column, String, JSON, DateTime
 from sqlalchemy.orm import declarative_base
 import collections
-from prometheus_client import Counter, Histogram, REGISTRY
-import base64
+from prometheus_client import Counter
 
 # Import the centralized tracer configuration
 try:
     from arbiter.otel_config import get_tracer
+
     tracer = get_tracer("monitor")
 except ImportError:
     # Mock tracer for testing
     class MockSpan:
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
-    
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
     class MockTracer:
         def start_as_current_span(self, name):
             return MockSpan()
-    
+
     tracer = MockTracer()
 
 # Mock/Placeholder imports for a self-contained fix
@@ -42,56 +44,82 @@ try:
     from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.agent_state import Base
 except ImportError:
+
     class registry:
         @staticmethod
         def register(kind, name, version, author):
             def decorator(cls):
                 return cls
+
             return decorator
+
     class PlugInKind:
         CORE_SERVICE = "core_service"
+
     class PostgresClient:
         def __init__(self, db_url):
             pass
+
         async def get_session(self):
             class MockSession:
-                async def __aenter__(self): return self
-                async def __aexit__(self, exc_type, exc_val, exc_tb): pass
-                def add(self, log): pass
-                async def commit(self): pass
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    pass
+
+                def add(self, log):
+                    pass
+
+                async def commit(self):
+                    pass
+
             return MockSession()
+
     class ArbiterConfig:
         def __init__(self):
             # Generate a proper Fernet key for testing
             self.ENCRYPTION_KEY = Fernet.generate_key().decode()
-            self.DATABASE_URL = 'sqlite:///monitor.db'
+            self.DATABASE_URL = "sqlite:///monitor.db"
+
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):
             return True
+
     Base = declarative_base()
 
 
 # Constants for robust logging
 MAX_IN_MEMORY_LOG_SIZE_MB = 10
-JSON_LOG_WRITE_LIMIT = 500 # Max number of actions to write in JSON format before raising a warning
+JSON_LOG_WRITE_LIMIT = (
+    500  # Max number of actions to write in JSON format before raising a warning
+)
+
 
 class LogFormat(Enum):
     JSONL = "jsonl"
     JSON = "json"
     PLAINTEXT = "plaintext"
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
 # Prometheus Metrics
-monitor_ops_total = Counter("monitor_ops_total", "Total monitor operations", ["operation"])
-monitor_errors_total = Counter("monitor_errors_total", "Total monitor errors", ["operation"])
+monitor_ops_total = Counter(
+    "monitor_ops_total", "Total monitor operations", ["operation"]
+)
+monitor_errors_total = Counter(
+    "monitor_errors_total", "Total monitor errors", ["operation"]
+)
 
 
 class ActionLog(Base):
@@ -100,10 +128,11 @@ class ActionLog(Base):
     data = Column(JSON)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
+
 class Monitor:
     """
     Gold-standard monitor for tracking and auditing agent/system actions.
-    
+
     This class is designed for robustness in a production environment.
     It is thread-safe and provides features for in-memory and on-disk logging,
     log rotation, tamper-evidence, and anomaly detection.
@@ -124,7 +153,7 @@ class Monitor:
         observers: Optional[List[Callable[[Dict[str, Any]], None]]] = None,
         tamper_evident: bool = False,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """Initializes the Monitor instance. This class is thread-safe.
 
@@ -138,7 +167,7 @@ class Monitor:
             global_metadata (Optional[Dict[str, Any]]): Metadata to include in all log entries.
             observers (Optional[List[Callable[[Dict[str, Any]], None]]]): List of callback functions to invoke on each log action.
             tamper_evident (bool): If True, computes hashes for log entries to detect tampering.
-        
+
         Raises:
             ValueError: If an invalid log format is provided.
         """
@@ -154,14 +183,23 @@ class Monitor:
         self._last_line_hash: Optional[str] = None  # For tamper-evident logging
         self._lock = threading.Lock()  # Lock for thread-safe operations
         self.config = ArbiterConfig()
-        self.db_client = PostgresClient(self.config.DATABASE_URL) if kwargs.get("use_db", False) else None
+        self.db_client = (
+            PostgresClient(self.config.DATABASE_URL)
+            if kwargs.get("use_db", False)
+            else None
+        )
         self._rotation_count = 0  # Track how many times we've rotated
-        
+
         if self.format not in LogFormat:
             raise ValueError(f"Invalid log format: {format}")
-        
-        self.logger.info(f"Monitor initialized. Log file: {self.log_file}, Format: {self.format.name}")
-        if self.format == LogFormat.JSON and self.max_actions_in_memory > JSON_LOG_WRITE_LIMIT:
+
+        self.logger.info(
+            f"Monitor initialized. Log file: {self.log_file}, Format: {self.format.name}"
+        )
+        if (
+            self.format == LogFormat.JSON
+            and self.max_actions_in_memory > JSON_LOG_WRITE_LIMIT
+        ):
             self.logger.warning(
                 f"Log format is JSON. Performance will degrade significantly with {self.max_actions_in_memory} actions. "
                 f"Consider using JSONL for high-volume logging."
@@ -173,6 +211,7 @@ class Monitor:
         """
         try:
             from arbiter import PermissionManager
+
             permission_mgr = PermissionManager(self.config)
             return permission_mgr.check_permission(role, permission)
         except ImportError:
@@ -192,7 +231,7 @@ class Monitor:
         if self.db_client:
             await self.db_client.disconnect()
         self.logger.info("Monitor resources cleaned up.")
-    
+
     @staticmethod
     def _default_logger() -> logging.Logger:
         """Creates and returns a default logger if none is provided."""
@@ -200,7 +239,9 @@ class Monitor:
         logger.setLevel(logging.INFO)
         if not logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         return logger
@@ -215,7 +256,7 @@ class Monitor:
     def log_action(self, action: Dict[str, Any]) -> None:
         """
         Records an action with context and metadata.
-        
+
         This method is thread-safe. It appends the action to the in-memory log,
         applies tamper-evidence hashing if enabled, notifies observers, and writes
         the action to a file.
@@ -224,7 +265,9 @@ class Monitor:
             with self._lock:
                 # Add metadata and timestamp
                 action_with_meta = dict(self.global_metadata, **action)
-                action_with_meta.setdefault("timestamp", datetime.now(timezone.utc).isoformat())  # Fixed: replaced deprecated utcnow()
+                action_with_meta.setdefault(
+                    "timestamp", datetime.now(timezone.utc).isoformat()
+                )  # Fixed: replaced deprecated utcnow()
                 action_with_meta.setdefault("source", "unknown")
 
                 # Apply tamper-evident hashing
@@ -237,10 +280,10 @@ class Monitor:
                     self._last_line_hash = this_hash
 
                 self.action_logs.append(action_with_meta)
-                
+
                 # Prune in-memory log if needed (circular buffer)
                 if len(self.action_logs) > self.max_actions_in_memory:
-                    self.action_logs = self.action_logs[-self.max_actions_in_memory:]
+                    self.action_logs = self.action_logs[-self.max_actions_in_memory :]
 
                 # Notify observers
                 for obs in self.observers:
@@ -254,8 +297,10 @@ class Monitor:
                     try:
                         self._write_log(action_with_meta)
                     except Exception as e:
-                        self.logger.error(f"Failed to write action to log file: {e}", exc_info=True)
-                
+                        self.logger.error(
+                            f"Failed to write action to log file: {e}", exc_info=True
+                        )
+
                 if self.db_client:
                     asyncio.create_task(self.log_to_database(action_with_meta))
 
@@ -275,7 +320,7 @@ class Monitor:
                 current_size = self.log_file.stat().st_size
                 # Rotate if file size is at or above the limit
                 if current_size >= self.max_file_size:
-                    backup = self.log_file.with_suffix('.bak')
+                    backup = self.log_file.with_suffix(".bak")
                     if backup.exists():
                         backup.unlink()
                     self.log_file.rename(backup)
@@ -286,7 +331,7 @@ class Monitor:
             self.logger.error(f"Failed to rotate log file: {e}")
             monitor_errors_total.labels(operation="rotate_log").inc()
             return
-            
+
         # Write the log entry
         try:
             if self.format == LogFormat.JSONL:
@@ -295,14 +340,21 @@ class Monitor:
             elif self.format == LogFormat.JSON:
                 # Check the global constant dynamically to allow test patching
                 import sys
+
                 current_module = sys.modules[__name__]
-                limit = getattr(current_module, 'JSON_LOG_WRITE_LIMIT', JSON_LOG_WRITE_LIMIT)
-                
+                limit = getattr(
+                    current_module, "JSON_LOG_WRITE_LIMIT", JSON_LOG_WRITE_LIMIT
+                )
+
                 if len(self.action_logs) > limit:
                     # Use the actual logger instance to ensure it gets captured
-                    self.logger.error(f"JSON log format with {len(self.action_logs)} actions is not recommended. Exceeds write limit of {limit}.")
+                    self.logger.error(
+                        f"JSON log format with {len(self.action_logs)} actions is not recommended. Exceeds write limit of {limit}."
+                    )
                     # Also log to the module logger for backward compatibility
-                    logging.getLogger(__name__).error(f"JSON log format with {len(self.action_logs)} actions is not recommended. Exceeds write limit of {limit}.")
+                    logging.getLogger(__name__).error(
+                        f"JSON log format with {len(self.action_logs)} actions is not recommended. Exceeds write limit of {limit}."
+                    )
                     return
                 with self.log_file.open("w", encoding="utf-8") as f:
                     json.dump(self.action_logs, f, ensure_ascii=False, indent=2)
@@ -319,8 +371,14 @@ class Monitor:
         """Logs an action to the database asynchronously."""
         try:
             async with self.db_client.get_session() as session:
-                action_id = sha256(json.dumps(action, sort_keys=True).encode()).hexdigest()
-                session.add(ActionLog(id=action_id, data=action, timestamp=datetime.now(timezone.utc)))
+                action_id = sha256(
+                    json.dumps(action, sort_keys=True).encode()
+                ).hexdigest()
+                session.add(
+                    ActionLog(
+                        id=action_id, data=action, timestamp=datetime.now(timezone.utc)
+                    )
+                )
                 await session.commit()
                 monitor_ops_total.labels(operation="log_to_database").inc()
         except Exception as e:
@@ -333,7 +391,9 @@ class Monitor:
         Returns a list of actions tagged as an error, anomaly, or suspicious.
         """
         try:
-            threshold_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+            threshold_time = datetime.now(timezone.utc) - timedelta(
+                minutes=window_minutes
+            )
             anomalies = []
             with self._lock:
                 action_counts = collections.defaultdict(int)
@@ -343,19 +403,29 @@ class Monitor:
                         continue
                     try:
                         # Fixed: Add timezone info to parsed timestamp
-                        ts = datetime.fromisoformat(ts_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+                        ts = datetime.fromisoformat(ts_str.rstrip("Z")).replace(
+                            tzinfo=timezone.utc
+                        )
                         if ts < threshold_time:
                             continue
                         action_type = action.get("event", "unknown")
                         action_counts[action_type] += 1
                     except ValueError:
-                        self.logger.warning(f"Skipping action with invalid timestamp: {ts_str}")
-                
+                        self.logger.warning(
+                            f"Skipping action with invalid timestamp: {ts_str}"
+                        )
+
                 for action_type, count in action_counts.items():
                     # This threshold is a placeholder for a more sophisticated model
                     if count > 100:
-                        anomalies.append({"type": "high_frequency", "action_type": action_type, "count": count})
-            
+                        anomalies.append(
+                            {
+                                "type": "high_frequency",
+                                "action_type": action_type,
+                                "count": count,
+                            }
+                        )
+
             monitor_ops_total.labels(operation="detect_anomalies").inc()
             return anomalies
         except Exception as e:
@@ -370,23 +440,29 @@ class Monitor:
             # For synchronous context, we'll create a simple anomaly count
             anomaly_count = 0
             anomalies = []
-            
+
             # Simple synchronous anomaly detection for reports
             action_counts = collections.defaultdict(int)
             for action in self.action_logs:
                 action_type = action.get("event", action.get("type", "unknown"))
                 action_counts[action_type] += 1
-            
+
             for action_type, count in action_counts.items():
                 if count > 100:
-                    anomalies.append({"type": "high_frequency", "action_type": action_type, "count": count})
+                    anomalies.append(
+                        {
+                            "type": "high_frequency",
+                            "action_type": action_type,
+                            "count": count,
+                        }
+                    )
                     anomaly_count += 1
-            
+
             return {
-                'total_actions': len(self.action_logs),
-                'anomaly_count': anomaly_count,
-                'anomalies': anomalies,
-                'recent_actions': self.action_logs[-10:],
+                "total_actions": len(self.action_logs),
+                "anomaly_count": anomaly_count,
+                "anomalies": anomalies,
+                "recent_actions": self.action_logs[-10:],
             }
 
     def get_recent_events(self, count: int = 10) -> List[Dict[str, Any]]:
@@ -401,25 +477,29 @@ class Monitor:
         """
         with self._lock:
             for a in self.action_logs:
-                if a.get('decision_id') == decision_id:
+                if a.get("decision_id") == decision_id:
                     return {
-                        'decision_id': decision_id,
-                        'description': a.get('description', 'No description available.'),
-                        'details': a,
-                        'why': a.get('why', 'No explicit cause/reason recorded.'),
-                        'parent_id': a.get('parent_id')
+                        "decision_id": decision_id,
+                        "description": a.get(
+                            "description", "No description available."
+                        ),
+                        "details": a,
+                        "why": a.get("why", "No explicit cause/reason recorded."),
+                        "parent_id": a.get("parent_id"),
                     }
-        return {'error': f'Decision {decision_id} not found.'}
+        return {"error": f"Decision {decision_id} not found."}
 
-    def search(self, filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None) -> List[Dict[str, Any]]:
+    def search(
+        self, filter_fn: Optional[Callable[[Dict[str, Any]], bool]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Performs a deep query of the in-memory log using a custom filter function.
-        
+
         Args:
             filter_fn (Optional[Callable[[Dict[str, Any]], bool]]): A function that takes
                                                                     a log entry dict and
                                                                     returns True to include it.
-        
+
         Returns:
             List[Dict[str, Any]]: A list of matching log entries.
         """
@@ -428,15 +508,17 @@ class Monitor:
                 return self.action_logs.copy()
             return [a for a in self.action_logs if filter_fn(a)]
 
-    async def export_log(self, file_path: Union[str, Path], format: Optional[LogFormat] = None) -> None:
+    async def export_log(
+        self, file_path: Union[str, Path], format: Optional[LogFormat] = None
+    ) -> None:
         """
         Exports the entire in-memory log to a new file in the chosen format.
-        
+
         Args:
             file_path (Union[str, Path]): The path to the new export file.
             format (Optional[LogFormat]): The format for the export. Defaults to
                                           the monitor's current format.
-        
+
         Raises:
             ValueError: If an unknown log format is specified.
         """
@@ -450,19 +532,19 @@ class Monitor:
                 raise ValueError(f"Unknown export format: {format}")
         else:
             fmt = format or self.format
-            
+
         path = Path(file_path)
-        
+
         # Fixed: Handle ENCRYPTION_KEY properly
         encryption_key = self.config.ENCRYPTION_KEY
         if not isinstance(encryption_key, (str, bytes)):
             # Try to get the secret value if it's an object
             encryption_key = encryption_key.get_secret_value()
-        
+
         # Ensure it's bytes
         if isinstance(encryption_key, str):
             encryption_key = encryption_key.encode()
-        
+
         # Generate a new key if the provided one is invalid
         # Fixed: Don't silently regenerate key - this causes data loss!
         try:
@@ -470,17 +552,25 @@ class Monitor:
         except Exception as e:
             # Raise an error instead of silently generating a new key
             # as this would make previously encrypted data inaccessible
-            raise ValueError(f"Invalid Fernet encryption key: {e}. Cannot decrypt existing data with a new key.") from e
-        
+            raise ValueError(
+                f"Invalid Fernet encryption key: {e}. Cannot decrypt existing data with a new key."
+            ) from e
+
         with self._lock:
             try:
                 async with aiofiles.open(path, "w", encoding="utf-8") as f:
                     if fmt == LogFormat.JSONL:
                         for a in self.action_logs:
-                            encrypted_action = fernet.encrypt(json.dumps(a, ensure_ascii=False).encode()).decode()
+                            encrypted_action = fernet.encrypt(
+                                json.dumps(a, ensure_ascii=False).encode()
+                            ).decode()
                             await f.write(encrypted_action + "\n")
                     elif fmt == LogFormat.JSON:
-                        encrypted_data = fernet.encrypt(json.dumps(self.action_logs, ensure_ascii=False, indent=2).encode()).decode()
+                        encrypted_data = fernet.encrypt(
+                            json.dumps(
+                                self.action_logs, ensure_ascii=False, indent=2
+                            ).encode()
+                        ).decode()
                         await f.write(encrypted_data)
                     elif fmt == LogFormat.PLAINTEXT:
                         for a in self.action_logs:
@@ -494,7 +584,9 @@ class Monitor:
                 monitor_errors_total.labels(operation="export_log").inc()
                 # Log to both instance logger and module logger for test compatibility
                 self.logger.error(f"Failed to export log to {path}: {e}")
-                logging.getLogger(__name__).error(f"Failed to export log to {path}: {e}")
+                logging.getLogger(__name__).error(
+                    f"Failed to export log to {path}: {e}"
+                )
                 raise
 
     async def health_check(self) -> Dict[str, Any]:
@@ -510,9 +602,15 @@ class Monitor:
             health_data = {"status": "healthy", "in_memory_logs": len(self.action_logs)}
             if self.log_file:
                 if not self.log_file.exists():
-                    return {"status": "unhealthy", "error": f"Log file {self.log_file} does not exist"}
+                    return {
+                        "status": "unhealthy",
+                        "error": f"Log file {self.log_file} does not exist",
+                    }
                 if not os.access(self.log_file, os.W_OK):
-                    return {"status": "unhealthy", "error": f"Log file {self.log_file} is not writable"}
+                    return {
+                        "status": "unhealthy",
+                        "error": f"Log file {self.log_file} is not writable",
+                    }
                 health_data["log_file_size"] = self.log_file.stat().st_size
             monitor_ops_total.labels(operation="health_check").inc()
             return health_data
@@ -523,4 +621,6 @@ class Monitor:
 
 
 # Register as a plugin
-registry.register(kind=PlugInKind.CORE_SERVICE, name="Monitor", version="1.0.0", author="Arbiter Team")(Monitor)
+registry.register(
+    kind=PlugInKind.CORE_SERVICE, name="Monitor", version="1.0.0", author="Arbiter Team"
+)(Monitor)

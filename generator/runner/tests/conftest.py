@@ -26,7 +26,9 @@ os.environ["PROVIDER_TYPE"] = "software"
 # --- END FIX ---
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_DEFAULT_ALGO"] = "hmac"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
-os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = str(pathlib.Path(tempfile.gettempdir()) / "pytest-keys") # Use tempdir
+os.environ["AUDIT_CRYPTO_DEVELOPMENT_SOFTWARE_KEY_DIR"] = str(
+    pathlib.Path(tempfile.gettempdir()) / "pytest-keys"
+)  # Use tempdir
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_KMS_KEY_ID"] = "dummy-kms-key"
 os.environ["AUDIT_CRYPTO_DEVELOPMENT_AWS_REGION"] = "us-east-1"
 
@@ -34,20 +36,23 @@ os.environ["AUDIT_CRYPTO_DEVELOPMENT_AWS_REGION"] = "us-east-1"
 # === 3. Add project root to path ===
 project_root = pathlib.Path(__file__).parent.parent.parent
 import sys
+
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # === 4. Pytest config & Fixtures ===
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
-from runner.llm_client import LLMClient
-from runner import llm_client # Import the module namespace to access the global variable
+from runner import (
+    llm_client,
+)  # Import the module namespace to access the global variable
+
 
 def pytest_configure(config):
     """Sets pytest configuration options."""
     config.option.asyncio_mode = "auto"
-    
+
+
 # CRITICAL FIX for asynchronous cleanup hang during teardown
 # We must explicitly shut down the global LLMClient singleton if it was initialized.
 @pytest.fixture(scope="session")
@@ -62,14 +67,15 @@ def event_loop():
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
+
     yield loop
-    
+
     # Minimal cleanup - just close the loop at the very end
     try:
         loop.close()
     except Exception:
         pass
+
 
 @pytest.fixture(scope="session", autouse=True)
 async def async_cleanup_global_client():
@@ -84,9 +90,15 @@ async def async_cleanup_global_client():
             # Explicitly await the cleanup of all aiohttp/redis resources with timeout.
             await asyncio.wait_for(llm_client._async_client.close(), timeout=5.0)
         except asyncio.TimeoutError:
-            print(f"\n[CLEANUP TIMEOUT] Global LLMClient cleanup timed out after 5s", file=sys.stderr)
+            print(
+                "\n[CLEANUP TIMEOUT] Global LLMClient cleanup timed out after 5s",
+                file=sys.stderr,
+            )
         except Exception as e:
             # Log the error but continue teardown
-            print(f"\n[CLEANUP ERROR] Failed to close global LLMClient: {e}", file=sys.stderr)
+            print(
+                f"\n[CLEANUP ERROR] Failed to close global LLMClient: {e}",
+                file=sys.stderr,
+            )
         finally:
             llm_client._async_client = None

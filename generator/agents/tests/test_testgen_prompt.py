@@ -5,12 +5,9 @@ UPDATED: Fixed to match actual production code signatures and APIs
 """
 
 import pytest
-import asyncio
-import os
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
-from typing import Dict, Any
+from unittest.mock import MagicMock, patch
 
 # Import from the REAL production module
 from agents.testgen_agent.testgen_prompt import (
@@ -25,7 +22,6 @@ from agents.testgen_agent.testgen_prompt import (
     build_agentic_prompt,
     initialize_codebase_for_rag,
     MAX_PROMPT_TOKENS,
-    COMPLIANCE_MODE,
     SUPPORTED_LANGUAGES,
     SUPPORTED_FRAMEWORKS,
 )
@@ -34,6 +30,7 @@ from agents.testgen_agent.testgen_prompt import (
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def temp_dir():
@@ -45,32 +42,39 @@ def temp_dir():
 @pytest.fixture
 def mock_chromadb():
     """Mock ChromaDB client and collections"""
-    with patch('agents.testgen_agent.testgen_prompt.chromadb.PersistentClient') as mock_client:
+    with patch(
+        "agents.testgen_agent.testgen_prompt.chromadb.PersistentClient"
+    ) as mock_client:
         mock_collection = MagicMock()
         mock_collection.add = MagicMock()
-        mock_collection.query = MagicMock(return_value={
-            'documents': [['test doc']],
-            'metadatas': [[{'filename': 'test.py'}]],
-            'distances': [[0.5]]
-        })
-        
+        mock_collection.query = MagicMock(
+            return_value={
+                "documents": [["test doc"]],
+                "metadatas": [[{"filename": "test.py"}]],
+                "distances": [[0.5]],
+            }
+        )
+
         mock_client_instance = MagicMock()
-        mock_client_instance.get_or_create_collection = MagicMock(return_value=mock_collection)
+        mock_client_instance.get_or_create_collection = MagicMock(
+            return_value=mock_collection
+        )
         mock_client.return_value = mock_client_instance
-        
+
         yield mock_client_instance
 
 
 @pytest.fixture
 def mock_add_provenance():
     """Mock add_provenance to avoid API signature issues"""
-    with patch('agents.testgen_agent.testgen_prompt.add_provenance') as mock:
+    with patch("agents.testgen_agent.testgen_prompt.add_provenance") as mock:
         yield mock
 
 
 # ============================================================================
 # Test: Text Sanitization
 # ============================================================================
+
 
 class TestTextSanitization:
     """Test text sanitization security features"""
@@ -135,30 +139,31 @@ class TestTextSanitization:
 # Test: MultiVectorDBManager
 # ============================================================================
 
+
 class TestMultiVectorDBManager:
     """Test RAG functionality with vector database"""
 
     def test_initialization(self, mock_chromadb):
         """Manager should initialize with all collections"""
         manager = MultiVectorDBManager()
-        
+
         assert manager.client is not None
-        assert 'codebase' in manager.collections
-        assert 'tests' in manager.collections
-        assert 'docs' in manager.collections
-        assert 'dependencies' in manager.collections
-        assert 'historical_failures' in manager.collections
+        assert "codebase" in manager.collections
+        assert "tests" in manager.collections
+        assert "docs" in manager.collections
+        assert "dependencies" in manager.collections
+        assert "historical_failures" in manager.collections
 
     @pytest.mark.asyncio
     async def test_add_files(self, mock_chromadb, mock_add_provenance):
         """Should add files to collection"""
         manager = MultiVectorDBManager()
         files = {"test.py": "def test(): pass"}
-        
-        await manager.add_files('codebase', files)
-        
+
+        await manager.add_files("codebase", files)
+
         # Verify add was called on collection
-        manager.collections['codebase'].add.assert_called_once()
+        manager.collections["codebase"].add.assert_called_once()
         # Verify provenance was logged
         mock_add_provenance.assert_called()
 
@@ -167,50 +172,48 @@ class TestMultiVectorDBManager:
         """Should raise error for invalid collection"""
         manager = MultiVectorDBManager()
         files = {"test.py": "code"}
-        
+
         with pytest.raises(ValueError, match="Unknown collection"):
-            await manager.add_files('invalid', files)
+            await manager.add_files("invalid", files)
 
     @pytest.mark.asyncio
     async def test_query_relevant_context(self, mock_chromadb, mock_add_provenance):
         """Should query and return context from collections"""
         manager = MultiVectorDBManager()
-        
+
         results = await manager.query_relevant_context(
-            "test query",
-            collections=['codebase'],
-            n_results=3
+            "test query", collections=["codebase"], n_results=3
         )
-        
+
         assert isinstance(results, dict)
-        assert 'codebase' in results
-        manager.collections['codebase'].query.assert_called_once()
+        assert "codebase" in results
+        manager.collections["codebase"].query.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_query_multiple_collections(self, mock_chromadb, mock_add_provenance):
         """Should query multiple collections"""
         manager = MultiVectorDBManager()
-        
+
         results = await manager.query_relevant_context(
-            "test query",
-            collections=['codebase', 'tests']
+            "test query", collections=["codebase", "tests"]
         )
-        
-        assert 'codebase' in results
-        assert 'tests' in results
+
+        assert "codebase" in results
+        assert "tests" in results
 
     @pytest.mark.asyncio
     async def test_close(self, mock_chromadb, mock_add_provenance):
         """Should clear resources on close"""
         manager = MultiVectorDBManager()
         await manager.close()
-        
+
         assert len(manager.collections) == 0
 
 
 # ============================================================================
-# Test: AdvancedTemplateTracker  
+# Test: AdvancedTemplateTracker
 # ============================================================================
+
 
 class TestAdvancedTemplateTracker:
     """Test template versioning and management"""
@@ -221,7 +224,7 @@ class TestAdvancedTemplateTracker:
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
         db_file = tracker_dir / "template_performance.json"
-        
+
         tracker = AdvancedTemplateTracker(str(db_file))
         assert tracker.db_path == str(db_file)
 
@@ -231,7 +234,7 @@ class TestAdvancedTemplateTracker:
         tracker_dir.mkdir()
         db_file = tracker_dir / "template_performance.json"
         tracker = AdvancedTemplateTracker(str(db_file))
-        
+
         # This will test the save functionality
         # The actual method may vary based on implementation
 
@@ -239,6 +242,7 @@ class TestAdvancedTemplateTracker:
 # ============================================================================
 # Test: AdaptivePromptDirector
 # ============================================================================
+
 
 class TestAdaptivePromptDirector:
     """Test dynamic prompt routing"""
@@ -248,11 +252,11 @@ class TestAdaptivePromptDirector:
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
         db_file = tracker_dir / "template_performance.json"
-        
+
         vdb = MultiVectorDBManager()
         tracker = AdvancedTemplateTracker(str(db_file))
         director = AdaptivePromptDirector(vdb, tracker)
-        
+
         assert director is not None
         assert director.multi_vdb == vdb
         assert director.tracker == tracker
@@ -262,6 +266,7 @@ class TestAdaptivePromptDirector:
 # Test: Prompt Builders
 # ============================================================================
 
+
 class TestPromptBuilders:
     """Test prompt builder classes"""
 
@@ -270,12 +275,12 @@ class TestPromptBuilders:
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
         db_file = tracker_dir / "template_performance.json"
-        
+
         vdb = MultiVectorDBManager()
         tracker = AdvancedTemplateTracker(str(db_file))
         director = AdaptivePromptDirector(vdb, tracker)
         builder = DefaultPromptBuilder(director)
-        
+
         assert builder is not None
 
     @pytest.mark.asyncio
@@ -284,18 +289,23 @@ class TestPromptBuilders:
         tracker_dir = temp_dir / "tracker"
         tracker_dir.mkdir()
         db_file = tracker_dir / "template_performance.json"
-        
+
         # Create a test template
-        template_file = temp_dir / "testgen_templates" / "test_test_generation_default.j2"
+        template_file = (
+            temp_dir / "testgen_templates" / "test_test_generation_default.j2"
+        )
         template_file.parent.mkdir(parents=True, exist_ok=True)
         template_file.write_text("Test template for {{ task }}")
-        
-        with patch('agents.testgen_agent.testgen_prompt.TEMPLATE_DIR', str(template_file.parent)):
+
+        with patch(
+            "agents.testgen_agent.testgen_prompt.TEMPLATE_DIR",
+            str(template_file.parent),
+        ):
             vdb = MultiVectorDBManager()
             tracker = AdvancedTemplateTracker(str(db_file))
             director = AdaptivePromptDirector(vdb, tracker)
             builder = DefaultPromptBuilder(director)
-            
+
             try:
                 prompt = await builder.build("test_generation", code="def test(): pass")
                 assert isinstance(prompt, str)
@@ -305,16 +315,18 @@ class TestPromptBuilders:
 
     def test_register_builder(self):
         """Should register custom builders"""
+
         class CustomBuilder(AgenticPromptBuilder):
             async def build(self, prompt_type, **kwargs):
                 return "custom"
-        
+
         register_prompt_builder("custom", CustomBuilder)
 
 
 # ============================================================================
 # Test: Helper Functions
 # ============================================================================
+
 
 class TestHelperFunctions:
     """Test module helper functions"""
@@ -324,8 +336,10 @@ class TestHelperFunctions:
         # Create empty template directory
         template_dir = temp_dir / "templates"
         template_dir.mkdir()
-        
-        with patch('agents.testgen_agent.testgen_prompt.TEMPLATE_DIR', str(template_dir)):
+
+        with patch(
+            "agents.testgen_agent.testgen_prompt.TEMPLATE_DIR", str(template_dir)
+        ):
             with pytest.raises(FileNotFoundError):
                 build_agentic_prompt("test_generation", code="def test(): pass")
 
@@ -334,13 +348,14 @@ class TestHelperFunctions:
         """Should initialize codebase for RAG indexing"""
         # Create test files
         (temp_dir / "test.py").write_text("def hello(): pass")
-        
+
         initialize_codebase_for_rag(str(temp_dir))
 
 
 # ============================================================================
 # Test: Configuration
 # ============================================================================
+
 
 class TestConfiguration:
     """Test module configuration"""
@@ -353,17 +368,17 @@ class TestConfiguration:
     def test_supported_languages(self):
         """Supported languages should be defined"""
         assert isinstance(SUPPORTED_LANGUAGES, list)
-        assert 'python' in SUPPORTED_LANGUAGES
+        assert "python" in SUPPORTED_LANGUAGES
 
     def test_supported_frameworks(self):
         """Supported frameworks should be defined"""
         assert isinstance(SUPPORTED_FRAMEWORKS, dict)
-        assert 'python' in SUPPORTED_FRAMEWORKS
+        assert "python" in SUPPORTED_FRAMEWORKS
 
     def test_sanitization_patterns(self):
         """Sanitization patterns should be defined"""
         assert isinstance(SANITIZATION_PATTERNS, dict)
-        assert '[REDACTED_EMAIL]' in SANITIZATION_PATTERNS
+        assert "[REDACTED_EMAIL]" in SANITIZATION_PATTERNS
 
 
 if __name__ == "__main__":

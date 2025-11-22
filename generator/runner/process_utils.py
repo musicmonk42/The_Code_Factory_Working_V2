@@ -95,11 +95,15 @@ def _noop_collect_feedback(*args, **kwargs):
     return None
 
 
-def _noop_redact_secrets(value: Union[str, bytes, Dict[str, Any]]) -> Union[str, bytes, Dict[str, Any]]:
+def _noop_redact_secrets(
+    value: Union[str, bytes, Dict[str, Any]],
+) -> Union[str, bytes, Dict[str, Any]]:
     return value
 
 
-def _noop_add_provenance(data: Dict[str, Any], action: Optional[str] = None) -> Dict[str, Any]:
+def _noop_add_provenance(
+    data: Dict[str, Any], action: Optional[str] = None
+) -> Dict[str, Any]:
     if "provenance" not in data:
         data["provenance"] = {
             "source": "process_utils",
@@ -208,7 +212,7 @@ class CircuitBreaker:
                 result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
-        except Exception as exc:
+        except Exception:
             # Record failure
             self.failures += 1
             self.last_failure_time = time.time()
@@ -275,11 +279,10 @@ async def _run_subprocess_once(
         cwd=str(cwd) if cwd is not None else None,
         env=full_env,
     )
-    
+
     try:
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            process.communicate(),
-            timeout=timeout
+            process.communicate(), timeout=timeout
         )
         returncode = process.returncode
     except asyncio.TimeoutError:
@@ -327,7 +330,7 @@ async def subprocess_wrapper(
     timeout: Optional[float] = None,
     cwd: Optional[Union[str, Path]] = None,
     env: Optional[Dict[str, str]] = None,
-    circuit_breaker_name: Optional[str] = None  # <-- [FIX] ADD THIS ARGUMENT
+    circuit_breaker_name: Optional[str] = None,  # <-- [FIX] ADD THIS ARGUMENT
 ) -> Dict[str, Any]:
     """
     Run a command with standardized behavior:
@@ -473,7 +476,9 @@ async def distributed_subprocess(
         raise ValueError("No backend specified for distributed_subprocess")
 
     if selected_backend not in BACKENDS:
-        raise ValueError(f"Unknown backend '{selected_backend}' for distributed_subprocess")
+        raise ValueError(
+            f"Unknown backend '{selected_backend}' for distributed_subprocess"
+        )
 
     if not hasattr(runner_backends, "BACKEND_REGISTRY"):
         raise RuntimeError("runner_backends.BACKEND_REGISTRY not available")

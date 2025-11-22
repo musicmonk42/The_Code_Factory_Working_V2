@@ -16,10 +16,7 @@ def isolated_metrics():
     # Create a mock metric class
     mock_metric = MagicMock()
     mock_metric.labels.return_value = MagicMock(
-        inc=MagicMock(),
-        dec=MagicMock(),
-        set=MagicMock(),
-        observe=MagicMock()
+        inc=MagicMock(), dec=MagicMock(), set=MagicMock(), observe=MagicMock()
     )
 
     # Pre-populate the mock METRICS dictionary with expected keys to prevent KeyError
@@ -54,9 +51,9 @@ def isolated_metrics():
         "reasoner_init_duration_seconds": mock_metric,
         # Adding keys from prompt_strategies.py as well
         "prompt_size_bytes": mock_metric,
-        "inference_duration_seconds": mock_metric
+        "inference_duration_seconds": mock_metric,
     }
-    
+
     with patch(
         "arbiter.explainable_reasoner.metrics.METRICS_REGISTRY", new=CollectorRegistry()
     ) as registry, patch(

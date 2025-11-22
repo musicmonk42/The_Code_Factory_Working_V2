@@ -16,7 +16,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict
 
-import pytest
 
 # Absolute path per your message; also support running in CI on non-Windows.
 CONFIG_PATHS = [
@@ -29,12 +28,15 @@ def _load_config_text() -> str:
     for p in CONFIG_PATHS:
         if p.exists():
             return p.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"Could not find arbiter_config.json in any of: {CONFIG_PATHS}")
+    raise FileNotFoundError(
+        f"Could not find arbiter_config.json in any of: {CONFIG_PATHS}"
+    )
 
 
 # --- Env placeholder expansion (${VAR} and ${VAR:-default}) with type coercion ---
 
 _PLACEHOLDER = re.compile(r"\$\{([^}:]+)(?::-(.+?))?\}")
+
 
 def _coerce_scalar(value: str) -> Any:
     """Best-effort scalar coercion: bools, ints, floats; otherwise original string."""
@@ -56,6 +58,7 @@ def _coerce_scalar(value: str) -> Any:
             pass
     return value
 
+
 def _expand_placeholders_in_string(s: str, env: Dict[str, str]) -> Any:
     def repl(m: re.Match) -> str:
         var = m.group(1)
@@ -74,6 +77,7 @@ def _expand_placeholders_in_string(s: str, env: Dict[str, str]) -> Any:
     # Otherwise return the expanded string (could contain mixed text)
     return expanded
 
+
 def _expand_env(obj: Any, env: Dict[str, str]) -> Any:
     if isinstance(obj, dict):
         return {k: _expand_env(v, env) for k, v in obj.items()}
@@ -86,14 +90,24 @@ def _expand_env(obj: Any, env: Dict[str, str]) -> Any:
 
 # ----------------------------- Tests -----------------------------
 
+
 def test_config_file_is_well_formed_json_and_has_top_keys():
     raw = _load_config_text()
     cfg = json.loads(raw)
 
     # structural sanity
-    for key in ("app_settings", "security", "ml_models", "llm", "third_party_integrations",
-                "knowledge_management", "data_explorer", "audit"):
+    for key in (
+        "app_settings",
+        "security",
+        "ml_models",
+        "llm",
+        "third_party_integrations",
+        "knowledge_management",
+        "data_explorer",
+        "audit",
+    ):
         assert key in cfg, f"Missing top-level key: {key}"
+
 
 def test_env_expansion_with_defaults_and_required_vars(monkeypatch):
     raw = _load_config_text()
@@ -101,7 +115,7 @@ def test_env_expansion_with_defaults_and_required_vars(monkeypatch):
 
     # Clear any existing REDIS_URL to ensure we test the default
     monkeypatch.delenv("REDIS_URL", raising=False)
-    
+
     # Minimal env: provide only the truly required ones (no defaults in file)
     monkeypatch.setenv("ENCRYPTION_KEY", "k_test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
@@ -111,19 +125,20 @@ def test_env_expansion_with_defaults_and_required_vars(monkeypatch):
 
     # app_settings defaults / required
     app = expanded["app_settings"]
-    assert app["redis_url"] == "redis://localhost:6379"                # default applied
-    assert app["db_path"].startswith("sqlite:///")                     # default applied
-    assert app["encryption_key"] == "k_test"                           # required (no default)
-    assert isinstance(app["log_file"], str) and app["log_file"]        # default applied
+    assert app["redis_url"] == "redis://localhost:6379"  # default applied
+    assert app["db_path"].startswith("sqlite:///")  # default applied
+    assert app["encryption_key"] == "k_test"  # required (no default)
+    assert isinstance(app["log_file"], str) and app["log_file"]  # default applied
 
     # llm section: numeric fields become numbers after coercion
     llm = expanded["llm"]
-    assert llm["model_name"] == "gpt-4o-mini"                          # default applied
-    assert llm["temperature"] == 0.7                                   # coerced float
-    assert llm["max_tokens"] == 500                                    # coerced int
-    assert llm["top_p"] == 1.0                                         # coerced float
-    assert llm["frequency_penalty"] == 0.0                             # coerced float
-    assert llm["presence_penalty"] == 0.0                              # coerced float
+    assert llm["model_name"] == "gpt-4o-mini"  # default applied
+    assert llm["temperature"] == 0.7  # coerced float
+    assert llm["max_tokens"] == 500  # coerced int
+    assert llm["top_p"] == 1.0  # coerced float
+    assert llm["frequency_penalty"] == 0.0  # coerced float
+    assert llm["presence_penalty"] == 0.0  # coerced float
+
 
 def test_security_regex_is_valid_and_sane():
     raw = _load_config_text()
@@ -131,7 +146,10 @@ def test_security_regex_is_valid_and_sane():
     pat = cfg["security"]["valid_domain_pattern"]
     rx = re.compile(pat)
     assert rx.fullmatch("abc_123-XYZ")
-    assert not rx.fullmatch("invalid.domain.com")  # dots are disallowed by this pattern (by design)
+    assert not rx.fullmatch(
+        "invalid.domain.com"
+    )  # dots are disallowed by this pattern (by design)
+
 
 def test_data_explorer_defaults_and_ranges(monkeypatch):
     raw = _load_config_text()
@@ -142,11 +160,14 @@ def test_data_explorer_defaults_and_ranges(monkeypatch):
     assert dx["enabled"] is True
     assert isinstance(dx["max_depth"], int) and dx["max_depth"] >= 0
     assert isinstance(dx["max_pages"], int) and dx["max_pages"] > 0
-    assert isinstance(dx["rate_limit_per_second"], int) and dx["rate_limit_per_second"] > 0
+    assert (
+        isinstance(dx["rate_limit_per_second"], int) and dx["rate_limit_per_second"] > 0
+    )
     assert isinstance(dx["allowed_domains"], list) and dx["allowed_domains"]
     assert isinstance(dx["compliance_flags"], dict)
     for flag in ("gdpr", "ccpa", "finra_rule_2210"):
         assert dx["compliance_flags"].get(flag) is True
+
 
 def test_third_party_conditional_requirements_email_enabled(monkeypatch):
     raw = _load_config_text()
@@ -165,11 +186,12 @@ def test_third_party_conditional_requirements_email_enabled(monkeypatch):
 
     email = expanded["third_party_integrations"]["email"]
     assert email["enabled"] is True
-    assert email["use_tls"] is True      # default coerced
+    assert email["use_tls"] is True  # default coerced
     assert isinstance(email["timeout_seconds"], float) and email["timeout_seconds"] > 0
     # Required when enabled
     for k in ("sender", "recipients", "smtp_server", "smtp_username", "smtp_password"):
         assert isinstance(email[k], str) and email[k]
+
 
 def test_third_party_conditional_requirements_email_disabled(monkeypatch):
     raw = _load_config_text()
@@ -184,6 +206,7 @@ def test_third_party_conditional_requirements_email_disabled(monkeypatch):
     email = expanded["third_party_integrations"]["email"]
     assert email["enabled"] is False
 
+
 def test_pagerduty_enabled_requires_routing_key(monkeypatch):
     raw = _load_config_text()
     cfg = json.loads(raw)
@@ -195,8 +218,11 @@ def test_pagerduty_enabled_requires_routing_key(monkeypatch):
 
     pd = expanded["third_party_integrations"]["pagerduty"]
     assert pd["enabled"] is True
-    assert isinstance(pd["api_timeout_seconds"], float) and pd["api_timeout_seconds"] > 0
+    assert (
+        isinstance(pd["api_timeout_seconds"], float) and pd["api_timeout_seconds"] > 0
+    )
     assert pd["routing_key"] == "rkey"
+
 
 def test_llm_api_key_required(monkeypatch):
     raw = _load_config_text()
@@ -208,7 +234,10 @@ def test_llm_api_key_required(monkeypatch):
     expanded = _expand_env(cfg, dict(os.environ))
 
     # Must still contain placeholder if not provided
-    assert expanded["llm"]["api_key"] == "${OPENAI_API_KEY}"            # unresolved means missing required
+    assert (
+        expanded["llm"]["api_key"] == "${OPENAI_API_KEY}"
+    )  # unresolved means missing required
+
 
 def test_app_encryption_key_required(monkeypatch):
     raw = _load_config_text()
@@ -218,4 +247,6 @@ def test_app_encryption_key_required(monkeypatch):
     monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     expanded = _expand_env(cfg, dict(os.environ))
-    assert expanded["app_settings"]["encryption_key"] == "${ENCRYPTION_KEY}"   # unresolved
+    assert (
+        expanded["app_settings"]["encryption_key"] == "${ENCRYPTION_KEY}"
+    )  # unresolved

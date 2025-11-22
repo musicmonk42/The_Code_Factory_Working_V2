@@ -11,16 +11,15 @@ critical failure has occurred, triggering self-healing actions if necessary.
 from __future__ import annotations
 
 import asyncio
-import json
-import logging
 import random
 import time
-from typing import TYPE_CHECKING, Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Dict, Any, Optional
 
 # --------------------------------------------------------------------------- #
 #  Logging – use structlog (the same logger the bus uses) and add .bind()
 # --------------------------------------------------------------------------- #
 import structlog
+
 logger = structlog.get_logger(__name__)
 # The original code did:
 #   logger = logger.bind(module="MessageBusGuardian")
@@ -32,6 +31,7 @@ logger = logger.bind(module="MessageBusGuardian")
 # --------------------------------------------------------------------------- #
 try:
     from prometheus_client import Counter, Gauge, Histogram  # type: ignore
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
@@ -40,7 +40,6 @@ except ImportError:  # pragma: no cover
 # --------------------------------------------------------------------------- #
 #  Local / Relative imports
 # --------------------------------------------------------------------------- #
-from .resilience import CircuitBreaker
 from .metrics import (
     MESSAGE_BUS_HEALTH_STATUS,
     MESSAGE_BUS_CRITICAL_FAILURES_TOTAL,
@@ -54,8 +53,10 @@ if TYPE_CHECKING:
 # --------------------------------------------------------------------------- #
 try:
     from arbiter.config import ArbiterConfig
+
     settings = ArbiterConfig()
 except ImportError:  # pragma: no cover
+
     class MockConfig:
         def __getattr__(self, name):
             defaults = {
@@ -146,7 +147,9 @@ def _observe_check(duration: float) -> None:
 def _set_component(component: str, healthy: bool) -> None:
     if METRIC_GUARDIAN_COMPONENT_STATUS:
         try:
-            METRIC_GUARDIAN_COMPONENT_STATUS.labels(component=component).set(1 if healthy else 0)
+            METRIC_GUARDIAN_COMPONENT_STATUS.labels(component=component).set(
+                1 if healthy else 0
+            )
         except Exception:
             pass
 
@@ -156,6 +159,7 @@ def _set_component(component: str, healthy: bool) -> None:
 # --------------------------------------------------------------------------- #
 class CriticalFailure(Exception):
     """Raised when the Guardian detects a non-recoverable systemic failure."""
+
     pass
 
 
@@ -191,18 +195,14 @@ class MessageBusGuardian:
         self.healing_timeout = getattr(
             settings, "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT", 300
         )
-        self.alert_retries = getattr(
-            settings, "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES", 3
-        )
+        self.alert_retries = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES", 3)
         self.alert_base_delay = getattr(
             settings, "MESSAGE_BUS_GUARDIAN_ALERT_BASE_DELAY", 0.5
         )
         self.alert_max_delay = getattr(
             settings, "MESSAGE_BUS_GUARDIAN_ALERT_MAX_DELAY", 10.0
         )
-        self.alert_jitter = getattr(
-            settings, "MESSAGE_BUS_GUARDIAN_ALERT_JITTER", 0.3
-        )
+        self.alert_jitter = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_JITTER", 0.3)
         self.enable_critical_failures = getattr(
             settings, "ENABLE_CRITICAL_FAILURES", True
         )
@@ -230,9 +230,7 @@ class MessageBusGuardian:
         self._component_statuses[name] = is_healthy
         if self.enable_metrics:
             _set_component(name, is_healthy)
-        logger.debug(
-            "Updated component status.", component=name, healthy=is_healthy
-        )
+        logger.debug("Updated component status.", component=name, healthy=is_healthy)
 
     # ------------------------------------------------------------------- #
     #  Lifecycle
@@ -358,7 +356,9 @@ class MessageBusGuardian:
 
         if self.message_bus.redis_bridge:
             health = await self.message_bus.redis_bridge.health()
-            if not health.get("running", False) or not health.get("redis_connected", False):
+            if not health.get("running", False) or not health.get(
+                "redis_connected", False
+            ):
                 report["overall_healthy"] = False
                 report["unhealthy_bridges"] += 1
                 report["critical_errors"].append("Redis bridge unhealthy")

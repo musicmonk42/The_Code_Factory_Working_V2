@@ -1,11 +1,13 @@
-import os, re, sys
+import os
+import re
 
 ROOT = os.getcwd()
 PKG = "test_generation"
 BASE = os.path.join(ROOT, PKG)
 
 # from ..foo.bar import Baz  -> from test_generation.foo.bar import Baz
-REL_FROM = re.compile(r'^(from\s+)(\.+)([\w\.]*)(\s+import\s+)', re.M)
+REL_FROM = re.compile(r"^(from\s+)(\.+)([\w\.]*)(\s+import\s+)", re.M)
+
 
 def fix_file(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -23,6 +25,7 @@ def fix_file(path):
             f.write(new_src)
         print(f"fixed: {path}")
 
+
 def main():
     for root, _, files in os.walk(BASE):
         for fn in files:
@@ -32,6 +35,7 @@ def main():
             if "tests" in root or fn.startswith("test_"):
                 fix_file(os.path.join(root, fn))
     print("done.")
+
 
 if __name__ == "__main__":
     main()

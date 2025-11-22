@@ -47,6 +47,8 @@ if os.environ.get("PYTEST_CURRENT_TEST"):
         category=RuntimeWarning,
         message="coroutine 'AsyncMockMixin._execute_mock_call' was never awaited",
     )
+
+
 class _JsonFormatter(logging.Formatter):
     # Keep it minimal to avoid dependency bloat.
     def format(self, record: logging.LogRecord) -> str:
@@ -79,7 +81,9 @@ def _mkdirs_resilient(base_root: str, rel_path: str) -> None:
     in tests and some prod environments.
     """
     base = Path(base_root)
-    rel = Path(str(rel_path).lstrip(r"\/"))  # ensure relative semantics (win+posix) without escape warnings
+    rel = Path(
+        str(rel_path).lstrip(r"\/")
+    )  # ensure relative semantics (win+posix) without escape warnings
     cur = base
     for part in rel.parts:
         cur = cur / part
@@ -99,11 +103,15 @@ class PipelineConfig:
     coverage_reports_dir: str = "atco_artifacts/coverage_reports"
     venv_dir: str = "atco_artifacts/venv"  # FIX: Add venv directory to config
     suite_dir: str = "tests"
-    python_venv_deps: List[str] = field(default_factory=lambda: ["pytest", "pytest-cov"])
+    python_venv_deps: List[str] = field(
+        default_factory=lambda: ["pytest", "pytest-cov"]
+    )
     backend_timeouts: Dict[str, int] = field(default_factory=lambda: {"pynguin": 60})
     test_exec_timeout_seconds: int = 30
     mutation_testing: Dict[str, Any] = field(default_factory=lambda: {"enabled": False})
-    compliance_reporting: Dict[str, Any] = field(default_factory=lambda: {"enabled": True})
+    compliance_reporting: Dict[str, Any] = field(
+        default_factory=lambda: {"enabled": True}
+    )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineConfig":
@@ -125,7 +133,9 @@ class PipelineConfig:
 def _load_config(project_root: str, config_file: str) -> PipelineConfig:
     cfg_path = Path(project_root) / config_file
     try:
-        with open(cfg_path, "r", encoding="utf-8") as f:  # intentionally uses builtins.open for tests
+        with open(
+            cfg_path, "r", encoding="utf-8"
+        ) as f:  # intentionally uses builtins.open for tests
             raw = json.load(f)
             if not isinstance(raw, dict):
                 raw = {}
@@ -185,7 +195,9 @@ async def _process_target(
         await _maybe_await(utils.SecurityScanner.scan_test_file(test_path))
     except Exception as exc:
         # Non‑blocking: log and continue
-        await audit.log_event("security_scan_error", {"file": test_path, "error": str(exc)})
+        await audit.log_event(
+            "security_scan_error", {"file": test_path, "error": str(exc)}
+        )
 
     # Hash / compare / optional backup (all patched in tests)
     try:
@@ -215,7 +227,9 @@ async def _run_reporting(
 
     try:
         _ = await _maybe_await(
-            HTMLReporter.generate_html_report("sarif", "html", {"files": generated_paths})
+            HTMLReporter.generate_html_report(
+                "sarif", "html", {"files": generated_paths}
+            )
         )
     except Exception as exc:
         await audit.log_event("html_report_error", {"error": str(exc)})
@@ -257,7 +271,7 @@ async def main(args) -> None:
             )
             logger.info("venv_ready")
         except Exception as exc:
-            logger.info(json.dumps({"event":"venv_error","error":str(exc)}))
+            logger.info(json.dumps({"event": "venv_error", "error": str(exc)}))
             _venv_ok, _venv_python = False, None
     else:
         logger.info("venv_skipped")
@@ -295,7 +309,7 @@ async def main(args) -> None:
                 target=t,
                 timeouts=cfg.backend_timeouts,
                 audit=audit,
-    )
+            )
 
     tasks = [asyncio.create_task(_guarded_process(t)) for t in uncovered]
     for fut in tasks:
@@ -319,7 +333,11 @@ async def main(args) -> None:
 
     await audit.log_event(
         "pipeline_complete",
-        {"project_root": project_root, "status": "ok", "generated": len(generated_paths)},
+        {
+            "project_root": project_root,
+            "status": "ok",
+            "generated": len(generated_paths),
+        },
     )
 
     # Exit cleanly for the harness
@@ -327,6 +345,7 @@ async def main(args) -> None:
 
 
 if __name__ == "__main__":
+
     class _Args:
         project_root = "."
         coverage_xml = "coverage.xml"

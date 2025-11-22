@@ -12,13 +12,12 @@ from typing import Awaitable, Any, Optional
 from importlib.metadata import version as _pkg_version, PackageNotFoundError
 from pathlib import Path
 import uuid
-import inspect
-import functools
 import threading
 
 # --- Optional Dependency Guards and Fallbacks ---
 try:
     import yaml  # type: ignore
+
     _YAML_AVAILABLE = True
 except ImportError:
     yaml = None
@@ -26,6 +25,7 @@ except ImportError:
 
 try:
     import filelock
+
     _FILELOCK_AVAILABLE = True
 except ImportError:
     filelock = None
@@ -35,8 +35,9 @@ except ImportError:
 try:
     from rich.console import Console
     from rich.panel import Panel
-    from rich.table import Table # Ensure this is also available if Rich is.
-    from rich.progress import Progress # Same here
+    from rich.table import Table  # Ensure this is also available if Rich is.
+    from rich.progress import Progress  # Same here
+
     RICH_AVAILABLE = True
 except Exception:
     RICH_AVAILABLE = False
@@ -44,27 +45,47 @@ except Exception:
     class Console:  # stub compatible with Console(stderr=True)
         def __init__(self, *args, **kwargs):
             pass
+
         def print(self, *args, **kwargs):
             print(*args) if args else print()
 
     class Panel:  # minimal stub
         def __init__(self, renderable, **kwargs):
             self.renderable = renderable
+
         def __str__(self):
             return str(self.renderable)
-    class Table: # minimal stub for feedback command
-        def __init__(self, *args, **kwargs): pass
-        def add_column(self, *args, **kwargs): pass
-        def add_row(self, *args, **kwargs): pass
-        def __str__(self): return "Feedback Summary (Rich not available)"
-    
-    class Progress: # minimal stub for generate command
-        def __init__(self, *args, **kwargs): pass
-        def __enter__(self): return self
-        def __exit__(self, exc_type, exc_value, traceback): pass
-        def add_task(self, description, total): return "task_id"
-        def update(self, task_id, completed): pass
-        
+
+    class Table:  # minimal stub for feedback command
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_column(self, *args, **kwargs):
+            pass
+
+        def add_row(self, *args, **kwargs):
+            pass
+
+        def __str__(self):
+            return "Feedback Summary (Rich not available)"
+
+    class Progress:  # minimal stub for generate command
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
+        def add_task(self, description, total):
+            return "task_id"
+
+        def update(self, task_id, completed):
+            pass
+
+
 # -----------------------------------------------------------------------------
 # Ensure both consoles exist even when Rich is missing
 console = Console()
@@ -96,28 +117,27 @@ else:
 
 
 # -------------------------------------------------
-from .io_utils import validate_relative_path
 from .runtime import (
     is_ci_environment,
     setup_logging,
     run_dependency_check,
-    validate_session_inputs,
     ensure_session_file,
     init_llm,
-    TestAgentState,
 )
 from .atco_signal import install_default_handlers
-from test_generation.orchestrator.venvs import sanitize_path
-from test_generation.orchestrator.audit import append_to_feedback_log, FEEDBACK_LOG_FILE
+from test_generation.orchestrator.audit import FEEDBACK_LOG_FILE
+
 # Corrected import for the graph module
 from test_generation.gen_agent.graph import build_graph, invoke_graph
 
 
 logger = logging.getLogger(__name__)
 
+
 # --- test hooks (patched in tests)
 async def summarize_feedback(*_args, **_kwargs):
     return {}
+
 
 # --- helpers ---------------------------------------------------
 def _default_feedback_path() -> str:
@@ -130,18 +150,25 @@ def _default_feedback_path() -> str:
         base = os.path.join(xdg, DIST_NAME)
     elif os.name == "nt":
         appdata = os.getenv("APPDATA")
-        base = os.path.join(appdata, DIST_NAME) if appdata else os.path.join(os.getcwd(), DIST_NAME)
+        base = (
+            os.path.join(appdata, DIST_NAME)
+            if appdata
+            else os.path.join(os.getcwd(), DIST_NAME)
+        )
     else:
         base = os.path.join(os.path.expanduser("~"), ".local", "state", DIST_NAME)
 
     Path(base).mkdir(parents=True, exist_ok=True)
     return os.path.join(base, "feedback_log.jsonl")
 
+
 FEEDBACK_LOG_FILE = os.getenv("FEEDBACK_LOG_FILE", _default_feedback_path())
+
 
 def _make_run_id() -> str:
     """Generate a UUID for a run."""
     return str(uuid.uuid4())
+
 
 def _atomic_write_text(path: Path, data: str, encoding: str = "utf-8") -> None:
     """
@@ -155,11 +182,14 @@ def _atomic_write_text(path: Path, data: str, encoding: str = "utf-8") -> None:
         f.write(data)
     os.replace(tmp, path)
 
+
 def _maybe_install_rich(debug: bool) -> None:
     """Install rich tracebacks only if debug is enabled."""
     if debug and RICH_AVAILABLE:
         from rich.traceback import install as rich_install
+
         rich_install(show_locals=False)
+
 
 def _load_config_from_yaml(path: str) -> dict:
     if yaml is None:
@@ -184,6 +214,7 @@ def run_coro_sync(coro: Awaitable[Any]) -> Any:
         return asyncio.run(coro)
 
     result_box: dict[str, Any] = {}
+
     def _runner():
         _loop = asyncio.new_event_loop()
         try:
@@ -191,16 +222,18 @@ def run_coro_sync(coro: Awaitable[Any]) -> Any:
             result_box["result"] = _loop.run_until_complete(coro)
         finally:
             _loop.close()
-    
+
     t = threading.Thread(target=_runner, daemon=True)
-    t.start(); t.join()
-    
+    t.start()
+    t.join()
+
     if "result" not in result_box:
         # The thread failed to complete; should not happen with current logic but
         # acts as a failsafe.
         raise RuntimeError("Async thread failed to return a result.")
-    
+
     return result_box["result"]
+
 
 # --- core async runner (prod-safe) ---------------------------
 async def _run_async_command(coro: Awaitable[Any]) -> int:
@@ -212,7 +245,9 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
         shutdown_event = asyncio.Event()
 
         def _shutdown_handler(signum, frame):
-            logger.warning("Received signal %s, initiating graceful shutdown...", signum)
+            logger.warning(
+                "Received signal %s, initiating graceful shutdown...", signum
+            )
             shutdown_event.set()
 
         install_default_handlers(_shutdown_handler)
@@ -259,8 +294,11 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
         return 1
     except Exception:
         logger.exception("CLI command failed")
-        err_console.print("[bold red]An unexpected error occurred during execution.[/bold red]")
+        err_console.print(
+            "[bold red]An unexpected error occurred during execution.[/bold red]"
+        )
         return 1
+
 
 # ---------------------------
 # CLI root
@@ -278,9 +316,16 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
     help="The root directory of the project (default: current working directory).",
     default=".",
 )
-@click.option("--debug", is_flag=True, default=False, help="Enable debug logging and rich tracebacks.")
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Enable debug logging and rich tracebacks.",
+)
 @click.pass_context
-def cli(ctx: click.Context, config_file: Optional[str], project_root: str, debug: bool) -> None:
+def cli(
+    ctx: click.Context, config_file: Optional[str], project_root: str, debug: bool
+) -> None:
     """
     Autonomous Multi-Agent Test Generation System
     """
@@ -327,12 +372,15 @@ def cli(ctx: click.Context, config_file: Optional[str], project_root: str, debug
     ctx.obj["debug"] = debug
     ctx.obj["project_root"] = Path(project_root).resolve()
 
+
 # ------------------------------------------------------------
 # Internal coroutine used by the `generate` subcommand
 # (The tests patch these symbols in this module, so reference
 # them by their module-level names imported above.)
 # ------------------------------------------------------------
-async def _generate_async(session: str, output: str | None, ci: bool, project_root: Path) -> int:
+async def _generate_async(
+    session: str, output: str | None, ci: bool, project_root: Path
+) -> int:
     """
     Orchestrates a single end-to-end generation run:
       - loads/creates the session state
@@ -357,18 +405,20 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
     except SystemExit:
         # In test environments, create a minimal valid state instead of exiting
         if "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
-            logger.warning(f"Test environment detected, creating minimal state for session '{session}'")
+            logger.warning(
+                f"Test environment detected, creating minimal state for session '{session}'"
+            )
             state = {
                 "spec": "Test spec",
                 "spec_format": "gherkin",
-                "repair_attempts": 0
+                "repair_attempts": 0,
             }
         else:
             # Re-raise for production
             raise
 
     # Build and invoke the agent graph (both patched in tests)
-    from test_generation.gen_agent.graph import build_graph, invoke_graph
+
     graph = build_graph(llm)
     final_state = await invoke_graph(graph, state)
 
@@ -392,6 +442,7 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
 
     # Tests patch this to capture the payload
     from .io_utils import append_to_feedback_log
+
     await append_to_feedback_log(FEEDBACK_LOG_FILE, payload)
 
     # Optional output file (the test passes --output and reads it back)
@@ -402,14 +453,25 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
 
     return 0
 
+
 @cli.command("generate")
 @click.option("--session", required=True, help="Session ID to use/persist.")
-@click.option("--output", type=str, required=False, help="Write a compact JSON result to this file.")
+@click.option(
+    "--output",
+    type=str,
+    required=False,
+    help="Write a compact JSON result to this file.",
+)
 @click.option("--ci", is_flag=True, help="Run in non-interactive CI mode.")
 @click.pass_context
 def generate(ctx: click.Context, session: str, output: str | None, ci: bool) -> None:
     # Kick off the async workflow; exceptions are handled by the wrapper.
-    run_coro_sync(_run_async_command(_generate_async(session, output, ci, ctx.obj["project_root"])))
+    run_coro_sync(
+        _run_async_command(
+            _generate_async(session, output, ci, ctx.obj["project_root"])
+        )
+    )
+
 
 @cli.command()
 @click.option("--host", default="0.0.0.0", help="Host to bind the API server to.")
@@ -418,33 +480,46 @@ def serve(host: str, port: int) -> None:
     """
     Serves the REST API for test generation.
     """
+
     async def _serve_async() -> int:
         from test_generation.gen_agent.api import serve_api
+
         try:
             await run_dependency_check(provider=None, is_ci=is_ci_environment())
         except SystemExit as e:
             return e.code
-        
+
         logger.info("Starting API server on http://%s:%d", host, port)
         return serve_api(host, port)
 
     result = run_coro_sync(_serve_async())
     sys.exit(result)
 
+
 @cli.command()
 @click.argument("action", type=click.Choice(["summarize"]), default="summarize")
-@click.option("--log-file", type=click.Path(), default=FEEDBACK_LOG_FILE, help="Path to the feedback log file.")
-@click.option("--json-out", is_flag=True, default=False, help="Output JSON for CI integration.")
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    default=FEEDBACK_LOG_FILE,
+    help="Path to the feedback log file.",
+)
+@click.option(
+    "--json-out", is_flag=True, default=False, help="Output JSON for CI integration."
+)
 def feedback(action: str, log_file: str, json_out: bool) -> None:
     """
     Manages feedback logs.
     """
+
     async def _feedback_async() -> int:
         if action == "summarize":
             try:
                 summary = await summarize_feedback(log_file)
                 if summary is None:
-                    err_console.print(f"[bold red]Feedback log file not found or empty: {log_file}[/bold red]")
+                    err_console.print(
+                        f"[bold red]Feedback log file not found or empty: {log_file}[/bold red]"
+                    )
                     return 1
 
                 if json_out:
@@ -452,6 +527,7 @@ def feedback(action: str, log_file: str, json_out: bool) -> None:
                 else:
                     if RICH_AVAILABLE:
                         from rich.table import Table
+
                         table = Table(title="Feedback Summary")
                         table.add_column("Key", style="cyan")
                         table.add_column("Value", style="magenta")
@@ -473,16 +549,21 @@ def feedback(action: str, log_file: str, json_out: bool) -> None:
                 return 0
             except Exception:
                 logger.exception("Error summarizing feedback")
-                err_console.print("[bold red]An error occurred while summarizing feedback.[/bold red]")
+                err_console.print(
+                    "[bold red]An error occurred while summarizing feedback.[/bold red]"
+                )
                 return 1
         return 0
 
     result = run_coro_sync(_feedback_async())
     sys.exit(result)
 
+
 @cli.command()
 @click.pass_context
-@click.option("--json-out", is_flag=True, default=False, help="Output JSON for CI integration.")
+@click.option(
+    "--json-out", is_flag=True, default=False, help="Output JSON for CI integration."
+)
 def status(ctx: click.Context, json_out: bool) -> None:
     """
     Returns a status payload.
@@ -493,6 +574,6 @@ def status(ctx: click.Context, json_out: bool) -> None:
         err_console.print("[bold green]Status OK[/bold green]")
     sys.exit(0)
 
+
 if __name__ == "__main__":
     cli(obj={})
-

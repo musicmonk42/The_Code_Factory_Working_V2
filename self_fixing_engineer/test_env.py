@@ -1,4 +1,5 @@
 """Set up test environment variables for the self_fixing_engineer test suite"""
+
 import os
 import sys
 from pathlib import Path
@@ -49,6 +50,7 @@ os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("CLUSTER_NAME", "test-cluster")
 os.environ.setdefault("ENVIRONMENT", "test")
 
+
 def setup_test_environment():
     """
     Function to be called at the beginning of test runs
@@ -57,6 +59,7 @@ def setup_test_environment():
     print("Test environment variables configured")
     print(f"Project root: {PROJECT_ROOT}")
     print(f"Python path includes: {sys.path[0]}")
+
 
 if __name__ == "__main__":
     setup_test_environment()

@@ -1,7 +1,6 @@
 # tests/test_signal.py
 import os
 import signal
-import sys
 import time
 from unittest.mock import patch, MagicMock
 
@@ -9,7 +8,6 @@ import pytest
 
 # Fix: Change the import to the correct module name
 from test_generation.gen_agent import atco_signal as signal_mod
-import faulthandler
 
 
 @pytest.fixture(autouse=True)
@@ -39,14 +37,16 @@ def test_signal_debounce(monkeypatch):
     fake_event = MagicMock()
     monkeypatch.setattr(signal_mod, "shutdown_event", fake_event)
     # Set the last signal time to now, so the next signal is debounced
-    monkeypatch.setattr(signal_mod, "_last_signal_at", {signal.SIGINT: time.monotonic()})
-    
+    monkeypatch.setattr(
+        signal_mod, "_last_signal_at", {signal.SIGINT: time.monotonic()}
+    )
+
     # Use the full handler installation
     signal_mod.install_default_handlers(on_interrupt=fake_event.set)
-    
+
     handler = signal.getsignal(signal.SIGINT)
     handler(signal.SIGINT, None)
-    
+
     fake_event.set.assert_not_called()
 
 
@@ -59,7 +59,7 @@ def test_escalation_after_multiple_signals(monkeypatch):
     # FIX: Add the missing state to trigger escalation logic.
     monkeypatch.setattr(signal_mod, "_shutting_down", True)
     monkeypatch.setattr(signal_mod, "SHUTDOWN_FORCE_SEC", 0)
-    
+
     with patch("os._exit") as mock_exit:
         # Use the full handler which contains the escalation logic
         signal_mod.install_default_handlers(on_interrupt=fake_event.set)
@@ -87,8 +87,10 @@ def test_faulthandler_enabled(monkeypatch):
     # Patch the function where it is guaranteed to exist
     with patch("faulthandler.register", fake_register, create=True):
         # Use the full installer which sets up SIGUSR1
-        signal_mod.install_default_handlers(on_interrupt=lambda: None, signals=["SIGUSR1"])
-    
+        signal_mod.install_default_handlers(
+            on_interrupt=lambda: None, signals=["SIGUSR1"]
+        )
+
     # Assert that register was called for SIGUSR1
     was_called = any(
         call.args[0] == signal.SIGUSR1 for call in fake_register.call_args_list
@@ -103,10 +105,10 @@ def test_forward_child_signals(monkeypatch):
     mock_psutil = MagicMock()
     child = MagicMock()
     mock_psutil.Process.return_value.children.return_value = [child]
-    
+
     with patch.dict("sys.modules", {"psutil": mock_psutil}):
         signal_mod._forward_children()
-    
+
     child.send_signal.assert_called_with(signal.SIGTERM)
 
 
@@ -117,24 +119,27 @@ def test_debounce_per_signal(monkeypatch):
     """
     fake_event = MagicMock()
     monkeypatch.setattr(signal_mod, "shutdown_event", fake_event)
-    monkeypatch.setattr(signal_mod, "SIGNAL_DEBOUNCE_MS", 100) # 100ms
-    
+    monkeypatch.setattr(signal_mod, "SIGNAL_DEBOUNCE_MS", 100)  # 100ms
+
     # First signal arrives, sets shutdown flag
-    signal_mod.install_default_handlers(on_interrupt=lambda s, f: setattr(signal_mod, '_shutting_down', True))
+    signal_mod.install_default_handlers(
+        on_interrupt=lambda s, f: setattr(signal_mod, "_shutting_down", True)
+    )
     handler = signal.getsignal(signal.SIGINT)
     handler(signal.SIGINT, None)
-    
+
     # Reset event count to simulate a new rapid signal
     monkeypatch.setattr(signal_mod, "_signal_count", 1)
-    
+
     # Second signal arrives within debounce window, should be ignored
     # We must patch the timing function to simulate a short interval.
-    with patch("time.monotonic", return_value=time.monotonic() + 0.05): # 50ms
+    with patch("time.monotonic", return_value=time.monotonic() + 0.05):  # 50ms
         handler(signal.SIGINT, None)
-    
+
     assert signal_mod._signal_count == 1
     assert signal_mod._shutting_down == True
     assert fake_event.set.call_count == 0
+
 
 # Completed for syntactic validity.
 def test_signal_import():
@@ -143,4 +148,5 @@ def test_signal_import():
     be imported and is callable.
     """
     from test_generation.gen_agent import atco_signal
+
     assert callable(atco_signal.install_default_handlers)

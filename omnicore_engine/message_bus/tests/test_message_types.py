@@ -4,11 +4,9 @@ import unittest
 import time
 import uuid
 import json
-from unittest.mock import patch, Mock
-from dataclasses import asdict, fields
+from dataclasses import asdict
 import sys
 from pathlib import Path
-from typing import Any, Dict
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,11 +20,8 @@ class TestMessage(unittest.TestCase):
 
     def test_basic_initialization(self):
         """Test basic Message initialization with required fields."""
-        msg = Message(
-            topic="test.topic",
-            payload={"data": "test"}
-        )
-        
+        msg = Message(topic="test.topic", payload={"data": "test"})
+
         self.assertEqual(msg.topic, "test.topic")
         self.assertEqual(msg.payload, {"data": "test"})
         self.assertEqual(msg.priority, 0)  # Default
@@ -39,7 +34,7 @@ class TestMessage(unittest.TestCase):
         """Test Message initialization with all fields specified."""
         test_time = time.time()
         test_uuid = str(uuid.uuid4())
-        
+
         msg = Message(
             topic="test.topic",
             payload={"data": "test"},
@@ -49,9 +44,9 @@ class TestMessage(unittest.TestCase):
             encrypted=True,
             idempotency_key="idem_123",
             context={"user_id": "user_456"},
-            processing_start=123456789
+            processing_start=123456789,
         )
-        
+
         self.assertEqual(msg.topic, "test.topic")
         self.assertEqual(msg.payload, {"data": "test"})
         self.assertEqual(msg.priority, 5)
@@ -67,14 +62,14 @@ class TestMessage(unittest.TestCase):
         before = time.time()
         msg = Message(topic="test", payload="data")
         after = time.time()
-        
+
         self.assertGreaterEqual(msg.timestamp, before)
         self.assertLessEqual(msg.timestamp, after)
 
     def test_default_trace_id(self):
         """Test that trace_id is auto-generated as UUID if not provided."""
         msg = Message(topic="test", payload="data")
-        
+
         # Should be a valid UUID string
         try:
             uuid.UUID(msg.trace_id)
@@ -84,7 +79,7 @@ class TestMessage(unittest.TestCase):
     def test_default_context(self):
         """Test that context defaults to empty dict."""
         msg = Message(topic="test", payload="data")
-        
+
         self.assertEqual(msg.context, {})
         self.assertIsInstance(msg.context, dict)
 
@@ -92,7 +87,7 @@ class TestMessage(unittest.TestCase):
         """Test that auto-generated trace_ids are unique."""
         messages = [Message(topic="test", payload=f"data_{i}") for i in range(100)]
         trace_ids = [msg.trace_id for msg in messages]
-        
+
         # All trace_ids should be unique
         self.assertEqual(len(trace_ids), len(set(trace_ids)))
 
@@ -106,9 +101,9 @@ class TestMessage(unittest.TestCase):
             None,
             [1, 2, 3],
             {"nested": {"data": "value"}},
-            {"mixed": [1, "two", {"three": 3}]}
+            {"mixed": [1, "two", {"three": 3}]},
         ]
-        
+
         for payload in test_cases:
             msg = Message(topic="test", payload=payload)
             self.assertEqual(msg.payload, payload)
@@ -116,30 +111,21 @@ class TestMessage(unittest.TestCase):
     def test_dataclass_methods(self):
         """Test dataclass methods like equality and representation."""
         msg1 = Message(
-            topic="test",
-            payload="data",
-            trace_id="fixed_id",
-            timestamp=100.0
+            topic="test", payload="data", trace_id="fixed_id", timestamp=100.0
         )
-        
+
         msg2 = Message(
-            topic="test",
-            payload="data",
-            trace_id="fixed_id",
-            timestamp=100.0
+            topic="test", payload="data", trace_id="fixed_id", timestamp=100.0
         )
-        
+
         msg3 = Message(
-            topic="different",
-            payload="data",
-            trace_id="fixed_id",
-            timestamp=100.0
+            topic="different", payload="data", trace_id="fixed_id", timestamp=100.0
         )
-        
+
         # Test equality
         self.assertEqual(msg1, msg2)
         self.assertNotEqual(msg1, msg3)
-        
+
         # Test representation
         repr_str = repr(msg1)
         self.assertIn("Message", repr_str)
@@ -152,11 +138,11 @@ class TestMessage(unittest.TestCase):
             payload={"data": "test"},
             priority=5,
             trace_id="trace_123",
-            idempotency_key="idem_456"
+            idempotency_key="idem_456",
         )
-        
+
         msg_dict = asdict(msg)
-        
+
         self.assertEqual(msg_dict["topic"], "test.topic")
         self.assertEqual(msg_dict["payload"], {"data": "test"})
         self.assertEqual(msg_dict["priority"], 5)
@@ -168,11 +154,11 @@ class TestMessage(unittest.TestCase):
     def test_mutable_context(self):
         """Test that context is mutable."""
         msg = Message(topic="test", payload="data")
-        
+
         # Should be able to modify context
         msg.context["key1"] = "value1"
         msg.context["key2"] = "value2"
-        
+
         self.assertEqual(msg.context, {"key1": "value1", "key2": "value2"})
 
     def test_field_defaults(self):
@@ -180,17 +166,17 @@ class TestMessage(unittest.TestCase):
         # Create multiple messages to ensure defaults are independent
         msg1 = Message(topic="test1", payload="data1")
         msg2 = Message(topic="test2", payload="data2")
-        
+
         # Modify context of first message
         msg1.context["key"] = "value"
-        
+
         # Second message context should not be affected
         self.assertEqual(msg2.context, {})
 
     def test_priority_values(self):
         """Test different priority values."""
         priorities = [-1, 0, 1, 5, 10, 100, 999]
-        
+
         for priority in priorities:
             msg = Message(topic="test", payload="data", priority=priority)
             self.assertEqual(msg.priority, priority)
@@ -200,7 +186,7 @@ class TestMessage(unittest.TestCase):
         msg_encrypted = Message(topic="test", payload="data", encrypted=True)
         msg_plain = Message(topic="test", payload="data", encrypted=False)
         msg_default = Message(topic="test", payload="data")
-        
+
         self.assertTrue(msg_encrypted.encrypted)
         self.assertFalse(msg_plain.encrypted)
         self.assertFalse(msg_default.encrypted)  # Default is False
@@ -211,11 +197,8 @@ class TestMessageSchema(unittest.TestCase):
 
     def test_basic_validation(self):
         """Test basic MessageSchema validation."""
-        schema = MessageSchema(
-            topic="test.topic",
-            payload={"data": "test"}
-        )
-        
+        schema = MessageSchema(topic="test.topic", payload={"data": "test"})
+
         self.assertEqual(schema.topic, "test.topic")
         self.assertEqual(schema.payload, {"data": "test"})
         self.assertEqual(schema.priority, 0)  # Default
@@ -231,9 +214,9 @@ class TestMessageSchema(unittest.TestCase):
             priority=5,
             trace_id="trace_123",
             idempotency_key="idem_456",
-            context={"user_id": "user_789"}
+            context={"user_id": "user_789"},
         )
-        
+
         self.assertEqual(schema.topic, "test.topic")
         self.assertEqual(schema.payload, {"data": "test"})
         self.assertEqual(schema.priority, 5)
@@ -246,16 +229,16 @@ class TestMessageSchema(unittest.TestCase):
         # Missing topic
         with self.assertRaises(ValidationError) as context:
             MessageSchema(payload={"data": "test"})
-        
+
         errors = context.exception.errors()
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0]["loc"], ("topic",))
         self.assertEqual(errors[0]["type"], "missing")
-        
+
         # Missing payload
         with self.assertRaises(ValidationError) as context:
             MessageSchema(topic="test.topic")
-        
+
         errors = context.exception.errors()
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0]["loc"], ("payload",))
@@ -265,17 +248,15 @@ class TestMessageSchema(unittest.TestCase):
         # Invalid priority type
         with self.assertRaises(ValidationError):
             MessageSchema(
-                topic="test",
-                payload={"data": "test"},
-                priority="high"  # Should be int
+                topic="test", payload={"data": "test"}, priority="high"  # Should be int
             )
-        
+
         # Invalid context type
         with self.assertRaises(ValidationError):
             MessageSchema(
                 topic="test",
                 payload={"data": "test"},
-                context="invalid"  # Should be dict
+                context="invalid",  # Should be dict
             )
 
     def test_json_serialization(self):
@@ -284,15 +265,15 @@ class TestMessageSchema(unittest.TestCase):
             topic="test.topic",
             payload={"data": "test", "number": 123},
             priority=5,
-            trace_id="trace_123"
+            trace_id="trace_123",
         )
-        
+
         # Convert to JSON
         json_str = schema.model_dump_json()
-        
+
         # Parse back
         parsed = json.loads(json_str)
-        
+
         self.assertEqual(parsed["topic"], "test.topic")
         self.assertEqual(parsed["payload"], {"data": "test", "number": 123})
         self.assertEqual(parsed["priority"], 5)
@@ -300,14 +281,10 @@ class TestMessageSchema(unittest.TestCase):
 
     def test_dict_conversion(self):
         """Test converting MessageSchema to dict."""
-        schema = MessageSchema(
-            topic="test.topic",
-            payload={"data": "test"},
-            priority=5
-        )
-        
+        schema = MessageSchema(topic="test.topic", payload={"data": "test"}, priority=5)
+
         schema_dict = schema.model_dump()
-        
+
         self.assertEqual(schema_dict["topic"], "test.topic")
         self.assertEqual(schema_dict["payload"], {"data": "test"})
         self.assertEqual(schema_dict["priority"], 5)
@@ -322,11 +299,11 @@ class TestMessageSchema(unittest.TestCase):
             "payload": {"data": "test"},
             "priority": 5,
             "trace_id": "trace_123",
-            "context": {"key": "value"}
+            "context": {"key": "value"},
         }
-        
+
         schema = MessageSchema(**data)
-        
+
         self.assertEqual(schema.topic, "test.topic")
         self.assertEqual(schema.payload, {"data": "test"})
         self.assertEqual(schema.priority, 5)
@@ -338,11 +315,11 @@ class TestMessageSchema(unittest.TestCase):
         # Empty string topic (should be allowed)
         schema = MessageSchema(topic="", payload={})
         self.assertEqual(schema.topic, "")
-        
+
         # Empty payload dict (should be allowed)
         schema = MessageSchema(topic="test", payload={})
         self.assertEqual(schema.payload, {})
-        
+
         # Negative priority (should be allowed)
         schema = MessageSchema(topic="test", payload={}, priority=-10)
         self.assertEqual(schema.priority, -10)
@@ -350,12 +327,9 @@ class TestMessageSchema(unittest.TestCase):
     def test_optional_fields_none(self):
         """Test that optional fields can be explicitly set to None."""
         schema = MessageSchema(
-            topic="test",
-            payload={},
-            trace_id=None,
-            idempotency_key=None
+            topic="test", payload={}, trace_id=None, idempotency_key=None
         )
-        
+
         self.assertIsNone(schema.trace_id)
         self.assertIsNone(schema.idempotency_key)
 
@@ -364,10 +338,10 @@ class TestMessageSchema(unittest.TestCase):
         # Create two schemas without specifying context
         schema1 = MessageSchema(topic="test1", payload={})
         schema2 = MessageSchema(topic="test2", payload={})
-        
+
         # Modify context of first schema
         schema1.context["key"] = "value"
-        
+
         # Second schema context should not be affected
         self.assertEqual(schema2.context, {})
 
@@ -383,18 +357,18 @@ class TestMessageSchemaCompatibility(unittest.TestCase):
             priority=5,
             trace_id="trace_123",
             idempotency_key="idem_456",
-            context={"user": "test_user"}
+            context={"user": "test_user"},
         )
-        
+
         # Convert to dict and create schema
         msg_dict = asdict(msg)
         # Remove fields not in schema
         msg_dict.pop("timestamp", None)
         msg_dict.pop("encrypted", None)
         msg_dict.pop("processing_start", None)
-        
+
         schema = MessageSchema(**msg_dict)
-        
+
         self.assertEqual(schema.topic, msg.topic)
         self.assertEqual(schema.payload, msg.payload)
         self.assertEqual(schema.priority, msg.priority)
@@ -410,9 +384,9 @@ class TestMessageSchemaCompatibility(unittest.TestCase):
             priority=5,
             trace_id="trace_123",
             idempotency_key="idem_456",
-            context={"user": "test_user"}
+            context={"user": "test_user"},
         )
-        
+
         # Convert to Message
         msg = Message(
             topic=schema.topic,
@@ -420,9 +394,9 @@ class TestMessageSchemaCompatibility(unittest.TestCase):
             priority=schema.priority,
             trace_id=schema.trace_id or str(uuid.uuid4()),
             idempotency_key=schema.idempotency_key,
-            context=schema.context
+            context=schema.context,
         )
-        
+
         self.assertEqual(msg.topic, schema.topic)
         self.assertEqual(msg.payload, schema.payload)
         self.assertEqual(msg.priority, schema.priority)
@@ -437,25 +411,25 @@ class TestMessageUsagePatterns(unittest.TestCase):
     def test_priority_queue_compatibility(self):
         """Test that Messages work with priority queues."""
         import heapq
-        
+
         # Create messages with different priorities
         msg1 = Message(topic="test", payload="1", priority=5)
         msg2 = Message(topic="test", payload="2", priority=1)
         msg3 = Message(topic="test", payload="3", priority=10)
-        
+
         # Use in priority queue (lower number = higher priority)
         queue = []
         heapq.heappush(queue, (msg1.priority, msg1.trace_id, msg1))
         heapq.heappush(queue, (msg2.priority, msg2.trace_id, msg2))
         heapq.heappush(queue, (msg3.priority, msg3.trace_id, msg3))
-        
+
         # Pop in priority order
         _, _, first = heapq.heappop(queue)
         self.assertEqual(first.payload, "2")  # Priority 1
-        
+
         _, _, second = heapq.heappop(queue)
         self.assertEqual(second.payload, "1")  # Priority 5
-        
+
         _, _, third = heapq.heappop(queue)
         self.assertEqual(third.payload, "3")  # Priority 10
 
@@ -467,22 +441,22 @@ class TestMessageUsagePatterns(unittest.TestCase):
             priority=5,
             trace_id="trace_123",
             idempotency_key="idem_456",
-            context={"user_id": "user_789"}
+            context={"user_id": "user_789"},
         )
-        
+
         # Convert to JSON-serializable dict
         msg_dict = asdict(original)
         json_str = json.dumps(msg_dict)
-        
+
         # Parse back
         parsed_dict = json.loads(json_str)
         reconstructed = Message(**parsed_dict)
-        
+
         self.assertEqual(reconstructed.topic, original.topic)
         self.assertEqual(reconstructed.payload, original.payload)
         self.assertEqual(reconstructed.priority, original.priority)
         self.assertEqual(reconstructed.trace_id, original.trace_id)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(verbosity=2)

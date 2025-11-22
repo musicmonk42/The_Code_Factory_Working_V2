@@ -10,7 +10,7 @@ from .prompt_strategies import (
     PromptStrategy,
     DefaultPromptStrategy,
     ConcisePromptStrategy,
-    PromptStrategyFactory
+    PromptStrategyFactory,
 )
 from .utils import (
     _sanitize_context,
@@ -29,7 +29,7 @@ from .adapters import (
     OpenAIGPTAdapter,
     GeminiAPIAdapter,
     AnthropicAdapter,
-    LLMAdapterFactory
+    LLMAdapterFactory,
 )
 
 # Define the package version
@@ -37,15 +37,18 @@ __version__ = "1.0.0"
 
 # List of public exports for star imports (if used)
 
+
 # ExplainableReasoner class
 class ExplainableReasoner:
     """Main reasoner class for explainable AI reasoning"""
+
     def __init__(self, config=None):
         self.config = config or {}
-    
+
     async def reason(self, query, context=None):
         """Perform reasoning on a query"""
         return {"reasoning": "Not implemented", "query": query}
+
 
 __all__ = [
     "ReasonerConfig",

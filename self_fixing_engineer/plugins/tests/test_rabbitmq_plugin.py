@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import logging
@@ -8,11 +7,10 @@ import pytest
 import hmac
 import hashlib
 from unittest.mock import MagicMock, patch, AsyncMock
-from typing import Dict, Any, List, Tuple
-from aiormq.exceptions import AMQPConnectionError, ChannelInvalidStateError
+from typing import Dict
+from aiormq.exceptions import AMQPConnectionError
 from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
-import aiormq
 import importlib
 
 # Assuming these are available in a file named rabbitmq_plugin.py
@@ -22,28 +20,36 @@ import importlib
 PRODUCTION_MODE = False
 logger = logging.getLogger(__name__)
 
+
 class AnalyzerCriticalError(RuntimeError):
     pass
+
 
 class NonCriticalError(Exception):
     pass
 
+
 def alert_operator(message, level="CRITICAL"):
     pass
 
+
 def scrub_sensitive_data(data):
     return data
+
 
 class DummyAuditLogger:
     def log_event(self, *args, **kwargs):
         pass
 
+
 audit_logger = DummyAuditLogger()
 SECRETS_MANAGER = MagicMock()
+
 
 class RabbitMQSettings:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
+
 
 class RabbitMQMetrics:
     def __init__(self, registry=None):
@@ -57,6 +63,7 @@ class RabbitMQMetrics:
         self.CIRCUIT_BREAKER_STATUS = MagicMock()
         self.QUEUE_SIZE = MagicMock()
 
+
 class AuditEvent:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -67,15 +74,18 @@ class AuditEvent:
     def _sign_event(self):
         return "mock_signature"
 
+
 class CircuitBreaker:
     def __init__(self, threshold, reset_seconds, metrics):
         self._is_open = False
         self._failure_count = 0
         self._last_failure_time = 0.0
         self._metrics = metrics
-        self._metrics.CIRCUIT_BREAKER_STATUS.labels = MagicMock(return_value=MagicMock())
+        self._metrics.CIRCUIT_BREAKER_STATUS.labels = MagicMock(
+            return_value=MagicMock()
+        )
         self._metrics.CIRCUIT_BREAKER_STATUS.labels().set(0)
-    
+
     def check(self):
         if self._is_open:
             if time.monotonic() - self._last_failure_time > self._reset_seconds:
@@ -84,7 +94,7 @@ class CircuitBreaker:
                 self._metrics.CIRCUIT_BREAKER_STATUS.labels().set(0)
             else:
                 raise ConnectionError("Circuit breaker is open")
-    
+
     def record_failure(self):
         self._failure_count += 1
         if self._failure_count >= self._threshold and not self._is_open:
@@ -95,6 +105,7 @@ class CircuitBreaker:
     def record_success(self):
         self._failure_count = 0
 
+
 class RabbitMQGateway:
     def __init__(self, settings, metrics):
         self.settings = settings
@@ -103,8 +114,12 @@ class RabbitMQGateway:
         self._connection = None
         self._worker_task = None
         self._shutdown_event = asyncio.Event()
-        self._circuit_breaker = CircuitBreaker(settings.circuit_breaker_threshold, settings.circuit_breaker_reset_sec, metrics)
-    
+        self._circuit_breaker = CircuitBreaker(
+            settings.circuit_breaker_threshold,
+            settings.circuit_breaker_reset_sec,
+            metrics,
+        )
+
     async def startup(self):
         self._connection = MagicMock()
         self._connection.channel = AsyncMock(return_value=MagicMock())
@@ -116,10 +131,19 @@ class RabbitMQGateway:
         await self._event_queue.put(None)
         await self._worker_task
         await self._connection.close()
-    
+
     def publish(self, event_name, service_name, details, routing_key):
         if not self._event_queue.full():
-            self._event_queue.put_nowait((AuditEvent(event_name=event_name, service_name=service_name, details=details), routing_key))
+            self._event_queue.put_nowait(
+                (
+                    AuditEvent(
+                        event_name=event_name,
+                        service_name=service_name,
+                        details=details,
+                    ),
+                    routing_key,
+                )
+            )
         else:
             alert_operator("RabbitMQ event queue is FULL", level="CRITICAL")
 
@@ -141,11 +165,14 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
     logger.handlers = []
+
 
 @pytest.fixture
 def mock_audit_logger():
@@ -154,11 +181,13 @@ def mock_audit_logger():
     with patch("rabbitmq_plugin.audit_logger", mock):
         yield mock
 
+
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function."""
     with patch("rabbitmq_plugin.alert_operator") as mock:
         yield mock
+
 
 @pytest.fixture
 def mock_scrub_sensitive_data():
@@ -166,6 +195,7 @@ def mock_scrub_sensitive_data():
     with patch("rabbitmq_plugin.scrub_sensitive_data") as mock:
         mock.side_effect = lambda x: x
         yield mock
+
 
 @pytest.fixture
 def mock_secrets_manager():
@@ -175,6 +205,7 @@ def mock_secrets_manager():
         mock.get_secret.return_value = "amqps://user:pass@host:port/vhost"
         yield mock
 
+
 @pytest.fixture
 def mock_aiormq(monkeypatch):
     """Mock aiormq components."""
@@ -182,9 +213,10 @@ def mock_aiormq(monkeypatch):
     mock_connection.channel = AsyncMock(return_value=MagicMock())
     mock_connection.close = AsyncMock()
     mock_connect = AsyncMock(return_value=mock_connection)
-    
+
     with patch("aiormq.connect", mock_connect) as connect_patch:
         yield mock_connect, mock_connection
+
 
 @pytest.fixture
 def mock_prometheus_registry():
@@ -193,13 +225,17 @@ def mock_prometheus_registry():
     with patch("rabbitmq_plugin.CollectorRegistry", return_value=registry):
         yield registry
 
+
 @pytest.fixture
 def set_env(monkeypatch):
     """Fixture to set environment variables for tests."""
+
     def _set_env(vars: Dict[str, str]):
         for key, value in vars.items():
             monkeypatch.setenv(key, value)
+
     return _set_env
+
 
 @pytest.fixture
 def sample_settings_dict():
@@ -217,13 +253,15 @@ def sample_settings_dict():
         "circuit_breaker_reset_sec": 30,
         "allowed_exchange_names": ["test_exchange"],
         "allowed_routing_keys": ["test.*"],
-        "dry_run": False
+        "dry_run": False,
     }
+
 
 @pytest.fixture
 def sample_metrics(mock_prometheus_registry):
     """Sample RabbitMQMetrics instance."""
     return RabbitMQMetrics(mock_prometheus_registry)
+
 
 # --- Settings Validation Tests ---
 def test_rabbitmq_settings_success(sample_settings_dict, mock_secrets_manager):
@@ -232,26 +270,38 @@ def test_rabbitmq_settings_success(sample_settings_dict, mock_secrets_manager):
     assert settings.exchange_name == "test_exchange"
     assert settings.url == "amqps://user:pass@host:port/vhost"
 
-def test_rabbitmq_settings_insecure_url_prod(set_env, sample_settings_dict, mock_secrets_manager):
+
+def test_rabbitmq_settings_insecure_url_prod(
+    set_env, sample_settings_dict, mock_secrets_manager
+):
     """Test insecure URL fails in production."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.return_value = "amqp://guest:guest@localhost/"
     with pytest.raises(ValidationError, match="Non-TLS URL"):
         RabbitMQSettings(**sample_settings_dict)
 
-def test_rabbitmq_settings_default_credentials_prod(set_env, sample_settings_dict, mock_secrets_manager):
+
+def test_rabbitmq_settings_default_credentials_prod(
+    set_env, sample_settings_dict, mock_secrets_manager
+):
     """Test default credentials fail in production."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.return_value = "amqps://guest:guest@host:port/vhost"
     with pytest.raises(ValidationError, match="Default 'guest:guest' credentials"):
         RabbitMQSettings(**sample_settings_dict)
 
-def test_rabbitmq_settings_not_in_allowlist_prod(set_env, sample_settings_dict, mock_secrets_manager):
+
+def test_rabbitmq_settings_not_in_allowlist_prod(
+    set_env, sample_settings_dict, mock_secrets_manager
+):
     """Test URL not in allowlist fails in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["allowed_exchange_names"] = ["allowed_exchange"]
-    with pytest.raises(ValidationError, match="not in the 'allowed_exchange_names' list"):
+    with pytest.raises(
+        ValidationError, match="not in the 'allowed_exchange_names' list"
+    ):
         RabbitMQSettings(**sample_settings_dict)
+
 
 def test_rabbitmq_settings_wildcard_exchange_prod(set_env, sample_settings_dict):
     """Test wildcard exchange name fails in production."""
@@ -260,11 +310,13 @@ def test_rabbitmq_settings_wildcard_exchange_prod(set_env, sample_settings_dict)
     with pytest.raises(ValidationError, match="Wildcard characters are not allowed"):
         RabbitMQSettings(**sample_settings_dict)
 
+
 def test_rabbitmq_settings_invalid_routing_keys_regex(sample_settings_dict):
     """Test invalid routing key regex fails."""
     sample_settings_dict["allowed_routing_keys"] = ["invalid_regex["]
     with pytest.raises(ValidationError, match="Invalid regex pattern"):
         RabbitMQSettings(**sample_settings_dict)
+
 
 def test_rabbitmq_settings_dry_run_prod(set_env, sample_settings_dict):
     """Test dry_run=True fails in production."""
@@ -272,6 +324,7 @@ def test_rabbitmq_settings_dry_run_prod(set_env, sample_settings_dict):
     sample_settings_dict["dry_run"] = True
     with pytest.raises(ValidationError, match="'dry_run' must be False"):
         RabbitMQSettings(**sample_settings_dict)
+
 
 # --- Metrics Tests ---
 def test_rabbitmq_metrics_init(sample_metrics):
@@ -285,6 +338,7 @@ def test_rabbitmq_metrics_init(sample_metrics):
     assert metrics.CIRCUIT_BREAKER_STATUS is not None
     assert metrics.QUEUE_SIZE is not None
 
+
 def test_metrics_init_failure(mock_prometheus_registry, mock_alert_operator):
     """Test metrics initialization failure aborts."""
     with patch("prometheus_client.Counter", side_effect=Exception("Metrics error")):
@@ -294,35 +348,58 @@ def test_metrics_init_failure(mock_prometheus_registry, mock_alert_operator):
     assert "Prometheus metrics initialization failed" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 # --- AuditEvent Tests ---
 def test_audit_event_success(mock_secrets_manager):
     """Test successful AuditEvent creation."""
-    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"key": "value"}
+    )
     assert event.event_name == "test"
     assert event.service_name == "test-service"
 
+
 def test_audit_event_pii_scrubbing(mock_scrub_sensitive_data):
     """Test PII scrubbing in details."""
-    mock_scrub_sensitive_data.side_effect = lambda x: {"scrubbed": True} if x == {"sensitive": "data"} else x
-    event = AuditEvent(event_name="test", service_name="test-service", details={"sensitive": "data"})
+    mock_scrub_sensitive_data.side_effect = lambda x: (
+        {"scrubbed": True} if x == {"sensitive": "data"} else x
+    )
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"sensitive": "data"}
+    )
     assert event.details == {"scrubbed": True}
 
-def test_audit_event_pii_detection_aborts(mock_scrub_sensitive_data, mock_alert_operator):
+
+def test_audit_event_pii_detection_aborts(
+    mock_scrub_sensitive_data, mock_alert_operator
+):
     """Test PII detection aborts."""
     mock_scrub_sensitive_data.side_effect = lambda x: {"changed": True}
     with pytest.raises(RuntimeError):
-        AuditEvent(event_name="test", service_name="test-service", details={"sensitive": "data"})
+        AuditEvent(
+            event_name="test",
+            service_name="test-service",
+            details={"sensitive": "data"},
+        )
     alert_args, _ = mock_alert_operator.call_args
     assert "Sensitive data detected in audit event details" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 def test_audit_event_sign(mock_secrets_manager):
     """Test event signing."""
     mock_secrets_manager.get_secret.return_value = "hmac_key"
-    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"key": "value"}
+    )
     sig = event._sign_event()
-    expected = hmac.new(b"hmac_key", json.dumps(event.model_dump(exclude={"signature"}), sort_keys=True).encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(
+        b"hmac_key",
+        json.dumps(event.model_dump(exclude={"signature"}), sort_keys=True).encode(),
+        hashlib.sha256,
+    ).hexdigest()
     assert sig == expected
+
 
 def test_audit_event_sign_missing_key_prod(set_env, mock_secrets_manager):
     """Test missing HMAC key in production aborts."""
@@ -332,6 +409,7 @@ def test_audit_event_sign_missing_key_prod(set_env, mock_secrets_manager):
     with pytest.raises(RuntimeError):
         event._sign_event()
 
+
 # --- CircuitBreaker Tests ---
 def test_circuit_breaker_initial_state(sample_metrics):
     """Test circuit breaker initial state."""
@@ -340,6 +418,7 @@ def test_circuit_breaker_initial_state(sample_metrics):
     assert cb._failure_count == 0
     assert cb._last_failure_time == 0.0
     sample_metrics.CIRCUIT_BREAKER_STATUS.labels().set.assert_called_with(0)
+
 
 def test_circuit_breaker_trip(sample_metrics, mock_alert_operator):
     """Test circuit breaker tripping."""
@@ -352,6 +431,7 @@ def test_circuit_breaker_trip(sample_metrics, mock_alert_operator):
     assert alert_args[1] == "CRITICAL"
     sample_metrics.CIRCUIT_BREAKER_STATUS.labels().set.assert_called_with(1)
 
+
 def test_circuit_breaker_reset(sample_metrics, mock_alert_operator):
     """Test circuit breaker reset after timeout."""
     cb = CircuitBreaker(threshold=3, reset_seconds=0.1, metrics=sample_metrics)
@@ -363,9 +443,12 @@ def test_circuit_breaker_reset(sample_metrics, mock_alert_operator):
     assert "RabbitMQ Circuit Breaker RESET" in alert_args[0]
     assert alert_args[1] == "INFO"
 
+
 # --- RabbitMQGateway Tests ---
 @pytest.mark.asyncio
-async def test_gateway_init_success(sample_settings_dict, sample_metrics, mock_secrets_manager):
+async def test_gateway_init_success(
+    sample_settings_dict, sample_metrics, mock_secrets_manager
+):
     """Test successful gateway initialization."""
     settings = RabbitMQSettings(**sample_settings_dict)
     gateway = RabbitMQGateway(settings, sample_metrics)
@@ -373,8 +456,11 @@ async def test_gateway_init_success(sample_settings_dict, sample_metrics, mock_s
     assert gateway._event_queue.maxsize == 10000
     assert gateway._connection is None
 
+
 @pytest.mark.asyncio
-async def test_gateway_init_insecure_url_prod(set_env, sample_settings_dict, mock_secrets_manager, mock_alert_operator):
+async def test_gateway_init_insecure_url_prod(
+    set_env, sample_settings_dict, mock_secrets_manager, mock_alert_operator
+):
     """Test insecure URL aborts in production."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.return_value = "amqp://guest:guest@localhost/"
@@ -384,8 +470,11 @@ async def test_gateway_init_insecure_url_prod(set_env, sample_settings_dict, moc
     assert "RabbitMQ URL insecure/default in PRODUCTION_MODE" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 @pytest.mark.asyncio
-async def test_gateway_startup_success(mock_aiormq, sample_settings_dict, sample_metrics):
+async def test_gateway_startup_success(
+    mock_aiormq, sample_settings_dict, sample_metrics
+):
     """Test successful gateway startup."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
@@ -396,8 +485,11 @@ async def test_gateway_startup_success(mock_aiormq, sample_settings_dict, sample
     assert gateway._worker_task is not None
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_gateway_startup_connection_failure(mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator):
+async def test_gateway_startup_connection_failure(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator
+):
     """Test connection failure during startup aborts."""
     mock_connect, _ = mock_aiormq
     mock_connect.side_effect = AMQPConnectionError("Connection failed")
@@ -409,8 +501,11 @@ async def test_gateway_startup_connection_failure(mock_aiormq, sample_settings_d
     assert "Failed to connect to RabbitMQ after retries" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 @pytest.mark.asyncio
-async def test_gateway_shutdown_success(mock_aiormq, sample_settings_dict, sample_metrics):
+async def test_gateway_shutdown_success(
+    mock_aiormq, sample_settings_dict, sample_metrics
+):
     """Test successful gateway shutdown."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
@@ -420,8 +515,11 @@ async def test_gateway_shutdown_success(mock_aiormq, sample_settings_dict, sampl
     mock_connection.close.assert_called_once()
     assert gateway._worker_task.done()
 
+
 @pytest.mark.asyncio
-async def test_gateway_shutdown_timeout(mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator):
+async def test_gateway_shutdown_timeout(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator
+):
     """Test shutdown timeout escalates."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
@@ -436,8 +534,11 @@ async def test_gateway_shutdown_timeout(mock_aiormq, sample_settings_dict, sampl
     assert "RabbitMQ Gateway worker NOT finished" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 @pytest.mark.asyncio
-async def test_publish_success(mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager):
+async def test_publish_success(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager
+):
     """Test successful publish."""
     mock_connect, mock_connection = mock_aiormq
     settings = RabbitMQSettings(**sample_settings_dict)
@@ -449,8 +550,15 @@ async def test_publish_success(mock_aiormq, sample_settings_dict, sample_metrics
     assert gateway._event_queue.qsize() == 1
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_publish_queue_full(mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator, mock_secrets_manager):
+async def test_publish_queue_full(
+    mock_aiormq,
+    sample_settings_dict,
+    sample_metrics,
+    mock_alert_operator,
+    mock_secrets_manager,
+):
     """Test queue full drops event."""
     sample_settings_dict["max_queue_size"] = 1
     mock_connect, mock_connection = mock_aiormq
@@ -466,8 +574,11 @@ async def test_publish_queue_full(mock_aiormq, sample_settings_dict, sample_metr
     assert alert_args[1] == "CRITICAL"
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_publish_invalid_routing_key_prod(set_env, sample_settings_dict, mock_alert_operator):
+async def test_publish_invalid_routing_key_prod(
+    set_env, sample_settings_dict, mock_alert_operator
+):
     """Test invalid routing key aborts in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["allowed_routing_keys"] = ["allowed.*"]
@@ -478,8 +589,11 @@ async def test_publish_invalid_routing_key_prod(set_env, sample_settings_dict, m
     assert "Routing key 'forbidden.routing' forbidden" in alert_args[0]
     assert alert_args[1] == "CRITICAL"
 
+
 @pytest.mark.asyncio
-async def test_publish_batch_success(mock_aiormq, sample_settings_dict, sample_metrics, mock_tracer, mock_secrets_manager):
+async def test_publish_batch_success(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_tracer, mock_secrets_manager
+):
     """Test successful batch publish."""
     mock_connect, mock_connection = mock_aiormq
     settings = RabbitMQSettings(**sample_settings_dict)
@@ -487,23 +601,42 @@ async def test_publish_batch_success(mock_aiormq, sample_settings_dict, sample_m
     gateway = RabbitMQGateway(settings, sample_metrics)
     gateway._connect = mock_connect
     await gateway.startup()
-    batch = [(AuditEvent(event_name="test", service_name="test-service", details={}), "test.routing")]
+    batch = [
+        (
+            AuditEvent(event_name="test", service_name="test-service", details={}),
+            "test.routing",
+        )
+    ]
     gateway.channel = mock_connection.channel.return_value
     gateway.channel.basic_publish = AsyncMock()
     await gateway._publish_batch(batch)
     gateway.channel.basic_publish.assert_called_once()
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_publish_batch_connection_error(mock_aiormq, sample_settings_dict, sample_metrics, mock_alert_operator, mock_secrets_manager):
+async def test_publish_batch_connection_error(
+    mock_aiormq,
+    sample_settings_dict,
+    sample_metrics,
+    mock_alert_operator,
+    mock_secrets_manager,
+):
     """Test batch publish connection error aborts."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
     gateway._connect = mock_connect
     await gateway.startup()
-    batch = [(AuditEvent(event_name="test", service_name="test-service", details={}), "test.routing")]
+    batch = [
+        (
+            AuditEvent(event_name="test", service_name="test-service", details={}),
+            "test.routing",
+        )
+    ]
     gateway.channel = mock_connection.channel.return_value
-    gateway.channel.basic_publish = AsyncMock(side_effect=AMQPConnectionError("Connection error"))
+    gateway.channel.basic_publish = AsyncMock(
+        side_effect=AMQPConnectionError("Connection error")
+    )
     with pytest.raises(SystemExit):
         await gateway._publish_batch(batch)
     alert_args, _ = mock_alert_operator.call_args
@@ -511,8 +644,11 @@ async def test_publish_batch_connection_error(mock_aiormq, sample_settings_dict,
     assert alert_args[1] == "CRITICAL"
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_worker_success(mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager):
+async def test_worker_success(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager
+):
     """Test worker processes events successfully."""
     mock_connect, mock_connection = mock_aiormq
     settings = RabbitMQSettings(**sample_settings_dict)
@@ -530,8 +666,11 @@ async def test_worker_success(mock_aiormq, sample_settings_dict, sample_metrics,
     gateway.channel.basic_publish.assert_called_once()
     await gateway.shutdown()
 
+
 @pytest.mark.asyncio
-async def test_worker_dry_run(mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager):
+async def test_worker_dry_run(
+    mock_aiormq, sample_settings_dict, sample_metrics, mock_secrets_manager
+):
     """Test worker in dry run mode."""
     sample_settings_dict["dry_run"] = True
     mock_connect, mock_connection = mock_aiormq
@@ -549,17 +688,23 @@ async def test_worker_dry_run(mock_aiormq, sample_settings_dict, sample_metrics,
     gateway.channel.basic_publish.assert_not_called()
     await gateway.shutdown()
 
+
 # --- Main Block Tests ---
 def test_main_block_prod(set_env, mock_alert_operator):
     """Test main block aborts in production."""
     set_env({"PRODUCTION_MODE": "true"})
     with pytest.raises(SystemExit):
         import rabbitmq_plugin
+
         rabbitmq_plugin.__name__ = "__main__"
         importlib.reload(rabbitmq_plugin)
     alert_args, _ = mock_alert_operator.call_args
-    assert "CRITICAL: RabbitMQ plugin example code executed in PRODUCTION_MODE. Aborting." in alert_args[0]
+    assert (
+        "CRITICAL: RabbitMQ plugin example code executed in PRODUCTION_MODE. Aborting."
+        in alert_args[0]
+    )
     assert alert_args[1] == "CRITICAL"
+
 
 # --- Run Tests ---
 if __name__ == "__main__":

@@ -3,11 +3,6 @@
 import threading
 import time
 import logging
-from typing import Dict
-from pydantic import BaseModel
-from pydantic_settings import BaseSettings
-
-from omnicore_engine.metrics import _get_or_create_metric
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +37,10 @@ class CircuitBreaker:
             self.last_failure_time = time.time()
             if self.failure_count >= self.failure_threshold and self.state == "closed":
                 self.state = "open"
-                logger.warning("Circuit breaker opened due to repeated failures", threshold=self.failure_threshold)
+                logger.warning(
+                    "Circuit breaker opened due to repeated failures",
+                    threshold=self.failure_threshold,
+                )
 
     def record_success(self):
         with self._lock:
@@ -56,10 +54,15 @@ class CircuitBreaker:
             if self.state == "closed":
                 return True
 
-            if self.state == "open" and self.last_failure_time and \
-               (time.time() - self.last_failure_time) > self.recovery_timeout:
+            if (
+                self.state == "open"
+                and self.last_failure_time
+                and (time.time() - self.last_failure_time) > self.recovery_timeout
+            ):
                 self.state = "half-open"
-                logger.info("Circuit breaker moved to half-open state for trial attempt.")
+                logger.info(
+                    "Circuit breaker moved to half-open state for trial attempt."
+                )
                 return True
 
             return False

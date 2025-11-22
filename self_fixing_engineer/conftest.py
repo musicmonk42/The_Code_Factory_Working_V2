@@ -20,8 +20,9 @@ os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
 # conftest.py (root) — minimal guardrail so collection never dies on dup metrics
 
 import os
+
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
-os.environ.setdefault("OTEL_SDK_DISABLED", "true")         # keep OTEL quiet
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # keep OTEL quiet
 
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
@@ -60,11 +61,14 @@ try:
                 return collector
 
     # Patch both the class and the default registry instance
-    CollectorRegistry.register = _safe_register            # class-level
-    REGISTRY.register = _safe_register.__get__(REGISTRY, REGISTRY.__class__)  # instance-level
+    CollectorRegistry.register = _safe_register  # class-level
+    REGISTRY.register = _safe_register.__get__(
+        REGISTRY, REGISTRY.__class__
+    )  # instance-level
 except Exception:
     pass
 # ---- end hardening
+
 
 # ---- OpenTelemetry Test Setup Fixture ---
 @pytest.fixture(scope="session", autouse=True)
@@ -76,11 +80,11 @@ def setup_otel():
     """
     provider = TracerProvider()
     # Using ConsoleSpanExporter as a robust fallback.
-    exporter = ConsoleSpanExporter() 
+    exporter = ConsoleSpanExporter()
     processor = SimpleSpanProcessor(exporter)
     provider.add_span_processor(processor)
-    
+
     # Sets the global tracer provider
     trace.set_tracer_provider(provider)
-    
+
     yield

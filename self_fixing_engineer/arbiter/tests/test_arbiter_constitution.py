@@ -15,14 +15,13 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 
 # -----------------------
 # Hardened import shim
 # -----------------------
 def _import_constitution():
     import importlib
+
     candidates = ("arbiter.arbiter_constitution", "arbiter_constitution")
     for name in candidates:
         try:
@@ -45,17 +44,23 @@ def _import_constitution():
             pass
 
     # Last resort: direct file load
-    for f in (repo_root / "arbiter" / "arbiter_constitution.py",
-              repo_root / "arbiter_constitution.py"):
+    for f in (
+        repo_root / "arbiter" / "arbiter_constitution.py",
+        repo_root / "arbiter_constitution.py",
+    ):
         if f.exists():
             import importlib.util
-            spec = importlib.util.spec_from_file_location("arbiter_constitution_fallback", str(f))
+
+            spec = importlib.util.spec_from_file_location(
+                "arbiter_constitution_fallback", str(f)
+            )
             if spec and spec.loader:
                 mod = importlib.util.module_from_spec(spec)
                 sys.modules[spec.name] = mod
                 spec.loader.exec_module(mod)  # type: ignore[arg-type]
                 return mod
     raise ImportError("Cannot import arbiter_constitution")
+
 
 mod = _import_constitution()
 ArbiterConstitution = getattr(mod, "ArbiterConstitution")
@@ -67,12 +72,19 @@ logger = getattr(mod, "logger")
 # Tests
 # -----------------------
 
+
 def test_init_and_parse_counts():
     cons = ArbiterConstitution()
     assert cons.constitution_text == ARB_CONSTITUTION
 
     # Basic structure keys present
-    assert set(cons.rules.keys()) == {"purpose", "powers", "principles", "evolution", "aim"}
+    assert set(cons.rules.keys()) == {
+        "purpose",
+        "powers",
+        "principles",
+        "evolution",
+        "aim",
+    }
 
     # Expected bullet counts (from the current constitution text)
     assert len(cons.rules["purpose"]) == 2

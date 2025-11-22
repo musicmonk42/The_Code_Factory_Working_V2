@@ -51,8 +51,9 @@ import unittest.mock as mock
 mock_session_state = mock.MagicMock()
 mock_session_state.get.return_value = "test_user"
 
-with mock.patch.dict(sys.modules, {'streamlit': mock.MagicMock()}):
-    sys.modules['streamlit'].session_state = mock_session_state
+with mock.patch.dict(sys.modules, {"streamlit": mock.MagicMock()}):
+    sys.modules["streamlit"].session_state = mock_session_state
+
 
 @pytest.fixture(autouse=True)
 def setup_test_environment():
@@ -62,19 +63,25 @@ def setup_test_environment():
         sys.path.insert(0, str(intent_capture_dir))
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-    
+
     yield
-    
+
     # Cleanup
     import gc
+
     gc.collect()
+
 
 @pytest.fixture(autouse=True)
 def mock_streamlit_for_tests():
     """Mock Streamlit components that cause issues in tests."""
-    with mock.patch('streamlit.session_state', mock_session_state):
-        with mock.patch('streamlit.runtime.scriptrunner_utils.script_run_context.get_script_run_ctx', return_value=None):
+    with mock.patch("streamlit.session_state", mock_session_state):
+        with mock.patch(
+            "streamlit.runtime.scriptrunner_utils.script_run_context.get_script_run_ctx",
+            return_value=None,
+        ):
             yield
+
 
 @pytest.fixture(autouse=True)
 def cleanup_logging():
@@ -88,8 +95,11 @@ def cleanup_logging():
             pass
         logging.root.removeHandler(handler)
 
+
 # Prevent module-level imports from failing
 import atexit
+
+
 def cleanup_at_exit():
     """Cleanup function to prevent errors at exit."""
     try:
@@ -97,5 +107,6 @@ def cleanup_at_exit():
         logging.shutdown()
     except:
         pass
+
 
 atexit.register(cleanup_at_exit)

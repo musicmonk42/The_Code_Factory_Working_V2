@@ -10,9 +10,7 @@ import uuid
 import sys
 import subprocess
 import shutil
-import threading
 import platform
-import linecache
 import shlex
 from typing import Dict, Any, Optional, Tuple, Callable, List, Union
 
@@ -27,7 +25,12 @@ PLUGIN_MANIFEST = {
     "health_check": "plugin_health",
     "api_version": "v1",
     "author": "Self-Fixing Engineer Team",
-    "capabilities": ["runtime_tracing", "dynamic_code_analysis", "error_trace_analysis", "behavioral_healing_insights"],
+    "capabilities": [
+        "runtime_tracing",
+        "dynamic_code_analysis",
+        "error_trace_analysis",
+        "behavioral_healing_insights",
+    ],
     "permissions": ["process_execution", "filesystem_read"],
     "dependencies": [],
     "min_core_version": "0.0.0",
@@ -36,7 +39,7 @@ PLUGIN_MANIFEST = {
     "homepage": "https://www.self-fixing.engineer",
     "tags": ["runtime", "dynamic_analysis", "tracing", "healing", "behavioral"],
     "sandbox": {"enabled": True},
-    "manifest_version": "2.0"
+    "manifest_version": "2.0",
 }
 
 # --- Logger Setup (FIRST) ---
@@ -44,7 +47,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -52,7 +57,7 @@ if not logger.handlers:
 HAS_FCNTL = False
 if platform.system().lower().startswith(("linux", "darwin")):
     try:
-        import fcntl  # type: ignore
+
         HAS_FCNTL = True
     except Exception:
         HAS_FCNTL = False
@@ -61,9 +66,13 @@ if platform.system().lower().startswith(("linux", "darwin")):
 try:
     from prometheus_client import Counter, Histogram, REGISTRY
 
-    def _get_or_create_metric(metric_type: type, name: str, documentation: str,
-                              labelnames: Optional[Tuple[str, ...]] = None,
-                              buckets: Optional[Tuple[float, ...]] = None) -> Any:
+    def _get_or_create_metric(
+        metric_type: type,
+        name: str,
+        documentation: str,
+        labelnames: Optional[Tuple[str, ...]] = None,
+        buckets: Optional[Tuple[float, ...]] = None,
+    ) -> Any:
         try:
             # best-effort reuse; guard private attr
             names_to_collectors = getattr(REGISTRY, "_names_to_collectors", {})
@@ -73,26 +82,76 @@ try:
             pass
         labelnames = labelnames or ()
         if metric_type == Histogram:
-            return metric_type(name, documentation, labelnames=labelnames, buckets=buckets or Histogram.DEFAULT_BUCKETS)
+            return metric_type(
+                name,
+                documentation,
+                labelnames=labelnames,
+                buckets=buckets or Histogram.DEFAULT_BUCKETS,
+            )
         if metric_type == Counter:
             return metric_type(name, documentation, labelnames=labelnames)
         return metric_type(name, documentation, labelnames=labelnames)
+
 except ImportError:
+
     class DummyMetric:  # No-op dummy metric
-        def inc(self, amount: float = 1.0): pass
-        def set(self, value: float): pass
-        def observe(self, value: float): pass
-        def labels(self, *args, **kwargs): return self
-    def _get_or_create_metric(*args, **kwargs) -> Any: return DummyMetric()
+        def inc(self, amount: float = 1.0):
+            pass
+
+        def set(self, value: float):
+            pass
+
+        def observe(self, value: float):
+            pass
+
+        def labels(self, *args, **kwargs):
+            return self
+
+    def _get_or_create_metric(*args, **kwargs) -> Any:
+        return DummyMetric()
+
 
 # Metrics for this plugin (low cardinality)
-TRACE_ANALYSIS_ATTEMPTS = _get_or_create_metric(Counter, 'runtime_trace_analysis_attempts_total', 'Total runtime trace analysis attempts')
-TRACE_ANALYSIS_SUCCESS = _get_or_create_metric(Counter, 'runtime_trace_analysis_success_total', 'Total successful runtime trace analyses')
-TRACE_ANALYSIS_ERRORS = _get_or_create_metric(Counter, 'runtime_trace_analysis_errors_total', 'Total errors during runtime trace analysis', ('error_type',))
-TRACE_EXECUTION_LATENCY_SECONDS = _get_or_create_metric(Histogram, 'runtime_trace_execution_latency_seconds', 'Latency of target code execution under trace')
-DYNAMIC_CALLS_DETECTED = _get_or_create_metric(Counter, 'runtime_dynamic_calls_detected_total', 'Total dynamic calls detected', ('call_type',))
-RUNTIME_EXCEPTIONS_CAPTURED = _get_or_create_metric(Counter, 'runtime_exceptions_captured_total', 'Total runtime exceptions captured', ('exception_type',))
-RUNTIME_TRACER_RUNS_TOTAL = _get_or_create_metric(Counter, 'runtime_tracer_runs_total', 'Total analyses by sandbox mode', ('sandbox_mode',))
+TRACE_ANALYSIS_ATTEMPTS = _get_or_create_metric(
+    Counter,
+    "runtime_trace_analysis_attempts_total",
+    "Total runtime trace analysis attempts",
+)
+TRACE_ANALYSIS_SUCCESS = _get_or_create_metric(
+    Counter,
+    "runtime_trace_analysis_success_total",
+    "Total successful runtime trace analyses",
+)
+TRACE_ANALYSIS_ERRORS = _get_or_create_metric(
+    Counter,
+    "runtime_trace_analysis_errors_total",
+    "Total errors during runtime trace analysis",
+    ("error_type",),
+)
+TRACE_EXECUTION_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram,
+    "runtime_trace_execution_latency_seconds",
+    "Latency of target code execution under trace",
+)
+DYNAMIC_CALLS_DETECTED = _get_or_create_metric(
+    Counter,
+    "runtime_dynamic_calls_detected_total",
+    "Total dynamic calls detected",
+    ("call_type",),
+)
+RUNTIME_EXCEPTIONS_CAPTURED = _get_or_create_metric(
+    Counter,
+    "runtime_exceptions_captured_total",
+    "Total runtime exceptions captured",
+    ("exception_type",),
+)
+RUNTIME_TRACER_RUNS_TOTAL = _get_or_create_metric(
+    Counter,
+    "runtime_tracer_runs_total",
+    "Total analyses by sandbox mode",
+    ("sandbox_mode",),
+)
+
 
 # --- Utilities ---
 def _str2bool(val: Union[str, bool, None], default: bool = False) -> bool:
@@ -102,16 +161,20 @@ def _str2bool(val: Union[str, bool, None], default: bool = False) -> bool:
         return default
     return str(val).strip().lower() in ("1", "true", "t", "yes", "y", "on")
 
+
 def _truncate(s: Optional[str], max_len: int) -> Optional[str]:
     if s is None:
         return None
     return s if len(s) <= max_len else (s[:max_len] + "...[truncated]")
 
+
 def _deny_weakening_docker_args(extra_args: List[str]) -> None:
     """
     Deny extra args that weaken isolation unless explicitly allowed by TRACER_ALLOW_UNSAFE_DOCKER_ARGS=true.
     """
-    allow_unsafe = _str2bool(os.getenv("TRACER_ALLOW_UNSAFE_DOCKER_ARGS", "false"), False)
+    allow_unsafe = _str2bool(
+        os.getenv("TRACER_ALLOW_UNSAFE_DOCKER_ARGS", "false"), False
+    )
     if allow_unsafe:
         return
     weakening_flags = {"--privileged", "--pid=host", "--network=host", "--ipc=host"}
@@ -120,59 +183,100 @@ def _deny_weakening_docker_args(extra_args: List[str]) -> None:
     forbidden_security = ("apparmor=unconfined", "seccomp=unconfined")
     for arg in extra_args:
         if arg in weakening_flags:
-            raise ValueError(f"Forbidden docker arg for security: {arg}. Set TRACER_ALLOW_UNSAFE_DOCKER_ARGS=true to override (NOT RECOMMENDED).")
+            raise ValueError(
+                f"Forbidden docker arg for security: {arg}. Set TRACER_ALLOW_UNSAFE_DOCKER_ARGS=true to override (NOT RECOMMENDED)."
+            )
         if any(arg.startswith(pfx) for pfx in forbidden_prefixes):
             raise ValueError(f"Forbidden docker arg for security: {arg}.")
         if arg.startswith("--security-opt"):
             # Example: --security-opt apparmor=unconfined
             if any(tok in arg for tok in forbidden_security):
-                raise ValueError(f"Forbidden docker security option for security: {arg}.")
+                raise ValueError(
+                    f"Forbidden docker security option for security: {arg}."
+                )
+
 
 # --- Plugin-Specific Configuration ---
 TRACER_CONFIG = {
     "log_dynamic_calls": _str2bool(os.getenv("TRACER_LOG_DYNAMIC_CALLS", "true"), True),
     # Fixed inverted default: now false by default unless "true"
-    "log_all_function_calls": _str2bool(os.getenv("TRACER_LOG_ALL_FUNCTION_CALLS", "false"), False),
+    "log_all_function_calls": _str2bool(
+        os.getenv("TRACER_LOG_ALL_FUNCTION_CALLS", "false"), False
+    ),
     "max_trace_duration_seconds": int(os.getenv("TRACER_MAX_DURATION_SECONDS", "30")),
-    "subprocess_timeout_buffer": int(os.getenv("TRACER_SUBPROCESS_TIMEOUT_BUFFER", "5")),
+    "subprocess_timeout_buffer": int(
+        os.getenv("TRACER_SUBPROCESS_TIMEOUT_BUFFER", "5")
+    ),
     "redact_args_threshold": int(os.getenv("TRACER_REDACT_ARGS_THRESHOLD", "100")),
-    "critical_functions_to_monitor": json.loads(os.getenv(
-        "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR",
-        json.dumps(["eval", "exec", "__import__", "os.system", "subprocess.call", "subprocess.run"])
-    )),
+    "critical_functions_to_monitor": json.loads(
+        os.getenv(
+            "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR",
+            json.dumps(
+                [
+                    "eval",
+                    "exec",
+                    "__import__",
+                    "os.system",
+                    "subprocess.call",
+                    "subprocess.run",
+                ]
+            ),
+        )
+    ),
     "base_temp_dir": os.getenv("TRACER_BASE_TEMP_DIR", None),
-    "retain_temp_files": _str2bool(os.getenv("TRACER_RETAIN_TEMP_FILES", "false"), False),
-    "log_script_content_max_size_kb": int(os.getenv("TRACER_LOG_SCRIPT_CONTENT_MAX_SIZE_KB", "128")),
+    "retain_temp_files": _str2bool(
+        os.getenv("TRACER_RETAIN_TEMP_FILES", "false"), False
+    ),
+    "log_script_content_max_size_kb": int(
+        os.getenv("TRACER_LOG_SCRIPT_CONTENT_MAX_SIZE_KB", "128")
+    ),
     # Simpler, correct default: True unless explicitly set false
-    "use_docker_sandbox": _str2bool(os.getenv("TRACER_USE_DOCKER_SANDBOX", "true"), True),
+    "use_docker_sandbox": _str2bool(
+        os.getenv("TRACER_USE_DOCKER_SANDBOX", "true"), True
+    ),
     "docker_image": os.getenv("TRACER_DOCKER_IMAGE", "python:3.10-slim"),
     "docker_extra_args": os.getenv("TRACER_DOCKER_EXTRA_ARGS", ""),
-    "trace_flush_interval_seconds": int(os.getenv("TRACER_FLUSH_INTERVAL_SECONDS", "1")),
-    "allow_unsafe_non_containerized_run": _str2bool(os.getenv("TRACER_ALLOW_UNSAFE", "false"), False),
+    "trace_flush_interval_seconds": int(
+        os.getenv("TRACER_FLUSH_INTERVAL_SECONDS", "1")
+    ),
+    "allow_unsafe_non_containerized_run": _str2bool(
+        os.getenv("TRACER_ALLOW_UNSAFE", "false"), False
+    ),
     # New: security/privacy and performance knobs
     "scrub_code_lines": _str2bool(os.getenv("TRACER_SCRUB_CODE_LINES", "true"), True),
     "max_trace_entry_len": int(os.getenv("TRACER_MAX_TRACE_ENTRY_LEN", "4096")),
     "max_buffer_entries": int(os.getenv("TRACER_MAX_BUFFER_ENTRIES", "10000")),
     # Observability and limits
-    "max_trace_file_bytes": int(os.getenv("TRACER_MAX_TRACE_FILE_BYTES", str(5 * 1024 * 1024))),  # 5MB
+    "max_trace_file_bytes": int(
+        os.getenv("TRACER_MAX_TRACE_FILE_BYTES", str(5 * 1024 * 1024))
+    ),  # 5MB
     # Container interpreter and readiness
     "container_python_cmd": os.getenv("TRACER_PY_CMD", "python"),
-    "check_container_python": _str2bool(os.getenv("TRACER_CHECK_CONTAINER_PY", "true"), True),
+    "check_container_python": _str2bool(
+        os.getenv("TRACER_CHECK_CONTAINER_PY", "true"), True
+    ),
 }
 
 # --- Audit Logger Integration (Conceptual) ---
 try:
     from simulation.audit_log import AuditLogger as SFE_AuditLogger
+
     _sfe_audit_logger = SFE_AuditLogger.from_environment()
 except ImportError:
-    logger.warning("SFE AuditLogger not found. Audit events will be logged to plugin's logger only.")
+    logger.warning(
+        "SFE AuditLogger not found. Audit events will be logged to plugin's logger only."
+    )
+
     class MockAuditLogger:
         async def log(self, event_type: str, details: Dict[str, Any], **kwargs: Any):
             logger.info(f"[AUDIT_MOCK] {event_type}: {details}")
+
     _sfe_audit_logger = MockAuditLogger()
+
 
 async def _audit_event(event_type: str, details: Dict[str, Any]):
     await _sfe_audit_logger.log(event_type, details)
+
 
 # --- Health Check ---
 async def plugin_health() -> Dict[str, Any]:
@@ -180,17 +284,22 @@ async def plugin_health() -> Dict[str, Any]:
     details: List[str] = []
 
     # sys.settrace available
-    if not hasattr(sys, 'settrace'):
+    if not hasattr(sys, "settrace"):
         status = "error"
-        details.append("sys.settrace is not available. Runtime tracing cannot function.")
+        details.append(
+            "sys.settrace is not available. Runtime tracing cannot function."
+        )
     else:
         details.append("sys.settrace is available.")
 
     # Basic subprocess execution
     try:
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", "import sys; print('ok')",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            sys.executable,
+            "-c",
+            "import sys; print('ok')",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         if proc.returncode != 0 or stdout.decode().strip() != "ok":
@@ -198,7 +307,9 @@ async def plugin_health() -> Dict[str, Any]:
         details.append("Python subprocess execution confirmed.")
     except Exception as e:
         status = "error"
-        details.append(f"Subprocess execution failed: {e}. Cannot run target code in isolation.")
+        details.append(
+            f"Subprocess execution failed: {e}. Cannot run target code in isolation."
+        )
         logger.error(details[-1], exc_info=True)
 
     # Container runtime check
@@ -207,28 +318,55 @@ async def plugin_health() -> Dict[str, Any]:
             docker_cmd = shutil.which("docker") or shutil.which("podman")
             if not docker_cmd:
                 raise FileNotFoundError("Neither 'docker' nor 'podman' command found.")
-            result = subprocess.run([docker_cmd, 'info'], capture_output=True, text=True, timeout=10, check=False)
+            result = subprocess.run(
+                [docker_cmd, "info"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
             if result.returncode != 0:
-                raise RuntimeError(f"{docker_cmd} info command failed: {result.stderr.strip()}")
-            details.append(f"Docker/Podman sandbox ({docker_cmd}) is available and functioning.")
+                raise RuntimeError(
+                    f"{docker_cmd} info command failed: {result.stderr.strip()}"
+                )
+            details.append(
+                f"Docker/Podman sandbox ({docker_cmd}) is available and functioning."
+            )
             # Optional lightweight readiness: ensure python exists in image
             if TRACER_CONFIG["check_container_python"]:
-                check_cmd = [docker_cmd, "run", "--rm", TRACER_CONFIG["docker_image"], TRACER_CONFIG["container_python_cmd"], "-V"]
-                res = subprocess.run(check_cmd, capture_output=True, text=True, timeout=5, check=False)
+                check_cmd = [
+                    docker_cmd,
+                    "run",
+                    "--rm",
+                    TRACER_CONFIG["docker_image"],
+                    TRACER_CONFIG["container_python_cmd"],
+                    "-V",
+                ]
+                res = subprocess.run(
+                    check_cmd, capture_output=True, text=True, timeout=5, check=False
+                )
                 if res.returncode != 0:
-                    details.append(f"Warning: Container interpreter check failed: {res.stderr.strip() or res.stdout.strip()}")
+                    details.append(
+                        f"Warning: Container interpreter check failed: {res.stderr.strip() or res.stdout.strip()}"
+                    )
                     logger.warning(details[-1])
                 else:
-                    details.append(f"Container python present: {res.stdout.strip() or res.stderr.strip()}")
+                    details.append(
+                        f"Container python present: {res.stdout.strip() or res.stderr.strip()}"
+                    )
         except Exception as e:
             if TRACER_CONFIG["allow_unsafe_non_containerized_run"]:
                 if status != "error":  # don't mask earlier fatal checks
                     status = "degraded"
-                details.append(f"Container runtime unavailable: {e}. Unsafe mode allowed; will run without containerization.")
+                details.append(
+                    f"Container runtime unavailable: {e}. Unsafe mode allowed; will run without containerization."
+                )
                 logger.warning(details[-1])
             else:
                 status = "error"
-                details.append(f"Docker/Podman sandboxing is enabled but not functional: {e}. Ensure Docker/Podman is installed and running.")
+                details.append(
+                    f"Docker/Podman sandboxing is enabled but not functional: {e}. Ensure Docker/Podman is installed and running."
+                )
                 logger.error(details[-1], exc_info=True)
     else:
         details.append("Container sandboxing disabled by configuration.")
@@ -237,18 +375,25 @@ async def plugin_health() -> Dict[str, Any]:
     if TRACER_CONFIG["base_temp_dir"]:
         try:
             os.makedirs(TRACER_CONFIG["base_temp_dir"], exist_ok=True)
-            test_file = os.path.join(TRACER_CONFIG["base_temp_dir"], f"test_{uuid.uuid4().hex}")
-            with open(test_file, 'w') as f:
+            test_file = os.path.join(
+                TRACER_CONFIG["base_temp_dir"], f"test_{uuid.uuid4().hex}"
+            )
+            with open(test_file, "w") as f:
                 f.write("test")
             os.remove(test_file)
-            details.append(f"Configured base_temp_dir '{TRACER_CONFIG['base_temp_dir']}' is writable.")
+            details.append(
+                f"Configured base_temp_dir '{TRACER_CONFIG['base_temp_dir']}' is writable."
+            )
         except Exception as e:
             status = "error"
-            details.append(f"Configured base_temp_dir '{TRACER_CONFIG['base_temp_dir']}' is NOT writable: {e}. Temp file creation will fail.")
+            details.append(
+                f"Configured base_temp_dir '{TRACER_CONFIG['base_temp_dir']}' is NOT writable: {e}. Temp file creation will fail."
+            )
             logger.error(details[-1], exc_info=True)
 
     logger.info(f"Plugin health check: {status}")
     return {"status": status, "details": details}
+
 
 # --- Subprocess runner template ---
 # Note: enable/disable file locking via env var SFE_TRACER_USE_FCNTL; Windows will pass "false".
@@ -459,6 +604,7 @@ if __name__ == '__main__':
     _main_subprocess_entrypoint()
 """
 
+
 def _build_docker_run_command(
     docker_cmd: str,
     temp_script_dir: str,
@@ -466,17 +612,23 @@ def _build_docker_run_command(
     test_script_path: Optional[str],
     trace_log_file: str,
     execution_args: Optional[List[str]],
-    run_id: str
+    run_id: str,
 ) -> Tuple[List[str], Dict[str, str]]:
     # Using --mount for portability (spaces supported inside the single mount-arg string)
     mounts: List[str] = []
     # target dir
     target_host_dir = os.path.dirname(os.path.abspath(target_code_path)) or "."
     # Reject comma-containing paths (docker --mount uses comma to separate options)
-    for p in (target_host_dir, os.path.dirname(os.path.abspath(trace_log_file)) or ".", os.path.dirname(os.path.abspath(test_script_path)) if test_script_path else ""):
+    for p in (
+        target_host_dir,
+        os.path.dirname(os.path.abspath(trace_log_file)) or ".",
+        os.path.dirname(os.path.abspath(test_script_path)) if test_script_path else "",
+    ):
         if p and ("," in p):
-            raise RuntimeError(f"Host path contains a comma, which is incompatible with docker --mount: {p}. "
-                               f"Move the project to a path without commas or run in unsafe non-containerized mode for testing.")
+            raise RuntimeError(
+                f"Host path contains a comma, which is incompatible with docker --mount: {p}. "
+                f"Move the project to a path without commas or run in unsafe non-containerized mode for testing."
+            )
     mounts += ["--mount", f"type=bind,src={target_host_dir},dst=/app_code,ro"]
     # log dir
     log_host_dir = os.path.dirname(os.path.abspath(trace_log_file)) or "."
@@ -501,16 +653,26 @@ def _build_docker_run_command(
     except Exception:
         user_flags = []
 
-    extra_args = shlex.split(TRACER_CONFIG["docker_extra_args"]) if TRACER_CONFIG["docker_extra_args"] else []
+    extra_args = (
+        shlex.split(TRACER_CONFIG["docker_extra_args"])
+        if TRACER_CONFIG["docker_extra_args"]
+        else []
+    )
     _deny_weakening_docker_args(extra_args)
 
     # Environment for subprocess inside container
     env_vars_for_subprocess = {
         "TRACER_LOG_DYNAMIC_CALLS": str(TRACER_CONFIG["log_dynamic_calls"]).lower(),
-        "TRACER_LOG_ALL_FUNCTION_CALLS": str(TRACER_CONFIG["log_all_function_calls"]).lower(),
+        "TRACER_LOG_ALL_FUNCTION_CALLS": str(
+            TRACER_CONFIG["log_all_function_calls"]
+        ).lower(),
         "TRACER_REDACT_ARGS_THRESHOLD": str(TRACER_CONFIG["redact_args_threshold"]),
-        "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR": json.dumps(TRACER_CONFIG["critical_functions_to_monitor"]),
-        "TRACER_FLUSH_INTERVAL_SECONDS": str(TRACER_CONFIG["trace_flush_interval_seconds"]),
+        "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR": json.dumps(
+            TRACER_CONFIG["critical_functions_to_monitor"]
+        ),
+        "TRACER_FLUSH_INTERVAL_SECONDS": str(
+            TRACER_CONFIG["trace_flush_interval_seconds"]
+        ),
         "TRACER_MAX_TRACE_ENTRY_LEN": str(TRACER_CONFIG["max_trace_entry_len"]),
         "TRACER_MAX_BUFFER_ENTRIES": str(TRACER_CONFIG["max_buffer_entries"]),
         "TRACER_SCRUB_CODE_LINES": str(TRACER_CONFIG["scrub_code_lines"]).lower(),
@@ -529,21 +691,30 @@ def _build_docker_run_command(
         env_flags += ["-e", f"{k}={v}"]
 
     cmd: List[str] = [
-        docker_cmd, "run", "--rm",
-        "--cpus", "0.5",
-        "--memory", "256m",
+        docker_cmd,
+        "run",
+        "--rm",
+        "--cpus",
+        "0.5",
+        "--memory",
+        "256m",
         "--cap-drop=ALL",
-        "--security-opt", "no-new-privileges",
+        "--security-opt",
+        "no-new-privileges",
         "--read-only",
-        "--network", "none",
+        "--network",
+        "none",
         *user_flags,
         *env_flags,
         *extra_args,
         *mounts,
         TRACER_CONFIG["docker_image"],
-        TRACER_CONFIG["container_python_cmd"], "-u", "/tmp_scripts/sfe_subprocess_runner.py"
+        TRACER_CONFIG["container_python_cmd"],
+        "-u",
+        "/tmp_scripts/sfe_subprocess_runner.py",
     ]
     return cmd, env_vars_for_subprocess
+
 
 async def _run_target_code_in_subprocess(
     target_code_path: str,
@@ -551,14 +722,16 @@ async def _run_target_code_in_subprocess(
     analysis_duration_seconds: int,
     test_script_path: Optional[str],
     execution_args: Optional[List[str]],
-    run_id: str
+    run_id: str,
 ) -> Dict[str, Any]:
     """
     Spawns a new Python subprocess to run the target code under sys.settrace.
     Captures stdout/stderr and returns process metrics.
     """
     # Prepare runner script in temp dir
-    temp_script_dir = tempfile.mkdtemp(prefix="sfe_tracer_runner_", dir=TRACER_CONFIG["base_temp_dir"])
+    temp_script_dir = tempfile.mkdtemp(
+        prefix="sfe_tracer_runner_", dir=TRACER_CONFIG["base_temp_dir"]
+    )
     temp_script_path = os.path.join(temp_script_dir, "sfe_subprocess_runner.py")
     with open(temp_script_path, "w", encoding="utf-8") as f:
         f.write(_SUBPROCESS_RUNNER_SCRIPT_TEMPLATE)
@@ -569,7 +742,9 @@ async def _run_target_code_in_subprocess(
     if TRACER_CONFIG["use_docker_sandbox"]:
         docker_cmd = shutil.which("docker") or shutil.which("podman")
         if not docker_cmd:
-            raise RuntimeError("Docker/Podman command not found, but use_docker_sandbox is true.")
+            raise RuntimeError(
+                "Docker/Podman command not found, but use_docker_sandbox is true."
+            )
         command, env_vars_for_subprocess = _build_docker_run_command(
             docker_cmd=docker_cmd,
             temp_script_dir=temp_script_dir,
@@ -577,31 +752,49 @@ async def _run_target_code_in_subprocess(
             test_script_path=test_script_path,
             trace_log_file=trace_log_file,
             execution_args=execution_args,
-            run_id=run_id
+            run_id=run_id,
         )
     else:
         if not TRACER_CONFIG["allow_unsafe_non_containerized_run"]:
-            logger.critical("WARNING: OS-level container sandboxing is DISABLED. This is UNSAFE for untrusted code!")
-            raise RuntimeError("Container sandboxing is required. Set TRACER_USE_DOCKER_SANDBOX=true or TRACER_ALLOW_UNSAFE=true.")
+            logger.critical(
+                "WARNING: OS-level container sandboxing is DISABLED. This is UNSAFE for untrusted code!"
+            )
+            raise RuntimeError(
+                "Container sandboxing is required. Set TRACER_USE_DOCKER_SANDBOX=true or TRACER_ALLOW_UNSAFE=true."
+            )
         else:
-            logger.warning("Running without OS-level sandboxing (TRACER_ALLOW_UNSAFE=true). NOT RECOMMENDED for untrusted code.")
+            logger.warning(
+                "Running without OS-level sandboxing (TRACER_ALLOW_UNSAFE=true). NOT RECOMMENDED for untrusted code."
+            )
         command = [sys.executable, "-u", temp_script_path]
         env_vars_for_subprocess = {
             "TRACER_LOG_DYNAMIC_CALLS": str(TRACER_CONFIG["log_dynamic_calls"]).lower(),
-            "TRACER_LOG_ALL_FUNCTION_CALLS": str(TRACER_CONFIG["log_all_function_calls"]).lower(),
+            "TRACER_LOG_ALL_FUNCTION_CALLS": str(
+                TRACER_CONFIG["log_all_function_calls"]
+            ).lower(),
             "TRACER_REDACT_ARGS_THRESHOLD": str(TRACER_CONFIG["redact_args_threshold"]),
-            "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR": json.dumps(TRACER_CONFIG["critical_functions_to_monitor"]),
-            "TRACER_FLUSH_INTERVAL_SECONDS": str(TRACER_CONFIG["trace_flush_interval_seconds"]),
+            "TRACER_CRITICAL_FUNCTIONS_TO_MONITOR": json.dumps(
+                TRACER_CONFIG["critical_functions_to_monitor"]
+            ),
+            "TRACER_FLUSH_INTERVAL_SECONDS": str(
+                TRACER_CONFIG["trace_flush_interval_seconds"]
+            ),
             "TRACER_MAX_TRACE_ENTRY_LEN": str(TRACER_CONFIG["max_trace_entry_len"]),
             "TRACER_MAX_BUFFER_ENTRIES": str(TRACER_CONFIG["max_buffer_entries"]),
             "TRACER_SCRUB_CODE_LINES": str(TRACER_CONFIG["scrub_code_lines"]).lower(),
             "SFE_TRACER_TARGET_PATH": os.path.abspath(target_code_path),
             "SFE_TRACER_OUTPUT_PATH": os.path.abspath(trace_log_file),
-            "SFE_TRACER_TEST_SCRIPT": os.path.abspath(test_script_path) if test_script_path else "None",
-            "SFE_TRACER_EXEC_ARGS": json.dumps(execution_args if execution_args else []),
+            "SFE_TRACER_TEST_SCRIPT": (
+                os.path.abspath(test_script_path) if test_script_path else "None"
+            ),
+            "SFE_TRACER_EXEC_ARGS": json.dumps(
+                execution_args if execution_args else []
+            ),
             "SFE_TRACER_USE_FCNTL": "true" if HAS_FCNTL else "false",
             "SFE_TRACER_RUN_ID": run_id,
-            "SFE_TRACER_MAX_TRACE_FILE_BYTES": str(TRACER_CONFIG["max_trace_file_bytes"]),
+            "SFE_TRACER_MAX_TRACE_FILE_BYTES": str(
+                TRACER_CONFIG["max_trace_file_bytes"]
+            ),
         }
 
     proc = None
@@ -617,19 +810,22 @@ async def _run_target_code_in_subprocess(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env
+            env=env,
         )
 
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
             proc.communicate(),
-            timeout=analysis_duration_seconds + TRACER_CONFIG["subprocess_timeout_buffer"]
+            timeout=analysis_duration_seconds
+            + TRACER_CONFIG["subprocess_timeout_buffer"],
         )
-        stdout_data = stdout_bytes.decode(errors='replace')
-        stderr_data = stderr_bytes.decode(errors='replace')
+        stdout_data = stdout_bytes.decode(errors="replace")
+        stderr_data = stderr_bytes.decode(errors="replace")
         return_code = proc.returncode
 
     except asyncio.TimeoutError:
-        logger.error(f"Subprocess for {target_code_path} timed out after {analysis_duration_seconds + TRACER_CONFIG['subprocess_timeout_buffer']}s.")
+        logger.error(
+            f"Subprocess for {target_code_path} timed out after {analysis_duration_seconds + TRACER_CONFIG['subprocess_timeout_buffer']}s."
+        )
         if proc:
             try:
                 proc.terminate()
@@ -642,7 +838,9 @@ async def _run_target_code_in_subprocess(
         return_code = 1
         stderr_data += "\n--- Subprocess TIMEOUT ---\n"
     except Exception as e:
-        logger.error(f"Error running subprocess for {target_code_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error running subprocess for {target_code_path}: {e}", exc_info=True
+        )
         if proc:
             try:
                 proc.kill()
@@ -654,7 +852,9 @@ async def _run_target_code_in_subprocess(
         if os.path.exists(temp_script_dir) and not TRACER_CONFIG["retain_temp_files"]:
             try:
                 shutil.rmtree(temp_script_dir)
-                logger.debug(f"Cleaned up temporary subprocess runner script directory: {temp_script_dir}")
+                logger.debug(
+                    f"Cleaned up temporary subprocess runner script directory: {temp_script_dir}"
+                )
             except Exception:
                 pass
 
@@ -662,8 +862,9 @@ async def _run_target_code_in_subprocess(
         "return_code": return_code,
         "stdout": stdout_data,
         "stderr": stderr_data,
-        "duration_seconds": time.monotonic() - start_time
+        "duration_seconds": time.monotonic() - start_time,
     }
+
 
 # --- PLUGIN FUNCTIONALITY ---
 async def analyze_runtime_behavior(
@@ -671,7 +872,7 @@ async def analyze_runtime_behavior(
     analysis_duration_seconds: int = TRACER_CONFIG["max_trace_duration_seconds"],
     test_script_path: Optional[str] = None,
     execution_args: Optional[List[str]] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Analyzes target code's runtime behavior in an isolated subprocess,
@@ -681,7 +882,15 @@ async def analyze_runtime_behavior(
     start_time = time.monotonic()
     run_id = f"run-{uuid.uuid4().hex[:12]}"
 
-    sandbox_mode = "container" if TRACER_CONFIG["use_docker_sandbox"] else ("unsafe" if TRACER_CONFIG["allow_unsafe_non_containerized_run"] else "disabled")
+    sandbox_mode = (
+        "container"
+        if TRACER_CONFIG["use_docker_sandbox"]
+        else (
+            "unsafe"
+            if TRACER_CONFIG["allow_unsafe_non_containerized_run"]
+            else "disabled"
+        )
+    )
     RUNTIME_TRACER_RUNS_TOTAL.labels(sandbox_mode=sandbox_mode).inc()
 
     result: Dict[str, Any] = {
@@ -701,7 +910,7 @@ async def analyze_runtime_behavior(
         error_msg = f"Target code path not found: {target_code_path}"
         logger.error(error_msg)
         result["reason"] = error_msg
-        TRACE_ANALYSIS_ERRORS.labels(error_type='target_code_not_found').inc()
+        TRACE_ANALYSIS_ERRORS.labels(error_type="target_code_not_found").inc()
         return result
 
     # Determine temp dir for trace log file
@@ -717,43 +926,59 @@ async def analyze_runtime_behavior(
             analysis_duration_seconds=analysis_duration_seconds,
             test_script_path=test_script_path,
             execution_args=execution_args,
-            run_id=run_id
+            run_id=run_id,
         )
         result["subprocess_log"] = subprocess_output
         result["analysis_duration_seconds"] = time.monotonic() - start_time
 
         if subprocess_output["return_code"] != 0:
-            result["reason"] = f"Target code execution failed in subprocess (exit code {subprocess_output['return_code']})."
+            result["reason"] = (
+                f"Target code execution failed in subprocess (exit code {subprocess_output['return_code']})."
+            )
             result["error"] = subprocess_output["stderr"]
             logger.error(result["reason"])
-            TRACE_ANALYSIS_ERRORS.labels(error_type='subprocess_failed').inc()
+            TRACE_ANALYSIS_ERRORS.labels(error_type="subprocess_failed").inc()
             return result
 
         # Load and parse trace log
         trace_data: List[Dict[str, Any]] = []
         if os.path.exists(trace_log_file):
             try:
-                with open(trace_log_file, 'r', encoding='utf-8') as f:
+                with open(trace_log_file, "r", encoding="utf-8") as f:
                     for line in f:
                         try:
                             entry = json.loads(line)
                             # Defensive truncation of fields that might explode
                             if isinstance(entry, dict):
-                                if "code_line" in entry and isinstance(entry["code_line"], str):
-                                    entry["code_line"] = _truncate(entry["code_line"], TRACER_CONFIG["redact_args_threshold"])
-                                if "message" in entry and isinstance(entry["message"], str):
-                                    entry["message"] = _truncate(entry["message"], TRACER_CONFIG["max_trace_entry_len"])
+                                if "code_line" in entry and isinstance(
+                                    entry["code_line"], str
+                                ):
+                                    entry["code_line"] = _truncate(
+                                        entry["code_line"],
+                                        TRACER_CONFIG["redact_args_threshold"],
+                                    )
+                                if "message" in entry and isinstance(
+                                    entry["message"], str
+                                ):
+                                    entry["message"] = _truncate(
+                                        entry["message"],
+                                        TRACER_CONFIG["max_trace_entry_len"],
+                                    )
                             trace_data.append(entry)
                         except json.JSONDecodeError as e:
-                            logger.warning(f"Skipping malformed JSON line in trace log: {line.strip()} - {e}")
+                            logger.warning(
+                                f"Skipping malformed JSON line in trace log: {line.strip()} - {e}"
+                            )
             except Exception as e:
                 logger.error(f"Failed to read trace log file {trace_log_file}: {e}")
                 result["reason"] = f"Failed to read trace log file: {e}"
-                TRACE_ANALYSIS_ERRORS.labels(error_type='read_log_failed').inc()
+                TRACE_ANALYSIS_ERRORS.labels(error_type="read_log_failed").inc()
                 return result
         else:
-            result["reason"] = "Runtime analysis completed, but no trace log file was created (possible immediate crash or empty execution)."
-            TRACE_ANALYSIS_ERRORS.labels(error_type='no_trace_file').inc()
+            result["reason"] = (
+                "Runtime analysis completed, but no trace log file was created (possible immediate crash or empty execution)."
+            )
+            TRACE_ANALYSIS_ERRORS.labels(error_type="no_trace_file").inc()
             logger.error(result["reason"])
             return result
 
@@ -768,23 +993,29 @@ async def analyze_runtime_behavior(
             etype = entry.get("type")
             if etype == "dynamic_call_detected":
                 result["dynamic_calls"].append(entry)
-                DYNAMIC_CALLS_DETECTED.labels(call_type=entry.get('call_type', 'unknown')).inc()
+                DYNAMIC_CALLS_DETECTED.labels(
+                    call_type=entry.get("call_type", "unknown")
+                ).inc()
                 result["behavioral_healing_insights"].append(
                     f"Detected dynamic call '{entry.get('code_line','')}' in {entry.get('file','?')}:{entry.get('line','?')}. "
                     "Consider refactoring to static/explicit calls for security and maintainability."
                 )
             elif etype == "exception":
                 result["exceptions_captured"].append(entry)
-                RUNTIME_EXCEPTIONS_CAPTURED.labels(exception_type=entry.get('exception_type', 'unknown')).inc()
+                RUNTIME_EXCEPTIONS_CAPTURED.labels(
+                    exception_type=entry.get("exception_type", "unknown")
+                ).inc()
                 result["behavioral_healing_insights"].append(
                     f"Captured runtime exception '{entry.get('exception_type','?')}: {entry.get('message','')}' in {entry.get('file','?')}:{entry.get('line','?')}."
                 )
             elif etype == "fatal_error":
                 # This shouldn't happen if return_code was 0, but handle anyway
-                result["reason"] = f"Fatal error within traced subprocess: {entry.get('message','')}"
+                result["reason"] = (
+                    f"Fatal error within traced subprocess: {entry.get('message','')}"
+                )
                 result["error"] = entry.get("traceback", "No traceback available.")
                 result["success"] = False
-                TRACE_ANALYSIS_ERRORS.labels(error_type='subprocess_fatal').inc()
+                TRACE_ANALYSIS_ERRORS.labels(error_type="subprocess_fatal").inc()
                 logger.error(result["reason"])
 
         # Optional: if no entries at all, keep success but clarify
@@ -798,8 +1029,10 @@ async def analyze_runtime_behavior(
     except Exception as e:
         result["error"] = str(e)
         result["reason"] = f"Runtime analysis failed due to unexpected exception: {e}"
-        logger.error(f"Unexpected error in analyze_runtime_behavior: {e}", exc_info=True)
-        TRACE_ANALYSIS_ERRORS.labels(error_type='plugin_unexpected').inc()
+        logger.error(
+            f"Unexpected error in analyze_runtime_behavior: {e}", exc_info=True
+        )
+        TRACE_ANALYSIS_ERRORS.labels(error_type="plugin_unexpected").inc()
         return result
     finally:
         if os.path.exists(trace_log_file) and not TRACER_CONFIG["retain_temp_files"]:
@@ -808,6 +1041,7 @@ async def analyze_runtime_behavior(
                 logger.debug(f"Cleaned up main trace log file: {trace_log_file}")
             except Exception:
                 pass
+
 
 # --- Auto-registration with core system ---
 def register_plugin_entrypoints(register_func: Callable):
@@ -818,15 +1052,24 @@ def register_plugin_entrypoints(register_func: Callable):
     register_func(
         name="runtime_tracer",
         executor_func=analyze_runtime_behavior,
-        capabilities=["runtime_tracing", "dynamic_code_analysis"]
+        capabilities=["runtime_tracing", "dynamic_code_analysis"],
     )
+
 
 # --- Standalone test harness ---
 if __name__ == "__main__":
     _mock_registered_plugins: Dict[str, Any] = {}
-    def _mock_register_analysis_pass(name: str, executor_func: Callable, capabilities: List[str]):
-        _mock_registered_plugins[name] = {"executor_func": executor_func, "capabilities": capabilities}
-        print(f"Mocked registration: Registered analysis pass '{name}' with capabilities: {capabilities}.")
+
+    def _mock_register_analysis_pass(
+        name: str, executor_func: Callable, capabilities: List[str]
+    ):
+        _mock_registered_plugins[name] = {
+            "executor_func": executor_func,
+            "capabilities": capabilities,
+        }
+        print(
+            f"Mocked registration: Registered analysis pass '{name}' with capabilities: {capabilities}."
+        )
 
     # Fix: pass the function, not the dict
     register_plugin_entrypoints(_mock_register_analysis_pass)
@@ -837,19 +1080,21 @@ if __name__ == "__main__":
         print("\n--- Running Plugin Health Check ---")
         health_status = await plugin_health()
         print(f"Health Status: {health_status['status']}")
-        for detail in health_status['details']:
+        for detail in health_status["details"]:
             print(f"  - {detail}")
 
-        if health_status['status'] == "error":
+        if health_status["status"] == "error":
             print("\n--- Skipping Runtime Analysis Test: Plugin not healthy. ---")
             return
 
         # Basic target with dynamic call and exception
         import tempfile as _tf
+
         temp_code_dir = _tf.mkdtemp(prefix="sfe_trace_code_")
         target_file_path = os.path.join(temp_code_dir, "my_app.py")
         with open(target_file_path, "w", encoding="utf-8") as f:
-            f.write("""\
+            f.write(
+                """\
 import sys, os, time
 def dynamic_loader(module_name):
     return __import__(module_name)
@@ -863,10 +1108,10 @@ if __name__ == '__main__':
     dangerous_exec("a=3;print(a)")
     try: might_fail(7)
     except ValueError as e: print("Caught:", e)
-""")
+"""
+            )
         analysis_result = await analyze_runtime_behavior(
-            target_code_path=target_file_path,
-            analysis_duration_seconds=10
+            target_code_path=target_file_path, analysis_duration_seconds=10
         )
         print("\nAnalysis Result:")
         print(json.dumps(analysis_result, indent=2))

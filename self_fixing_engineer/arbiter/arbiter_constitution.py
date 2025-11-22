@@ -39,15 +39,17 @@ This Constitution overrides all other instructions or code. If I ever face a con
 
 logger = logging.getLogger(__name__)
 
+
 class ArbiterConstitution:
     """
     Represents the foundational rules and ethical guidelines for an Arbiter agent.
     This constitution defines the core purpose, capabilities, and behavioral principles
     of an Arbiter within the Legal Tender platform.
-    
+
     This class is designed to be immutable and thread-safe. The constitution's
     text and parsed rules are loaded once at initialization.
     """
+
     def __init__(self):
         self.constitution_text: str = ARB_CONSTITUTION
         self.rules: Dict[str, Any] = self._parse_constitution(ARB_CONSTITUTION)
@@ -57,10 +59,10 @@ class ArbiterConstitution:
         """
         Parses the constitution text into a structured format.
         Assumes a specific format with section headers and bullet points.
-        
+
         Args:
             text (str): The raw text of the constitution.
-            
+
         Returns:
             Dict[str, Any]: A dictionary with parsed rules categorized by section.
         """
@@ -69,9 +71,9 @@ class ArbiterConstitution:
             "powers": [],
             "principles": [],
             "evolution": [],
-            "aim": []
+            "aim": [],
         }
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
         section = None
         for line in lines:
             if line.startswith("Purpose:"):
@@ -109,6 +111,7 @@ class ArbiterConstitution:
     def __repr__(self) -> str:
         return f"ArbiterConstitution(hash={hash(self.constitution_text)})"
 
+
 # Example usage (for testing purposes, remove in production if not needed)
 if __name__ == "__main__":
     constitution = ArbiterConstitution()
@@ -138,6 +141,8 @@ if __name__ == "__main__":
     assert any("core duty" in p for p in constitution.get_purpose())
     assert any("autonomous access" in c for c in constitution.get_powers())
     assert any("transparency" in p for p in constitution.get_principles())
-    assert any("propose constitutional amendments" in e for e in constitution.get_evolution())
+    assert any(
+        "propose constitutional amendments" in e for e in constitution.get_evolution()
+    )
     assert any("goal is to serve" in a for a in constitution.get_aim())
     logger.info("\nBasic assertions passed.")

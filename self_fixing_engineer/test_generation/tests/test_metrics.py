@@ -1,19 +1,26 @@
 import pytest
-import asyncio
+
 # Fix: Added missing imports
 from unittest.mock import Mock
 import logging
 
-from test_generation.orchestrator.metrics import METRICS_AVAILABLE, generation_duration, integration_success, integration_failure, _DummyTimerCtx
-from test_generation.orchestrator.console import log
+from test_generation.orchestrator.metrics import (
+    generation_duration,
+    integration_success,
+    _DummyTimerCtx,
+)
+
 
 @pytest.mark.asyncio
 async def test_metrics_available(monkeypatch):
     mock_histogram = Mock()
-    monkeypatch.setattr("prometheus_client.Histogram", Mock(return_value=mock_histogram))
+    monkeypatch.setattr(
+        "prometheus_client.Histogram", Mock(return_value=mock_histogram)
+    )
     monkeypatch.setattr("test_generation.orchestrator.metrics.METRICS_AVAILABLE", True)
     generation_duration.labels(language="python").observe(1.0)
     assert mock_histogram.observe.called
+
 
 @pytest.mark.asyncio
 async def test_dummy_metrics_noop(monkeypatch, caplog):
@@ -23,6 +30,7 @@ async def test_dummy_metrics_noop(monkeypatch, caplog):
     integration_success.inc()
     assert "Metrics disabled" in caplog.text
 
+
 def test_no_duplicate_metrics():
     """
     Tests that a metric proxy correctly returns a real metric instance when available.
@@ -30,14 +38,16 @@ def test_no_duplicate_metrics():
     # Force metrics to be available for this test
     # This requires patching the module-level variable
     with patch("test_generation.orchestrator.metrics.METRICS_AVAILABLE", True):
-        with patch("test_generation.orchestrator.metrics.prometheus_client.Histogram") as mock_histogram_class:
+        with patch(
+            "test_generation.orchestrator.metrics.prometheus_client.Histogram"
+        ) as mock_histogram_class:
             # First call should instantiate the metric
             generation_duration.labels(language="python").observe(1.0)
             mock_histogram_class.assert_called_once()
-            
+
             # Second call should not instantiate a new metric
             generation_duration.labels(language="python").observe(2.0)
             mock_histogram_class.assert_called_once()
-            
+
             # Assert that the object is not the dummy one
             assert generation_duration is not _DummyTimerCtx()

@@ -1,8 +1,7 @@
 # test_anthropic_adapter.py
 import pytest
-import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 
 # Import the adapter and related exceptions
@@ -13,7 +12,7 @@ from arbiter.plugins.llm_client import (
     RateLimitError,
     TimeoutError,
     APIError,
-    CircuitBreakerOpenError
+    CircuitBreakerOpenError,
 )
 import anthropic
 from tenacity import RetryError
@@ -32,31 +31,31 @@ class TestAnthropicAdapter:
             "LLM_API_RETRY_ATTEMPTS": 2,
             "LLM_API_RETRY_BACKOFF_FACTOR": 1.5,
             "CIRCUIT_BREAKER_THRESHOLD": 3,
-            "CIRCUIT_BREAKER_TIMEOUT_SECONDS": 60
+            "CIRCUIT_BREAKER_TIMEOUT_SECONDS": 60,
         }
 
     @pytest.fixture
     async def adapter(self, valid_settings):
         """Creates an AnthropicAdapter instance with mocked LLMClient."""
-        with patch('arbiter.plugins.anthropic_adapter.LLMClient') as mock_client:
+        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "claude-3-sonnet-20240229"
-            
+
             adapter = AnthropicAdapter(valid_settings)
             adapter.client = mock_instance
             yield adapter
 
     # --- Initialization Tests ---
-    
+
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch('arbiter.plugins.anthropic_adapter.LLMClient') as mock_client:
+        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
-            
+
             adapter = AnthropicAdapter(valid_settings)
-            
+
             assert adapter.circuit_breaker_state == "closed"
             assert adapter.circuit_breaker_failures == 0
             assert adapter.circuit_breaker_threshold == 3
@@ -66,13 +65,13 @@ class TestAnthropicAdapter:
     def test_init_missing_api_key(self):
         """Test initialization fails when API key is missing."""
         settings = {"LLM_MODEL": "claude-3"}
-        
+
         with pytest.raises(ValueError, match="Missing API key"):
             AnthropicAdapter(settings)
 
     def test_init_with_none_client(self, valid_settings):
         """Test initialization fails when LLMClient returns None."""
-        with patch('arbiter.plugins.anthropic_adapter.LLMClient', return_value=None):
+        with patch("arbiter.plugins.anthropic_adapter.LLMClient", return_value=None):
             with pytest.raises(ValueError, match="Failed to initialize LLMClient"):
                 AnthropicAdapter(valid_settings)
 
@@ -102,7 +101,7 @@ class TestAnthropicAdapter:
         """Test that invalid max_tokens raises ValueError."""
         with pytest.raises(ValueError, match="max_tokens must be between 1 and 4096"):
             await adapter.generate("test", max_tokens=5000)
-        
+
         with pytest.raises(ValueError, match="max_tokens must be between 1 and 4096"):
             await adapter.generate("test", max_tokens=0)
 
@@ -111,7 +110,7 @@ class TestAnthropicAdapter:
         """Test that invalid temperature raises ValueError."""
         with pytest.raises(ValueError, match="temperature must be between 0.0 and 1.0"):
             await adapter.generate("test", temperature=1.5)
-        
+
         with pytest.raises(ValueError, match="temperature must be between 0.0 and 1.0"):
             await adapter.generate("test", temperature=-0.1)
 
@@ -121,14 +120,11 @@ class TestAnthropicAdapter:
     async def test_generate_success(self, adapter):
         """Test successful text generation."""
         adapter.client.generate_text.return_value = "Generated text response"
-        
+
         result = await adapter.generate(
-            "Test prompt",
-            max_tokens=100,
-            temperature=0.7,
-            correlation_id="test-123"
+            "Test prompt", max_tokens=100, temperature=0.7, correlation_id="test-123"
         )
-        
+
         assert result == "Generated text response"
         adapter.client.generate_text.assert_called_once()
         assert adapter.circuit_breaker_state == "closed"
@@ -140,76 +136,70 @@ class TestAnthropicAdapter:
     async def test_generate_retry_error(self, adapter):
         """Test handling of RetryError."""
         adapter.client.generate_text.side_effect = RetryError("All retries exhausted")
-        
+
         with pytest.raises(APIError, match="failed after multiple retries"):
             await adapter.generate("Test prompt", correlation_id="test-retry")
-        
+
         assert adapter.circuit_breaker_failures == 1
 
     @pytest.mark.asyncio
     async def test_generate_timeout_error(self, adapter):
         """Test handling of timeout errors."""
         timeout_exception = anthropic.APITimeoutError("Request timed out")
-        adapter.client.generate_text.side_effect = LLMClientError("Timeout") 
+        adapter.client.generate_text.side_effect = LLMClientError("Timeout")
         adapter.client.generate_text.side_effect.__cause__ = timeout_exception
-        
+
         with pytest.raises(TimeoutError, match="API call timed out"):
             await adapter.generate("Test prompt", correlation_id="test-timeout")
-        
+
         assert adapter.circuit_breaker_failures == 1
 
     @pytest.mark.asyncio
     async def test_generate_auth_error(self, adapter):
         """Test handling of authentication errors."""
         auth_exception = anthropic.APIStatusError(
-            message="Unauthorized",
-            response=Mock(status_code=401),
-            body=None
+            message="Unauthorized", response=Mock(status_code=401), body=None
         )
         auth_exception.status_code = 401
         auth_exception.message = "Unauthorized"
-        
+
         adapter.client.generate_text.side_effect = LLMClientError("Auth error")
         adapter.client.generate_text.side_effect.__cause__ = auth_exception
-        
+
         with pytest.raises(AuthError, match="authentication error"):
             await adapter.generate("Test prompt", correlation_id="test-auth")
-        
+
         assert adapter.circuit_breaker_failures == 1
 
     @pytest.mark.asyncio
     async def test_generate_rate_limit_error(self, adapter):
         """Test handling of rate limit errors."""
         rate_limit_exception = anthropic.APIStatusError(
-            message="Rate limit exceeded",
-            response=Mock(status_code=429),
-            body=None
+            message="Rate limit exceeded", response=Mock(status_code=429), body=None
         )
         rate_limit_exception.status_code = 429
         rate_limit_exception.message = "Rate limit exceeded"
-        
+
         adapter.client.generate_text.side_effect = LLMClientError("Rate limited")
         adapter.client.generate_text.side_effect.__cause__ = rate_limit_exception
-        
+
         with pytest.raises(RateLimitError, match="rate limit exceeded"):
             await adapter.generate("Test prompt", correlation_id="test-rate")
-        
+
         assert adapter.circuit_breaker_failures == 1
 
     @pytest.mark.asyncio
     async def test_generate_generic_api_error(self, adapter):
         """Test handling of generic API errors."""
         api_exception = anthropic.APIStatusError(
-            message="Server error",
-            response=Mock(status_code=500),
-            body=None
+            message="Server error", response=Mock(status_code=500), body=None
         )
         api_exception.status_code = 500
         api_exception.message = "Server error"
-        
+
         adapter.client.generate_text.side_effect = LLMClientError("API error")
         adapter.client.generate_text.side_effect.__cause__ = api_exception
-        
+
         with pytest.raises(APIError, match="API error.*status 500"):
             await adapter.generate("Test prompt", correlation_id="test-api")
 
@@ -217,10 +207,10 @@ class TestAnthropicAdapter:
     async def test_generate_unexpected_error(self, adapter):
         """Test handling of unexpected errors."""
         adapter.client.generate_text.side_effect = Exception("Unexpected error")
-        
+
         with pytest.raises(APIError, match="Critical unhandled error"):
             await adapter.generate("Test prompt", correlation_id="test-unexpected")
-        
+
         assert adapter.circuit_breaker_failures == 1
 
     # --- Circuit Breaker Tests ---
@@ -230,15 +220,15 @@ class TestAnthropicAdapter:
         """Test that circuit breaker opens after reaching failure threshold."""
         adapter.circuit_breaker_threshold = 3
         adapter.client.generate_text.side_effect = Exception("Test error")
-        
+
         # Fail 3 times to open the circuit
         for i in range(3):
             with pytest.raises(APIError):
                 await adapter.generate(f"Test {i}")
-        
+
         assert adapter.circuit_breaker_state == "open"
         assert adapter.circuit_breaker_failures == 3
-        
+
         # Next call should fail immediately
         with pytest.raises(CircuitBreakerOpenError):
             await adapter.generate("Test when open")
@@ -249,11 +239,11 @@ class TestAnthropicAdapter:
         adapter.circuit_breaker_state = "open"
         adapter.circuit_breaker_last_failure_time = time.time() - 61  # 61 seconds ago
         adapter.circuit_breaker_timeout = 60
-        
+
         adapter.client.generate_text.return_value = "Success after recovery"
-        
+
         result = await adapter.generate("Test recovery")
-        
+
         assert result == "Success after recovery"
         assert adapter.circuit_breaker_state == "closed"
         assert adapter.circuit_breaker_failures == 0
@@ -264,9 +254,9 @@ class TestAnthropicAdapter:
         adapter.circuit_breaker_failures = 2
         adapter.circuit_breaker_state = "half-open"
         adapter.client.generate_text.return_value = "Success"
-        
+
         result = await adapter.generate("Test reset")
-        
+
         assert result == "Success"
         assert adapter.circuit_breaker_state == "closed"
         assert adapter.circuit_breaker_failures == 0
@@ -296,7 +286,7 @@ class TestAnthropicAdapter:
 
     def test_sanitize_prompt_removes_control_chars(self, adapter):
         """Test that control characters are removed from prompt."""
-        prompt = "Test\x00with\x1Fcontrol\x7Fchars"
+        prompt = "Test\x00with\x1fcontrol\x7fchars"
         sanitized = adapter._sanitize_prompt(prompt)
         assert sanitized == "Testwithcontrolchars"
 
@@ -305,24 +295,26 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch('arbiter.plugins.anthropic_adapter.LLMClient') as mock_client:
+        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
-            
+
             async with AnthropicAdapter(valid_settings) as adapter:
                 assert adapter is not None
-            
+
             mock_instance.aclose_session.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_context_manager_handles_close_error(self, valid_settings):
         """Test that context manager handles errors during session close."""
-        with patch('arbiter.plugins.anthropic_adapter.LLMClient') as mock_client:
+        with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
-            mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close error"))
-            
+            mock_instance.aclose_session = AsyncMock(
+                side_effect=Exception("Close error")
+            )
+
             async with AnthropicAdapter(valid_settings) as adapter:
                 pass  # Should not raise even if close fails
 
@@ -331,26 +323,32 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_success(self, adapter):
         """Test that metrics are recorded on successful generation."""
-        with patch('arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds') as mock_latency, \
-             patch('arbiter.plugins.anthropic_adapter.anthropic_call_success_total') as mock_success:
-            
+        with patch(
+            "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+        ) as mock_latency, patch(
+            "arbiter.plugins.anthropic_adapter.anthropic_call_success_total"
+        ) as mock_success:
+
             adapter.client.generate_text.return_value = "Success"
             await adapter.generate("Test", correlation_id="metrics-test")
-            
+
             mock_latency.labels.assert_called()
             mock_success.labels.assert_called()
 
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_failure(self, adapter):
         """Test that metrics are recorded on failed generation."""
-        with patch('arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds') as mock_latency, \
-             patch('arbiter.plugins.anthropic_adapter.anthropic_call_errors_total') as mock_errors:
-            
+        with patch(
+            "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+        ) as mock_latency, patch(
+            "arbiter.plugins.anthropic_adapter.anthropic_call_errors_total"
+        ) as mock_errors:
+
             adapter.client.generate_text.side_effect = Exception("Test error")
-            
+
             with pytest.raises(APIError):
                 await adapter.generate("Test", correlation_id="metrics-fail-test")
-            
+
             mock_latency.labels.assert_called()
             mock_errors.labels.assert_called()
 

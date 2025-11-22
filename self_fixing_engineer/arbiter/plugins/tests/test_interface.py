@@ -1,10 +1,6 @@
 # test_interface.py
 import pytest
-import asyncio
-import datetime
-import json
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any, List
+from unittest.mock import Mock, patch
 
 from arbiter.plugins.multimodal.interface import (
     ProcessingResult,
@@ -13,7 +9,6 @@ from arbiter.plugins.multimodal.interface import (
     VideoProcessor,
     TextProcessor,
     AnalysisResultType,
-    MultiModalAnalysisResult,
     ImageAnalysisResult,
     AudioAnalysisResult,
     VideoAnalysisResult,
@@ -24,7 +19,7 @@ from arbiter.plugins.multimodal.interface import (
     InvalidInputError,
     ConfigurationError,
     ProviderNotAvailableError,
-    ProcessingError
+    ProcessingError,
 )
 from pydantic import ValidationError
 
@@ -39,9 +34,9 @@ class TestProcessingResult:
             data={"key": "value"},
             summary="Test successful",
             operation_id="op123",
-            model_confidence=0.95
+            model_confidence=0.95,
         )
-        
+
         assert result.success is True
         assert result.data == {"key": "value"}
         assert result.model_confidence == 0.95
@@ -50,11 +45,9 @@ class TestProcessingResult:
     def test_processing_result_failure(self):
         """Test failed ProcessingResult creation."""
         result = ProcessingResult(
-            success=False,
-            error="Processing failed",
-            operation_id="op456"
+            success=False, error="Processing failed", operation_id="op456"
         )
-        
+
         assert result.success is False
         assert result.error == "Processing failed"
         assert result.data is None
@@ -63,26 +56,18 @@ class TestProcessingResult:
         """Test confidence score validation."""
         # Valid confidence
         result = ProcessingResult(
-            success=True,
-            operation_id="op789",
-            model_confidence=0.5
+            success=True, operation_id="op789", model_confidence=0.5
         )
         assert result.model_confidence == 0.5
-        
+
         # Invalid confidence (out of range)
         with pytest.raises(ValidationError):
-            ProcessingResult(
-                success=True,
-                operation_id="op789",
-                model_confidence=1.5
-            )
+            ProcessingResult(success=True, operation_id="op789", model_confidence=1.5)
 
     def test_processing_result_extra_fields_allowed(self):
         """Test that extra fields are allowed."""
         result = ProcessingResult(
-            success=True,
-            operation_id="op123",
-            custom_field="custom_value"
+            success=True, operation_id="op123", custom_field="custom_value"
         )
         assert result.custom_field == "custom_value"
 
@@ -101,14 +86,14 @@ class TestAnalysisResults:
             classifications=[{"label": "cat", "score": 0.95}],
             objects=[{"box": [10, 20, 30, 40], "label": "cat", "confidence": 0.9}],
             ocr_text="Hello World",
-            embedding=[0.1, 0.2, 0.3]
+            embedding=[0.1, 0.2, 0.3],
         )
-        
+
         assert result.is_valid() is True
         assert "cat" in result.summary()
         assert "Objects detected: 1" in result.summary()
         assert "OCR text present" in result.summary()
-        
+
         provenance = result.get_provenance_info()
         assert provenance["result_type"] == "image"
         assert provenance["model_id"] == "vision-v1"
@@ -124,9 +109,9 @@ class TestAnalysisResults:
             transcript="Hello, this is a test",
             speakers=[{"speaker": "Speaker1", "confidence": 0.9}],
             sentiment={"positive": 0.8, "negative": 0.1, "neutral": 0.1},
-            language="en"
+            language="en",
         )
-        
+
         assert result.is_valid() is True
         assert "Transcript:" in result.summary()
         assert "Sentiment: positive" in result.summary()
@@ -142,9 +127,9 @@ class TestAnalysisResults:
             summary_transcript="Video summary text",
             scene_changes=[1.0, 5.0, 10.0],
             tracked_objects=[{"id": 1, "label": "person"}],
-            actions=[{"action": "walking", "confidence": 0.9, "timestamp": (1.0, 3.0)}]
+            actions=[{"action": "walking", "confidence": 0.9, "timestamp": (1.0, 3.0)}],
         )
-        
+
         assert result.is_valid() is True
         assert "Scenes: 3" in result.summary()
         assert "Tracked Objects: 1" in result.summary()
@@ -161,9 +146,9 @@ class TestAnalysisResults:
             sentiment={"positive": 0.7, "negative": 0.2, "neutral": 0.1},
             entities=[{"text": "John Doe", "type": "PERSON"}],
             summary_text="This is a summary",
-            language="en"
+            language="en",
         )
-        
+
         assert result.is_valid() is True
         assert "Class: technology" in result.summary()
         assert "Sentiment: positive" in result.summary()
@@ -175,9 +160,9 @@ class TestAnalysisResults:
             raw_data={},
             result_type=AnalysisResultType.IMAGE,
             success=False,
-            error_message="Processing failed"
+            error_message="Processing failed",
         )
-        
+
         assert result.is_valid() is False
         assert result.error_message == "Processing failed"
 
@@ -188,9 +173,9 @@ class TestAnalysisResults:
             result_type=AnalysisResultType.IMAGE,
             success=True,
             model_id="test-model",
-            confidence=0.8
+            confidence=0.8,
         )
-        
+
         repr_str = repr(result)
         assert "ImageAnalysisResult" in repr_str
         assert "result_type='image'" in repr_str
@@ -215,7 +200,7 @@ class TestDummyMultiModalPlugin:
     def test_analyze_image(self, plugin):
         """Test image analysis."""
         result = plugin.analyze_image(b"fake_image_bytes", description="test image")
-        
+
         assert result.success is True
         assert result.result_type == AnalysisResultType.IMAGE
         assert result.confidence == 0.75
@@ -228,14 +213,14 @@ class TestDummyMultiModalPlugin:
         """Test image analysis with invalid input."""
         with pytest.raises(ValueError, match="Invalid image_data"):
             plugin.analyze_image(None)
-        
+
         with pytest.raises(ValueError, match="Invalid image_data"):
             plugin.analyze_image("/nonexistent/path.jpg")
 
     def test_analyze_audio(self, plugin):
         """Test audio analysis."""
         result = plugin.analyze_audio(b"fake_audio_bytes", description="test audio")
-        
+
         assert result.success is True
         assert result.result_type == AnalysisResultType.AUDIO
         assert result.transcript == "This is a dummy transcript."
@@ -246,7 +231,7 @@ class TestDummyMultiModalPlugin:
     def test_analyze_video(self, plugin):
         """Test video analysis."""
         result = plugin.analyze_video(b"fake_video_bytes", description="test video")
-        
+
         assert result.success is True
         assert result.result_type == AnalysisResultType.VIDEO
         assert len(result.scene_changes) == 3
@@ -258,7 +243,7 @@ class TestDummyMultiModalPlugin:
         """Test text analysis."""
         test_text = "This is a test text for analysis"
         result = plugin.analyze_text(test_text, description="test text")
-        
+
         assert result.success is True
         assert result.result_type == AnalysisResultType.TEXT
         assert result.raw_data == test_text
@@ -271,14 +256,14 @@ class TestDummyMultiModalPlugin:
         """Test text analysis with invalid input."""
         with pytest.raises(ValueError, match="Invalid text_data"):
             plugin.analyze_text("")
-        
+
         with pytest.raises(ValueError, match="Invalid text_data"):
             plugin.analyze_text(None)
 
     def test_supported_modalities(self, plugin):
         """Test supported_modalities method."""
         modalities = plugin.supported_modalities()
-        
+
         assert "image" in modalities
         assert "audio" in modalities
         assert "video" in modalities
@@ -290,9 +275,9 @@ class TestDummyMultiModalPlugin:
         # Process some data first
         plugin.analyze_image(b"test")
         plugin.analyze_text("test")
-        
+
         info = plugin.model_info()
-        
+
         assert info["name"] == "DummyMultiModalPlugin"
         assert info["model_id"] == "test-dummy-v1"
         assert info["call_count"] == 2
@@ -303,7 +288,7 @@ class TestDummyMultiModalPlugin:
         with plugin as p:
             assert p is plugin
             p.analyze_image(b"test")
-        
+
         # After exiting, shutdown should have been called
 
     @pytest.mark.asyncio
@@ -311,7 +296,7 @@ class TestDummyMultiModalPlugin:
         """Test asynchronous context manager."""
         async with plugin as p:
             assert p is plugin
-        
+
         # After exiting, shutdown_async should have been called
 
     @pytest.mark.asyncio
@@ -319,29 +304,29 @@ class TestDummyMultiModalPlugin:
         """Test that async methods raise NotImplementedError."""
         with pytest.raises(NotImplementedError):
             await plugin.analyze_image_async(b"test")
-        
+
         with pytest.raises(NotImplementedError):
             await plugin.analyze_audio_async(b"test")
-        
+
         with pytest.raises(NotImplementedError):
             await plugin.analyze_video_async(b"test")
-        
+
         with pytest.raises(NotImplementedError):
             await plugin.analyze_text_async("test")
 
-    @patch('arbiter.plugins.multimodal.interface.time.sleep')
+    @patch("arbiter.plugins.multimodal.interface.time.sleep")
     def test_metrics_tracking(self, mock_sleep, plugin):
         """Test that metrics are properly tracked."""
         # Mock sleep to speed up tests
         mock_sleep.return_value = None
-        
+
         # Successful request
         plugin.analyze_image(b"test")
-        
+
         # Failed request
         with pytest.raises(ValueError):
             plugin.analyze_image(None)
-        
+
         # Check metrics were called (mocked in the fixture)
         # In real scenario, you'd check the actual Prometheus metrics
 
@@ -423,7 +408,7 @@ def get_or_create(metric):
 @pytest.fixture(autouse=True)
 def mock_metrics():
     """Auto-use fixture to mock metrics."""
-    with patch('arbiter.plugins.multimodal.interface.get_or_create', get_or_create):
+    with patch("arbiter.plugins.multimodal.interface.get_or_create", get_or_create):
         yield
 
 

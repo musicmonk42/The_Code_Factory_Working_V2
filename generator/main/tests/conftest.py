@@ -54,7 +54,7 @@ MOCKED_MODULES = [
     "generator.audit_log.audit_crypto.audit_crypto_provider",
     "generator.audit_log.audit_crypto.audit_keystore",
     "generator.audit_log.audit_crypto.secrets",
-    "generator.engine",                     # fixes “No module named 'engine'”
+    "generator.engine",  # fixes “No module named 'engine'”
     # "generator.main.gui",  # <-- FIX: DO NOT MOCK THE FILE UNDER TEST
     "generator.main.api",
     "generator.main.cli",
@@ -71,7 +71,7 @@ MOCKED_MODULES = [
 ]
 
 for name in MOCKED_MODULES:
-    if name not in sys.modules: # Only mock if not already imported
+    if name not in sys.modules:  # Only mock if not already imported
         sys.modules[name] = MOCK
 
 # -------------------------------------------------

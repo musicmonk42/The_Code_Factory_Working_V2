@@ -23,15 +23,12 @@ logger = logging.getLogger("omnicore_engine_init")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    ))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 # FIXED: Removed misleading entries from __all__.
 # The __all__ list now only contains names actually imported or defined in this file,
 # making the package's public API explicit and avoiding import errors.
-__all__ = [
-    "PLUGIN_REGISTRY",
-    "plugin_event_handler"
-]
+__all__ = ["PLUGIN_REGISTRY", "plugin_event_handler"]

@@ -1,12 +1,16 @@
 import pytest
-import asyncio
+
 # Fix: Added missing import
 import logging
 from test_generation.orchestrator.stubs import (
-    DummyPolicyEngine, DummyEventBus, DummySecurityScanner,
-    DummyKnowledgeGraphClient, DummyPRCreator, DummyMutationTester, DummyTestEnricher
+    DummyPolicyEngine,
+    DummyEventBus,
+    DummySecurityScanner,
+    DummyPRCreator,
+    DummyMutationTester,
+    DummyTestEnricher,
 )
-from test_generation.orchestrator.console import log
+
 
 @pytest.mark.asyncio
 async def test_dummy_policy_engine(caplog):
@@ -19,12 +23,14 @@ async def test_dummy_policy_engine(caplog):
     assert "DummyPolicyEngine" in caplog.text
     assert policy.policy_hash == "stub-hash"
 
+
 @pytest.mark.asyncio
 async def test_dummy_event_bus(caplog):
     caplog.set_level(logging.DEBUG)
     bus = DummyEventBus()
     await bus.publish("event")
     assert "DummyEventBus" in caplog.text
+
 
 @pytest.mark.asyncio
 async def test_dummy_security_scanner(caplog):
@@ -35,6 +41,7 @@ async def test_dummy_security_scanner(caplog):
     assert issues == []
     assert severity == "NONE"
     assert "DummySecurityScanner" in caplog.text
+
 
 @pytest.mark.asyncio
 async def test_dummy_pr_creator(caplog):
@@ -48,6 +55,7 @@ async def test_dummy_pr_creator(caplog):
     assert url == "https://jira.com/stub-ticket"
     assert "DummyPRCreator" in caplog.text
 
+
 @pytest.mark.asyncio
 async def test_dummy_mutation_tester(caplog):
     caplog.set_level(logging.DEBUG)
@@ -58,6 +66,7 @@ async def test_dummy_mutation_tester(caplog):
     assert log_msg == "Stubbed mutation score"
     assert "DummyMutationTester" in caplog.text
 
+
 @pytest.mark.asyncio
 async def test_dummy_test_enricher(caplog):
     caplog.set_level(logging.DEBUG)
@@ -66,6 +75,7 @@ async def test_dummy_test_enricher(caplog):
     result = await enricher.enrich_test(content)
     assert result == content
     assert "DummyTestEnricher" in caplog.text
+
 
 @pytest.mark.asyncio
 async def test_dummy_policy():
@@ -77,10 +87,12 @@ async def test_dummy_policy():
     result, _ = await policy.should_integrate_test("test")
     assert result
 
+
 def test_dummy_policy_import():
     """
     Tests that the DummyPolicyEngine class and its should_integrate_test method
     can be correctly imported and are callable.
     """
     from test_generation.orchestrator.stubs import DummyPolicyEngine
+
     assert callable(DummyPolicyEngine.should_integrate_test)

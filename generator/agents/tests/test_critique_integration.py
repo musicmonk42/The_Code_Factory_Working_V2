@@ -45,11 +45,15 @@ async def test_orchestrate_critique_pipeline_happy_path(monkeypatch, tmp_path):
         return {"content": '{"verdict": "pass", "score": 0.99}'}
 
     # Patch internals of critique_agent orchestrator
-    monkeypatch.setattr(core, "build_semantic_critique_prompt", fake_build_prompt, raising=False)
+    monkeypatch.setattr(
+        core, "build_semantic_critique_prompt", fake_build_prompt, raising=False
+    )
     monkeypatch.setattr(core, "run_all_lints_and_checks", fake_run_lints, raising=False)
     monkeypatch.setattr(core, "apply_auto_fixes", fake_apply_auto_fixes, raising=False)
     monkeypatch.setattr(core, "runner_run_tests", fake_runner_run_tests, raising=False)
-    monkeypatch.setattr(core, "scan_for_vulnerabilities", fake_scan_for_vulnerabilities, raising=False)
+    monkeypatch.setattr(
+        core, "scan_for_vulnerabilities", fake_scan_for_vulnerabilities, raising=False
+    )
     monkeypatch.setattr(core, "call_llm_api", fake_call_llm_api, raising=False)
 
     cfg = CritiqueConfig()

@@ -13,7 +13,7 @@ from .audit_backend_core import (
     _STATUS_OK,
     _STATUS_ERROR,
     logger,
-    retry_operation,   # <-- ADD here (it’s defined in audit_backend_core)
+    retry_operation,  # <-- ADD here (it’s defined in audit_backend_core)
 )
 
 # File and SQL Backends
@@ -23,7 +23,12 @@ from .audit_backend_file_sql import FileBackend, SQLiteBackend
 from .audit_backend_cloud import S3Backend, GCSBackend, AzureBlobBackend
 
 # Streaming Backends
-from .audit_backend_streaming_backends import HTTPBackend, KafkaBackend, SplunkBackend, InMemoryBackend
+from .audit_backend_streaming_backends import (
+    HTTPBackend,
+    KafkaBackend,
+    SplunkBackend,
+    InMemoryBackend,
+)
 
 # Streaming Utilities (public exports expected by tests)
 from .audit_backend_streaming_utils import (
@@ -47,11 +52,16 @@ _BACKEND_REGISTRY: Dict[str, Type[LogBackend]] = {
     "inmemory": InMemoryBackend,
 }
 
-def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> LogBackend:
+
+def get_backend(
+    backend_type: str, params: Optional[Dict[str, Any]] = None
+) -> LogBackend:
     """Factory for backend instantiation."""
     backend_type_lower = backend_type.lower()
     if backend_type_lower not in _BACKEND_REGISTRY:
-        raise ValueError(f"Unknown backend: {backend_type}. Available: {list(_BACKEND_REGISTRY.keys())}")
+        raise ValueError(
+            f"Unknown backend: {backend_type}. Available: {list(_BACKEND_REGISTRY.keys())}"
+        )
 
     # normalize params so we can index safely
     params = dict(params or {})
@@ -71,6 +81,7 @@ def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> L
             params["dlq_class"] = PersistentRetryQueue
 
     return _BACKEND_REGISTRY[backend_type_lower](params)
+
 
 __all__ = [
     # core

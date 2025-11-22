@@ -5,28 +5,31 @@ import warnings
 
 from . import audit_log_pb2 as audit__log__pb2
 
-GRPC_GENERATED_VERSION = '1.63.2'
+GRPC_GENERATED_VERSION = "1.63.2"
 GRPC_VERSION = grpc.__version__
-EXPECTED_ERROR_RELEASE = '1.65.0'
-SCHEDULED_RELEASE_DATE = 'June 25, 2024'
+EXPECTED_ERROR_RELEASE = "1.65.0"
+SCHEDULED_RELEASE_DATE = "June 25, 2024"
 _version_not_supported = False
 
 try:
     from grpc._utilities import first_version_is_lower
-    _version_not_supported = first_version_is_lower(GRPC_VERSION, GRPC_GENERATED_VERSION)
+
+    _version_not_supported = first_version_is_lower(
+        GRPC_VERSION, GRPC_GENERATED_VERSION
+    )
 except ImportError:
     _version_not_supported = True
 
 if _version_not_supported:
     warnings.warn(
-        f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in audit_log_pb2_grpc.py depends on'
-        + f' grpcio>={GRPC_GENERATED_VERSION}.'
-        + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
-        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
-        + f' This warning will become an error in {EXPECTED_ERROR_RELEASE},'
-        + f' scheduled for release on {SCHEDULED_RELEASE_DATE}.',
-        RuntimeWarning
+        f"The grpc package installed is at version {GRPC_VERSION},"
+        + " but the generated code in audit_log_pb2_grpc.py depends on"
+        + f" grpcio>={GRPC_GENERATED_VERSION}."
+        + f" Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}"
+        + f" or downgrade your generated code using grpcio-tools<={GRPC_VERSION}."
+        + f" This warning will become an error in {EXPECTED_ERROR_RELEASE},"
+        + f" scheduled for release on {SCHEDULED_RELEASE_DATE}.",
+        RuntimeWarning,
     )
 
 
@@ -42,15 +45,17 @@ class AuditServiceStub(object):
             channel: A grpc.Channel.
         """
         self.LogAction = channel.unary_unary(
-                '/audit_log.AuditService/LogAction',
-                request_serializer=audit__log__pb2.LogActionRequest.SerializeToString,
-                response_deserializer=audit__log__pb2.LogActionResponse.FromString,
-                _registered_method=True)
+            "/audit_log.AuditService/LogAction",
+            request_serializer=audit__log__pb2.LogActionRequest.SerializeToString,
+            response_deserializer=audit__log__pb2.LogActionResponse.FromString,
+            _registered_method=True,
+        )
         self.LogStream = channel.stream_unary(
-                '/audit_log.AuditService/LogStream',
-                request_serializer=audit__log__pb2.LogActionRequest.SerializeToString,
-                response_deserializer=audit__log__pb2.LogActionResponse.FromString,
-                _registered_method=True)
+            "/audit_log.AuditService/LogStream",
+            request_serializer=audit__log__pb2.LogActionRequest.SerializeToString,
+            response_deserializer=audit__log__pb2.LogActionResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class AuditServiceServicer(object):
@@ -59,60 +64,62 @@ class AuditServiceServicer(object):
     """
 
     def LogAction(self, request, context):
-        """Logs a single action. This is a unary RPC for individual, transactional events.
-        """
+        """Logs a single action. This is a unary RPC for individual, transactional events."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
     def LogStream(self, request_iterator, context):
         """Logs a stream of actions for high-throughput, bulk data processing
         or continuous event streaming from another service.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
 
 def add_AuditServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'LogAction': grpc.unary_unary_rpc_method_handler(
-                    servicer.LogAction,
-                    request_deserializer=audit__log__pb2.LogActionRequest.FromString,
-                    response_serializer=audit__log__pb2.LogActionResponse.SerializeToString,
-            ),
-            'LogStream': grpc.stream_unary_rpc_method_handler(
-                    servicer.LogStream,
-                    request_deserializer=audit__log__pb2.LogActionRequest.FromString,
-                    response_serializer=audit__log__pb2.LogActionResponse.SerializeToString,
-            ),
+        "LogAction": grpc.unary_unary_rpc_method_handler(
+            servicer.LogAction,
+            request_deserializer=audit__log__pb2.LogActionRequest.FromString,
+            response_serializer=audit__log__pb2.LogActionResponse.SerializeToString,
+        ),
+        "LogStream": grpc.stream_unary_rpc_method_handler(
+            servicer.LogStream,
+            request_deserializer=audit__log__pb2.LogActionRequest.FromString,
+            response_serializer=audit__log__pb2.LogActionResponse.SerializeToString,
+        ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'audit_log.AuditService', rpc_method_handlers)
+        "audit_log.AuditService", rpc_method_handlers
+    )
     server.add_generic_rpc_handlers((generic_handler,))
 
 
- # This class is part of an EXPERIMENTAL API.
+# This class is part of an EXPERIMENTAL API.
 class AuditService(object):
     """The AuditService provides methods for logging actions to a secure,
     tamper-evident audit trail. It supports both single-entry and streaming ingestion.
     """
 
     @staticmethod
-    def LogAction(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
+    def LogAction(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/audit_log.AuditService/LogAction',
+            "/audit_log.AuditService/LogAction",
             audit__log__pb2.LogActionRequest.SerializeToString,
             audit__log__pb2.LogActionResponse.FromString,
             options,
@@ -123,23 +130,26 @@ class AuditService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            _registered_method=True,
+        )
 
     @staticmethod
-    def LogStream(request_iterator,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
+    def LogStream(
+        request_iterator,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
         return grpc.experimental.stream_unary(
             request_iterator,
             target,
-            '/audit_log.AuditService/LogStream',
+            "/audit_log.AuditService/LogStream",
             audit__log__pb2.LogActionRequest.SerializeToString,
             audit__log__pb2.LogActionResponse.FromString,
             options,
@@ -150,4 +160,5 @@ class AuditService(object):
             wait_for_ready,
             timeout,
             metadata,
-            _registered_method=True)
+            _registered_method=True,
+        )

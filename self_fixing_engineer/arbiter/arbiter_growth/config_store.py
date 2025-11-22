@@ -8,11 +8,17 @@ from datetime import datetime, timezone
 
 import aiofiles
 import etcd3
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 # Local application imports are moved inside methods where they are used to prevent circular dependencies.
 
 logger = logging.getLogger(__name__)
+
 
 class ConfigStore:
     """
@@ -56,17 +62,25 @@ class ConfigStore:
         self._store = {}
         # Filter out None values for clean client instantiation
         etcd_kwargs = {
-            k: v for k, v in {
-                "host": etcd_host, "port": etcd_port, "user": etcd_user,
-                "password": etcd_password, "ca_cert": etcd_ca_cert,
-                "cert_key": etcd_cert_key, "cert_cert": etcd_cert_cert,
-            }.items() if v is not None
+            k: v
+            for k, v in {
+                "host": etcd_host,
+                "port": etcd_port,
+                "user": etcd_user,
+                "password": etcd_password,
+                "ca_cert": etcd_ca_cert,
+                "cert_key": etcd_cert_key,
+                "cert_cert": etcd_cert_cert,
+            }.items()
+            if v is not None
         }
 
         try:
             self.client = etcd3.client(**etcd_kwargs)
         except Exception as e:
-            logger.error(f"Failed to initialize etcd client: {e}. Will rely on fallback mechanisms.")
+            logger.error(
+                f"Failed to initialize etcd client: {e}. Will rely on fallback mechanisms."
+            )
 
         self.fallback_path = fallback_path
         self.cache_ttl = cache_ttl_seconds
@@ -83,7 +97,7 @@ class ConfigStore:
             "security.idempotency_salt": "test_salt",
             "storage.backend": "sqlite",
             "redis.url": "redis://localhost:6379",
-            "kafka.bootstrap_servers": "localhost:9092"
+            "kafka.bootstrap_servers": "localhost:9092",
         }
         self._cache: Dict[str, tuple[Any, float]] = {}
         self._cache_lock = asyncio.Lock()
@@ -124,7 +138,7 @@ class ConfigStore:
         """A background task that watches etcd for changes and updates the cache."""
         if not self.client:
             return
-        
+
         try:
             # The etcd3-py library's watch methods are blocking, so we run them in an executor
             # to avoid blocking the asyncio event loop.
@@ -132,14 +146,21 @@ class ConfigStore:
             while True:
                 event_iterator, cancel = self.client.watch_prefix("/")
                 for event in event_iterator:
-                    key = event.key.decode('utf-8')
-                    value = event.value.decode('utf-8')
-                    logger.info(f"Detected etcd change for key '{key}'. Updating cache.")
+                    key = event.key.decode("utf-8")
+                    value = event.value.decode("utf-8")
+                    logger.info(
+                        f"Detected etcd change for key '{key}'. Updating cache."
+                    )
                     async with self._cache_lock:
-                        self._cache[key] = (self._parse_value(value), datetime.now(timezone.utc).timestamp() + self.cache_ttl)
-                await asyncio.sleep(1) # prevent tight loop on watch error
+                        self._cache[key] = (
+                            self._parse_value(value),
+                            datetime.now(timezone.utc).timestamp() + self.cache_ttl,
+                        )
+                await asyncio.sleep(1)  # prevent tight loop on watch error
         except Exception as e:
-            logger.error(f"etcd watch task failed: {e}. Watcher will stop.", exc_info=True)
+            logger.error(
+                f"etcd watch task failed: {e}. Watcher will stop.", exc_info=True
+            )
 
     async def _watch_etcd_updates(self):
         """Watches etcd for updates and invalidates the cache for changed keys."""
@@ -175,33 +196,44 @@ class ConfigStore:
         checksum_path = f"{self.fallback_path}.sha256"
         if os.path.exists(checksum_path):
             try:
-                async with aiofiles.open(checksum_path, 'r') as f:
+                async with aiofiles.open(checksum_path, "r") as f:
                     expected_hash = (await f.read()).strip()
-                
-                async with aiofiles.open(self.fallback_path, 'rb') as f:
+
+                async with aiofiles.open(self.fallback_path, "rb") as f:
                     content_bytes = await f.read()
                     computed_hash = hashlib.sha256(content_bytes).hexdigest()
 
                 if computed_hash != expected_hash:
-                    logger.error(f"Fallback file integrity check failed for '{self.fallback_path}'. File may be corrupt.")
+                    logger.error(
+                        f"Fallback file integrity check failed for '{self.fallback_path}'. File may be corrupt."
+                    )
                     return
             except Exception as e:
                 logger.error(f"Error during fallback file integrity check: {e}")
                 return
         else:
-            logger.warning(f"No checksum file found for '{self.fallback_path}'. Skipping integrity check.")
+            logger.warning(
+                f"No checksum file found for '{self.fallback_path}'. Skipping integrity check."
+            )
 
         try:
-            async with aiofiles.open(self.fallback_path, 'r') as f:
+            async with aiofiles.open(self.fallback_path, "r") as f:
                 content = await f.read()
                 fallback_configs = json.loads(content)
                 async with self._cache_lock:
                     for k, v in fallback_configs.items():
                         # Set a very long TTL for fallback values to differentiate them from etcd values
-                        self._cache[k] = (v, datetime.now(timezone.utc).timestamp() + 86400)
-                logger.info(f"Loaded configurations from fallback file: {self.fallback_path}")
+                        self._cache[k] = (
+                            v,
+                            datetime.now(timezone.utc).timestamp() + 86400,
+                        )
+                logger.info(
+                    f"Loaded configurations from fallback file: {self.fallback_path}"
+                )
         except Exception as e:
-            logger.error(f"Failed to read or parse fallback config file {self.fallback_path}: {e}")
+            logger.error(
+                f"Failed to read or parse fallback config file {self.fallback_path}: {e}"
+            )
 
     def _parse_value(self, value_str: str) -> Any:
         """Tries to parse a string value as float or JSON, otherwise returns the string."""
@@ -215,23 +247,24 @@ class ConfigStore:
 
     async def _get_from_etcd_with_retry(self, key: str) -> Optional[Any]:
         """Wrapper to enable proper retry logic for etcd."""
+
         @retry(
             stop=stop_after_attempt(3),
             wait=wait_exponential(min=1, max=5),
             retry=retry_if_exception_type(Exception),
-            reraise=True
+            reraise=True,
         )
         async def _inner():
             if not self.client:
                 raise Exception("No etcd client available")
-            
+
             loop = asyncio.get_running_loop()
             value_bytes, _ = await loop.run_in_executor(None, self.client.get, key)
-            
+
             if value_bytes:
-                return self._parse_value(value_bytes.decode('utf-8'))
+                return self._parse_value(value_bytes.decode("utf-8"))
             return None
-        
+
         try:
             return await _inner()
         except Exception:
@@ -256,16 +289,16 @@ class ConfigStore:
         """
         # FIX: Moved import here to break the circular dependency
         from .metrics import CONFIG_FALLBACK_USED
-        
+
         # Check cache first with lock to prevent concurrent fetches
         async with self._cache_lock:
             if self._is_cache_valid(key):
                 return self._cache[key][0]
-            
+
             # If not in cache, we need to fetch it
             # Do the fetch while holding the lock to prevent duplicates
             logger.debug(f"Cache miss for config key '{key}'.")
-            
+
             # FIX: Only attempt etcd fetch if the client exists.
             # This prevents slow retries when etcd initialization has already failed.
             if self.client:
@@ -273,14 +306,19 @@ class ConfigStore:
                     value = await self._get_from_etcd(key)
                     if value is not None:
                         logger.debug(f"Fetched config '{key}' from etcd: {value}")
-                        self._cache[key] = (value, datetime.now(timezone.utc).timestamp() + self.cache_ttl)
+                        self._cache[key] = (
+                            value,
+                            datetime.now(timezone.utc).timestamp() + self.cache_ttl,
+                        )
                         return value
                 except Exception as e:
-                    logger.warning(f"Could not reach etcd to get config '{key}': {e}. Attempting fallback.")
-        
+                    logger.warning(
+                        f"Could not reach etcd to get config '{key}': {e}. Attempting fallback."
+                    )
+
         # Release lock before loading fallback
         await self._load_from_fallback()
-        
+
         async with self._cache_lock:
             if self._is_cache_valid(key):
                 logger.warning(f"Using fallback config for '{key}'.")
@@ -291,12 +329,15 @@ class ConfigStore:
                 value = self.defaults[key]
                 logger.warning(f"Using hardcoded default for config '{key}'.")
                 CONFIG_FALLBACK_USED.labels(config_key=key).inc()
-                self._cache[key] = (value, datetime.now(timezone.utc).timestamp() + self.cache_ttl)
+                self._cache[key] = (
+                    value,
+                    datetime.now(timezone.utc).timestamp() + self.cache_ttl,
+                )
                 return value
 
         if default is not None:
             return default
-        
+
         raise KeyError(f"Configuration key '{key}' not found in any source.")
 
     def get_all(self) -> Dict[str, Any]:
@@ -309,6 +350,7 @@ class ConfigStore:
 
 class TokenBucketRateLimiter:
     """Implements a token bucket rate limiter with blocking capability."""
+
     def __init__(self, config_store: ConfigStore):
         self.config_store = config_store
         self.tokens: float = 0.0
@@ -328,11 +370,17 @@ class TokenBucketRateLimiter:
             # FIX: Use a monotonic clock for reliable time-based calculations.
             # `datetime.now()` is not monotonic and caused incorrect elapsed time calculations.
             now = asyncio.get_running_loop().time()
-            
+
             max_tokens = await self.config_store.get_config("rate_limit_tokens", 10)
-            refill_rate = await self.config_store.get_config("rate_limit_refill_rate", 10)
-            effective_timeout = timeout if timeout is not None else await self.config_store.get_config("rate_limit_timeout", 30.0)
-            
+            refill_rate = await self.config_store.get_config(
+                "rate_limit_refill_rate", 10
+            )
+            effective_timeout = (
+                timeout
+                if timeout is not None
+                else await self.config_store.get_config("rate_limit_timeout", 30.0)
+            )
+
             # Ensure we have valid values
             if max_tokens is None:
                 max_tokens = 10
@@ -344,7 +392,7 @@ class TokenBucketRateLimiter:
             if self.last_refill == 0.0:
                 self.last_refill = now
                 self.tokens = max_tokens
-            
+
             # Calculate tokens accumulated since last refill
             elapsed = now - self.last_refill
             self.tokens = min(max_tokens, self.tokens + elapsed * refill_rate)
@@ -353,20 +401,20 @@ class TokenBucketRateLimiter:
             if self.tokens >= 1.0:
                 self.tokens -= 1.0
                 return True
-            
+
             # Calculate wait time needed to get 1 token
             tokens_needed = 1.0 - self.tokens
             wait_time = tokens_needed / refill_rate
-            
+
             if wait_time > effective_timeout:
                 return False
-            
+
             # Wait for the calculated time
             await asyncio.sleep(wait_time)
-            
+
             # After waiting, update tokens based on the wait time
             # We waited long enough to get exactly the tokens we needed
             self.tokens = self.tokens + wait_time * refill_rate - 1.0
             self.last_refill = now + wait_time
-            
+
             return True

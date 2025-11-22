@@ -4,13 +4,13 @@
 __all__ = [
     "analyzer",
     "core_graph",
-    "core_policy", 
+    "core_policy",
     "core_security",
     "core_ai",
     "core_audit",
     "core_report",
     "core_secrets",
-    "core_utils"
+    "core_utils",
 ]
 
 __version__ = "1.0.0"

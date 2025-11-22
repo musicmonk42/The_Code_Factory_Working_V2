@@ -1,12 +1,12 @@
 """
 Kafka Plugin (production-ready)
 """
+
 from __future__ import annotations
 
 import os
 import sys
 import json
-import time
 import hmac
 import math
 import uuid
@@ -25,6 +25,7 @@ try:
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
 except ImportError:
+
     def alert_operator(msg: str, level: str = "WARNING") -> None:
         """Dummy alert function."""
         print(f"[OPS ALERT - {level}] {msg}", file=sys.stderr)
@@ -35,8 +36,10 @@ except ImportError:
 
     class _DummyAudit:
         """Dummy audit logger."""
+
         def log_event(self, *a, **k):
             print(f"[AUDIT_LOG] args={a} kwargs={k}")
+
     audit_logger = _DummyAudit()
     SECRETS_MANAGER = None  # type: ignore
 
@@ -44,16 +47,22 @@ except ImportError:
 try:
     from omnicore_engine.plugin_registry import plugin, PlugInKind
 except ImportError:
+
     def plugin(**_kwargs):
-        def _decorator(cls): return cls
+        def _decorator(cls):
+            return cls
+
         return _decorator
+
     class PlugInKind:
         SINK = "sink"
         INTEGRATION = "integration"
 
+
 # ---- Optional OpenTelemetry
 try:
     from opentelemetry import trace as _otel_trace
+
     _tracer = _otel_trace.get_tracer(__name__)
     _OTEL_AVAILABLE = True
 except ImportError:
@@ -63,36 +72,62 @@ except ImportError:
 # ---- Optional Prometheus metrics
 try:
     from prometheus_client import Counter, Gauge, Histogram
+
     _METRICS = True
 except ImportError:
     _METRICS = False
+
     class Counter:
-        def __init__(self, *a, **k): pass
-        def labels(self, *a, **k): return self
-        def inc(self, *a, **k): pass
+        def __init__(self, *a, **k):
+            pass
+
+        def labels(self, *a, **k):
+            return self
+
+        def inc(self, *a, **k):
+            pass
+
     class Gauge:
-        def __init__(self, *a, **k): pass
-        def set(self, *a, **k): pass
+        def __init__(self, *a, **k):
+            pass
+
+        def set(self, *a, **k):
+            pass
+
     class Histogram:
-        def __init__(self, *a, **k): pass
-        def labels(self, *a, **k): return self
-        def observe(self, *a, **k): pass
+        def __init__(self, *a, **k):
+            pass
+
+        def labels(self, *a, **k):
+            return self
+
+        def observe(self, *a, **k):
+            pass
+
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     _h = logging.StreamHandler(sys.stdout)
-    _f = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
+    _f = logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
     _h.setFormatter(_f)
     logger.addHandler(_h)
 logger.setLevel(logging.INFO)
 
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 
+
 # ---- Exceptions (library-safe)
 class StartupDependencyMissing(RuntimeError): ...
+
+
 class QueueDrainTimeout(RuntimeError): ...
+
+
 class PermanentSendError(RuntimeError): ...
+
+
 class MisconfigurationError(RuntimeError): ...
+
 
 # ---- aiokafka (async) or dry-run
 _AIOKAFKA_AVAILABLE = False
@@ -101,18 +136,36 @@ try:
     # Bug fix 1: Import all aiokafka-related classes in one block
     from aiokafka import AIOKafkaProducer
     from aiokafka import errors as _kafka_errors
+
     _AIOKAFKA_AVAILABLE = True
 except ImportError:
     pass
 
 # ---- Metrics (labeled by topic)
-_kafka_sent = Counter("kafka_plugin_messages_sent_total", "Messages successfully sent to Kafka", ['topic'])
-_kafka_retried = Counter("kafka_plugin_messages_retried_total", "Messages retried after transient failure", ['topic'])
-_kafka_dropped = Counter("kafka_plugin_messages_dropped_total", "Messages permanently dropped", ['topic', 'reason'])
-_kafka_dlq = Counter("kafka_plugin_dlq_total", "Messages sent to dead-letter queue", ['topic', 'reason'])
+_kafka_sent = Counter(
+    "kafka_plugin_messages_sent_total", "Messages successfully sent to Kafka", ["topic"]
+)
+_kafka_retried = Counter(
+    "kafka_plugin_messages_retried_total",
+    "Messages retried after transient failure",
+    ["topic"],
+)
+_kafka_dropped = Counter(
+    "kafka_plugin_messages_dropped_total",
+    "Messages permanently dropped",
+    ["topic", "reason"],
+)
+_kafka_dlq = Counter(
+    "kafka_plugin_dlq_total", "Messages sent to dead-letter queue", ["topic", "reason"]
+)
 _kafka_queue_depth = Gauge("kafka_plugin_queue_depth", "Current in-memory queue depth")
-_kafka_latency_seconds = Histogram("kafka_plugin_latency_seconds", "End-to-end event latency", ['topic'],
-                                   buckets=[.01, .1, .5, 1.0, 5.0, 10.0, 30.0, 60.0])
+_kafka_latency_seconds = Histogram(
+    "kafka_plugin_latency_seconds",
+    "End-to-end event latency",
+    ["topic"],
+    buckets=[0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
+)
+
 
 # ---- Config dataclass
 @dataclass
@@ -128,10 +181,14 @@ class KafkaConfig:
     ssl_cafile: Optional[str] = os.getenv("KAFKA_SSL_CAFILE") or None
     ssl_certfile: Optional[str] = os.getenv("KAFKA_SSL_CERTFILE") or None
     ssl_keyfile: Optional[str] = os.getenv("KAFKA_SSL_KEYFILE") or None
-    allow_plaintext: bool = os.getenv("KAFKA_ALLOW_PLAINTEXT", "false").lower() == "true"
+    allow_plaintext: bool = (
+        os.getenv("KAFKA_ALLOW_PLAINTEXT", "false").lower() == "true"
+    )
 
     acks: str = os.getenv("KAFKA_ACKS", "all")
-    enable_idempotence: bool = os.getenv("KAFKA_ENABLE_IDEMPOTENCE", "true").lower() == "true"
+    enable_idempotence: bool = (
+        os.getenv("KAFKA_ENABLE_IDEMPOTENCE", "true").lower() == "true"
+    )
     linger_ms: int = int(os.getenv("KAFKA_LINGER_MS", "25"))
     batch_size: int = int(os.getenv("KAFKA_BATCH_BYTES", "16384"))
     max_in_flight: int = int(os.getenv("KAFKA_MAX_IN_FLIGHT", "5"))
@@ -148,8 +205,13 @@ class KafkaConfig:
     max_record_bytes: int = int(os.getenv("KAFKA_MAX_RECORD_BYTES", "900000"))
     key_field: Optional[str] = os.getenv("KAFKA_KEY_FIELD") or None
     allowed_topics: Optional[List[str]] = (
-        [t.strip() for t in os.getenv("KAFKA_ALLOWED_TOPICS", "").split(",") if t.strip()]
-        if os.getenv("KAFKA_ALLOWED_TOPICS") else None
+        [
+            t.strip()
+            for t in os.getenv("KAFKA_ALLOWED_TOPICS", "").split(",")
+            if t.strip()
+        ]
+        if os.getenv("KAFKA_ALLOWED_TOPICS")
+        else None
     )
 
     # Retry policy
@@ -170,7 +232,9 @@ class KafkaConfig:
             bs = SECRETS_MANAGER.get("KAFKA_BOOTSTRAP_SERVERS", default=bs) or bs
             topic = SECRETS_MANAGER.get("KAFKA_TOPIC", default=topic) or topic
         if not bs or not topic:
-            raise MisconfigurationError("KAFKA_BOOTSTRAP_SERVERS and KAFKA_TOPIC are required")
+            raise MisconfigurationError(
+                "KAFKA_BOOTSTRAP_SERVERS and KAFKA_TOPIC are required"
+            )
 
         cfg = KafkaConfig(bootstrap_servers=bs, topic=topic)
 
@@ -196,19 +260,26 @@ class KafkaConfig:
                         v = str(v).lower() == "true"
                     setattr(cfg, field, v)
 
-            event_key = SECRETS_MANAGER.get("EVENT_HMAC_KEY", default=os.getenv("EVENT_HMAC_KEY"))
+            event_key = SECRETS_MANAGER.get(
+                "EVENT_HMAC_KEY", default=os.getenv("EVENT_HMAC_KEY")
+            )
         else:
             event_key = os.getenv("EVENT_HMAC_KEY")
 
         if event_key:
             try:
                 import base64
-                cfg.hmac_key = base64.b64decode(event_key) if any(c in event_key for c in "/+=") else event_key.encode("utf-8")
+
+                cfg.hmac_key = (
+                    base64.b64decode(event_key)
+                    if any(c in event_key for c in "/+=")
+                    else event_key.encode("utf-8")
+                )
             except Exception:
                 cfg.hmac_key = event_key.encode("utf-8")
         else:
             cfg.hmac_key = None
-        
+
         cfg._validate()
         return cfg
 
@@ -224,10 +295,23 @@ class KafkaConfig:
         sec = (self.security_protocol or "PLAINTEXT").upper()
         if sec not in {"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"}:
             raise MisconfigurationError(f"Invalid KAFKA_SECURITY_PROTOCOL: {sec}")
-        if PRODUCTION_MODE and sec in {"PLAINTEXT", "SASL_PLAINTEXT"} and not self.allow_plaintext:
-            raise MisconfigurationError("PLAINTEXT disallowed in PRODUCTION_MODE (set KAFKA_ALLOW_PLAINTEXT=true to override)")
-        if self.compression_type and self.compression_type not in {"gzip", "snappy", "lz4", "zstd"}:
-            raise MisconfigurationError("KAFKA_COMPRESSION_TYPE must be one of: gzip, snappy, lz4, zstd")
+        if (
+            PRODUCTION_MODE
+            and sec in {"PLAINTEXT", "SASL_PLAINTEXT"}
+            and not self.allow_plaintext
+        ):
+            raise MisconfigurationError(
+                "PLAINTEXT disallowed in PRODUCTION_MODE (set KAFKA_ALLOW_PLAINTEXT=true to override)"
+            )
+        if self.compression_type and self.compression_type not in {
+            "gzip",
+            "snappy",
+            "lz4",
+            "zstd",
+        }:
+            raise MisconfigurationError(
+                "KAFKA_COMPRESSION_TYPE must be one of: gzip, snappy, lz4, zstd"
+            )
         if PRODUCTION_MODE and not _AIOKAFKA_AVAILABLE and not self.dev_dry_run:
             raise StartupDependencyMissing("aiokafka not installed in PRODUCTION_MODE")
 
@@ -244,26 +328,38 @@ def _utc_now_iso() -> str:
     """Returns current UTC time in ISO 8601 format."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-def _sign_event(hmac_key: Optional[bytes], payload: Dict[str, Any]) -> Optional[Dict[str, str]]:
+
+def _sign_event(
+    hmac_key: Optional[bytes], payload: Dict[str, Any]
+) -> Optional[Dict[str, str]]:
     """Generates an HMAC signature for the entire payload."""
     if not hmac_key:
         return None
-    
+
     # Bug fix: sign everything except the signature fields themselves
-    canonical = {k: v for k, v in payload.items() if k not in ("signature", "sig_alg", "sig_scope")}
-    body = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    canonical = {
+        k: v
+        for k, v in payload.items()
+        if k not in ("signature", "sig_alg", "sig_scope")
+    }
+    body = json.dumps(
+        canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
     digest = hmac.new(hmac_key, body, hashlib.sha256).hexdigest()
     return {"value": digest, "alg": "HMAC-SHA256", "scope": "*"}
 
+
 def _jittered_backoff_ms(base_ms: int, attempt: int, cap_ms: int) -> int:
     """Calculates exponential backoff with jitter."""
-    exp = min(cap_ms, int(base_ms * (2 ** attempt)))
+    exp = min(cap_ms, int(base_ms * (2**attempt)))
     lo = max(base_ms, int(exp * 0.5))
     return random.randint(lo, exp)
+
 
 def _serialize_event(event: Dict[str, Any]) -> bytes:
     """Serializes a dictionary to a JSON bytes object."""
     return json.dumps(event, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
 
 # ---- Plugin Implementation
 @plugin(name="kafka_audit_plugin", version="1.2.0", kind=PlugInKind.SINK)
@@ -280,9 +376,9 @@ class KafkaAuditPlugin:
         self.config = config or KafkaConfig.from_env_and_secrets()
         # queue item: (topic, payload, headers, enq_ts)
         # Bug fix 2: Update queue type hint to match encoded headers
-        self._queue: asyncio.Queue[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]] = asyncio.Queue(
-            maxsize=self.config.queue_maxsize
-        )
+        self._queue: asyncio.Queue[
+            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
+        ] = asyncio.Queue(maxsize=self.config.queue_maxsize)
         self._producer: Optional["AIOKafkaProducer"] = None
         self._sender_task: Optional[asyncio.Task] = None
         self._stop_evt = asyncio.Event()
@@ -300,12 +396,16 @@ class KafkaAuditPlugin:
         """
         if self.config.dev_dry_run:
             self._producer = None
-            logger.info("KafkaAuditPlugin initialized (DRY-RUN, topic=%s)", self.config.topic)
+            logger.info(
+                "KafkaAuditPlugin initialized (DRY-RUN, topic=%s)", self.config.topic
+            )
             return
 
         if not _AIOKAFKA_AVAILABLE:
             if PRODUCTION_MODE:
-                raise StartupDependencyMissing("aiokafka not available and dev dry-run disabled")
+                raise StartupDependencyMissing(
+                    "aiokafka not available and dev dry-run disabled"
+                )
             else:
                 logger.warning("aiokafka not installed; running in dry-run mode.")
                 self.config.dev_dry_run = True
@@ -325,25 +425,42 @@ class KafkaAuditPlugin:
         if self.config.compression_type:
             kwargs["compression_type"] = self.config.compression_type
 
-        sec = self.config.security_protocol.upper() if self.config.security_protocol else "PLAINTEXT"
+        sec = (
+            self.config.security_protocol.upper()
+            if self.config.security_protocol
+            else "PLAINTEXT"
+        )
         kwargs["security_protocol"] = sec
         if sec in ("SASL_PLAINTEXT", "SASL_SSL"):
-            if self.config.sasl_mechanism and self.config.sasl_username and self.config.sasl_password:
+            if (
+                self.config.sasl_mechanism
+                and self.config.sasl_username
+                and self.config.sasl_password
+            ):
                 kwargs.update(
                     sasl_mechanism=self.config.sasl_mechanism,
                     sasl_plain_username=self.config.sasl_username,
                     sasl_plain_password=self.config.sasl_password,
                 )
             elif PRODUCTION_MODE:
-                raise MisconfigurationError("SASL_* required for SASL_* protocol in PRODUCTION_MODE")
+                raise MisconfigurationError(
+                    "SASL_* required for SASL_* protocol in PRODUCTION_MODE"
+                )
 
         if sec in ("SSL", "SASL_SSL"):
-            if self.config.ssl_cafile: kwargs["ssl_cafile"] = self.config.ssl_cafile
-            if self.config.ssl_certfile: kwargs["ssl_certfile"] = self.config.ssl_certfile
-            if self.config.ssl_keyfile: kwargs["ssl_keyfile"] = self.config.ssl_keyfile
+            if self.config.ssl_cafile:
+                kwargs["ssl_cafile"] = self.config.ssl_cafile
+            if self.config.ssl_certfile:
+                kwargs["ssl_certfile"] = self.config.ssl_certfile
+            if self.config.ssl_keyfile:
+                kwargs["ssl_keyfile"] = self.config.ssl_keyfile
 
         self._producer = AIOKafkaProducer(**kwargs)
-        logger.info("KafkaAuditPlugin initialized (topic=%s, compression=%s)", self.config.topic, self.config.compression_type)
+        logger.info(
+            "KafkaAuditPlugin initialized (topic=%s, compression=%s)",
+            self.config.topic,
+            self.config.compression_type,
+        )
 
     async def start(self) -> None:
         """Starts the producer and the sender loop."""
@@ -353,7 +470,9 @@ class KafkaAuditPlugin:
         if self._producer is not None:
             await self._producer.start()
         self._stop_evt.clear()
-        self._sender_task = asyncio.create_task(self._sender_loop(), name="kafka_sender_loop")
+        self._sender_task = asyncio.create_task(
+            self._sender_loop(), name="kafka_sender_loop"
+        )
         self._started = True
         logger.info("KafkaAuditPlugin started.")
 
@@ -373,8 +492,13 @@ class KafkaAuditPlugin:
         except asyncio.TimeoutError as e:
             remaining = self._queue.qsize()
             logger.error("Timed out draining Kafka queue (remaining=%s)", remaining)
-            alert_operator(f"Timed out draining Kafka queue on shutdown (remaining={remaining})", level="CRITICAL")
-            raise QueueDrainTimeout(f"Timed out draining Kafka queue (remaining={remaining})") from e
+            alert_operator(
+                f"Timed out draining Kafka queue on shutdown (remaining={remaining})",
+                level="CRITICAL",
+            )
+            raise QueueDrainTimeout(
+                f"Timed out draining Kafka queue (remaining={remaining})"
+            ) from e
         finally:
             self._sender_task = None
 
@@ -405,8 +529,13 @@ class KafkaAuditPlugin:
             raise RuntimeError("KafkaAuditPlugin is not started; cannot enqueue.")
 
         dest_topic = (topic or self.config.topic).strip()
-        if self.config.allowed_topics is not None and dest_topic not in self.config.allowed_topics:
-            raise MisconfigurationError(f"Topic '{dest_topic}' not in KAFKA_ALLOWED_TOPICS")
+        if (
+            self.config.allowed_topics is not None
+            and dest_topic not in self.config.allowed_topics
+        ):
+            raise MisconfigurationError(
+                f"Topic '{dest_topic}' not in KAFKA_ALLOWED_TOPICS"
+            )
 
         safe_details = scrub_secrets(details) if details is not None else {}
         uid = uuid.uuid4().hex
@@ -432,10 +561,14 @@ class KafkaAuditPlugin:
             safe_headers = scrub_secrets(headers_in)
         except Exception:
             safe_headers = headers_in
-        headers = [(str(k), str(v).encode("utf-8")) for k, v in safe_headers.items()] if safe_headers else None
-        
+        headers = (
+            [(str(k), str(v).encode("utf-8")) for k, v in safe_headers.items()]
+            if safe_headers
+            else None
+        )
+
         enq_ts = self._loop.time()
-        
+
         # Bug fix 4: Implement queue drop policy
         try:
             if self.config.queue_drop_policy == "block":
@@ -458,14 +591,22 @@ class KafkaAuditPlugin:
                 await self._queue.put((dest_topic, payload, headers, enq_ts))
         finally:
             _kafka_queue_depth.set(self._queue.qsize())
-        
-        audit_logger.log_event("kafka_enqueue", event_type=event_type, severity=severity, correlation_id=correlation_id, topic=dest_topic)
+
+        audit_logger.log_event(
+            "kafka_enqueue",
+            event_type=event_type,
+            severity=severity,
+            correlation_id=correlation_id,
+            topic=dest_topic,
+        )
 
     async def _sender_loop(self) -> None:
         """
         Main loop for batching and sending messages.
         """
-        batch: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]] = []
+        batch: List[
+            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
+        ] = []
         next_flush = self._loop.time() + (self.config.flush_interval_ms / 1000.0)
 
         while True:
@@ -478,39 +619,64 @@ class KafkaAuditPlugin:
                 pass
 
             if self._stop_evt.is_set() and self._queue.empty():
-                if batch: await self._flush_batch(batch)
+                if batch:
+                    await self._flush_batch(batch)
                 break
 
             if len(batch) >= self.config.batch_max or self._loop.time() >= next_flush:
-                if batch: await self._flush_batch(batch)
+                if batch:
+                    await self._flush_batch(batch)
                 batch = []
-                next_flush = self._loop.time() + (self.config.flush_interval_ms / 1000.0)
+                next_flush = self._loop.time() + (
+                    self.config.flush_interval_ms / 1000.0
+                )
 
-    async def _flush_batch(self, batch: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]]) -> None:
+    async def _flush_batch(
+        self,
+        batch: List[
+            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
+        ],
+    ) -> None:
         """Sends a batch of messages concurrently."""
-        if not batch: return
+        if not batch:
+            return
 
-        chunk_size = max(1, math.ceil(len(batch) / max(1, self.config.send_concurrency)))
-        chunks = [batch[i:i + chunk_size] for i in range(0, len(batch), chunk_size)]
-        
-        cm = _tracer.start_as_current_span("kafka_flush_batch") if _OTEL_AVAILABLE and _tracer else contextlib.nullcontext()
-        
+        chunk_size = max(
+            1, math.ceil(len(batch) / max(1, self.config.send_concurrency))
+        )
+        chunks = [batch[i : i + chunk_size] for i in range(0, len(batch), chunk_size)]
+
+        cm = (
+            _tracer.start_as_current_span("kafka_flush_batch")
+            if _OTEL_AVAILABLE and _tracer
+            else contextlib.nullcontext()
+        )
+
         with cm as span:
             if span:
                 span.set_attribute("batch.size", len(batch))
                 span.set_attribute("chunk.count", len(chunks))
-            
+
             send_tasks = [self._send_chunk(ch, span) for ch in chunks]
             results = await asyncio.gather(*send_tasks, return_exceptions=True)
             for res in results:
                 if isinstance(res, Exception):
                     logger.error("Chunk send error (continuing): %s", res)
 
-    async def _send_chunk(self, chunk: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]], span=None) -> None:
+    async def _send_chunk(
+        self,
+        chunk: List[
+            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
+        ],
+        span=None,
+    ) -> None:
         """Sends a chunk of messages with individual retry logic."""
-        if not chunk: return
+        if not chunk:
+            return
 
-        if (not _AIOKAFKA_AVAILABLE or self._producer is None) and self.config.dev_dry_run:
+        if (
+            not _AIOKAFKA_AVAILABLE or self._producer is None
+        ) and self.config.dev_dry_run:
             per_topic_count: Dict[str, int] = {}
             for topic, payload, _, enq_ts in chunk:
                 _kafka_latency_seconds.labels(topic).observe(self._loop.time() - enq_ts)
@@ -528,8 +694,16 @@ class KafkaAuditPlugin:
             body = _serialize_event(payload)
             if len(body) > self.config.max_record_bytes:
                 _kafka_dropped.labels(topic, "payload_too_large").inc()
-                audit_logger.log_event("kafka_send_drop", error="record_too_large", size=len(body), topic=topic)
-                alert_operator(f"Kafka record too large; dropped (topic={topic}, size={len(body)})", level="ERROR")
+                audit_logger.log_event(
+                    "kafka_send_drop",
+                    error="record_too_large",
+                    size=len(body),
+                    topic=topic,
+                )
+                alert_operator(
+                    f"Kafka record too large; dropped (topic={topic}, size={len(body)})",
+                    level="ERROR",
+                )
                 continue
 
             # Bug fix 2: Headers are already prepared in enqueue_event
@@ -540,7 +714,9 @@ class KafkaAuditPlugin:
                 k = payload.get(self.config.key_field)
                 if k is None and isinstance(payload.get("details"), dict):
                     k = payload["details"].get(self.config.key_field)
-                key_bytes = (str(k) if k is not None else payload.get("id", "")).encode("utf-8")
+                key_bytes = (str(k) if k is not None else payload.get("id", "")).encode(
+                    "utf-8"
+                )
             else:
                 key_bytes = payload.get("id", "").encode("utf-8")
 
@@ -550,9 +726,13 @@ class KafkaAuditPlugin:
             except PermanentSendError as e:
                 _kafka_dropped.labels(topic, "permanent_error").inc()
                 if self.config.dlq_topic:
-                    await self._send_to_dlq(self.config.dlq_topic, payload, str(e), headers)
+                    await self._send_to_dlq(
+                        self.config.dlq_topic, payload, str(e), headers
+                    )
                 else:
-                    logger.error("Permanent send error; dropped message (topic=%s): %s", topic, e)
+                    logger.error(
+                        "Permanent send error; dropped message (topic=%s): %s", topic, e
+                    )
 
     async def _send_with_retry(
         self,
@@ -570,11 +750,17 @@ class KafkaAuditPlugin:
             try:
                 if self._producer is None:
                     raise StartupDependencyMissing("Producer not started")
-                
-                md = await self._producer.send_and_wait(topic, value=value, key=key, headers=headers)
+
+                md = await self._producer.send_and_wait(
+                    topic, value=value, key=key, headers=headers
+                )
                 _kafka_latency_seconds.labels(topic).observe(self._loop.time() - enq_ts)
-                audit_logger.log_event("kafka_send_ok", topic=topic, partition=getattr(md, "partition", None),
-                                       offset=getattr(md, "offset", None))
+                audit_logger.log_event(
+                    "kafka_send_ok",
+                    topic=topic,
+                    partition=getattr(md, "partition", None),
+                    offset=getattr(md, "offset", None),
+                )
                 if span:
                     span.set_attribute("kafka.topic", topic)
                     span.set_attribute("kafka.partition", getattr(md, "partition", -1))
@@ -584,30 +770,56 @@ class KafkaAuditPlugin:
                 retryable = self._is_retryable(e)
                 now_ms = int(self._loop.time() * 1000)
                 total_elapsed = now_ms - start_ms
-                
+
                 if span:
                     span.set_attribute("kafka.retry.attempt", attempt)
                     span.set_attribute("kafka.retryable", retryable)
-                
-                if (not retryable) or (attempt >= self.config.max_retries) or (total_elapsed >= self.config.max_retry_total_ms):
-                    audit_logger.log_event("kafka_send_drop", error=str(e), topic=topic, attempt=attempt, retryable=retryable)
+
+                if (
+                    (not retryable)
+                    or (attempt >= self.config.max_retries)
+                    or (total_elapsed >= self.config.max_retry_total_ms)
+                ):
+                    audit_logger.log_event(
+                        "kafka_send_drop",
+                        error=str(e),
+                        topic=topic,
+                        attempt=attempt,
+                        retryable=retryable,
+                    )
                     if PRODUCTION_MODE:
-                        alert_operator(f"Kafka send dropped (topic={topic}, attempt={attempt}, retryable={retryable}): {e}", level="CRITICAL")
+                        alert_operator(
+                            f"Kafka send dropped (topic={topic}, attempt={attempt}, retryable={retryable}): {e}",
+                            level="CRITICAL",
+                        )
                     raise PermanentSendError(str(e)) from e
-                
+
                 attempt += 1
                 _kafka_retried.labels(topic).inc()
-                backoff = _jittered_backoff_ms(self.config.base_backoff_ms, attempt, self.config.max_backoff_ms) / 1000.0
-                audit_logger.log_event("kafka_send_retry", attempt=attempt, backoff=backoff, topic=topic)
+                backoff = (
+                    _jittered_backoff_ms(
+                        self.config.base_backoff_ms, attempt, self.config.max_backoff_ms
+                    )
+                    / 1000.0
+                )
+                audit_logger.log_event(
+                    "kafka_send_retry", attempt=attempt, backoff=backoff, topic=topic
+                )
                 await asyncio.sleep(backoff)
 
-    async def _send_to_dlq(self, dlq_topic: str, payload: Dict[str, Any], reason: str, headers: Optional[List[Tuple[str, bytes]]]) -> None:
+    async def _send_to_dlq(
+        self,
+        dlq_topic: str,
+        payload: Dict[str, Any],
+        reason: str,
+        headers: Optional[List[Tuple[str, bytes]]],
+    ) -> None:
         """Sends a failed message to the Dead-Letter Queue."""
         if self.config.dev_dry_run:
             _kafka_dlq.labels(dlq_topic, "permanent_error").inc()
             logger.warning("[DRY-RUN] Would send to DLQ: %s", reason)
             return
-        
+
         if self._producer is None:
             raise StartupDependencyMissing("Producer not started; cannot send to DLQ")
 
@@ -619,13 +831,25 @@ class KafkaAuditPlugin:
             }
             body = _serialize_event(dlq_payload)
             key_bytes = payload.get("id", "").encode("utf-8")
-            
-            await self._producer.send_and_wait(dlq_topic, value=body, key=key_bytes, headers=headers)
+
+            await self._producer.send_and_wait(
+                dlq_topic, value=body, key=key_bytes, headers=headers
+            )
             _kafka_dlq.labels(dlq_topic, "permanent_error").inc()
-            logger.warning("Message failed to send and was moved to DLQ (topic=%s, reason=%s)", dlq_topic, reason)
+            logger.warning(
+                "Message failed to send and was moved to DLQ (topic=%s, reason=%s)",
+                dlq_topic,
+                reason,
+            )
         except Exception as e:
-            logger.critical("Failed to send message to DLQ. Message is permanently lost. Error: %s", e)
-            alert_operator(f"Failed to send to DLQ. Event lost! Reason: {reason}. Error: {e}", level="CRITICAL")
+            logger.critical(
+                "Failed to send message to DLQ. Message is permanently lost. Error: %s",
+                e,
+            )
+            alert_operator(
+                f"Failed to send to DLQ. Event lost! Reason: {reason}. Error: {e}",
+                level="CRITICAL",
+            )
             _kafka_dropped.labels(dlq_topic, "dlq_failure").inc()
 
     async def health(self) -> Dict[str, Any]:
@@ -636,10 +860,12 @@ class KafkaAuditPlugin:
             return {"ok": True, "mode": "dry-run"}
         if self._producer is None:
             return {"ok": False, "error": "producer_not_started"}
-        
+
         try:
             # A safer metadata fetch
-            if hasattr(self._producer, 'client') and hasattr(self._producer.client, 'fetch_all_metadata'):
+            if hasattr(self._producer, "client") and hasattr(
+                self._producer.client, "fetch_all_metadata"
+            ):
                 await self._producer.client.fetch_all_metadata()
             else:
                 # Fallback for older aiokafka versions
@@ -656,28 +882,45 @@ class KafkaAuditPlugin:
             if RetriableError and isinstance(exc, RetriableError):
                 return True
         text = repr(exc).lower()
-        transient_signals = ("connection", "timeout", "temporarily", "retriable", "not leader", "leader epoch", "transport", "disconnected")
+        transient_signals = (
+            "connection",
+            "timeout",
+            "temporarily",
+            "retriable",
+            "not leader",
+            "leader epoch",
+            "transport",
+            "disconnected",
+        )
         return any(s in text for s in transient_signals)
+
 
 # ---- Convenience factory used by some loaders
 def build_plugin_from_env() -> KafkaAuditPlugin:
     """Factory function to build plugin from environment variables."""
     return KafkaAuditPlugin(KafkaConfig.from_env_and_secrets())
 
+
 # ---- If this module is run directly, do a quick dry-run smoke
 if __name__ == "__main__":
+
     async def _smoke():
         print("Starting Kafka Audit Plugin smoke test...")
         hook = KafkaAuditPlugin(KafkaConfig.from_env_and_secrets())
         await hook.initialize()
         await hook.start()
         try:
-            await hook.enqueue_event("diagnostic.smoke", {"hello": "world"}, subject="self-test", severity="INFO")
+            await hook.enqueue_event(
+                "diagnostic.smoke",
+                {"hello": "world"},
+                subject="self-test",
+                severity="INFO",
+            )
             await asyncio.sleep(0.5)
         finally:
             await hook.stop()
         print("Smoke test finished.")
-    
+
     try:
         asyncio.run(_smoke())
     except Exception as e:

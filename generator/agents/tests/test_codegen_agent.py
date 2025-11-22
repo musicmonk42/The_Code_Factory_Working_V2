@@ -1,15 +1,13 @@
 import json
-import os
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
-from agents.codegen_agent.codegen_agent import(
+from agents.codegen_agent.codegen_agent import (
     CodeGenConfig,
     SQLiteFeedbackStore,
     RedisFeedbackStore,
@@ -21,6 +19,7 @@ from agents.codegen_agent.codegen_agent import(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def temp_codegen_env(tmp_path: Path):
@@ -39,6 +38,7 @@ def temp_codegen_env(tmp_path: Path):
     }
 
     import yaml
+
     with config_path.open("w") as f:
         yaml.dump(config_data, f)
 
@@ -54,6 +54,7 @@ def temp_codegen_env(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # CodeGenConfig.from_file behavior
 # ---------------------------------------------------------------------------
+
 
 def test_codegen_config_from_file_loads(temp_codegen_env):
     cfg = CodeGenConfig.from_file(temp_codegen_env["config_path"])
@@ -87,6 +88,7 @@ def test_codegen_config_invalid_inputs_do_not_crash(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # SQLiteFeedbackStore
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_sqlite_feedback_store_round_trip(temp_codegen_env):
@@ -129,8 +131,11 @@ async def test_sqlite_feedback_store_round_trip(temp_codegen_env):
 # RedisFeedbackStore (smoke / skipped)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="RedisFeedbackStore requires real or fully wired Redis; skipped.")
+@pytest.mark.skip(
+    reason="RedisFeedbackStore requires real or fully wired Redis; skipped."
+)
 async def test_redis_feedback_store_smoke(temp_codegen_env):
     store = RedisFeedbackStore({"url": "redis://localhost:6379/0"})
     req_hash = str(uuid.uuid4())
@@ -141,6 +146,7 @@ async def test_redis_feedback_store_smoke(temp_codegen_env):
 # ---------------------------------------------------------------------------
 # generate_code helpers
 # ---------------------------------------------------------------------------
+
 
 def _dict_requirements(temp_env):
     """
@@ -157,8 +163,12 @@ def _dict_requirements(temp_env):
 # generate_code: error handling + success
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-@patch("agents.codegen_agent.codegen_agent.call_llm_api", side_effect=Exception("LLM failure"))
+@patch(
+    "agents.codegen_agent.codegen_agent.call_llm_api",
+    side_effect=Exception("LLM failure"),
+)
 async def test_generate_code_llm_failure_returns_error_file(mock_llm, temp_codegen_env):
     requirements = _dict_requirements(temp_codegen_env)
 
@@ -174,7 +184,10 @@ async def test_generate_code_llm_failure_returns_error_file(mock_llm, temp_codeg
 
 
 @pytest.mark.asyncio
-@patch("agents.codegen_agent.codegen_agent.call_llm_api", side_effect=Exception("Rate limit exceeded"))
+@patch(
+    "agents.codegen_agent.codegen_agent.call_llm_api",
+    side_effect=Exception("Rate limit exceeded"),
+)
 async def test_generate_code_rate_limit_returns_error_file(mock_llm, temp_codegen_env):
     requirements = _dict_requirements(temp_codegen_env)
 
@@ -190,8 +203,13 @@ async def test_generate_code_rate_limit_returns_error_file(mock_llm, temp_codege
 
 
 @pytest.mark.asyncio
-@patch("agents.codegen_agent.codegen_agent.call_llm_api", side_effect=Exception("Circuit open"))
-async def test_generate_code_circuit_breaker_returns_error_file(mock_llm, temp_codegen_env):
+@patch(
+    "agents.codegen_agent.codegen_agent.call_llm_api",
+    side_effect=Exception("Circuit open"),
+)
+async def test_generate_code_circuit_breaker_returns_error_file(
+    mock_llm, temp_codegen_env
+):
     requirements = _dict_requirements(temp_codegen_env)
 
     result = await generate_code(
@@ -210,7 +228,9 @@ async def test_generate_code_circuit_breaker_returns_error_file(mock_llm, temp_c
     "agents.codegen_agent.codegen_agent.call_llm_api",
     new_callable=AsyncMock,
 )
-async def test_generate_code_success_with_json_string_response(mock_llm, temp_codegen_env):
+async def test_generate_code_success_with_json_string_response(
+    mock_llm, temp_codegen_env
+):
     """
     When LLM returns a JSON string parseable by parse_llm_response,
     generate_code should expose those files.
@@ -264,6 +284,7 @@ async def test_generate_code_returns_error_on_bad_format(mock_llm, temp_codegen_
 # Security scanning
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch(
     "agents.codegen_agent.codegen_agent.scan_for_vulnerabilities",
@@ -284,6 +305,7 @@ async def test_perform_security_scans_does_not_modify_code(mock_scan, temp_codeg
 # ---------------------------------------------------------------------------
 # FastAPI app integration
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_fastapi_health_endpoint_allows_degraded(temp_codegen_env):

@@ -2,24 +2,15 @@
 
 import pytest
 import asyncio
-import json
-import hashlib
-import tempfile
 import os
-import time
-from pathlib import Path
-from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import Dict, Any, List
 from cryptography.fernet import Fernet
 import importlib
 
 # Import all the modules we're testing
 from arbiter.learner.core import Arbiter, Learner
-from arbiter.learner.encryption import ArbiterConfig, encrypt_value, decrypt_value
-from arbiter.learner.validation import DomainNotFoundError
-from arbiter.learner.audit import CircuitBreaker, MerkleTree
-from arbiter.learner.fuzzy import FuzzyParser, load_parser_priorities, PARSER_PRIORITIES
+from arbiter.learner.encryption import ArbiterConfig
+from arbiter.learner.audit import CircuitBreaker
 
 
 class TestEndToEndLearner:
@@ -30,7 +21,7 @@ class TestEndToEndLearner:
         """Clean environment before and after each test."""
         original_env = os.environ.copy()
         # Set a very short audit interval for testing
-        os.environ['SELF_AUDIT_INTERVAL_SECONDS'] = '0.1'
+        os.environ["SELF_AUDIT_INTERVAL_SECONDS"] = "0.1"
         yield
         os.environ.clear()
         os.environ.update(original_env)
@@ -38,83 +29,116 @@ class TestEndToEndLearner:
     @pytest.fixture(autouse=True)
     def patch_audit_log_module(self):
         """Patch the audit_log module functions and classes."""
-        with patch('arbiter.learner.audit.audit_log') as mock_audit_func:
+        with patch("arbiter.learner.audit.audit_log") as mock_audit_func:
             # Make audit_log a callable async function
             async def mock_log_event(*args, **kwargs):
                 return None
+
             mock_audit_func.side_effect = mock_log_event
-            
+
             # Also patch the TamperEvidentLogger to handle _get_trace_ids
-            with patch('arbiter.audit_log.TamperEvidentLogger') as mock_logger_class:
+            with patch("arbiter.audit_log.TamperEvidentLogger") as mock_logger_class:
                 instance = AsyncMock()
                 instance._get_trace_ids = Mock(return_value=("trace-123", "span-456"))
                 instance.emit_audit_event = AsyncMock()
                 instance.log_event = AsyncMock()
                 mock_logger_class.return_value = instance
-                
+
                 # Patch the singleton instance
-                with patch('arbiter.audit_log.audit_logger', instance):
+                with patch("arbiter.audit_log.audit_logger", instance):
                     yield
 
     @pytest.fixture(autouse=True)
     def patch_prometheus_metrics(self):
         """Patch all Prometheus metrics across modules."""
+
         class DummyCounter:
             def labels(self, **kwargs):
                 return self
+
             def inc(self, *args, **kwargs):
                 pass
-                
+
         class DummyHistogram:
             def labels(self, **kwargs):
                 return self
+
             def observe(self, amount):
                 pass
-        
+
         class DummyGauge:
             def labels(self, **kwargs):
                 return self
+
             def set(self, value):
                 pass
-        
+
         # List of patches to apply
         patches = []
-        
+
         # Patch the metrics module itself to avoid global labels issue
-        with patch('arbiter.learner.metrics.GLOBAL_LABELS', {}):
+        with patch("arbiter.learner.metrics.GLOBAL_LABELS", {}):
             # Patch all metric instances
             metrics_to_patch = [
-                ('arbiter.learner.core', 'learn_counter', DummyCounter()),
-                ('arbiter.learner.core', 'learn_error_counter', DummyCounter()),
-                ('arbiter.learner.core', 'forget_counter', DummyCounter()),
-                ('arbiter.learner.core', 'retrieve_hit_miss', DummyCounter()),
-                ('arbiter.learner.core', 'learn_duration_seconds', DummyHistogram()),
-                ('arbiter.learner.core', 'forget_duration_seconds', DummyHistogram()),
-                ('arbiter.learner.audit', 'circuit_breaker_state', DummyGauge()),
-                ('arbiter.learner.audit', 'learn_error_counter', DummyCounter()),
-                ('arbiter.learner.validation', 'validation_success_total', DummyCounter()),
-                ('arbiter.learner.validation', 'validation_failure_total', DummyCounter()),
-                ('arbiter.learner.validation', 'schema_reload_total', DummyCounter()),
-                ('arbiter.learner.validation', 'schema_reload_latency_seconds', DummyHistogram()),
-                ('arbiter.learner.validation', 'validation_latency_seconds', DummyHistogram()),
-                ('arbiter.learner.explanations', 'explanation_llm_latency_seconds', DummyHistogram()),
-                ('arbiter.learner.explanations', 'explanation_llm_failure_total', DummyCounter()),
-                ('arbiter.learner.fuzzy', 'fuzzy_parser_success_total', DummyCounter()),
-                ('arbiter.learner.fuzzy', 'fuzzy_parser_failure_total', DummyCounter()),
-                ('arbiter.learner.fuzzy', 'fuzzy_parser_latency_seconds', DummyHistogram()),
+                ("arbiter.learner.core", "learn_counter", DummyCounter()),
+                ("arbiter.learner.core", "learn_error_counter", DummyCounter()),
+                ("arbiter.learner.core", "forget_counter", DummyCounter()),
+                ("arbiter.learner.core", "retrieve_hit_miss", DummyCounter()),
+                ("arbiter.learner.core", "learn_duration_seconds", DummyHistogram()),
+                ("arbiter.learner.core", "forget_duration_seconds", DummyHistogram()),
+                ("arbiter.learner.audit", "circuit_breaker_state", DummyGauge()),
+                ("arbiter.learner.audit", "learn_error_counter", DummyCounter()),
+                (
+                    "arbiter.learner.validation",
+                    "validation_success_total",
+                    DummyCounter(),
+                ),
+                (
+                    "arbiter.learner.validation",
+                    "validation_failure_total",
+                    DummyCounter(),
+                ),
+                ("arbiter.learner.validation", "schema_reload_total", DummyCounter()),
+                (
+                    "arbiter.learner.validation",
+                    "schema_reload_latency_seconds",
+                    DummyHistogram(),
+                ),
+                (
+                    "arbiter.learner.validation",
+                    "validation_latency_seconds",
+                    DummyHistogram(),
+                ),
+                (
+                    "arbiter.learner.explanations",
+                    "explanation_llm_latency_seconds",
+                    DummyHistogram(),
+                ),
+                (
+                    "arbiter.learner.explanations",
+                    "explanation_llm_failure_total",
+                    DummyCounter(),
+                ),
+                ("arbiter.learner.fuzzy", "fuzzy_parser_success_total", DummyCounter()),
+                ("arbiter.learner.fuzzy", "fuzzy_parser_failure_total", DummyCounter()),
+                (
+                    "arbiter.learner.fuzzy",
+                    "fuzzy_parser_latency_seconds",
+                    DummyHistogram(),
+                ),
             ]
-            
+
             for module_name, attr_name, mock_obj in metrics_to_patch:
                 try:
                     module = importlib.import_module(module_name)
                     if hasattr(module, attr_name):
-                        p = patch(f'{module_name}.{attr_name}', mock_obj)
+                        p = patch(f"{module_name}.{attr_name}", mock_obj)
                         p.start()
                         patches.append(p)
                 except (ImportError, AttributeError):
                     # Metric doesn't exist, skip it
                     pass
-            
+
             try:
                 yield
             finally:
@@ -125,16 +149,21 @@ class TestEndToEndLearner:
     @pytest.fixture(autouse=True)
     def patch_time_functions(self):
         """Patch time functions to return deterministic values."""
-        with patch('arbiter.learner.validation.time.perf_counter', return_value=1.0):
-            with patch('time.time', return_value=1234567890.0):
-                with patch('time.monotonic', return_value=1.0):
+        with patch("arbiter.learner.validation.time.perf_counter", return_value=1.0):
+            with patch("time.time", return_value=1234567890.0):
+                with patch("time.monotonic", return_value=1.0):
                     yield
 
     @pytest.fixture(autouse=True)
     def patch_arbiter_config(self):
         """Patch ArbiterConfig to use short intervals for testing."""
-        with patch('arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS', 0.1):
-            with patch('arbiter.learner.encryption.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS', 0.1):
+        with patch(
+            "arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS", 0.1
+        ):
+            with patch(
+                "arbiter.learner.encryption.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS",
+                0.1,
+            ):
                 yield
 
     @pytest.fixture
@@ -145,7 +174,7 @@ class TestEndToEndLearner:
         key2 = Fernet.generate_key()
         ArbiterConfig.ENCRYPTION_KEYS = {
             "v1": key1,  # Raw bytes
-            "v2": key2   # Raw bytes
+            "v2": key2,  # Raw bytes
         }
         ArbiterConfig.ENCRYPTED_DOMAINS = ["SecretData", "PersonalInfo"]
 
@@ -172,36 +201,43 @@ class TestEndToEndLearner:
         class MockTransaction:
             async def __aenter__(self):
                 return self
+
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 return None
 
         mock_db.transaction = lambda: MockTransaction()
 
         # Create Arbiter and Learner with properly mocked bug_manager
-        with patch('arbiter.learner.core.BugManager') as mock_bug_manager:
-            with patch('arbiter.learner.core.Neo4jKnowledgeGraph') as mock_neo4j:
+        with patch("arbiter.learner.core.BugManager") as mock_bug_manager:
+            with patch("arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
                 bug_manager_instance = Mock()
-                bug_manager_instance.bug_detected = AsyncMock()  # Fix: Make it AsyncMock
+                bug_manager_instance.bug_detected = (
+                    AsyncMock()
+                )  # Fix: Make it AsyncMock
                 mock_bug_manager.return_value = bug_manager_instance
                 mock_neo4j.return_value = Mock()
                 arbiter = Arbiter()
                 arbiter.bug_manager = bug_manager_instance  # Ensure it's set
 
-        with patch('arbiter.learner.core.PostgresClient') as mock_postgres:
+        with patch("arbiter.learner.core.PostgresClient") as mock_postgres:
             mock_postgres.return_value = mock_db
 
-            with patch('arbiter.learner.core.LLMClient') as mock_llm:
+            with patch("arbiter.learner.core.LLMClient") as mock_llm:
                 mock_llm_instance = AsyncMock()
-                mock_llm_instance.generate_text = AsyncMock(return_value="Generated explanation")
+                mock_llm_instance.generate_text = AsyncMock(
+                    return_value="Generated explanation"
+                )
                 mock_llm.return_value = mock_llm_instance
 
-                with patch('arbiter.learner.core.AuditLogger') as mock_audit:
+                with patch("arbiter.learner.core.AuditLogger") as mock_audit:
                     mock_audit_instance = AsyncMock()
                     mock_audit_instance.log_event = AsyncMock()
                     mock_audit_instance.add_entry = AsyncMock()
                     mock_audit.from_environment.return_value = mock_audit_instance
 
-                    with patch('arbiter.learner.core.get_meta_learning_data_store') as mock_meta:
+                    with patch(
+                        "arbiter.learner.core.get_meta_learning_data_store"
+                    ) as mock_meta:
                         mock_meta_store = AsyncMock()
                         mock_meta_store.connect = AsyncMock()
                         mock_meta_store.disconnect = AsyncMock()
@@ -224,7 +260,7 @@ class TestEndToEndLearner:
                             "pre_learn": [],
                             "post_learn": [],
                             "pre_forget": [],
-                            "post_forget": []
+                            "post_forget": [],
                         }
                         learner.db_circuit_breaker = CircuitBreaker()
                         learner.audit_circuit_breaker = CircuitBreaker()
@@ -237,7 +273,7 @@ class TestEndToEndLearner:
                             "learner": learner,
                             "arbiter": arbiter,
                             "redis": mock_redis,
-                            "db": mock_db
+                            "db": mock_db,
                         }
 
     @pytest.mark.asyncio
@@ -246,18 +282,22 @@ class TestEndToEndLearner:
         """Test a complete learning cycle: learn, retrieve, update, forget."""
         env = setup_learner_environment  # Don't await - it's not async
         learner = env["learner"]
-        
+
         # Don't start the self-audit task for this test
         # Just connect the meta store
         await learner.meta_data_store.connect()
 
         try:
             # 1. Learn new fact
-            with patch('arbiter.learner.core.should_auto_learn', return_value=(True, None)):
-                with patch('arbiter.learner.core.validate_data') as mock_validate:
+            with patch(
+                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+            ):
+                with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch('arbiter.learner.core.generate_explanation') as mock_explain:
+                    with patch(
+                        "arbiter.learner.core.generate_explanation"
+                    ) as mock_explain:
                         mock_explain.return_value = "New fact learned"
 
                         result = await learner.learn_new_thing(
@@ -265,7 +305,7 @@ class TestEndToEndLearner:
                             key="fact1",
                             value={"data": "initial", "score": 100},
                             user_id="test_user",
-                            source="test"
+                            source="test",
                         )
 
                         assert result["status"] == "learned"
@@ -278,18 +318,22 @@ class TestEndToEndLearner:
             assert retrieved["version"] == 1
 
             # 3. Update the fact
-            with patch('arbiter.learner.core.should_auto_learn', return_value=(True, None)):
-                with patch('arbiter.learner.core.validate_data') as mock_validate:
+            with patch(
+                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+            ):
+                with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch('arbiter.learner.core.generate_explanation') as mock_explain:
+                    with patch(
+                        "arbiter.learner.core.generate_explanation"
+                    ) as mock_explain:
                         mock_explain.return_value = "Fact updated"
 
                         result = await learner.learn_new_thing(
                             domain="TestDomain",
                             key="fact1",
                             value={"data": "updated", "score": 200},
-                            user_id="test_user"
+                            user_id="test_user",
                         )
 
                         assert result["status"] == "learned"
@@ -300,7 +344,7 @@ class TestEndToEndLearner:
                 domain="TestDomain",
                 key="fact1",
                 user_id="test_user",
-                reason="test_cleanup"
+                reason="test_cleanup",
             )
 
             assert result["status"] == "forgotten"
@@ -320,39 +364,56 @@ class TestEndToEndLearner:
         """Test batch learning with mixed valid/invalid facts."""
         env = setup_learner_environment  # Don't await
         learner = env["learner"]
-        
+
         await learner.meta_data_store.connect()
 
         try:
             # Set up validation schema
             test_schema = {
                 "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "value": {"type": "number"}
-                },
-                "required": ["name", "value"]
+                "properties": {"name": {"type": "string"}, "value": {"type": "number"}},
+                "required": ["name", "value"],
             }
 
             learner.validation_schemas = {
-                "ValidatedDomain": {
-                    "schema": test_schema,
-                    "version": "1.0"
-                }
+                "ValidatedDomain": {"schema": test_schema, "version": "1.0"}
             }
 
             facts = [
-                {"domain": "ValidatedDomain", "key": "valid1", "value": {"name": "test", "value": 42}},
-                {"domain": "ValidatedDomain", "key": "invalid1", "value": {"name": "test"}},
-                {"domain": "ValidatedDomain", "key": "valid2", "value": {"name": "test2", "value": 100}},
+                {
+                    "domain": "ValidatedDomain",
+                    "key": "valid1",
+                    "value": {"name": "test", "value": 42},
+                },
+                {
+                    "domain": "ValidatedDomain",
+                    "key": "invalid1",
+                    "value": {"name": "test"},
+                },
+                {
+                    "domain": "ValidatedDomain",
+                    "key": "valid2",
+                    "value": {"name": "test2", "value": 100},
+                },
             ]
 
-            with patch('arbiter.learner.core.should_auto_learn', return_value=(True, None)):
-                with patch('arbiter.learner.core.generate_explanation', return_value="Batch explanation"):
-                    results = await learner.learn_batch(facts, user_id="test_user", write_to_disk=False)
+            with patch(
+                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+            ):
+                with patch(
+                    "arbiter.learner.core.generate_explanation",
+                    return_value="Batch explanation",
+                ):
+                    results = await learner.learn_batch(
+                        facts, user_id="test_user", write_to_disk=False
+                    )
 
                     assert len(results) == 3
-                    results_by_key = {r.get("fact", {}).get("key"): r for r in results if isinstance(r, dict)}
+                    results_by_key = {
+                        r.get("fact", {}).get("key"): r
+                        for r in results
+                        if isinstance(r, dict)
+                    }
                     if "valid1" in results_by_key:
                         assert results_by_key["valid1"]["status"] == "learned"
                     if "invalid1" in results_by_key:
@@ -369,17 +430,24 @@ class TestEndToEndLearner:
         """Test that sensitive domains are properly encrypted."""
         env = setup_learner_environment  # Don't await
         learner = env["learner"]
-        
+
         await learner.meta_data_store.connect()
 
         try:
-            sensitive_data = {"ssn": "123-45-6789", "credit_card": "4111-1111-1111-1111"}
+            sensitive_data = {
+                "ssn": "123-45-6789",
+                "credit_card": "4111-1111-1111-1111",
+            }
 
-            with patch('arbiter.learner.core.should_auto_learn', return_value=(True, None)):
-                with patch('arbiter.learner.core.validate_data') as mock_validate:
+            with patch(
+                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
+            ):
+                with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch('arbiter.learner.core.generate_explanation') as mock_explain:
+                    with patch(
+                        "arbiter.learner.core.generate_explanation"
+                    ) as mock_explain:
                         mock_explain.return_value = "Sensitive data stored"
 
                         result = await learner.learn_new_thing(
@@ -387,7 +455,7 @@ class TestEndToEndLearner:
                             key="user123",
                             value=sensitive_data,
                             user_id="admin",
-                            write_to_disk=False
+                            write_to_disk=False,
                         )
                         assert result["status"] == "learned"
 

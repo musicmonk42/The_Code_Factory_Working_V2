@@ -3,7 +3,6 @@
 # Requires: pytest, unittest.mock
 # Run with: pytest test_utils.py -v --cov=utils
 
-import logging
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -12,27 +11,24 @@ import pytest
 from arbiter.bug_manager.utils import (
     parse_bool_env,
     redact_pii,
-    validate_settings,
     apply_settings_validation,
     validate_input_details,
     BugManagerError,
     NotificationError,
-    CircuitBreakerOpenError,
-    RateLimitExceededError,
-    AuditLogError,
     RemediationError,
-    MLRemediationError,
     Severity,
 )
 from arbiter.bug_manager.utils import SecretStr
 
 # --- Fixtures ---
 
+
 @pytest.fixture
 def mock_logger():
     """Fixture to patch the logger in the utils module."""
-    with patch('arbiter.bug_manager.utils.logger') as mock_log:
+    with patch("arbiter.bug_manager.utils.logger") as mock_log:
         yield mock_log
+
 
 @pytest.fixture
 def valid_settings():
@@ -78,7 +74,9 @@ def valid_settings():
     settings.ML_MODEL_ENDPOINT = "http://localhost:8000/predict"
     return settings
 
+
 # --- Test Cases ---
+
 
 class TestSecretStr:
     def test_creation_and_retrieval(self):
@@ -125,7 +123,7 @@ class TestRedactPII:
         data = {
             "contact_email": "test.user@example.com",
             "last_login_ip": "192.168.1.1",
-            "connection_string": "user:pass;token=supersecret123"
+            "connection_string": "user:pass;token=supersecret123",
         }
         redacted = redact_pii(data)
         # The keyword "email" in the key takes precedence and redacts the whole value.
@@ -136,23 +134,23 @@ class TestRedactPII:
     def test_recursive_redaction(self):
         data = {
             "user_id": 123,
-            "config": {
-                "credentials": {
-                    "password": "my-password-123"
-                }
-            },
-            "history": [
-                {"action": "login", "ip_address": "10.0.0.1"},
-                "logout"
-            ]
+            "config": {"credentials": {"password": "my-password-123"}},
+            "history": [{"action": "login", "ip_address": "10.0.0.1"}, "logout"],
         }
         redacted = redact_pii(data)
         assert redacted["config"]["credentials"]["password"] == "[REDACTED]"
         assert redacted["history"][0]["ip_address"] == "[REDACTED]"
-        assert redacted["history"][1] == "logout" # Non-sensitive strings in lists are untouched
+        assert (
+            redacted["history"][1] == "logout"
+        )  # Non-sensitive strings in lists are untouched
 
     def test_ignores_non_sensitive_data(self):
-        data = {"user_id": 123, "is_active": True, "score": 99.5, "notes": "A regular note"}
+        data = {
+            "user_id": 123,
+            "is_active": True,
+            "score": 99.5,
+            "notes": "A regular note",
+        }
         redacted = redact_pii(data)
         assert redacted == data
 
@@ -162,7 +160,9 @@ class TestSettingsValidation:
         try:
             apply_settings_validation(valid_settings)
         except ValueError:
-            pytest.fail("apply_settings_validation raised ValueError unexpectedly on valid settings.")
+            pytest.fail(
+                "apply_settings_validation raised ValueError unexpectedly on valid settings."
+            )
 
     def test_apply_validation_fails_on_missing_field(self, valid_settings):
         del valid_settings.DEBUG_MODE
@@ -171,21 +171,26 @@ class TestSettingsValidation:
 
     def test_apply_validation_fails_on_incorrect_type(self, valid_settings):
         valid_settings.DEBUG_MODE = "not-a-bool"
-        with pytest.raises(ValueError, match="Setting 'DEBUG_MODE' has incorrect type. Expected <class 'bool'>, got <class 'str'>."):
+        with pytest.raises(
+            ValueError,
+            match="Setting 'DEBUG_MODE' has incorrect type. Expected <class 'bool'>, got <class 'str'>.",
+        ):
             apply_settings_validation(valid_settings)
 
     def test_apply_validation_handles_optional_fields(self, valid_settings):
         # Should be valid with a string
         valid_settings.SLACK_WEBHOOK_URL = "http://example.com"
         apply_settings_validation(valid_settings)
-        
+
         # Should be valid with None
         valid_settings.SLACK_WEBHOOK_URL = None
         apply_settings_validation(valid_settings)
-        
+
         # Should fail with an incorrect type
         valid_settings.SLACK_WEBHOOK_URL = 123
-        with pytest.raises(ValueError, match="Setting 'SLACK_WEBHOOK_URL' has incorrect type."):
+        with pytest.raises(
+            ValueError, match="Setting 'SLACK_WEBHOOK_URL' has incorrect type."
+        ):
             apply_settings_validation(valid_settings)
 
 
@@ -220,22 +225,29 @@ class TestErrorClasses:
         assert "Test message" in str(error)
 
     def test_subclass_properties(self):
-        notif_error = NotificationError("Failed", channel="slack", error_code="API_ERROR")
+        notif_error = NotificationError(
+            "Failed", channel="slack", error_code="API_ERROR"
+        )
         assert notif_error.channel == "slack"
         assert notif_error.error_code == "API_ERROR"
-        
-        remed_error = RemediationError("Step failed", step_name="restart", playbook_name="svc_restart")
+
+        remed_error = RemediationError(
+            "Step failed", step_name="restart", playbook_name="svc_restart"
+        )
         assert remed_error.step_name == "restart"
         assert remed_error.playbook_name == "svc_restart"
 
 
 class TestSeverityEnum:
-    @pytest.mark.parametrize("input_str, expected", [
-        ("CRITICAL", Severity.CRITICAL),
-        ("high", Severity.HIGH),
-        ("Medium", Severity.MEDIUM),
-        ("lOw", Severity.LOW),
-    ])
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            ("CRITICAL", Severity.CRITICAL),
+            ("high", Severity.HIGH),
+            ("Medium", Severity.MEDIUM),
+            ("lOw", Severity.LOW),
+        ],
+    )
     def test_from_string_valid(self, input_str, expected):
         assert Severity.from_string(input_str) == expected
 

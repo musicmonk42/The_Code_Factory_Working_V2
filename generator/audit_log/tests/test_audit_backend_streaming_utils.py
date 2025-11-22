@@ -37,6 +37,7 @@ from generator.audit_log.audit_backend import (
 # Global/auto-use fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def fresh_prom_registry(monkeypatch):
     reg = CollectorRegistry()
@@ -80,6 +81,7 @@ def tmp_dir():
 # SensitiveDataFilter
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_sensitive_data_filter_redaction():
     f = SensitiveDataFilter()
@@ -117,6 +119,7 @@ async def test_sensitive_data_filter_redaction():
 # ---------------------------------------------------------------------------
 # SimpleCircuitBreaker
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_state_transitions():
@@ -172,6 +175,7 @@ async def test_circuit_breaker_concurrent_usage_is_safe():
 # ---------------------------------------------------------------------------
 # DLQ classes (current surface = ctor + metrics)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_persistent_retry_queue_constructs_and_sets_metrics(tmp_dir):

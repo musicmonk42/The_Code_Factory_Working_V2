@@ -21,10 +21,12 @@ CAUTION:
 import os
 import sys
 import logging
-from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [bootstrap] %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - [bootstrap] %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 def create_dummy_files():
     """
@@ -34,21 +36,21 @@ def create_dummy_files():
     logger.info("Starting creation of dummy development environment modules...")
 
     required_dummy_files = {
-        "audit_log.py": '''
+        "audit_log.py": """
 def log_action(event: str, data: dict):
     # DUMMY AUDIT LOG: For development and local testing ONLY.
     # In production, this would securely log to a persistent, tamper-evident system (e.g., SIEM, ELK).
     print(f"[AUDIT_LOG_DUMMY] Event: {event}, Data: {data}")
-''',
-        "utils.py": '''
+""",
+        "utils.py": """
 import asyncio
 from typing import Dict, Any, List, Optional
 # DUMMY UTILS: For development and local testing ONLY.
 # In production, this would provide real utility functions.
 async def summarize_text(text: str, max_length: int = 1000) -> str:
     return text[:max_length] + ("..." if len(text) > max_length else "")
-''',
-        "testgen_prompt.py": '''
+""",
+        "testgen_prompt.py": """
 import asyncio
 from typing import Dict, Any, List, Optional
 # DUMMY PROMPT BUILDER: For development and local testing ONLY.
@@ -56,16 +58,16 @@ async def build_agentic_prompt(purpose: str, language: str, code_files: Dict[str
     return f"DUMMY_PROMPT: Purpose={purpose}, Lang={language}, Files={list(code_files.keys())}, Kwargs={kwargs}"
 async def initialize_codebase_for_rag(repo_path: str):
     print(f"[RAG_DUMMY] Initializing RAG for {repo_path}")
-''',
-        "testgen_response_handler.py": '''
+""",
+        "testgen_response_handler.py": """
 from typing import Dict, Any
 # DUMMY RESPONSE HANDLER: For development and local testing ONLY.
 def parse_llm_response(response_content: str, language: str) -> Dict[str, str]:
     if "fix" in response_content.lower() or "heal" in response_content.lower():
         return {"fixed_test_dummy.py": "// Healed test content (DUMMY)"}
     return {"test_file_dummy.py": f"// Parsed test content for {language} (DUMMY): {response_content[:50]}"}
-''',
-        "testgen_validator.py": '''
+""",
+        "testgen_validator.py": """
 import asyncio
 from typing import Dict, Any, List
 # DUMMY TEST VALIDATOR: For development and local testing ONLY.
@@ -78,8 +80,8 @@ async def validate_test_quality(code_files: Dict[str, str], test_files: Dict[str
     if validation_type == 'stress_performance':
         return {"status": "success", "performance_score": 0.9, "issues": []}
     return {"status": "failed", "score": 0.0, "issues": [f"Unsupported validation type (DUMMY): {validation_type}"]}
-''',
-        "deploy_llm_call.py": '''
+""",
+        "deploy_llm_call.py": """
 import asyncio
 from typing import Dict, Any, AsyncGenerator, Optional, List, Tuple, Type
 # DUMMY LLM CALL ORCHESTRATOR: For development and local testing ONLY.
@@ -111,7 +113,7 @@ class DummyClientSession:
     @property
     def closed(self): return False
     async def close(self): pass
-''',
+""",
     }
 
     for fname, content in required_dummy_files.items():
@@ -131,15 +133,22 @@ class DummyClientSession:
         os.makedirs("llm_providers")
         logger.info("Created 'llm_providers' directory.")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DUMMY DEVELOPMENT ENVIRONMENT BOOTSTRAP COMPLETE".center(80))
     print("".center(80))
-    print("You can now run `testgen_agent.py` locally for development and testing.".center(80))
+    print(
+        "You can now run `testgen_agent.py` locally for development and testing.".center(
+            80
+        )
+    )
     print("".center(80))
     print("REMEMBER: These are DUMMY implementations.".center(80))
     print("DO NOT package or deploy these dummy files to production.".center(80))
-    print("Your production environment MUST have the real modules installed.".center(80))
-    print("="*80 + "\n")
+    print(
+        "Your production environment MUST have the real modules installed.".center(80)
+    )
+    print("=" * 80 + "\n")
+
 
 if __name__ == "__main__":
     create_dummy_files()

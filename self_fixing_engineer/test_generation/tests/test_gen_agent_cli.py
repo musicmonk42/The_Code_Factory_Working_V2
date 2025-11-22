@@ -2,12 +2,11 @@
 import asyncio
 import os
 import signal
-import sys
 import tempfile
 import uuid
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, Mock, Mock as MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -40,15 +39,19 @@ def test_cli_version_option(runner):
 
 def test_cli_loads_config_file(runner, temp_config_file):
     """CLI should load YAML config and merge into environment."""
+
     async def check_env_and_succeed(*_args, **_kwargs):
         # The key is uppercased and prefixed by the cli module.
         assert os.environ.get("ATCO_TEST_KEY") == "test_value"
         return 0
 
     # Patch the async generator used by the command so we don't run deep logic
-    with patch("test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed):
+    with patch(
+        "test_generation.gen_agent.cli._generate_async", new=check_env_and_succeed
+    ):
         result = runner.invoke(
-            cli.cli, ["--config-file", str(temp_config_file), "generate", "--session", "test"]
+            cli.cli,
+            ["--config-file", str(temp_config_file), "generate", "--session", "test"],
         )
 
     assert result.exit_code == 0
@@ -66,7 +69,9 @@ async def test_run_async_command_graceful_shutdown():
             main_task_cancelled.set()  # Signal that this inner task was cancelled
             raise
 
-    with patch("test_generation.gen_agent.cli.install_default_handlers") as mock_install:
+    with patch(
+        "test_generation.gen_agent.cli.install_default_handlers"
+    ) as mock_install:
         # Run the command and let it install its signal handler
         task = asyncio.create_task(cli._run_async_command(fake_main()))
         await asyncio.sleep(0.01)  # Give asyncio time to schedule and run the setup
@@ -82,7 +87,9 @@ async def test_run_async_command_graceful_shutdown():
         exit_code = await task
 
         assert exit_code == 1
-        assert main_task_cancelled.is_set(), "The main task within _run_async_command was not cancelled."
+        assert (
+            main_task_cancelled.is_set()
+        ), "The main task within _run_async_command was not cancelled."
 
 
 def test_cli_generate_command_runs(runner, tmp_path):
@@ -90,11 +97,21 @@ def test_cli_generate_command_runs(runner, tmp_path):
     async_mock = AsyncMock(return_value=0)
 
     # Prevent the passed coroutine from being awaited/executed; return 0 immediately
-    with patch("test_generation.gen_agent.cli._run_async_command", new=AsyncMock(return_value=0)) as run_mock:
+    with patch(
+        "test_generation.gen_agent.cli._run_async_command",
+        new=AsyncMock(return_value=0),
+    ) as run_mock:
         with patch("test_generation.gen_agent.cli._generate_async", new=async_mock):
             # NOTE: group options must precede the subcommand
             result = runner.invoke(
-                cli.cli, ["--project-root", str(tmp_path), "generate", "--session", "test_session"]
+                cli.cli,
+                [
+                    "--project-root",
+                    str(tmp_path),
+                    "generate",
+                    "--session",
+                    "test_session",
+                ],
             )
 
     # `_generate_async` is called exactly once to create the coroutine
@@ -113,7 +130,8 @@ def test_cli_handles_missing_yaml_dependency(runner, temp_config_file):
     """
     with patch("test_generation.gen_agent.cli.yaml", None):
         result = runner.invoke(
-            cli.cli, ["--config-file", str(temp_config_file), "generate", "--session", "test"]
+            cli.cli,
+            ["--config-file", str(temp_config_file), "generate", "--session", "test"],
         )
 
     assert result.exit_code == 1
@@ -133,10 +151,15 @@ def test_make_run_id(monkeypatch):
 @pytest.mark.asyncio
 async def test_graceful_shutdown_logs_message(caplog):
     """Test that the signal handler used by _run_async_command logs a message."""
-    async def dummy_task():
-        await asyncio.sleep(5)  # A task that does nothing, just to keep the command alive.
 
-    with patch("test_generation.gen_agent.cli.install_default_handlers") as mock_install:
+    async def dummy_task():
+        await asyncio.sleep(
+            5
+        )  # A task that does nothing, just to keep the command alive.
+
+    with patch(
+        "test_generation.gen_agent.cli.install_default_handlers"
+    ) as mock_install:
         with caplog.at_level(logging.WARNING):
             # Start the command, which will install the real handler via our mock
             task = asyncio.create_task(cli._run_async_command(dummy_task()))
@@ -164,12 +187,18 @@ async def test_feedback_async_command(runner, tmp_path):
     log_file_path = tmp_path / "test.jsonl"
     with open(log_file_path, "w") as f:
         f.write('{"execution_status": "PASS", "final_scores": {"coverage": 95.0}}\n')
-    
+
     # Mock the underlying asynchronous function call
-    with patch("test_generation.gen_agent.cli.summarize_feedback", new=AsyncMock(return_value={"total_runs": 1})):
-        result = runner.invoke(cli.cli, ["feedback", "summarize", "--log-file", str(log_file_path)])
+    with patch(
+        "test_generation.gen_agent.cli.summarize_feedback",
+        new=AsyncMock(return_value={"total_runs": 1}),
+    ):
+        result = runner.invoke(
+            cli.cli, ["feedback", "summarize", "--log-file", str(log_file_path)]
+        )
 
     assert result.exit_code == 0
+
 
 # Completed for syntactic validity.
 def test_cli_import():
@@ -177,4 +206,5 @@ def test_cli_import():
     Verifies that the main CLI entry point can be imported and is callable.
     """
     from test_generation.gen_agent import cli
+
     assert callable(cli.cli)

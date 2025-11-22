@@ -60,7 +60,9 @@ async def test_llm_generate_strategy_python_rename_variable(monkeypatch):
 
 
 def test_hitl_review_fixes_with_callback():
-    fixes = {"main.py": [{"strategy": "regex", "fix": {"pattern": "a", "replacement": "b"}}]}
+    fixes = {
+        "main.py": [{"strategy": "regex", "fix": {"pattern": "a", "replacement": "b"}}]
+    }
 
     def approve_all(f):
         return f

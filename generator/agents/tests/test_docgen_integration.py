@@ -13,25 +13,25 @@ Tests cover end-to-end workflows:
 
 import sys
 import pytest
-import asyncio
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock
 from typing import Tuple, Optional, Any
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
-sys.modules['runner'] = MagicMock()
-sys.modules['runner.llm_client'] = MagicMock()
-sys.modules['runner.runner_logging'] = MagicMock()
-sys.modules['runner.runner_metrics'] = MagicMock()
-sys.modules['runner.runner_errors'] = MagicMock()
-sys.modules['runner.runner_file_utils'] = MagicMock()
-sys.modules['runner.summarize_utils'] = MagicMock()
+sys.modules["runner"] = MagicMock()
+sys.modules["runner.llm_client"] = MagicMock()
+sys.modules["runner.runner_logging"] = MagicMock()
+sys.modules["runner.runner_metrics"] = MagicMock()
+sys.modules["runner.runner_errors"] = MagicMock()
+sys.modules["runner.runner_file_utils"] = MagicMock()
+sys.modules["runner.summarize_utils"] = MagicMock()
 
 # FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
 from abc import ABC, abstractmethod
+
 builtins.Path = Path
 builtins.Tuple = Tuple
 builtins.Optional = Optional
@@ -50,12 +50,13 @@ from generator.agents.docgen_agent.docgen_response_validator import ResponseVali
 # FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def comprehensive_repo():
     """Create a comprehensive test repository."""
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
-        
+
         # Create directory structure
         (repo_path / "src").mkdir()
         (repo_path / "src" / "utils").mkdir()
@@ -63,9 +64,10 @@ def comprehensive_repo():
         (repo_path / "docs").mkdir()
         (repo_path / "doc_templates").mkdir()
         (repo_path / "few_shot_docs").mkdir()
-        
+
         # Create Python module with comprehensive docstrings
-        (repo_path / "src" / "calculator.py").write_text('''
+        (repo_path / "src" / "calculator.py").write_text(
+            '''
 """
 Calculator Module
 =================
@@ -164,10 +166,12 @@ class Calculator:
         result = round(a / b, self.precision)
         self.history.append(f"divide({a}, {b}) = {result}")
         return result
-''')
-        
+'''
+        )
+
         # Create JavaScript module
-        (repo_path / "src" / "utils" / "helper.js").write_text('''
+        (repo_path / "src" / "utils" / "helper.js").write_text(
+            """
 /**
  * Helper utilities module
  * @module utils/helper
@@ -213,10 +217,12 @@ class StringHelper {
 }
 
 module.exports = { formatCurrency, StringHelper };
-''')
-        
+"""
+        )
+
         # Create template
-        (repo_path / "doc_templates" / "python_default.jinja").write_text("""
+        (repo_path / "doc_templates" / "python_default.jinja").write_text(
+            """
 Generate comprehensive API documentation for: {{ file_name }}
 
 Language: {{ language }}
@@ -234,16 +240,22 @@ Please generate documentation including:
 - Class documentation with attributes
 - Method documentation with parameters, returns, and exceptions
 - Usage examples
-""")
-        
+"""
+        )
+
         # Create few-shot example
-        (repo_path / "few_shot_docs" / "python_class.json").write_text(json.dumps({
-            "input": "class Example:\n    def method(self, x): return x * 2",
-            "output": "## class Example\n\n### method(x)\nDoubles the input value.\n\n**Parameters:**\n- x: Input value\n\n**Returns:** Doubled value"
-        }))
-        
+        (repo_path / "few_shot_docs" / "python_class.json").write_text(
+            json.dumps(
+                {
+                    "input": "class Example:\n    def method(self, x): return x * 2",
+                    "output": "## class Example\n\n### method(x)\nDoubles the input value.\n\n**Parameters:**\n- x: Input value\n\n**Returns:** Doubled value",
+                }
+            )
+        )
+
         # Create README
-        (repo_path / "README.md").write_text("""
+        (repo_path / "README.md").write_text(
+            """
 # Calculator Project
 
 A comprehensive calculator implementation.
@@ -251,17 +263,20 @@ A comprehensive calculator implementation.
 ## License
 
 MIT License
-""")
-        
+"""
+        )
+
         # Create LICENSE
-        (repo_path / "LICENSE").write_text("""
+        (repo_path / "LICENSE").write_text(
+            """
 MIT License
 
 Copyright (c) 2025 Test Author
 
 Permission is hereby granted...
-""")
-        
+"""
+        )
+
         yield repo_path
 
 
@@ -269,13 +284,13 @@ Permission is hereby granted...
 def mock_all_llm():
     """Mock all LLM calls across all modules."""
     patches = [
-        patch('generator.agents.docgen_agent.docgen_agent.call_llm_api'),
-        patch('generator.agents.docgen_agent.docgen_agent.call_ensemble_api'),
-        patch('generator.agents.docgen_agent.docgen_prompt.call_llm_api'),
+        patch("generator.agents.docgen_agent.docgen_agent.call_llm_api"),
+        patch("generator.agents.docgen_agent.docgen_agent.call_ensemble_api"),
+        patch("generator.agents.docgen_agent.docgen_prompt.call_llm_api"),
     ]
-    
+
     mocks = [p.start() for p in patches]
-    
+
     # Configure default responses
     doc_response = {
         "content": """
@@ -325,14 +340,14 @@ Divide two numbers with zero-division handling.
 """,
         "model": "gpt-4o",
         "provider": "openai",
-        "tokens_used": 500
+        "tokens_used": 500,
     }
-    
+
     for mock in mocks:
         mock.return_value = doc_response
-    
+
     yield mocks
-    
+
     for p in patches:
         p.stop()
 
@@ -340,24 +355,31 @@ Divide two numbers with zero-division handling.
 @pytest.fixture
 def mock_presidio_full():
     """Mock Presidio across all modules."""
-    with patch('generator.agents.docgen_agent.docgen_agent.AnalyzerEngine') as mock_a1, \
-         patch('generator.agents.docgen_agent.docgen_agent.AnonymizerEngine') as mock_an1, \
-         patch('generator.agents.docgen_agent.docgen_prompt.AnalyzerEngine') as mock_a2, \
-         patch('generator.agents.docgen_agent.docgen_prompt.AnonymizerEngine') as mock_an2, \
-         patch('generator.agents.docgen_agent.docgen_response_validator.AnalyzerEngine') as mock_a3, \
-         patch('generator.agents.docgen_agent.docgen_response_validator.AnonymizerEngine') as mock_an3:
-        
+    with patch(
+        "generator.agents.docgen_agent.docgen_agent.AnalyzerEngine"
+    ) as mock_a1, patch(
+        "generator.agents.docgen_agent.docgen_agent.AnonymizerEngine"
+    ) as mock_an1, patch(
+        "generator.agents.docgen_agent.docgen_prompt.AnalyzerEngine"
+    ) as mock_a2, patch(
+        "generator.agents.docgen_agent.docgen_prompt.AnonymizerEngine"
+    ) as mock_an2, patch(
+        "generator.agents.docgen_agent.docgen_response_validator.AnalyzerEngine"
+    ) as mock_a3, patch(
+        "generator.agents.docgen_agent.docgen_response_validator.AnonymizerEngine"
+    ) as mock_an3:
+
         # Configure all analyzer/anonymizer mocks
         for analyzer_mock in [mock_a1, mock_a2, mock_a3]:
             analyzer_instance = Mock()
             analyzer_instance.analyze.return_value = []
             analyzer_mock.return_value = analyzer_instance
-        
+
         for anonymizer_mock in [mock_an1, mock_an2, mock_an3]:
             anonymizer_instance = Mock()
             anonymizer_instance.anonymize.return_value = Mock(text="clean")
             anonymizer_mock.return_value = anonymizer_instance
-        
+
         yield
 
 
@@ -365,9 +387,10 @@ def mock_presidio_full():
 # TEST: End-to-End Documentation Generation
 # =============================================================================
 
+
 class TestEndToEndGeneration:
     """Test complete documentation generation workflows."""
-    
+
     @pytest.mark.asyncio
     async def test_single_file_complete_pipeline(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
@@ -375,62 +398,58 @@ class TestEndToEndGeneration:
         """Test generating documentation for a single file through complete pipeline."""
         # Initialize agent
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Generate documentation
         target_file = str(comprehensive_repo / "src" / "calculator.py")
         result = await agent.generate_documentation(
-            target_files=[target_file],
-            doc_format="markdown",
-            include_compliance=True
+            target_files=[target_file], doc_format="markdown", include_compliance=True
         )
-        
+
         # Verify results
         assert "docs" in result
         assert "compliance" in result
         assert "run_id" in result
         assert len(result["docs"]) > 0
-        
+
         # Verify compliance checks ran
         assert "license" in result["compliance"]
         assert "copyright" in result["compliance"]
-        
+
         # Verify LLM was called
         assert any(mock.called for mock in mock_all_llm)
-    
+
     @pytest.mark.asyncio
     async def test_multi_file_batch_generation(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test batch generation for multiple files."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
-        
+
         result = await agent.generate_documentation(
-            target_files=files,
-            doc_format="markdown"
+            target_files=files, doc_format="markdown"
         )
-        
+
         assert "docs" in result
         # Should have docs for multiple files
         assert len(result["docs"]) >= 1
-    
+
     @pytest.mark.asyncio
     async def test_multi_format_generation(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test generating documentation in multiple formats."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         target_file = str(comprehensive_repo / "src" / "calculator.py")
         result = await agent.generate_documentation(
-            target_files=[target_file],
-            doc_format=["markdown", "rst", "html"]
+            target_files=[target_file], doc_format=["markdown", "rst", "html"]
         )
-        
+
         assert "docs" in result
         # Should have generated multiple formats
         docs = result["docs"]
@@ -441,50 +460,49 @@ class TestEndToEndGeneration:
 # TEST: Streaming Generation
 # =============================================================================
 
+
 class TestStreamingGeneration:
     """Test streaming documentation generation."""
-    
+
     @pytest.mark.asyncio
     async def test_streaming_single_file(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test streaming generation for a single file."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         target_file = str(comprehensive_repo / "src" / "calculator.py")
-        
+
         chunks = []
         async for chunk in agent.generate_documentation_stream(
-            target_files=[target_file],
-            doc_format="markdown"
+            target_files=[target_file], doc_format="markdown"
         ):
             chunks.append(chunk)
-        
+
         # Should have received multiple chunks
         assert len(chunks) > 0
-        
+
         # Chunks should contain useful data
         assert any("file" in chunk or "docs" in chunk for chunk in chunks)
-    
+
     @pytest.mark.asyncio
     async def test_streaming_multiple_files(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test streaming generation for multiple files."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
-        
+
         chunks = []
         async for chunk in agent.generate_documentation_stream(
-            target_files=files,
-            doc_format="markdown"
+            target_files=files, doc_format="markdown"
         ):
             chunks.append(chunk)
-        
+
         assert len(chunks) > 0
 
 
@@ -492,9 +510,10 @@ class TestStreamingGeneration:
 # TEST: Component Integration
 # =============================================================================
 
+
 class TestComponentIntegration:
     """Test integration between different components."""
-    
+
     @pytest.mark.asyncio
     async def test_prompt_to_validation_flow(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
@@ -503,53 +522,50 @@ class TestComponentIntegration:
         # 1. Generate prompt
         prompt_agent = DocGenPromptAgent(
             template_dir=str(comprehensive_repo / "doc_templates"),
-            few_shot_dir=str(comprehensive_repo / "few_shot_docs")
+            few_shot_dir=str(comprehensive_repo / "few_shot_docs"),
         )
-        
+
         file_path = str(comprehensive_repo / "src" / "calculator.py")
         prompt = await prompt_agent.build_doc_prompt(
             file_path=file_path,
             target="python",
-            instructions="Generate comprehensive API docs"
+            instructions="Generate comprehensive API docs",
         )
-        
+
         assert isinstance(prompt, str)
         assert len(prompt) > 100
-        
+
         # 2. Simulate LLM response (already mocked)
         llm_response = mock_all_llm[0].return_value
         doc_content = llm_response["content"]
-        
+
         # 3. Validate response
         validator = ResponseValidator()
         validation_result = await validator.validate_response(
-            content=doc_content,
-            doc_format="markdown"
+            content=doc_content, doc_format="markdown"
         )
-        
+
         assert validation_result["valid"] is True
         assert "formatted" in validation_result
-    
+
     @pytest.mark.asyncio
     async def test_agent_uses_all_components(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test that DocGenAgent properly uses all components."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Verify components are initialized
         assert agent.prompt_agent is not None
         assert agent.response_validator is not None
         assert agent.plugin_registry is not None
-        
+
         # Generate docs (uses all components)
         target_file = str(comprehensive_repo / "src" / "calculator.py")
         result = await agent.generate_documentation(
-            target_files=[target_file],
-            doc_format="markdown",
-            include_compliance=True
+            target_files=[target_file], doc_format="markdown", include_compliance=True
         )
-        
+
         # All components should have been used
         assert result is not None
         assert "docs" in result
@@ -560,45 +576,42 @@ class TestComponentIntegration:
 # TEST: Human-in-the-Loop Integration
 # =============================================================================
 
+
 class TestHumanInTheLoop:
     """Test human approval workflows."""
-    
+
     @pytest.mark.asyncio
     async def test_approval_workflow(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test complete human approval workflow."""
         agent = DocGenAgent(
-            repo_path=str(comprehensive_repo),
-            slack_webhook="http://test.webhook"
+            repo_path=str(comprehensive_repo), slack_webhook="http://test.webhook"
         )
-        
+
         # Mock approval process
-        with patch.object(agent, '_request_approval', return_value=True):
+        with patch.object(agent, "_request_approval", return_value=True):
             target_file = str(comprehensive_repo / "src" / "calculator.py")
             result = await agent.generate_documentation(
-                target_files=[target_file],
-                doc_format="markdown",
-                human_approval=True
+                target_files=[target_file], doc_format="markdown", human_approval=True
             )
-            
+
             assert result is not None
             assert "docs" in result
-    
+
     @pytest.mark.asyncio
     async def test_approval_rejection_flow(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test handling approval rejection."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
-        with patch.object(agent, '_request_approval', return_value=False):
+
+        with patch.object(agent, "_request_approval", return_value=False):
             target_file = str(comprehensive_repo / "src" / "calculator.py")
-            
+
             with pytest.raises(RuntimeError, match="approval rejected"):
                 await agent.generate_documentation(
-                    target_files=[target_file],
-                    human_approval=True
+                    target_files=[target_file], human_approval=True
                 )
 
 
@@ -606,59 +619,59 @@ class TestHumanInTheLoop:
 # TEST: Error Recovery
 # =============================================================================
 
+
 class TestErrorRecovery:
     """Test error handling and recovery across components."""
-    
+
     @pytest.mark.asyncio
-    async def test_llm_retry_integration(
-        self, comprehensive_repo, mock_presidio_full
-    ):
+    async def test_llm_retry_integration(self, comprehensive_repo, mock_presidio_full):
         """Test LLM error retry across pipeline."""
         call_count = 0
-        
+
         def mock_llm_with_retry(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 2:
                 from runner.runner_errors import LLMError
+
                 raise LLMError("Temporary failure")
             return {
                 "content": "# Documentation",
                 "model": "gpt-4o",
-                "provider": "openai"
+                "provider": "openai",
             }
-        
-        with patch('generator.agents.docgen_agent.docgen_agent.call_llm_api', side_effect=mock_llm_with_retry):
+
+        with patch(
+            "generator.agents.docgen_agent.docgen_agent.call_llm_api",
+            side_effect=mock_llm_with_retry,
+        ):
             agent = DocGenAgent(repo_path=str(comprehensive_repo))
-            
+
             target_file = str(comprehensive_repo / "src" / "calculator.py")
-            result = await agent.generate_documentation(
-                target_files=[target_file]
-            )
-            
+            result = await agent.generate_documentation(target_files=[target_file])
+
             # Should have retried and succeeded
             assert call_count >= 2
             assert result is not None
-    
+
     @pytest.mark.asyncio
     async def test_partial_failure_handling(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test handling partial failures in batch processing."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Mix of valid and invalid files
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
             "/nonexistent/file.py",
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
-        
+
         result = await agent.generate_documentation(
-            target_files=files,
-            continue_on_error=True
+            target_files=files, continue_on_error=True
         )
-        
+
         # Should have processed valid files despite errors
         assert "docs" in result or "errors" in result
 
@@ -667,9 +680,10 @@ class TestErrorRecovery:
 # TEST: Plugin Entry Point
 # =============================================================================
 
+
 class TestPluginEntryPoint:
     """Test the generate() plugin entry point."""
-    
+
     @pytest.mark.asyncio
     async def test_generate_entry_point(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
@@ -679,11 +693,11 @@ class TestPluginEntryPoint:
             "repo_path": str(comprehensive_repo),
             "target_files": [str(comprehensive_repo / "src" / "calculator.py")],
             "doc_format": "markdown",
-            "include_compliance": True
+            "include_compliance": True,
         }
-        
+
         result = await generate(**request)
-        
+
         assert result is not None
         assert isinstance(result, dict)
         assert "docs" in result or "status" in result
@@ -693,36 +707,39 @@ class TestPluginEntryPoint:
 # TEST: Performance and Concurrency
 # =============================================================================
 
+
 class TestPerformanceAndConcurrency:
     """Test performance and concurrent operations."""
-    
+
     @pytest.mark.asyncio
     async def test_concurrent_file_processing(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test processing multiple files concurrently."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Create multiple files
         for i in range(5):
-            (comprehensive_repo / "src" / f"module{i}.py").write_text(f"""
+            (comprehensive_repo / "src" / f"module{i}.py").write_text(
+                f"""
 def function_{i}():
     '''Function {i}'''
     return {i}
-""")
-        
+"""
+            )
+
         files = [str(comprehensive_repo / "src" / f"module{i}.py") for i in range(5)]
-        
+
         import time
+
         start = time.time()
-        
+
         result = await agent.generate_documentation(
-            target_files=files,
-            doc_format="markdown"
+            target_files=files, doc_format="markdown"
         )
-        
+
         elapsed = time.time() - start
-        
+
         assert "docs" in result
         # With concurrency, should be reasonably fast
         # (actual time depends on mocking overhead)
@@ -732,71 +749,67 @@ def function_{i}():
 # TEST: Real-world Scenarios
 # =============================================================================
 
+
 class TestRealWorldScenarios:
     """Test realistic usage scenarios."""
-    
+
     @pytest.mark.asyncio
     async def test_document_entire_project(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test documenting an entire project."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Find all Python files
         python_files = list((comprehensive_repo / "src").rglob("*.py"))
-        
+
         result = await agent.generate_documentation(
             target_files=[str(f) for f in python_files],
             doc_format="markdown",
-            include_compliance=True
+            include_compliance=True,
         )
-        
+
         assert "docs" in result
         assert "compliance" in result
         assert len(result["docs"]) > 0
-    
+
     @pytest.mark.asyncio
     async def test_multi_language_project(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test documenting a multi-language project."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         files = [
             str(comprehensive_repo / "src" / "calculator.py"),
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
-        
+
         result = await agent.generate_documentation(
-            target_files=files,
-            doc_format=["markdown", "html"]
+            target_files=files, doc_format=["markdown", "html"]
         )
-        
+
         assert "docs" in result
         # Should have processed both Python and JavaScript
-    
+
     @pytest.mark.asyncio
     async def test_incremental_documentation_update(
         self, comprehensive_repo, mock_all_llm, mock_presidio_full
     ):
         """Test updating documentation for changed files."""
         agent = DocGenAgent(repo_path=str(comprehensive_repo))
-        
+
         # Generate initial docs
         target_file = str(comprehensive_repo / "src" / "calculator.py")
-        result1 = await agent.generate_documentation(
-            target_files=[target_file]
-        )
-        
+        result1 = await agent.generate_documentation(target_files=[target_file])
+
         # Modify file
-        with open(target_file, 'a') as f:
+        with open(target_file, "a") as f:
             f.write("\n\ndef new_method():\n    '''A new method'''\n    pass\n")
-        
+
         # Re-generate docs
-        result2 = await agent.generate_documentation(
-            target_files=[target_file]
-        )
-        
+        result2 = await agent.generate_documentation(target_files=[target_file])
+
         # Both should succeed
         assert "docs" in result1
         assert "docs" in result2

@@ -1,10 +1,12 @@
 """
 Simple test for ArbiterArena that avoids Pydantic validation issues.
 """
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 import tempfile
 import shutil
+
 
 @pytest.fixture
 def temp_dir():
@@ -12,6 +14,7 @@ def temp_dir():
     path = tempfile.mkdtemp()
     yield path
     shutil.rmtree(path, ignore_errors=True)
+
 
 @pytest.fixture
 def mock_config(temp_dir):
@@ -26,10 +29,10 @@ def mock_config(temp_dir):
     config.EMAIL_ENABLED = False
     config.WORLD_SIZE = 2
     config.PERIODIC_SCAN_INTERVAL_S = 3600
-    
+
     # Add DATABASE_URL that Arbiter expects
     config.DATABASE_URL = "postgresql://user:pass@localhost/testdb"
-    
+
     # Email config - set to None to avoid Pydantic issues
     config.EMAIL_SMTP_SERVER = None
     config.EMAIL_SMTP_PORT = None
@@ -42,6 +45,7 @@ def mock_config(temp_dir):
     config.WEBHOOK_URL = None
     return config
 
+
 @pytest.fixture
 def mock_db_engine():
     """Create a mock database engine."""
@@ -52,34 +56,34 @@ def mock_db_engine():
 
 class TestArbiterArena:
     """Test the ArbiterArena class without dealing with complex dependencies."""
-    
+
     def test_arena_initialization(self, mock_config, mock_db_engine):
         """Test that arena can be initialized with mocked dependencies."""
         # Mock the HumanInLoopConfig to avoid Pydantic validation
-        with patch('arbiter.arena.HumanInLoopConfig') as mock_hitl_config:
+        with patch("arbiter.arena.HumanInLoopConfig") as mock_hitl_config:
             mock_hitl_config.return_value = MagicMock()
-            
+
             # Mock HumanInLoop class
-            with patch('arbiter.arena.HumanInLoop') as mock_hitl:
+            with patch("arbiter.arena.HumanInLoop") as mock_hitl:
                 mock_hitl.return_value = MagicMock()
-                
+
                 # Mock the Arbiter class to avoid its initialization issues
-                with patch('arbiter.arena.Arbiter') as mock_arbiter_class:
+                with patch("arbiter.arena.Arbiter") as mock_arbiter_class:
                     mock_arbiter_instance = MagicMock()
                     mock_arbiter_instance.name = "MockArbiter"
                     mock_arbiter_class.return_value = mock_arbiter_instance
-                    
+
                     # Import here after patching
                     from arbiter.arena import ArbiterArena
-                    
+
                     # Create arena
                     arena = ArbiterArena(
                         settings=mock_config,
                         name="TestArena",
                         db_engine=mock_db_engine,
-                        port=9000
+                        port=9000,
                     )
-                    
+
                     # Basic assertions
                     assert arena.name == "TestArena"
                     assert arena.version == "1.1.0"
@@ -87,107 +91,111 @@ class TestArbiterArena:
                     assert arena._db_engine == mock_db_engine
                     assert arena.base_port == 9000
                     assert arena.http_port == 8000
-                    
+
                     # Verify Arbiter was created with correct parameters
                     assert mock_arbiter_class.call_count == mock_config.WORLD_SIZE
-    
+
     @pytest.mark.asyncio
     async def test_arena_context_manager(self, mock_config, mock_db_engine):
         """Test arena works as an async context manager."""
-        with patch('arbiter.arena.HumanInLoopConfig'):
-            with patch('arbiter.arena.HumanInLoop'):
-                with patch('arbiter.arena.Arbiter'):
+        with patch("arbiter.arena.HumanInLoopConfig"):
+            with patch("arbiter.arena.HumanInLoop"):
+                with patch("arbiter.arena.Arbiter"):
                     from arbiter.arena import ArbiterArena
-                    
+
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
-                    
+
                     # Mock the start and stop methods
-                    with patch.object(arena, 'start_arena_services', new_callable=AsyncMock):
-                        with patch.object(arena, 'stop_all', new_callable=AsyncMock):
+                    with patch.object(
+                        arena, "start_arena_services", new_callable=AsyncMock
+                    ):
+                        with patch.object(arena, "stop_all", new_callable=AsyncMock):
                             async with arena as a:
                                 assert a == arena
-                            
+
                             arena.stop_all.assert_called_once()
                             mock_db_engine.dispose.assert_called_once()
-    
+
     @pytest.mark.asyncio
     async def test_register_and_remove_arbiter(self, mock_config, mock_db_engine):
         """Test registering and removing arbiters from arena."""
-        with patch('arbiter.arena.HumanInLoopConfig'):
-            with patch('arbiter.arena.HumanInLoop'):
-                with patch('arbiter.arena.Arbiter'):
+        with patch("arbiter.arena.HumanInLoopConfig"):
+            with patch("arbiter.arena.HumanInLoop"):
+                with patch("arbiter.arena.Arbiter"):
                     from arbiter.arena import ArbiterArena
-                    
+
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
-                    
+
                     # Create a mock arbiter
                     mock_arbiter = MagicMock()
                     mock_arbiter.name = "TestArbiter"
-                    
+
                     # Test registration
                     await arena.register(mock_arbiter)
                     assert mock_arbiter in arena.arbiters
-                    
+
                     # Test removal
                     await arena.remove(mock_arbiter)
                     assert mock_arbiter not in arena.arbiters
-    
+
     @pytest.mark.asyncio
     async def test_get_random_arbiter(self, mock_config, mock_db_engine):
         """Test getting a random arbiter from the arena."""
-        with patch('arbiter.arena.HumanInLoopConfig'):
-            with patch('arbiter.arena.HumanInLoop'):
-                with patch('arbiter.arena.Arbiter'):
+        with patch("arbiter.arena.HumanInLoopConfig"):
+            with patch("arbiter.arena.HumanInLoop"):
+                with patch("arbiter.arena.Arbiter"):
                     from arbiter.arena import ArbiterArena
-                    
+
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
-                    
+
                     # Test with no arbiters
                     arena.arbiters.clear()
                     with pytest.raises(ValueError, match="No arbiters available"):
                         await arena.get_random_arbiter()
-                    
+
                     # Add an arbiter and test
                     mock_arbiter = MagicMock()
                     mock_arbiter.name = "TestArbiter"
                     arena.arbiters.append(mock_arbiter)
-                    
+
                     result = await arena.get_random_arbiter()
                     assert result == mock_arbiter
-    
+
     @pytest.mark.asyncio
     async def test_webhook_sending(self, mock_config, mock_db_engine):
         """Test that webhooks are sent correctly."""
         mock_config.WEBHOOK_URL = "http://example.com/webhook"
-        
-        with patch('arbiter.arena.HumanInLoopConfig'):
-            with patch('arbiter.arena.HumanInLoop'):
-                with patch('arbiter.arena.Arbiter'):
+
+        with patch("arbiter.arena.HumanInLoopConfig"):
+            with patch("arbiter.arena.HumanInLoop"):
+                with patch("arbiter.arena.Arbiter"):
                     from arbiter.arena import ArbiterArena
-                    
+
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
-                    
+
                     # Mock aiohttp session
-                    with patch('aiohttp.ClientSession') as mock_session:
+                    with patch("aiohttp.ClientSession") as mock_session:
                         mock_response = AsyncMock()
                         mock_response.status = 200
-                        mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = mock_response
-                        
+                        mock_session.return_value.__aenter__.return_value.post.return_value.__aenter__.return_value = (
+                            mock_response
+                        )
+
                         await arena._send_webhook("test_event", {"key": "value"})
-                        
+
                         # Verify the webhook was called
                         mock_session.return_value.__aenter__.return_value.post.assert_called_once()
-    
+
     def test_setup_routes(self, mock_config, mock_db_engine):
         """Test that FastAPI routes are set up correctly."""
-        with patch('arbiter.arena.HumanInLoopConfig'):
-            with patch('arbiter.arena.HumanInLoop'):
-                with patch('arbiter.arena.Arbiter'):
+        with patch("arbiter.arena.HumanInLoopConfig"):
+            with patch("arbiter.arena.HumanInLoop"):
+                with patch("arbiter.arena.Arbiter"):
                     from arbiter.arena import ArbiterArena
-                    
+
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
                     arena._setup_routes()
-                    
+
                     # Check that basic routes exist
                     routes = [route.path for route in arena.app.routes]
                     assert "/health" in routes

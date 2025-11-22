@@ -8,7 +8,7 @@ import tempfile
 import time
 import asyncio
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, Union
+from typing import Dict, Any, List, Optional, Union
 
 import aiohttp
 import aiofiles
@@ -39,7 +39,9 @@ try:
         AnonymizerEngine = _AnonymizerEngine
     else:
         # In TESTING, we deliberately skip heavy NLP stack to avoid torch / DLL issues.
-        logger.info("TESTING=1: Skipping Presidio/ spaCy / torch initialization in critique_prompt.")
+        logger.info(
+            "TESTING=1: Skipping Presidio/ spaCy / torch initialization in critique_prompt."
+        )
 except (ImportError, OSError, RuntimeError, Exception) as e:  # ultra-defensive
     logger.warning(
         "Optional Presidio/PII stack unavailable or failed to load "
@@ -81,7 +83,9 @@ try:
     # Stub for legacy dependency (kept only so calls do not explode)
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            logging.error("LanguageCritiquePlugin is a dependency bleed and should be refactored.")
+            logging.error(
+                "LanguageCritiquePlugin is a dependency bleed and should be refactored."
+            )
             return True, {"output": "Mock success"}
 
     def save_files_to_output(*args, **kwargs):
@@ -149,7 +153,7 @@ TEMPLATE_DIR = "prompt_templates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 
 # FIX: Define a constant namespace for deterministic UUIDs
-AGENT_NAMESPACE_UUID = uuid.UUID('c4a1b1b0-2b1a-4c8a-9f0a-1a2b3c4d5e6f')
+AGENT_NAMESPACE_UUID = uuid.UUID("c4a1b1b0-2b1a-4c8a-9f0a-1a2b3c4d5e6f")
 
 # Default Template (Inline for safety/fallback)
 DEFAULT_TEMPLATE = """
@@ -258,17 +262,15 @@ async def auto_tune_template_based_on_feedback(
                 response_json = await resp.json()
                 choices = response_json.get("choices") or []
                 if choices:
-                    refined_template_content = (
-                        choices[0]["message"]["content"].strip()
-                    )
+                    refined_template_content = choices[0]["message"]["content"].strip()
                     if refined_template_content.startswith("```jinja"):
-                        refined_template_content = (
-                            refined_template_content.lstrip("```jinja").strip()
-                        )
+                        refined_template_content = refined_template_content.lstrip(
+                            "```jinja"
+                        ).strip()
                     if refined_template_content.endswith("```"):
-                        refined_template_content = (
-                            refined_template_content.rstrip("```").strip()
-                        )
+                        refined_template_content = refined_template_content.rstrip(
+                            "```"
+                        ).strip()
                     log_action(
                         "Template Tuned",
                         {
@@ -310,18 +312,14 @@ async def incorporate_multi_modal_data(
             for filename, content in code_files.items():
                 file_path = temp_dir_path / filename
                 file_path.parent.mkdir(parents=True, exist_ok=True)
-                async with aiofiles.open(
-                    file_path, mode="w", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(file_path, mode="w", encoding="utf-8") as f:
                     await f.write(content)
 
             # Write test files
             for filename, content in test_files.items():
                 file_path = temp_dir_path / filename
                 file_path.parent.mkdir(parents=True, exist_ok=True)
-                async with aiofiles.open(
-                    file_path, mode="w", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(file_path, mode="w", encoding="utf-8") as f:
                     await f.write(content)
 
             combined_code_content = "\n".join(code_files.values())
@@ -350,22 +348,16 @@ async def incorporate_multi_modal_data(
                 )
                 if success and output_file.exists():
                     try:
-                        with open(
-                            output_file, "r", encoding="utf-8"
-                        ) as f:
+                        with open(output_file, "r", encoding="utf-8") as f:
                             coverage_report = json.load(f)
-                        percent_covered = (
-                            coverage_report.get("totals", {}).get(
-                                "percent_covered", 0
-                            )
+                        percent_covered = coverage_report.get("totals", {}).get(
+                            "percent_covered", 0
                         )
                         coverage_data_str = (
                             f"Python Code Coverage: {percent_covered:.2f}%"
                         )
                     except json.JSONDecodeError as e:
-                        logger.error(
-                            "Failed to parse pytest coverage JSON: %s", e
-                        )
+                        logger.error("Failed to parse pytest coverage JSON: %s", e)
                 else:
                     logger.warning(
                         "Pytest coverage failed or output not found: %s",
@@ -374,9 +366,7 @@ async def incorporate_multi_modal_data(
                 multi_modal_summary.append(coverage_data_str)
 
             elif lang in ["javascript", "typescript"]:
-                output_file_path = (
-                    temp_dir_path / "coverage" / "coverage-summary.json"
-                )
+                output_file_path = temp_dir_path / "coverage" / "coverage-summary.json"
                 dummy_package_json_path = temp_dir_path / "package.json"
                 if not dummy_package_json_path.exists():
                     dummy_package_json_content = """
@@ -431,9 +421,7 @@ async def incorporate_multi_modal_data(
                     )
                     if test_success and output_file_path.exists():
                         try:
-                            with open(
-                                output_file_path, "r", encoding="utf-8"
-                            ) as f:
+                            with open(output_file_path, "r", encoding="utf-8") as f:
                                 coverage_report = json.load(f)
                             statements_pct = (
                                 coverage_report.get("total", {})
@@ -444,9 +432,7 @@ async def incorporate_multi_modal_data(
                                 f"JS/TS Code Coverage: {statements_pct:.2f}%"
                             )
                         except json.JSONDecodeError as e:
-                            logger.error(
-                                "Failed to parse jest coverage JSON: %s", e
-                            )
+                            logger.error("Failed to parse jest coverage JSON: %s", e)
                     else:
                         logger.warning(
                             "Jest coverage failed or output not found: %s",
@@ -461,9 +447,7 @@ async def incorporate_multi_modal_data(
                 logger.info(msg)
 
         # UML Diagram generation (best-effort, with robust fallbacks)
-        uml_diagram_str = (
-            "UML Diagram: Not generated (PlantUML unavailable)."
-        )
+        uml_diagram_str = "UML Diagram: Not generated (PlantUML unavailable)."
         try:
             uml_code = "@startuml\n"
             class_info: List[Dict[str, Any]] = []
@@ -488,18 +472,14 @@ async def incorporate_multi_modal_data(
                                         n.name
                                         for n in node.body
                                         if hasattr(n, "name")
-                                        and getattr(
-                                            n, "__class__", None
-                                        ).__name__
+                                        and getattr(n, "__class__", None).__name__
                                         == "FunctionDef"
                                     ]
                                     parent = next(
                                         (
                                             b.id
                                             for b in node.bases
-                                            if getattr(
-                                                b, "__class__", None
-                                            ).__name__
+                                            if getattr(b, "__class__", None).__name__
                                             == "Name"
                                         ),
                                         None,
@@ -521,9 +501,7 @@ async def incorporate_multi_modal_data(
                                         f"{cls['parent']} <|-- {cls['name']}"
                                     )
                         except SyntaxError as e:
-                            logger.warning(
-                                "Failed to parse Python code for UML: %s", e
-                            )
+                            logger.warning("Failed to parse Python code for UML: %s", e)
 
                     elif lang in ("javascript", "typescript"):
                         try:
@@ -531,15 +509,11 @@ async def incorporate_multi_modal_data(
 
                             tree = esprima.parseModule(content)
                             for node in tree.body:
-                                if (
-                                    node.type
-                                    == "ClassDeclaration"
-                                ):
+                                if node.type == "ClassDeclaration":
                                     methods = [
                                         m.key.name
                                         for m in node.body.body
-                                        if m.type
-                                        == "MethodDefinition"
+                                        if m.type == "MethodDefinition"
                                     ]
                                     parent = (
                                         node.superClass.name
@@ -556,18 +530,14 @@ async def incorporate_multi_modal_data(
                             for cls in class_info:
                                 uml_code += f"class {cls['name']} {{\n"
                                 for method in cls["methods"]:
-                                    uml_code += (
-                                        f" +{method}()\n"
-                                    )
+                                    uml_code += f" +{method}()\n"
                                 uml_code += "}\n"
                                 if cls["parent"]:
                                     relationships.append(
                                         f"{cls['parent']} <|-- {cls['name']}"
                                     )
                         except Exception as e:
-                            logger.warning(
-                                "Failed to parse JS/TS code for UML: %s", e
-                            )
+                            logger.warning("Failed to parse JS/TS code for UML: %s", e)
 
                 uml_code += "\n".join(relationships) + "\n@enduml"
                 # We don't actually need to call PlantUML server to keep this
@@ -588,9 +558,7 @@ async def incorporate_multi_modal_data(
                             class_info.append(
                                 {
                                     "name": class_name,
-                                    "parent": parent.strip()
-                                    if parent
-                                    else None,
+                                    "parent": parent.strip() if parent else None,
                                     "methods": [],
                                 }
                             )
@@ -615,9 +583,7 @@ async def incorporate_multi_modal_data(
                     f"{', '.join(c['name'] for c in class_info) if class_info else 'none'}."
                 )
         except Exception as e:
-            logger.error(
-                "Error generating PlantUML diagram: %s", e
-            )
+            logger.error("Error generating PlantUML diagram: %s", e)
             uml_diagram_str = (
                 "UML Diagram: Generation failed due to an error. "
                 "Falling back to basic summary."
@@ -750,10 +716,8 @@ async def build_semantic_critique_prompt(
         + state_summary
         + conf.model_dump_json()
     )
-    prompt_hash = hashlib.sha256(
-        prompt_content_hash_input.encode("utf-8")
-    ).hexdigest()
-    
+    prompt_hash = hashlib.sha256(prompt_content_hash_input.encode("utf-8")).hexdigest()
+
     # 2. Create deterministic op_id FROM the hash
     op_id = str(uuid.uuid5(AGENT_NAMESPACE_UUID, prompt_hash))
     # --- END FIX ---
@@ -799,31 +763,25 @@ async def build_semantic_critique_prompt(
 
     # Code summary
     code_concat = "\n".join(
-        f"// File: {name}\n{content}"
-        for name, content in sorted(code_files.items())
+        f"// File: {name}\n{content}" for name, content in sorted(code_files.items())
     )
     try:
         code_safe = await scrub_pii_and_secrets(code_concat)
     except Exception:
         code_safe = code_concat
 
-    code_summary = await _maybe_await(
-        summarize_text(code_safe, max_length=1200)
-    )
+    code_summary = await _maybe_await(summarize_text(code_safe, max_length=1200))
 
     # Test summary
     test_concat = "\n".join(
-        f"// File: {name}\n{content}"
-        for name, content in sorted(test_files.items())
+        f"// File: {name}\n{content}" for name, content in sorted(test_files.items())
     )
     try:
         test_safe = await scrub_pii_and_secrets(test_concat)
     except Exception:
         test_safe = test_concat
 
-    test_summary = await _maybe_await(
-        summarize_text(test_safe, max_length=800)
-    )
+    test_summary = await _maybe_await(summarize_text(test_safe, max_length=800))
 
     # --- RAG context (optional / test-safe) ---
     rag_context = ""
@@ -878,21 +836,20 @@ async def build_semantic_critique_prompt(
             template_name,
             e,
         )
-        template_content_str = DEFAULT_TEMPLATE # Use the inline string as fallback
+        template_content_str = DEFAULT_TEMPLATE  # Use the inline string as fallback
 
     # --- Optional auto-tuning of template (best-effort, deterministic) ---
     try:
         # Tune the *raw template string*, not a rendered version
         tuned_template_str = await auto_tune_template_based_on_feedback(
             template_content_str,
-            feedback=conf.feedback, # Pass the feedback from config
+            feedback=conf.feedback,  # Pass the feedback from config
         )
         # Create the final template object from the (potentially) tuned string
         final_template = Template(tuned_template_str)
     except Exception as e:
         logger.warning(f"Failed to auto-tune template: {e}. Using original template.")
-        final_template = Template(template_content_str) # Fallback to untuned template
-
+        final_template = Template(template_content_str)  # Fallback to untuned template
 
     # --- Render final prompt ---
     prompt = final_template.render(
@@ -914,9 +871,7 @@ async def build_semantic_critique_prompt(
     # --- Token budget & truncation (safe, deterministic) ---
     try:
         MAX_PROMPT_TOKENS = 8192
-        token_count = await _maybe_await(
-            count_tokens(prompt, model_name="default")
-        )
+        token_count = await _maybe_await(count_tokens(prompt, model_name="default"))
         if token_count > MAX_PROMPT_TOKENS:
             logger.warning(
                 "Generated prompt (%s tokens) exceeds limit (%s); summarizing.",
@@ -956,9 +911,7 @@ if __name__ == "__main__":
     import argparse
     import asyncio as _asyncio_mod
 
-    parser = argparse.ArgumentParser(
-        description="Build semantic critique prompt"
-    )
+    parser = argparse.ArgumentParser(description="Build semantic critique prompt")
     parser.add_argument(
         "--code-dir",
         required=True,
@@ -967,32 +920,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test-dir",
         default="",
-        help=(
-            "Path to the directory containing test files "
-            "(optional)."
-        ),
+        help=("Path to the directory containing test files " "(optional)."),
     )
     parser.add_argument(
         "--requirements",
         default="{}",
-        help=(
-            "JSON string of requirements or path to a JSON "
-            "file."
-        ),
+        help=("JSON string of requirements or path to a JSON " "file."),
     )
     parser.add_argument(
         "--state-summary",
         default="Auto-generated",
-        help=(
-            "Summary of the current state or context."
-        ),
+        help=("Summary of the current state or context."),
     )
     parser.add_argument(
         "--config",
         default="{}",
-        help=(
-            "JSON string of prompt configuration overrides."
-        ),
+        help=("JSON string of prompt configuration overrides."),
     )
     args = parser.parse_args()
 
@@ -1001,9 +944,7 @@ if __name__ == "__main__":
         for f_name in os.listdir(args.code_dir):
             f_path = Path(args.code_dir) / f_name
             if f_path.is_file():
-                async with aiofiles.open(
-                    f_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(f_path, "r", encoding="utf-8") as f:
                     code_files[f_name] = await f.read()
 
         test_files: Dict[str, str] = {}
@@ -1011,9 +952,7 @@ if __name__ == "__main__":
             for f_name in os.listdir(args.test_dir):
                 f_path = Path(args.test_dir) / f_name
                 if f_path.is_file():
-                    async with aiofiles.open(
-                        f_path, "r", encoding="utf-8"
-                    ) as f:
+                    async with aiofiles.open(f_path, "r", encoding="utf-8") as f:
                         test_files[f_name] = await f.read()
 
         requirements_data: Dict[str, Any] = {}
@@ -1027,13 +966,10 @@ if __name__ == "__main__":
                         "r",
                         encoding="utf-8",
                     ) as f:
-                        requirements_data = json.loads(
-                            await f.read()
-                        )
+                        requirements_data = json.loads(await f.read())
                 except Exception as e:
                     logger.error(
-                        "Failed to read/parse requirements "
-                        "file '%s': %s",
+                        "Failed to read/parse requirements " "file '%s': %s",
                         args.requirements,
                         e,
                     )

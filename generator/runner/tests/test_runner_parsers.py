@@ -11,37 +11,20 @@ Industry-grade test suite for runner_parsers.py (2025 refactor).
 * Traceability: logs test IDs
 """
 
-import asyncio
-import json
 import logging
-import os
-import re
 import shutil
 import tempfile
-from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
-import xml.etree.ElementTree as ET
 
 # --------------------------------------------------------------------------- #
 # Import module under test
 # --------------------------------------------------------------------------- #
 from runner.runner_parsers import (
-    COVERAGE_DETAILS_KEY,
-    COVERAGE_PERCENTAGE_KEY,
-    CURRENT_PARSER_SCHEMA_VERSION,
-    ERROR_TESTS_KEY,
-    FAILED_TESTS_KEY,
-    PASS_RATE_KEY,
-    PASSED_TESTS_KEY,
-    SKIPPED_TESTS_KEY,
-    TEST_CASES_KEY,
-    TOTAL_TESTS_KEY,
     CoverageReportSchema,
     ParserInfo,
     TestCaseResult,
@@ -68,6 +51,7 @@ from runner.runner_parsers import (
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)
 test_logger = logging.getLogger(__name__)
+
 
 # --------------------------------------------------------------------------- #
 # Fixtures
@@ -100,16 +84,31 @@ def mock_et_parse():
 # --------------------------------------------------------------------------- #
 # Tests for schemas (Pydantic validation)
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("model, data, valid", [
-    (ParserInfo, {"parser_name": "test", "status": "success", "version": 2}, True),
-    (ParserInfo, {"parser_name": "test", "status": "invalid"}, False),
-    (TestCaseResult, {"name": "test_case", "status": "passed", "time": 1.5}, True),
-    (TestCaseResult, {"name": "test_case", "status": "invalid"}, False),
-    (TestReportSchema, {"total_tests": 5, "passed_tests": 3, "pass_rate": 0.6}, True),
-    (TestReportSchema, {"total_tests": 5, "passed_tests": 6}, False),  # Invalid pass_rate
-    (CoverageReportSchema, {"coverage_percentage": 80.0, "coverage_details": {}}, True),
-    (CoverageReportSchema, {"coverage_percentage": 101.0}, False),
-])
+@pytest.mark.parametrize(
+    "model, data, valid",
+    [
+        (ParserInfo, {"parser_name": "test", "status": "success", "version": 2}, True),
+        (ParserInfo, {"parser_name": "test", "status": "invalid"}, False),
+        (TestCaseResult, {"name": "test_case", "status": "passed", "time": 1.5}, True),
+        (TestCaseResult, {"name": "test_case", "status": "invalid"}, False),
+        (
+            TestReportSchema,
+            {"total_tests": 5, "passed_tests": 3, "pass_rate": 0.6},
+            True,
+        ),
+        (
+            TestReportSchema,
+            {"total_tests": 5, "passed_tests": 6},
+            False,
+        ),  # Invalid pass_rate
+        (
+            CoverageReportSchema,
+            {"coverage_percentage": 80.0, "coverage_details": {}},
+            True,
+        ),
+        (CoverageReportSchema, {"coverage_percentage": 101.0}, False),
+    ],
+)
 def test_schema_validation(model, data: Dict, valid: bool):
     if valid:
         model(**data)
@@ -123,7 +122,7 @@ def test_schema_validation(model, data: Dict, valid: bool):
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_parse_junit_xml_success(temp_file: Path, mock_aiofiles):
-    xml_content = '''
+    xml_content = """
 <testsuites>
 <testsuite name="suite" tests="3" failures="1" errors="0" skipped="1">
 <testcase name="pass" time="1.0" />
@@ -131,7 +130,7 @@ async def test_parse_junit_xml_success(temp_file: Path, mock_aiofiles):
 <testcase name="skip" time="0.5"><skipped /></testcase>
 </testsuite>
 </testsuites>
-'''
+"""
     temp_file.write_text(xml_content)
     mock_reader = AsyncMock()
     mock_reader.read.return_value = xml_content.encode()
@@ -145,7 +144,7 @@ async def test_parse_junit_xml_success(temp_file: Path, mock_aiofiles):
     assert result.passed_tests == 1
     assert result.failed_tests == 1
     assert result.skipped_tests == 1
-    assert result.pass_rate == 1/3
+    assert result.pass_rate == 1 / 3
     assert len(result.test_cases) == 3
 
 
@@ -153,7 +152,11 @@ async def test_parse_junit_xml_success(temp_file: Path, mock_aiofiles):
 async def test_parse_junit_xml_invalid_xml(temp_file: Path, mock_aiofiles):
     xml_content = "<invalid>xml"
     temp_file.write_text(xml_content)
-    mock_aiofiles.open.return_value = AsyncMock(__aenter__=AsyncMock(return_value=AsyncMock(read=AsyncMock(return_value=xml_content.encode()))))
+    mock_aiofiles.open.return_value = AsyncMock(
+        __aenter__=AsyncMock(
+            return_value=AsyncMock(read=AsyncMock(return_value=xml_content.encode()))
+        )
+    )
 
     with pytest.raises(RunnerError, match="XML parsing failed"):
         await parse_junit_xml(temp_file)
@@ -164,7 +167,7 @@ async def test_parse_junit_xml_invalid_xml(temp_file: Path, mock_aiofiles):
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_parse_coverage_xml_success(temp_file: Path, mock_aiofiles):
-    xml_content = '''
+    xml_content = """
 <coverage line-rate="0.8">
 <sources><source>/src</source></sources>
 <packages>
@@ -175,7 +178,7 @@ async def test_parse_coverage_xml_success(temp_file: Path, mock_aiofiles):
 </package>
 </packages>
 </coverage>
-'''
+"""
     temp_file.write_text(xml_content)
     mock_reader = AsyncMock()
     mock_reader.read.return_value = xml_content.encode()
@@ -202,18 +205,50 @@ async def test_parse_coverage_xml_success(temp_file: Path, mock_aiofiles):
         (parse_behave_junit, '<testsuite tests="2" failures="1"></testsuite>', 2, 0.5),
         # This test is correct. The failure indicates a bug in parse_robot_xml,
         # which should be mapping "PASS" to "passed" and "FAIL" to "failed".
-        (parse_robot_xml, '<suite><test status="PASS"></test><test status="FAIL"></test></suite>', 2, 0.5),
-        (parse_jest_json, '{"numTotalTests":3, "numPassedTests":2}', 3, 2/3),
+        (
+            parse_robot_xml,
+            '<suite><test status="PASS"></test><test status="FAIL"></test></suite>',
+            2,
+            0.5,
+        ),
+        (parse_jest_json, '{"numTotalTests":3, "numPassedTests":2}', 3, 2 / 3),
         # This test is correct. The failure indicates a bug in parse_go_test_json,
         # which should be counting the "pass" and "fail" actions.
-        (parse_go_test_json, '{"Action":"pass", "Test": "t1"}\n{"Action":"fail", "Test": "t2"}', 2, 0.5),
-        (parse_surefire_xml, '<testsuite tests="4" failures="1" errors="1" skipped="1"></testsuite>', 4, 0.25),
-        (parse_jacoco_xml, '<report><counter type="LINE" covered="80" missed="20" />', 0, 80.0),  # coverage %
+        (
+            parse_go_test_json,
+            '{"Action":"pass", "Test": "t1"}\n{"Action":"fail", "Test": "t2"}',
+            2,
+            0.5,
+        ),
+        (
+            parse_surefire_xml,
+            '<testsuite tests="4" failures="1" errors="1" skipped="1"></testsuite>',
+            4,
+            0.25,
+        ),
+        (
+            parse_jacoco_xml,
+            '<report><counter type="LINE" covered="80" missed="20" />',
+            0,
+            80.0,
+        ),  # coverage %
         (parse_istanbul_json, '{"total":{"lines":{"pct":75}}}', 0, 75.0),
-        (parse_go_coverprofile, "mode: count\nfile.go:1.1,2.2 1 1\nfile.go:3.3,4.4 1 0", 0, 50.0),
+        (
+            parse_go_coverprofile,
+            "mode: count\nfile.go:1.1,2.2 1 1\nfile.go:3.3,4.4 1 0",
+            0,
+            50.0,
+        ),
     ],
 )
-async def test_parsers_success(parser_func, content: str, expected_total: int, expected_pass_rate: float, temp_file: Path, mock_aiofiles):
+async def test_parsers_success(
+    parser_func,
+    content: str,
+    expected_total: int,
+    expected_pass_rate: float,
+    temp_file: Path,
+    mock_aiofiles,
+):
     temp_file.write_text(content)
     mock_reader = AsyncMock()
     mock_reader.read.return_value = content.encode()
@@ -249,7 +284,7 @@ async def test_parser_wrapper_success(temp_file: Path):
     # FIX: Define the stub custom_parser
     async def custom_parser(path: Path) -> Dict[str, Any]:
         return {"total_tests": 1, "passed_tests": 1, "pass_rate": 1.0}
-    
+
     @parser_wrapper(custom_parser, name="custom")
     async def wrapped_parser(path: Path) -> Dict[str, Any]:
         return await custom_parser(path)
@@ -270,7 +305,7 @@ async def test_parser_wrapper_error(temp_file: Path):
         return bad_parser(path)
 
     result = await wrapped_bad(temp_file)
-    
+
     # FIX: The wrapper correctly sets status to "failed" to match the schema.
     assert result.parser_info.status == "failed"
     assert result.parser_info.message == "parse fail"

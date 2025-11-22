@@ -4,7 +4,7 @@ from omnicore_engine.database import Database
 from omnicore_engine.message_bus.resilience import RetryPolicy, CircuitBreaker
 from omnicore_engine.message_bus.encryption import FernetEncryption
 from cryptography.fernet import Fernet
-from unittest.mock import AsyncMock
+
 
 @pytest.mark.asyncio
 async def test_merkle_tree_integrity(tmp_path):
@@ -18,6 +18,7 @@ async def test_merkle_tree_integrity(tmp_path):
     assert root1 != root2
     await db.close()
 
+
 def test_encryption_key_rotation():
     key1 = Fernet.generate_key()
     key2 = Fernet.generate_key()
@@ -27,10 +28,12 @@ def test_encryption_key_rotation():
     encryption = FernetEncryption([key2, key1])
     assert encryption.decrypt(encrypted) == data
 
+
 def test_retry_policy_backoff():
     policy = RetryPolicy(max_retries=2, backoff_factor=0.1)
     assert policy.backoff_factor == 0.1
     assert policy.max_retries == 2
+
 
 def test_circuit_breaker_states():
     breaker = CircuitBreaker(failure_threshold=2, recovery_timeout=1)
@@ -40,6 +43,7 @@ def test_circuit_breaker_states():
     assert not breaker.can_attempt()
     time.sleep(1.1)
     assert breaker.can_attempt()  # Half-open state
+
 
 @pytest.mark.asyncio
 async def test_audit_encryption(tmp_path):

@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+
 # --- FIX: Import uuid ---
 import uuid
 
@@ -51,9 +52,9 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(
-    Fernet.generate_key()
-).decode("utf-8")
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
+    "utf-8"
+)
 
 # We also provide an ENCRYPTION_KEYS-style bundle, in case audit_log uses it.
 encryption_keys_payload = json.dumps(
@@ -115,7 +116,7 @@ pkg_roots = [
     "generator",
     "generator.audit_log",
     "generator.audit_log.audit_backend",
-    "generator.audit_log.audit_utils", # NEW: Root for utils
+    "generator.audit_log.audit_utils",  # NEW: Root for utils
 ]
 for name in pkg_roots:
     if name not in sys.modules:
@@ -179,15 +180,11 @@ sys.modules[utils_name] = utils_module
 # --------------------------------------------------------------------------- #
 
 from generator.audit_log.audit_log import (
-    AuditLog,
-    log_action,
     api_app,
-    app as typer_app,
 )
 
 # gRPC protos are optional; if missing, we won't fail tests.
 try:
-    from generator.audit_log import audit_log_pb2, audit_log_pb2_grpc  # type: ignore
 
     HAS_GRPC_PROTOS = True
 except Exception:
@@ -225,8 +222,8 @@ async def mock_presidio():
     """
     Mock Presidio analyzer/anonymizer so any PII-redaction logic in audit_log
     can run without external deps.
-    
-    The actual patching targets are now inside the stubbed audit_utils module, 
+
+    The actual patching targets are now inside the stubbed audit_utils module,
     but for simplicity, we mock the top-level classes used in the stub.
     """
     # The patch path now directly targets the stubbed classes in audit_utils
@@ -254,9 +251,7 @@ async def mock_audit_log_backend():
     Note: This overrides the stub's get_backend for the duration of the test
     so we can assert calls.
     """
-    with patch(
-        "generator.audit_log.audit_log.get_backend"
-    ) as mock_get_backend:
+    with patch("generator.audit_log.audit_log.get_backend") as mock_get_backend:
         backend = AsyncMock()
         backend.append = AsyncMock(return_value=None)
         backend.read_last_n = AsyncMock(return_value=[])
@@ -270,9 +265,12 @@ async def mock_software_key_master():
     """
     Returns a dummy async accessor function required by the CryptoProviderFactory.
     """
+
     async def dummy_accessor():
         return b"32-byte-dummy-master-key-12345678"
+
     return dummy_accessor
+
 
 @pytest.fixture
 def mock_crypto_provider_factory(mock_software_key_master):
@@ -281,17 +279,20 @@ def mock_crypto_provider_factory(mock_software_key_master):
     Also mocks the internal Keystore methods to prevent OS-specific file errors.
     """
     from unittest.mock import MagicMock
-    from generator.audit_log.audit_crypto import audit_crypto_factory as crypto_factory_module
 
     # Mock the CryptoProvider instance returned by the factory
     mock_provider = MagicMock()
     mock_provider.supported_algos = ["ed25519"]
-    mock_provider.settings = SimpleNamespace(SUPPORTED_ALGOS=["ed25519"]) # Added settings mock
-    mock_provider.generate_key = AsyncMock(return_value=str(uuid.uuid4())) # Use UUID for key ID
+    mock_provider.settings = SimpleNamespace(
+        SUPPORTED_ALGOS=["ed25519"]
+    )  # Added settings mock
+    mock_provider.generate_key = AsyncMock(
+        return_value=str(uuid.uuid4())
+    )  # Use UUID for key ID
     mock_provider.rotate_key = AsyncMock(return_value=str(uuid.uuid4()))
     mock_provider.sign_data = AsyncMock(return_value=b"mock-signature")
     mock_provider.verify_signature = AsyncMock(return_value=True)
-    
+
     # Mock the factory itself
     mock_factory = MagicMock()
     mock_factory.get_provider.return_value = mock_provider
@@ -299,25 +300,27 @@ def mock_crypto_provider_factory(mock_software_key_master):
     # Patch the Keystore methods that use os.fchmod/os.fsync (issue on Windows)
     with patch(
         "generator.audit_log.audit_crypto.audit_keystore.FileSystemKeyStorageBackend._atomic_write_and_set_permissions",
-        new_callable=AsyncMock
+        new_callable=AsyncMock,
     ) as mock_atomic_write:
-        mock_atomic_write.return_value = None # Ensure it doesn't raise the OS error
+        mock_atomic_write.return_value = None  # Ensure it doesn't raise the OS error
 
         # Patch the global factory instance and the internal accessor function
         with patch(
             "generator.audit_log.audit_crypto.audit_crypto_factory.crypto_provider_factory",
-            mock_factory
+            mock_factory,
         ), patch(
             "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_software_key_master",
-            mock_software_key_master
+            mock_software_key_master,
         ):
-            # Re-initialize the global AUDIT_LOG instance after patching the factory 
+            # Re-initialize the global AUDIT_LOG instance after patching the factory
             # to ensure AuditLog.__init__ uses the mock.
-            from generator.audit_log.audit_log import initialize_audit_log_instance, AUDIT_LOG
-            
+            from generator.audit_log.audit_log import (
+                initialize_audit_log_instance,
+            )
+
             # The global AUDIT_LOG needs to be re-initialized after the factory is mocked
             new_audit_log = initialize_audit_log_instance()
-            
+
             # Patch the module-level AUDIT_LOG to point to the new, mocked instance
             with patch("generator.audit_log.audit_log.AUDIT_LOG", new_audit_log):
                 yield mock_factory
@@ -325,9 +328,7 @@ def mock_crypto_provider_factory(mock_software_key_master):
 
 @pytest_asyncio.fixture
 async def mock_metrics():
-    with patch(
-        "generator.audit_log.audit_log.Counter"
-    ) as mock_counter, patch(
+    with patch("generator.audit_log.audit_log.Counter") as mock_counter, patch(
         "generator.audit_log.audit_log.Histogram"
     ) as mock_histogram:
         mc = {
@@ -366,7 +367,7 @@ async def mock_opentelemetry():
 @pytest_asyncio.fixture
 async def audit_log_instance(
     mock_audit_log_backend,
-    mock_crypto_provider_factory, 
+    mock_crypto_provider_factory,
     # The actual AUDIT_LOG instance is already replaced by mock_crypto_provider_factory fixture's internal patch
 ):
     """
@@ -374,11 +375,11 @@ async def audit_log_instance(
     It needs to be started and shut down properly.
     """
     from generator.audit_log.audit_log import AUDIT_LOG
-    
+
     # We must patch the crypto provider's sign/verify methods on the actual instance
     # generated by the mocked factory, as the factory only mocked the return object.
     crypto_mock = mock_crypto_provider_factory.get_provider.return_value
-    
+
     # Simple mock implementation for sign/verify using the mocked instance
     async def mock_sign(data, key_id):
         # We need a proper 64-byte signature structure for the backend tests (b64 encoding)
@@ -386,10 +387,10 @@ async def audit_log_instance(
 
     async def mock_verify(signature, data, key_id):
         return True
-        
+
     crypto_mock.sign = AsyncMock(side_effect=mock_sign)
     crypto_mock.verify = AsyncMock(side_effect=mock_verify)
-    
+
     # Force initialize_signing_key to use a mocked key ID so we don't rely on the failed Keystore path
     AUDIT_LOG.current_signing_key_id = "test-key-id"
 
@@ -402,7 +403,7 @@ async def audit_log_instance(
 
 
 @pytest_asyncio.fixture
-async def fastapi_client(mock_crypto_provider_factory, audit_log_instance): 
+async def fastapi_client(mock_crypto_provider_factory, audit_log_instance):
     # Depends on audit_log_instance to ensure AUDIT_LOG is properly initialized
     # with crypto provider, signing key, and started background tasks
     return TestClient(api_app)
@@ -438,7 +439,7 @@ class TestAuditLog:
         audit_log_instance,
         mock_presidio,
         mock_audit_log_backend,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
         mock_metrics,
     ):
         creds = MagicMock()
@@ -456,7 +457,7 @@ class TestAuditLog:
         # --- START FIX: Expected logged entry is now a dict, not an encrypted string ---
         # The backend now correctly receives the dict before its internal encryption logic.
         assert isinstance(logged, dict)
-        assert logged['action'] == 'user_login'
+        assert logged["action"] == "user_login"
         # --- END FIX ---
 
     @pytest.mark.asyncio
@@ -466,7 +467,7 @@ class TestAuditLog:
         fastapi_client,
         mock_presidio,
         mock_audit_log_backend,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
         mock_metrics,
     ):
         headers = {"Authorization": "Bearer admin_token"}
@@ -488,7 +489,7 @@ class TestAuditLog:
         self,
         fastapi_client,
         mock_audit_log_backend,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
         mock_metrics,
     ):
         headers = {"Authorization": "Bearer invalid"}
@@ -507,7 +508,7 @@ class TestAuditLog:
         audit_log_instance,
         mock_presidio,
         mock_audit_log_backend,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
         mock_metrics,
     ):
         creds = MagicMock()
@@ -532,7 +533,7 @@ class TestAuditLog:
         audit_log_instance,
         mock_presidio,
         mock_audit_log_backend,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
     ):
         from generator.audit_log.audit_log import register_hook
 
@@ -559,7 +560,7 @@ class TestAuditLog:
     async def test_key_rotation_path(
         self,
         audit_log_instance,
-        mock_crypto_provider_factory, 
+        mock_crypto_provider_factory,
     ):
         if not hasattr(audit_log_instance, "rotate_signing_key"):
             pytest.skip("Key rotation not implemented")

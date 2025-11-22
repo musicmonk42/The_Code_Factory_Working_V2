@@ -70,8 +70,15 @@ from typing import Any, Dict, Optional, Literal, List
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from logging.handlers import RotatingFileHandler, WatchedFileHandler, QueueHandler, QueueListener
-from core_secrets import SecretsManager  # Assumes core_secrets.py is in the same directory
+from logging.handlers import (
+    RotatingFileHandler,
+    WatchedFileHandler,
+    QueueHandler,
+    QueueListener,
+)
+from core_secrets import (
+    SecretsManager,
+)  # Assumes core_secrets.py is in the same directory
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SCHEMA_VERSION = 1
@@ -90,20 +97,29 @@ def _prod() -> bool:
 
 class _DropOnFullQueueHandler(QueueHandler):
     """A QueueHandler that drops messages and warns to stderr if the queue is full."""
+
     def enqueue(self, record: logging.LogRecord) -> None:
         try:
             self.queue.put_nowait(record)
         except queue.Full:
             try:
                 ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-                err_msg = {"schema_version": SCHEMA_VERSION, "event_type": "audit_queue_full", "timestamp": ts}
-                sys.stderr.write(json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n")
+                err_msg = {
+                    "schema_version": SCHEMA_VERSION,
+                    "event_type": "audit_queue_full",
+                    "timestamp": ts,
+                }
+                sys.stderr.write(
+                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
+                )
             except Exception:
                 pass
 
 
 class _SafeHandler(logging.Handler):
     """Wraps a real handler to catch emit/flush/close errors and mirror JSON to stderr."""
+
     def __init__(self, inner: logging.Handler, strict: bool, name: str):
         super().__init__(level=inner.level)
         self.inner = inner
@@ -136,10 +152,20 @@ class _SafeHandler(logging.Handler):
     def _mirror(self, event_type: str, err: str) -> None:
         try:
             ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-            sys.stderr.write(json.dumps({
-                "schema_version": SCHEMA_VERSION, "event_type": event_type, "timestamp": ts,
-                "handler": self.name, "error": err,
-            }, separators=(",", ":"), ensure_ascii=False) + "\n")
+            sys.stderr.write(
+                json.dumps(
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "event_type": event_type,
+                        "timestamp": ts,
+                        "handler": self.name,
+                        "error": err,
+                    },
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         except Exception:
             pass
         if self.strict:
@@ -149,7 +175,8 @@ class _SafeHandler(logging.Handler):
 
 class AuditLogger:
     """A thread-safe, production-ready audit logger that writes structured JSON events."""
-    _instance: Optional['AuditLogger'] = None
+
+    _instance: Optional["AuditLogger"] = None
     _singleton_lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
@@ -179,7 +206,9 @@ class AuditLogger:
             self.logger.propagate = False
             self._app_instance_id = uuid.uuid4().hex
 
-            maxsize = self._get_config_value("AUDIT_QUEUE_MAXSIZE", 10000, int, (1000, 1_000_000))
+            maxsize = self._get_config_value(
+                "AUDIT_QUEUE_MAXSIZE", 10000, int, (1000, 1_000_000)
+            )
             self._log_queue: queue.Queue = queue.Queue(maxsize=maxsize)
             self._queue_handler = _DropOnFullQueueHandler(self._log_queue)
             self.logger.addHandler(self._queue_handler)
@@ -190,7 +219,9 @@ class AuditLogger:
             atexit.register(self.close)
             self._initialized = True
 
-    def _get_config_value(self, key: str, default: Any, type_cast: type, bounds: Optional[tuple] = None) -> Any:
+    def _get_config_value(
+        self, key: str, default: Any, type_cast: type, bounds: Optional[tuple] = None
+    ) -> Any:
         """Helper to fetch, cast, and bound configuration values."""
         val = self.secrets_manager.get_secret(key, default=default, type_cast=type_cast)
         if bounds and isinstance(val, (int, float)):
@@ -207,12 +238,16 @@ class AuditLogger:
             "app_instance_id": self._app_instance_id,
         }
         try:
-            extra_context_str = self._get_config_value("AUDIT_EXTRA_CONTEXT_JSON", None, str)
+            extra_context_str = self._get_config_value(
+                "AUDIT_EXTRA_CONTEXT_JSON", None, str
+            )
             if extra_context_str:
                 extra_context = json.loads(extra_context_str)
                 if isinstance(extra_context, dict):
                     for k, v in extra_context.items():
-                        if k not in self._context and isinstance(v, (str, int, float, bool, type(None))):
+                        if k not in self._context and isinstance(
+                            v, (str, int, float, bool, type(None))
+                        ):
                             self._context[k] = v
         except (json.JSONDecodeError, TypeError):
             pass
@@ -229,16 +264,26 @@ class AuditLogger:
         except Exception:
             pass
 
-        formatter = logging.Formatter('%(message)s')
+        formatter = logging.Formatter("%(message)s")
         new_handlers: List[logging.Handler] = []
 
         use_watched = self._get_config_value("AUDIT_USE_WATCHED_FILE", False, bool)
-        if use_watched and os.name == 'posix':
-            fh = WatchedFileHandler(filename=file_path_str, encoding='utf-8')
+        if use_watched and os.name == "posix":
+            fh = WatchedFileHandler(filename=file_path_str, encoding="utf-8")
         else:
-            max_bytes = self._get_config_value("AUDIT_LOG_MAX_BYTES", 10 * 1024 * 1024, int, (1_000_000, 1_000_000_000))
-            backup_count = self._get_config_value("AUDIT_LOG_BACKUP_COUNT", 5, int, (1, 50))
-            fh = RotatingFileHandler(file_path_str, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8', delay=True)
+            max_bytes = self._get_config_value(
+                "AUDIT_LOG_MAX_BYTES", 10 * 1024 * 1024, int, (1_000_000, 1_000_000_000)
+            )
+            backup_count = self._get_config_value(
+                "AUDIT_LOG_BACKUP_COUNT", 5, int, (1, 50)
+            )
+            fh = RotatingFileHandler(
+                file_path_str,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+                delay=True,
+            )
         fh.setFormatter(formatter)
         new_handlers.append(fh)
 
@@ -248,8 +293,17 @@ class AuditLogger:
             if _prod():
                 try:
                     ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-                    err_msg = {"schema_version": SCHEMA_VERSION, "event_type": "audit_perm_warning", "timestamp": ts, "path": file_path_str, "error": str(perm_err)}
-                    sys.stderr.write(json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n")
+                    err_msg = {
+                        "schema_version": SCHEMA_VERSION,
+                        "event_type": "audit_perm_warning",
+                        "timestamp": ts,
+                        "path": file_path_str,
+                        "error": str(perm_err),
+                    }
+                    sys.stderr.write(
+                        json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                        + "\n"
+                    )
                 except Exception:
                     pass
 
@@ -281,7 +335,9 @@ class AuditLogger:
                 pass
         self._attached_handlers.clear()
 
-        self._listener = QueueListener(self._log_queue, *wrapped_handlers, respect_handler_level=True)
+        self._listener = QueueListener(
+            self._log_queue, *wrapped_handlers, respect_handler_level=True
+        )
         self._attached_handlers = wrapped_handlers
         self._listener.start()
 
@@ -291,10 +347,18 @@ class AuditLogger:
         self.logger.setLevel(getattr(logging, level_str, logging.INFO))
         self._load_context()
 
-        self._rl_window = self._get_config_value("AUDIT_RL_WINDOW_SEC", 10, int, (1, 300))
-        self._rl_limit = self._get_config_value("AUDIT_RL_MAX_EVENTS", 100, int, (10, 10000))
-        self._rl_max_keys = self._get_config_value("AUDIT_RL_MAX_KEYS", 1000, int, (100, 10000))
-        self._max_event_bytes = self._get_config_value("AUDIT_EVENT_MAX_BYTES", 256 * 1024, int, (16 * 1024, 2 * 1024 * 1024))
+        self._rl_window = self._get_config_value(
+            "AUDIT_RL_WINDOW_SEC", 10, int, (1, 300)
+        )
+        self._rl_limit = self._get_config_value(
+            "AUDIT_RL_MAX_EVENTS", 100, int, (10, 10000)
+        )
+        self._rl_max_keys = self._get_config_value(
+            "AUDIT_RL_MAX_KEYS", 1000, int, (100, 10000)
+        )
+        self._max_event_bytes = self._get_config_value(
+            "AUDIT_EVENT_MAX_BYTES", 256 * 1024, int, (16 * 1024, 2 * 1024 * 1024)
+        )
         self._strict_writes = self._get_config_value("AUDIT_STRICT_WRITES", False, bool)
 
         self._active_hmac_key, self._active_hmac_kid = None, None
@@ -315,13 +379,22 @@ class AuditLogger:
 
         self._configure_handlers()
 
-    def log_event(self, event_type: str, level: LogLevel = "INFO", **kwargs: Any) -> None:
+    def log_event(
+        self, event_type: str, level: LogLevel = "INFO", **kwargs: Any
+    ) -> None:
         """Logs a structured JSON event with contextual metadata."""
         if self._closed:
             try:
                 ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
-                err_msg = {"schema_version": SCHEMA_VERSION, "event_type": "audit_after_close", "timestamp": ts}
-                sys.stderr.write(json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n")
+                err_msg = {
+                    "schema_version": SCHEMA_VERSION,
+                    "event_type": "audit_after_close",
+                    "timestamp": ts,
+                }
+                sys.stderr.write(
+                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
+                )
             except Exception:
                 pass
             return
@@ -348,8 +421,18 @@ class AuditLogger:
 
         timestamp = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
         corr = kwargs.get("corr_id") or kwargs.get("correlation_id")
-        reserved = {"schema_version", "event_id", "event_type", "timestamp", "signature", "kid",
-                    "thread", "correlation_id", "corr_id", "level"} | self._context.keys()
+        reserved = {
+            "schema_version",
+            "event_id",
+            "event_type",
+            "timestamp",
+            "signature",
+            "kid",
+            "thread",
+            "correlation_id",
+            "corr_id",
+            "level",
+        } | self._context.keys()
         user_data = {k: v for k, v in kwargs.items() if k not in reserved}
 
         log_entry = {
@@ -359,46 +442,101 @@ class AuditLogger:
             "timestamp": timestamp,
             "level": lvl,
             "thread": threading.current_thread().name,
-            **self._context, **user_data
+            **self._context,
+            **user_data,
         }
         if corr is not None:
             log_entry["correlation_id"] = corr
 
         try:
-            log_json = json.dumps(log_entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_fallback)
+            log_json = json.dumps(
+                log_entry,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                default=_json_fallback,
+            )
 
             if len(log_json.encode("utf-8")) > self._max_event_bytes:
                 log_entry["truncated"] = True
-                oversized = [k for k, v in user_data.items() if isinstance(v, str) and len(v) > 1024]
+                oversized = [
+                    k
+                    for k, v in user_data.items()
+                    if isinstance(v, str) and len(v) > 1024
+                ]
                 for k in oversized:
                     log_entry[k] = log_entry[k][:1024] + "...(truncated)"
-                log_json = json.dumps(log_entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_fallback)
+                log_json = json.dumps(
+                    log_entry,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    default=_json_fallback,
+                )
 
                 if len(log_json.encode("utf-8")) > self._max_event_bytes:
-                    core_keys = {"schema_version", "event_id", "event_type", "timestamp", "thread", "app_name", "environment", "pid"}
+                    core_keys = {
+                        "schema_version",
+                        "event_id",
+                        "event_type",
+                        "timestamp",
+                        "thread",
+                        "app_name",
+                        "environment",
+                        "pid",
+                    }
                     if "correlation_id" in log_entry:
                         core_keys.add("correlation_id")  # preserve trace linkage
                     log_entry = {k: log_entry[k] for k in core_keys if k in log_entry}
                     log_entry["truncated"] = True
-                    log_entry["truncation_notice"] = f"payload exceeded {self._max_event_bytes} bytes"
-                    log_json = json.dumps(log_entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_fallback)
+                    log_entry["truncation_notice"] = (
+                        f"payload exceeded {self._max_event_bytes} bytes"
+                    )
+                    log_json = json.dumps(
+                        log_entry,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        default=_json_fallback,
+                    )
 
             if self._active_hmac_key:
                 if self._active_hmac_kid:
                     log_entry["kid"] = self._active_hmac_kid
                 try:
-                    body = json.dumps(log_entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_fallback).encode("utf-8")
-                    log_entry["signature"] = hmac.new(self._active_hmac_key.encode("utf-8"), body, hashlib.sha256).hexdigest()
+                    body = json.dumps(
+                        log_entry,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        default=_json_fallback,
+                    ).encode("utf-8")
+                    log_entry["signature"] = hmac.new(
+                        self._active_hmac_key.encode("utf-8"), body, hashlib.sha256
+                    ).hexdigest()
                 except Exception as e:
                     log_entry["signature_error"] = str(e)
 
-            log_json = json.dumps(log_entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=_json_fallback)
+            log_json = json.dumps(
+                log_entry,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                default=_json_fallback,
+            )
 
             self.logger.log(log_level, log_json)
 
         except Exception as e:
-            fallback_entry = {"schema_version": SCHEMA_VERSION, "event_type": "audit_serialization_error", "timestamp": timestamp, "error": str(e)}
-            fallback_json = json.dumps(fallback_entry, separators=(",", ":"), ensure_ascii=False)
+            fallback_entry = {
+                "schema_version": SCHEMA_VERSION,
+                "event_type": "audit_serialization_error",
+                "timestamp": timestamp,
+                "error": str(e),
+            }
+            fallback_json = json.dumps(
+                fallback_entry, separators=(",", ":"), ensure_ascii=False
+            )
             with self._write_lock:
                 try:
                     self.logger.error(fallback_json)
@@ -412,19 +550,28 @@ class AuditLogger:
         try:
             tb_lines = traceback.TracebackException.from_exception(exc).format()
             exc_info = {
-                "exc_type": type(exc).__name__, "exc_message": str(exc),
-                "trace_hash": hashlib.sha256("".join(tb_lines).encode("utf-8")).hexdigest()
+                "exc_type": type(exc).__name__,
+                "exc_message": str(exc),
+                "trace_hash": hashlib.sha256(
+                    "".join(tb_lines).encode("utf-8")
+                ).hexdigest(),
             }
             if self._get_config_value("AUDIT_INCLUDE_TRACES", False, bool):
                 exc_info["traceback"] = "".join(tb_lines)
         except Exception as format_exc:
-            exc_info = {"exc_type": type(exc).__name__, "exc_message": str(exc), "trace_format_error": str(format_exc)}
+            exc_info = {
+                "exc_type": type(exc).__name__,
+                "exc_message": str(exc),
+                "trace_format_error": str(format_exc),
+            }
         self.log_event(event_type, level="ERROR", **exc_info, **kwargs)
 
     def update_context(self, **kwargs: Any) -> None:
         with self._init_lock:
             self._context.update(kwargs)
-            self.log_event("audit_context_updated", level="DEBUG", updated_keys=list(kwargs.keys()))
+            self.log_event(
+                "audit_context_updated", level="DEBUG", updated_keys=list(kwargs.keys())
+            )
 
     def reload(self) -> None:
         with self._init_lock:

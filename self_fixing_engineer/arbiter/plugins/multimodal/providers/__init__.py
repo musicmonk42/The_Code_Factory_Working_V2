@@ -8,7 +8,7 @@ from .default_multimodal_providers import (
     DefaultImageProcessor,
     DefaultAudioProcessor,
     DefaultVideoProcessor,
-    DefaultTextProcessor
+    DefaultTextProcessor,
 )
 
 __all__ = [
@@ -16,5 +16,5 @@ __all__ = [
     "DefaultImageProcessor",
     "DefaultAudioProcessor",
     "DefaultVideoProcessor",
-    "DefaultTextProcessor"
+    "DefaultTextProcessor",
 ]

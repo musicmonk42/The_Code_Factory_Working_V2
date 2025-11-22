@@ -1,6 +1,6 @@
 import os
-import json
 from pathlib import Path
+
 
 def _load_dotenv(path: Path):
     if not path.exists():
@@ -14,6 +14,7 @@ def _load_dotenv(path: Path):
         k = k.strip()
         v = v.strip().strip('"').strip("'")
         os.environ.setdefault(k, v)
+
 
 def pytest_load_initial_conftests(*_args, **_kwargs):
     # If you keep a master .env elsewhere, point to it here:

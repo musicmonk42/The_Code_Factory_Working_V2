@@ -18,14 +18,19 @@ class ConsistentHashRing:
         for node in nodes:
             # We add nodes one by one to use the internal add_node logic.
             self.add_node(node)
-        logger.info("ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas)
+        logger.info(
+            "ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas
+        )
 
     def add_node(self, node: str) -> None:
         """
         Adds a node to the hash ring, preventing duplicates.
         """
         if node in self.nodes:
-            logger.warning("Attempted to add a duplicate node to the hash ring. Skipping.", node=node)
+            logger.warning(
+                "Attempted to add a duplicate node to the hash ring. Skipping.",
+                node=node,
+            )
             return
 
         for i in range(self.replicas):
@@ -40,9 +45,11 @@ class ConsistentHashRing:
         Removes a node from the hash ring.
         """
         if node not in self.nodes:
-            logger.warning("Attempted to remove non-existent node from hash ring.", node=node)
+            logger.warning(
+                "Attempted to remove non-existent node from hash ring.", node=node
+            )
             return
-        
+
         # Rebuild the ring without the specified node's replicas.
         self.ring = [(key, n) for key, n in self.ring if n != node]
         self.nodes.remove(node)
@@ -54,17 +61,17 @@ class ConsistentHashRing:
         """
         if not self.ring:
             raise ValueError("No nodes in hash ring. Cannot get node.")
-        
+
         hash_key = self._hash(key)
-        
+
         # bisect_left finds the insertion point, which is the position of the first element >= hash_key.
         # This is the "next" replica in the ring.
         idx = bisect.bisect_left(self.ring, (hash_key, ""))
-        
+
         # If we loop past the end of the ring, we wrap around to the first element.
         if idx == len(self.ring):
             idx = 0
-            
+
         return self.ring[idx][1]
 
     def _hash(self, key: str) -> int:
@@ -73,20 +80,26 @@ class ConsistentHashRing:
         Returns a 64-bit integer.
         """
         # Using sha256 for better security and collision resistance compared to md5.
-        hash_digest = hashlib.sha256(key.encode('utf-8')).hexdigest()
+        hash_digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
         # Take the first 16 characters (64 bits) to keep the integer size manageable
         return int(hash_digest[:16], 16)
 
-    def add_node_dynamic(self, node: str, rebalance_callback: Callable[[str, List[str]], None]) -> None:
+    def add_node_dynamic(
+        self, node: str, rebalance_callback: Callable[[str, List[str]], None]
+    ) -> None:
         """Adds a node and triggers rebalancing of affected keys."""
         if node in self.nodes:
             logger.warning(f"Node {node} already exists.")
             return
         self.add_node(node)  # Use existing add_node
-        affected_keys = self._get_affected_keys(node)  # New helper to find remapped keys
+        affected_keys = self._get_affected_keys(
+            node
+        )  # New helper to find remapped keys
         rebalance_callback(node, affected_keys)  # Callback to migrate messages
 
-    def remove_node_dynamic(self, node: str, rebalance_callback: Callable[[str, List[str]], None]) -> None:
+    def remove_node_dynamic(
+        self, node: str, rebalance_callback: Callable[[str, List[str]], None]
+    ) -> None:
         """Removes a node and rebalances its keys to remaining nodes."""
         if node not in self.nodes:
             logger.warning(f"Node {node} not found.")

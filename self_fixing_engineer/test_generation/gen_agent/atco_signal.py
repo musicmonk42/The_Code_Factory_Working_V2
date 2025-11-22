@@ -1,7 +1,6 @@
 import signal as signal_module
 import asyncio
 import logging
-import traceback
 import os
 import threading
 from typing import Callable, Any, Optional, Dict, Set, Iterable, List, Tuple
@@ -83,6 +82,7 @@ shutdown_event = asyncio.Event()
 _has_structlog = False
 try:
     import structlog
+
     _has_structlog = True
     logging.info("Using structlog for enhanced structured logging.")
     structlog.configure(
@@ -98,6 +98,7 @@ try:
 except ImportError:
     logging.warning("structlog not found. Using standard logging.")
     logger = logging.getLogger(__name__)
+
 
 def _log(level: int, msg: str, **kv):
     """
@@ -116,6 +117,7 @@ def _log(level: int, msg: str, **kv):
         except Exception:
             pass
 
+
 def _flush_logging():
     """
     Flushes all logging handlers.
@@ -130,11 +132,13 @@ def _flush_logging():
     except Exception:
         pass
 
+
 _atexit.register(_flush_logging)
 
 # --- Prometheus Metrics (Optional) ---
 try:
     from prometheus_client import Counter, REGISTRY
+
     # Fix: Check for existing metrics to prevent multiple registrations in test environments.
     _sig_count = None
     _esc_count = None
@@ -152,6 +156,7 @@ except ImportError:
     _sig_count = _esc_count = None
     _log(logging.DEBUG, "Prometheus client not found. Skipping metrics.")
 
+
 # --- Scheduler Helper ---
 def _get_scheduler(loop: Optional[asyncio.AbstractEventLoop]) -> Callable[[Any], None]:
     """
@@ -167,7 +172,10 @@ def _get_scheduler(loop: Optional[asyncio.AbstractEventLoop]) -> Callable[[Any],
         except Exception:
             _log(logging.ERROR, "Coroutine runner thread failed", exc_info=True)
 
-    return lambda coro: threading.Thread(target=_runner, args=(coro,), daemon=True).start()
+    return lambda coro: threading.Thread(
+        target=_runner, args=(coro,), daemon=True
+    ).start()
+
 
 def _invoke(handler: Callable, *args: Any):
     """
@@ -185,6 +193,7 @@ def _invoke(handler: Callable, *args: Any):
         _log(logging.ERROR, "Callback failed", exc_info=True)
         return None
 
+
 def _run_maybe_async(handler: Callable, scheduler: Callable, *args: Any):
     """
     Invokes a handler and schedules it if it's awaitable.
@@ -196,6 +205,7 @@ def _run_maybe_async(handler: Callable, scheduler: Callable, *args: Any):
     except Exception:
         _log(logging.ERROR, "Callback failed", exc_info=True)
 
+
 # --- Diagnostics Helpers ---
 def _dump_threads_once():
     """
@@ -205,12 +215,14 @@ def _dump_threads_once():
         _dump_threads_once.done = True
         try:
             import faulthandler
+
             path = os.getenv("THREAD_DUMP", tempfile.gettempdir() + "/threads.dump")
             with open(path, "w", encoding="utf-8") as f:
                 faulthandler.dump_traceback(file=f, all_threads=True)
             _log(logging.INFO, "Thread dump written", file=path)
         except Exception:
             _log(logging.DEBUG, "Thread dump failed", exc_info=True)
+
 
 def _dump_threads():
     """
@@ -220,13 +232,16 @@ def _dump_threads():
     # Prefer faulthandler
     try:
         import faulthandler
+
         dump_path_env = os.getenv("THREAD_DUMP")
         if dump_path_env:
             with open(dump_path_env, "w", encoding="utf-8") as f:
                 faulthandler.dump_traceback(file=f, all_threads=True)
             _log(logging.INFO, "Thread dump written", file=dump_path_env)
         else:
-            with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8") as f:
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False, encoding="utf-8"
+            ) as f:
                 faulthandler.dump_traceback(file=f, all_threads=True)
                 dump_file = f.name
             _log(logging.INFO, "Thread dump written", file=dump_file)
@@ -238,18 +253,29 @@ def _dump_threads():
                 f.write(f"Thread dump:\n{threading.enumerate()}\n")
             _log(logging.INFO, "Thread dump written", file=dump_file)
         else:
-            _log(logging.WARNING, "Cannot dump threads, faulthandler not available and THREAD_DUMP not set.")
-    
+            _log(
+                logging.WARNING,
+                "Cannot dump threads, faulthandler not available and THREAD_DUMP not set.",
+            )
+
+
 def _start_force_timer():
     """
     Starts a background thread to force-exit the process after a timeout.
     """
+
     def _killer():
         time.sleep(SHUTDOWN_FORCE_SEC)
-        _log(logging.WARNING, "Shutdown grace period exceeded. Forcing exit.", seconds=SHUTDOWN_FORCE_SEC)
+        _log(
+            logging.WARNING,
+            "Shutdown grace period exceeded. Forcing exit.",
+            seconds=SHUTDOWN_FORCE_SEC,
+        )
         _flush_logging()
         os._exit(1)
+
     threading.Thread(target=_killer, daemon=True).start()
+
 
 def _forward_children():
     """
@@ -259,13 +285,19 @@ def _forward_children():
         return
     try:
         import psutil
+
         me = psutil.Process()
         children = me.children(recursive=True)
         for ch in children:
             try:
                 ch.send_signal(signal_module.SIGTERM)
             except Exception:
-                _log(logging.DEBUG, "Failed sending SIGTERM to child", pid=ch.pid, exc_info=True)
+                _log(
+                    logging.DEBUG,
+                    "Failed sending SIGTERM to child",
+                    pid=ch.pid,
+                    exc_info=True,
+                )
         _log(logging.INFO, "Forwarded SIGTERM to children", count=len(children))
     except ImportError:
         # Fall back to process group kill if psutil isn't installed
@@ -274,12 +306,20 @@ def _forward_children():
                 os.killpg(0, signal_module.SIGTERM)
                 _log(logging.INFO, "Forwarded SIGTERM to process group (fallback).")
             except Exception:
-                _log(logging.WARNING, "psutil not found; fallback forwarding failed.", exc_info=True)
+                _log(
+                    logging.WARNING,
+                    "psutil not found; fallback forwarding failed.",
+                    exc_info=True,
+                )
         else:
-            _log(logging.DEBUG, "psutil missing; process-group fallback disabled (ENABLE_PG_FALLBACK!=1).")
+            _log(
+                logging.DEBUG,
+                "psutil missing; process-group fallback disabled (ENABLE_PG_FALLBACK!=1).",
+            )
     except Exception:
         _log(logging.DEBUG, "Child forwarding failed", exc_info=True)
-        
+
+
 def _forward_signal_to_children(signum: int):
     """
     A direct wrapper for forwarding signals to children.
@@ -287,14 +327,19 @@ def _forward_signal_to_children(signum: int):
     if os.getenv("FORWARD_CHILD_SIGNALS"):
         try:
             import psutil
+
             for proc in psutil.process_iter():
                 try:
                     proc.send_signal(signum)
                 except (psutil.NoSuchProcess, ProcessLookupError):
                     pass
         except ImportError:
-            _log(logging.WARNING, "psutil not installed, cannot forward signals to children.")
-    
+            _log(
+                logging.WARNING,
+                "psutil not installed, cannot forward signals to children.",
+            )
+
+
 def _setup_faulthandler():
     """
     Centralized faulthandler setup logic.
@@ -303,25 +348,46 @@ def _setup_faulthandler():
     if ENABLE_FAULTHANDLER:
         try:
             import faulthandler
+
             faulthandler.enable(file=sys.stderr, all_threads=True)
             _log(logging.INFO, "faulthandler enabled.")
             if hasattr(signal, "SIGUSR1"):
-                dump_file_path = os.getenv("FAULT_DUMP", tempfile.gettempdir() + "/fault.dump")
+                dump_file_path = os.getenv(
+                    "FAULT_DUMP", tempfile.gettempdir() + "/fault.dump"
+                )
                 # Only try to register if the function exists (it's POSIX-only)
                 if hasattr(faulthandler, "register"):
                     try:
                         _fault_dump_fp = open(dump_file_path, "a", buffering=1)
-                        faulthandler.register(signal.SIGUSR1, file=_fault_dump_fp, all_threads=True, chain=True)
-                        _log(logging.INFO, "faulthandler enabled and registered for SIGUSR1", file=dump_file_path)
+                        faulthandler.register(
+                            signal.SIGUSR1,
+                            file=_fault_dump_fp,
+                            all_threads=True,
+                            chain=True,
+                        )
+                        _log(
+                            logging.INFO,
+                            "faulthandler enabled and registered for SIGUSR1",
+                            file=dump_file_path,
+                        )
                     except Exception as e:
-                        _log(logging.WARNING, "Could not set up faulthandler dump file", error=str(e))
+                        _log(
+                            logging.WARNING,
+                            "Could not set up faulthandler dump file",
+                            error=str(e),
+                        )
                 else:
-                    _log(logging.DEBUG, "faulthandler.register not available on this platform.")
+                    _log(
+                        logging.DEBUG,
+                        "faulthandler.register not available on this platform.",
+                    )
         except (ImportError, Exception):
             _log(logging.DEBUG, "faulthandler setup failed", exc_info=True)
 
+
 # --- Faulthandler Integration ---
 _setup_faulthandler()
+
 
 # --- Main API Functions ---
 def get_signal_status():
@@ -338,9 +404,11 @@ def get_signal_status():
         "last_signal_at": {int(k): v for k, v in _last_signal_at.items()},
     }
 
+
 def wait_for_shutdown_started() -> Optional[asyncio.Event]:
     """Return an asyncio.Event set when shutdown starts (None if no loop)."""
     return _shutdown_event
+
 
 def _normalize_signal_names(names: Iterable[str]) -> List[Tuple[str, int]]:
     """
@@ -354,8 +422,12 @@ def _normalize_signal_names(names: Iterable[str]) -> List[Tuple[str, int]]:
             out.append((n, sig))
     return out
 
-def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Optional[Callable[..., Any]] = None,
-                             signals: Optional[Iterable[str]] = None):
+
+def install_default_handlers(
+    on_interrupt: Callable[..., Any],
+    on_reload: Optional[Callable[..., Any]] = None,
+    signals: Optional[Iterable[str]] = None,
+):
     """
     Installs signal handlers for graceful shutdown on SIGINT/SIGTERM,
     and for configuration reload on SIGHUP.
@@ -375,15 +447,18 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
     _raw_debounce_env = os.getenv("SIGNAL_DEBOUNCE_MS_PER_SIGNAL")
     if _raw_debounce_env:
         try:
-            pairs = _raw_debounce_env.split(',')
+            pairs = _raw_debounce_env.split(",")
             for pair in pairs:
                 name, ms = pair.split("=")
                 sig = getattr(signal_module, name.strip(), None)
                 if sig is not None:
                     _signal_debounce_map[sig] = float(ms.strip())
         except Exception:
-            _log(logging.WARNING, "Failed to parse SIGNAL_DEBOUNCE_MS_PER_SIGNAL", exc_info=True)
-
+            _log(
+                logging.WARNING,
+                "Failed to parse SIGNAL_DEBOUNCE_MS_PER_SIGNAL",
+                exc_info=True,
+            )
 
     if threading.current_thread() is not threading.main_thread():
         _log(logging.WARNING, "Not installing handlers: not in main thread.")
@@ -398,10 +473,10 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
         loop = asyncio.get_running_loop()
     except RuntimeError:
         pass
-    
+
     _installed_with_loop = loop
     scheduler = _get_scheduler(loop)
-    
+
     if loop and loop.is_running():
         _shutdown_event = asyncio.Event()
 
@@ -414,16 +489,31 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
         last_for_this = _last_signal_at.get(signum, 0.0)
         debounce_ms = _signal_debounce_map.get(signum, SIGNAL_DEBOUNCE_MS * 1000.0)
         if (now - last_for_this) * 1000.0 < debounce_ms:
-            _log(logging.DEBUG, "Ignoring signal due to debounce.", event="signal_debounced", signum=signum)
+            _log(
+                logging.DEBUG,
+                "Ignoring signal due to debounce.",
+                event="signal_debounced",
+                signum=signum,
+            )
             return
         _last_signal_at[signum] = now
-        
-        _log(logging.INFO, "Received signal", event="signal_received", signum=signum,
-             signal_count=_signal_count + 1, shutting_down=_shutting_down)
+
+        _log(
+            logging.INFO,
+            "Received signal",
+            event="signal_received",
+            signum=signum,
+            signal_count=_signal_count + 1,
+            shutting_down=_shutting_down,
+        )
 
         # --- Reload-only path: never touch shutdown events ---
         if signum == getattr(signal_module, "SIGHUP", None) and _on_reload_callback:
-            _log(logging.INFO, "Received SIGHUP. Reloading configuration...", event="config_reload")
+            _log(
+                logging.INFO,
+                "Received SIGHUP. Reloading configuration...",
+                event="config_reload",
+            )
             _run_maybe_async(_on_reload_callback, scheduler, signum, frame)
             return
 
@@ -432,7 +522,7 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
 
         if not _shutting_down:
             _shutting_down = True
-            
+
             # Only auto-set the public shutdown_event if we didn't get a custom handler
             if _auto_set_shutdown_event and shutdown_event:
                 shutdown_event.set()
@@ -447,65 +537,112 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
                 _dump_threads_once()
             if FORWARD_CHILD_SIGNALS:
                 _forward_children()
-            
-            _log(logging.WARNING, "Initiating graceful shutdown.", event="graceful_shutdown", signum=signum)
-            
+
+            _log(
+                logging.WARNING,
+                "Initiating graceful shutdown.",
+                event="graceful_shutdown",
+                signum=signum,
+            )
+
             # Call the user's handler if it exists
             if _on_interrupt_callback:
                 _run_maybe_async(_on_interrupt_callback, scheduler, signum, frame)
-        else: # Escalation logic
-            _log(logging.WARNING, "Additional shutdown signal received.", event="shutdown_escalation",
-                           signum=signum, signal_count=_signal_count)
+        else:  # Escalation logic
+            _log(
+                logging.WARNING,
+                "Additional shutdown signal received.",
+                event="shutdown_escalation",
+                signum=signum,
+                signal_count=_signal_count,
+            )
             if _esc_count:
                 _esc_count.inc()
-            
+
             if _signal_count == 2:
-                _log(logging.WARNING, "Escalating shutdown; arming force-exit timer", timeout=SHUTDOWN_FORCE_SEC)
+                _log(
+                    logging.WARNING,
+                    "Escalating shutdown; arming force-exit timer",
+                    timeout=SHUTDOWN_FORCE_SEC,
+                )
                 _start_force_timer()
             elif _signal_count >= 3 and EXIT_ON_THIRD_SIGNAL:
-                _log(logging.ERROR, "Hard exiting after repeated signals", signal_count=_signal_count)
+                _log(
+                    logging.ERROR,
+                    "Hard exiting after repeated signals",
+                    signal_count=_signal_count,
+                )
                 _flush_logging()
-                os._exit(1) # This is what the test expects
+                os._exit(1)  # This is what the test expects
 
         if CHAIN_PREV_HANDLER:
             prev_handler = _previous_handlers.get(signum)
-            if callable(prev_handler) and prev_handler not in (signal_module.SIG_DFL, signal_module.SIG_IGN, signal_module.default_int_handler):
+            if callable(prev_handler) and prev_handler not in (
+                signal_module.SIG_DFL,
+                signal_module.SIG_IGN,
+                signal_module.default_int_handler,
+            ):
                 try:
                     prev_handler(signum, frame)
                 except Exception as e:
-                    _log(logging.ERROR, "Previous handler failed", error=str(e), exc_info=True)
-    
+                    _log(
+                        logging.ERROR,
+                        "Previous handler failed",
+                        error=str(e),
+                        exc_info=True,
+                    )
+
     def _register_handler(sig_name: str, handler: Callable):
         sig = getattr(signal_module, sig_name, None)
         if sig is None:
             return
 
         _previous_handlers[sig] = signal_module.getsignal(sig)
-        
-        if _installed_with_loop and hasattr(_installed_with_loop, 'add_signal_handler') and os.name != 'nt':
+
+        if (
+            _installed_with_loop
+            and hasattr(_installed_with_loop, "add_signal_handler")
+            and os.name != "nt"
+        ):
             try:
-                _installed_with_loop.add_signal_handler(sig, partial(handler, sig, None))
+                _installed_with_loop.add_signal_handler(
+                    sig, partial(handler, sig, None)
+                )
                 _installed_signals.add(sig)
                 _log(logging.DEBUG, f"Installed async handler for {sig_name}")
             except (ValueError, OSError) as e:
-                _log(logging.DEBUG, f"Could not install async handler for {sig_name}", error=str(e))
+                _log(
+                    logging.DEBUG,
+                    f"Could not install async handler for {sig_name}",
+                    error=str(e),
+                )
         else:
             try:
                 signal_module.signal(sig, handler)
                 _installed_signals.add(sig)
                 _log(logging.DEBUG, f"Installed standard handler for {sig_name}")
             except (ValueError, OSError) as e:
-                _log(logging.DEBUG, f"Could not install standard handler for {sig_name}", error=str(e))
+                _log(
+                    logging.DEBUG,
+                    f"Could not install standard handler for {sig_name}",
+                    error=str(e),
+                )
 
     if os.name == "nt" and os.getenv("ENABLE_WINCTRL", "1") == "1":
         try:
             PHANDLER = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
-            CTRL_CLOSE = 2; CTRL_LOGOFF = 5; CTRL_SHUTDOWN = 6
+            CTRL_CLOSE = 2
+            CTRL_LOGOFF = 5
+            CTRL_SHUTDOWN = 6
+
             def _ctrl_handler(ctrl_type):
                 if ctrl_type in (CTRL_CLOSE, CTRL_LOGOFF, CTRL_SHUTDOWN):
-                    _handle_signal(getattr(signal_module, "SIGTERM", signal_module.SIGINT), None)
+                    _handle_signal(
+                        getattr(signal_module, "SIGTERM", signal_module.SIGINT), None
+                    )
                     return True
                 return False
+
             global _win_ctrl_handler
             _win_ctrl_handler = PHANDLER(_ctrl_handler)
             ctypes.windll.kernel32.SetConsoleCtrlHandler(_win_ctrl_handler, True)
@@ -523,29 +660,38 @@ def install_default_handlers(on_interrupt: Callable[..., Any], on_reload: Option
     if signals is None:
         signals_from_env = os.getenv("SIGNALS")
         if signals_from_env:
-            signals = signals_from_env.split(',')
+            signals = signals_from_env.split(",")
         else:
             signals = ["SIGINT", "SIGTERM", "SIGHUP"]
             if hasattr(signal_module, "SIGBREAK"):
                 signals.append("SIGBREAK")
             if os.name != "nt" and hasattr(signal_module, "SIGQUIT"):
                 signals.append("SIGQUIT")
-    
+
     pairs = _normalize_signal_names(signals)
     _active_signals = [name for name, _ in pairs]
-    
+
     for name, sig in pairs:
         if name == "SIGQUIT" and os.name != "nt":
+
             def _sigquit(s, f):
                 _dump_threads_once()
                 if CHAIN_PREV_HANDLER:
                     prev = _previous_handlers.get(s)
-                    if callable(prev) and prev not in (signal_module.SIG_DFL, signal_module.SIG_IGN, signal_module.default_int_handler):
-                        try: prev(s, None)
-                        except Exception: _log(logging.ERROR, "Prev SIGQUIT failed", exc_info=True)
+                    if callable(prev) and prev not in (
+                        signal_module.SIG_DFL,
+                        signal_module.SIG_IGN,
+                        signal_module.default_int_handler,
+                    ):
+                        try:
+                            prev(s, None)
+                        except Exception:
+                            _log(logging.ERROR, "Prev SIGQUIT failed", exc_info=True)
+
             _register_handler(name, _sigquit)
         else:
             _register_handler(name, _handle_signal)
+
 
 def install_signal_handlers(handler=None):
     """
@@ -556,8 +702,10 @@ def install_signal_handlers(handler=None):
     # FIX: Change the default handler to None instead of cli_graceful_shutdown
     # This prevents SystemExit in simple tests that don't mock it.
     effective_handler = handler
-    
-    install_default_handlers(on_interrupt=effective_handler, signals=["SIGINT", "SIGTERM"])
+
+    install_default_handlers(
+        on_interrupt=effective_handler, signals=["SIGINT", "SIGTERM"]
+    )
 
     # This part of the original function is now handled by _setup_faulthandler
     # and the main install_default_handlers logic if SIGUSR1 is included.
@@ -566,6 +714,7 @@ def install_signal_handlers(handler=None):
     if hasattr(signal, "SIGUSR1"):
         try:
             import faulthandler
+
             faulthandler.enable()
         except (ImportError, Exception):
             pass
@@ -576,27 +725,31 @@ def uninstall_handlers():
     Restores the signal handlers to their state before `install_default_handlers` was called.
     """
     global _previous_handlers, _installed_with_loop, _installed_signals, _installed, _fault_dump_fp, _shutdown_event, _win_ctrl_handler
-    
+
     if not _installed:
         _log(logging.INFO, "No signal handlers to uninstall.")
         return
 
     _installed = False
-    
+
     loop = _installed_with_loop
     for sig in _installed_signals:
         try:
-            if loop is not None and hasattr(loop, "remove_signal_handler") and os.name != 'nt':
+            if (
+                loop is not None
+                and hasattr(loop, "remove_signal_handler")
+                and os.name != "nt"
+            ):
                 loop.remove_signal_handler(sig)
-            
+
             prev = _previous_handlers.get(sig)
             if prev is not None:
                 signal_module.signal(sig, prev)
-            
+
             _log(logging.DEBUG, "Restored previous handler", signal=sig)
         except (ValueError, OSError, RuntimeError) as e:
             _log(logging.DEBUG, "Failed to restore handler", signal=sig, error=str(e))
-            
+
     _previous_handlers.clear()
     _installed_signals.clear()
     _installed_with_loop = None
@@ -606,6 +759,7 @@ def uninstall_handlers():
     if _fault_dump_fp:
         try:
             import faulthandler
+
             sig = getattr(signal_module, "SIGUSR1", None)
             if sig is not None and hasattr(faulthandler, "unregister"):
                 faulthandler.unregister(sig)
@@ -614,18 +768,27 @@ def uninstall_handlers():
             pass
         finally:
             _fault_dump_fp = None
-    
+
     _log(logging.INFO, "Signal handlers uninstalled.")
+
 
 def reconfigure_signals(names: Iterable[str]):
     """Replace the set of handled signal names at runtime."""
     if not _installed:
-        _log(logging.WARNING, "Not installed, calling install_default_handlers to configure signals.")
-        return install_default_handlers(_on_interrupt_callback, _on_reload_callback, signals=names)
+        _log(
+            logging.WARNING,
+            "Not installed, calling install_default_handlers to configure signals.",
+        )
+        return install_default_handlers(
+            _on_interrupt_callback, _on_reload_callback, signals=names
+        )
 
     _log(logging.INFO, f"Reconfiguring signals: {names}")
     with temporarily_uninstall():
-        install_default_handlers(_on_interrupt_callback, _on_reload_callback, signals=names)
+        install_default_handlers(
+            _on_interrupt_callback, _on_reload_callback, signals=names
+        )
+
 
 @contextmanager
 def temporarily_uninstall():
@@ -635,10 +798,10 @@ def temporarily_uninstall():
     if not _installed:
         yield
         return
-    
+
     callbacks = (_on_interrupt_callback, _on_reload_callback)
     signals = _active_signals
-    
+
     uninstall_handlers()
     try:
         yield
@@ -653,7 +816,7 @@ def _reset_for_tests():
     global _shutting_down, _signal_count, _last_signal_time, _installed, _previous_handlers
     global _installed_signals, _installed_with_loop, _fault_dump_fp, _on_interrupt_callback, _on_reload_callback, _active_signals
     global _last_signal_at, _shutdown_event, _win_ctrl_handler
-    
+
     _shutting_down = False
     _signal_count = 0
     _last_signal_time = 0.0
@@ -670,17 +833,19 @@ def _reset_for_tests():
     if _fault_dump_fp:
         _fault_dump_fp.close()
         _fault_dump_fp = None
-    
+
     if hasattr(_dump_threads_once, "done"):
         try:
             delattr(_dump_threads_once, "done")
         except Exception:
             pass
 
+
 class SignalHandlerContext:
     """
     A context manager for installing and uninstalling signal handlers.
     """
+
     def __init__(self, on_interrupt: Callable, on_reload: Optional[Callable] = None):
         self.on_interrupt = on_interrupt or cli_graceful_shutdown
         self.on_reload = on_reload
@@ -706,24 +871,30 @@ async def graceful_shutdown_coro(signum: Optional[int] = None):
         return
 
     _log(logging.INFO, "Starting graceful shutdown procedure.", signum=signum)
-    
+
     tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     if tasks:
         _log(logging.INFO, f"Cancelling {len(tasks)} pending tasks...")
         for task in tasks:
             task.cancel()
-        
+
         try:
             # FIX: Complete the wait_for call and add timeout handling.
-            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=SHUTDOWN_GRACE_SEC)
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=SHUTDOWN_GRACE_SEC,
+            )
             _log(logging.INFO, "All tasks cancelled and finished.")
         except asyncio.TimeoutError:
-            _log(logging.WARNING, "Timeout reached during graceful shutdown. Some tasks may not have finished.")
-            
+            _log(
+                logging.WARNING,
+                "Timeout reached during graceful shutdown. Some tasks may not have finished.",
+            )
+
     try:
         await asyncio.sleep(0)
         loop = asyncio.get_running_loop()
-        if hasattr(loop, 'shutdown_asyncgens'):
+        if hasattr(loop, "shutdown_asyncgens"):
             await loop.shutdown_asyncgens()
     except Exception:
         _log(logging.DEBUG, "Error during asyncio shutdown_asyncgens", exc_info=True)
@@ -734,8 +905,11 @@ async def graceful_shutdown_coro(signum: Optional[int] = None):
 
 
 # --- Main entry point (for demonstration/testing) ---
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     _log(logging.INFO, "Starting demo application.")
 
     async def worker_task():
@@ -752,19 +926,29 @@ if __name__ == '__main__':
 
     async def main():
         with SignalHandlerContext(on_interrupt=graceful_shutdown_coro):
-            _log(logging.INFO, "Signal handlers installed. Press Ctrl+C to test shutdown.")
+            _log(
+                logging.INFO,
+                "Signal handlers installed. Press Ctrl+C to test shutdown.",
+            )
             worker = asyncio.create_task(worker_task())
-            
+
             try:
                 await worker
             except asyncio.CancelledError:
                 _log(logging.INFO, "Main function caught CancelledError.")
-                
+
         _log(logging.INFO, "Main function finished. Handlers uninstalled.")
 
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        _log(logging.INFO, "KeyboardInterrupt caught, but shutdown should have been handled by the signal handler.")
-    except Exception as e:
-        _log(logging.ERROR, "An unexpected error occurred in the main event loop", exc_info=True)
+        _log(
+            logging.INFO,
+            "KeyboardInterrupt caught, but shutdown should have been handled by the signal handler.",
+        )
+    except Exception:
+        _log(
+            logging.ERROR,
+            "An unexpected error occurred in the main event loop",
+            exc_info=True,
+        )

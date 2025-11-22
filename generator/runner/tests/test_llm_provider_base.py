@@ -9,9 +9,13 @@ Covers:
 """
 
 import unittest
-import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
-from typing import Dict, Any, AsyncGenerator, Optional, List, Union # FIX: Added Union and List
+from unittest.mock import patch, AsyncMock
+from typing import (
+    Dict,
+    Any,
+    AsyncGenerator,
+    Union,
+)  # FIX: Added Union and List
 from runner.llm_provider_base import LLMProvider, LLMResult, LLMStream, LLMResponse
 
 
@@ -23,7 +27,7 @@ class MockLLMProvider(LLMProvider):
     supports_streaming = True
     supports_non_streaming = True
     display_name = "Mock Provider"
-    
+
     # We use these flags to control the behavior of the abstract methods in tests
     mock_call_implementation = AsyncMock()
     mock_count_tokens_implementation = AsyncMock(return_value=42)
@@ -46,11 +50,14 @@ class NonConformingProvider(LLMProvider):
     # Intentionally missing name attribute and required methods for enforcement
     pass
 
+
 class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         # Reset mocks before each test
-        MockLLMProvider.mock_call_implementation = AsyncMock(return_value={"content": "OK"})
+        MockLLMProvider.mock_call_implementation = AsyncMock(
+            return_value={"content": "OK"}
+        )
         MockLLMProvider.mock_count_tokens_implementation = AsyncMock(return_value=42)
         MockLLMProvider.mock_health_check_implementation = AsyncMock(return_value=True)
         self.provider = MockLLMProvider()
@@ -62,15 +69,20 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
     async def test_abstract_class_raises_on_instantiation(self):
         # A concrete subclass must be used; the ABC itself shouldn't be instantiated
         with self.assertRaisesRegex(TypeError, "Can't instantiate abstract class"):
-            LLMProvider() # Should fail because __init__ is not explicitly defined in LLMProvider
+            LLMProvider()  # Should fail because __init__ is not explicitly defined in LLMProvider
 
     async def test_non_conforming_subclass_fails_basic_validation(self):
         # NonConformingProvider doesn't implement required abstract methods
-        
+
         # Test 1: Check TypeError on instantiation (as Python enforces @abstractmethod)
-        with self.assertRaisesRegex(TypeError, "Can't instantiate abstract class NonConformingProvider with abstract methods"):
-             _ = NonConformingProvider() # FIX: Changed expectation to catch TypeError on instantiation
-             
+        with self.assertRaisesRegex(
+            TypeError,
+            "Can't instantiate abstract class NonConformingProvider with abstract methods",
+        ):
+            _ = (
+                NonConformingProvider()
+            )  # FIX: Changed expectation to catch TypeError on instantiation
+
         # The remaining checks for missing methods are redundant since instantiation already failed,
         # but if we could instantiate, the attributes would be missing.
 
@@ -111,14 +123,16 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
         # Empty model uses default
         model = self.provider.resolve_model(None)
         self.assertEqual(model, "mock-default-model")
-        
+
         model_empty_str = self.provider.resolve_model("")
         self.assertEqual(model_empty_str, "mock-default-model")
 
     def test_resolve_model_no_model_raises(self):
         # If no default is set and model is empty, it must raise
         self.provider.default_model = None
-        with self.assertRaisesRegex(ValueError, "No model specified and no default_model is configured"):
+        with self.assertRaisesRegex(
+            ValueError, "No model specified and no default_model is configured"
+        ):
             self.provider.resolve_model(None)
 
     # --- normalize_non_streaming_response ---
@@ -132,9 +146,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["metadata"], 123)
 
     def test_normalize_non_streaming_response_content_missing_synthesize(self):
-        raw = {
-            "metadata": "details"
-        }
+        raw = {"metadata": "details"}
         # Content is synthesized from str(raw)
         result = self.provider.normalize_non_streaming_response(raw)
         self.assertIn("'metadata': 'details'", result["content"])
@@ -142,7 +154,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
 
     def test_normalize_non_streaming_response_content_coercion(self):
         raw = {
-            "content": 12345, # Integer content
+            "content": 12345,  # Integer content
             "model": "m",
         }
         result = self.provider.normalize_non_streaming_response(raw)
@@ -152,16 +164,18 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
     # --- approx_token_count ---
     async def test_approx_token_count_heuristic(self):
         # The input string has 7 words: "This", "is", "a", "sentence", "with", "five", "words."
-        text = "This is a sentence with five words." 
-        
+        text = "This is a sentence with five words."
+
         # Patch the actual implementation to run synchronously for this test
-        with patch.object(self.provider, 'approx_token_count', wraps=self.provider.approx_token_count) as mock_approx:
-             # The implementation uses len(text.split()) * 1.3
-             # 7 words * 1.3 = 9.1. int(9.1) = 9.
-             approx_count = await mock_approx(text)
-        
-        expected_count = int(7 * 1.3) # 9
-        self.assertEqual(approx_count, expected_count) # FIX: Expected value is 9
+        with patch.object(
+            self.provider, "approx_token_count", wraps=self.provider.approx_token_count
+        ) as mock_approx:
+            # The implementation uses len(text.split()) * 1.3
+            # 7 words * 1.3 = 9.1. int(9.1) = 9.
+            approx_count = await mock_approx(text)
+
+        expected_count = int(7 * 1.3)  # 9
+        self.assertEqual(approx_count, expected_count)  # FIX: Expected value is 9
         self.assertIsInstance(approx_count, int)
 
     # =========================================================================

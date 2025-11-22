@@ -122,6 +122,7 @@ def _install_dummy_sentence_transformers():
 
 _install_dummy_sentence_transformers()
 
+
 # --- STUB PRESIDIO ---
 # NEW FIX: Add dummy presidio to stop Spacy/Torch from loading
 def _install_dummy_presidio():
@@ -157,6 +158,7 @@ def _install_dummy_presidio():
     pan.AnonymizerEngine = DummyAnonymizerEngine
     sys.modules["presidio_anonymizer"] = pan
 
+
 _install_dummy_presidio()
 # End NEW FIX
 
@@ -174,22 +176,14 @@ print("TESTING=1 → watchers disabled")
 #
 # *** THIS IS THE FIX ***
 #
-from generator.agents.codegen_agent.codegen_agent import (
-    generate_code,
-    hitl_review,
-    CodeGenConfig,
-    SQLiteFeedbackStore,
-)
 
 # --------------------------------------------------------------
 # 6. ENTERPRISE FIXTURES
 # --------------------------------------------------------------
 import pytest
-import asyncio
 import tempfile
 import shutil
 import yaml
-import sqlite3
 from unittest.mock import AsyncMock, patch
 
 
@@ -203,7 +197,7 @@ def codegen_env():
 
     (templates / "python.jinja2").write_text(
         "Generate: {{ requirements.features }}. "
-        "JSON: {\"files\": {\"main.py\": \"def x(): pass\"}}",
+        'JSON: {"files": {"main.py": "def x(): pass"}}',
         encoding="utf-8",
     )
 
@@ -242,7 +236,5 @@ def mock_llm():
         "generator.agents.codegen_agent.codegen_agent.call_llm_api",
         new_callable=AsyncMock,
     ) as m:
-        m.return_value = {
-            "content": '{"files": {"main.py": "def fib(n): return n"}}'
-        }
+        m.return_value = {"content": '{"files": {"main.py": "def fib(n): return n"}}'}
         yield m

@@ -1,11 +1,11 @@
 # Add these fixtures to conftest.py or at the top of test_analyzer.py
 
 import pytest
-import tempfile
 import os
 import yaml
 import json
 from unittest.mock import MagicMock, patch
+
 
 @pytest.fixture
 def valid_config_yaml_path(tmp_path):
@@ -14,27 +14,25 @@ def valid_config_yaml_path(tmp_path):
         "project_root": str(tmp_path / "project"),
         "audit_logging_enabled": True,
         "policy_rules_file": str(tmp_path / "policy.json"),
-        "ai_config": {
-            "model": "gpt-3.5-turbo",
-            "temperature": 0.7
-        },
+        "ai_config": {"model": "gpt-3.5-turbo", "temperature": 0.7},
         "demo_mode_enabled": False,
-        "llm_endpoint": "https://api.openai.com"
+        "llm_endpoint": "https://api.openai.com",
     }
-    
+
     # Create the project directory
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    
+
     # Create the policy file
     policy_file = tmp_path / "policy.json"
     policy_file.write_text("{}")
-    
+
     # Create the config file
     config_file = tmp_path / "config.yaml"
     config_file.write_text(yaml.dump(config_data))
-    
+
     return str(config_file)
+
 
 @pytest.fixture
 def valid_config_json_path(tmp_path):
@@ -43,27 +41,25 @@ def valid_config_json_path(tmp_path):
         "project_root": str(tmp_path / "project"),
         "audit_logging_enabled": True,
         "policy_rules_file": str(tmp_path / "policy.json"),
-        "ai_config": {
-            "model": "gpt-3.5-turbo",
-            "temperature": 0.7
-        },
+        "ai_config": {"model": "gpt-3.5-turbo", "temperature": 0.7},
         "demo_mode_enabled": False,
-        "llm_endpoint": "https://api.openai.com"
+        "llm_endpoint": "https://api.openai.com",
     }
-    
+
     # Create the project directory
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    
+
     # Create the policy file
     policy_file = tmp_path / "policy.json"
     policy_file.write_text("{}")
-    
+
     # Create the config file
     config_file = tmp_path / "config.json"
     config_file.write_text(json.dumps(config_data))
-    
+
     return str(config_file)
+
 
 @pytest.fixture
 def malformed_config_path(tmp_path):
@@ -72,51 +68,59 @@ def malformed_config_path(tmp_path):
     config_file.write_text("{ invalid yaml content: [}")
     return str(config_file)
 
+
 @pytest.fixture
 def invalid_schema_config_path(tmp_path):
     """Create a configuration file with invalid schema for testing"""
     config_data = {
         # Missing required 'project_root' field
         "audit_logging_enabled": "not_a_boolean",  # Wrong type
-        "invalid_field": "should_not_exist"
+        "invalid_field": "should_not_exist",
     }
-    
+
     config_file = tmp_path / "invalid_schema.yaml"
     config_file.write_text(yaml.dump(config_data))
-    
+
     return str(config_file)
+
 
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function"""
-    with patch('self_fixing_engineer.plugins.core_utils.alert_operator') as mock:
+    with patch("self_fixing_engineer.plugins.core_utils.alert_operator") as mock:
         yield mock
+
 
 @pytest.fixture
 def mock_audit_logger():
     """Mock the audit_logger"""
     mock_logger = MagicMock()
-    with patch('self_fixing_engineer.plugins.core_audit.audit_logger', mock_logger):
+    with patch("self_fixing_engineer.plugins.core_audit.audit_logger", mock_logger):
         yield mock_logger
+
 
 @pytest.fixture
 def tmp_config_file(tmp_path):
     """Helper fixture to create temporary config files"""
-    def _create_config(content, format='yaml'):
-        if format == 'yaml':
+
+    def _create_config(content, format="yaml"):
+        if format == "yaml":
             config_file = tmp_path / "config.yaml"
             config_file.write_text(yaml.dump(content))
         else:
             config_file = tmp_path / "config.json"
             config_file.write_text(json.dumps(content))
         return str(config_file)
+
     return _create_config
+
 
 @pytest.fixture
 def mock_sys_exit():
     """Mock sys.exit to prevent test runner from exiting"""
-    with patch('sys.exit') as mock:
+    with patch("sys.exit") as mock:
         yield mock
+
 
 @pytest.fixture
 def mock_os_env():

@@ -3,14 +3,14 @@
 # Exports from the main agent orchestrator
 from .docgen_agent import (
     DocGenAgent,
-    scrub_text, # scrub_text is defined in multiple files, exporting agent's one
+    scrub_text,  # scrub_text is defined in multiple files, exporting agent's one
     CompliancePlugin,
     LicenseCompliance,
     CopyrightCompliance,
     SphinxDocGenerator,
     BatchProcessor,
     doc_critique_summary,
-    generate, # The omnicore plugin entry point
+    generate,  # The omnicore plugin entry point
     PluginRegistry,  # Compliance plugin registry from docgen_agent
     SPHINX_AVAILABLE,  # Sphinx availability flag
 )
@@ -27,7 +27,7 @@ from .docgen_response_validator import (
     PluginRegistry as ValidatorPluginRegistry,  # Rename to avoid conflict
     ValidationRequest,
     ValidationReportResponse,
-    app as validator_api_app # Export the FastAPI app
+    app as validator_api_app,  # Export the FastAPI app
 )
 
 # Re-export dependencies that tests need to patch

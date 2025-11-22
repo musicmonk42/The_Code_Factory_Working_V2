@@ -24,6 +24,7 @@ except ImportError:
 # Harden the optional Redis dependency at import time
 try:
     import redis.asyncio as redis
+
     _redis_available = True
 except ImportError:
     redis = None
@@ -33,6 +34,7 @@ except ImportError:
 # Optional: runtime probe to improve mapping
 try:
     from importlib.metadata import packages_distributions
+
     _PKG_DIST = packages_distributions()
 except Exception:
     _PKG_DIST = {}
@@ -54,6 +56,7 @@ _core_utils_loaded = False
 try:
     from core_utils import alert_operator, scrub_secrets
     from core_audit import audit_logger
+
     _core_utils_loaded = True
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for fixer_dep: {e}.")
@@ -73,16 +76,19 @@ def _alert_operator_or_log(message: str, level: str = "CRITICAL"):
 # --- Custom Exception Hierarchy ---
 class HealerError(RuntimeError):
     """Base exception for the dependency healer module."""
+
     pass
 
 
 class ConfigError(HealerError):
     """Raised for critical configuration errors that should halt execution."""
+
     pass
 
 
 class SecurityViolationError(HealerError):
     """Raised when a potential security violation, like path traversal, is detected."""
+
     def __init__(self, message: str, path: str, whitelist: List[str]):
         super().__init__(message)
         self.path = path
@@ -95,29 +101,38 @@ class SecurityViolationError(HealerError):
                 whitelisted_paths=whitelist,
                 message=message,
             )
-            _alert_operator_or_log(f"CRITICAL: Security violation: {message}", level="CRITICAL")
+            _alert_operator_or_log(
+                f"CRITICAL: Security violation: {message}", level="CRITICAL"
+            )
 
 
 class FilesystemAccessError(HealerError):
     """Raised for file-related issues like read/write permissions."""
+
     def __init__(self, message: str, path: str):
         super().__init__(message)
         self.path = path
         if _core_utils_loaded:
-            _alert_operator_or_log(f"CRITICAL: Filesystem access error: {message}", level="CRITICAL")
+            _alert_operator_or_log(
+                f"CRITICAL: Filesystem access error: {message}", level="CRITICAL"
+            )
 
 
 class HealerNonCriticalError(HealerError):
     """
     Custom exception for recoverable issues that should be logged but not halt execution.
     """
+
     pass
+
 
 # --- Atomic Write Helper ---
 def _atomic_write_text(path: Path, data: str) -> None:
     """Writes text data to a file atomically."""
     d = path.parent
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=d, delete=False) as tf:
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=d, delete=False
+    ) as tf:
         tf.write(data)
     os.replace(tf.name, path)
 
@@ -130,6 +145,7 @@ def _get_stdlib_set(python_version: str) -> Set[str]:
     """
     try:
         from stdlib_list import stdlib_list
+
         logger.debug(f"Loaded stdlib for Python {python_version}.")
         return set(stdlib_list(python_version))
     except (ImportError, KeyError) as e:
@@ -157,10 +173,28 @@ def _get_stdlib_set(python_version: str) -> Set[str]:
                 # A hardcoded fallback for older Python versions
                 logger.warning("Using a conservative, hardcoded stdlib list fallback.")
                 return {
-                    "os", "sys", "re", "math", "json", "logging", "typing",
-                    "collections", "asyncio", "shutil", "tempfile",
-                    "pathlib", "functools", "hashlib", "difflib", "importlib",
-                    "time", "datetime", "io", "abc", "argparse", "inspect",
+                    "os",
+                    "sys",
+                    "re",
+                    "math",
+                    "json",
+                    "logging",
+                    "typing",
+                    "collections",
+                    "asyncio",
+                    "shutil",
+                    "tempfile",
+                    "pathlib",
+                    "functools",
+                    "hashlib",
+                    "difflib",
+                    "importlib",
+                    "time",
+                    "datetime",
+                    "io",
+                    "abc",
+                    "argparse",
+                    "inspect",
                 }
     except Exception as e:
         raise ConfigError(f"Unexpected error loading stdlib_list: {e}.") from e
@@ -192,15 +226,26 @@ async def _get_cache_client():
             logger.info("Connected to Redis for caching.")
             return _redis_client_instance
         except Exception as e:
-            logger.warning(f"Failed to connect to Redis for caching: {e}. Falling back to file cache.")
+            logger.warning(
+                f"Failed to connect to Redis for caching: {e}. Falling back to file cache."
+            )
             if _core_utils_loaded:
-                _alert_operator_or_log(f"WARNING: Redis cache failed: {e}. Using file cache.", level="WARNING")
+                _alert_operator_or_log(
+                    f"WARNING: Redis cache failed: {e}. Using file cache.",
+                    level="WARNING",
+                )
 
     # Fallback to file cache
     if not _file_cache_dir:
-        primary_root = Path(os.path.abspath(_whitelisted_project_paths[0])) if _whitelisted_project_paths else None
+        primary_root = (
+            Path(os.path.abspath(_whitelisted_project_paths[0]))
+            if _whitelisted_project_paths
+            else None
+        )
         if not primary_root:
-            logger.error("Cannot initialize file cache without a whitelisted root path.")
+            logger.error(
+                "Cannot initialize file cache without a whitelisted root path."
+            )
             return None
         _file_cache_dir = primary_root / ".healer_cache"
         _file_cache_dir.mkdir(exist_ok=True)
@@ -211,7 +256,9 @@ async def _get_cache_client():
             self.cache_dir = cache_dir
 
         async def get(self, key):
-            file_path = self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+            file_path = (
+                self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+            )
             if file_path.exists():
                 try:
                     raw = file_path.read_text("utf-8")
@@ -234,9 +281,14 @@ async def _get_cache_client():
             return None
 
         async def setex(self, key, expiry, value):
-            file_path = self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+            file_path = (
+                self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
+            )
             try:
-                payload = {"v": value, "exp": time.time() + float(expiry) if expiry else None}
+                payload = {
+                    "v": value,
+                    "exp": time.time() + float(expiry) if expiry else None,
+                }
                 with file_path.open("w", encoding="utf-8") as f:
                     json.dump(payload, f)
             except Exception as e:
@@ -252,8 +304,10 @@ _whitelisted_project_paths: List[str] = []
 
 def _within_whitelist(path: str, wl: List[str]) -> bool:
     """Checks if a given path is within any of the whitelisted paths using commonpath equality."""
+
     def _norm(p: str) -> str:
         return os.path.normcase(os.path.realpath(p))
+
     try:
         rp = _norm(path)
         for w in wl:
@@ -272,7 +326,9 @@ def init_dependency_healing_module(whitelisted_paths: List[str]):
         raise ConfigError("Whitelisted project paths cannot be empty.")
 
     _whitelisted_project_paths = [os.path.abspath(p) for p in whitelisted_paths]
-    logger.info(f"Dependency healing module initialized with whitelisted paths: {_whitelisted_project_paths}")
+    logger.info(
+        f"Dependency healing module initialized with whitelisted paths: {_whitelisted_project_paths}"
+    )
 
 
 # --- Concurrency Semaphore ---
@@ -296,20 +352,40 @@ def _get_parse_sem(workers: Optional[int] = None) -> asyncio.Semaphore:
             except (ValueError, TypeError):
                 logger.error("Invalid HEALER_PARSE_CONCURRENCY; using default.")
                 val = 32
-        
+
         if val < 1:
             val = 1
-        
+
         _parse_concurrency_sem = asyncio.Semaphore(val)
         logger.info(f"Using a parsing concurrency of {val}.")
     return _parse_concurrency_sem
 
+
 def _skip_dirs() -> Set[str]:
     """Returns the set of directories to skip, including configurable ones."""
     base = {
-        ".git",".hg",".svn",".venv","venv",".mypy_cache",".pytest_cache","__pycache__",
-        "build","dist",".tox",".ruff_cache",".coverage","htmlcov",".eggs","vendor",
-        "third_party","site-packages","docs/_build","node_modules",".idea",".vscode",
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        ".mypy_cache",
+        ".pytest_cache",
+        "__pycache__",
+        "build",
+        "dist",
+        ".tox",
+        ".ruff_cache",
+        ".coverage",
+        "htmlcov",
+        ".eggs",
+        "vendor",
+        "third_party",
+        "site-packages",
+        "docs/_build",
+        "node_modules",
+        ".idea",
+        ".vscode",
     }
     env_skips = {s for s in os.getenv("HEALER_SKIP_DIRS", "").split(",") if s}
     return base | _EXTRA_SKIP_DIRS | env_skips
@@ -337,7 +413,11 @@ def _get_py_files(roots: List[str]) -> List[str]:
 
         for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
             # prune noisy dirs in-place for perf
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))]
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))
+            ]
             if not _within_whitelist(dirpath, _whitelisted_project_paths):
                 logger.debug(f"Skipping directory outside whitelisted paths: {dirpath}")
                 continue
@@ -346,7 +426,10 @@ def _get_py_files(roots: List[str]) -> List[str]:
                 if f.endswith(".py"):
                     file_path = os.path.join(dirpath, f)
                     if not os.access(file_path, os.R_OK):
-                        raise FilesystemAccessError(f"No read access to file: {file_path}. Aborting.", path=file_path)
+                        raise FilesystemAccessError(
+                            f"No read access to file: {file_path}. Aborting.",
+                            path=file_path,
+                        )
                     py_files.add(file_path)
     logger.debug(f"Found {len(py_files)} Python files across roots: {roots}")
     if HEAL_METRICS:
@@ -354,7 +437,9 @@ def _get_py_files(roots: List[str]) -> List[str]:
     return sorted(list(py_files))
 
 
-def _get_module_map_sync(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
+def _get_module_map_sync(
+    roots: List[str],
+) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
     """
     Creates a mapping from top-level module names to their full module paths,
     and from file paths to their module names. (Synchronous version)
@@ -375,7 +460,11 @@ def _get_module_map_sync(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[s
             continue
 
         for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))]
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d not in SKIP_DIRS and not os.path.islink(os.path.join(dirpath, d))
+            ]
             if not _within_whitelist(dirpath, _whitelisted_project_paths):
                 logger.debug(f"Skipping directory outside whitelisted paths: {dirpath}")
                 continue
@@ -409,18 +498,23 @@ def _get_module_map_sync(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[s
     return dict(module_map), file_to_mod
 
 
-async def _get_module_map(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
+async def _get_module_map(
+    roots: List[str],
+) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
     """
     Creates a mapping from top-level module names to their full module paths,
     and from file paths to their module names with caching.
     """
     cache_client = await _get_cache_client()
-    
+
     # Normalize paths for a stable cache key
     norm_roots = [os.path.normcase(os.path.realpath(p)) for p in roots]
-    cache_key = "module_map:" + hashlib.sha256(
-        json.dumps(sorted(norm_roots), separators=(",", ":")).encode()
-    ).hexdigest()
+    cache_key = (
+        "module_map:"
+        + hashlib.sha256(
+            json.dumps(sorted(norm_roots), separators=(",", ":")).encode()
+        ).hexdigest()
+    )
 
     if cache_client:
         try:
@@ -436,7 +530,9 @@ async def _get_module_map(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[
 
     if cache_client:
         try:
-            await cache_client.setex(cache_key, 86400, json.dumps((module_map, file_to_mod)))
+            await cache_client.setex(
+                cache_key, 86400, json.dumps((module_map, file_to_mod))
+            )
             logger.debug("Module map cached successfully.")
         except Exception as e:
             logger.warning(f"Failed to cache module map: {e}")
@@ -445,7 +541,9 @@ async def _get_module_map(roots: List[str]) -> Tuple[Dict[str, List[str]], Dict[
     return module_map, file_to_mod
 
 
-def _discover_local_top_levels(roots: List[str], file_to_mod: Dict[str, str]) -> Set[str]:
+def _discover_local_top_levels(
+    roots: List[str], file_to_mod: Dict[str, str]
+) -> Set[str]:
     """
     Determine local top-level packages robustly, including src/ and similar layouts.
     - From module names, take first component; if it's a container dir, also take the second.
@@ -470,8 +568,9 @@ def _discover_local_top_levels(roots: List[str], file_to_mod: Dict[str, str]) ->
                 if not os.path.isdir(p):
                     continue
                 try:
-                    if (os.path.isfile(os.path.join(p, "__init__.py"))
-                        or any(fn.endswith(".py") for fn in os.listdir(p))):
+                    if os.path.isfile(os.path.join(p, "__init__.py")) or any(
+                        fn.endswith(".py") for fn in os.listdir(p)
+                    ):
                         local.add(entry.replace("-", "_"))
                 except OSError:
                     continue
@@ -484,16 +583,16 @@ def _discover_local_top_levels(roots: List[str], file_to_mod: Dict[str, str]) ->
             _scan(os.path.join(root, cd))
     return local
 
+
 def _is_type_checking_test(test: ast.AST) -> bool:
     # matches `if TYPE_CHECKING:` or `if typing.TYPE_CHECKING:`
-    return (
-        isinstance(test, ast.Name) and test.id == "TYPE_CHECKING"
-    ) or (
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
         isinstance(test, ast.Attribute)
         and isinstance(test.value, ast.Name)
         and test.value.id in {"typing", "typing_extensions"}
         and test.attr == "TYPE_CHECKING"
     )
+
 
 class ImportCollector(ast.NodeVisitor):
     def __init__(self, file_imports, file_path):
@@ -555,7 +654,7 @@ def _parse_file_imports(file_path: str) -> Dict[str, List[str]]:
             path=file_path,
             whitelist=_whitelisted_project_paths,
         )
-    
+
     try:
         try:
             mtime = os.path.getmtime(file_path)
@@ -563,22 +662,42 @@ def _parse_file_imports(file_path: str) -> Dict[str, List[str]]:
             mtime = 0.0
         return _parse_file_imports_cached(file_path, mtime)
     except SyntaxError as e:
-        logger.error(f"Syntax error in {file_path}: {e}. Skipping import parsing for this file.")
+        logger.error(
+            f"Syntax error in {file_path}: {e}. Skipping import parsing for this file."
+        )
         if _core_utils_loaded:
-            audit_logger.log_event("dependency_scan_failure", reason="syntax_error", file=file_path, error=str(e))
-            _alert_operator_or_log(f"ERROR: Syntax error in {file_path} during dependency scan. Review file.", level="ERROR")
+            audit_logger.log_event(
+                "dependency_scan_failure",
+                reason="syntax_error",
+                file=file_path,
+                error=str(e),
+            )
+            _alert_operator_or_log(
+                f"ERROR: Syntax error in {file_path} during dependency scan. Review file.",
+                level="ERROR",
+            )
         raise HealerNonCriticalError(f"Syntax error in {file_path}: {e}. Skipping.")
     except Exception as e:
         logger.error(f"Error parsing imports from {file_path}: {e}", exc_info=True)
         if _core_utils_loaded:
-            audit_logger.log_event("dependency_scan_failure", reason="parsing_error", file=file_path, error=str(e))
-            _alert_operator_or_log(f"ERROR: Unexpected error parsing {file_path} during dependency scan. Review file.", level="ERROR")
+            audit_logger.log_event(
+                "dependency_scan_failure",
+                reason="parsing_error",
+                file=file_path,
+                error=str(e),
+            )
+            _alert_operator_or_log(
+                f"ERROR: Unexpected error parsing {file_path} during dependency scan. Review file.",
+                level="ERROR",
+            )
         raise
     # Should be unreachable due to re-raise
-    return {} 
+    return {}
 
 
-async def _get_all_imports_async(py_files: List[str], workers: Optional[int] = None) -> Dict[str, List[str]]:
+async def _get_all_imports_async(
+    py_files: List[str], workers: Optional[int] = None
+) -> Dict[str, List[str]]:
     """
     Parses all Python files to extract all top-level import names and their locations asynchronously,
     with backpressure.
@@ -636,9 +755,20 @@ _IMPORT_TO_DIST = {
     "botocore": "botocore",
 }
 
+
 def _normalize_dep_name(name: str) -> str:
     """Normalizes a dependency name for comparison (e.g., 'Flask-SQLAlchemy' -> 'flask-sqlalchemy')."""
-    return name.split("[")[0].split(">")[0].split("<")[0].split("=")[0].strip().lower().replace("_", "-").replace(".", "-")
+    return (
+        name.split("[")[0]
+        .split(">")[0]
+        .split("<")[0]
+        .split("=")[0]
+        .strip()
+        .lower()
+        .replace("_", "-")
+        .replace(".", "-")
+    )
+
 
 def _import_to_distribution(name: str) -> str:
     """Best-effort mapping from import path to PyPI distribution (prefer specific → generic)."""
@@ -646,7 +776,7 @@ def _import_to_distribution(name: str) -> str:
     candidates = []
     if len(parts) >= 2:
         candidates.append(".".join(parts[:2]))  # two-level (e.g., google.protobuf)
-    candidates.append(parts[0])                 # top-level
+    candidates.append(parts[0])  # top-level
 
     # 1) curated remaps, then 2) runtime hints (deterministic)
     for cand in candidates:
@@ -656,7 +786,7 @@ def _import_to_distribution(name: str) -> str:
             dists = sorted(_PKG_DIST.get(cand, []))
             if dists:
                 return dists[0]
-    
+
     # 2.5) heuristics for common vendor namespaces
     if parts[0] == "google" and len(parts) >= 3 and parts[1] == "cloud":
         # google.cloud.storage -> google-cloud-storage
@@ -667,9 +797,10 @@ def _import_to_distribution(name: str) -> str:
             return "azure-" + "-".join(parts[1:])
         return "azure-" + parts[1].replace("_", "-")
 
-
     # 3) fallback to normalized top-level
-    logger.debug(f"dist map fallback: import '{name}' → '{_normalize_dep_name(parts[0])}'")
+    logger.debug(
+        f"dist map fallback: import '{name}' → '{_normalize_dep_name(parts[0])}'"
+    )
     return _normalize_dep_name(parts[0])
 
 
@@ -681,18 +812,22 @@ def _get_pyproject_deps(pyproject_data: Dict) -> Set[str]:
             _normalize_dep_name(d) for d in pyproject_data["project"]["dependencies"]
         )
     # Also check optional-dependencies to avoid false positives for missing dependencies
-    for _extra, _deps in pyproject_data.get("project", {}).get("optional-dependencies", {}).items():
+    for _extra, _deps in (
+        pyproject_data.get("project", {}).get("optional-dependencies", {}).items()
+    ):
         for _d in _deps or []:
             deps.add(_normalize_dep_name(_d))
 
     return deps
 
+
 def _is_test_path(p: str) -> bool:
     """Heuristic to check if a path is likely part of a test suite."""
     bn = os.path.basename(p)
     return (
-        "/tests/" in p.replace("\\","/") or
-        bn.startswith("test_") or bn.endswith("_test.py")
+        "/tests/" in p.replace("\\", "/")
+        or bn.startswith("test_")
+        or bn.endswith("_test.py")
     )
 
 
@@ -711,7 +846,7 @@ async def heal_dependencies(
     Scans for external Python dependencies used in the codebase and synchronizes
     `pyproject.toml` and `requirements.txt` files.
     Identifies missing and unused dependencies.
-    
+
     Note: If importing this library directly, you must call init_dependency_healing_module()
     before calling this function. You must also set the PRODUCTION_MODE and HEAL_METRICS
     environment variables or globals before import to enable their respective behaviors.
@@ -751,28 +886,51 @@ async def heal_dependencies(
 
     all_py_files = _get_py_files(project_roots)
     if not all_py_files:
-        logger.info("No Python files found in specified roots. Skipping dependency healing.")
+        logger.info(
+            "No Python files found in specified roots. Skipping dependency healing."
+        )
         if _core_utils_loaded:
-            audit_logger.log_event("dependency_healing_skipped", reason="no_python_files_found")
-        return {"added": [], "removed": [], "pyproject_diff": "", "requirements_diff": ""}
+            audit_logger.log_event(
+                "dependency_healing_skipped", reason="no_python_files_found"
+            )
+        return {
+            "added": [],
+            "removed": [],
+            "pyproject_diff": "",
+            "requirements_diff": "",
+        }
 
     _, file_to_mod = await _get_module_map(project_roots)
 
     # Identify local (in-repo) top-level packages to exclude from "external" deps
     local_top_levels = _discover_local_top_levels(project_roots, file_to_mod)
 
-    all_imports_with_locations = await _get_all_imports_async(all_py_files, workers=workers)
-    
-    _BUILD_TOOLS = {"pkg_resources","setuptools","pip","distutils","wheel","build","hatchling"}
+    all_imports_with_locations = await _get_all_imports_async(
+        all_py_files, workers=workers
+    )
+
+    _BUILD_TOOLS = {
+        "pkg_resources",
+        "setuptools",
+        "pip",
+        "distutils",
+        "wheel",
+        "build",
+        "hatchling",
+    }
+
     def _top(n: str) -> str:
         return n.split(".")[0]
-    
+
     stdlib = _get_stdlib_set(python_version)
     external_deps_raw = {
-        name for name in all_imports_with_locations.keys()
-        if _top(name) not in stdlib and _top(name) not in local_top_levels and _top(name) not in _BUILD_TOOLS
+        name
+        for name in all_imports_with_locations.keys()
+        if _top(name) not in stdlib
+        and _top(name) not in local_top_levels
+        and _top(name) not in _BUILD_TOOLS
     }
-    
+
     # Create a mapping from import name to distribution name for consistent tracking
     import_to_dist = {imp: _import_to_distribution(imp) for imp in external_deps_raw}
     dist_to_imports = defaultdict(list)
@@ -783,13 +941,16 @@ async def heal_dependencies(
     if "google" in dist_to_imports:
         has_specific_google = any(
             any(imp.startswith("google.") for imp in imps)
-            for d, imps in dist_to_imports.items() if d != "google"
+            for d, imps in dist_to_imports.items()
+            if d != "google"
         )
         if has_specific_google:
             dist_to_imports.pop("google", None)
-    
+
     # Normalize to *distribution* names so missing/unused agree
-    imported_dists_normalized = {_normalize_dep_name(dist) for dist in dist_to_imports.keys()}
+    imported_dists_normalized = {
+        _normalize_dep_name(dist) for dist in dist_to_imports.keys()
+    }
 
     primary_root = Path(project_roots[0])
     pyproject_path = primary_root / "pyproject.toml"
@@ -807,14 +968,21 @@ async def heal_dependencies(
 
     if pyproject_path.exists():
         if not os.access(pyproject_path, os.R_OK):
-            raise FilesystemAccessError(f"No read access to {pyproject_path}. Aborting.", path=str(pyproject_path))
+            raise FilesystemAccessError(
+                f"No read access to {pyproject_path}. Aborting.",
+                path=str(pyproject_path),
+            )
         try:
             pyproject_original_content = pyproject_path.read_bytes()
             pyproject_data = tomli.loads(pyproject_original_content.decode("utf-8"))
-            if 'tool' in pyproject_data and 'poetry' in pyproject_data['tool']:
-                logger.warning("Poetry project detected. Modifying PEP 621 `project.dependencies` only.")
+            if "tool" in pyproject_data and "poetry" in pyproject_data["tool"]:
+                logger.warning(
+                    "Poetry project detected. Modifying PEP 621 `project.dependencies` only."
+                )
 
-            logger.info(f"Loaded {len(_get_pyproject_deps(pyproject_data))} dependencies from pyproject.toml.")
+            logger.info(
+                f"Loaded {len(_get_pyproject_deps(pyproject_data))} dependencies from pyproject.toml."
+            )
         except Exception as e:
             if _core_utils_loaded:
                 audit_logger.log_event(
@@ -823,12 +991,16 @@ async def heal_dependencies(
                     file=str(pyproject_path),
                     error=str(e),
                 )
-            raise FilesystemAccessError(f"Error reading pyproject.toml at {pyproject_path}: {e}. Aborting.", path=str(pyproject_path)) from e
+            raise FilesystemAccessError(
+                f"Error reading pyproject.toml at {pyproject_path}: {e}. Aborting.",
+                path=str(pyproject_path),
+            ) from e
 
     current_pyproject_deps_normalized = _get_pyproject_deps(pyproject_data)
     preferred_dists = set(dist_to_imports.keys())
     missing_deps = [
-        d for d in sorted(preferred_dists, key=_normalize_dep_name)
+        d
+        for d in sorted(preferred_dists, key=_normalize_dep_name)
         if _normalize_dep_name(d) not in current_pyproject_deps_normalized
     ]
 
@@ -843,23 +1015,28 @@ async def heal_dependencies(
             logger.info(
                 "Dependency '%s' used in: %s",
                 dist,
-                ", ".join(locs) if locs else "Unknown location"
+                ", ".join(locs) if locs else "Unknown location",
             )
     else:
         logger.info("No missing dependencies detected.")
 
     def _has_env_marker(spec: str) -> bool:
         return ";" in spec
-    
+
     unused_deps = []
     for dep_full_spec in pyproject_data.get("project", {}).get("dependencies", []):
         dep_name_normalized = _normalize_dep_name(dep_full_spec)
-        if dep_name_normalized not in imported_dists_normalized and not _has_env_marker(dep_full_spec):
+        if (
+            dep_name_normalized not in imported_dists_normalized
+            and not _has_env_marker(dep_full_spec)
+        ):
             unused_deps.append(dep_full_spec)
 
     log_unused = logger.info if dry_run else logger.warning
     if unused_deps:
-        log_unused(f"Found potentially unused dependencies in pyproject.toml: {unused_deps}")
+        log_unused(
+            f"Found potentially unused dependencies in pyproject.toml: {unused_deps}"
+        )
     else:
         logger.info("No unused dependencies detected in pyproject.toml.")
 
@@ -883,8 +1060,8 @@ async def heal_dependencies(
             locs = []
             for imp in imps:
                 locs.extend(all_imports_with_locations.get(imp, []))
-            
-            if locs and all(_is_test_path(l.split(":",1)[0]) for l in locs):
+
+            if locs and all(_is_test_path(l.split(":", 1)[0]) for l in locs):
                 test_only_dists.add(dist)
 
         for dep in missing_deps:
@@ -898,30 +1075,41 @@ async def heal_dependencies(
     # Add missing main dependencies
     for dep in main_deps_to_add:
         dep_norm = _normalize_dep_name(dep)
-        if not any(_normalize_dep_name(d) == dep_norm for d in proposed_pyproject_data["project"]["dependencies"]):
+        if not any(
+            _normalize_dep_name(d) == dep_norm
+            for d in proposed_pyproject_data["project"]["dependencies"]
+        ):
             proposed_pyproject_data["project"]["dependencies"].append(dep)
 
     # Add missing dev dependencies
     if dev_extra and dev_deps_to_add:
-        opt_deps = proposed_pyproject_data["project"].setdefault("optional-dependencies", {})
+        opt_deps = proposed_pyproject_data["project"].setdefault(
+            "optional-dependencies", {}
+        )
         dev_deps = opt_deps.setdefault(dev_extra, [])
         for dep in dev_deps_to_add:
-             dep_norm = _normalize_dep_name(dep)
-             if not any(_normalize_dep_name(d) == dep_norm for d in dev_deps):
-                 dev_deps.append(dep)
+            dep_norm = _normalize_dep_name(dep)
+            if not any(_normalize_dep_name(d) == dep_norm for d in dev_deps):
+                dev_deps.append(dep)
         opt_deps[dev_extra] = sorted(list(set(dev_deps)), key=_normalize_dep_name)
-    
+
     # Handle unused dependencies based on flag
     if prune_unused:
-        new_pyproject_deps = [d for d in proposed_pyproject_data["project"]["dependencies"] if d not in unused_deps]
+        new_pyproject_deps = [
+            d
+            for d in proposed_pyproject_data["project"]["dependencies"]
+            if d not in unused_deps
+        ]
         proposed_pyproject_data["project"]["dependencies"] = new_pyproject_deps
-    
+
     proposed_pyproject_data["project"]["dependencies"] = sorted(
         list(set(proposed_pyproject_data["project"]["dependencies"])),
         key=lambda s: _normalize_dep_name(s),
     )
 
-    original_pyproject_text = pyproject_original_content.decode("utf-8") if pyproject_original_content else ""
+    original_pyproject_text = (
+        pyproject_original_content.decode("utf-8") if pyproject_original_content else ""
+    )
     pyproject_new_content = tomli_w.dumps(proposed_pyproject_data)
     if pyproject_new_content != original_pyproject_text:
         pyproject_diff = difflib.unified_diff(
@@ -937,14 +1125,19 @@ async def heal_dependencies(
     if sync_reqs or requirements_path.exists():
         requirements_original_content = ""
         if requirements_path.exists():
-            if not _within_whitelist(str(requirements_path), _whitelisted_project_paths):
+            if not _within_whitelist(
+                str(requirements_path), _whitelisted_project_paths
+            ):
                 raise SecurityViolationError(
                     f"requirements.txt path '{requirements_path}' is outside whitelisted paths.",
                     path=str(requirements_path),
                     whitelist=_whitelisted_project_paths,
                 )
             if not os.access(requirements_path, os.R_OK):
-                raise FilesystemAccessError(f"No read access to {requirements_path}. Aborting.", path=str(requirements_path))
+                raise FilesystemAccessError(
+                    f"No read access to {requirements_path}. Aborting.",
+                    path=str(requirements_path),
+                )
             requirements_original_content = requirements_path.read_text("utf-8")
 
         req_lines = sorted(
@@ -952,8 +1145,11 @@ async def heal_dependencies(
             key=lambda s: _normalize_dep_name(s),
         )
         requirements_new_content = "\n".join(req_lines) + ("\n" if req_lines else "")
-        
-        if not requirements_path.exists() or requirements_new_content != requirements_original_content:
+
+        if (
+            not requirements_path.exists()
+            or requirements_new_content != requirements_original_content
+        ):
             requirements_diff = difflib.unified_diff(
                 requirements_original_content.splitlines(keepends=True),
                 requirements_new_content.splitlines(keepends=True),
@@ -970,7 +1166,7 @@ async def heal_dependencies(
             "pyproject_diff": pyproject_diff_str,
             "requirements_diff": requirements_diff_str,
         }
-    
+
     # Check for fail-on-diff condition
     if fail_on_diff and (pyproject_diff_str or requirements_diff_str):
         raise HealerError("Changes were detected and --fail-on-diff is set.")
@@ -981,11 +1177,16 @@ async def heal_dependencies(
         # Write to pyproject.toml
         try:
             if not os.access(pyproject_path.parent, os.W_OK):
-                raise FilesystemAccessError(f"No write access to directory {pyproject_path.parent}. Aborting.", path=str(pyproject_path.parent))
+                raise FilesystemAccessError(
+                    f"No write access to directory {pyproject_path.parent}. Aborting.",
+                    path=str(pyproject_path.parent),
+                )
 
             if pyproject_path.exists():
                 shutil.copy2(pyproject_path, pyproject_path.with_suffix(".toml.bak"))
-                logger.info(f"Backed up pyproject.toml to {pyproject_path.with_suffix('.toml.bak')}")
+                logger.info(
+                    f"Backed up pyproject.toml to {pyproject_path.with_suffix('.toml.bak')}"
+                )
                 if _core_utils_loaded:
                     audit_logger.log_event(
                         "file_backup",
@@ -995,8 +1196,12 @@ async def heal_dependencies(
 
             _atomic_write_text(pyproject_path, pyproject_new_content)
             logger.info(f"pyproject.toml has been updated at {pyproject_path}.")
-            
-            safe_py_diff = scrub_secrets(pyproject_diff_str) if _core_utils_loaded else pyproject_diff_str
+
+            safe_py_diff = (
+                scrub_secrets(pyproject_diff_str)
+                if _core_utils_loaded
+                else pyproject_diff_str
+            )
             diff_hash = hashlib.sha256(safe_py_diff.encode()).hexdigest()
             if _core_utils_loaded:
                 audit_logger.log_event(
@@ -1018,23 +1223,37 @@ async def heal_dependencies(
                     file=str(pyproject_path),
                     error=str(e),
                 )
-            raise FilesystemAccessError(f"Failed to write to pyproject.toml at {pyproject_path}: {e}. Aborting.", path=str(pyproject_path)) from e
+            raise FilesystemAccessError(
+                f"Failed to write to pyproject.toml at {pyproject_path}: {e}. Aborting.",
+                path=str(pyproject_path),
+            ) from e
 
         # Write to requirements.txt
-        if requirements_new_content is not None and (sync_reqs or requirements_path.exists()):
+        if requirements_new_content is not None and (
+            sync_reqs or requirements_path.exists()
+        ):
             try:
-                if not _within_whitelist(str(requirements_path), _whitelisted_project_paths):
+                if not _within_whitelist(
+                    str(requirements_path), _whitelisted_project_paths
+                ):
                     raise SecurityViolationError(
                         f"requirements.txt path '{requirements_path}' is outside whitelisted paths.",
                         path=str(requirements_path),
                         whitelist=_whitelisted_project_paths,
                     )
                 if not os.access(requirements_path.parent, os.W_OK):
-                    raise FilesystemAccessError(f"No write access to directory {requirements_path.parent}. Aborting.", path=str(requirements_path.parent))
+                    raise FilesystemAccessError(
+                        f"No write access to directory {requirements_path.parent}. Aborting.",
+                        path=str(requirements_path.parent),
+                    )
 
                 if requirements_path.exists():
-                    shutil.copy2(requirements_path, requirements_path.with_suffix(".txt.bak"))
-                    logger.info(f"Backed up requirements.txt to {requirements_path.with_suffix('.txt.bak')}")
+                    shutil.copy2(
+                        requirements_path, requirements_path.with_suffix(".txt.bak")
+                    )
+                    logger.info(
+                        f"Backed up requirements.txt to {requirements_path.with_suffix('.txt.bak')}"
+                    )
                     if _core_utils_loaded:
                         audit_logger.log_event(
                             "file_backup",
@@ -1043,9 +1262,15 @@ async def heal_dependencies(
                         )
 
                 _atomic_write_text(requirements_path, requirements_new_content)
-                logger.info(f"requirements.txt has been updated at {requirements_path}.")
-                
-                safe_req_diff = scrub_secrets(requirements_diff_str) if _core_utils_loaded else requirements_diff_str
+                logger.info(
+                    f"requirements.txt has been updated at {requirements_path}."
+                )
+
+                safe_req_diff = (
+                    scrub_secrets(requirements_diff_str)
+                    if _core_utils_loaded
+                    else requirements_diff_str
+                )
                 diff_hash = hashlib.sha256(safe_req_diff.encode()).hexdigest()
                 if _core_utils_loaded:
                     audit_logger.log_event(
@@ -1067,11 +1292,14 @@ async def heal_dependencies(
                         file=str(requirements_path),
                         error=str(e),
                     )
-                raise FilesystemAccessError(f"Failed to write to requirements.txt at {requirements_path}: {e}. Aborting.", path=str(requirements_path)) from e
+                raise FilesystemAccessError(
+                    f"Failed to write to requirements.txt at {requirements_path}: {e}. Aborting.",
+                    path=str(requirements_path),
+                ) from e
     else:
         log_info = logger.info if not dry_run else logger.debug
         log_info("No changes to dependency files were needed or applied.")
-        
+
     return {
         "added": missing_deps,
         "removed": unused_deps if prune_unused else [],
@@ -1088,7 +1316,9 @@ def main():
     import argparse
     import time
 
-    parser = argparse.ArgumentParser(description="Heal Python dependencies in a project.")
+    parser = argparse.ArgumentParser(
+        description="Heal Python dependencies in a project."
+    )
     parser.add_argument(
         "--roots",
         nargs="+",
@@ -1155,8 +1385,9 @@ def main():
         type=str,
         help="Name of the optional-dependencies extra for test-only dependencies (e.g., 'dev').",
     )
-    parser.add_argument("-v", "--verbose", action="count", default=0,
-                        help="-v for INFO, -vv for DEBUG")
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0, help="-v for INFO, -vv for DEBUG"
+    )
     parser.add_argument(
         "--skip-dirs",
         default="",
@@ -1169,13 +1400,13 @@ def main():
     )
 
     args = parser.parse_args()
-    
+
     level = logging.WARNING
     if args.verbose == 1:
         level = logging.INFO
     elif args.verbose >= 2:
         level = logging.DEBUG
-        
+
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s - %(message)s",
@@ -1188,12 +1419,12 @@ def main():
         _EXTRA_SKIP_DIRS |= {s for s in args.skip_dirs.split(",") if s}
     if args.container_dirs:
         _CONTAINER_DIRS |= {s for s in args.container_dirs.split(",") if s}
-    
+
     start_time = time.monotonic()
 
     try:
         init_dependency_healing_module(whitelisted_paths=args.roots)
-        
+
         logger.info("Performing dry run to generate diffs...")
         dry_run_results = asyncio.run(
             heal_dependencies(
@@ -1206,17 +1437,19 @@ def main():
                 dev_extra=args.dev_extra,
             )
         )
-        
+
         pyproject_diff = dry_run_results["pyproject_diff"]
         requirements_diff = dry_run_results["requirements_diff"]
-        
+
         should_apply = False
         if args.dry_run:
             logger.info("Dry run finished. No files were modified.")
             should_apply = False
-        elif (pyproject_diff or requirements_diff):
+        elif pyproject_diff or requirements_diff:
             if args.fail_on_diff:
-                logger.error("Changes were detected and --fail-on-diff is set. Exiting.")
+                logger.error(
+                    "Changes were detected and --fail-on-diff is set. Exiting."
+                )
                 sys.exit(1)
             if args.confirm and not args.yes:
                 print("\n--- Proposed changes to pyproject.toml ---")
@@ -1224,7 +1457,7 @@ def main():
                 print("\n--- Proposed changes to requirements.txt ---")
                 print(requirements_diff)
                 response = input("\nApply these changes? (y/N) ").lower()
-                if response == 'y':
+                if response == "y":
                     should_apply = True
                 else:
                     logger.info("Changes declined by user. Aborting.")
@@ -1237,10 +1470,10 @@ def main():
                 should_apply = True
         else:
             logger.info("No changes to dependency files were needed or applied.")
-            
+
         final_results = dry_run_results
         if should_apply:
-             final_results = asyncio.run(
+            final_results = asyncio.run(
                 heal_dependencies(
                     project_roots=args.roots,
                     dry_run=False,
@@ -1254,18 +1487,18 @@ def main():
 
         if args.json_output:
             print(json.dumps(final_results, indent=2))
-        
+
     except (ConfigError, SecurityViolationError, FilesystemAccessError) as e:
         logger.critical(f"A critical error occurred: {e}")
         sys.exit(1)
-    except Exception as e:
+    except Exception:
         logger.exception("An unexpected error occurred during dependency healing.")
         sys.exit(1)
     finally:
         end_time = time.monotonic()
         if HEAL_METRICS:
             _metrics["total_seconds"] = end_time - start_time
-            print(f"\n--- Metrics ---")
+            print("\n--- Metrics ---")
             for k, v in _metrics.items():
                 print(f"# HELP fixer_dep_{k} {k.replace('_', ' ')}")
                 print(f"# TYPE fixer_dep_{k} gauge")

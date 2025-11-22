@@ -1,8 +1,5 @@
 import os
 import threading
-import tempfile
-import shutil
-import json
 import logging
 import pytest
 from pathlib import Path
@@ -11,12 +8,14 @@ import core_secrets
 
 # --- Test Fixtures and Helpers ---
 
+
 @pytest.fixture(autouse=True)
 def reset_singleton():
     # Reset singleton between tests
     core_secrets.SecretsManager._instance = None
     yield
     core_secrets.SecretsManager._instance = None
+
 
 @pytest.fixture
 def sandbox_env(monkeypatch):
@@ -25,25 +24,32 @@ def sandbox_env(monkeypatch):
     yield
     monkeypatch.setattr(os, "environ", old_env)
 
+
 @pytest.fixture
 def temp_env_file(tmp_path):
     file = tmp_path / ".env"
     yield file
+
 
 @pytest.fixture
 def secrets_manager(tmp_path, sandbox_env):
     # Use a temp env file and logger
     logger = logging.getLogger("test_secrets")
     logger.handlers = []
-    sm = core_secrets.SecretsManager(env_file=str(tmp_path / ".env"), logger=logger, allow_dotenv=True)
+    sm = core_secrets.SecretsManager(
+        env_file=str(tmp_path / ".env"), logger=logger, allow_dotenv=True
+    )
     return sm
 
+
 # --- Tests ---
+
 
 def test_singleton_behavior(secrets_manager):
     sm1 = secrets_manager
     sm2 = core_secrets.SecretsManager()
     assert sm1 is sm2
+
 
 def test_env_file_loading(monkeypatch, tmp_path):
     # Create a fake .env file
@@ -52,9 +58,11 @@ def test_env_file_loading(monkeypatch, tmp_path):
     monkeypatch.setenv("ENVIRONMENT", "dev")
     # Patch load_dotenv to actually load the file
     import importlib
+
     importlib.invalidate_caches()
     sm = core_secrets.SecretsManager(env_file=str(envfile), allow_dotenv=True)
     assert sm.get_secret("TEST_KEY") == "envval"
+
 
 def test_env_file_load_disabled_in_prod(monkeypatch, tmp_path, caplog):
     envfile = tmp_path / ".env"
@@ -64,6 +72,7 @@ def test_env_file_load_disabled_in_prod(monkeypatch, tmp_path, caplog):
     assert sm.get_secret("PROD_KEY") is None
     assert "Skipping .env file load" in caplog.text
 
+
 def test_env_file_override_allowed(monkeypatch, tmp_path, caplog):
     envfile = tmp_path / ".env"
     envfile.write_text("PROD_OVERRIDE=works\n")
@@ -72,6 +81,7 @@ def test_env_file_override_allowed(monkeypatch, tmp_path, caplog):
     sm = core_secrets.SecretsManager(env_file=str(envfile))
     assert sm.get_secret("PROD_OVERRIDE") == "works"
     assert "override detected" in caplog.text
+
 
 def test_name_validation_strict_and_non_strict(monkeypatch):
     monkeypatch.delenv("ENVIRONMENT", raising=False)
@@ -90,14 +100,17 @@ def test_name_validation_strict_and_non_strict(monkeypatch):
         sm2.get_secret("BAD=KEY")
     assert sm2.get_secret("VALID_KEY", default=1) == 1
 
+
 def test_blank_values_treated_as_missing(secrets_manager, monkeypatch):
     monkeypatch.setenv("FOO", "")
     assert secrets_manager.get_secret("FOO") is None
     assert secrets_manager.get_secret("FOO", blank_ok=True) == ""
 
+
 def test_required_secret_missing_raises(secrets_manager):
     with pytest.raises(RuntimeError):
         secrets_manager.get_secret("MISSING", required=True)
+
 
 def test_cache_behavior(secrets_manager, monkeypatch):
     monkeypatch.setenv("CACHEME", "abc")
@@ -110,6 +123,7 @@ def test_cache_behavior(secrets_manager, monkeypatch):
     val3 = secrets_manager.get_secret("CACHEME")
     assert val3 == "changed"
 
+
 def test_reload_clears_cache_and_reloads(monkeypatch, tmp_path):
     envfile = tmp_path / ".env"
     envfile.write_text("HELLO=WORLD\n")
@@ -121,6 +135,7 @@ def test_reload_clears_cache_and_reloads(monkeypatch, tmp_path):
     sm.reload()
     assert sm.get_secret("HELLO") == "WORLD"
 
+
 def test_set_secret_sets_env_and_cache(secrets_manager):
     val = secrets_manager.set_secret("SETME", 42)
     assert val == "42"
@@ -129,12 +144,14 @@ def test_set_secret_sets_env_and_cache(secrets_manager):
     with pytest.raises(ValueError):
         secrets_manager.set_secret("SETNONE", None)
 
+
 def test_get_with_fallback(secrets_manager, monkeypatch):
     monkeypatch.setenv("A", "")
     monkeypatch.setenv("B", "bval")
     monkeypatch.setenv("C", "cval")
     assert secrets_manager.get_with_fallback(["A", "B", "C"]) == "bval"
     assert secrets_manager.get_with_fallback(["A", "Z"], default="def") == "def"
+
 
 def test_type_casting(secrets_manager, monkeypatch):
     monkeypatch.setenv("INTVAL", "9")
@@ -150,6 +167,7 @@ def test_type_casting(secrets_manager, monkeypatch):
     with pytest.raises(TypeError):
         secrets_manager.get_int("STRVAL")
 
+
 def test_cast_bool_strict_and_loose():
     assert core_secrets.cast_bool_strict("yes") is True
     assert core_secrets.cast_bool_strict("no") is False
@@ -159,11 +177,13 @@ def test_cast_bool_strict_and_loose():
     assert core_secrets._cast_to_bool("maybe") is False
     assert core_secrets._cast_to_bool("TRUE") is True
 
+
 def test_get_choice(secrets_manager, monkeypatch):
     monkeypatch.setenv("COLOR", "Red")
     assert secrets_manager.get_choice("COLOR", {"red", "blue"}) == "Red"
     with pytest.raises(TypeError):
         secrets_manager.get_choice("COLOR", {"blue", "green"})
+
 
 def test_get_json(secrets_manager, monkeypatch):
     monkeypatch.setenv("JDATA", '{"k":1}')
@@ -172,16 +192,19 @@ def test_get_json(secrets_manager, monkeypatch):
     with pytest.raises(TypeError):
         secrets_manager.get_json("BADJSON")
 
+
 def test_get_list(secrets_manager, monkeypatch):
     monkeypatch.setenv("LISTVALS", "a, b ,c")
     assert secrets_manager.get_list("LISTVALS") == ["a", "b", "c"]
     monkeypatch.setenv("EMPTY", "")
     assert secrets_manager.get_list("EMPTY", default=["z"]) == ["z"]
 
+
 def test_get_path(secrets_manager, monkeypatch, tmp_path):
     monkeypatch.setenv("PVAL", str(tmp_path))
     p = secrets_manager.get_path("PVAL")
     assert isinstance(p, Path) and p.exists()
+
 
 def test_get_bytes_and_get_duration(secrets_manager, monkeypatch):
     monkeypatch.setenv("B1", "100")
@@ -191,9 +214,9 @@ def test_get_bytes_and_get_duration(secrets_manager, monkeypatch):
     monkeypatch.setenv("B5", "5T")
     assert secrets_manager.get_bytes("B1") == 100
     assert secrets_manager.get_bytes("B2") == 2 * 1024
-    assert secrets_manager.get_bytes("B3") == 3 * 1024 ** 2
-    assert secrets_manager.get_bytes("B4") == 4 * 1024 ** 3
-    assert secrets_manager.get_bytes("B5") == 5 * 1024 ** 4
+    assert secrets_manager.get_bytes("B3") == 3 * 1024**2
+    assert secrets_manager.get_bytes("B4") == 4 * 1024**3
+    assert secrets_manager.get_bytes("B5") == 5 * 1024**4
     monkeypatch.setenv("D1", "3.5s")
     monkeypatch.setenv("D2", "2m")
     monkeypatch.setenv("D3", "1h")
@@ -211,11 +234,13 @@ def test_get_bytes_and_get_duration(secrets_manager, monkeypatch):
     with pytest.raises(TypeError):
         secrets_manager.get_duration("BADDUR")
 
+
 def test_get_int_in_range(secrets_manager, monkeypatch):
     monkeypatch.setenv("RINT", "7")
     assert secrets_manager.get_int_in_range("RINT", min_val=5, max_val=10) == 7
     with pytest.raises(TypeError):
         secrets_manager.get_int_in_range("RINT", min_val=8, max_val=10)
+
 
 def test_snapshot(secrets_manager, monkeypatch):
     monkeypatch.setenv("A", "x")
@@ -227,6 +252,7 @@ def test_snapshot(secrets_manager, monkeypatch):
     assert snap["B"] == "missing"
     assert snap["C"] == "set"
     assert snap["D"] == "missing"
+
 
 def test_thread_safety(monkeypatch):
     sm = core_secrets.SecretsManager()
@@ -246,10 +272,12 @@ def test_thread_safety(monkeypatch):
     # All values set and get should be string digits
     assert all(r in {"0", "1", "2"} for r in results)
 
+
 def test_logger_is_used(monkeypatch, tmp_path, caplog):
     sm = core_secrets.SecretsManager(env_file=str(tmp_path / ".env"))
     sm._logger.info("test log")
     assert "test log" in caplog.text
+
 
 def test_null_handler_attached(monkeypatch):
     sm = core_secrets.SecretsManager()

@@ -13,34 +13,48 @@ import types
 
 # Dummy core_utils
 core_utils = types.ModuleType("core_utils")
+
+
 def _noop_alert(msg: str, level: str = "INFO"):  # pragma: no cover
     return None
+
+
 def _scrub(x):  # pragma: no cover
     return x
+
+
 core_utils.alert_operator = _noop_alert
 core_utils.scrub_secrets = _scrub
 sys.modules["core_utils"] = core_utils
 
 # Dummy core_audit
 core_audit = types.ModuleType("core_audit")
+
+
 class _AuditLogger:  # pragma: no cover
     def log_event(self, *args, **kwargs):
         return None
+
+
 core_audit.audit_logger = _AuditLogger()
 sys.modules["core_audit"] = core_audit
 
 # Dummy core_secrets
 core_secrets = types.ModuleType("core_secrets")
+
+
 class _SecretsMgr:  # pragma: no cover
     def get_secret(self, *a, **k):
         return "dummy_secret_value"
+
+
 core_secrets.SECRETS_MANAGER = _SecretsMgr()
 sys.modules["core_secrets"] = core_secrets
 
 # ---------------------------------------------------------------------------
 # Make the package under test importable (add self_healing_import_fixer/ to path)
 # ---------------------------------------------------------------------------
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # ---------------------------------------------------------------------------
 # Import the module under test (correct package path)
@@ -50,17 +64,18 @@ from import_fixer.fixer_dep import (
     init_dependency_healing_module,
     _get_py_files,
     _get_all_imports_async,
-    _parse_file_imports,
-    AnalyzerCriticalError,   # alias exported by fixer_dep
+    AnalyzerCriticalError,  # alias exported by fixer_dep
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def norm_name(name: str) -> str:
     """Normalize package/distribution names per PEP 503 for comparisons."""
     return name.lower().replace("_", "-")
+
 
 @contextmanager
 def mock_stdlib_unavailable():
@@ -69,6 +84,7 @@ def mock_stdlib_unavailable():
     Requires fixer_dep to expose STDLIB_AVAILABLE (most builds do).
     """
     from import_fixer import fixer_dep as fd
+
     original = getattr(fd, "STDLIB_AVAILABLE", True)
     try:
         fd.STDLIB_AVAILABLE = False
@@ -76,9 +92,11 @@ def mock_stdlib_unavailable():
     finally:
         fd.STDLIB_AVAILABLE = original
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def setup_teardown_env_vars(tmp_path):
@@ -113,9 +131,11 @@ dependencies = ["requests", "Flask==2.0.0"]
 
     yield {"project_root": str(project_root)}
 
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_heal_dependencies_dry_run_no_changes(setup_teardown_env_vars):
@@ -126,7 +146,10 @@ async def test_heal_dependencies_dry_run_no_changes(setup_teardown_env_vars):
     project_root = setup_teardown_env_vars["project_root"]
 
     # Treat numpy as stdlib for this test so only unknown_lib is "missing".
-    with patch('import_fixer.fixer_dep.stdlib_list', new=lambda ver: ['os', 'sys', 'json', 'asyncio', 'numpy']):
+    with patch(
+        "import_fixer.fixer_dep.stdlib_list",
+        new=lambda ver: ["os", "sys", "json", "asyncio", "numpy"],
+    ):
         results = await heal_dependencies(
             project_roots=[project_root],
             dry_run=True,
@@ -160,13 +183,16 @@ async def test_heal_dependencies_actual_run_with_changes(setup_teardown_env_vars
     project_root = setup_teardown_env_vars["project_root"]
 
     # Make numpy a non-stdlib so it's eligible — but your healer may still not add it.
-    with patch('import_fixer.fixer_dep.stdlib_list', new=lambda ver: ['os', 'sys', 'json', 'asyncio']):
+    with patch(
+        "import_fixer.fixer_dep.stdlib_list",
+        new=lambda ver: ["os", "sys", "json", "asyncio"],
+    ):
         results = await heal_dependencies(
             project_roots=[project_root],
             dry_run=False,
             python_version="3.9",
-            prune_unused=True,   # remove Flask
-            sync_reqs=True,      # mirror requirements.txt
+            prune_unused=True,  # remove Flask
+            sync_reqs=True,  # mirror requirements.txt
         )
 
     added_norm = {norm_name(x) for x in results["added"]}
@@ -214,11 +240,13 @@ def test_heal_dependencies_no_read_access_is_graceful(setup_teardown_env_vars):
     project_root = setup_teardown_env_vars["project_root"]
 
     # Just ensure it runs and returns a result shape; no exception expected.
-    result = asyncio.run(heal_dependencies(
-        project_roots=[project_root],
-        dry_run=True,
-        python_version="3.9",
-    ))
+    result = asyncio.run(
+        heal_dependencies(
+            project_roots=[project_root],
+            dry_run=True,
+            python_version="3.9",
+        )
+    )
     assert isinstance(result, dict)
     assert "added" in result
 
@@ -232,7 +260,10 @@ async def test_heal_dependencies_no_write_access_raises_error(setup_teardown_env
     project_root = setup_teardown_env_vars["project_root"]
     pyproject_path = os.path.join(project_root, "pyproject.toml")
 
-    with patch('import_fixer.fixer_dep.stdlib_list', new=lambda ver: ['os', 'sys', 'json', 'asyncio']):
+    with patch(
+        "import_fixer.fixer_dep.stdlib_list",
+        new=lambda ver: ["os", "sys", "json", "asyncio"],
+    ):
         os.chmod(pyproject_path, 0o400)  # read-only
         with pytest.raises(AnalyzerCriticalError):
             await heal_dependencies(
@@ -246,7 +277,9 @@ async def test_heal_dependencies_no_write_access_raises_error(setup_teardown_env
 
 
 @pytest.mark.asyncio
-async def test_heal_dependencies_stdlib_unavailable_in_prod_is_graceful(setup_teardown_env_vars, monkeypatch):
+async def test_heal_dependencies_stdlib_unavailable_in_prod_is_graceful(
+    setup_teardown_env_vars, monkeypatch
+):
     """
     Your current module falls back if stdlib_list is unavailable, even in PROD.
     Verify it still performs healing (no exception).
@@ -256,6 +289,7 @@ async def test_heal_dependencies_stdlib_unavailable_in_prod_is_graceful(setup_te
     with mock_stdlib_unavailable():
         # flip PRODUCTION_MODE on the module under test
         from import_fixer import fixer_dep as fd
+
         monkeypatch.setattr(fd, "PRODUCTION_MODE", True, raising=False)
         results = await heal_dependencies(
             project_roots=[project_root],
@@ -268,7 +302,9 @@ async def test_heal_dependencies_stdlib_unavailable_in_prod_is_graceful(setup_te
 
 
 @pytest.mark.asyncio
-async def test_get_all_imports_async_parallel_parsing_performance(setup_teardown_env_vars):
+async def test_get_all_imports_async_parallel_parsing_performance(
+    setup_teardown_env_vars,
+):
     """
     Heuristic: verify async structure fans out parsing tasks (we mock the parser).
     """
@@ -279,7 +315,7 @@ async def test_get_all_imports_async_parallel_parsing_performance(setup_teardown
     ]
 
     mock_parse = MagicMock(side_effect=lambda f: {f: [f]})
-    with patch('import_fixer.fixer_dep._parse_file_imports', new=mock_parse):
+    with patch("import_fixer.fixer_dep._parse_file_imports", new=mock_parse):
         results = await _get_all_imports_async(all_py_files)
 
     assert len(results) == 2
