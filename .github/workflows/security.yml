@@ -188,6 +188,13 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker rmi $(docker images -q) || true
+          echo "Disk space after cleanup:"
+          df -h
+          
       - name: Checkout code
         uses: actions/checkout@v4
         

@@ -25,7 +25,7 @@ openai>=1.30,<2         # 1.x SDK; update code if still using legacy 0.x
 # Data & Storage
 etcd3-py>=0.1.6,<0.2    # note: largely unmaintained; consider alternatives if starting fresh
 SQLAlchemy>=2.0,<3.0
-psycopg2-binary>=2.9,<3  # keep v2 driver unless code is migrated to psycopg3
+psycopg2-binary>=2.9,<3  # LGPL with linking exception - for dev/testing only; use psycopg2 in production
 aiosqlite>=0.19,<1
 redis>=5,<7
 
