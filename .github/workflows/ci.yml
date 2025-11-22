@@ -81,7 +81,6 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip cache purge || true
           python -m pip install --upgrade pip
           pip install --no-cache-dir black ruff flake8 mypy
           
@@ -130,7 +129,6 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip cache purge || true
           python -m pip install --upgrade pip
           if [ -f generator/requirements.txt ]; then
             pip install --no-cache-dir -r generator/requirements.txt
@@ -201,7 +199,6 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip cache purge || true
           python -m pip install --upgrade pip
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
@@ -262,7 +259,6 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip cache purge || true
           python -m pip install --upgrade pip
           if [ -f self_fixing_engineer/requirements.txt ]; then
             pip install --no-cache-dir -r self_fixing_engineer/requirements.txt
@@ -335,7 +331,6 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip cache purge || true
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt

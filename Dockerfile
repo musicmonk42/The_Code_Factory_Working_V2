@@ -48,21 +48,23 @@ RUN pip install --upgrade pip setuptools wheel || \
 # Note: --trusted-host bypasses SSL verification as a fallback for environments with
 # SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
 RUN if [ -f requirements.txt ]; then \
-        pip install --no-cache-dir -r requirements.txt || \
+        (pip install --no-cache-dir -r requirements.txt || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt)) && \
+        pip cache purge; \
     elif [ -f generator/requirements.txt ]; then \
-        pip install --no-cache-dir -r generator/requirements.txt || \
+        (pip install --no-cache-dir -r generator/requirements.txt || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt); \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r generator/requirements.txt)) && \
+        pip cache purge; \
     elif [ -f pyproject.toml ]; then \
-        pip install --no-cache-dir . || \
+        (pip install --no-cache-dir . || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .)) && \
+        pip cache purge; \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
-    fi && \
-    pip cache purge
+    fi
 
 # Copy the rest of the application
 COPY . /app
