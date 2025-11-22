@@ -148,8 +148,6 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
         """
         Checks if a user role has a specific permission.
         """
-        from arbiter import PermissionManager
-        from arbiter.config import ArbiterConfig
         permission_mgr = PermissionManager(ArbiterConfig())
         return permission_mgr.check_permission(role, permission)
 

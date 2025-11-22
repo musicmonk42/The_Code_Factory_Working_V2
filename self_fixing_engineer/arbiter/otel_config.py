@@ -34,7 +34,6 @@ from typing import Optional, Dict, Any, List, Callable, Union
 from dataclasses import dataclass, field
 from functools import wraps, lru_cache
 from contextlib import contextmanager
-from opentelemetry.sdk.resources import Resource
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
@@ -96,6 +95,73 @@ try:
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
+    # Create mock classes for type hints and fallback
+    Resource = Any  # type: ignore
+    SERVICE_NAME = "service.name"
+    SERVICE_VERSION = "service.version"
+    
+    # Mock classes
+    class TracerProvider:
+        pass
+    
+    class BatchSpanProcessor:
+        pass
+    
+    class ConsoleSpanExporter:
+        pass
+    
+    class TraceIdRatioBased:
+        pass
+    
+    class ParentBased:
+        pass
+    
+    class LoggerProvider:
+        pass
+    
+    class BatchLogRecordProcessor:
+        pass
+    
+    class _NoOpTracerStub:
+        def start_as_current_span(self, name, **kwargs):
+            from contextlib import contextmanager
+            @contextmanager
+            def _noop():
+                yield None
+            return _noop()
+        
+        def start_span(self, name, **kwargs):
+            return None
+    
+    class trace:
+        @staticmethod
+        def get_tracer_provider():
+            return None
+        
+        @staticmethod
+        def set_tracer_provider(provider):
+            pass
+        
+        @staticmethod
+        def get_tracer(name, version=None):
+            return _NoOpTracerStub()
+        
+        class Status:
+            def __init__(self, code, message):
+                pass
+        
+        class StatusCode:
+            ERROR = "ERROR"
+            OK = "OK"
+    
+    class metrics:
+        @staticmethod
+        def set_meter_provider(provider):
+            pass
+        
+        @staticmethod
+        def get_meter(name, version):
+            return None
 
 logger = logging.getLogger(__name__)
 
