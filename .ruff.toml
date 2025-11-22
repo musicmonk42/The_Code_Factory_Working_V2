@@ -1,0 +1,14 @@
+# Ruff linting configuration
+# https://docs.astral.sh/ruff/
+
+[tool.ruff]
+# Keep default checks for source, but relax in tests
+extend-ignore = ["E712"]  # Optional: allow == True/False until code is fixed
+
+[tool.ruff.per-file-ignores]
+# Relax unused variable and import checks in test directories
+"self_fixing_engineer/plugins/tests/*.py" = ["F401", "F841"]
+"self_fixing_engineer/simulation/tests/*.py" = ["F401", "F841"]
+"omnicore_engine/tests/*.py" = ["F401", "F841"]
+"generator/tests/*.py" = ["F401", "F841"]
+"**/tests/*.py" = ["F401", "F841"]

@@ -203,6 +203,10 @@ jobs:
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
           fi
+          # Install the package itself so `import omnicore_engine` works in tests
+          python -m pip install --no-cache-dir -e ./omnicore_engine
+          # Install common test/runtime extras that may be missing from requirements
+          pip install --no-cache-dir PyYAML httpx PyJWT || true
           pip install --no-cache-dir pytest pytest-cov pytest-asyncio pytest-mock
           
       - name: Run OmniCore tests

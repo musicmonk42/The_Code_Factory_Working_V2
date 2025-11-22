@@ -121,7 +121,7 @@ google-cloud-core==2.4.3
 google-cloud-logging==3.12.1
 google-cloud-pubsub==2.25.0
 google-cloud-secret-manager==2.24.0
-google-cloud-storage==3.3.0
+google-cloud-storage<3.0.0,>=1.32.0
 google-crc32c==1.7.1
 google-generativeai==0.8.5
 google-resumable-media==2.7.2
@@ -253,6 +253,7 @@ phonenumbers==9.0.17
 pillow==11.3.0
 platformdirs==4.5.0
 pluggy==1.6.0
+portalocker==2.8.2
 posthog==5.4.0
 preshed==3.0.10
 presidio_analyzer==2.2.360
@@ -339,9 +340,9 @@ tokenizers==0.22.1
 toml==0.10.2
 tomli==2.3.0
 toolz==1.1.0
-torch==2.9.0+cpu
-torchaudio==2.9.0+cpu
-torchvision==0.24.0+cpu
+torch==2.9.0
+torchaudio==2.9.0
+torchvision==0.24.0
 tqdm==4.67.1
 typeguard==4.4.4
 typer==0.20.0
