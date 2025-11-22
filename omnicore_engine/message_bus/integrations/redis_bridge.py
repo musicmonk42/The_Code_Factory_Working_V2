@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import time
+import uuid
+from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable, Awaitable, Tuple
+from typing import Any, Dict, List, Optional, Callable, Awaitable, Tuple, Set
 
 # Attempt to import redis, which is assumed to be installed in a production environment
 try:
@@ -161,11 +164,19 @@ class RedisBridge:
         self._running = False
         self._stop_event = asyncio.Event()
         self._subscribers: Dict[str, List[MessageHandler]] = {}
-        self._subscribed_topics: set = set()
+        self._subscribed_topics: Set[str] = set()
         self._dedup_namespace = "omnicore:dedup:"
         logger.info("RedisBridge initialized with config.", url=config.REDIS_URL)
 
     # --- Lifecycle ---
+
+    def _should_start_listener(self) -> bool:
+        """Check if listener task needs to be started."""
+        if not self._subscribed_topics:
+            return False
+        if self._listener_task is None:
+            return True
+        return self._listener_task.done()
 
     async def start(self):
         """Initializes the Redis connection pool and starts listener if subscribed."""
@@ -190,7 +201,10 @@ class RedisBridge:
                 await self.pubsub_client.subscribe(topic)
 
             # Start the listener loop in the background if we have subscriptions
-            if self._subscribed_topics:
+            if self._should_start_listener():
+                if self._listener_task and self._listener_task.done():
+                    # Clean up old task
+                    self._listener_task = None
                 self._listener_task = asyncio.create_task(self._listener_loop())
 
             self.circuit.record_success()
@@ -262,16 +276,21 @@ class RedisBridge:
     async def publish_dlq(self, message: Message, original_error: str) -> bool:
         """Simulates DLQ by publishing to a suffixed channel."""
         dlq_channel = f"{message.topic}{self.cfg.DLQ_CHANNEL_SUFFIX}"
-        message.payload["dlq_original_error"] = original_error  # Augment payload
-        return await self.publish(message)  # Reuse publish, but topic is overridden in Message? Wait, no: publish uses message.topic
-        # Fix: Temporarily set topic
-        original_topic = message.topic
-        message.topic = dlq_channel
-        try:
-            result = await self.publish(message)
-        finally:
-            message.topic = original_topic
-        return result
+        
+        # Create a copy to avoid mutating original
+        dlq_message = copy(message)
+        dlq_message.topic = dlq_channel
+        
+        # Safely add error to payload
+        if isinstance(dlq_message.payload, dict):
+            dlq_message.payload["dlq_original_error"] = original_error
+        else:
+            dlq_message.payload = {
+                "original_payload": dlq_message.payload,
+                "dlq_original_error": original_error
+            }
+        
+        return await self.publish(dlq_message)
 
     # --- Subscription ---
 
@@ -282,8 +301,11 @@ class RedisBridge:
         self._subscribers[topic].append(handler)
         self._subscribed_topics.add(topic)
         
-        if self._running and self.pubsub_client and not self._listener_task:
+        if self._running and self.pubsub_client and self._should_start_listener():
             # If we subscribe while running, we need to ensure the listener is active
+            if self._listener_task and self._listener_task.done():
+                # Clean up old task
+                self._listener_task = None
             self._listener_task = asyncio.create_task(self._listener_loop())
 
         logger.info("Subscribed to Redis topic.", topic=topic)
@@ -292,35 +314,43 @@ class RedisBridge:
         """Background loop to listen for Pub/Sub messages."""
         while self._running and not self._stop_event.is_set():
             try:
-                if self.pubsub_client:
-                    message = await self.pubsub_client.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                    if message is None:
-                        continue
-
-                    topic = message['channel']
-                    payload_str = message['data']
+                if not self.pubsub_client:
+                    logger.warning("PubSub client not available, waiting...")
+                    await asyncio.sleep(1)
+                    continue
                     
-                    if payload_str == 'ping':  # Ignore pings if any
-                        continue
+                message = await self.pubsub_client.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message is None:
+                    continue
 
-                    # Deserialize and create Message
-                    try:
-                        payload = json.loads(payload_str)
-                        internal_message = Message(
-                            topic=topic,
-                            payload=payload,
-                            trace_id=internal_message.get('trace_id', str(uuid.uuid4())),  # Assume payload has it or generate
-                            timestamp=time.time()
-                        )
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to decode JSON from Redis topic {topic}: {e}. Payload: {payload_str[:100]}...")
-                        _metrics_inc_consume("decode_fail", topic)
-                        continue
+                topic = message['channel']
+                payload_str = message['data']
+                
+                if payload_str == 'ping':  # Ignore pings if any
+                    continue
 
-                    # Dispatch to handlers with retries
-                    await self._dispatch_with_retries(topic, internal_message)
+                # Deserialize and create Message
+                try:
+                    payload = json.loads(payload_str)
+                    internal_message = Message(
+                        topic=topic,
+                        payload=payload,
+                        priority=payload.get('priority', 0) if isinstance(payload, dict) else 0,
+                        timestamp=time.time(),
+                        trace_id=payload.get('trace_id', str(uuid.uuid4())) if isinstance(payload, dict) else str(uuid.uuid4()),
+                        encrypted=False,  # Redis messages come as plain JSON
+                        idempotency_key=payload.get('idempotency_key') if isinstance(payload, dict) else None,
+                        context=payload.get('context', {}) if isinstance(payload, dict) else {}
+                    )
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to decode JSON from Redis topic {topic}: {e}. Payload: {payload_str[:100]}...")
+                    _metrics_inc_consume("decode_fail", topic)
+                    continue
 
-                    _metrics_inc_consume("success", topic)
+                # Dispatch to handlers with retries
+                await self._dispatch_with_retries(topic, internal_message)
+
+                _metrics_inc_consume("success", topic)
 
             except asyncio.TimeoutError:
                 continue  # Expected on timeout
@@ -339,10 +369,12 @@ class RedisBridge:
         handlers = self._subscribers.get(topic, [])
         if not handlers:
             # Fallback to internal bus dispatch
-            await self.message_bus._dispatch_message_to_subscribers_and_externals(
-                message, 
-                self.message_bus.callback_executors[0]  # Use a default executor (e.g., shard 0)
-            )
+            # Check if executors exist
+            if hasattr(self.message_bus, 'callback_executors') and self.message_bus.callback_executors:
+                executor = self.message_bus.callback_executors[0]
+                await self.message_bus._dispatch_message_to_subscribers_and_externals(message, executor)
+            else:
+                logger.warning(f"No callback executors available for topic {topic}")
             return
 
         for handler in handlers:
