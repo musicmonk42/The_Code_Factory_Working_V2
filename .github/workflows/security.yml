@@ -236,37 +236,21 @@ jobs:
               pip install pip-licenses
               pip-licenses --format=json > "$TEMP_DIR/licenses-$(basename "$req_file").json" || true
               
-              # Use python to parse structured JSON and detect GPL/AGPL (but ignore LGPL)
-              python - <<'PY'
-import json
-import sys
-fn = "$TEMP_DIR/licenses-$(basename "$req_file").json"
-try:
-    data = json.load(open(fn))
-except Exception:
-    sys.exit(0)
-bad = []
-for pkg in data:
-    lic = pkg.get("License", "") or ""
-    # Check license field for restrictive strings but allow LGPL
-    if ("AGPL" in lic or ("GPL" in lic and "LGPL" not in lic)):
-        bad.append({"Name": pkg.get("Name"), "License": lic})
-if bad:
-    print("RESTRICTIVE_FOUND:", bad)
-    sys.exit(2)
-sys.exit(0)
-PY
-              RC=$? || true
+              # Check for GPL/AGPL licenses using jq (ignore LGPL)
+              if command -v jq >/dev/null 2>&1; then
+                RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not)) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-$(basename "$req_file").json" 2>/dev/null || true)
+                if [ -n "$RESTRICTIVE" ]; then
+                  echo "⚠️  Found packages with restrictive licenses:"
+                  echo "$RESTRICTIVE"
+                  HAS_ISSUES=1
+                fi
+              fi
               
               # Generate markdown report for artifacts
               pip-licenses --format=markdown --output-file="licenses-$(basename $req_file).md" || true
               
               deactivate
               rm -rf "$TEMP_DIR/venv"
-              
-              if [ "$RC" -eq 2 ]; then
-                HAS_ISSUES=1
-              fi
             fi
           done
           
