@@ -144,6 +144,32 @@ def validate_user_id(user_id: str) -> str:
         raise ValueError("Invalid user_id format")
     return user_id
 
+def serialize_audit_record(record: Any) -> Dict[str, Any]:
+    """
+    Serialize an ExplainAuditRecord to a dictionary.
+    
+    This function provides explicit control over which fields are serialized,
+    making it clear what data is being exposed via the API.
+    """
+    return {
+        "uuid": record.uuid,
+        "kind": record.kind,
+        "name": record.name,
+        "detail": record.detail,
+        "ts": record.ts,
+        "hash": record.hash,
+        "sim_id": record.sim_id,
+        "error": record.error,
+        "agent_id": record.agent_id,
+        "context": record.context,
+        "custom_attributes": record.custom_attributes,
+        "rationale": record.rationale,
+        "simulation_outcomes": record.simulation_outcomes,
+        "tenant_id": record.tenant_id,
+        "explanation_id": record.explanation_id,
+        "root_merkle_hash": record.root_merkle_hash
+    }
+
 # Default values for agent state initialization
 # These can be overridden via configuration if needed in the future
 DEFAULT_AGENT_X = 0
@@ -1032,25 +1058,8 @@ class Database:
                 
                 result = await session.execute(query)
                 records = result.scalars().all()
-                # Serialize SQLAlchemy objects to dictionaries
-                return [{
-                    "uuid": r.uuid,
-                    "kind": r.kind,
-                    "name": r.name,
-                    "detail": r.detail,
-                    "ts": r.ts,
-                    "hash": r.hash,
-                    "sim_id": r.sim_id,
-                    "error": r.error,
-                    "agent_id": r.agent_id,
-                    "context": r.context,
-                    "custom_attributes": r.custom_attributes,
-                    "rationale": r.rationale,
-                    "simulation_outcomes": r.simulation_outcomes,
-                    "tenant_id": r.tenant_id,
-                    "explanation_id": r.explanation_id,
-                    "root_merkle_hash": r.root_merkle_hash
-                } for r in records]
+                # Serialize SQLAlchemy objects to dictionaries using helper function
+                return [serialize_audit_record(r) for r in records]
         except Exception as e:
             AUDIT_DB_ERRORS.labels(operation='query_audit_records').observe(time.time() - start_time)
             await self.feedback_manager.record_feedback(
