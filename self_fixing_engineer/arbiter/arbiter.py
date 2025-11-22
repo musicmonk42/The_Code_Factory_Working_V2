@@ -1937,7 +1937,7 @@ class Arbiter:
                 await self.db_client.log_error(e, {"agent_name": self.name})
                 return {"companies": [], "explain_log": [{"error": f"Failed to filter companies: {e}"}]}
         else:
-            logging.getLogger(__name).warning("Company data plugin not available for filtering.")
+            logging.getLogger(__name__).warning("Company data plugin not available for filtering.")
             return {"companies": [], "explain_log": [{"error": "Company data plugin not available."}]}
 
     async def stop_async_services(self):

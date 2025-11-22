@@ -38,8 +38,6 @@ async def config_store_with_fallback(tmp_path, mocker):
     FIX: Provides a ConfigStore that fails etcd and uses a temporary fallback file.
     This mock is now sophisticated enough to handle text vs. binary file reads.
     """
-async def config_store_with_fallback(tmp_path):
-    """Provides a ConfigStore that fails etcd and uses a temporary fallback file."""
     fallback_file = tmp_path / "fallback.json"
     checksum_file = tmp_path / "fallback.json.sha256"
     fallback_data = {"fallback_key": "fallback_value"}
@@ -89,13 +87,7 @@ async def config_store_with_fallback(tmp_path):
             # Also mock os.path.exists
             with patch('os.path.exists', return_value=True):
                 yield ConfigStore(fallback_path=str(fallback_file))
-    content_bytes = json.dumps(fallback_data).encode('utf-8')
-    fallback_file.write_bytes(content_bytes)
-    computed_hash = hashlib.sha256(content_bytes).hexdigest()
-    checksum_file.write_text(computed_hash)
 
-    with patch('etcd3.client', side_effect=Exception("etcd fail")):
-        yield ConfigStore(fallback_path=str(fallback_file))
 
 
 @pytest_asyncio.fixture
