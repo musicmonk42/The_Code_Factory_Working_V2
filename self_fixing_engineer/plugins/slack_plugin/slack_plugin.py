@@ -41,6 +41,7 @@ import psutil
 # ---- CUSTOM EXCEPTION CLASSES ----
 class AnalyzerCriticalError(Exception):
     """Raised for unrecoverable failures in the analyzer/gateway logic."""
+
     pass
 
 
