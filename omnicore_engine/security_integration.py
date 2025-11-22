@@ -321,7 +321,7 @@ class SecurityIntegrationManager:
         
         # Query user from database - MUST be implemented before production use
         # This is a critical security function that should query your user table
-        # Example implementation:
+        # Example implementation (requires: from sqlalchemy import text):
         # async with self.db.get_session() as session:
         #     result = await session.execute(
         #         text("SELECT username, password_hash, roles, mfa_enabled, mfa_secret FROM users WHERE username = :username"),

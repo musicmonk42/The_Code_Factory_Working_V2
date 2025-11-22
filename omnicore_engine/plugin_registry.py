@@ -188,7 +188,13 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Plugin execution timed out")
 
 def execute_with_limits(func, *args, **kwargs):
-    """Executes a function with resource limits and a timeout."""
+    """Executes a function with resource limits and a timeout.
+    
+    Note: This function is called within a subprocess created by safe_execute_plugin().
+    The primary timeout mechanism is the process.join(timeout) call in safe_execute_plugin,
+    which works on both Unix and Windows. The signal-based timeout here is an additional
+    protection for Unix-like systems.
+    """
     # SECURITY: SIGALRM is not available on Windows
     # Use signal-based timeout only on Unix-like systems
     timeout_seconds = getattr(settings, 'PLUGIN_EXECUTION_TIMEOUT', 30)
@@ -197,9 +203,8 @@ def execute_with_limits(func, *args, **kwargs):
         signal.signal(signal.SIGALRM, timeout_handler)
         signal.alarm(timeout_seconds)
     else:
-        # On Windows, we rely on the multiprocessing timeout in safe_execute_plugin
-        # which uses process.join(timeout) instead of signals
-        logger.debug("Signal-based timeout not available on Windows, using process timeout")
+        # On Windows, the parent process handles timeout via process.join(timeout)
+        logger.debug("Signal-based timeout not available on Windows, parent process handles timeout")
 
     # Limit memory usage (e.g., 512MB)
     try:
@@ -1093,7 +1098,13 @@ class PluginVersionManager:
                                 try:
                                     if platform.system() == 'Windows':
                                         import atexit
-                                        atexit.register(lambda p=temp_file_path: p.unlink(missing_ok=True))
+                                        # Compatibility: Use try-except for unlink instead of missing_ok for Python < 3.8
+                                        def cleanup_on_exit(p):
+                                            try:
+                                                p.unlink()
+                                            except FileNotFoundError:
+                                                pass
+                                        atexit.register(cleanup_on_exit, temp_file_path)
                                 except Exception as fallback_err:
                                     self.logger.debug(f"Fallback cleanup registration failed: {fallback_err}")
                 

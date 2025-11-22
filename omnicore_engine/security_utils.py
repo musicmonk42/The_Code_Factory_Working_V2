@@ -199,7 +199,7 @@ def _hkdf_derive_key(secret: _t.Union[str, bytes], salt: _t.Optional[bytes] = No
     if salt is None:
         # Use deterministic salt for key derivation (acceptable when secret is pre-shared and secure)
         # This allows encryption/decryption to work with the same derived key
-        salt = hashlib_sha256(b"omnicore_engine.hkdf.v2." + str(len(secret_bytes)).encode("ascii"))
+        salt = hashlib_sha256(b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii"))
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000)
     return kdf.derive(secret_bytes)
 
@@ -278,12 +278,13 @@ def _fallback_sanitize_html(html_text: str) -> str:
                         v = (v or "")
                         if isinstance(v, bytes):
                             v = v.decode("utf-8", "ignore")
-                        v = v.strip().lower()
-                        # SECURITY: More thorough check for javascript: and data: URIs
-                        # Check for various encodings and obfuscations
-                        if (v.startswith(("http://", "https://", "#", "mailto:")) and
-                            not any(dangerous in v for dangerous in ["javascript:", "data:", "vbscript:"])):
-                            safe_attrs.append((k, html.escape(v, quote=True)))
+                        v_stripped = v.strip()
+                        v_lower = v_stripped.lower()
+                        # SECURITY: Check for dangerous protocols on lowercase version
+                        # but preserve original case for legitimate URLs
+                        if (v_lower.startswith(("http://", "https://", "#", "mailto:")) and
+                            not any(dangerous in v_lower for dangerous in ["javascript:", "data:", "vbscript:"])):
+                            safe_attrs.append((k, html.escape(v_stripped, quote=True)))
                     elif k in ("title", "target", "rel"):
                         if v is not None:
                             safe_attrs.append((k, html.escape(str(v), quote=True)))
