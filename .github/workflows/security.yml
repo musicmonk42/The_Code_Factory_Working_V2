@@ -212,40 +212,52 @@ jobs:
           
       - name: Check licenses
         run: |
-          # Track if we found any issues
+          set -euo pipefail
           HAS_ISSUES=0
+          TEMP_DIR=$(mktemp -d)
+          cleanup() { rm -rf "$TEMP_DIR"; }
+          trap cleanup EXIT
           
           for req_file in requirements.txt generator/requirements.txt omnicore_engine/requirements.txt self_fixing_engineer/requirements.txt; do
             if [ -f "$req_file" ]; then
               echo "Checking licenses for $req_file"
-              pip install -r "$req_file" || continue
+              python -m venv "$TEMP_DIR/venv"
+              source "$TEMP_DIR/venv/bin/activate"
+              python -m pip install --upgrade pip
               
-              # Generate license report
-              pip-licenses --format=markdown --output-file=licenses-$(basename $req_file).md || continue
-              
-              # Check for GPL and AGPL licenses (which are restrictive)
-              # Note: LGPL with linking exception (like psycopg2-binary) is acceptable
-              echo "Checking for restrictive licenses in $req_file..."
-              RESTRICTIVE=$(pip-licenses --format=plain --with-license-file --no-license-path 2>/dev/null | grep -iE "AGPL|GPL" | grep -v "LGPL" | grep -v "Approved" || true)
-              
-              if [ -n "$RESTRICTIVE" ]; then
-                echo "⚠️  WARNING: Found potentially restrictive or unknown licenses in $req_file:"
-                echo "$RESTRICTIVE"
-                HAS_ISSUES=1
+              # Try to install, if install fails we skip this req file and warn
+              if ! pip install -r "$req_file"; then
+                echo "⚠️  pip install failed for $req_file — skipping license check for this file"
+                deactivate
+                rm -rf "$TEMP_DIR/venv"
+                continue
               fi
+              
+              pip install pip-licenses
+              pip-licenses --format=json > "$TEMP_DIR/licenses-$(basename "$req_file").json" || true
+              
+              # Check for GPL/AGPL licenses using jq (ignore LGPL)
+              if command -v jq >/dev/null 2>&1; then
+                RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not)) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-$(basename "$req_file").json" 2>/dev/null || true)
+                if [ -n "$RESTRICTIVE" ]; then
+                  echo "⚠️  Found packages with restrictive licenses:"
+                  echo "$RESTRICTIVE"
+                  HAS_ISSUES=1
+                fi
+              fi
+              
+              # Generate markdown report for artifacts
+              pip-licenses --format=markdown --output-file="licenses-$(basename $req_file).md" || true
+              
+              deactivate
+              rm -rf "$TEMP_DIR/venv"
             fi
           done
           
-          # Fail if restrictive licenses were found
           if [ "$HAS_ISSUES" -eq 1 ]; then
             echo ""
             echo "❌ License compliance check failed!"
-            echo "Found packages with GPL or AGPL licenses."
-            echo "Note: LGPL with linking exception (like psycopg2-binary) is acceptable."
-            echo "Please review the license reports and either:"
-            echo "  1. Replace packages with restrictive licenses with permissive alternatives"
-            echo "  2. Remove unused dependencies"
-            echo "  3. Update the approved licenses list if the license is acceptable"
+            echo "Found packages with GPL or AGPL licenses. See uploaded reports."
             exit 1
           fi
           

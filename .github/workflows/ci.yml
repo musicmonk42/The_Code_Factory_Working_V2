@@ -207,6 +207,10 @@ jobs:
           python -m pip install --no-cache-dir -e ./omnicore_engine
           # Install common test/runtime extras that may be missing from requirements
           pip install --no-cache-dir PyYAML httpx PyJWT || true
+          # Install missing runtime/test dependencies
+          pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
+          # Install CPU-only PyTorch wheel to satisfy imports in tests
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu || true
           pip install --no-cache-dir pytest pytest-cov pytest-asyncio pytest-mock
           
       - name: Run OmniCore tests
@@ -214,9 +218,9 @@ jobs:
           REDIS_URL: redis://localhost:6379
           APP_ENV: test
         run: |
-          cd omnicore_engine
-          if [ -d tests ]; then
-            pytest tests/ --cov --cov-report=xml --cov-report=term -v
+          export PYTHONPATH="$PYTHONPATH:$PWD"
+          if [ -d omnicore_engine/tests ]; then
+            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v
           else
             echo "Error: No tests directory found. Failing the build."
             exit 1
