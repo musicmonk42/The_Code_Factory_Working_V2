@@ -1269,7 +1269,7 @@ if __name__ == "__main__":
     </testsuites>"""
             junit_file = tmp_path / "junit_results.xml"
             async with aiofiles.open(junit_file, 'w', encoding='utf-8') as f:
-            await f.write(junit_content)
+                await f.write(junit_content)
             junit_parsed = await _PARSER_REGISTRY['junit_xml'](junit_file)
             print(json.dumps(junit_parsed.model_dump(by_alias=True), indent=2))
             assert junit_parsed.total_tests == 2
@@ -1298,7 +1298,7 @@ if __name__ == "__main__":
     """
             unittest_file = tmp_path / "unittest_results.txt"
             async with aiofiles.open(unittest_file, 'w', encoding='utf-8') as f:
-            await f.write(unittest_content)
+                await f.write(unittest_content)
             unittest_parsed = await _PARSER_REGISTRY['unittest_output'](unittest_file)
             print(json.dumps(unittest_parsed.model_dump(by_alias=True), indent=2))
             assert unittest_parsed.total_tests == 2
@@ -1319,7 +1319,7 @@ if __name__ == "__main__":
     </testsuites>"""
             behave_xml_file = tmp_path / "behave_results.xml"
             async with aiofiles.open(behave_xml_file, 'w', encoding='utf-8') as f:
-            await f.write(behave_xml_content)
+                await f.write(behave_xml_content)
             behave_parsed = await _PARSER_REGISTRY['behave_report'](behave_xml_file)
             print(json.dumps(behave_parsed.model_dump(by_alias=True), indent=2))
             assert behave_parsed.total_tests == 1
@@ -1366,7 +1366,7 @@ if __name__ == "__main__":
     """
             behave_json_file = tmp_path / "behave_results.json"
             async with aiofiles.open(behave_json_file, 'w', encoding='utf-8') as f:
-            await f.write(behave_json_content)
+                await f.write(behave_json_content)
             behave_json_parsed = await _PARSER_REGISTRY['behave_report'](behave_json_file)
             print(json.dumps(behave_json_parsed.model_dump(by_alias=True), indent=2))
             assert behave_json_parsed.total_tests == 2
@@ -1398,7 +1398,7 @@ if __name__ == "__main__":
     </robot>"""
             robot_file = tmp_path / "robot_output.xml"
             async with aiofiles.open(robot_file, 'w', encoding='utf-8') as f:
-            await f.write(robot_content)
+                await f.write(robot_content)
             robot_parsed = await _PARSER_REGISTRY['robot_xml'](robot_file)
             print(json.dumps(robot_parsed.model_dump(by_alias=True), indent=2))
             assert robot_parsed.total_tests == 2
@@ -1462,7 +1462,7 @@ if __name__ == "__main__":
     """
             jest_file = tmp_path / "jest_results.json"
             async with aiofiles.open(jest_file, 'w', encoding='utf-8') as f:
-            await f.write(jest_content)
+                await f.write(jest_content)
             jest_parsed = await _PARSER_REGISTRY['jest_json'](jest_file)
             print(json.dumps(jest_parsed.model_dump(by_alias=True), indent=2))
             assert jest_parsed.total_tests == 2
@@ -1506,7 +1506,7 @@ if __name__ == "__main__":
     """
             go_json_file = tmp_path / "go_results.json"
             async with aiofiles.open(go_json_file, 'w', encoding='utf-8') as f:
-            await f.write(go_json_content)
+                await f.write(go_json_content)
             go_parsed = await _PARSER_REGISTRY['go_test_json'](go_json_file)
             print(json.dumps(go_parsed.model_dump(by_alias=True), indent=2))
             assert go_parsed.total_tests == 3
@@ -1538,9 +1538,9 @@ if __name__ == "__main__":
             surefire_dir = tmp_path / "target" / "surefire-reports"
             surefire_dir.mkdir(parents=True, exist_ok=True)
             async with aiofiles.open(surefire_dir / "TEST-com.example.AppTest.xml", 'w', encoding='utf-8') as f:
-            await f.write(surefire_test_suite_1)
+                await f.write(surefire_test_suite_1)
             async with aiofiles.open(surefire_dir / "TEST-com.example.UtilTest.xml", 'w', encoding='utf-8') as f:
-            await f.write(surefire_test_suite_2)
+                await f.write(surefire_test_suite_2)
             
             surefire_parsed = await _PARSER_REGISTRY['surefire_xml'](surefire_dir)
             print(json.dumps(surefire_parsed.model_dump(by_alias=True), indent=2))
@@ -1577,7 +1577,7 @@ if __name__ == "__main__":
     </coverage>"""
             cobertura_file = tmp_path / "cobertura_coverage.xml"
             async with aiofiles.open(cobertura_file, 'w', encoding='utf-8') as f:
-            await f.write(cobertura_content)
+                await f.write(cobertura_content)
             cobertura_parsed = await _COVERAGE_PARSER_REGISTRY['cobertura_xml'](cobertura_file)
             print(json.dumps(cobertura_parsed.model_dump(by_alias=True), indent=2))
             assert cobertura_parsed.coverage_percentage == 75.0
@@ -1611,7 +1611,7 @@ if __name__ == "__main__":
     </report>"""
             jacoco_file = tmp_path / "jacoco_coverage.xml"
             async with aiofiles.open(jacoco_file, 'w', encoding='utf-8') as f:
-            await f.write(jacoco_content)
+                await f.write(jacoco_content)
             jacoco_parsed = await _COVERAGE_PARSER_REGISTRY['jacoco_xml'](jacoco_file)
             print(json.dumps(jacoco_parsed.model_dump(by_alias=True), indent=2))
             assert jacoco_parsed.coverage_percentage == (17/(17+3))*100
@@ -1650,7 +1650,7 @@ if __name__ == "__main__":
     """
             istanbul_file = tmp_path / "istanbul_coverage.json"
             async with aiofiles.open(istanbul_file, 'w', encoding='utf-8') as f:
-            await f.write(istanbul_content)
+                await f.write(istanbul_content)
             istanbul_parsed = await _COVERAGE_PARSER_REGISTRY['istanbul_json'](istanbul_file)
             print(json.dumps(istanbul_parsed.model_dump(by_alias=True), indent=2))
             assert round(istanbul_parsed.coverage_percentage, 2) == 66.67
@@ -1667,7 +1667,7 @@ if __name__ == "__main__":
     """
             go_cover_file = tmp_path / "coverage.out"
             async with aiofiles.open(go_cover_file, 'w', encoding='utf-8') as f:
-            await f.write(go_cover_content)
+                await f.write(go_cover_content)
             go_cover_parsed = await _COVERAGE_PARSER_REGISTRY['go_coverprofile'](go_cover_file)
             print(json.dumps(go_cover_parsed.model_dump(by_alias=True), indent=2))
             assert round(go_cover_parsed.coverage_percentage, 2) == 66.67
@@ -1682,7 +1682,7 @@ if __name__ == "__main__":
             html_cov_dir.mkdir(exist_ok=True)
             html_cov_file = html_cov_dir / "index.html"
             async with aiofiles.open(html_cov_file, 'w', encoding='utf-8') as f:
-            await f.write(html_cov_content)
+                await f.write(html_cov_content)
             html_cov_parsed = await _COVERAGE_PARSER_REGISTRY['html_coverage_report'](html_cov_file)
             print(json.dumps(html_cov_parsed.model_dump(by_alias=True), indent=2))
             assert html_cov_parsed.coverage_percentage == 85.5
