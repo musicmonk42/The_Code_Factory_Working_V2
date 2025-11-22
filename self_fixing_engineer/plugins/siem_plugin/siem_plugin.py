@@ -26,6 +26,9 @@ from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from cryptography.fernet import Fernet
 import psutil
 
+# Import custom exceptions from parent module
+from self_fixing_engineer.exceptions import AnalyzerCriticalError
+
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
@@ -144,7 +147,7 @@ try:
     from opentelemetry import trace
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
     from opentelemetry.propagate import set_global_textmap
@@ -1256,7 +1259,7 @@ class SIEMGateway:
             ):
                 self._scale_down_timer += 10
                 if self._scale_down_timer >= 30:
-                    worker_to_stop = active_workers.pop()
+                    _worker_to_stop = active_workers.pop()
                     main_logger.info(
                         f"Queue empty, scaling down worker for {self.target_config.name} to {len(active_workers)}"
                     )
