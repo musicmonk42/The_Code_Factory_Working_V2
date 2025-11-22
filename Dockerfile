@@ -47,7 +47,10 @@ RUN pip install --upgrade pip setuptools wheel || \
 # Install project dependencies
 # Note: --trusted-host bypasses SSL verification as a fallback for environments with
 # SSL inspection/MITM proxies. Production builds with proper SSL should use the primary path.
-RUN if [ -f requirements.txt ]; then \
+ARG SKIP_HEAVY_DEPS=0
+RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
+        echo "Skipping heavy dependencies for CI build"; \
+    elif [ -f requirements.txt ]; then \
         pip install --no-cache-dir -r requirements.txt || \
         (echo "WARNING: requirements install failed with SSL verification, retrying with --trusted-host" && \
          pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt); \
@@ -61,7 +64,8 @@ RUN if [ -f requirements.txt ]; then \
          pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
-    fi
+    fi && \
+    rm -rf /root/.cache/pip /tmp/*
 
 # Copy the rest of the application
 COPY . /app

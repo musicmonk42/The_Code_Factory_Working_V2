@@ -28,6 +28,11 @@ python-dateutil>=2.8.0
 
 # Networking / Async
 aiohttp>=3.8.0
+httpx>=0.24.0
+
+# YAML and JWT utilities
+PyYAML>=6.0
+PyJWT>=2.8.0
 
 # Messaging / Caching
 # kafka-python is legacy; consider confluent-kafka if you need production Kafka
