@@ -114,7 +114,7 @@ except Exception as e:
     print(f"test_generation.backends not available ({e}); skipping.")
 
 try:
-    from simulation.runners import MyCustomRunner, MyBetterRunner
+    from self_fixing_engineer.simulation.runners import MyCustomRunner, MyBetterRunner
 except Exception as e:
     MyCustomRunner = None
     MyBetterRunner = None
@@ -130,7 +130,7 @@ except ImportError:
     print("envs module not found.")
 
 try:
-    from simulation.registry import SIM_REGISTRY
+    from self_fixing_engineer.simulation.registry import SIM_REGISTRY
 except ImportError:
     SIM_REGISTRY = None
     print("simulation.registry not found.")
