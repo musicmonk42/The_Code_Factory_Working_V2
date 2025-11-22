@@ -491,8 +491,12 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
             pass
         
         # Check simulation module health
+        # Note: simulation module is optional, so not_initialized is acceptable
         simulation_health = await _simulation_health_check()
-        simulation_ok = simulation_health.get("status") in ("ok", "healthy", "not_initialized")
+        sim_status = simulation_health.get("status")
+        simulation_ok = sim_status in ("ok", "healthy") or (
+            sim_status == "not_initialized" and simulation_health.get("available") == False
+        )
         
         overall_status = "ok" if (redis_ok and simulation_ok) else "degraded"
         
