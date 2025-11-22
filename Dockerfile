@@ -15,12 +15,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install build tools for any packages that need compiling
 # Update ca-certificates first to avoid SSL issues with pip
+# Clean up apt cache to save disk space
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends \
     build-essential git \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Create virtual environment for dependencies
 RUN python -m venv /opt/venv
@@ -40,9 +42,9 @@ COPY self_fixing_engineer/requirements.txt self_fixing_engineer/requirements.txt
 # Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts
 # Note: The || fallback catches any pip failure including SSL errors. This is intentional
 # to handle corporate proxies and development environments with SSL inspection.
-RUN pip install --upgrade pip setuptools wheel || \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel || \
     (echo "WARNING: pip upgrade failed with SSL verification, retrying with --trusted-host" && \
-     pip install --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
+     pip install --no-cache-dir --upgrade --trusted-host pypi.org --trusted-host files.pythonhosted.org pip setuptools wheel)
 
 # Install project dependencies
 # Note: --trusted-host bypasses SSL verification as a fallback for environments with
@@ -77,11 +79,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
+# Clean up apt cache to save disk space
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends curl \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Create non-root user
 RUN useradd -m -u 10001 appuser

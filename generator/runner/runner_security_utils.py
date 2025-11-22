@@ -106,7 +106,7 @@ def _load_presidio_engine() -> bool:
         # NOTE: This still requires torch/spacy libraries to be loadable.
         _nlp_provider_config = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}]
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]
         }
         _nlp_provider = NlpEngineProvider(nlp_configuration=_nlp_provider_config)
         _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=_nlp_provider.create_engine())

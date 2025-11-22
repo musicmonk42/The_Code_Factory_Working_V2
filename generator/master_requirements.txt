@@ -70,7 +70,7 @@ distro==1.9.0
 docker==7.1.0
 durationpy==0.10
 ecdsa==0.19.1
-en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl#sha256=293e9547a655b25499198ab15a525b05b9407a75f10255e405e8c3854329ab63
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 environs==14.3.0
 etcd3-py==0.1.6
 eth-account==0.13.7
