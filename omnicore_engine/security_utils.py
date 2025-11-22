@@ -182,15 +182,24 @@ def _require_crypto() -> None:
 
 
 def _hkdf_derive_key(secret: _t.Union[str, bytes], salt: _t.Optional[bytes] = None, length: int = 32) -> bytes:
-    """Derive a fixed-length key from arbitrary secret using PBKDF2HMAC (HKDF alternative)."""
+    """Derive a fixed-length key from arbitrary secret using PBKDF2HMAC (HKDF alternative).
+    
+    SECURITY NOTE: This function uses a deterministic salt when none is provided, which is
+    acceptable for deriving encryption keys from a pre-shared secret. The security relies on:
+    1. The secret being cryptographically random and kept secure
+    2. Random nonces being used for each encryption operation
+    
+    For password-based key derivation, use hash_password() which uses random salts.
+    """
     _require_crypto()
     if isinstance(secret, str):
         secret_bytes = secret.encode("utf-8")
     else:
         secret_bytes = secret
     if salt is None:
-        # deterministic salt from secret length & a constant label
-        salt = hashlib_sha256(b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii"))
+        # Use deterministic salt for key derivation (acceptable when secret is pre-shared and secure)
+        # This allows encryption/decryption to work with the same derived key
+        salt = hashlib_sha256(b"omnicore_engine.hkdf.v2." + str(len(secret_bytes)).encode("ascii"))
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000)
     return kdf.derive(secret_bytes)
 
@@ -350,21 +359,29 @@ def hash_password(
     )
 
 
-def verify_password(password: str, stored: str) -> bool:
+def verify_password(password: str, stored: str) -> tuple[bool, bool]:
     """
     Verify a password against the stored hash format emitted by `hash_password`.
+    
+    Returns:
+        tuple[bool, bool]: (is_valid, needs_rehash)
+            - is_valid: True if password matches
+            - needs_rehash: True if the password should be rehashed (e.g., old iteration count)
     """
     try:
         algo, iterations_s, salt_b64, hash_b64 = stored.split("$", 3)
         if algo != "pbkdf2_sha256":
-            return False
+            return (False, False)
         iterations = int(iterations_s)
         salt = _b64url_decode(salt_b64)
         expected = _b64url_decode(hash_b64)
         candidate = _pbkdf2_sha256(password, salt, iterations)
-        return constant_time_compare(candidate, expected)
+        is_valid = constant_time_compare(candidate, expected)
+        # Check if we need to rehash (iterations too low)
+        needs_rehash = is_valid and iterations < 390_000
+        return (is_valid, needs_rehash)
     except Exception:
-        return False
+        return (False, False)
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +561,14 @@ class RateLimiter:
     def reset(self, key: str) -> None:
         with self._lock:
             self._hits.pop(key, None)
+    
+    def is_allowed(self, key: str) -> bool:
+        """Check if a request is allowed without raising an exception."""
+        try:
+            self.check(key)
+            return True
+        except RateLimitError:
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +691,8 @@ class EnterpriseSecurityUtils:
         self._secret = secret or os.environ.get("OMNICORE_SECRET", "omnicore-default-secret")
         self.audit = SecurityAuditLogger()
         self.sessions = SecureSessionManager(self._secret, ttl_seconds=session_ttl_seconds)
+        # Rate limiter for request throttling (100 requests per 60 seconds by default)
+        self.rate_limiter = RateLimiter(max_calls=100, per_seconds=60)
 
     # ----- HTML -----
     def sanitize_html(self, text: str) -> str:
@@ -675,7 +702,7 @@ class EnterpriseSecurityUtils:
     def hash_password(self, password: str, iterations: int = 390_000) -> str:
         return hash_password(password, iterations=iterations)
 
-    def verify_password(self, password: str, stored: str) -> bool:
+    def verify_password(self, password: str, stored: str) -> tuple[bool, bool]:
         return verify_password(password, stored)
 
     # ----- Tokens -----
@@ -821,7 +848,7 @@ def sanitize_html_proxy(text: str) -> str:  # internal alias to keep names tidy
 def hash_password_proxy(password: str, iterations: int = 390_000) -> str:
     return get_security_utils().hash_password(password, iterations)
 
-def verify_password_proxy(password: str, stored: str) -> bool:
+def verify_password_proxy(password: str, stored: str) -> tuple[bool, bool]:
     return get_security_utils().verify_password(password, stored)
 
 def generate_token_proxy(payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True) -> str:

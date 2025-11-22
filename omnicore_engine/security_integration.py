@@ -319,15 +319,28 @@ class SecurityIntegrationManager:
         if not self.db:
             return None
         
-        # This would query your user table
-        # Placeholder implementation
-        return {
-            'username': username,
-            'password_hash': '$argon2id$...',  # Placeholder
-            'roles': [UserRole.USER],
-            'mfa_enabled': True,
-            'mfa_secret': 'secret'
-        }
+        # Query user from database - MUST be implemented before production use
+        # This is a critical security function that should query your user table
+        # Example implementation:
+        # async with self.db.get_session() as session:
+        #     result = await session.execute(
+        #         text("SELECT username, password_hash, roles, mfa_enabled, mfa_secret FROM users WHERE username = :username"),
+        #         {"username": username}
+        #     )
+        #     row = result.fetchone()
+        #     if row:
+        #         return {
+        #             'username': row.username,
+        #             'password_hash': row.password_hash,
+        #             'roles': row.roles,
+        #             'mfa_enabled': row.mfa_enabled,
+        #             'mfa_secret': row.mfa_secret
+        #         }
+        #     return None
+        
+        # SECURITY: Return None until database query is properly implemented
+        # This prevents the authentication bypass vulnerability
+        return None
     
     async def _handle_failed_login(self, username: str, request: Optional[Request]):
         """Handle failed login attempt"""
@@ -569,7 +582,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.security_manager = security_manager
         self.config = security_manager.config
-        self.rate_limiter = self.security_manager.security_utils._rate_limiter
+        self.rate_limiter = self.security_manager.security_utils.rate_limiter
     
     async def dispatch(self, request: Request, call_next):
         """Process request through security checks"""
@@ -733,18 +746,13 @@ class SecureDatabase(Database):
             details={"query_type": query.split()[0].upper()}
         ))
         
-        # Sanitize parameters
-        sanitized_params = {}
-        for key, value in params.items():
-            if isinstance(value, str):
-                # Basic SQL injection prevention
-                sanitized_params[key] = value.replace("'", "''")
-            else:
-                sanitized_params[key] = value
+        # SECURITY: Parameters are passed directly to SQLAlchemy's execute() which
+        # properly escapes them using parameterized queries. Do NOT manually sanitize.
+        # The text() and execute() combination handles SQL injection prevention.
         
-        # Execute query
+        # Execute query with parameterized query support
         async with self.AsyncSessionLocal() as db_session:
-            result = await db_session.execute(text(query), sanitized_params)
+            result = await db_session.execute(text(query), params)
             await db_session.commit()
             return result
 
