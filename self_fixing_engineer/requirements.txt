@@ -330,7 +330,7 @@ pyee==13.0.0
 pyflakes==3.4.0
 pylint==3.3.8
 pyparsing==3.2.3
-pyreadline3==3.5.4
+pyreadline3==3.5.4; sys_platform == 'win32'  # Windows-only dependency
 pytest==8.4.1
 pytest-asyncio==1.1.0
 pytest-benchmark==5.1.0
@@ -347,7 +347,7 @@ python-multipart==0.0.20
 python-socketio==5.13.0
 pytz==2025.2
 pyunormalize==16.0.0
-pywin32==311
+pywin32==311; sys_platform == 'win32'  # Windows-only dependency
 pyzmq==27.0.1
 qiskit==2.1.1
 radon==6.0.1
