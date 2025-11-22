@@ -144,6 +144,13 @@ def validate_user_id(user_id: str) -> str:
         raise ValueError("Invalid user_id format")
     return user_id
 
+# Default values for agent state initialization
+# These can be overridden via configuration if needed in the future
+DEFAULT_AGENT_X = 0
+DEFAULT_AGENT_Y = 0
+DEFAULT_AGENT_ENERGY = 100
+DEFAULT_AGENT_WORLD_SIZE = 100
+
 class Database:
     """
     Database class for managing agent states, simulations, and audit records.
@@ -1223,7 +1230,13 @@ class Database:
         logger.warning("Key rotation modifies global settings without locking. Ensure no concurrent operations.")
         
         old_encrypter = self.encrypter
-        all_keys = [new_key.decode('utf-8')] + settings.FERNET_KEYS.get_secret_value().split(',')
+        
+        try:
+            new_key_str = new_key.decode('utf-8')
+        except UnicodeDecodeError as e:
+            raise ValueError(f"new_key must contain valid UTF-8 bytes: {e}")
+        
+        all_keys = [new_key_str] + settings.FERNET_KEYS.get_secret_value().split(',')
         
         # Update settings (Note: This modifies global state without proper locking)
         settings.FERNET_KEYS = SecretStr(','.join(all_keys))
@@ -1288,12 +1301,15 @@ class Database:
         """
         Save state for a generator agent.
         
-        Note: Default values (x=0, y=0, energy=100, world_size=100) are used for new agents.
-        These could be extracted as configuration values if customization is needed.
+        Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
+        DEFAULT_AGENT_ENERGY, and DEFAULT_AGENT_WORLD_SIZE.
         """
         async with self.AsyncSessionLocal() as session:
             stmt = insert(GeneratorAgentState).values(
-                id=agent_id, name="generator", x=0, y=0, energy=100, world_size=100, agent_type="generator",
+                id=agent_id, name="generator", 
+                x=DEFAULT_AGENT_X, y=DEFAULT_AGENT_Y, 
+                energy=DEFAULT_AGENT_ENERGY, world_size=DEFAULT_AGENT_WORLD_SIZE, 
+                agent_type="generator",
                 generated_code=data.get("code"), test_results=data.get("tests"),
                 deployment_config=data.get("deployment"), docs=data.get("docs")
             )
@@ -1304,12 +1320,15 @@ class Database:
         """
         Save state for a self-fixing engineer agent.
         
-        Note: Default values (x=0, y=0, energy=100, world_size=100) are used for new agents.
-        These could be extracted as configuration values if customization is needed.
+        Uses module-level constants for default values: DEFAULT_AGENT_X, DEFAULT_AGENT_Y,
+        DEFAULT_AGENT_ENERGY, and DEFAULT_AGENT_WORLD_SIZE.
         """
         async with self.AsyncSessionLocal() as session:
             stmt = insert(SFEAgentState).values(
-                id=agent_id, name="sfe", x=0, y=0, energy=100, world_size=100, agent_type="sfe",
+                id=agent_id, name="sfe", 
+                x=DEFAULT_AGENT_X, y=DEFAULT_AGENT_Y, 
+                energy=DEFAULT_AGENT_ENERGY, world_size=DEFAULT_AGENT_WORLD_SIZE, 
+                agent_type="sfe",
                 fixed_code=data.get("fixed_code"), analysis_report=data.get("analysis"),
                 trust_score=data.get("trust_score")
             )
