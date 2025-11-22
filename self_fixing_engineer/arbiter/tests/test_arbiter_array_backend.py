@@ -14,7 +14,6 @@ Run:
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,8 @@ import pytest
 # or repo_root/arbiter/arbiter_array_backend.py without PYTHONPATH.
 # -------------------------------------------------------------------
 def _import_backend():
-    import importlib, sys
+    import importlib
+    import sys
     from importlib.util import spec_from_file_location, module_from_spec
     from pathlib import Path
 
@@ -50,7 +50,10 @@ def _import_backend():
             pass
 
     # Last resort: direct file load
-    for f in (repo_root / "arbiter_array_backend.py", repo_root / "arbiter" / "arbiter_array_backend.py"):
+    for f in (
+        repo_root / "arbiter_array_backend.py",
+        repo_root / "arbiter" / "arbiter_array_backend.py",
+    ):
         if f.exists():
             spec = spec_from_file_location("arbiter_array_backend_fallback", str(f))
             assert spec and spec.loader
@@ -59,6 +62,7 @@ def _import_backend():
             spec.loader.exec_module(mod)  # type: ignore[arg-type]
             return mod
     raise ImportError("Cannot import arbiter_array_backend")
+
 
 _backend = _import_backend()
 
@@ -76,6 +80,7 @@ ArrayMeta = getattr(_backend, "ArrayMeta")
 def json_file(tmp_path: Path) -> Path:
     return tmp_path / "array.json"
 
+
 @pytest.fixture
 def fresh_env(monkeypatch):
     # Make sure defaults are predictable per test
@@ -84,9 +89,12 @@ def fresh_env(monkeypatch):
     monkeypatch.setenv("ARRAY_ENCRYPTION_ENABLED", "false")
     return monkeypatch
 
+
 @pytest.fixture
 async def backend(json_file: Path, fresh_env) -> ConcreteArrayBackend:
-    be = ConcreteArrayBackend(name="test_array", storage_path=str(json_file), storage_type="json")
+    be = ConcreteArrayBackend(
+        name="test_array", storage_path=str(json_file), storage_type="json"
+    )
     await be.initialize()
     yield be
     # graceful close if implemented
@@ -102,9 +110,10 @@ async def backend(json_file: Path, fresh_env) -> ConcreteArrayBackend:
 @pytest.mark.asyncio
 async def test_initialize_empty_and_get_page(backend: ConcreteArrayBackend):
     # Fresh JSON store yields empty page
-    page = await backend.get()     # defaults to current page
+    page = await backend.get()  # defaults to current page
     assert isinstance(page, list)
     assert page == []
+
 
 @pytest.mark.asyncio
 async def test_append_get_update_delete_roundtrip(backend: ConcreteArrayBackend):
@@ -125,16 +134,21 @@ async def test_append_get_update_delete_roundtrip(backend: ConcreteArrayBackend)
     with pytest.raises(IndexError):
         await backend.get(2)  # old index 2 shifted after delete, should now be OOB
 
+
 @pytest.mark.asyncio
 async def test_persistence_reopen(json_file: Path, fresh_env):
-    be1 = ConcreteArrayBackend(name="persist", storage_path=str(json_file), storage_type="json")
+    be1 = ConcreteArrayBackend(
+        name="persist", storage_path=str(json_file), storage_type="json"
+    )
     await be1.initialize()
     await be1.append({"n": 1})
     await be1.append({"n": 2})
     await be1.close()
 
     # reopen a new instance on same file
-    be2 = ConcreteArrayBackend(name="persist", storage_path=str(json_file), storage_type="json")
+    be2 = ConcreteArrayBackend(
+        name="persist", storage_path=str(json_file), storage_type="json"
+    )
     await be2.initialize()
     page = await be2.get()
     assert page == [{"n": 1}, {"n": 2}]
@@ -147,13 +161,16 @@ async def test_persistence_reopen(json_file: Path, fresh_env):
 @pytest.mark.asyncio
 async def test_size_limit_enforced(json_file: Path, fresh_env):
     fresh_env.setenv("ARRAY_MAX_SIZE", "2")
-    be = ConcreteArrayBackend(name="limit", storage_path=str(json_file), storage_type="json")
+    be = ConcreteArrayBackend(
+        name="limit", storage_path=str(json_file), storage_type="json"
+    )
     await be.initialize()
     await be.append(1)
     await be.append(2)
     with pytest.raises(ArraySizeLimitError):
         await be.append(3)
     await be.close()
+
 
 @pytest.mark.asyncio
 async def test_query_predicate(backend: ConcreteArrayBackend):
@@ -176,7 +193,9 @@ async def test_rotate_encryption_key(json_file: Path, fresh_env):
     fresh_env.setenv("ARRAY_ENCRYPTION_ENABLED", "true")
     fresh_env.setenv("SFE_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
-    be = ConcreteArrayBackend(name="enc", storage_path=str(json_file), storage_type="json")
+    be = ConcreteArrayBackend(
+        name="enc", storage_path=str(json_file), storage_type="json"
+    )
     await be.initialize()
     await be.append({"secret": 1})
     await be.append({"secret": 2})
@@ -196,7 +215,11 @@ async def test_rotate_encryption_key(json_file: Path, fresh_env):
 async def test_health_check(backend: ConcreteArrayBackend):
     health = await backend.health_check()
     assert isinstance(health, dict)
-    assert health.get("status") in {"healthy", "unhealthy"}  # json backend reports healthy if file exists
+    assert health.get("status") in {
+        "healthy",
+        "unhealthy",
+    }  # json backend reports healthy if file exists
+
 
 @pytest.mark.asyncio
 async def test_on_reload_triggers_background_load(backend: ConcreteArrayBackend):
@@ -214,7 +237,9 @@ async def test_on_reload_triggers_background_load(backend: ConcreteArrayBackend)
 # --------------------
 @pytest.mark.asyncio
 async def test_json_corruption_recovers_to_empty(json_file: Path, fresh_env):
-    be = ConcreteArrayBackend(name="corrupt", storage_path=str(json_file), storage_type="json")
+    be = ConcreteArrayBackend(
+        name="corrupt", storage_path=str(json_file), storage_type="json"
+    )
     await be.initialize()
     await be.append({"x": 1})
     await be.close()
@@ -223,7 +248,9 @@ async def test_json_corruption_recovers_to_empty(json_file: Path, fresh_env):
     json_file.write_text("{ this is not valid json ")
 
     # loader should not raise — it logs a warning and resets to []
-    be2 = ConcreteArrayBackend(name="corrupt", storage_path=str(json_file), storage_type="json")
+    be2 = ConcreteArrayBackend(
+        name="corrupt", storage_path=str(json_file), storage_type="json"
+    )
     await be2.initialize()
     page = await be2.get()
     assert page == []

@@ -20,6 +20,7 @@ class NoopCircuitBreaker:
     Simple circuit breaker stub for tests that don't care about the
     full state machine semantics. It just forwards the call.
     """
+
     def __init__(self, name: str = "test"):
         self.name = name
         self.state = "CLOSED"
@@ -124,8 +125,10 @@ class TestCircuitBreaker(unittest.IsolatedAsyncioTestCase):
             await cb.call(should_not_run)
 
         # Fast-forward past recovery_timeout so we enter HALF-OPEN on next call.
-        with patch("runner.process_utils.time.time",
-                   return_value=cb.last_failure_time + 10):
+        with patch(
+            "runner.process_utils.time.time", return_value=cb.last_failure_time + 10
+        ):
+
             async def ok():
                 return "recovered"
 
@@ -346,17 +349,19 @@ class TestDistributedSubprocess(unittest.IsolatedAsyncioTestCase):
     """
 
     async def test_requires_runner_infrastructure(self):
-        with patch("runner.process_utils._HAS_RUNNER", False), \
-             patch("runner.process_utils.logger") as mock_logger:
+        with patch("runner.process_utils._HAS_RUNNER", False), patch(
+            "runner.process_utils.logger"
+        ) as mock_logger:
             with self.assertRaises(RuntimeError):
                 await distributed_subprocess([["echo", "x"]], backend="any")
             mock_logger.error.assert_called()
 
     async def test_invalid_backend_rejected(self):
-        with patch("runner.process_utils._HAS_RUNNER", True), \
-             patch("runner.process_utils.BACKENDS", {}), \
-             patch("runner.process_utils.config", MagicMock(backend="local")), \
-             patch("runner.process_utils.logger"):
+        with patch("runner.process_utils._HAS_RUNNER", True), patch(
+            "runner.process_utils.BACKENDS", {}
+        ), patch("runner.process_utils.config", MagicMock(backend="local")), patch(
+            "runner.process_utils.logger"
+        ):
             with self.assertRaises(ValueError):
                 await distributed_subprocess([["echo", "x"]], backend="missing")
 
@@ -380,24 +385,27 @@ class TestDistributedSubprocess(unittest.IsolatedAsyncioTestCase):
 
         fake_runner = FakeRunner(cfg=MagicMock())
 
-        with patch("runner.process_utils._HAS_RUNNER", True), \
-             patch("runner.process_utils.BACKENDS", {"fake": True}), \
-             patch("runner.process_utils.config", MagicMock(backend="fake")), \
-             patch("runner.process_utils.redact_secrets",
-                   side_effect=lambda s: s), \
-             patch("runner.process_utils.add_provenance",
-                   side_effect=lambda d, action=None: {
-                       **d,
-                       "provenance": {"action": action},
-                   }), \
-             patch("runner.process_utils.UTIL_ERRORS"), \
-             patch("runner.process_utils.logger") as mock_logger, \
-             patch("runner.process_utils.collect_feedback", new=AsyncMock()), \
-             patch(
-                 "runner.process_utils.runner_backends.BACKEND_REGISTRY",
-                 {"fake": lambda cfg: fake_runner},
-                 create=True,
-             ):
+        with patch("runner.process_utils._HAS_RUNNER", True), patch(
+            "runner.process_utils.BACKENDS", {"fake": True}
+        ), patch("runner.process_utils.config", MagicMock(backend="fake")), patch(
+            "runner.process_utils.redact_secrets", side_effect=lambda s: s
+        ), patch(
+            "runner.process_utils.add_provenance",
+            side_effect=lambda d, action=None: {
+                **d,
+                "provenance": {"action": action},
+            },
+        ), patch(
+            "runner.process_utils.UTIL_ERRORS"
+        ), patch(
+            "runner.process_utils.logger"
+        ) as mock_logger, patch(
+            "runner.process_utils.collect_feedback", new=AsyncMock()
+        ), patch(
+            "runner.process_utils.runner_backends.BACKEND_REGISTRY",
+            {"fake": lambda cfg: fake_runner},
+            create=True,
+        ):
 
             results = await distributed_subprocess([["echo", "x"]], backend="fake")
 

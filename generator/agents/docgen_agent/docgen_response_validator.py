@@ -23,15 +23,13 @@ STRICT FAILURE ENFORCEMENT:
 """
 
 import asyncio
-import uuid
 import logging
 import json
 import os
 import re
-import glob
-import time # *** FIX: Added missing import ***
+import time  # *** FIX: Added missing import ***
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple, Type, Union
+from typing import Dict, List, Optional, Any
 from abc import ABC, abstractmethod
 from pathlib import Path
 import importlib.util
@@ -41,62 +39,91 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # --- Format/Tooling Dependencies ---
-import pypandoc  # For format conversions
 import docutils.core  # For RST validation
-from bs4 import BeautifulSoup # For HTML validation
+from bs4 import BeautifulSoup  # For HTML validation
 import nltk  # For GOAT NLP metrics
 from nltk.sentiment import SentimentIntensityAnalyzer  # For sentiment analysis
 from nltk.tokenize import sent_tokenize
-from nltk.corpus import stopwords
-import tiktoken  # For token counting
-from jinja2 import Template # For templating enrichments
 
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+
 try:
     from plantuml import PlantUML
 except ImportError:
     PlantUML = None
-    logging.warning("PlantUML library not found. Diagram generation in enrichment will be skipped.")
+    logging.warning(
+        "PlantUML library not found. Diagram generation in enrichment will be skipped."
+    )
 
 # --- Async/API/CLI Dependencies ---
-import aiofiles
-import tempfile
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import uvicorn # For running FastAPI in __main__
-import unittest # For tests in __main__
+import uvicorn  # For running FastAPI in __main__
+import unittest  # For tests in __main__
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
-from runner.llm_client import call_llm_api, call_ensemble_api
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS, LLM_TOKEN_INPUT_TOTAL, LLM_TOKEN_OUTPUT_TOTAL
-from runner.runner_errors import LLMError
-from runner.runner_file_utils import get_commits # For changelog enrichment
-from opentelemetry.trace.status import Status, StatusCode # *** FIX: Added missing import ***
+from runner.llm_client import call_ensemble_api
+from runner.runner_logging import logger
+from runner.runner_file_utils import get_commits  # For changelog enrichment
+from opentelemetry.trace.status import (
+    Status,
+    StatusCode,
+)  # *** FIX: Added missing import ***
+
 # -----------------------------------
 
 # --- Local Prometheus Metrics (Internal Stats Only) ---
 # LLM-related metrics are IMPORTED from the runner.
 # These metrics track the internal operations of this specific service.
 from prometheus_client import Counter, Histogram, Gauge
-process_calls_total = Counter('docgen_validator_calls_total', 'Total validation calls by format and operation', ['format', 'operation'])
-process_errors_total = Counter('docgen_validator_errors_total', 'Total validation errors by format, operation, and type', ['format', 'operation', 'error_type'])
-process_latency_seconds = Histogram('docgen_validator_latency_seconds', 'Validation latency in seconds by format and operation', ['format', 'operation'])
-docgen_compliance_issues_total = Counter('docgen_validator_compliance_issues_total', 'Compliance issues detected during validation', ['format', 'issue_type'])
-docgen_security_findings_total = Counter('docgen_validator_security_findings_total', 'Security findings detected during validation', ['format', 'finding_category'])
-docgen_content_quality_score = Gauge('docgen_validator_content_quality_score', 'Quality score of processed documentation', ['format', 'metric_type'])
-section_status_gauge = Gauge('docgen_response_section_status', 'Status of required sections in docs (1=present, 0=missing)', ['output_format', 'section_name'])
+
+process_calls_total = Counter(
+    "docgen_validator_calls_total",
+    "Total validation calls by format and operation",
+    ["format", "operation"],
+)
+process_errors_total = Counter(
+    "docgen_validator_errors_total",
+    "Total validation errors by format, operation, and type",
+    ["format", "operation", "error_type"],
+)
+process_latency_seconds = Histogram(
+    "docgen_validator_latency_seconds",
+    "Validation latency in seconds by format and operation",
+    ["format", "operation"],
+)
+docgen_compliance_issues_total = Counter(
+    "docgen_validator_compliance_issues_total",
+    "Compliance issues detected during validation",
+    ["format", "issue_type"],
+)
+docgen_security_findings_total = Counter(
+    "docgen_validator_security_findings_total",
+    "Security findings detected during validation",
+    ["format", "finding_category"],
+)
+docgen_content_quality_score = Gauge(
+    "docgen_validator_content_quality_score",
+    "Quality score of processed documentation",
+    ["format", "metric_type"],
+)
+section_status_gauge = Gauge(
+    "docgen_response_section_status",
+    "Status of required sections in docs (1=present, 0=missing)",
+    ["output_format", "section_name"],
+)
+
 
 # --- NLTK Data Download (Strictly required data for NLP features) ---
 # Use a helper function to avoid polluting global scope
 def setup_nltk_data():
     nltk_data_paths = {
-        'punkt': 'tokenizers/punkt',
-        'stopwords': 'corpora/stopwords',
-        'vader_lexicon': 'sentiment/vader_lexicon'
+        "punkt": "tokenizers/punkt",
+        "stopwords": "corpora/stopwords",
+        "vader_lexicon": "sentiment/vader_lexicon",
     }
     for name, path in nltk_data_paths.items():
         try:
@@ -104,28 +131,50 @@ def setup_nltk_data():
         except LookupError:
             logger.info(f"NLTK data '{name}' not found. Downloading...")
             nltk.download(name, quiet=True)
+
+
 setup_nltk_data()
 
 
 # --- Constants ---
 # Merged schema from validator and handler
 DEFAULT_SCHEMA = {
-    "sections": ["introduction", "installation", "usage", "api_reference", "testing", "safety", "license", "copyright", "conclusion"],
-    "order": ["introduction", "installation", "usage", "api_reference", "testing", "safety", "license", "copyright", "conclusion"],
+    "sections": [
+        "introduction",
+        "installation",
+        "usage",
+        "api_reference",
+        "testing",
+        "safety",
+        "license",
+        "copyright",
+        "conclusion",
+    ],
+    "order": [
+        "introduction",
+        "installation",
+        "usage",
+        "api_reference",
+        "testing",
+        "safety",
+        "license",
+        "copyright",
+        "conclusion",
+    ],
     "min_section_length": 50,
     "min_total_length": 500,
     "languages": ["en"],
     "required_section_minimum": 3,  # Only require at least 3 sections instead of all 9
-    "core_sections": ["introduction", "usage"]  # These are essential sections
+    "core_sections": ["introduction", "usage"],  # These are essential sections
 }
 
 # Merged patterns from validator and handler
 DANGEROUS_CONTENT_PATTERNS = {
     "HardcodedCredentials": r'(?i)(api_key|secret|password|token)\s*=\s*[\'"]?\S+[\'"]?',
-    "InsecureProtocolUsage": r'(?i)(http://|ftp://)',
-    "DirectRootAccess": r'(?i)^user\s+root\b',
-    "SensitiveFilePaths": r'(?i)/etc/passwd|/root/\.ssh|/var/log/secure',
-    "ExposedSensitivePorts": r'(?i)expose\s+(21|23|80|443|3389|8080|8443)',
+    "InsecureProtocolUsage": r"(?i)(http://|ftp://)",
+    "DirectRootAccess": r"(?i)^user\s+root\b",
+    "SensitiveFilePaths": r"(?i)/etc/passwd|/root/\.ssh|/var/log/secure",
+    "ExposedSensitivePorts": r"(?i)expose\s+(21|23|80|443|3389|8080|8443)",
 }
 
 
@@ -133,22 +182,26 @@ DANGEROUS_CONTENT_PATTERNS = {
 app = FastAPI(
     title="DocGen Response Validator API",
     description="Unified API for processing, validating, healing, and enriching LLM-generated documentation.",
-    version="2.0.0"
+    version="2.0.0",
 )
+
 
 # --- Request/Response Models for FastAPI (from validator) ---
 class ValidationRequest(BaseModel):
-    raw_response: Dict[str, Any] # Expecting LLM response format: {'content': '...', 'usage': {...}}
+    raw_response: Dict[
+        str, Any
+    ]  # Expecting LLM response format: {'content': '...', 'usage': {...}}
     target_files: Optional[List[str]] = None
     format: str = "md"
     lang: str = "en"
     auto_correct: bool = False
-    repo_path: str = "." # Path to the repository for context
+    repo_path: str = "."  # Path to the repository for context
+
 
 class ValidationReportResponse(BaseModel):
     is_valid: bool
-    overall_status: str # "passed", "failed", "partially_corrected"
-    docs: str # The final, enriched documentation content
+    overall_status: str  # "passed", "failed", "partially_corrected"
+    docs: str  # The final, enriched documentation content
     issues: Dict[str, Any]
     suggestions: List[str]
     quality_metrics: Dict[str, float]
@@ -164,16 +217,16 @@ def scrub_text(text: str) -> str:
     """
     if not text:
         return ""
-    
+
     analyzer = AnalyzerEngine()
     anonymizer = AnonymizerEngine()
-    
+
     # Analyze text for PII
-    results = analyzer.analyze(text=text, language='en')
-    
+    results = analyzer.analyze(text=text, language="en")
+
     # Anonymize the detected PII
     anonymized_result = anonymizer.anonymize(text=text, analyzer_results=results)
-    
+
     return anonymized_result.text
 
 
@@ -185,17 +238,17 @@ def parse_llm_response(response: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not isinstance(response, dict):
         raise TypeError("Response must be a dictionary")
-    
+
     if not response:
         raise ValueError("Response cannot be empty")
-    
+
     if "content" not in response:
         raise KeyError("Response missing required 'content' field")
-    
+
     # Basic validation - ensure content is a string
     if not isinstance(response["content"], str):
         raise ValueError("Response 'content' must be a string")
-    
+
     return response
 
 
@@ -225,114 +278,132 @@ class DocGenPlugin(ABC):
 # --- Concrete Plugin Implementations ---
 class MarkdownPlugin(DocGenPlugin):
     """Plugin for Markdown documentation validation and formatting."""
-    
+
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         """
         FIXED: More reasonable validation - doesn't require ALL sections.
         """
         issues = []
-        
+
         # Basic validation - not empty
         if not content.strip():
             issues.append("Markdown content is empty.")
-        
+
         # Check for H1 header
-        if not re.search(r'^\s*#\s*\S', content, re.MULTILINE):
+        if not re.search(r"^\s*#\s*\S", content, re.MULTILINE):
             issues.append("Markdown missing a top-level H1 header.")
-        
+
         # Basic length checks
         min_length = schema.get("min_total_length", 500)
         if len(content) < min_length:
             issues.append(f"Content too short: {len(content)} < {min_length}")
-        
+
         # FIXED: More reasonable section checking
         required_sections = schema.get("sections", [])
         core_sections = schema.get("core_sections", ["introduction", "usage"])
         min_sections = schema.get("required_section_minimum", 3)
-        
+
         # Check for core sections (essential ones)
         missing_core = []
         for section in core_sections:
-            if not re.search(rf'^\s*#{{1,6}}\s+{re.escape(section)}\s*$', content, re.IGNORECASE | re.MULTILINE):
+            if not re.search(
+                rf"^\s*#{{1,6}}\s+{re.escape(section)}\s*$",
+                content,
+                re.IGNORECASE | re.MULTILINE,
+            ):
                 missing_core.append(section)
-        
+
         if missing_core:
             issues.append(f"Missing core sections: {', '.join(missing_core)}")
-        
+
         # Check that we have at least minimum number of sections
         found_sections = 0
         for section in required_sections:
-            if re.search(rf'^\s*#{{1,6}}\s+{re.escape(section)}\s*$', content, re.IGNORECASE | re.MULTILINE):
+            if re.search(
+                rf"^\s*#{{1,6}}\s+{re.escape(section)}\s*$",
+                content,
+                re.IGNORECASE | re.MULTILINE,
+            ):
                 found_sections += 1
-        
+
         if found_sections < min_sections:
-            issues.append(f"Insufficient sections: found {found_sections}, need at least {min_sections}")
-        
+            issues.append(
+                f"Insufficient sections: found {found_sections}, need at least {min_sections}"
+            )
+
         return {"valid": len(issues) == 0, "issues": issues}
-    
+
     def format(self, content: str) -> str:
         """Apply markdown-specific formatting."""
         # Ensure proper spacing around headers
-        content = re.sub(r'\n#{1,6}', '\n\n#', content)
-        content = re.sub(r'^#{1,6}', '#', content)
-        return content.strip() + '\n'
-    
+        content = re.sub(r"\n#{1,6}", "\n\n#", content)
+        content = re.sub(r"^#{1,6}", "#", content)
+        return content.strip() + "\n"
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         """Add markdown-specific enrichments."""
         # Add badges at the top if project info available
         enriched = content
-        if 'repo_name' in context:
-            badges = f"[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]() [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()\n\n"
+        if "repo_name" in context:
+            badges = "[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]() [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()\n\n"
             enriched = badges + enriched
         return enriched
 
 
 class RSTPlugin(DocGenPlugin):
     """Plugin for reStructuredText documentation validation and formatting."""
-    
+
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         """Validate RST content using docutils."""
         issues = []
-        
+
         # Basic length check
         min_length = schema.get("min_total_length", 500)
         if len(content) < min_length:
             issues.append(f"Content too short: {len(content)} < {min_length}")
-        
+
         # Try to parse with docutils
         try:
             docutils.core.publish_doctree(content)
         except Exception as e:
             issues.append(f"RST parsing error: {str(e)}")
-        
+
         # Basic section checking (not as strict as before)
         core_sections = schema.get("core_sections", ["introduction", "usage"])
         missing_core = []
         for section in core_sections:
-            if not re.search(rf'^{re.escape(section)}\s*\n[=-]+', content, re.IGNORECASE | re.MULTILINE):
+            if not re.search(
+                rf"^{re.escape(section)}\s*\n[=-]+",
+                content,
+                re.IGNORECASE | re.MULTILINE,
+            ):
                 missing_core.append(section)
-        
+
         if missing_core:
             issues.append(f"Missing core sections: {', '.join(missing_core)}")
-        
+
         return {"valid": len(issues) == 0, "issues": issues}
-    
+
     def format(self, content: str) -> str:
         """Apply RST-specific formatting."""
         # Ensure proper spacing and underline length
-        lines = content.split('\n')
+        lines = content.split("\n")
         formatted_lines = []
         for i, line in enumerate(lines):
             formatted_lines.append(line)
             # Check if next line is an underline
-            if i + 1 < len(lines) and lines[i + 1] and all(c in '=-~^' for c in lines[i + 1].strip()):
+            if (
+                i + 1 < len(lines)
+                and lines[i + 1]
+                and all(c in "=-~^" for c in lines[i + 1].strip())
+            ):
                 # Ensure underline matches header length
                 if len(lines[i + 1].strip()) != len(line.strip()):
                     formatted_lines.append(lines[i + 1][0] * len(line.strip()))
                     if i + 1 < len(lines) - 1:  # Skip the original underline
                         i += 1
-        return '\n'.join(formatted_lines)
-    
+        return "\n".join(formatted_lines)
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         """Add RST-specific enrichments."""
         return content  # Basic implementation
@@ -340,27 +411,27 @@ class RSTPlugin(DocGenPlugin):
 
 class HTMLPlugin(DocGenPlugin):
     """Plugin for HTML documentation validation and formatting."""
-    
+
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         """Validate HTML content using BeautifulSoup."""
         issues = []
-        
+
         try:
-            soup = BeautifulSoup(content, 'html.parser')
-            
+            soup = BeautifulSoup(content, "html.parser")
+
             # Check basic structure
-            if not soup.find('html'):
+            if not soup.find("html"):
                 issues.append("Missing <html> tag")
-            if not soup.find('head'):
+            if not soup.find("head"):
                 issues.append("Missing <head> tag")
-            if not soup.find('body'):
+            if not soup.find("body"):
                 issues.append("Missing <body> tag")
-            
+
             # Basic section checking (not as strict)
             core_sections = schema.get("core_sections", ["introduction", "usage"])
-            headers = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            headers = soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
             missing_core = []
-            
+
             for section in core_sections:
                 section_found = False
                 for header in headers:
@@ -370,26 +441,26 @@ class HTMLPlugin(DocGenPlugin):
                     if header_text == section_lower or section_lower in header_text:
                         section_found = True
                         break
-                
+
                 if not section_found:
                     missing_core.append(section)
-            
+
             if missing_core:
                 issues.append(f"Missing core sections: {', '.join(missing_core)}")
-        
+
         except Exception as e:
             issues.append(f"HTML parsing error: {str(e)}")
-        
+
         return {"valid": len(issues) == 0, "issues": issues}
-    
+
     def format(self, content: str) -> str:
         """Apply HTML-specific formatting."""
         try:
-            soup = BeautifulSoup(content, 'html.parser')
+            soup = BeautifulSoup(content, "html.parser")
             return soup.prettify()
         except:
             return content
-    
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         """Add HTML-specific enrichments."""
         return content  # Basic implementation
@@ -399,40 +470,54 @@ class HTMLPlugin(DocGenPlugin):
 class LaTeXPlugin(DocGenPlugin):
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         return {"valid": True, "issues": []}
+
     def format(self, content: str) -> str:
         return content
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         return content
+
 
 class DocusaurusPlugin(DocGenPlugin):
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         return {"valid": True, "issues": []}
+
     def format(self, content: str) -> str:
         return content
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         return content
+
 
 class SphinxPlugin(DocGenPlugin):
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         return {"valid": True, "issues": []}
+
     def format(self, content: str) -> str:
         return content
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         return content
+
 
 class JupyterNotebookPlugin(DocGenPlugin):
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         return {"valid": True, "issues": []}
+
     def format(self, content: str) -> str:
         return content
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         return content
+
 
 class MkDocsPlugin(DocGenPlugin):
     def validate(self, content: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         return {"valid": True, "issues": []}
+
     def format(self, content: str) -> str:
         return content
+
     def enrich(self, content: str, context: Dict[str, Any]) -> str:
         return content
 
@@ -448,14 +533,14 @@ class PluginRegistry(FileSystemEventHandler):
         self.plugin_dir = Path(plugin_dir)
         self.plugins: Dict[str, DocGenPlugin] = {}
         self._observer: Optional[Observer] = None
-        
+
         # Register default plugins
         self._register_default_plugins()
-        
+
         # Setup hot-reload if plugin directory exists
         if self.plugin_dir.exists():
             self._setup_hot_reload()
-        
+
         # Scan for additional plugins
         self._scan_plugins()
 
@@ -485,14 +570,20 @@ class PluginRegistry(FileSystemEventHandler):
 
         for plugin_file in self.plugin_dir.glob("*.py"):
             try:
-                spec = importlib.util.spec_from_file_location(plugin_file.stem, plugin_file)
+                spec = importlib.util.spec_from_file_location(
+                    plugin_file.stem, plugin_file
+                )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
                 # Find DocGenPlugin subclasses
                 for name in dir(module):
                     obj = getattr(module, name)
-                    if isinstance(obj, type) and issubclass(obj, DocGenPlugin) and obj != DocGenPlugin:
+                    if (
+                        isinstance(obj, type)
+                        and issubclass(obj, DocGenPlugin)
+                        and obj != DocGenPlugin
+                    ):
                         # Register plugin with lowercase name
                         plugin_name = name.lower().replace("plugin", "")
                         self.plugins[plugin_name] = obj()
@@ -503,16 +594,18 @@ class PluginRegistry(FileSystemEventHandler):
 
     def on_modified(self, event):
         """Handle plugin file modifications for hot-reload."""
-        if event.is_directory or not event.src_path.endswith('.py'):
+        if event.is_directory or not event.src_path.endswith(".py"):
             return
-        
+
         logger.info(f"Plugin file modified: {event.src_path}, reloading...")
         self._scan_plugins()
 
     def get_plugin(self, format_name: str) -> DocGenPlugin:
         """Get a plugin by format name."""
         if format_name not in self.plugins:
-            raise ValueError(f"No validation plugin found for '{format_name}'. Available: {list(self.plugins.keys())}")
+            raise ValueError(
+                f"No validation plugin found for '{format_name}'. Available: {list(self.plugins.keys())}"
+            )
         return self.plugins[format_name]
 
     def list_plugins(self) -> List[str]:
@@ -536,7 +629,7 @@ class ResponseValidator:
     def __init__(self, schema: Dict[str, Any]):
         self.schema = schema
         self.plugin_registry = PluginRegistry()
-        
+
         # Initialize NLTK components for GOAT features
         try:
             self.sentiment_analyzer = SentimentIntensityAnalyzer()
@@ -554,41 +647,47 @@ class ResponseValidator:
             # Basic metrics
             word_count = len(content.split())
             char_count = len(content)
-            
+
             # Readability (simple proxy based on sentence/word ratio)
             sentences = sent_tokenize(content)
             avg_sentence_length = word_count / max(len(sentences), 1)
-            readability_score = min(100, max(0, 100 - (avg_sentence_length - 15) * 2))  # Optimal ~15 words/sentence
-            
+            readability_score = min(
+                100, max(0, 100 - (avg_sentence_length - 15) * 2)
+            )  # Optimal ~15 words/sentence
+
             # Sentiment analysis
             sentiment_scores = self.sentiment_analyzer.polarity_scores(content)
-            sentiment_score = max(0, sentiment_scores['compound'] + 1) * 50  # Normalize to 0-100
-            
+            sentiment_score = (
+                max(0, sentiment_scores["compound"] + 1) * 50
+            )  # Normalize to 0-100
+
             # Coherence (simple proxy based on repeated key terms)
             words = content.lower().split()
             word_freq = {}
             for word in words:
                 word_freq[word] = word_freq.get(word, 0) + 1
-            
+
             # Coherence based on term repetition and structure
-            coherence_score = min(100, len([w for w, c in word_freq.items() if c > 1]) * 2)
-            
+            coherence_score = min(
+                100, len([w for w, c in word_freq.items() if c > 1]) * 2
+            )
+
             # Completeness (based on schema requirements)
             required_sections = self.schema.get("sections", [])
             found_sections = 0
             for section in required_sections:
-                if re.search(rf'\b{re.escape(section)}\b', content, re.IGNORECASE):
+                if re.search(rf"\b{re.escape(section)}\b", content, re.IGNORECASE):
                     found_sections += 1
             completeness_score = (found_sections / max(len(required_sections), 1)) * 100
-            
+
             # Overall score (weighted average)
             overall_score = (
-                readability_score * 0.25 +
-                sentiment_score * 0.2 +
-                coherence_score * 0.25 +
-                completeness_score * 0.3
+                readability_score * 0.25
+                + sentiment_score * 0.2
+                + coherence_score * 0.25
+                + completeness_score * 0.3
             )
-            
+
             return {
                 "overall_score": round(overall_score, 2),
                 "readability": round(readability_score, 2),
@@ -596,9 +695,9 @@ class ResponseValidator:
                 "coherence": round(coherence_score, 2),
                 "completeness": round(completeness_score, 2),
                 "word_count": word_count,
-                "character_count": char_count
+                "character_count": char_count,
             }
-            
+
         except Exception as e:
             logger.warning(f"Quality assessment failed: {e}")
             return {
@@ -608,27 +707,28 @@ class ResponseValidator:
                 "coherence": 0.0,
                 "completeness": 0.0,
                 "word_count": len(content.split()),
-                "character_count": len(content)
+                "character_count": len(content),
             }
 
     def _detect_security_issues(self, content: str) -> List[Dict[str, str]]:
         """Detect security issues in content using pattern matching."""
         findings = []
-        
+
         for category, pattern in DANGEROUS_CONTENT_PATTERNS.items():
             matches = re.findall(pattern, content)
             if matches:
-                findings.append({
-                    "category": category,
-                    "count": len(matches),
-                    "description": f"Found {len(matches)} instances of {category}"
-                })
+                findings.append(
+                    {
+                        "category": category,
+                        "count": len(matches),
+                        "description": f"Found {len(matches)} instances of {category}",
+                    }
+                )
                 # Update metrics
                 docgen_security_findings_total.labels(
-                    format="unknown", 
-                    finding_category=category
+                    format="unknown", finding_category=category
                 ).inc(len(matches))
-        
+
         return findings
 
     def _enrich_content(self, content: str, output_format: str, repo_path: str) -> str:
@@ -641,14 +741,18 @@ class ResponseValidator:
                 changelog_content = get_commits(repo_path)
                 if changelog_content:
                     if output_format == "md":
-                        changelog_section = f"\n\n## Recent Changes\n\n```\n{changelog_content}\n```\n"
+                        changelog_section = (
+                            f"\n\n## Recent Changes\n\n```\n{changelog_content}\n```\n"
+                        )
                     elif output_format == "rst":
                         changelog_section = f"\n\nRecent Changes\n--------------\n\n::\n\n    {changelog_content}\n"
                     elif output_format == "html":
                         changelog_section = f"\n<h2>Recent Changes</h2>\n<pre>{changelog_content}</pre>\n"
                     else:
-                        changelog_section = f"\n\nRecent Changes:\n{changelog_content}\n"
-                    
+                        changelog_section = (
+                            f"\n\nRecent Changes:\n{changelog_content}\n"
+                        )
+
                     content += changelog_section
             except Exception as e:
                 logger.warning(f"Failed to add changelog: {e}")
@@ -672,55 +776,75 @@ class ResponseValidator:
         raw_response: Dict[str, Any],
         output_format: str = "md",
         auto_correct: bool = False,
-        repo_path: str = "."
+        repo_path: str = ".",
     ) -> Dict[str, Any]:
         """
         Main processing pipeline: parse → validate → enrich → correct (if needed).
         """
         start_time = time.time()
-        
+
         # Create provenance tracking
         provenance = {
             "timestamp": datetime.utcnow().isoformat(),
             "validator_version": "2.0.0",
             "auto_correct_enabled": auto_correct,
             "output_format": output_format,
-            "rationale_steps": []
+            "rationale_steps": [],
         }
-        
+
         try:
             with tracer.start_as_current_span("docgen_response_validation") as span:
                 # Step 1: Parse LLM response
                 try:
                     parsed_response = parse_llm_response(raw_response)
                     content = parsed_response["content"]
-                    provenance["rationale_steps"].append("Parsed LLM response successfully")
+                    provenance["rationale_steps"].append(
+                        "Parsed LLM response successfully"
+                    )
                 except Exception as e:
                     span.set_status(Status(StatusCode.ERROR, str(e)))
-                    process_errors_total.labels(format=output_format, operation="parse", error_type="parse_error").inc()
+                    process_errors_total.labels(
+                        format=output_format,
+                        operation="parse",
+                        error_type="parse_error",
+                    ).inc()
                     raise ValueError(f"Failed to parse LLM response: {e}")
 
                 # Step 2: Security scrubbing
                 try:
                     content = scrub_text(content)
-                    provenance["rationale_steps"].append("Applied PII/secret scrubbing with Presidio")
+                    provenance["rationale_steps"].append(
+                        "Applied PII/secret scrubbing with Presidio"
+                    )
                 except Exception as e:
                     logger.warning(f"Security scrubbing failed: {e}")
-                    provenance["rationale_steps"].append(f"Security scrubbing failed: {e}")
+                    provenance["rationale_steps"].append(
+                        f"Security scrubbing failed: {e}"
+                    )
 
                 # Step 3: Format-specific validation
                 try:
                     plugin = self.plugin_registry.get_plugin(output_format)
                     validation_result = plugin.validate(content, self.schema)
-                    provenance["rationale_steps"].append(f"Validated content using {output_format} plugin")
+                    provenance["rationale_steps"].append(
+                        f"Validated content using {output_format} plugin"
+                    )
                 except Exception as e:
                     span.set_status(Status(StatusCode.ERROR, str(e)))
-                    process_errors_total.labels(format=output_format, operation="validate", error_type="plugin_error").inc()
-                    raise ValueError(f"Validation failed for format '{output_format}': {e}")
+                    process_errors_total.labels(
+                        format=output_format,
+                        operation="validate",
+                        error_type="plugin_error",
+                    ).inc()
+                    raise ValueError(
+                        f"Validation failed for format '{output_format}': {e}"
+                    )
 
                 # Step 4: Quality assessment (GOAT upgrade)
                 quality_metrics = self.assess_quality(content)
-                provenance["rationale_steps"].append("Performed NLP-based quality assessment")
+                provenance["rationale_steps"].append(
+                    "Performed NLP-based quality assessment"
+                )
 
                 # Step 5: Security scanning
                 security_findings = self._detect_security_issues(content)
@@ -740,23 +864,31 @@ Original content:
 Please fix the issues and return valid {output_format} documentation that includes at least the core sections: {self.schema.get('core_sections', [])}.
 Return only the corrected documentation content.
 """
-                        
+
                         correction_response = await call_ensemble_api(correction_prompt)
                         corrected_content = correction_response["content"]
-                        
+
                         # Re-validate corrected content
-                        corrected_validation = plugin.validate(corrected_content, self.schema)
+                        corrected_validation = plugin.validate(
+                            corrected_content, self.schema
+                        )
                         if corrected_validation["valid"]:
                             content = corrected_content
                             is_valid = True
                             validation_result = corrected_validation
-                            provenance["rationale_steps"].append("Auto-corrected document via LLM")
+                            provenance["rationale_steps"].append(
+                                "Auto-corrected document via LLM"
+                            )
                         else:
-                            provenance["rationale_steps"].append("Auto-correction attempted but failed")
-                            
+                            provenance["rationale_steps"].append(
+                                "Auto-correction attempted but failed"
+                            )
+
                     except Exception as e:
                         logger.error(f"Auto-correction failed: {e}")
-                        provenance["rationale_steps"].append(f"Auto-correction failed: {e}")
+                        provenance["rationale_steps"].append(
+                            f"Auto-correction failed: {e}"
+                        )
 
                 # Step 7: Content enrichment
                 content = self._enrich_content(content, output_format, repo_path)
@@ -765,19 +897,31 @@ Return only the corrected documentation content.
                 # Step 8: Final formatting
                 try:
                     content = plugin.format(content)
-                    provenance["rationale_steps"].append("Applied format-specific formatting")
+                    provenance["rationale_steps"].append(
+                        "Applied format-specific formatting"
+                    )
                 except Exception as e:
                     logger.warning(f"Formatting failed: {e}")
 
                 # Update section status metrics
                 for section in self.schema.get("sections", []):
-                    section_present = 1 if re.search(rf'\b{re.escape(section)}\b', content, re.IGNORECASE) else 0
-                    section_status_gauge.labels(output_format=output_format, section_name=section).set(section_present)
+                    section_present = (
+                        1
+                        if re.search(
+                            rf"\b{re.escape(section)}\b", content, re.IGNORECASE
+                        )
+                        else 0
+                    )
+                    section_status_gauge.labels(
+                        output_format=output_format, section_name=section
+                    ).set(section_present)
 
                 # Update quality metrics
                 for metric_name, score in quality_metrics.items():
                     if isinstance(score, (int, float)):
-                        docgen_content_quality_score.labels(format=output_format, metric_type=metric_name).set(score)
+                        docgen_content_quality_score.labels(
+                            format=output_format, metric_type=metric_name
+                        ).set(score)
 
                 # Final result
                 result = {
@@ -788,21 +932,31 @@ Return only the corrected documentation content.
                     "suggestions": [],  # Could be enhanced
                     "quality_metrics": quality_metrics,
                     "security_findings": security_findings,
-                    "provenance": provenance
+                    "provenance": provenance,
                 }
 
                 # Update metrics
-                process_calls_total.labels(format=output_format, operation="validate").inc()
-                process_latency_seconds.labels(format=output_format, operation="validate").observe(time.time() - start_time)
-                
+                process_calls_total.labels(
+                    format=output_format, operation="validate"
+                ).inc()
+                process_latency_seconds.labels(
+                    format=output_format, operation="validate"
+                ).observe(time.time() - start_time)
+
                 if not is_valid:
-                    process_errors_total.labels(format=output_format, operation="validate", error_type="validation_failure").inc()
+                    process_errors_total.labels(
+                        format=output_format,
+                        operation="validate",
+                        error_type="validation_failure",
+                    ).inc()
 
                 return result
 
         except Exception as e:
             logger.error(f"Response validation pipeline failed: {e}", exc_info=True)
-            process_errors_total.labels(format=output_format, operation="pipeline", error_type="pipeline_error").inc()
+            process_errors_total.labels(
+                format=output_format, operation="pipeline", error_type="pipeline_error"
+            ).inc()
             return {
                 "is_valid": False,
                 "overall_status": "failed",
@@ -811,7 +965,7 @@ Return only the corrected documentation content.
                 "suggestions": [],
                 "quality_metrics": {},
                 "security_findings": [],
-                "provenance": provenance
+                "provenance": provenance,
             }
 
 
@@ -821,16 +975,16 @@ async def validate_documentation(request: ValidationRequest):
     """Main API endpoint for documentation validation."""
     try:
         validator = ResponseValidator(schema=DEFAULT_SCHEMA)
-        
+
         result = await validator.process_and_validate_response(
             raw_response=request.raw_response,
             output_format=request.format,
             auto_correct=request.auto_correct,
-            repo_path=request.repo_path
+            repo_path=request.repo_path,
         )
-        
+
         return ValidationReportResponse(**result)
-        
+
     except Exception as e:
         logger.error(f"API validation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -857,50 +1011,104 @@ if __name__ == "__main__":
 
     # --- Setup for local testing/CLI demonstration ---
     test_repo_path = "temp_docgen_validator_merged"
-    if not os.path.exists("docgen_plugins"): os.makedirs("docgen_plugins")
+    if not os.path.exists("docgen_plugins"):
+        os.makedirs("docgen_plugins")
     if not os.path.exists(test_repo_path):
         os.makedirs(test_repo_path)
         try:
-            subprocess.run(["git", "init"], cwd=test_repo_path, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=test_repo_path, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=test_repo_path, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "init"],
+                cwd=test_repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=test_repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=test_repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             (Path(test_repo_path) / "sample.py").write_text("print('hello')")
-            subprocess.run(["git", "add", "."], cwd=test_repo_path, check=True, capture_output=True, text=True)
-            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=test_repo_path, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=test_repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "Initial commit"],
+                cwd=test_repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             print(f"Initialized git repo in {test_repo_path}.")
         except Exception as e:
             print(f"Git init failed (is git installed?): {e}")
-    
-    parser = argparse.ArgumentParser(description="Documentation Response Validator CLI and API Server")
-    parser.add_argument("--raw_response_file", help="Path to a file containing raw LLM response (as JSON: {'content': '...'})")
+
+    parser = argparse.ArgumentParser(
+        description="Documentation Response Validator CLI and API Server"
+    )
+    parser.add_argument(
+        "--raw_response_file",
+        help="Path to a file containing raw LLM response (as JSON: {'content': '...'})",
+    )
     parser.add_argument("--format", default="md", help="Format of the documentation.")
-    parser.add_argument("--auto_correct", action="store_true", help="Enable LLM-based auto-correction.")
-    parser.add_argument("--repo_path", default=test_repo_path, help="Path to the repository for context.")
-    parser.add_argument("--server", action="store_true", help="Start the FastAPI server.")
+    parser.add_argument(
+        "--auto_correct", action="store_true", help="Enable LLM-based auto-correction."
+    )
+    parser.add_argument(
+        "--repo_path",
+        default=test_repo_path,
+        help="Path to the repository for context.",
+    )
+    parser.add_argument(
+        "--server", action="store_true", help="Start the FastAPI server."
+    )
     parser.add_argument("--host", default="0.0.0.0", help="Host for the API server.")
-    parser.add_argument("--port", type=int, default=8084, help="Port for the API server (merged port).")
+    parser.add_argument(
+        "--port", type=int, default=8084, help="Port for the API server (merged port)."
+    )
     parser.add_argument("--test", action="store_true", help="Run unit tests.")
     args = parser.parse_args()
 
     # --- Unit Tests (Merged) ---
     class TestDocgenResponseValidator(unittest.TestCase):
-        
+
         def setUp(self):
             # Mock the central runner functions used by the class
             self.mock_call_ensemble_api = unittest.mock.AsyncMock()
             self.mock_get_commits = unittest.mock.AsyncMock()
-            
+
             # Patch the imported runner functions
-            self.patch_call_ensemble = unittest.mock.patch('docgen_response_validator.call_ensemble_api', self.mock_call_ensemble_api)
-            self.patch_get_commits = unittest.mock.patch('docgen_response_validator.get_commits', self.mock_get_commits)
-            
+            self.patch_call_ensemble = unittest.mock.patch(
+                "docgen_response_validator.call_ensemble_api",
+                self.mock_call_ensemble_api,
+            )
+            self.patch_get_commits = unittest.mock.patch(
+                "docgen_response_validator.get_commits", self.mock_get_commits
+            )
+
             self.patch_call_ensemble.start()
             self.patch_get_commits.start()
 
             # Mock implementations
-            self.mock_call_ensemble_api.return_value = {"content": "# Fixed Title\n\nThis is [VALID] and corrected.", "usage": {"input_tokens": 10, "output_tokens": 10}}
+            self.mock_call_ensemble_api.return_value = {
+                "content": "# Fixed Title\n\nThis is [VALID] and corrected.",
+                "usage": {"input_tokens": 10, "output_tokens": 10},
+            }
             self.mock_get_commits.return_value = "abc1234 - Initial commit"
-            
+
             self.validator = ResponseValidator(schema=DEFAULT_SCHEMA)
 
         def tearDown(self):
@@ -913,46 +1121,55 @@ if __name__ == "__main__":
         def test_scrub_text_presidio_strict(self):
             test_text = "Secret: sk-123. Email: user@example.com."
             scrubbed = scrub_text(test_text)
-            self.assertIn('[REDACTED]', scrubbed)
-            self.assertNotIn('sk-1Player', scrubbed)
+            self.assertIn("[REDACTED]", scrubbed)
+            self.assertNotIn("sk-1Player", scrubbed)
 
         def test_plugin_registry_strict_get_plugin_fail(self):
             registry = PluginRegistry()
-            with self.assertRaisesRegex(ValueError, "No validation plugin found for 'nonexistent_format'"):
-                registry.get_plugin('nonexistent_format')
+            with self.assertRaisesRegex(
+                ValueError, "No validation plugin found for 'nonexistent_format'"
+            ):
+                registry.get_plugin("nonexistent_format")
 
         def test_markdown_plugin_validation_success(self):
             plugin = MarkdownPlugin()
-            validation = plugin.validate("# Title\nContent is long enough for this.", {"min_total_length": 10})
+            validation = plugin.validate(
+                "# Title\nContent is long enough for this.", {"min_total_length": 10}
+            )
             self.assertTrue(validation["valid"])
 
         def test_assess_quality_goat_upgrade(self):
             """Test the GOAT NLP quality assessment."""
             doc = "# Title\nThis is good. This is clear. This is coherent."
             quality = self.validator.assess_quality(doc)
-            self.assertTrue(quality['overall_score'] > 0)
-            self.assertTrue(quality['readability'] > 0)
-            self.assertTrue(quality['sentiment'] >= 0) # Neutral or positive
-            self.assertTrue(quality['coherence'] > 0) # Should have some coherence
+            self.assertTrue(quality["overall_score"] > 0)
+            self.assertTrue(quality["readability"] > 0)
+            self.assertTrue(quality["sentiment"] >= 0)  # Neutral or positive
+            self.assertTrue(quality["coherence"] > 0)  # Should have some coherence
 
         def test_process_and_validate_success(self):
             """Test the full pipeline success case."""
-            raw_response = {"content": "# Title\n\n## Introduction\nIntro text.\n\n## Usage\nUsage text."}
-            
+            raw_response = {
+                "content": "# Title\n\n## Introduction\nIntro text.\n\n## Usage\nUsage text."
+            }
+
             async def run_test():
                 result = await self.validator.process_and_validate_response(
                     raw_response, "md", auto_correct=False, repo_path=test_repo_path
                 )
-                self.assertTrue(result['is_valid'])
-                self.assertEqual(result['overall_status'], 'passed')
-                self.assertIn('## Recent Changes', result['docs']) # Enrichment check
-                self.assertIn('abc1234', result['docs']) # get_commits mock
+                self.assertTrue(result["is_valid"])
+                self.assertEqual(result["overall_status"], "passed")
+                self.assertIn("## Recent Changes", result["docs"])  # Enrichment check
+                self.assertIn("abc1234", result["docs"])  # get_commits mock
+
             self._run_async_test(run_test())
 
         def test_process_and_validate_autocorrect_llm_call(self):
             """Test that auto_correct triggers the (mocked) LLM call."""
-            raw_response = {"content": "# Title\n\nThis is missing sections."} # Will fail validation
-            
+            raw_response = {
+                "content": "# Title\n\nThis is missing sections."
+            }  # Will fail validation
+
             async def run_test():
                 result = await self.validator.process_and_validate_response(
                     raw_response, "md", auto_correct=True, repo_path=test_repo_path
@@ -960,33 +1177,39 @@ if __name__ == "__main__":
                 # Check that the mocked LLM was called
                 self.mock_call_ensemble_api.assert_called_once()
                 # Check that the pipeline used the LLM's fixed content
-                self.assertIn("# Fixed Title", result['docs'])
-                self.assertTrue(result['is_valid']) # Mock returns valid content
-                self.assertIn("Auto-corrected document via LLM", result['provenance']['rationale_steps'])
+                self.assertIn("# Fixed Title", result["docs"])
+                self.assertTrue(result["is_valid"])  # Mock returns valid content
+                self.assertIn(
+                    "Auto-corrected document via LLM",
+                    result["provenance"]["rationale_steps"],
+                )
+
             self._run_async_test(run_test())
 
     # --- CLI Execution ---
     if args.server:
         logger.info(f"Starting FastAPI server on {args.host}:{args.port}...")
         uvicorn.run(app, host=args.host, port=args.port)
-    
+
     elif args.test:
         logger.info("Running unit tests...")
         suite = unittest.TestSuite()
         suite.addTest(unittest.makeSuite(TestDocgenResponseValidator))
         runner = unittest.TextTestRunner(verbosity=2)
         runner.run(suite)
-    
+
     else:
         # Run in CLI mode for a single validation
         if not args.raw_response_file:
             parser.error("--raw_response_file is required for CLI mode.")
-        
+
         try:
-            with open(args.raw_response_file, 'r', encoding='utf-8') as f:
+            with open(args.raw_response_file, "r", encoding="utf-8") as f:
                 raw_response_data = json.load(f)
         except Exception as e:
-            logger.error(f"Failed to read raw response file {args.raw_response_file}: {e}")
+            logger.error(
+                f"Failed to read raw response file {args.raw_response_file}: {e}"
+            )
             sys.exit(1)
 
         async def run_cli_mode():
@@ -996,13 +1219,13 @@ if __name__ == "__main__":
                     raw_response=raw_response_data,
                     output_format=args.format,
                     auto_correct=args.auto_correct,
-                    repo_path=args.repo_path
+                    repo_path=args.repo_path,
                 )
                 print("\n--- Documentation Validation Report ---")
                 print(json.dumps(report_result, indent=2))
-                
-                if not report_result.get('is_valid', False):
-                    sys.exit(1) # Exit with error if validation failed
+
+                if not report_result.get("is_valid", False):
+                    sys.exit(1)  # Exit with error if validation failed
             except Exception as e:
                 logger.critical(f"CLI validation failed: {e}", exc_info=True)
                 sys.exit(1)

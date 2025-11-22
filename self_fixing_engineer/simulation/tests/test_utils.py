@@ -21,7 +21,6 @@ import json
 import sys
 import time
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -41,7 +40,8 @@ def utils_module(tmp_path_factory, monkeypatch):
         del sys.modules["simulation.utils"]
 
     import simulation.utils as utils  # noqa: WPS433
-    utils = importlib.reload(utils)   # bind env-provided provenance path
+
+    utils = importlib.reload(utils)  # bind env-provided provenance path
 
     # sanity
     assert utils.provenance_logger.provenance_file == prov_file
@@ -50,6 +50,7 @@ def utils_module(tmp_path_factory, monkeypatch):
 
 
 # ---------------------- Metrics & Reload Idempotency ---------------------- #
+
 
 def test_metrics_safe_on_reload(monkeypatch, tmp_path):
     """
@@ -63,6 +64,7 @@ def test_metrics_safe_on_reload(monkeypatch, tmp_path):
     if "simulation.utils" in sys.modules:
         del sys.modules["simulation.utils"]
     import simulation.utils as utils  # noqa
+
     # Reload a couple times; should not raise
     utils = importlib.reload(utils)
     utils = importlib.reload(utils)
@@ -74,6 +76,7 @@ def test_metrics_safe_on_reload(monkeypatch, tmp_path):
 
 
 # ---------------------- Hashing & Cache Invalidation ---------------------- #
+
 
 def test_hash_file_single_and_multi_algorithms(utils_module, tmp_path):
     utils = utils_module
@@ -108,6 +111,7 @@ def test_hash_cache_invalidation_on_change(utils_module, tmp_path):
 
 # ---------------------- File Finding ---------------------- #
 
+
 def test_find_files_by_pattern_dedup_and_validation(utils_module, tmp_path):
     utils = utils_module
     d1 = tmp_path / "dir1"
@@ -134,6 +138,7 @@ def test_find_files_by_pattern_dedup_and_validation(utils_module, tmp_path):
 
 # ---------------------- Diffs ---------------------- #
 
+
 def test_print_file_diff_unified_and_context(utils_module, tmp_path):
     utils = utils_module
     a = tmp_path / "a.txt"
@@ -156,6 +161,7 @@ def test_print_file_diff_unified_and_context(utils_module, tmp_path):
 
 # ---------------------- Path Safety ---------------------- #
 
+
 def test_sanitize_and_validate_safe_path(utils_module, tmp_path):
     utils = utils_module
     base = tmp_path / "base"
@@ -175,6 +181,7 @@ def test_sanitize_and_validate_safe_path(utils_module, tmp_path):
 
 # ---------------------- Artifact Loading ---------------------- #
 
+
 def test_load_artifact_success_and_limits(utils_module, tmp_path):
     utils = utils_module
     small = tmp_path / "small.txt"
@@ -192,6 +199,7 @@ def test_load_artifact_success_and_limits(utils_module, tmp_path):
 
 # ---------------------- Async Save + Provenance ---------------------- #
 
+
 @pytest.mark.asyncio
 async def test_save_sim_result_and_provenance_chain(utils_module, tmp_path):
     utils = utils_module
@@ -200,7 +208,7 @@ async def test_save_sim_result_and_provenance_chain(utils_module, tmp_path):
     data = {
         "id": str(uuid.uuid4()),
         "when": utils.datetime.utcnow(),  # datetime to exercise default=str
-        "nested": {"k": "v"}
+        "nested": {"k": "v"},
     }
     p = await utils.save_sim_result(data, out)
     assert p.exists()
@@ -209,11 +217,19 @@ async def test_save_sim_result_and_provenance_chain(utils_module, tmp_path):
     assert "when" in payload
 
     prov_path = utils.provenance_logger.provenance_file
-    lines = [json.loads(line) for line in prov_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    lines = [
+        json.loads(line)
+        for line in prov_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
     related = [e for e in lines if e.get("payload", {}).get("file") == str(p)]
     assert any(e.get("event_type") == "save_sim_result_attempt" for e in related)
-    assert any(e.get("event_type") == "save_sim_result" and e.get("payload", {}).get("status") == "success" for e in related)
+    assert any(
+        e.get("event_type") == "save_sim_result"
+        and e.get("payload", {}).get("status") == "success"
+        for e in related
+    )
 
     related_sorted = sorted(related, key=lambda e: e["timestamp"])
     if len(related_sorted) >= 2:
@@ -223,15 +239,18 @@ async def test_save_sim_result_and_provenance_chain(utils_module, tmp_path):
 
 def test_provenance_scrubs_secrets(utils_module):
     utils = utils_module
-    utils.provenance_logger.log({
-        "event_type": "unit.secret_test",
-        "payload": "password=supersecret sk_test_ABCDEFGHIJKLMNOP"
-    })
+    utils.provenance_logger.log(
+        {
+            "event_type": "unit.secret_test",
+            "payload": "password=supersecret sk_test_ABCDEFGHIJKLMNOP",
+        }
+    )
     prov = utils.provenance_logger.provenance_file.read_text(encoding="utf-8")
     assert "[PASSWORD_SCRUBBED]" in prov or "[POTENTIAL_SECRET]" in prov
 
 
 # ---------------------- Plugin API ---------------------- #
+
 
 def test_plugin_api_temp_dir_context_and_cleanup(utils_module):
     utils = utils_module
@@ -250,7 +269,13 @@ def test_plugin_api_report_and_error_log_to_provenance(utils_module):
     api.report_result("ok", {"alpha": 1, "beta": "two"})
     api.handle_error("bad thing", exception=ValueError("oops"), fatal=False)
 
-    prov_lines = [json.loads(line) for line in utils.provenance_logger.provenance_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    prov_lines = [
+        json.loads(line)
+        for line in utils.provenance_logger.provenance_file.read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.strip()
+    ]
     assert any(e.get("event_type") == "plugin_result" for e in prov_lines)
 
 

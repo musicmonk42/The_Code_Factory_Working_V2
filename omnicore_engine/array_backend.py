@@ -25,13 +25,20 @@ Upgrades from the original file:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 import json
-import random
 import re
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    Tuple,
+)
 from collections import defaultdict
 import types
 import numpy as np
@@ -50,6 +57,7 @@ CUPY_AVAILABLE = False
 cp = None  # Explicitly define cp as None initially for test patching
 try:
     import cupy as cp  # type: ignore
+
     CUPY_AVAILABLE = True
 except ImportError:
     pass
@@ -58,6 +66,7 @@ DASK_AVAILABLE = False
 try:
     import dask.array as da
     from dask.distributed import Client as DaskClient, LocalCluster
+
     DASK_AVAILABLE = True
 except ImportError:
     pass
@@ -65,6 +74,7 @@ except ImportError:
 TORCH_AVAILABLE = False
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     pass
@@ -73,8 +83,10 @@ HAS_QISKIT = False
 Aer = None
 try:
     from qiskit import QuantumCircuit, transpile
+
     try:
         from qiskit_aer import Aer
+
         HAS_QISKIT = True
     except ImportError:
         logging.warning("Modern qiskit_aer not found. Quantum backend will be limited.")
@@ -84,6 +96,7 @@ except ImportError:
 HAS_NENGO_LOIHI = False
 try:
     import nengo_loihi
+
     HAS_NENGO_LOIHI = True
 except ImportError:
     logging.warning("NengoLoihi not found. Neuromorphic backend will be unavailable.")
@@ -93,15 +106,17 @@ except ImportError:
 # This ensures consistent logging throughout the application.
 try:
     from omnicore_engine.core import logger as core_logger
+
     logger = core_logger.bind(module="ArrayBackend")
 except ImportError:
     logger = logging.getLogger(__name__)
     # Updated to use the new settings object and attribute
-    logger.setLevel(getattr(settings, 'log_level', 'INFO'))
+    logger.setLevel(getattr(settings, "log_level", "INFO"))
 
 # Structured logging with structlog if available
 try:
     import structlog
+
     logger = structlog.get_logger(__name__).bind(module="ArrayBackend")
 except ImportError:
     pass  # Fallback to standard logging
@@ -111,6 +126,7 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 try:
     from prometheus_client import Counter, Gauge
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
@@ -169,7 +185,7 @@ class _ArrayBackend:
     #  Initialization – lazy, safe, and observable
     # ------------------------------------------------------------------- #
     def _initialize(self) -> None:
-        self.xp = None          # will be numpy or cupy
+        self.xp = None  # will be numpy or cupy
         self.is_gpu = False
         self.name = "unknown"
 
@@ -177,6 +193,7 @@ class _ArrayBackend:
         try:
             global cp  # Use the module-level cp
             import cupy as _cp  # type: ignore
+
             # Quick sanity-check – create a tiny array
             test = _cp.zeros((2, 2), dtype=_cp.float32)
             del test
@@ -193,6 +210,7 @@ class _ArrayBackend:
         # 2. Fallback to NumPy
         if self.xp is None:
             import numpy as _np  # type: ignore
+
             self.xp = _np
             cp = None  # Ensure cp is None if not CuPy
             self.is_gpu = False
@@ -216,8 +234,8 @@ class _ArrayBackend:
 # --------------------------------------------------------------------------- #
 #  Public API – import these from the package
 # --------------------------------------------------------------------------- #
-backend = _ArrayBackend()          # singleton instance
-xp = backend.xp                    # numpy or cupy module
+backend = _ArrayBackend()  # singleton instance
+xp = backend.xp  # numpy or cupy module
 is_gpu = backend.is_gpu
 
 
@@ -232,6 +250,7 @@ async def health() -> Dict[str, Any]:
 # ---- Original methods (upgraded) ----
 MAX_ARRAY_SIZE = 1_000_000_000  # 1 billion elements
 
+
 def validate_array_size(shape):
     """
     Validates that the total number of elements in an array does not exceed a predefined limit.
@@ -240,35 +259,40 @@ def validate_array_size(shape):
     if total_elements > MAX_ARRAY_SIZE:
         raise ValueError(f"Array too large: {total_elements} elements")
 
+
 def sanitize_array_input(data: Any, backend_module=None) -> Any:
     """
     Sanitizes and validates array input data to prevent security vulnerabilities.
-    
+
     Args:
         data: Input data to sanitize (list, tuple, array, or number)
         backend_module: Optional backend module to use (defaults to np)
-    
+
     Returns:
         Sanitized numpy array
     """
     if backend_module is None:
         backend_module = np
-    
+
     if not isinstance(data, (list, tuple, np.ndarray, int, float)):
-        raise TypeError("Invalid array input type. Must be a list, tuple, number or numpy array.")
-    
+        raise TypeError(
+            "Invalid array input type. Must be a list, tuple, number or numpy array."
+        )
+
     # Convert and validate
     arr = backend_module.asarray(data)
     validate_array_size(arr.shape)
-    
+
     # Check for suspicious values that could indicate an injection or unexpected data
     if arr.dtype == object:
         raise ValueError("Object arrays are not supported for security reasons.")
-    
+
     return arr
+
 
 class Benchmarker:
     """Benchmarking class for array operations."""
+
     def __init__(self):
         self.results: Dict[str, List[float]] = defaultdict(list)
 
@@ -277,7 +301,9 @@ class Benchmarker:
         func()
         duration = time.time() - start
         self.results[operation].append(duration)
-        logger.debug(f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}")
+        logger.debug(
+            f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}"
+        )
 
     def get_results(self) -> Dict[str, List[float]]:
         return dict(self.results)
@@ -288,11 +314,18 @@ class BackendBenchmarker:
     A utility class to perform simple benchmarks on different array computation backends.
     It measures execution times for basic array operations.
     """
+
     def __init__(self):
         self.results: Dict[str, List[float]] = defaultdict(list)
         self.logger = logger.bind(sub_module="BackendBenchmarker")
 
-    def run_benchmark(self, xp_module: Any, operation_name: str, test_func: Callable, iterations: int = 10) -> Optional[float]:
+    def run_benchmark(
+        self,
+        xp_module: Any,
+        operation_name: str,
+        test_func: Callable,
+        iterations: int = 10,
+    ) -> Optional[float]:
         """
         Runs a benchmark for a specific operation on a given backend.
 
@@ -313,39 +346,46 @@ class BackendBenchmarker:
                 test_func()
                 end_time = time.perf_counter()
                 times.append(end_time - start_time)
-            
+
             avg_time = sum(times) / len(times)
             self.results[f"{xp_module.__name__}_{operation_name}"].append(avg_time)
-            self.logger.info(f"Benchmark '{operation_name}' on {xp_module.__name__}: Average time = {avg_time:.6f} seconds.")
+            self.logger.info(
+                f"Benchmark '{operation_name}' on {xp_module.__name__}: Average time = {avg_time:.6f} seconds."
+            )
             return avg_time
         except Exception as e:
-            self.logger.error(f"Benchmark '{operation_name}' on {xp_module.__name__} failed: {e}", exc_info=True)
+            self.logger.error(
+                f"Benchmark '{operation_name}' on {xp_module.__name__} failed: {e}",
+                exc_info=True,
+            )
             return None
 
     def get_results(self) -> Dict[str, List[float]]:
         """Returns all stored benchmark results."""
         return dict(self.results)
 
+
 class ArrayBackend:
     """
     Unified array backend class with support for multiple backends.
     """
-    def __init__(self, mode: str = 'auto', enable_benchmarking: bool = False):
+
+    def __init__(self, mode: str = "auto", enable_benchmarking: bool = False):
         self.mode = mode
         self.enable_benchmarking = enable_benchmarking
         self.benchmarker = Benchmarker() if enable_benchmarking else None
         self.xp = xp  # Use the global xp
 
-        if self.mode == 'auto':
+        if self.mode == "auto":
             if CUPY_AVAILABLE:
-                self.mode = 'cupy'
+                self.mode = "cupy"
             elif DASK_AVAILABLE:
-                self.mode = 'dask'
+                self.mode = "dask"
             elif TORCH_AVAILABLE:
-                self.mode = 'torch'
+                self.mode = "torch"
             else:
-                self.mode = 'numpy'
-        
+                self.mode = "numpy"
+
         logger.info(f"ArrayBackend initialized in {self.mode} mode.")
 
     def array(self, data: Any, dtype: Optional[Any] = None) -> Any:
@@ -362,7 +402,9 @@ class ArrayBackend:
             return self.xp.array(sanitized, dtype=dtype)
         return self.xp.array(sanitized)
 
-    def zeros(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def zeros(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an array of zeros with the given shape and data type.
         Args:
@@ -374,7 +416,9 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.zeros(shape, dtype=dtype)
 
-    def ones(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def ones(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an array of ones with the given shape and data type.
         Args:
@@ -386,7 +430,12 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.ones(shape, dtype=dtype)
 
-    def full(self, shape: Union[int, Tuple[int, ...]], fill_value: Any, dtype: Optional[Any] = None) -> Any:
+    def full(
+        self,
+        shape: Union[int, Tuple[int, ...]],
+        fill_value: Any,
+        dtype: Optional[Any] = None,
+    ) -> Any:
         """
         Creates an array filled with a specified value.
         Args:
@@ -399,7 +448,9 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.full(shape, fill_value, dtype=dtype)
 
-    def empty(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def empty(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an empty array with the given shape and data type.
         Args:
@@ -411,7 +462,13 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.empty(shape, dtype=dtype)
 
-    def arange(self, start: int, stop: Optional[int] = None, step: int = 1, dtype: Optional[Any] = None) -> Any:
+    def arange(
+        self,
+        start: int,
+        stop: Optional[int] = None,
+        step: int = 1,
+        dtype: Optional[Any] = None,
+    ) -> Any:
         """
         Returns evenly spaced values within a given interval.
         Args:
@@ -424,7 +481,14 @@ class ArrayBackend:
         """
         return self.xp.arange(start, stop, step, dtype=dtype)
 
-    def linspace(self, start: float, stop: float, num: int = 50, endpoint: bool = True, dtype: Optional[Any] = None) -> Any:
+    def linspace(
+        self,
+        start: float,
+        stop: float,
+        num: int = 50,
+        endpoint: bool = True,
+        dtype: Optional[Any] = None,
+    ) -> Any:
         """
         Returns evenly spaced numbers over a specified interval.
         Args:
@@ -438,7 +502,14 @@ class ArrayBackend:
         """
         return self.xp.linspace(start, stop, num, endpoint=endpoint, dtype=dtype)
 
-    def logspace(self, start: float, stop: float, num: int = 50, base: float = 10.0, dtype: Optional[Any] = None) -> Any:
+    def logspace(
+        self,
+        start: float,
+        stop: float,
+        num: int = 50,
+        base: float = 10.0,
+        dtype: Optional[Any] = None,
+    ) -> Any:
         """
         Returns numbers spaced evenly on a log scale.
         Args:
@@ -452,7 +523,7 @@ class ArrayBackend:
         """
         return self.xp.logspace(start, stop, num, base=base, dtype=dtype)
 
-    def meshgrid(self, *xi: Any, indexing: str = 'xy') -> List[Any]:
+    def meshgrid(self, *xi: Any, indexing: str = "xy") -> List[Any]:
         """
         Returns coordinate matrices from coordinate vectors.
         Args:
@@ -485,7 +556,12 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.random.randn(*shape)
 
-    def random_randint(self, low: int, high: Optional[int] = None, size: Optional[Union[int, Tuple[int, ...]]] = None) -> Any:
+    def random_randint(
+        self,
+        low: int,
+        high: Optional[int] = None,
+        size: Optional[Union[int, Tuple[int, ...]]] = None,
+    ) -> Any:
         """
         Generates random integers from low (inclusive) to high (exclusive).
         Args:
@@ -822,7 +898,9 @@ class ArrayBackend:
         """
         return self.xp.diff(a, n=n, axis=axis)
 
-    def trapz(self, y: Any, x: Optional[Any] = None, dx: float = 1.0, axis: int = -1) -> Any:
+    def trapz(
+        self, y: Any, x: Optional[Any] = None, dx: float = 1.0, axis: int = -1
+    ) -> Any:
         """
         Integrates y along the given axis using the composite trapezoidal rule.
         Args:
@@ -912,7 +990,9 @@ class ArrayBackend:
         """
         return self.xp.linalg.inv(a)
 
-    def linalg_norm(self, x: Any, ord: Optional[Any] = None, axis: Optional[int] = None) -> Any:
+    def linalg_norm(
+        self, x: Any, ord: Optional[Any] = None, axis: Optional[int] = None
+    ) -> Any:
         """
         Computes the matrix or vector norm.
         Args:
@@ -924,7 +1004,7 @@ class ArrayBackend:
         """
         return self.xp.linalg.norm(x, ord=ord, axis=axis)
 
-    def to_device(self, a: Any, device: str = 'cpu') -> Any:
+    def to_device(self, a: Any, device: str = "cpu") -> Any:
         """
         Moves the array to the specified device (if supported by backend).
         Args:
@@ -933,9 +1013,9 @@ class ArrayBackend:
         Returns:
             Any: Array on the specified device.
         """
-        if self.mode == 'cupy' and device == 'gpu':
+        if self.mode == "cupy" and device == "gpu":
             return cp.asarray(a)
-        elif self.mode == 'torch' and TORCH_AVAILABLE:
+        elif self.mode == "torch" and TORCH_AVAILABLE:
             return a.to(device)
         return a  # Fallback for other backends
 
@@ -947,9 +1027,9 @@ class ArrayBackend:
         Returns:
             np.ndarray: NumPy array on CPU.
         """
-        if hasattr(a, 'get'):
+        if hasattr(a, "get"):
             return a.get()  # CuPy
-        elif hasattr(a, 'cpu'):
+        elif hasattr(a, "cpu"):
             return a.cpu().numpy()  # PyTorch
         return np.asarray(a)
 
@@ -961,15 +1041,23 @@ class ArrayBackend:
         Returns:
             np.ndarray: NumPy array.
         """
-        if self.mode == 'cupy' and CUPY_AVAILABLE:
+        if self.mode == "cupy" and CUPY_AVAILABLE:
             return cp.asnumpy(a)
-        elif self.mode == 'torch' and TORCH_AVAILABLE:
+        elif self.mode == "torch" and TORCH_AVAILABLE:
             return a.cpu().numpy()
-        elif self.mode == 'dask' and DASK_AVAILABLE:
+        elif self.mode == "dask" and DASK_AVAILABLE:
             return a.compute()
         return np.asarray(a)
 
-    def __init__(self, mode="numpy", use_gpu=False, use_dask=False, use_quantum=False, use_neuromorphic=False, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        mode="numpy",
+        use_gpu=False,
+        use_dask=False,
+        use_quantum=False,
+        use_neuromorphic=False,
+        logger: Optional[logging.Logger] = None,
+    ):
         """
         Initialize the ArrayBackend with the specified mode and hardware preferences.
 
@@ -990,16 +1078,19 @@ class ArrayBackend:
         self.xp = self._init_backend()
         self.benchmarker = BackendBenchmarker()
         # Control benchmarking overhead with a setting
-        self.enable_benchmarking = getattr(settings, 'enable_array_backend_benchmarking', False)
+        self.enable_benchmarking = getattr(
+            settings, "enable_array_backend_benchmarking", False
+        )
         if self.enable_benchmarking:
             self.logger.info("ArrayBackend benchmarking is enabled.")
         else:
             self.logger.info("ArrayBackend benchmarking is disabled.")
-        
+
         # Initialize message_bus to None, it will be set by OmniCoreEngine
         self.message_bus: Optional[ShardedMessageBus] = None
-        self.logger.info(f"ArrayBackend initialized with mode: {self.mode}, GPU: {self.use_gpu}, Dask: {self.use_dask}, Quantum: {self.use_quantum}, Neuromorphic: {self.use_neuromorphic}")
-
+        self.logger.info(
+            f"ArrayBackend initialized with mode: {self.mode}, GPU: {self.use_gpu}, Dask: {self.use_dask}, Quantum: {self.use_quantum}, Neuromorphic: {self.use_neuromorphic}"
+        )
 
     def set_message_bus(self, message_bus: ShardedMessageBus):
         """
@@ -1008,13 +1099,21 @@ class ArrayBackend:
         """
         self.message_bus = message_bus
         if self.message_bus:
-            computation_filter = MessageFilter(lambda payload: isinstance(payload, dict) and "type" in payload)
+            computation_filter = MessageFilter(
+                lambda payload: isinstance(payload, dict) and "type" in payload
+            )
             # FIXED: Decoupled message processing from the core ArrayBackend class.
             # A new dedicated handler function is introduced to maintain separation of concerns.
-            self.message_bus.subscribe(re.compile(r"computation\.task\..*"), self._message_bus_handler, filter=computation_filter)
+            self.message_bus.subscribe(
+                re.compile(r"computation\.task\..*"),
+                self._message_bus_handler,
+                filter=computation_filter,
+            )
             self.logger.info("ArrayBackend subscribed to computation.task.* topics.")
         else:
-            self.logger.warning("Message bus not provided to ArrayBackend. Inter-service computation will not work.")
+            self.logger.warning(
+                "Message bus not provided to ArrayBackend. Inter-service computation will not work."
+            )
 
     async def _message_bus_handler(self, message: Message):
         """
@@ -1022,47 +1121,67 @@ class ArrayBackend:
         This approach decouples the ArrayBackend's core logic from the message bus transport layer.
         """
         if not self.message_bus:
-            self.logger.error("Message bus not set in ArrayBackend. Cannot handle computation tasks.")
+            self.logger.error(
+                "Message bus not set in ArrayBackend. Cannot handle computation tasks."
+            )
             return
 
-        self.logger.info(f"Received computation task on topic: {message.topic}", trace_id=message.trace_id)
-        
+        self.logger.info(
+            f"Received computation task on topic: {message.topic}",
+            trace_id=message.trace_id,
+        )
+
         try:
             payload_data = message.payload
             # Decrypt payload if encrypted
             if message.encrypted and self.message_bus.encryption:
                 try:
-                    decrypted_bytes = self.message_bus.encryption.decrypt(message.payload.encode('utf-8'))
-                    payload_data = json.loads(decrypted_bytes.decode('utf-8'))
+                    decrypted_bytes = self.message_bus.encryption.decrypt(
+                        message.payload.encode("utf-8")
+                    )
+                    payload_data = json.loads(decrypted_bytes.decode("utf-8"))
                     self.logger.debug("Decrypted message payload for computation task.")
                 except Exception as e:
-                    self.logger.error(f"Failed to decrypt message payload for {message.topic}: {e}", trace_id=message.trace_id)
+                    self.logger.error(
+                        f"Failed to decrypt message payload for {message.topic}: {e}",
+                        trace_id=message.trace_id,
+                    )
                     await self.message_bus.publish(
-                        f"computation.error.{message.trace_id}", 
-                        {"error": f"Decryption failed: {str(e)}", "original_topic": message.topic}, 
-                        priority=10
+                        f"computation.error.{message.trace_id}",
+                        {
+                            "error": f"Decryption failed: {str(e)}",
+                            "original_topic": message.topic,
+                        },
+                        priority=10,
                     )
                     return
-            
+
             if not isinstance(payload_data, dict):
-                raise ValueError(f"Invalid payload format for computation task: expected dict, got {type(payload_data)}")
+                raise ValueError(
+                    f"Invalid payload format for computation task: expected dict, got {type(payload_data)}"
+                )
 
             result = None
             error_message = None
-            
+
             # Sanitize data before processing
             if "data" in payload_data:
                 payload_data["data"] = sanitize_array_input(payload_data["data"])
 
-
-            if message.topic == "computation.task.array" or payload_data.get("type") == "array_creation":
+            if (
+                message.topic == "computation.task.array"
+                or payload_data.get("type") == "array_creation"
+            ):
                 data = payload_data.get("data")
                 dtype = payload_data.get("dtype")
                 if data is None:
                     raise ValueError("Missing 'data' for array creation task.")
                 result = self.array(data, dtype)
                 self.logger.info("Performed array creation computation.")
-            elif message.topic == "computation.task.normal" or payload_data.get("type") == "normal_distribution":
+            elif (
+                message.topic == "computation.task.normal"
+                or payload_data.get("type") == "normal_distribution"
+            ):
                 loc = payload_data.get("loc", 0.0)
                 scale = payload_data.get("scale", 1.0)
                 size = payload_data.get("size")
@@ -1070,7 +1189,10 @@ class ArrayBackend:
                     raise ValueError("Missing 'size' for normal distribution task.")
                 result = self.normal(loc, scale, size)
                 self.logger.info("Performed normal distribution computation.")
-            elif message.topic == "computation.task.sum" or payload_data.get("type") == "sum_operation":
+            elif (
+                message.topic == "computation.task.sum"
+                or payload_data.get("type") == "sum_operation"
+            ):
                 data = payload_data.get("data")
                 axis = payload_data.get("axis")
                 if data is None:
@@ -1078,41 +1200,56 @@ class ArrayBackend:
                 arr_data = self.array(data)
                 result = self.sum(arr_data, axis)
                 self.logger.info("Performed sum operation computation.")
-            elif message.topic == "computation.task.reshape" or payload_data.get("type") == "reshape_operation":
+            elif (
+                message.topic == "computation.task.reshape"
+                or payload_data.get("type") == "reshape_operation"
+            ):
                 data = payload_data.get("data")
                 newshape = payload_data.get("newshape")
                 if data is None or newshape is None:
-                    raise ValueError("Missing 'data' or 'newshape' for reshape operation.")
+                    raise ValueError(
+                        "Missing 'data' or 'newshape' for reshape operation."
+                    )
                 arr_data = self.array(data)
                 result = self.reshape(arr_data, newshape)
                 self.logger.info("Performed reshape operation computation.")
             else:
                 error_message = f"Unsupported computation task type or topic: {message.topic} / {payload_data.get('type')}"
                 self.logger.warning(error_message)
-                
+
             if error_message:
                 await self.message_bus.publish(
-                    f"computation.error.{message.trace_id}", 
-                    {"error": error_message, "original_topic": message.topic}, 
-                    priority=10
+                    f"computation.error.{message.trace_id}",
+                    {"error": error_message, "original_topic": message.topic},
+                    priority=10,
                 )
             else:
                 await self.message_bus.publish(
-                    f"computation.result.{message.trace_id}", 
-                    self.asnumpy(result).tolist() if hasattr(result, 'tolist') else result,
-                    priority=5, 
-                    encrypt=True
+                    f"computation.result.{message.trace_id}",
+                    (
+                        self.asnumpy(result).tolist()
+                        if hasattr(result, "tolist")
+                        else result
+                    ),
+                    priority=5,
+                    encrypt=True,
                 )
-                self.logger.info(f"Published computation result for {message.topic}", trace_id=message.trace_id)
+                self.logger.info(
+                    f"Published computation result for {message.topic}",
+                    trace_id=message.trace_id,
+                )
 
         except Exception as e:
-            self.logger.error(f"ArrayBackend computation failed for {message.topic}: {e}", exc_info=True, trace_id=message.trace_id)
-            await self.message_bus.publish(
-                f"computation.error.{message.trace_id}", 
-                {"error": str(e), "original_topic": message.topic}, 
-                priority=10
+            self.logger.error(
+                f"ArrayBackend computation failed for {message.topic}: {e}",
+                exc_info=True,
+                trace_id=message.trace_id,
             )
-
+            await self.message_bus.publish(
+                f"computation.error.{message.trace_id}",
+                {"error": str(e), "original_topic": message.topic},
+                priority=10,
+            )
 
     def _init_backend(self):
         """
@@ -1124,16 +1261,27 @@ class ArrayBackend:
             return cp
         if self.mode == "dask" and self.use_dask and DASK_AVAILABLE:
             try:
-                if not hasattr(self, '_dask_client') or (self._dask_client and self._dask_client.status == 'closed'):
-                    self.logger.info("ArrayBackend: Initializing Dask LocalCluster and Client.")
-                    self.cluster = LocalCluster(n_workers=os.cpu_count() or 1, threads_per_worker=1)
+                if not hasattr(self, "_dask_client") or (
+                    self._dask_client and self._dask_client.status == "closed"
+                ):
+                    self.logger.info(
+                        "ArrayBackend: Initializing Dask LocalCluster and Client."
+                    )
+                    self.cluster = LocalCluster(
+                        n_workers=os.cpu_count() or 1, threads_per_worker=1
+                    )
                     self._dask_client = DaskClient(self.cluster)
-                    self.logger.info(f"ArrayBackend: Dask client initialized: {self._dask_client.dashboard_link}")
+                    self.logger.info(
+                        f"ArrayBackend: Dask client initialized: {self._dask_client.dashboard_link}"
+                    )
                 else:
                     self.logger.info("ArrayBackend: Reusing existing Dask client.")
                 return da
             except Exception as e:
-                self.logger.warning(f"ArrayBackend: Dask initialization failed: {e}. Falling back to NumPy.", exc_info=True)
+                self.logger.warning(
+                    f"ArrayBackend: Dask initialization failed: {e}. Falling back to NumPy.",
+                    exc_info=True,
+                )
         if self.mode == "torch" and TORCH_AVAILABLE:
             self.logger.info("ArrayBackend: Initializing PyTorch backend (CPU).")
             return torch
@@ -1141,10 +1289,14 @@ class ArrayBackend:
             self.logger.info("ArrayBackend: Initializing Quantum (Qiskit) backend.")
             return self._quantum_backend()
         if self.mode == "neuromorphic" and self.use_neuromorphic and HAS_NENGO_LOIHI:
-            self.logger.info("ArrayBackend: Initializing Neuromorphic (NengoLoihi) backend.")
+            self.logger.info(
+                "ArrayBackend: Initializing Neuromorphic (NengoLoihi) backend."
+            )
             return self._neuromorphic_backend()
-        
-        self.logger.info("ArrayBackend: Falling back to NumPy backend (default or preferred backend unavailable).")
+
+        self.logger.info(
+            "ArrayBackend: Falling back to NumPy backend (default or preferred backend unavailable)."
+        )
         return np
 
     def _quantum_backend(self) -> Type[np.ndarray]:
@@ -1152,45 +1304,59 @@ class ArrayBackend:
         Creates a quantum backend using Qiskit. This provides a NumPy-like interface for array operations,
         but internally leverages Qiskit for random number generation and quantum simulations.
         """
+
         def quantum_normal(loc=0.0, scale=1.0, size=None):
             """Generates normally distributed random numbers using Qiskit for quantum randomness."""
             if not HAS_QISKIT or Aer is None:
-                self.logger.warning("Quantum backend: Qiskit Aer not available, quantum_normal falling back to NumPy.")
+                self.logger.warning(
+                    "Quantum backend: Qiskit Aer not available, quantum_normal falling back to NumPy."
+                )
                 return np.random.normal(loc, scale, size)
 
             size_val = size if size is not None else 1
             results = []
             num_samples = size_val if isinstance(size_val, int) else 1
-            
+
             for i in range(num_samples):
                 try:
                     qc = QuantumCircuit(1, 1)
                     qc.h(0)
                     qc.measure(0, 0)
 
-                    backend = Aer.get_backend('aer_simulator')
+                    backend = Aer.get_backend("aer_simulator")
                     tqc = transpile(qc, backend)
                     job = backend.run(tqc, shots=1, memory=True)
-                    
+
                     measurement_result = job.result().get_memory(tqc)[0]
                     measurement = int(measurement_result)
-                    
+
                     sample = (measurement * 2 - 1) * scale + loc
                     results.append(sample)
                 except Exception as e:
-                    self.logger.warning(f"Quantum backend simulation for sample {i+1}/{num_samples} failed: {e}. Falling back to NumPy for this sample.", exc_info=True)
+                    self.logger.warning(
+                        f"Quantum backend simulation for sample {i+1}/{num_samples} failed: {e}. Falling back to NumPy for this sample.",
+                        exc_info=True,
+                    )
                     results.append(np.random.normal(loc, scale))
 
-            return np.array(results) if isinstance(size_val, int) else (results[0] if results else np.random.normal(loc, scale))
+            return (
+                np.array(results)
+                if isinstance(size_val, int)
+                else (results[0] if results else np.random.normal(loc, scale))
+            )
 
-        QuantumModule = type("QuantumBackend", (object,), {
-            "normal": quantum_normal,
-            "zeros": np.zeros,
-            "array": np.array,
-            "cumsum": np.cumsum,
-            "clip": np.clip,
-            "random": types.SimpleNamespace(normal=quantum_normal)
-        })
+        QuantumModule = type(
+            "QuantumBackend",
+            (object,),
+            {
+                "normal": quantum_normal,
+                "zeros": np.zeros,
+                "array": np.array,
+                "cumsum": np.cumsum,
+                "clip": np.clip,
+                "random": types.SimpleNamespace(normal=quantum_normal),
+            },
+        )
         return QuantumModule()
 
     def _neuromorphic_backend(self) -> Type[np.ndarray]:
@@ -1198,47 +1364,63 @@ class ArrayBackend:
         Creates a neuromorphic backend using NengoLoihi. Provides a NumPy-like interface for array operations,
         internally using Nengo for simulations of neural networks.
         """
+
         def neuromorphic_normal(loc=0.0, scale=1.0, size=None):
             """Generates normally distributed random numbers using a NengoLoihi simulator."""
             if not HAS_NENGO_LOIHI:
-                self.logger.warning("Neuromorphic backend: NengoLoihi not available, neuromorphic_normal falling back to NumPy.")
+                self.logger.warning(
+                    "Neuromorphic backend: NengoLoihi not available, neuromorphic_normal falling back to NumPy."
+                )
                 return np.random.normal(loc, scale, size)
-            
+
             size_val = size if size is not None else 1
             num_steps = size_val if isinstance(size_val, int) else 1
 
             try:
                 import nengo
                 from nengo_loihi import Simulator
-                
+
                 with nengo.Network(seed=np.random.randint(10000)) as net:
-                    noise_node = nengo.Node(nengo.processes.WhiteNoise(dist=nengo.dists.Gaussian(loc, scale)))
+                    noise_node = nengo.Node(
+                        nengo.processes.WhiteNoise(
+                            dist=nengo.dists.Gaussian(loc, scale)
+                        )
+                    )
                     p_noise = nengo.Probe(noise_node)
-                
-                sim_context = Simulator(net) if HAS_NENGO_LOIHI else nengo.Simulator(net)
-                
+
+                sim_context = (
+                    Simulator(net) if HAS_NENGO_LOIHI else nengo.Simulator(net)
+                )
+
                 with sim_context as sim:
                     sim.run(sim.dt * num_steps)
-                
+
                 samples = sim.data[p_noise].flatten()
-                
+
                 if isinstance(size_val, int):
                     return samples[:size_val]
                 else:
                     return samples[0] if samples.size > 0 else loc
 
             except Exception as e:
-                self.logger.warning(f"Neuromorphic backend simulation failed: {e}. Falling back to NumPy for random numbers.", exc_info=True)
+                self.logger.warning(
+                    f"Neuromorphic backend simulation failed: {e}. Falling back to NumPy for random numbers.",
+                    exc_info=True,
+                )
                 return np.random.normal(loc, scale, size)
-        
-        NeuromorphicModule = type("NeuromorphicBackend", (object,), {
-            "normal": neuromorphic_normal,
-            "zeros": np.zeros,
-            "array": np.array,
-            "cumsum": np.cumsum,
-            "clip": np.clip,
-            "random": types.SimpleNamespace(normal=neuromorphic_normal)
-        })
+
+        NeuromorphicModule = type(
+            "NeuromorphicBackend",
+            (object,),
+            {
+                "normal": neuromorphic_normal,
+                "zeros": np.zeros,
+                "array": np.array,
+                "cumsum": np.cumsum,
+                "clip": np.clip,
+                "random": types.SimpleNamespace(normal=neuromorphic_normal),
+            },
+        )
         return NeuromorphicModule()
 
     def array(self, d: Any, t: Optional[Any] = None) -> Any:
@@ -1251,16 +1433,22 @@ class ArrayBackend:
             Any: An array-like object from the current backend.
         """
         validated_data = sanitize_array_input(d)
-        
+
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "array_creation", lambda: self.xp.array(validated_data, dtype=t))
-        
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "array_creation",
+                lambda: self.xp.array(validated_data, dtype=t),
+            )
+
         if self.mode == "torch" and TORCH_AVAILABLE:
             return self.xp.tensor(validated_data, dtype=t)
         if hasattr(self.xp, "array"):
             return self.xp.array(validated_data, dtype=t)
-        
-        self.logger.warning(f"Array creation not directly supported by current backend ({self.mode}), falling back to NumPy.")
+
+        self.logger.warning(
+            f"Array creation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
         return np.array(validated_data, dtype=t)
 
     def zeros(self, s: Union[int, Tuple[int, ...]], t: Optional[Any] = None) -> Any:
@@ -1273,9 +1461,11 @@ class ArrayBackend:
             Any: A zero-filled array-like object from the current backend.
         """
         validate_array_size(s)
-        
+
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "zeros_creation", lambda: self.xp.zeros(s, dtype=t))
+            self.benchmarker.run_benchmark(
+                self.xp, "zeros_creation", lambda: self.xp.zeros(s, dtype=t)
+            )
 
         if self.mode == "dask" and DASK_AVAILABLE:
             return self.xp.zeros(s, dtype=t)
@@ -1283,11 +1473,18 @@ class ArrayBackend:
             if self.mode == "torch" and TORCH_AVAILABLE:
                 return self.xp.zeros(s, dtype=t)
             return self.xp.zeros(s, dtype=t)
-        
-        self.logger.warning(f"Zeros creation not directly supported by current backend ({self.mode}), falling back to NumPy.")
+
+        self.logger.warning(
+            f"Zeros creation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
         return np.zeros(s, dtype=t)
 
-    def normal(self, l: float = 0.0, s: float = 1.0, z: Optional[Union[int, Tuple[int, ...]]] = None) -> Any:
+    def normal(
+        self,
+        l: float = 0.0,
+        s: float = 1.0,
+        z: Optional[Union[int, Tuple[int, ...]]] = None,
+    ) -> Any:
         """
         Generates normally distributed random numbers (mean l, std dev s) of shape z.
         Args:
@@ -1299,16 +1496,20 @@ class ArrayBackend:
         """
         if isinstance(z, (int, tuple)):
             validate_array_size(z if isinstance(z, tuple) else (z,))
-        
+
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "normal_generation", lambda: self.normal(l, s, z), iterations=5)
+            self.benchmarker.run_benchmark(
+                self.xp, "normal_generation", lambda: self.normal(l, s, z), iterations=5
+            )
 
         if hasattr(self.xp, "random") and hasattr(self.xp.random, "normal"):
             return self.xp.random.normal(l, s, z)
         elif hasattr(self.xp, "normal"):
             return self.xp.normal(l, s, z)
-        
-        self.logger.warning(f"Normal distribution generation not directly supported by current backend ({self.mode}), falling back to NumPy.")
+
+        self.logger.warning(
+            f"Normal distribution generation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
         return np.random.normal(l, s, z)
 
     def cumsum(self, a: Any, x: Optional[int] = None) -> Any:
@@ -1321,14 +1522,20 @@ class ArrayBackend:
             Any: An array-like object with the cumulative sum.
         """
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "cumsum_operation", lambda: self.cumsum(self.xp.array([1.0]*1000), x))
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "cumsum_operation",
+                lambda: self.cumsum(self.xp.array([1.0] * 1000), x),
+            )
 
         if hasattr(self.xp, "cumsum"):
             if self.mode == "torch" and TORCH_AVAILABLE:
                 return self.xp.cumsum(a, dim=x) if x is not None else self.xp.cumsum(a)
             return self.xp.cumsum(a, axis=x)
-        
-        self.logger.warning(f"Cumsum operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
+
+        self.logger.warning(
+            f"Cumsum operation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
         return np.cumsum(a, axis=x)
 
     def clip(self, a: Any, m: Union[int, float], M: Union[int, float]) -> Any:
@@ -1342,12 +1549,18 @@ class ArrayBackend:
             Any: Clipped array-like object.
         """
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "clip_operation", lambda: self.clip(self.xp.array([-1.0, 0.5, 2.0]), m, M))
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "clip_operation",
+                lambda: self.clip(self.xp.array([-1.0, 0.5, 2.0]), m, M),
+            )
 
         if hasattr(self.xp, "clip"):
             return self.xp.clip(a, m, M)
-        
-        self.logger.warning(f"Clip operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
+
+        self.logger.warning(
+            f"Clip operation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
         return np.clip(a, m, M)
 
     def asnumpy(self, a: Any) -> np.ndarray:
@@ -1360,7 +1573,11 @@ class ArrayBackend:
             np.ndarray: A NumPy array representation of the input.
         """
         if self.enable_benchmarking:
-            self.benchmarker.run_benchmark(self.xp, "asnumpy_conversion", lambda: self.asnumpy(self.array([1.0]*1000)))
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "asnumpy_conversion",
+                lambda: self.asnumpy(self.array([1.0] * 1000)),
+            )
 
         if self.mode == "cupy" and CUPY_AVAILABLE and isinstance(a, cp.ndarray):
             return cp.asnumpy(a)
@@ -1368,9 +1585,11 @@ class ArrayBackend:
             return a.compute()
         if self.mode == "torch" and TORCH_AVAILABLE and isinstance(a, torch.Tensor):
             return a.detach().cpu().numpy()
-        
+
         if not isinstance(a, np.ndarray):
-            self.logger.debug(f"Converting non-NumPy array from {type(a)} to NumPy (mode: {self.mode}).")
+            self.logger.debug(
+                f"Converting non-NumPy array from {type(a)} to NumPy (mode: {self.mode})."
+            )
         return np.array(a)
 
     def astype(self, a: Any, dtype: Any) -> Any:
@@ -1384,11 +1603,17 @@ class ArrayBackend:
         """
         if self.enable_benchmarking:
             # FIX: Call a non-recursive operation for benchmarking
-            self.benchmarker.run_benchmark(self.xp, "astype_operation", lambda: self.xp.array([1,2,3]).astype('float32'))
-        
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "astype_operation",
+                lambda: self.xp.array([1, 2, 3]).astype("float32"),
+            )
+
         if hasattr(a, "astype"):
             return a.astype(dtype)
-        self.logger.warning(f"Astype operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
+        self.logger.warning(
+            f"Astype operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy."
+        )
         return self.asnumpy(a).astype(dtype)
 
     def reshape(self, a: Any, newshape: Union[int, Tuple[int, ...]]) -> Any:
@@ -1402,11 +1627,17 @@ class ArrayBackend:
         """
         if self.enable_benchmarking:
             # FIX: Call a non-recursive operation for benchmarking
-            self.benchmarker.run_benchmark(self.xp, "reshape_operation", lambda: self.xp.arange(100).reshape((10,10)))
-        
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "reshape_operation",
+                lambda: self.xp.arange(100).reshape((10, 10)),
+            )
+
         if hasattr(a, "reshape"):
             return a.reshape(newshape)
-        self.logger.warning(f"Reshape operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy.")
+        self.logger.warning(
+            f"Reshape operation not directly supported by array type {type(a)} or current backend ({self.mode}), falling back to NumPy."
+        )
         return self.asnumpy(a).reshape(newshape)
 
     def sum(self, a: Any, axis: Optional[int] = None) -> Any:
@@ -1420,17 +1651,24 @@ class ArrayBackend:
         """
         if self.enable_benchmarking:
             # FIX: Call a non-recursive operation for benchmarking
-            self.benchmarker.run_benchmark(self.xp, "sum_operation", lambda: self.xp.sum(self.xp.random.rand(100,100), axis=0))
+            self.benchmarker.run_benchmark(
+                self.xp,
+                "sum_operation",
+                lambda: self.xp.sum(self.xp.random.rand(100, 100), axis=0),
+            )
 
         if hasattr(self.xp, "sum"):
             if self.mode == "torch" and TORCH_AVAILABLE:
                 return self.xp.sum(a, dim=axis) if axis is not None else self.xp.sum(a)
             return self.xp.sum(a, axis=axis)
-        
-        logger.warning(f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
-        self.logger.warning(f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy.")
-        return self.asnumpy(a).sum(axis=axis)
 
+        logger.warning(
+            f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
+        self.logger.warning(
+            f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy."
+        )
+        return self.asnumpy(a).sum(axis=axis)
 
     def get_benchmarking_results(self) -> Dict[str, List[float]]:
         """

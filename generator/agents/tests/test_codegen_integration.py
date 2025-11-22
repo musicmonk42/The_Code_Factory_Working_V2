@@ -67,12 +67,7 @@ def _patch_env_and_utils(monkeypatch):
             state = ctx.get("state_summary", "")
             lang = ctx.get("target_language", "")
             rag = ctx.get("rag_context") or ""
-            return (
-                f"LANG={lang}\n"
-                f"STATE={state}\n"
-                f"FEATS={feats}\n"
-                f"RAG={rag}\n"
-            )
+            return f"LANG={lang}\n" f"STATE={state}\n" f"FEATS={feats}\n" f"RAG={rag}\n"
 
         return types.SimpleNamespace(render=_render)
 
@@ -179,10 +174,7 @@ async def test_end_to_end_prompt_parse_trace_scan(monkeypatch):
     )
 
     # Ensure prompt build was audited
-    assert any(
-        e[0] == "Code Generation Prompt Built"
-        for e in events
-    )
+    assert any(e[0] == "Code Generation Prompt Built" for e in events)
 
     # 2. Simulate LLM response: valid Python referencing the requirements
     llm_response = json.dumps(
@@ -244,7 +236,4 @@ async def test_end_to_end_prompt_parse_trace_scan(monkeypatch):
     assert final == traced
 
     # Ensure SAST completion was logged
-    assert any(
-        e[0] == "Unified SAST Scan Complete" or "SAST" in e[0]
-        for e in logs
-    )
+    assert any(e[0] == "Unified SAST Scan Complete" or "SAST" in e[0] for e in logs)

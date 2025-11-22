@@ -16,7 +16,12 @@ import asyncpg
 from asyncpg.pool import Pool
 from asyncpg import exceptions as asyncpg_exceptions
 
-from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type, wait_exponential
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+    retry_if_exception_type,
+)
 
 from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
 
@@ -33,39 +38,59 @@ logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 class ConnectionError(Exception):
     """Database connection error."""
+
     pass
+
 
 class QueryError(Exception):
     """Database query error."""
+
     pass
+
 
 class PostgresClientError(Exception):
     """Base exception for PostgresClient errors."""
+
     pass
+
 
 class PostgresClientConnectionError(PostgresClientError):
     """Raised when connection to the database fails."""
+
     pass
+
 
 class PostgresClientSchemaError(PostgresClientError):
     """Raised for schema-related issues."""
+
     pass
+
 
 class PostgresClientQueryError(PostgresClientError):
     """Raised for query execution failures."""
+
     pass
+
 
 class PostgresClientTimeoutError(PostgresClientError):
     """Raised when a query times out."""
+
     pass
+
 
 # Get tracer using centralized configuration
 tracer = get_tracer(__name__)
 
 _METRIC_CACHE: Dict[str, Any] = {}
 
-def _get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[Histogram]],
-                          name: str, documentation: str, labelnames: Tuple[str, ...] = (), buckets: Optional[Tuple[float, ...]] = None):
+
+def _get_or_create_metric(
+    metric_class: Union[Type[Counter], Type[Gauge], Type[Histogram]],
+    name: str,
+    documentation: str,
+    labelnames: Tuple[str, ...] = (),
+    buckets: Optional[Tuple[float, ...]] = None,
+):
     """
     Idempotently get or create a Prometheus metric.
     """
@@ -73,31 +98,58 @@ def _get_or_create_metric(metric_class: Union[Type[Counter], Type[Gauge], Type[H
         return _METRIC_CACHE[name]
     try:
         if buckets is not None and metric_class is Histogram:
-            m = metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+            m = metric_class(
+                name, documentation, labelnames=labelnames, buckets=buckets
+            )
         else:
             m = metric_class(name, documentation, labelnames=labelnames)
     except ValueError:
         # Already registered by someone else; get it from the registry if possible
-        existing = REGISTRY._names_to_collectors.get(name)  # best available, yes it's private
+        existing = REGISTRY._names_to_collectors.get(
+            name
+        )  # best available, yes it's private
         if not existing:
             raise RuntimeError(f"Metric registry missing {name}")
         m = existing
     _METRIC_CACHE[name] = m
     return m
 
+
 # Metrics for PostgresClient Operations
-DB_CALLS_TOTAL = _get_or_create_metric(Counter, "db_calls_total", "Total database calls", ["db_type", "operation", "table", "status"])
-DB_CALLS_ERRORS = _get_or_create_metric(Counter, "db_calls_errors", "Database call errors", ["db_type", "operation", "table", "error_type"])
+DB_CALLS_TOTAL = _get_or_create_metric(
+    Counter,
+    "db_calls_total",
+    "Total database calls",
+    ["db_type", "operation", "table", "status"],
+)
+DB_CALLS_ERRORS = _get_or_create_metric(
+    Counter,
+    "db_calls_errors",
+    "Database call errors",
+    ["db_type", "operation", "table", "error_type"],
+)
 DB_CALL_LATENCY_SECONDS = _get_or_create_metric(
     Histogram,
     "db_call_latency_seconds",
     "Database call latency in seconds",
     ["db_type", "operation", "table", "status"],
-    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
-DB_CONNECTIONS_CURRENT = _get_or_create_metric(Gauge, "db_connections_current", "Current number of active DB connections", ["db_type"])
-DB_CONNECTIONS_IN_USE = _get_or_create_metric(Gauge, "db_connections_in_use", "Number of in-use DB connections from the pool", ["db_type"])
-DB_TABLE_ROWS = _get_or_create_metric(Gauge, "db_table_rows_total", "Total rows in a table", ["db_type", "table"])
+DB_CONNECTIONS_CURRENT = _get_or_create_metric(
+    Gauge,
+    "db_connections_current",
+    "Current number of active DB connections",
+    ["db_type"],
+)
+DB_CONNECTIONS_IN_USE = _get_or_create_metric(
+    Gauge,
+    "db_connections_in_use",
+    "Number of in-use DB connections from the pool",
+    ["db_type"],
+)
+DB_TABLE_ROWS = _get_or_create_metric(
+    Gauge, "db_table_rows_total", "Total rows in a table", ["db_type", "table"]
+)
 
 
 FATAL_EXC = (
@@ -126,9 +178,11 @@ TRANSIENT_EXC = (
     ConnectionResetError,
 )
 
+
 def _sanitize_dsn(dsn: str) -> str:
     """Removes password from a DSN string for safe logging."""
     return re.sub(r"://[^:]+:[^@]+@", "://user:***@", dsn)
+
 
 class PostgresClient:
     """
@@ -186,10 +240,22 @@ class PostgresClient:
                 CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback (type);
                 CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback (timestamp);
                 CREATE INDEX IF NOT EXISTS idx_feedback_data ON feedback USING GIN (data);
-            """
+            """,
         },
         "agent_knowledge": {
-            "columns": ["domain", "key", "value", "timestamp", "source", "user_id", "version", "diff", "merkle_leaf", "merkle_proof", "merkle_root"],
+            "columns": [
+                "domain",
+                "key",
+                "value",
+                "timestamp",
+                "source",
+                "user_id",
+                "version",
+                "diff",
+                "merkle_leaf",
+                "merkle_proof",
+                "merkle_root",
+            ],
             "jsonb_columns": ["value", "diff", "merkle_proof"],
             "pk": ["domain", "key"],
             "schema_sql": """
@@ -210,7 +276,7 @@ class PostgresClient:
                 CREATE INDEX IF NOT EXISTS idx_agent_knowledge_timestamp ON agent_knowledge (timestamp);
                 CREATE INDEX IF NOT EXISTS idx_agent_knowledge_domain ON agent_knowledge (domain);
                 CREATE INDEX IF NOT EXISTS idx_agent_knowledge_value ON agent_knowledge USING GIN (value);
-            """
+            """,
         },
         "agent_states": {
             "columns": ["session_id", "state", "last_updated"],
@@ -224,10 +290,20 @@ class PostgresClient:
                 );
                 CREATE INDEX IF NOT EXISTS idx_agent_states_last_updated ON agent_states (last_updated);
                 CREATE INDEX IF NOT EXISTS idx_agent_states_state ON agent_states USING GIN (state);
-            """
+            """,
         },
         "audit_events": {
-            "columns": ["id", "timestamp", "event_type", "details", "host", "previous_log_hash", "hash", "signatures", "correlation_id"],
+            "columns": [
+                "id",
+                "timestamp",
+                "event_type",
+                "details",
+                "host",
+                "previous_log_hash",
+                "hash",
+                "signatures",
+                "correlation_id",
+            ],
             "jsonb_columns": ["details", "signatures"],
             "pk": ["id"],
             "schema_sql": """
@@ -246,15 +322,17 @@ class PostgresClient:
                 CREATE INDEX IF NOT EXISTS idx_audit_events_event_type ON audit_events (event_type);
                 CREATE INDEX IF NOT EXISTS idx_audit_events_correlation_id ON audit_events (correlation_id);
                 CREATE INDEX IF NOT EXISTS idx_audit_events_details ON audit_events USING GIN (details);
-            """
-        }
+            """,
+        },
     }
 
     def __init__(self, db_url: Optional[str] = None):
         """Initializes the PostgresClient."""
         self.db_url = db_url or os.getenv("DATABASE_URL")
         if not self.db_url:
-            raise ValueError("Database URL (db_url or DATABASE_URL env var) must be provided.")
+            raise ValueError(
+                "Database URL (db_url or DATABASE_URL env var) must be provided."
+            )
 
         self._pool: Optional[Pool] = None
         self.db_type = "postgresql"
@@ -320,7 +398,9 @@ class PostgresClient:
                     count = await conn.fetchval(query)
                 DB_TABLE_ROWS.labels(db_type=self.db_type, table=table).set(count)
             except Exception as e:
-                logger.error(f"Failed to update row count for {table}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to update row count for {table}: {e}", exc_info=True
+                )
 
     async def _init_conn(self, conn):
         """Sets per-connection settings like timeout, timezone, and application name."""
@@ -336,7 +416,7 @@ class PostgresClient:
         stop=stop_after_attempt(5),
         wait=wait_random_exponential(multiplier=1, max=10),
         retry=retry_if_exception_type(TRANSIENT_EXC),
-        reraise=True
+        reraise=True,
     )
     async def connect(self) -> None:
         """
@@ -352,39 +432,65 @@ class PostgresClient:
             with tracer.start_as_current_span("db_connect") as span:
                 span.set_attribute("db.url", _sanitize_dsn(self.db_url))
                 start_time = time.monotonic()
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="connect", table="n/a", status="attempt").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation="connect",
+                    table="n/a",
+                    status="attempt",
+                ).inc()
                 try:
                     min_size = int(os.getenv("PG_POOL_MIN_SIZE", "1"))
                     max_size = int(os.getenv("PG_POOL_MAX_SIZE", "10"))
                     max_connections = int(os.getenv("PG_MAX_CONNECTIONS", "100"))
                     if max_size > max_connections:
-                        logger.warning(f"PG_POOL_MAX_SIZE ({max_size}) exceeds PG_MAX_CONNECTIONS ({max_connections}). Clamping.")
+                        logger.warning(
+                            f"PG_POOL_MAX_SIZE ({max_size}) exceeds PG_MAX_CONNECTIONS ({max_connections}). Clamping."
+                        )
                         max_size = max_connections
                     if min_size > max_size:
-                        logger.warning(f"PG_POOL_MIN_SIZE ({min_size}) is greater than PG_POOL_MAX_SIZE ({max_size}). Clamping min_size to max_size.")
+                        logger.warning(
+                            f"PG_POOL_MIN_SIZE ({min_size}) is greater than PG_POOL_MAX_SIZE ({max_size}). Clamping min_size to max_size."
+                        )
                         min_size = max_size
                     timeout = float(os.getenv("PG_POOL_TIMEOUT", "30"))
-                    ssl_mode = os.getenv("PG_SSL_MODE", "require" if os.getenv("ENV", "dev") == "prod" else "prefer").lower()
+                    ssl_mode = os.getenv(
+                        "PG_SSL_MODE",
+                        "require" if os.getenv("ENV", "dev") == "prod" else "prefer",
+                    ).lower()
                     env = os.getenv("ENV", "dev").lower()
 
-                    logger.info("Pool settings min=%s max=%s timeout=%s ssl_mode=%s env=%s",
-                                 min_size, max_size, timeout, ssl_mode, env)
+                    logger.info(
+                        "Pool settings min=%s max=%s timeout=%s ssl_mode=%s env=%s",
+                        min_size,
+                        max_size,
+                        timeout,
+                        ssl_mode,
+                        env,
+                    )
 
                     ssl_context = None
                     if ssl_mode == "require" or (ssl_mode == "allow" and env == "prod"):
-                        ssl_context = ssl.create_default_context(purpose=ssl.SSLPurpose.SERVER_AUTH)
+                        ssl_context = ssl.create_default_context(
+                            purpose=ssl.SSLPurpose.SERVER_AUTH
+                        )
                         ssl_context.check_hostname = True
                         ssl_context.verify_mode = ssl.CERT_REQUIRED
                     elif ssl_mode == "allow":
-                        logger.warning("PG_SSL_MODE='allow' is insecure and should only be used in development.")
+                        logger.warning(
+                            "PG_SSL_MODE='allow' is insecure and should only be used in development."
+                        )
                         ssl_context = ssl.create_default_context()
                         ssl_context.check_hostname = False
                         ssl_context.verify_mode = ssl.CERT_NONE
                     elif ssl_mode == "disable":
-                        logger.warning("PG_SSL_MODE=disable: using plaintext connection (dev/local only).")
+                        logger.warning(
+                            "PG_SSL_MODE=disable: using plaintext connection (dev/local only)."
+                        )
                         ssl_context = None  # plaintext
                     else:
-                        logger.warning("PG_SSL_MODE=prefer: may fall back to plaintext, not recommended for production.")
+                        logger.warning(
+                            "PG_SSL_MODE=prefer: may fall back to plaintext, not recommended for production."
+                        )
 
                     self._pool = await asyncpg.create_pool(
                         self.db_url,
@@ -392,7 +498,7 @@ class PostgresClient:
                         max_size=max_size,
                         timeout=timeout,
                         ssl=ssl_context,
-                        init=self._init_conn
+                        init=self._init_conn,
                     )
 
                     async with self._pool.acquire() as conn:
@@ -400,42 +506,93 @@ class PostgresClient:
                     logger.info("PostgreSQL connection pool warmed up.")
 
                     self._is_closed = False
-                    DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(self._pool.get_size())
-                    logger.info(f"PostgreSQL connection pool created for {_sanitize_dsn(self.db_url)}")
+                    DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(
+                        self._pool.get_size()
+                    )
+                    logger.info(
+                        f"PostgreSQL connection pool created for {_sanitize_dsn(self.db_url)}"
+                    )
 
                     if os.getenv("AUTO_MIGRATE", "0") == "1":
-                        logger.info("AUTO_MIGRATE is enabled. Running Alembic migrations.")
+                        logger.info(
+                            "AUTO_MIGRATE is enabled. Running Alembic migrations."
+                        )
                         try:
-                            subprocess.run(["alembic", "upgrade", "head"], check=True, capture_output=True, text=True)
+                            subprocess.run(
+                                ["alembic", "upgrade", "head"],
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                            )
                             logger.info("Alembic migrations applied successfully.")
                         except FileNotFoundError:
-                            logger.error("Alembic command not found. Please ensure it is installed and in your PATH.")
+                            logger.error(
+                                "Alembic command not found. Please ensure it is installed and in your PATH."
+                            )
                             raise
                         except subprocess.CalledProcessError as e:
-                            logger.error(f"Alembic migration failed: {e.stderr}", exc_info=True)
-                            raise RuntimeError(f"Failed to apply migrations: {e.stderr}") from e
+                            logger.error(
+                                f"Alembic migration failed: {e.stderr}", exc_info=True
+                            )
+                            raise RuntimeError(
+                                f"Failed to apply migrations: {e.stderr}"
+                            ) from e
                     else:
-                        logger.info("AUTO_MIGRATE is disabled. Skipping table schema creation.")
+                        logger.info(
+                            "AUTO_MIGRATE is disabled. Skipping table schema creation."
+                        )
 
-                    self._health_check_task = asyncio.create_task(self._start_health_check(
-                        interval=float(os.getenv("HEALTH_CHECK_INTERVAL", "60.0"))
-                    ))
+                    self._health_check_task = asyncio.create_task(
+                        self._start_health_check(
+                            interval=float(os.getenv("HEALTH_CHECK_INTERVAL", "60.0"))
+                        )
+                    )
 
-                    DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="connect", table="n/a", status="success").inc()
-                    DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation="connect", table="n/a", status="success").observe(time.monotonic() - start_time)
+                    DB_CALLS_TOTAL.labels(
+                        db_type=self.db_type,
+                        operation="connect",
+                        table="n/a",
+                        status="success",
+                    ).inc()
+                    DB_CALL_LATENCY_SECONDS.labels(
+                        db_type=self.db_type,
+                        operation="connect",
+                        table="n/a",
+                        status="success",
+                    ).observe(time.monotonic() - start_time)
                     span.set_status(Status(StatusCode.OK))
                 except Exception as e:
                     if self._pool:
                         await self._pool.close()
                     self._pool = None
                     self._is_closed = True
-                    DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="connect", table="n/a", status="failure").inc()
-                    DB_CALLS_ERRORS.labels(db_type=self.db_type, operation="connect", table="n/a", error_type=type(e).__name__).inc()
-                    DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation="connect", table="n/a", status="failure").observe(time.monotonic() - start_time)
+                    DB_CALLS_TOTAL.labels(
+                        db_type=self.db_type,
+                        operation="connect",
+                        table="n/a",
+                        status="failure",
+                    ).inc()
+                    DB_CALLS_ERRORS.labels(
+                        db_type=self.db_type,
+                        operation="connect",
+                        table="n/a",
+                        error_type=type(e).__name__,
+                    ).inc()
+                    DB_CALL_LATENCY_SECONDS.labels(
+                        db_type=self.db_type,
+                        operation="connect",
+                        table="n/a",
+                        status="failure",
+                    ).observe(time.monotonic() - start_time)
                     span.record_exception(e)
                     span.set_status(Status(StatusCode.ERROR, f"Failed to connect: {e}"))
-                    logger.error(f"Failed to connect to PostgreSQL at {_sanitize_dsn(self.db_url)}: {e}", exc_info=True)
-                    raise PostgresClientConnectionError(f"Failed to connect to PostgreSQL: {e}") from e
+                    logger.error(
+                        f"Failed to connect to PostgreSQL at {_sanitize_dsn(self.db_url)}: {e}",
+                        exc_info=True,
+                    )
+                    raise PostgresClientConnectionError(
+                        f"Failed to connect to PostgreSQL: {e}"
+                    ) from e
 
     async def disconnect(self) -> None:
         """Closes the PostgreSQL connection pool."""
@@ -451,27 +608,63 @@ class PostgresClient:
 
         with tracer.start_as_current_span("db_disconnect") as span:
             start_time = time.monotonic()
-            DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="disconnect", table="n/a", status="attempt").inc()
+            DB_CALLS_TOTAL.labels(
+                db_type=self.db_type,
+                operation="disconnect",
+                table="n/a",
+                status="attempt",
+            ).inc()
             try:
                 await self._pool.close()
                 self._pool = None
                 self._is_closed = True
                 DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(0)
                 DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(0)
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="disconnect", table="n/a", status="success").inc()
-                DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation="disconnect", table="n/a", status="success").observe(time.monotonic() - start_time)
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation="disconnect",
+                    table="n/a",
+                    status="success",
+                ).inc()
+                DB_CALL_LATENCY_SECONDS.labels(
+                    db_type=self.db_type,
+                    operation="disconnect",
+                    table="n/a",
+                    status="success",
+                ).observe(time.monotonic() - start_time)
                 span.set_status(Status(StatusCode.OK))
                 logger.info("PostgreSQL connection pool closed.")
             except Exception as e:
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation="disconnect", table="n/a", status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation="disconnect", table="n/a", error_type=type(e).__name__).inc()
-                DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation="disconnect", table="n/a", status="failure").observe(time.monotonic() - start_time)
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation="disconnect",
+                    table="n/a",
+                    status="failure",
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation="disconnect",
+                    table="n/a",
+                    error_type=type(e).__name__,
+                ).inc()
+                DB_CALL_LATENCY_SECONDS.labels(
+                    db_type=self.db_type,
+                    operation="disconnect",
+                    table="n/a",
+                    status="failure",
+                ).observe(time.monotonic() - start_time)
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Failed to disconnect: {e}"))
-                logger.error(f"Failed to close PostgreSQL connection pool: {e}", exc_info=True)
-                raise PostgresClientConnectionError(f"Failed to disconnect from PostgreSQL: {e}") from e
+                logger.error(
+                    f"Failed to close PostgreSQL connection pool: {e}", exc_info=True
+                )
+                raise PostgresClientConnectionError(
+                    f"Failed to disconnect from PostgreSQL: {e}"
+                ) from e
 
-    def _validate_table_and_columns(self, table: str, cols: Optional[List[str]] = None) -> None:
+    def _validate_table_and_columns(
+        self, table: str, cols: Optional[List[str]] = None
+    ) -> None:
         """
         Validates that a table and an optional list of columns exist in the predefined schema.
         Prevents SQL injection by checking against a hardcoded whitelist.
@@ -485,7 +678,9 @@ class PostgresClient:
             if invalid:
                 raise ValueError(f"Invalid column(s) for {table}: {sorted(invalid)}")
 
-    def _normalize_row(self, table: str, row: asyncpg.Record, normalize_datetimes: bool = True) -> Dict[str, Any]:
+    def _normalize_row(
+        self, table: str, row: asyncpg.Record, normalize_datetimes: bool = True
+    ) -> Dict[str, Any]:
         """Converts an asyncpg.Record to a dictionary."""
         d = dict(row)
         if normalize_datetimes:
@@ -497,27 +692,45 @@ class PostgresClient:
     async def _ensure_table_exists(self, table_name: str) -> None:
         """Ensures a specific table exists with its predefined schema using Alembic."""
         if self._pool is None or self._is_closed:
-            raise PostgresClientConnectionError("Database pool not initialized. Call connect() first.")
+            raise PostgresClientConnectionError(
+                "Database pool not initialized. Call connect() first."
+            )
         self._validate_table_and_columns(table_name)
         if os.getenv("AUTO_MIGRATE", "0") == "1":
             import subprocess
+
             logger.info(f"Running Alembic migrations for table '{table_name}'.")
             try:
-                subprocess.run(["alembic", "upgrade", "head"], check=True, capture_output=True, text=True)
-                logger.info(f"Alembic migrations applied successfully for '{table_name}'.")
+                subprocess.run(
+                    ["alembic", "upgrade", "head"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.info(
+                    f"Alembic migrations applied successfully for '{table_name}'."
+                )
             except FileNotFoundError:
-                logger.error("Alembic command not found. Please ensure it is installed and in your PATH.")
+                logger.error(
+                    "Alembic command not found. Please ensure it is installed and in your PATH."
+                )
                 raise
             except subprocess.CalledProcessError as e:
                 logger.error(f"Alembic migration failed: {e.stderr}", exc_info=True)
                 raise RuntimeError(f"Failed to apply migrations: {e.stderr}") from e
         else:
-            logger.info(f"AUTO_MIGRATE is disabled. Skipping migration for '{table_name}'.")
+            logger.info(
+                f"AUTO_MIGRATE is disabled. Skipping migration for '{table_name}'."
+            )
 
-    async def _execute_query(self, operation: str, table: str, query: str, *args: Any) -> Any:
+    async def _execute_query(
+        self, operation: str, table: str, query: str, *args: Any
+    ) -> Any:
         """Executes a database query with metrics and tracing."""
         if self._pool is None or self._is_closed:
-            raise PostgresClientConnectionError("Database pool not initialized. Call connect() first.")
+            raise PostgresClientConnectionError(
+                "Database pool not initialized. Call connect() first."
+            )
 
         start_time = time.monotonic()
         span_name = f"db.{operation}.{table}"
@@ -529,7 +742,7 @@ class PostgresClient:
 
             log_sql = os.getenv("SFE_LOG_SQL", "0") == "1"
             if log_sql:
-                sanitized_query = query if len(query) < 200 else query[:197] + '...'
+                sanitized_query = query if len(query) < 200 else query[:197] + "..."
                 span.set_attribute("db.statement", sanitized_query)
 
             sanitized_args = []
@@ -537,9 +750,13 @@ class PostgresClient:
                 if isinstance(arg, (dict, list)):
                     try:
                         json_str = json.dumps(arg, sort_keys=True)
-                        sanitized_args.append(f"hash:{hashlib.sha256(json_str.encode()).hexdigest()[:8]}")
+                        sanitized_args.append(
+                            f"hash:{hashlib.sha256(json_str.encode()).hexdigest()[:8]}"
+                        )
                     except (TypeError, ValueError):
-                        sanitized_args.append(f"hash:{hashlib.sha256(str(arg).encode()).hexdigest()[:8]}")
+                        sanitized_args.append(
+                            f"hash:{hashlib.sha256(str(arg).encode()).hexdigest()[:8]}"
+                        )
                 elif isinstance(arg, str) and len(arg) > 64:
                     sanitized_args.append(f"truncated:{arg[:61]}...")
                 else:
@@ -549,60 +766,111 @@ class PostgresClient:
             status = "failure"
             result = None
             try:
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="attempt").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="attempt",
+                ).inc()
 
                 async with self._pool.acquire() as conn:
                     size = self._pool.get_size()
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
                     if idle is not None:
-                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(max(0, size - idle))
+                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
+                            max(0, size - idle)
+                        )
                     DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(size)
 
-                    should_fetch = "RETURNING" in query.upper() or operation.startswith(("load", "get"))
+                    should_fetch = "RETURNING" in query.upper() or operation.startswith(
+                        ("load", "get")
+                    )
                     query_timeout = float(os.getenv("PG_QUERY_TIMEOUT", "0"))
 
                     if should_fetch:
                         if query_timeout > 0:
-                            result = await asyncio.wait_for(conn.fetch(query, *args), timeout=query_timeout)
+                            result = await asyncio.wait_for(
+                                conn.fetch(query, *args), timeout=query_timeout
+                            )
                         else:
                             result = await conn.fetch(query, *args)
                         span.set_attribute("db.rows_returned", len(result))
                     else:
                         if query_timeout > 0:
-                            result = await asyncio.wait_for(conn.execute(query, *args), timeout=query_timeout)
+                            result = await asyncio.wait_for(
+                                conn.execute(query, *args), timeout=query_timeout
+                            )
                         else:
                             result = await conn.execute(query, *args)
-                        if isinstance(result, str) and (operation.startswith("insert") or operation.startswith("update") or operation.startswith("delete")):
+                        if isinstance(result, str) and (
+                            operation.startswith("insert")
+                            or operation.startswith("update")
+                            or operation.startswith("delete")
+                        ):
                             try:
                                 affected_rows = int(result.split()[-1])
                                 span.set_attribute("db.affected_rows", affected_rows)
                             except (ValueError, IndexError):
                                 pass
                 status = "success"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="success").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="success",
+                ).inc()
                 span.set_status(Status(StatusCode.OK))
                 return result
 
             except asyncio.TimeoutError as e:
                 status = "timeout"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=operation, table=table, error_type="TimeoutError").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="failure",
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    error_type="TimeoutError",
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Query timed out: {e}"))
-                logger.error(f"Query timed out during DB operation '{operation}' on '{table}': {e}", exc_info=True)
-                raise PostgresClientTimeoutError(f"Query timed out during {operation} on {table}: {e}") from e
+                logger.error(
+                    f"Query timed out during DB operation '{operation}' on '{table}': {e}",
+                    exc_info=True,
+                )
+                raise PostgresClientTimeoutError(
+                    f"Query timed out during {operation} on {table}: {e}"
+                ) from e
 
             except TRANSIENT_EXC as e:
                 status = "transient_failure"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=operation, table=table, error_type=type(e).__name__).inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="failure",
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    error_type=type(e).__name__,
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Transient DB error: {e}"))
-                logger.warning(f"Transient error during {operation} on {table}: {e}. Attempting reconnect.")
+                logger.warning(
+                    f"Transient error during {operation} on {table}: {e}. Attempting reconnect."
+                )
                 await self.reconnect()
                 # Re-raise the original exception, let the caller decide to retry
-                raise PostgresClientConnectionError(f"Transient error during {operation} on {table}: {e}") from e
+                raise PostgresClientConnectionError(
+                    f"Transient error during {operation} on {table}: {e}"
+                ) from e
 
             except asyncio.CancelledError:
                 status = "cancelled"
@@ -610,46 +878,87 @@ class PostgresClient:
 
             except FATAL_EXC as e:
                 status = "fatal"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=operation, table=table, error_type=type(e).__name__).inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="failure",
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    error_type=type(e).__name__,
+                ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"PostgreSQL fatal error: {e}"))
-                logger.error(f"PostgreSQL fatal error during DB operation '{operation}' on '{table}': {e}", exc_info=True)
-                raise PostgresClientSchemaError(f"Schema error during {operation} on {table}: {e}") from e
+                span.set_status(
+                    Status(StatusCode.ERROR, f"PostgreSQL fatal error: {e}")
+                )
+                logger.error(
+                    f"PostgreSQL fatal error during DB operation '{operation}' on '{table}': {e}",
+                    exc_info=True,
+                )
+                raise PostgresClientSchemaError(
+                    f"Schema error during {operation} on {table}: {e}"
+                ) from e
 
             except Exception as e:
                 status = "failure"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=operation, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=operation, table=table, error_type=type(e).__name__).inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status="failure",
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    error_type=type(e).__name__,
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"DB error: {e}"))
-                logger.error(f"Error during DB operation '{operation}' on '{table}': {e}", exc_info=True)
-                raise PostgresClientQueryError(f"Query error during {operation} on {table}: {e}") from e
+                logger.error(
+                    f"Error during DB operation '{operation}' on '{table}': {e}",
+                    exc_info=True,
+                )
+                raise PostgresClientQueryError(
+                    f"Query error during {operation} on {table}: {e}"
+                ) from e
             finally:
                 if self._pool and not self._is_closed:
                     size = self._pool.get_size()
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
                     if idle is not None:
-                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(max(0, size - idle))
+                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
+                            max(0, size - idle)
+                        )
                     DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(size)
-                DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation=operation, table=table, status=status).observe(time.monotonic() - start_time)
+                DB_CALL_LATENCY_SECONDS.labels(
+                    db_type=self.db_type,
+                    operation=operation,
+                    table=table,
+                    status=status,
+                ).observe(time.monotonic() - start_time)
 
     def _scrub_secrets(self, value: Any) -> Any:
         """Scrub potentially sensitive data from logging."""
         if isinstance(value, str):
             sensitive_patterns = [
-                r'(password|token|secret|key|credential|auth)\b',
-                r'[a-zA-Z0-9]{32,}',  # Long alphanumeric strings (e.g., API keys)
-                r'[\w\.-]+@[\w\.-]+',  # Email addresses
-                r'\b\d{4}-\d{4}-\d{4}-\d{4}\b'  # Credit card-like patterns
+                r"(password|token|secret|key|credential|auth)\b",
+                r"[a-zA-Z0-9]{32,}",  # Long alphanumeric strings (e.g., API keys)
+                r"[\w\.-]+@[\w\.-]+",  # Email addresses
+                r"\b\d{4}-\d{4}-\d{4}-\d{4}\b",  # Credit card-like patterns
             ]
             for pattern in sensitive_patterns:
                 if re.search(pattern, value, re.IGNORECASE):
-                    return '***'
+                    return "***"
         return value
 
-    async def _get_insert_update_sql_and_values(self, table: str, data: Dict[str, Any]) -> Tuple[str, List[Any]]:
+    async def _get_insert_update_sql_and_values(
+        self, table: str, data: Dict[str, Any]
+    ) -> Tuple[str, List[Any]]:
         """Helper to construct INSERT/UPDATE SQL and prepare values for a single record."""
         self._validate_table_and_columns(table)
         table_schema = self._TABLE_SCHEMAS.get(table)
@@ -674,15 +983,21 @@ class PostgresClient:
         for col in columns:
             if col not in pk_columns:
                 if col in jsonb_columns:
-                    update_set_parts.append(f"{col} = COALESCE({table}.{col}, '{{}}'::jsonb) || COALESCE(EXCLUDED.{col}, '{{}}'::jsonb)")
+                    update_set_parts.append(
+                        f"{col} = COALESCE({table}.{col}, '{{}}'::jsonb) || COALESCE(EXCLUDED.{col}, '{{}}'::jsonb)"
+                    )
                 else:
                     update_set_parts.append(f"{col} = EXCLUDED.{col}")
 
         on_conflict_sql = f"ON CONFLICT ({on_conflict_pk_part}) DO UPDATE SET {', '.join(update_set_parts)}"
-        full_sql = f"{insert_sql_part} {on_conflict_sql} RETURNING {', '.join(pk_columns)};"
+        full_sql = (
+            f"{insert_sql_part} {on_conflict_sql} RETURNING {', '.join(pk_columns)};"
+        )
         return full_sql, values
 
-    async def _save_many_copy(self, table: str, data_list: List[Dict[str, Any]]) -> List[str]:
+    async def _save_many_copy(
+        self, table: str, data_list: List[Dict[str, Any]]
+    ) -> List[str]:
         """Uses PostgreSQL COPY for batch inserts, falling back to UPSERT for conflicts."""
         self._validate_table_and_columns(table)
         table_schema = self._TABLE_SCHEMAS.get(table)
@@ -690,7 +1005,7 @@ class PostgresClient:
         pk_columns = table_schema["pk"]
         jsonb_columns = table_schema["jsonb_columns"]
         saved_ids: List[str] = []
-        
+
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 # Prepare records for COPY and update original data_list with generated IDs
@@ -703,7 +1018,9 @@ class PostgresClient:
                         data_item["session_id"] = str(uuid.uuid4())
                     elif table == "agent_knowledge":
                         if "domain" not in data_item or "key" not in data_item:
-                            raise ValueError("Each item in agent_knowledge batch must have 'domain' and 'key'.")
+                            raise ValueError(
+                                "Each item in agent_knowledge batch must have 'domain' and 'key'."
+                            )
                     record = [data_item.get(col) for col in columns]
                     for i, col in enumerate(columns):
                         if col in jsonb_columns and record[i] is not None:
@@ -715,20 +1032,19 @@ class PostgresClient:
                         saved_ids.append(f"{data_item['domain']}:{data_item['key']}")
                     else:
                         saved_ids.append(str(data_item[pk_columns[0]]))
-                
+
                 # Use COPY for bulk insert
                 await conn.copy_records_to_table(
-                    table,
-                    columns=columns,
-                    records=records,
-                    schema_name="public"
+                    table, columns=columns, records=records, schema_name="public"
                 )
-                
+
                 # Handle conflicts with UPSERT (now using data_item with generated IDs)
                 for data_item in data_list:
-                    query_sql, values = await self._get_insert_update_sql_and_values(table, data_item)
+                    query_sql, values = await self._get_insert_update_sql_and_values(
+                        table, data_item
+                    )
                     await conn.execute(query_sql, *values)
-        
+
         return saved_ids
 
     async def save(self, table: str, data: Dict[str, Any]) -> str:
@@ -761,18 +1077,22 @@ class PostgresClient:
             raise ValueError(f"Table '{table}' has no primary key defined.")
 
         if pk_columns == ["id"] and "id" not in data:
-            data['id'] = str(uuid.uuid4())
+            data["id"] = str(uuid.uuid4())
         elif pk_columns == ["session_id"] and "session_id" not in data:
-            data['session_id'] = str(uuid.uuid4())
+            data["session_id"] = str(uuid.uuid4())
 
         if table == "agent_knowledge":
             if "domain" not in data or "key" not in data:
-                raise ValueError("For agent_knowledge table, 'domain' and 'key' are required in data for save operation.")
+                raise ValueError(
+                    "For agent_knowledge table, 'domain' and 'key' are required in data for save operation."
+                )
             pk_value = f"{data['domain']}:{data['key']}"
         elif len(pk_columns) == 1:
             pk_value = data.get(pk_columns[0])
             if pk_value is None:
-                raise ValueError(f"Primary key column '{pk_columns[0]}' is missing from data for table '{table}'.")
+                raise ValueError(
+                    f"Primary key column '{pk_columns[0]}' is missing from data for table '{table}'."
+                )
         else:
             pk_value = "unknown_pk"
 
@@ -813,17 +1133,21 @@ class PostgresClient:
         if not data_list:
             return []
         if self._pool is None or self._is_closed:
-            raise PostgresClientConnectionError("Database pool not initialized. Call connect() first.")
+            raise PostgresClientConnectionError(
+                "Database pool not initialized. Call connect() first."
+            )
 
         self._validate_table_and_columns(table)
         table_schema = self._TABLE_SCHEMAS.get(table)
         columns = table_schema["columns"]
         pk_columns = table_schema["pk"]
         jsonb_columns = table_schema["jsonb_columns"]
-        
+
         batch_size_threshold = int(os.getenv("PG_COPY_BATCH_THRESHOLD", "1000"))
         if len(data_list) >= batch_size_threshold:
-            logger.info(f"Using COPY for batch save of {len(data_list)} records to '{table}'.")
+            logger.info(
+                f"Using COPY for batch save of {len(data_list)} records to '{table}'."
+            )
             return await self._save_many_copy(table, data_list)
 
         MAX_PARAMS = int(os.getenv("PG_MAX_PARAMS", "65535"))
@@ -839,18 +1163,22 @@ class PostgresClient:
             span.set_attribute("db.operation", op)
             span.set_attribute("db.table", table)
             try:
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=op, table=table, status="attempt").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type, operation=op, table=table, status="attempt"
+                ).inc()
                 async with self._pool.acquire() as conn:
                     size = self._pool.get_size()
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
                     if idle is not None:
-                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(max(0, size - idle))
+                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
+                            max(0, size - idle)
+                        )
                     DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(size)
 
                     async with conn.transaction():
                         for start in range(0, len(data_list), max_rows_per_chunk):
-                            chunk = data_list[start:start + max_rows_per_chunk]
+                            chunk = data_list[start : start + max_rows_per_chunk]
 
                             all_values_flat: List[Any] = []
                             all_placeholders: List[str] = []
@@ -859,11 +1187,19 @@ class PostgresClient:
                                 current_data = data_item.copy()
                                 if pk_columns == ["id"] and "id" not in current_data:
                                     current_data["id"] = str(uuid.uuid4())
-                                elif pk_columns == ["session_id"] and "session_id" not in current_data:
+                                elif (
+                                    pk_columns == ["session_id"]
+                                    and "session_id" not in current_data
+                                ):
                                     current_data["session_id"] = str(uuid.uuid4())
                                 elif table == "agent_knowledge":
-                                    if "domain" not in current_data or "key" not in current_data:
-                                        raise ValueError("Each item in agent_knowledge batch must have 'domain' and 'key'.")
+                                    if (
+                                        "domain" not in current_data
+                                        or "key" not in current_data
+                                    ):
+                                        raise ValueError(
+                                            "Each item in agent_knowledge batch must have 'domain' and 'key'."
+                                        )
 
                                 row_placeholders: List[str] = []
                                 for col_idx, col in enumerate(columns):
@@ -874,7 +1210,9 @@ class PostgresClient:
                                         row_placeholders.append(f"${param_idx}::jsonb")
                                     else:
                                         row_placeholders.append(f"${param_idx}")
-                                all_placeholders.append(f"({', '.join(row_placeholders)})")
+                                all_placeholders.append(
+                                    f"({', '.join(row_placeholders)})"
+                                )
 
                             columns_str = ", ".join(columns)
                             placeholders_str = ", ".join(all_placeholders)
@@ -883,9 +1221,13 @@ class PostgresClient:
                             for col in columns:
                                 if col not in pk_columns:
                                     if col in jsonb_columns:
-                                        update_set_parts.append(f"{col} = COALESCE({table}.{col}, '{{}}'::jsonb) || COALESCE(EXCLUDED.{col}, '{{}}'::jsonb)")
+                                        update_set_parts.append(
+                                            f"{col} = COALESCE({table}.{col}, '{{}}'::jsonb) || COALESCE(EXCLUDED.{col}, '{{}}'::jsonb)"
+                                        )
                                     else:
-                                        update_set_parts.append(f"{col} = EXCLUDED.{col}")
+                                        update_set_parts.append(
+                                            f"{col} = EXCLUDED.{col}"
+                                        )
 
                             on_conflict_sql = f"ON CONFLICT ({on_conflict_pk_part}) DO UPDATE SET {', '.join(update_set_parts)}"
                             query_sql = f"INSERT INTO {table} ({columns_str}) VALUES {placeholders_str} {on_conflict_sql} RETURNING {', '.join(pk_columns)};"
@@ -893,51 +1235,98 @@ class PostgresClient:
                             result = await conn.fetch(query_sql, *all_values_flat)
                             for record in result:
                                 if table == "agent_knowledge":
-                                    saved_ids.append(f"{record['domain']}:{record['key']}")
+                                    saved_ids.append(
+                                        f"{record['domain']}:{record['key']}"
+                                    )
                                 else:
                                     saved_ids.append(str(record[pk_columns[0]]))
 
                 status = "success"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=op, table=table, status="success").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type, operation=op, table=table, status="success"
+                ).inc()
                 span.set_attribute("db.rows_affected", len(saved_ids))
                 span.set_status(Status(StatusCode.OK))
                 return saved_ids
             except asyncio.TimeoutError as e:
                 status = "timeout"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=op, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=op, table=table, error_type="TimeoutError").inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type, operation=op, table=table, status="failure"
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=op,
+                    table=table,
+                    error_type="TimeoutError",
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"save_many timed out: {e}"))
                 logger.error(f"save_many timed out on '{table}': {e}", exc_info=True)
-                raise PostgresClientTimeoutError(f"save_many timed out on {table}: {e}") from e
+                raise PostgresClientTimeoutError(
+                    f"save_many timed out on {table}: {e}"
+                ) from e
             except FATAL_EXC as e:
                 status = "fatal"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=op, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=op, table=table, error_type=type(e).__name__).inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type, operation=op, table=table, status="failure"
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=op,
+                    table=table,
+                    error_type=type(e).__name__,
+                ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"PostgreSQL fatal error in save_many: {e}"))
-                logger.error(f"PostgreSQL fatal error in save_many on '{table}': {e}", exc_info=True)
-                raise PostgresClientSchemaError(f"Schema error in save_many on {table}: {e}") from e
+                span.set_status(
+                    Status(
+                        StatusCode.ERROR, f"PostgreSQL fatal error in save_many: {e}"
+                    )
+                )
+                logger.error(
+                    f"PostgreSQL fatal error in save_many on '{table}': {e}",
+                    exc_info=True,
+                )
+                raise PostgresClientSchemaError(
+                    f"Schema error in save_many on {table}: {e}"
+                ) from e
             except Exception as e:
                 status = "failure"
-                DB_CALLS_TOTAL.labels(db_type=self.db_type, operation=op, table=table, status="failure").inc()
-                DB_CALLS_ERRORS.labels(db_type=self.db_type, operation=op, table=table, error_type=type(e).__name__).inc()
+                DB_CALLS_TOTAL.labels(
+                    db_type=self.db_type, operation=op, table=table, status="failure"
+                ).inc()
+                DB_CALLS_ERRORS.labels(
+                    db_type=self.db_type,
+                    operation=op,
+                    table=table,
+                    error_type=type(e).__name__,
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"save_many error: {e}"))
                 logger.error(f"Error in save_many on '{table}': {e}", exc_info=True)
-                raise PostgresClientQueryError(f"Query error in save_many on {table}: {e}") from e
+                raise PostgresClientQueryError(
+                    f"Query error in save_many on {table}: {e}"
+                ) from e
             finally:
                 if self._pool and not self._is_closed:
                     size = self._pool.get_size()
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
                     if idle is not None:
-                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(max(0, size - idle))
+                        DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
+                            max(0, size - idle)
+                        )
                     DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(size)
-                DB_CALL_LATENCY_SECONDS.labels(db_type=self.db_type, operation=op, table=table, status=status).observe(time.monotonic() - start_time)
+                DB_CALL_LATENCY_SECONDS.labels(
+                    db_type=self.db_type, operation=op, table=table, status=status
+                ).observe(time.monotonic() - start_time)
 
-
-    async def load(self, table: str, query_value: Any, query_field: str = "id", normalize_datetimes: bool = True) -> Optional[Dict[str, Any]]:
+    async def load(
+        self,
+        table: str,
+        query_value: Any,
+        query_field: str = "id",
+        normalize_datetimes: bool = True,
+    ) -> Optional[Dict[str, Any]]:
         """
         Loads a single record from a table based on a query field.
 
@@ -958,8 +1347,10 @@ class PostgresClient:
         params: List[Any] = []
         if table == "agent_knowledge" and query_field == "domain_key":
             if not isinstance(query_value, str) or ":" not in query_value:
-                raise ValueError("For agent_knowledge, query_value for 'domain_key' must be 'domain:key' string.")
-            domain, key = query_value.split(':', 1)
+                raise ValueError(
+                    "For agent_knowledge, query_value for 'domain_key' must be 'domain:key' string."
+                )
+            domain, key = query_value.split(":", 1)
             query_sql = f"SELECT * FROM {table} WHERE domain = $1 AND key = $2;"
             params = [domain, key]
         else:
@@ -972,8 +1363,14 @@ class PostgresClient:
             return self._normalize_row(table, res[0], normalize_datetimes)
         return None
 
-    async def load_all(self, table: str, filters: Optional[Dict[str, Any]] = None,
-                       order_by: Optional[str] = None, limit: Optional[int] = None, normalize_datetimes: bool = True) -> List[Dict[str, Any]]:
+    async def load_all(
+        self,
+        table: str,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        limit: Optional[int] = None,
+        normalize_datetimes: bool = True,
+    ) -> List[Dict[str, Any]]:
         """
         Loads multiple records from a table based on filters.
 
@@ -999,7 +1396,9 @@ class PostgresClient:
         param_counter = 1
 
         if filters:
-            jsonb_cols = set(self._TABLE_SCHEMAS.get(table, {}).get("jsonb_columns", []))
+            jsonb_cols = set(
+                self._TABLE_SCHEMAS.get(table, {}).get("jsonb_columns", [])
+            )
             for k, v in filters.items():
                 if k in jsonb_cols:
                     where_clauses.append(f"{k} @> ${param_counter}::jsonb")
@@ -1014,34 +1413,50 @@ class PostgresClient:
             query_sql += " WHERE " + " AND ".join(where_clauses)
 
         if order_by:
-            col_map = {c.lower().strip(): c for c in self._TABLE_SCHEMAS[table]["columns"]}
+            col_map = {
+                c.lower().strip(): c for c in self._TABLE_SCHEMAS[table]["columns"]
+            }
             order_parts = order_by.strip().split()
             key = order_parts[0].lower()
             direction = order_parts[1].lower() if len(order_parts) > 1 else ""
             if key not in col_map or (direction and direction not in ("asc", "desc")):
-                raise ValueError(f"Invalid order_by. Columns: {sorted(col_map.values())}; directions: asc, desc.")
+                raise ValueError(
+                    f"Invalid order_by. Columns: {sorted(col_map.values())}; directions: asc, desc."
+                )
             order_col = col_map[key]
-            query_sql += f" ORDER BY {order_col}" + (f" {direction.upper()}" if direction else "")
+            query_sql += f" ORDER BY {order_col}" + (
+                f" {direction.upper()}" if direction else ""
+            )
 
         global_max_rows = int(os.getenv("PG_GLOBAL_MAX_ROWS", "50000"))
         if limit is not None:
             max_limit = min(int(os.getenv("PG_MAX_LIMIT", "10000")), global_max_rows)
             if not isinstance(limit, int) or limit <= 0 or limit > max_limit:
-                raise ValueError(f"Invalid limit. Must be an integer between 1 and {max_limit}.")
+                raise ValueError(
+                    f"Invalid limit. Must be an integer between 1 and {max_limit}."
+                )
         else:
-            default_limit = min(int(os.getenv("PG_DEFAULT_LIMIT", "1000")), global_max_rows)
-            logger.warning(f"load_all called without a filter or limit. Applying default limit of {default_limit} to prevent full table scan.")
+            default_limit = min(
+                int(os.getenv("PG_DEFAULT_LIMIT", "1000")), global_max_rows
+            )
+            logger.warning(
+                f"load_all called without a filter or limit. Applying default limit of {default_limit} to prevent full table scan."
+            )
             limit = default_limit
-        
+
         query_sql += f" LIMIT {limit};"
         res = await self._execute_query("load_all", table, query_sql, *params)
-        
+
         if len(res) >= limit:
-            logger.warning(f"Query on {table} returned {len(res)} rows, which is the applied limit of {limit}. There may be more rows. Consider a more specific query or a higher limit.")
-        
+            logger.warning(
+                f"Query on {table} returned {len(res)} rows, which is the applied limit of {limit}. There may be more rows. Consider a more specific query or a higher limit."
+            )
+
         return [self._normalize_row(table, r, normalize_datetimes) for r in res]
 
-    async def update(self, table: str, query: Dict[str, Any], updates: Dict[str, Any]) -> bool:
+    async def update(
+        self, table: str, query: Dict[str, Any], updates: Dict[str, Any]
+    ) -> bool:
         """
         Updates records in a table that match the query.
 
@@ -1079,19 +1494,27 @@ class PostgresClient:
                     set_clauses.append(f"{k} = NULL")
                 elif isinstance(v, dict):
                     if "$replace" in v and "$unset" in v:
-                        raise ValueError("Cannot use '$replace' and '$unset' in the same update for a JSONB column.")
+                        raise ValueError(
+                            "Cannot use '$replace' and '$unset' in the same update for a JSONB column."
+                        )
                     if "$replace" in v:
                         set_clauses.append(f"{k} = ${param_counter}::jsonb")
                         set_params.append(v["$replace"])
                         param_counter += 1
                     elif "$unset" in v:
-                        if not isinstance(v["$unset"], list) or not all(isinstance(i, str) for i in v["$unset"]):
-                            raise ValueError("'$unset' value must be a list of strings.")
+                        if not isinstance(v["$unset"], list) or not all(
+                            isinstance(i, str) for i in v["$unset"]
+                        ):
+                            raise ValueError(
+                                "'$unset' value must be a list of strings."
+                            )
                         set_clauses.append(f"{k} = {k} #- ${param_counter}::text[]")
                         set_params.append(v["$unset"])
                         param_counter += 1
                     else:  # default JSONB merge
-                        set_clauses.append(f"{k} = COALESCE({k}, '{{}}'::jsonb) || ${param_counter}::jsonb")
+                        set_clauses.append(
+                            f"{k} = COALESCE({k}, '{{}}'::jsonb) || ${param_counter}::jsonb"
+                        )
                         set_params.append(v)
                         param_counter += 1
                 else:
@@ -1123,7 +1546,9 @@ class PostgresClient:
         res = await self._execute_query("update", table, query_sql, *all_params)
         return bool(res)
 
-    async def delete(self, table: str, query_value: Any, query_field: str = "id") -> bool:
+    async def delete(
+        self, table: str, query_value: Any, query_field: str = "id"
+    ) -> bool:
         """
         Deletes a record from a table based on a query field.
 
@@ -1142,8 +1567,10 @@ class PostgresClient:
         pk_cols = self._TABLE_SCHEMAS[table]["pk"]
         if table == "agent_knowledge" and query_field == "domain_key":
             if not isinstance(query_value, str) or ":" not in query_value:
-                raise ValueError("For agent_knowledge, query_value for 'domain_key' must be 'domain:key' string.")
-            domain, key = query_value.split(':', 1)
+                raise ValueError(
+                    "For agent_knowledge, query_value for 'domain_key' must be 'domain:key' string."
+                )
+            domain, key = query_value.split(":", 1)
             query_sql = f"DELETE FROM {table} WHERE domain = $1 AND key = $2 RETURNING {', '.join(pk_cols)};"
             params = [domain, key]
         else:
@@ -1157,11 +1584,15 @@ class PostgresClient:
 
 # Example Usage (for testing purposes)
 async def main():
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.setLevel(logging.DEBUG)
 
-    db_url = os.getenv("DATABASE_URL", "postgresql://sfe_user:sfe_password@localhost:5432/sfe_test_db")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql://sfe_user:sfe_password@localhost:5432/sfe_test_db"
+    )
     client = PostgresClient(db_url)
     exit_code = 0
 
@@ -1175,24 +1606,33 @@ async def main():
             feedback_data = {
                 "id": str(uuid.uuid4()),
                 "type": "user_feedback",
-                "data": {"decision_id": "dec_123", "approved": True, "comment": "Great job!"},
-                "timestamp": datetime.now(timezone.utc)
+                "data": {
+                    "decision_id": "dec_123",
+                    "approved": True,
+                    "comment": "Great job!",
+                },
+                "timestamp": datetime.now(timezone.utc),
             }
             saved_id = await client.save("feedback", feedback_data)
             logger.info(f"Saved feedback with ID: {saved_id}")
 
             retrieved_feedback = await client.load("feedback", saved_id)
             logger.info(f"Retrieved feedback: {retrieved_feedback}")
-            assert retrieved_feedback and retrieved_feedback['id'] == saved_id
+            assert retrieved_feedback and retrieved_feedback["id"] == saved_id
 
             updated_feedback_data = {"data": {"comment": "Excellent work, approved."}}
-            updated = await client.update("feedback", {"id": saved_id}, updated_feedback_data)
+            updated = await client.update(
+                "feedback", {"id": saved_id}, updated_feedback_data
+            )
             logger.info(f"Updated feedback: {updated}")
             assert updated
 
             retrieved_updated_feedback = await client.load("feedback", saved_id)
             logger.info(f"Retrieved updated feedback: {retrieved_updated_feedback}")
-            assert retrieved_updated_feedback['data']['comment'] == "Excellent work, approved."
+            assert (
+                retrieved_updated_feedback["data"]["comment"]
+                == "Excellent work, approved."
+            )
 
             deleted = await client.delete("feedback", saved_id)
             logger.info(f"Deleted feedback: {deleted}")
@@ -1215,30 +1655,45 @@ async def main():
                 "diff": None,
                 "merkle_leaf": "leaf_hash_1",
                 "merkle_proof": [{"node": "node1"}],
-                "merkle_root": "root_hash_1"
+                "merkle_root": "root_hash_1",
             }
             saved_knowledge_key = await client.save("agent_knowledge", knowledge_data)
             logger.info(f"Saved knowledge for domain:key {saved_knowledge_key}")
 
-            retrieved_knowledge = await client.load("agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key")
+            retrieved_knowledge = await client.load(
+                "agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key"
+            )
             logger.info(f"Retrieved knowledge: {retrieved_knowledge}")
-            assert retrieved_knowledge and retrieved_knowledge['domain'] == "bug_fix"
+            assert retrieved_knowledge and retrieved_knowledge["domain"] == "bug_fix"
 
-            updated_knowledge_data = {"value": {"status": "verified", "priority": "high"}, "version": 2}
-            updated_knowledge = await client.update("agent_knowledge", {"domain": "bug_fix", "key": "bug_id_456"}, updated_knowledge_data)
+            updated_knowledge_data = {
+                "value": {"status": "verified", "priority": "high"},
+                "version": 2,
+            }
+            updated_knowledge = await client.update(
+                "agent_knowledge",
+                {"domain": "bug_fix", "key": "bug_id_456"},
+                updated_knowledge_data,
+            )
             logger.info(f"Updated knowledge: {updated_knowledge}")
             assert updated_knowledge
 
-            retrieved_updated_knowledge = await client.load("agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key")
+            retrieved_updated_knowledge = await client.load(
+                "agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key"
+            )
             logger.info(f"Retrieved updated knowledge: {retrieved_updated_knowledge}")
-            assert retrieved_updated_knowledge['value']['status'] == "verified"
-            assert retrieved_updated_knowledge['version'] == 2
+            assert retrieved_updated_knowledge["value"]["status"] == "verified"
+            assert retrieved_updated_knowledge["version"] == 2
 
-            deleted_knowledge = await client.delete("agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key")
+            deleted_knowledge = await client.delete(
+                "agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key"
+            )
             logger.info(f"Deleted knowledge: {deleted_knowledge}")
             assert deleted_knowledge
 
-            retrieved_deleted_knowledge = await client.load("agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key")
+            retrieved_deleted_knowledge = await client.load(
+                "agent_knowledge", "bug_fix:bug_id_456", query_field="domain_key"
+            )
             assert retrieved_deleted_knowledge is None
             logger.info("Knowledge deletion verified.")
 
@@ -1247,29 +1702,45 @@ async def main():
             state_data = {
                 "session_id": "sess_agent_xyz",
                 "state": {"current_step": "planning", "memory_buffer": ["hi", "hello"]},
-                "last_updated": datetime.now(timezone.utc)
+                "last_updated": datetime.now(timezone.utc),
             }
             saved_session_id = await client.save("agent_states", state_data)
             logger.info(f"Saved agent state for session: {saved_session_id}")
 
-            retrieved_state = await client.load("agent_states", saved_session_id, query_field="session_id")
+            retrieved_state = await client.load(
+                "agent_states", saved_session_id, query_field="session_id"
+            )
             logger.info(f"Retrieved agent state: {retrieved_state}")
-            assert retrieved_state and retrieved_state['session_id'] == saved_session_id
+            assert retrieved_state and retrieved_state["session_id"] == saved_session_id
 
-            updated_state_data = {"state": {"current_step": "executing", "memory_buffer": ["hi", "hello", "executing"]}, "last_updated": datetime.now(timezone.utc)}
-            updated_state = await client.update("agent_states", {"session_id": saved_session_id}, updated_state_data)
+            updated_state_data = {
+                "state": {
+                    "current_step": "executing",
+                    "memory_buffer": ["hi", "hello", "executing"],
+                },
+                "last_updated": datetime.now(timezone.utc),
+            }
+            updated_state = await client.update(
+                "agent_states", {"session_id": saved_session_id}, updated_state_data
+            )
             logger.info(f"Updated agent state: {updated_state}")
             assert updated_state
 
-            retrieved_updated_state = await client.load("agent_states", saved_session_id, query_field="session_id")
+            retrieved_updated_state = await client.load(
+                "agent_states", saved_session_id, query_field="session_id"
+            )
             logger.info(f"Retrieved updated agent state: {retrieved_updated_state}")
-            assert retrieved_updated_state['state']['current_step'] == "executing"
+            assert retrieved_updated_state["state"]["current_step"] == "executing"
 
-            deleted_state = await client.delete("agent_states", saved_session_id, query_field="session_id")
+            deleted_state = await client.delete(
+                "agent_states", saved_session_id, query_field="session_id"
+            )
             logger.info(f"Deleted agent state: {deleted_state}")
             assert deleted_state
 
-            retrieved_deleted_state = await client.load("agent_states", saved_session_id, query_field="session_id")
+            retrieved_deleted_state = await client.load(
+                "agent_states", saved_session_id, query_field="session_id"
+            )
             assert retrieved_deleted_state is None
             logger.info("Agent state deletion verified.")
 
@@ -1284,18 +1755,22 @@ async def main():
                 "previous_log_hash": "prev_hash_abc",
                 "hash": "current_hash_xyz",
                 "signatures": [{"key_id": "key1", "signature": "sig1"}],
-                "correlation_id": str(uuid.uuid4())
+                "correlation_id": str(uuid.uuid4()),
             }
             saved_audit_id = await client.save("audit_events", audit_event_data)
             logger.info(f"Saved audit event with ID: {saved_audit_id}")
 
             retrieved_audit = await client.load("audit_events", saved_audit_id)
             logger.info(f"Retrieved audit event: {retrieved_audit}")
-            assert retrieved_audit and retrieved_audit['id'] == saved_audit_id
+            assert retrieved_audit and retrieved_audit["id"] == saved_audit_id
 
             # Test load_all
-            all_audit_events = await client.load_all("audit_events", filters={"event_type": "user:login"})
-            logger.info(f"Retrieved all 'user:login' audit events: {len(all_audit_events)}")
+            all_audit_events = await client.load_all(
+                "audit_events", filters={"event_type": "user:login"}
+            )
+            logger.info(
+                f"Retrieved all 'user:login' audit events: {len(all_audit_events)}"
+            )
             assert len(all_audit_events) > 0
 
             deleted_audit = await client.delete("audit_events", saved_audit_id)
@@ -1310,19 +1785,23 @@ async def main():
             logger.info("\n--- Testing 'save_many' ---")
             batch_feedback_data = []
             for i in range(5):
-                batch_feedback_data.append({
-                    "id": str(uuid.uuid4()),
-                    "type": "batch_feedback",
-                    "data": {"item_idx": i, "status": "processed"},
-                    "timestamp": datetime.now(timezone.utc)
-                })
+                batch_feedback_data.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "batch_feedback",
+                        "data": {"item_idx": i, "status": "processed"},
+                        "timestamp": datetime.now(timezone.utc),
+                    }
+                )
 
             batch_ids = await client.save_many("feedback", batch_feedback_data)
             logger.info(f"Saved {len(batch_ids)} items in batch: {batch_ids}")
             assert len(batch_ids) == 5
 
             # Verify batch items can be loaded
-            loaded_batch_items = await client.load_all("feedback", filters={"type": "batch_feedback"})
+            loaded_batch_items = await client.load_all(
+                "feedback", filters={"type": "batch_feedback"}
+            )
             logger.info(f"Loaded {len(loaded_batch_items)} batch feedback items.")
             assert len(loaded_batch_items) >= 5
 
@@ -1334,12 +1813,15 @@ async def main():
         elif os.getenv("RUN_TESTS", "0") == "1":
             logger.info("Running test suite.")
             import pytest
+
             exit_code = pytest.main(["tests/test_postgres_client.py", "-v"])
         else:
             logger.info("Skipping example usage. Set RUN_EXAMPLE=1 to run.")
 
     except Exception as e:
-        logger.error(f"An error occurred during PostgresClient testing: {e}", exc_info=True)
+        logger.error(
+            f"An error occurred during PostgresClient testing: {e}", exc_info=True
+        )
         exit_code = 1
     finally:
         await client.disconnect()
@@ -1347,8 +1829,10 @@ async def main():
         if exit_code != 0:
             raise SystemExit(exit_code)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 class SchemaValidationError(Exception):
     pass

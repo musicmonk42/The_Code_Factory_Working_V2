@@ -33,6 +33,7 @@ _logger = logging.getLogger(LOGGER_NAME)
 # Arbiter (external) audit logger availability probe
 try:
     from arbiter.audit_log import audit_logger as arbiter_audit
+
     AUDIT_LOGGER_AVAILABLE = True
 except ImportError:
     arbiter_audit = None
@@ -41,6 +42,7 @@ except ImportError:
 
 class AuditLogger:
     """Stub for compatibility when the full arbiter logger isn't available."""
+
     @staticmethod
     def from_environment():
         return logging.getLogger(LOGGER_NAME)
@@ -121,7 +123,9 @@ async def audit_event(
 
     # Serialize; if this fails, the test expects an ERROR log and graceful return.
     try:
-        line = json.dumps(log_entry, default=_json_serializable_default, ensure_ascii=False)
+        line = json.dumps(
+            log_entry, default=_json_serializable_default, ensure_ascii=False
+        )
     except Exception as e:
         _logger.error("Failed to serialize audit log for event '%s': %s", event_type, e)
         return
@@ -151,14 +155,25 @@ except Exception:
     pass
 
 # Define a constant for the feedback log file path
-FEEDBACK_LOG_FILE = os.getenv("FEEDBACK_LOG_FILE", os.path.join(
-    os.path.expanduser("~"), ".local", "state", "test-agent-cli", "feedback_log.jsonl"
-))
+FEEDBACK_LOG_FILE = os.getenv(
+    "FEEDBACK_LOG_FILE",
+    os.path.join(
+        os.path.expanduser("~"),
+        ".local",
+        "state",
+        "test-agent-cli",
+        "feedback_log.jsonl",
+    ),
+)
 
-async def append_to_feedback_log(feedback_log_path: str, feedback_data: Dict[str, Any], config: Optional[Dict] = None) -> None:
+
+async def append_to_feedback_log(
+    feedback_log_path: str, feedback_data: Dict[str, Any], config: Optional[Dict] = None
+) -> None:
     """
     Delegate to the io_utils implementation for backwards compatibility.
     This function exists to maintain compatibility with existing imports.
     """
     from test_generation.gen_agent.io_utils import append_to_feedback_log as io_append
+
     await io_append(feedback_log_path, feedback_data, config)

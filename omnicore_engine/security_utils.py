@@ -17,8 +17,6 @@ Author: ChatGPT (GPT-5 Thinking)
 from __future__ import annotations
 
 import base64
-import binascii
-import dataclasses
 import functools
 import hmac
 import html
@@ -26,12 +24,11 @@ import json
 import logging
 import os
 import re
-import secrets
 import threading
 import time
 import typing as _t
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum, auto
 
 # Optional deps: we try to import and fall back if missing
@@ -50,6 +47,7 @@ try:
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     _CRYPTO_AVAILABLE = True
 except Exception:  # pragma: no cover - if not available, we still allow module import
     _CRYPTO_AVAILABLE = False
@@ -100,6 +98,7 @@ __all__ = [
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class SecurityError(Exception):
     """Base class for security related errors."""
 
@@ -140,19 +139,23 @@ class ValidationError(SecurityError):
 # Enums and data classes
 # ---------------------------------------------------------------------------
 
+
 class HashAlgorithm(Enum):
     """Supported password hashing algorithms."""
+
     PBKDF2_SHA256 = auto()
 
 
 class EncryptionAlgorithm(Enum):
     """Supported symmetric encryption algorithms."""
+
     AES_GCM = auto()
 
 
 @dataclass(frozen=True)
 class Token:
     """Represents a signed, optionally-expiring token."""
+
     payload: dict
     issued_at: int
     expires_at: int
@@ -163,6 +166,7 @@ class Token:
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
 
 def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
@@ -181,14 +185,16 @@ def _require_crypto() -> None:
         )
 
 
-def _hkdf_derive_key(secret: _t.Union[str, bytes], salt: _t.Optional[bytes] = None, length: int = 32) -> bytes:
+def _hkdf_derive_key(
+    secret: _t.Union[str, bytes], salt: _t.Optional[bytes] = None, length: int = 32
+) -> bytes:
     """Derive a fixed-length key from arbitrary secret using PBKDF2HMAC (HKDF alternative).
-    
+
     SECURITY NOTE: This function uses a deterministic salt when none is provided, which is
     acceptable for deriving encryption keys from a pre-shared secret. The security relies on:
     1. The secret being cryptographically random and kept secure
     2. Random nonces being used for each encryption operation
-    
+
     For password-based key derivation, use hash_password() which uses random salts.
     """
     _require_crypto()
@@ -199,14 +205,19 @@ def _hkdf_derive_key(secret: _t.Union[str, bytes], salt: _t.Optional[bytes] = No
     if salt is None:
         # Use deterministic salt for key derivation (acceptable when secret is pre-shared and secure)
         # This allows encryption/decryption to work with the same derived key
-        salt = hashlib_sha256(b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii"))
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000)
+        salt = hashlib_sha256(
+            b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii")
+        )
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000
+    )
     return kdf.derive(secret_bytes)
 
 
 def hashlib_sha256(data: bytes) -> bytes:
     # Use stdlib hashlib to avoid importing twice
     import hashlib as _hashlib
+
     h = _hashlib.sha256()
     h.update(data)
     return h.digest()
@@ -226,12 +237,23 @@ def constant_time_compare(a: _t.Union[str, bytes], b: _t.Union[str, bytes]) -> b
 # ---------------------------------------------------------------------------
 
 _ALLOWED_TAGS = [
-    "p", "strong", "em", "ul", "ol", "li", "br", "a", "code", "pre", "span"
+    "p",
+    "strong",
+    "em",
+    "ul",
+    "ol",
+    "li",
+    "br",
+    "a",
+    "code",
+    "pre",
+    "span",
 ]
 _ALLOWED_ATTRIBUTES = {
     "a": ["href", "title", "target", "rel"],
     # Ignore all others
 }
+
 
 def _fallback_sanitize_html(html_text: str) -> str:
     """
@@ -240,18 +262,18 @@ def _fallback_sanitize_html(html_text: str) -> str:
       * strips all tags not in the allowed list
       * removes all attributes from allowed tags except a[href|title|target|rel]
       * escapes textual data by default
-    
+
     SECURITY WARNING: This is a basic sanitizer and may not catch all XSS vectors.
     Known limitations:
       - Only checks href prefix with startswith(), may miss some javascript: variations
       - Does not handle CSS-based attacks
       - Does not fully protect against HTML entity encoding tricks
-    
+
     RECOMMENDATION: For production use, consider replacing with a well-tested library:
       - bleach: https://github.com/mozilla/bleach
       - markupsafe: https://github.com/pallets/markupsafe
       - html-sanitizer: https://github.com/matthiask/html-sanitizer
-    
+
     NOTE: This is intentionally conservative for cases where external dependencies
     cannot be added.
     """
@@ -272,18 +294,22 @@ def _fallback_sanitize_html(html_text: str) -> str:
             if tag == "a":
                 # Keep only safe href
                 safe_attrs = []
-                for (k, v) in attrs:
+                for k, v in attrs:
                     k = k.lower()
                     if k == "href":
-                        v = (v or "")
+                        v = v or ""
                         if isinstance(v, bytes):
                             v = v.decode("utf-8", "ignore")
                         v_stripped = v.strip()
                         v_lower = v_stripped.lower()
                         # SECURITY: Check for dangerous protocols on lowercase version
                         # but preserve original case for legitimate URLs
-                        if (v_lower.startswith(("http://", "https://", "#", "mailto:")) and
-                            not any(dangerous in v_lower for dangerous in ["javascript:", "data:", "vbscript:"])):
+                        if v_lower.startswith(
+                            ("http://", "https://", "#", "mailto:")
+                        ) and not any(
+                            dangerous in v_lower
+                            for dangerous in ["javascript:", "data:", "vbscript:"]
+                        ):
                             safe_attrs.append((k, html.escape(v_stripped, quote=True)))
                     elif k in ("title", "target", "rel"):
                         if v is not None:
@@ -337,6 +363,7 @@ def sanitize_html(html_text: str) -> str:
 # Password hashing
 # ---------------------------------------------------------------------------
 
+
 def _pbkdf2_sha256(password: str, salt: bytes, iterations: int) -> bytes:
     _require_crypto()
     kdf = PBKDF2HMAC(
@@ -379,7 +406,7 @@ def hash_password(
 def verify_password(password: str, stored: str) -> tuple[bool, bool]:
     """
     Verify a password against the stored hash format emitted by `hash_password`.
-    
+
     Returns:
         tuple[bool, bool]: (is_valid, needs_rehash)
             - is_valid: True if password matches
@@ -404,6 +431,7 @@ def verify_password(password: str, stored: str) -> tuple[bool, bool]:
 # ---------------------------------------------------------------------------
 # Token: HMAC-SHA256 signed JSON with exp and iat
 # ---------------------------------------------------------------------------
+
 
 def _sign(data: bytes, key: _t.Union[str, bytes]) -> str:
     if isinstance(key, str):
@@ -444,7 +472,9 @@ def generate_token(
     body["exp"] = exp
 
     header = {"alg": "HS256", "typ": "OCET"}
-    head_b64 = _b64url_encode(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    head_b64 = _b64url_encode(
+        json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
     payload_b = json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
     pay_b64 = _b64url_encode(payload_b)
     signing_input = f"{head_b64}.{pay_b64}".encode("ascii")
@@ -481,6 +511,7 @@ def verify_token(token: str, *, secret: _t.Union[str, bytes], leeway: int = 0) -
 # ---------------------------------------------------------------------------
 # Symmetric encryption: AES-GCM
 # ---------------------------------------------------------------------------
+
 
 def encrypt(
     plaintext: _t.Union[str, bytes],
@@ -539,6 +570,7 @@ def decrypt(
 # Rate Limiter
 # ---------------------------------------------------------------------------
 
+
 class RateLimiter:
     """
     Simple in-memory sliding-window rate limiter.
@@ -547,6 +579,7 @@ class RateLimiter:
         rl = RateLimiter(max_calls=5, per_seconds=60)
         rl.check("login:ip:127.0.0.1")  # raises RateLimitError if exceeded
     """
+
     def __init__(self, max_calls: int, per_seconds: int):
         if max_calls <= 0 or per_seconds <= 0:
             raise ValueError("max_calls and per_seconds must be positive")
@@ -578,7 +611,7 @@ class RateLimiter:
     def reset(self, key: str) -> None:
         with self._lock:
             self._hits.pop(key, None)
-    
+
     def is_allowed(self, key: str) -> bool:
         """Check if a request is allowed without raising an exception."""
         try:
@@ -591,6 +624,7 @@ class RateLimiter:
 # ---------------------------------------------------------------------------
 # Session Management
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Session:
@@ -608,6 +642,7 @@ class SecureSessionManager:
     Session IDs are opaque strings that include an HMAC signature to prevent
     forgery. Session contents are stored server-side in-memory.
     """
+
     def __init__(self, secret: _t.Union[str, bytes], ttl_seconds: int = 3600):
         self._secret = secret
         self._ttl = int(ttl_seconds)
@@ -628,13 +663,22 @@ class SecureSessionManager:
             raise AuthenticationError("Invalid session id signature")
         return raw_id
 
-    def create(self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None) -> Session:
+    def create(
+        self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None
+    ) -> Session:
         now = int(time.time())
         expires = now + self._ttl
         raw_id = os.urandom(16)
         sid = self._sign_id(raw_id)
         csrf = _b64url_encode(os.urandom(16))
-        sess = Session(id=sid, user_id=user_id, issued_at=now, expires_at=expires, csrf=csrf, data=dict(data or {}))
+        sess = Session(
+            id=sid,
+            user_id=user_id,
+            issued_at=now,
+            expires_at=expires,
+            csrf=csrf,
+            data=dict(data or {}),
+        )
         with self._lock:
             self._store[sid] = sess
         return sess
@@ -661,18 +705,20 @@ class SecureSessionManager:
     def revoke(self, sid: str) -> None:
         with self._lock:
             self._store.pop(sid, None)
-    
+
     def cleanup_expired(self) -> int:
         """
         Clean up expired sessions to prevent memory leak.
         Should be called periodically.
-        
+
         Returns:
             Number of sessions cleaned up
         """
         now = int(time.time())
         with self._lock:
-            expired_ids = [sid for sid, sess in self._store.items() if now > sess.expires_at]
+            expired_ids = [
+                sid for sid, sess in self._store.items() if now > sess.expires_at
+            ]
             for sid in expired_ids:
                 self._store.pop(sid, None)
         return len(expired_ids)
@@ -682,16 +728,25 @@ class SecureSessionManager:
 # Audit Logging
 # ---------------------------------------------------------------------------
 
+
 class SecurityAuditLogger:
     """
     Lightweight in-memory audit logger with optional propagation to std logging.
     """
+
     def __init__(self, logger: _t.Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger("omnicore_engine.security")
         self._events: _t.List[dict] = []
         self._lock = threading.Lock()
 
-    def log(self, action: str, subject: str, *, metadata: _t.Optional[dict] = None, level: int = logging.INFO) -> None:
+    def log(
+        self,
+        action: str,
+        subject: str,
+        *,
+        metadata: _t.Optional[dict] = None,
+        level: int = logging.INFO,
+    ) -> None:
         evt = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "action": str(action),
@@ -707,22 +762,32 @@ class SecurityAuditLogger:
 
     def tail(self, n: int = 20) -> _t.List[dict]:
         with self._lock:
-            return self._events[-int(n):]
+            return self._events[-int(n) :]
 
 
 # ---------------------------------------------------------------------------
 # EnterpriseSecurityUtils (facade)
 # ---------------------------------------------------------------------------
 
+
 class EnterpriseSecurityUtils:
     """
     High-level facade aggregating security helpers used throughout the engine.
     """
 
-    def __init__(self, *, secret: _t.Union[str, bytes] | None = None, session_ttl_seconds: int = 3600):
-        self._secret = secret or os.environ.get("OMNICORE_SECRET", "omnicore-default-secret")
+    def __init__(
+        self,
+        *,
+        secret: _t.Union[str, bytes] | None = None,
+        session_ttl_seconds: int = 3600,
+    ):
+        self._secret = secret or os.environ.get(
+            "OMNICORE_SECRET", "omnicore-default-secret"
+        )
         self.audit = SecurityAuditLogger()
-        self.sessions = SecureSessionManager(self._secret, ttl_seconds=session_ttl_seconds)
+        self.sessions = SecureSessionManager(
+            self._secret, ttl_seconds=session_ttl_seconds
+        )
         # Rate limiter for request throttling (100 requests per 60 seconds by default)
         self.rate_limiter = RateLimiter(max_calls=100, per_seconds=60)
 
@@ -738,8 +803,15 @@ class EnterpriseSecurityUtils:
         return verify_password(password, stored)
 
     # ----- Tokens -----
-    def generate_token(self, payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True) -> str:
-        return generate_token(payload, secret=self._secret, ttl_seconds=ttl_seconds, include_nonce=include_nonce)
+    def generate_token(
+        self, payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True
+    ) -> str:
+        return generate_token(
+            payload,
+            secret=self._secret,
+            ttl_seconds=ttl_seconds,
+            include_nonce=include_nonce,
+        )
 
     def verify_token(self, token: str, *, leeway: int = 0) -> dict:
         return verify_token(token, secret=self._secret, leeway=leeway)
@@ -752,7 +824,9 @@ class EnterpriseSecurityUtils:
         return decrypt(token, key=self._secret)
 
     # ----- Sessions -----
-    def create_session(self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None) -> Session:
+    def create_session(
+        self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None
+    ) -> Session:
         sess = self.sessions.create(user_id, data=data)
         self.audit.log("session_create", str(user_id), metadata={"sid": sess.id})
         return sess
@@ -781,7 +855,9 @@ class EnterpriseSecurityUtils:
         totp = pyotp.TOTP(secret, interval=interval)
         return totp.now()
 
-    def verify_totp(self, secret: str, code: str, *, interval: int = 30, valid_window: int = 1) -> bool:
+    def verify_totp(
+        self, secret: str, code: str, *, interval: int = 30, valid_window: int = 1
+    ) -> bool:
         if pyotp is None:
             return False
         totp = pyotp.TOTP(secret, interval=interval)
@@ -795,6 +871,7 @@ class EnterpriseSecurityUtils:
 _LOCK = threading.Lock()
 _SINGLETON: EnterpriseSecurityUtils | None = None
 
+
 def get_security_utils() -> EnterpriseSecurityUtils:
     global _SINGLETON
     if _SINGLETON is None:
@@ -807,6 +884,7 @@ def get_security_utils() -> EnterpriseSecurityUtils:
 # ---------------------------------------------------------------------------
 # Decorators: authentication & authorization
 # ---------------------------------------------------------------------------
+
 
 def _extract_user_from_args_kwargs(args: tuple, kwargs: dict) -> _t.Any:
     """
@@ -829,6 +907,7 @@ def require_authentication(func: _t.Callable) -> _t.Callable:
     Decorator ensuring a user is present and authenticated.
     Expects a 'user' kwarg or request.user to have truthy 'is_authenticated'.
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         user = _extract_user_from_args_kwargs(args, kwargs)
@@ -840,6 +919,7 @@ def require_authentication(func: _t.Callable) -> _t.Callable:
         if not is_auth:
             raise AuthenticationError("User is not authenticated")
         return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -848,6 +928,7 @@ def require_authorization(*required_roles: str) -> _t.Callable:
     Decorator ensuring the authenticated user also has the required roles.
     If no roles are provided, behaves the same as require_authentication.
     """
+
     def decorator(func: _t.Callable) -> _t.Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -866,7 +947,9 @@ def require_authorization(*required_roles: str) -> _t.Callable:
                 if role not in roles_set:
                     raise AuthorizationError(f"Missing required role: {role}")
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -874,35 +957,52 @@ def require_authorization(*required_roles: str) -> _t.Callable:
 # Convenience proxy functions (module-level)
 # ---------------------------------------------------------------------------
 
+
 def sanitize_html_proxy(text: str) -> str:  # internal alias to keep names tidy
     return get_security_utils().sanitize_html(text)
+
 
 def hash_password_proxy(password: str, iterations: int = 390_000) -> str:
     return get_security_utils().hash_password(password, iterations)
 
+
 def verify_password_proxy(password: str, stored: str) -> tuple[bool, bool]:
     return get_security_utils().verify_password(password, stored)
 
-def generate_token_proxy(payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True) -> str:
-    return get_security_utils().generate_token(payload, ttl_seconds=ttl_seconds, include_nonce=include_nonce)
+
+def generate_token_proxy(
+    payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True
+) -> str:
+    return get_security_utils().generate_token(
+        payload, ttl_seconds=ttl_seconds, include_nonce=include_nonce
+    )
+
 
 def verify_token_proxy(token: str, leeway: int = 0) -> dict:
     return get_security_utils().verify_token(token, leeway=leeway)
 
+
 def encrypt_proxy(plaintext: _t.Union[str, bytes]) -> str:
     return get_security_utils().encrypt(plaintext)
+
 
 def decrypt_proxy(token: str) -> bytes:
     return get_security_utils().decrypt(token)
 
-def create_session_proxy(user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None) -> Session:
+
+def create_session_proxy(
+    user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None
+) -> Session:
     return get_security_utils().create_session(user_id, data=data)
+
 
 def get_session_proxy(sid: str) -> Session:
     return get_security_utils().get_session(sid)
 
+
 def revoke_session_proxy(sid: str) -> None:
     return get_security_utils().revoke_session(sid)
+
 
 def refresh_session_proxy(sid: str) -> Session:
     return get_security_utils().refresh_session(sid)

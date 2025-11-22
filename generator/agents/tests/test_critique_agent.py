@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 import json
 from pathlib import Path
@@ -108,7 +107,9 @@ def test_critique_config_rejects_or_normalizes_invalid_values() -> None:
 
 
 @pytest.mark.asyncio
-async def test_call_llm_for_critique_parses_json_and_merges(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_call_llm_for_critique_parses_json_and_merges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     call_llm_for_critique must:
     - Call call_llm_api.
@@ -140,7 +141,9 @@ async def test_call_llm_for_critique_parses_json_and_merges(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_call_llm_for_critique_handles_bad_json(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_call_llm_for_critique_handles_bad_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     If the LLM returns non-JSON junk, call_llm_for_critique must:
     - Not raise.
@@ -186,7 +189,9 @@ async def test_python_plugin_lint_delegates_safely(
         assert outdir == tmp_path
         recorded["saved"] = True
 
-    async def fake_run_all_lints_and_checks(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    async def fake_run_all_lints_and_checks(
+        *args: Any, **kwargs: Any
+    ) -> Dict[str, Any]:
         # Expect first arg = code_files, second arg = project_dir (str)
         assert len(args) >= 2, "Expected code_files and project_dir as positional args"
         code_files = args[0]
@@ -208,8 +213,12 @@ async def test_python_plugin_lint_delegates_safely(
         recorded["called"] = True
         return {"all_errors": []}
 
-    monkeypatch.setattr(core, "save_files_to_output", fake_save_files_to_output, raising=False)
-    monkeypatch.setattr(core, "run_all_lints_and_checks", fake_run_all_lints_and_checks, raising=False)
+    monkeypatch.setattr(
+        core, "save_files_to_output", fake_save_files_to_output, raising=False
+    )
+    monkeypatch.setattr(
+        core, "run_all_lints_and_checks", fake_run_all_lints_and_checks, raising=False
+    )
 
     plugin = PythonCritiquePlugin(CritiqueConfig())
     res = await plugin.lint({"main.py": "print('x')"}, tmp_path, CritiqueConfig())
@@ -226,7 +235,9 @@ async def test_python_plugin_lint_delegates_safely(
 
 
 @pytest.mark.asyncio
-async def test_orchestrate_critique_pipeline_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_orchestrate_critique_pipeline_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Pipeline-level contract test (happy path, fully stubbed):
 

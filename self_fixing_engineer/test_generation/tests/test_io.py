@@ -77,7 +77,9 @@ async def test_auto_compress_when_threshold_exceeded(temp_dir):
     big_entry = {"data": "x" * (io_utils_mod.FEEDBACK_COMPRESS_BYTES + 100)}
 
     # Force compression AND bypass redaction so the payload is preserved
-    with patch("test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x):
+    with patch(
+        "test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x
+    ):
         await io_utils_mod.append_to_feedback_log(
             str(log_path),
             big_entry,
@@ -115,6 +117,7 @@ async def test_invalid_path_type_raises(temp_dir):
         # Pass a non-string path on purpose
         await io_utils_mod.append_to_feedback_log(temp_dir / "x.jsonl", {"x": 1})  # type: ignore[arg-type]
 
+
 @pytest.mark.asyncio
 async def test_no_prometheus_duplicates(temp_dir):
     """
@@ -126,13 +129,18 @@ async def test_no_prometheus_duplicates(temp_dir):
         with patch("test_generation.gen_agent.io_utils._PROM_OK", True):
             # Append a log entry to trigger metric instantiation
             await io_utils_mod.append_to_feedback_log(str(log_path), {})
-            
+
             # The metric proxy should be a real metric now, not a dummy
-            from test_generation.gen_agent.io_utils import io_write_duration, _NoopMetric
+            from test_generation.gen_agent.io_utils import (
+                io_write_duration,
+                _NoopMetric,
+            )
+
             assert not isinstance(io_write_duration, _NoopMetric)
     finally:
         if os.path.exists(log_path):
             os.remove(log_path)
+
 
 def test_io_import():
     """
@@ -140,4 +148,5 @@ def test_io_import():
     This serves as a guard against import chain failures.
     """
     from test_generation.gen_agent import io_utils
+
     assert callable(io_utils.append_to_feedback_log)

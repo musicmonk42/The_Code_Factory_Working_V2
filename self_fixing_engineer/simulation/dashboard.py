@@ -9,14 +9,20 @@ ONBOARDING_BACKENDS_AVAILABLE = True
 
 try:
     import streamlit as _st
+
     st_dash = _st
 except ImportError:
+
     class _StubStreamlit:
         def __init__(self):
             self.session_state = {}
+
         def __getattr__(self, name):
-            def _noop(*args, **kwargs): return None
+            def _noop(*args, **kwargs):
+                return None
+
             return _noop
+
     st_dash = _StubStreamlit()
 
 logger = logging.getLogger("dashboard")
@@ -27,8 +33,10 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+
 class Config:
     """Configuration for dashboard directories."""
+
     PLUGINS_DIR: str = os.path.join(os.getcwd(), "plugins")
     RESULTS_DIR: str = os.path.join(os.getcwd(), "simulation_results")
     CONFIG_DIR: str = os.path.join(os.getcwd(), "configs")
@@ -39,44 +47,57 @@ class Config:
         for directory in [cls.PLUGINS_DIR, cls.RESULTS_DIR, cls.CONFIG_DIR]:
             os.makedirs(directory, exist_ok=True)
 
+
 _registered_panels: List[Dict[str, Any]] = []
 _registered_sidebar_components: List[Callable] = []
 _registered_main_components: List[Callable] = []
 _plugins_loaded: bool = False
 
+
 def get_registered_dashboard_panels() -> List[Dict[str, Any]]:
     """Return all registered dashboard panels."""
     return list(_registered_panels)
+
 
 def get_registered_sidebar_components() -> List[Callable]:
     """Return all registered sidebar components."""
     return list(_registered_sidebar_components)
 
+
 def get_registered_main_components() -> List[Callable]:
     """Return all registered main components."""
     return list(_registered_main_components)
+
 
 def _clear_registries():
     _registered_panels.clear()
     _registered_sidebar_components.clear()
     _registered_main_components.clear()
 
-def register_dashboard_panel(panel_id: str, title: str, render_func: Callable, live_data_supported: bool = False):
+
+def register_dashboard_panel(
+    panel_id: str, title: str, render_func: Callable, live_data_supported: bool = False
+):
     """Register a dashboard panel."""
-    _registered_panels.append({
-        "id": panel_id,
-        "title": title,
-        "render": render_func,
-        "live_data_supported": live_data_supported
-    })
+    _registered_panels.append(
+        {
+            "id": panel_id,
+            "title": title,
+            "render": render_func,
+            "live_data_supported": live_data_supported,
+        }
+    )
+
 
 def register_sidebar_component(component_func: Callable):
     """Register a sidebar component."""
     _registered_sidebar_components.append(component_func)
 
+
 def register_main_component(component_func: Callable):
     """Register a main component."""
     _registered_main_components.append(component_func)
+
 
 def sanitize_plugin_name(name: str) -> str:
     """
@@ -85,7 +106,13 @@ def sanitize_plugin_name(name: str) -> str:
     """
     if not isinstance(name, str):
         raise ValueError("Plugin name must be a string")
-    if ".." in name or "/" in name or "\\" in name or name.startswith(os.sep) or name.startswith("~"):
+    if (
+        ".." in name
+        or "/" in name
+        or "\\" in name
+        or name.startswith(os.sep)
+        or name.startswith("~")
+    ):
         raise ValueError("Path traversal detected in plugin name")
     dangerous = {"sys", "os", "builtins", "subprocess"}
     if name in dangerous:
@@ -96,12 +123,15 @@ def sanitize_plugin_name(name: str) -> str:
         raise ValueError("Invalid plugin name after sanitization")
     return normalized
 
+
 def is_version_compatible(version_str: str, min_version: str, max_version: str) -> bool:
     """
     Check if version_str is in [min_version, max_version).
     """
+
     def parse(v):
         return tuple(int(x) if x.isdigit() else 0 for x in v.split("."))
+
     try:
         v = parse(version_str)
         lo = parse(min_version)
@@ -110,6 +140,7 @@ def is_version_compatible(version_str: str, min_version: str, max_version: str) 
     except Exception as e:
         logger.warning(f"Version parsing exception: {e}")
         return False
+
 
 def validate_plugin_manifest(plugin_path: str) -> bool:
     """
@@ -128,12 +159,15 @@ def validate_plugin_manifest(plugin_path: str) -> bool:
                 return False
         # Example: require version 0.1.0 <= v < 1.0.0
         if not is_version_compatible(manifest["version"], "0.1.0", "1.0.0"):
-            logger.error(f"Incompatible plugin version: {manifest['version']} in {manifest_path}")
+            logger.error(
+                f"Incompatible plugin version: {manifest['version']} in {manifest_path}"
+            )
             return False
         return True
     except Exception as e:
         logger.error(f"Invalid manifest in {plugin_path}: {e}")
         return False
+
 
 def load_plugin_dashboard_panels_cached():
     """
@@ -172,7 +206,9 @@ def load_plugin_dashboard_panels_cached():
             continue
 
         try:
-            spec = importlib.util.spec_from_file_location(f"dashboard_plugin_{safe_name}", file_path)
+            spec = importlib.util.spec_from_file_location(
+                f"dashboard_plugin_{safe_name}", file_path
+            )
             if not spec or not spec.loader:
                 continue
             module = importlib.util.module_from_spec(spec)
@@ -190,6 +226,7 @@ def load_plugin_dashboard_panels_cached():
     _plugins_loaded = True
     logger.info("All plugins loaded.")
 
+
 def display_onboarding_wizard():
     """
     Display onboarding wizard for new configuration and a demo plugin.
@@ -201,7 +238,9 @@ def display_onboarding_wizard():
     wizard_type = st_dash.selectbox("wizard_type", ["agentic_swarm", "solo"])
     notif_backend = st_dash.selectbox("notification_backend", ["redis", "local"])
     cp_backend = st_dash.selectbox("checkpoint_backend", ["fs", "s3"])
-    languages = getattr(st_dash, "multiselect", lambda *a, **k: ["python"])("languages", ["python"])
+    languages = getattr(st_dash, "multiselect", lambda *a, **k: ["python"])(
+        "languages", ["python"]
+    )
     notif_url = getattr(st_dash, "text_input", lambda *a, **k: "")("notification_url")
     cp_dir = getattr(st_dash, "text_input", lambda *a, **k: "")("checkpoint_dir")
 
@@ -211,7 +250,7 @@ def display_onboarding_wizard():
             "wizard_type": wizard_type,
             "notification_backend": {"type": notif_backend, "url": notif_url},
             "checkpoint_backend": {"type": cp_backend, "dir": cp_dir},
-            "languages": languages
+            "languages": languages,
         }
         config_path = os.path.join(config_dir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
@@ -221,11 +260,12 @@ def display_onboarding_wizard():
         manifest = {
             "name": "demo_python_plugin",
             "version": "0.1.0",
-            "description": "Demo plugin generated by onboarding wizard"
+            "description": "Demo plugin generated by onboarding wizard",
         }
         with open(os.path.join(demo_dir, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
-        logger.info(f"Onboarding configuration and demo plugin created.")
+        logger.info("Onboarding configuration and demo plugin created.")
+
 
 async def _run_health_checks_gui(config: dict):
     """
@@ -240,9 +280,11 @@ async def _run_health_checks_gui(config: dict):
             if MeshPubSub:
                 mp = MeshPubSub(notif_type)
                 health = await mp.healthcheck()
-                st_dash.success(f"Notification backend {notif_type}: {health.get('message', health)}")
+                st_dash.success(
+                    f"Notification backend {notif_type}: {health.get('message', health)}"
+                )
             else:
-                st_dash.error(f"MeshPubSub class missing.")
+                st_dash.error("MeshPubSub class missing.")
         cp_cfg = config.get("checkpoint_backend", {})
         cp_type = cp_cfg.get("type")
         if cp_type:
@@ -250,12 +292,15 @@ async def _run_health_checks_gui(config: dict):
             if CheckpointManager:
                 cm = CheckpointManager(cp_type)
                 health = await cm.load()
-                st_dash.success(f"Checkpoint backend {cp_type}: {health.get('status', health)}")
+                st_dash.success(
+                    f"Checkpoint backend {cp_type}: {health.get('status', health)}"
+                )
             else:
-                st_dash.error(f"CheckpointManager class missing.")
+                st_dash.error("CheckpointManager class missing.")
     except Exception as e:
         logger.exception(f"Health check error: {e}")
         st_dash.error("Unexpected error during health checks.")
+
 
 def load_all_simulation_results(results_dir: Optional[str] = None) -> List[dict]:
     """
@@ -280,33 +325,31 @@ def load_all_simulation_results(results_dir: Optional[str] = None) -> List[dict]
             logger.warning(f"Failed to load {path}: {e}")
     return results
 
+
 _translations = {
-    "en": {
-        "welcome_message": "Welcome",
-        "language_selector_label": "Language"
-    },
-    "es": {
-        "welcome_message": "Bienvenido",
-        "language_selector_label": "Idioma"
-    },
-    "fr": {
-        "welcome_message": "Bienvenue",
-        "language_selector_label": "Langue"
-    }
+    "en": {"welcome_message": "Welcome", "language_selector_label": "Language"},
+    "es": {"welcome_message": "Bienvenido", "language_selector_label": "Idioma"},
+    "fr": {"welcome_message": "Bienvenue", "language_selector_label": "Langue"},
 }
+
 
 def t(key: str) -> str:
     lang = getattr(st_dash.session_state, "lang", "en")
     if isinstance(st_dash.session_state, dict):
         lang = st_dash.session_state.get("lang", lang)
-    return _translations.get(lang, _translations["en"]).get(key, _translations["en"].get(key, key))
+    return _translations.get(lang, _translations["en"]).get(
+        key, _translations["en"].get(key, key)
+    )
+
 
 def render(*args, **kwargs):
     return None
 
+
 # Dummy stubs for patching in tests (for test compatibility)
 class MeshPubSub:
     pass
+
 
 class CheckpointManager:
     pass

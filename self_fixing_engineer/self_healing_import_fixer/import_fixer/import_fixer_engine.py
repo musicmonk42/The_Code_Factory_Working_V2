@@ -31,6 +31,7 @@ from pathlib import Path
 # -----------------------------------------------------------------------------
 class Settings:
     """Minimal settings object (patched in tests)."""
+
     SIM_RETRY_ATTEMPTS: int = 3
     SIM_BACKOFF_FACTOR: float = 1.0
     LOG_LEVEL: str = "INFO"
@@ -91,6 +92,7 @@ class _AssertableCall:
     Lets tests do `SIM_MODULE_METRICS["health_status"].set.assert_called_with(...)`
     without requiring unittest.mock.
     """
+
     def __init__(self) -> None:
         self._calls: List[tuple] = []
 
@@ -109,6 +111,7 @@ class _AssertableCall:
 
 class _HealthGauge:
     """Gauge-like object with a `.set` attribute that is assertable."""
+
     def __init__(self) -> None:
         self.set = _AssertableCall()
 
@@ -121,12 +124,16 @@ SIM_MODULE_METRICS: Dict[str, Any] = {
         Histogram, "sim_module_duration_seconds", "Duration of simulations", ["type"]
     ),
     "quantum_op_total": _get_or_create_metric(
-        Counter, "sim_module_quantum_op_total", "Total quantum operations", ["op_type", "status"]
+        Counter,
+        "sim_module_quantum_op_total",
+        "Total quantum operations",
+        ["op_type", "status"],
     ),
     # Use an assertable gauge by default so tests can call `.set.assert_called_with(...)` even
     # without monkeypatching metrics.
     "health_status": _HealthGauge(),
 }
+
 
 # -----------------------------------------------------------------------------
 # Minimal stand-ins (types & helpers) so imports are patchable in tests
@@ -148,7 +155,9 @@ class Database:
     async def health_check(self) -> Dict[str, Any]:  # pragma: no cover
         return {"status": "ok", "latency_ms": 1}
 
-    async def save_audit_record(self, _record: Dict[str, Any]) -> None:  # pragma: no cover
+    async def save_audit_record(
+        self, _record: Dict[str, Any]
+    ) -> None:  # pragma: no cover
         return None
 
     async def close(self) -> None:  # pragma: no cover
@@ -206,7 +215,9 @@ class ExplainableReasonerPlugin:
 
 
 class QuantumPluginAPI:
-    async def perform_quantum_operation(self, *, operation_type: str, params: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover
+    async def perform_quantum_operation(
+        self, *, operation_type: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:  # pragma: no cover
         return {"status": "SUCCESS", "result": {}}
 
     def get_available_backends(self) -> List[str]:  # pragma: no cover
@@ -219,7 +230,9 @@ class SandboxPolicy:
     timeout: float = 2.0
 
 
-def run_in_sandbox(code: str, inputs: Dict[str, Any], policy: SandboxPolicy) -> Dict[str, Any]:  # pragma: no cover
+def run_in_sandbox(
+    code: str, inputs: Dict[str, Any], policy: SandboxPolicy
+) -> Dict[str, Any]:  # pragma: no cover
     # Minimal, unsafe placeholder; tests patch this.
     _ = (code, inputs, policy)
     return {"status": "success", "result": {}}
@@ -230,11 +243,15 @@ async def run_agent(_config: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no co
     return {"status": "success"}
 
 
-async def run_simulation_swarm(_config: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover
+async def run_simulation_swarm(
+    _config: Dict[str, Any],
+) -> Dict[str, Any]:  # pragma: no cover
     return {"status": "success", "swarm_results": []}
 
 
-async def run_parallel_simulations(_func: Callable[[Dict[str, Any]], Any], _tasks: List[Dict[str, Any]]) -> Dict[str, Any]:  # pragma: no cover
+async def run_parallel_simulations(
+    _func: Callable[[Dict[str, Any]], Any], _tasks: List[Dict[str, Any]]
+) -> Dict[str, Any]:  # pragma: no cover
     return {"status": "success", "results": []}
 
 
@@ -261,6 +278,7 @@ def safe_serialize(obj: Any) -> str:
 # Retry decorator (async)
 # -----------------------------------------------------------------------------
 
+
 def async_retry(max_retries: int = 3, backoff_factor: float = 2.0):
     """Async retry with exponential backoff (patched settings drive defaults)."""
 
@@ -279,7 +297,7 @@ def async_retry(max_retries: int = 3, backoff_factor: float = 2.0):
                         f"Attempt {attempt + 1}/{max_retries} for {fn.__name__} failed: {type(exc).__name__}: {exc}"
                     )
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(backoff_factor ** attempt)
+                        await asyncio.sleep(backoff_factor**attempt)
             assert last_exc is not None
             raise last_exc
 
@@ -294,17 +312,23 @@ def async_retry(max_retries: int = 3, backoff_factor: float = 2.0):
 class UnifiedSimulationModule:
     """Unified, async-first simulation orchestrator."""
 
-    def __init__(self, config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus):
+    def __init__(
+        self, config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus
+    ):
         self.config = dict(config or {})
         self.db = db
         self.message_bus = message_bus
         self.reasoner_plugin: Optional[ExplainableReasonerPlugin] = None
         self.quantum_api: Optional[QuantumPluginAPI] = None
         self._is_initialized = False
-        self._executor = ThreadPoolExecutor(max_workers=self.config.get("SIM_MAX_WORKERS", 4))
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.config.get("SIM_MAX_WORKERS", 4)
+        )
         # Track audited failures per operation+id to avoid duplicate audits across retries
         self._fail_audit_once: set[tuple[str, str]] = set()
-        logger.info("Unified Simulation Module constructed; call initialize() before use.")
+        logger.info(
+            "Unified Simulation Module constructed; call initialize() before use."
+        )
 
     async def initialize(self) -> None:
         if self._is_initialized:
@@ -384,7 +408,10 @@ class UnifiedSimulationModule:
 
         return report
 
-    @async_retry(max_retries=settings.SIM_RETRY_ATTEMPTS, backoff_factor=settings.SIM_BACKOFF_FACTOR)
+    @async_retry(
+        max_retries=settings.SIM_RETRY_ATTEMPTS,
+        backoff_factor=settings.SIM_BACKOFF_FACTOR,
+    )
     async def execute_simulation(self, sim_config: Dict[str, Any]) -> Dict[str, Any]:
         sim_type = sim_config.get("type", "agent")
         start = time.time()
@@ -397,7 +424,9 @@ class UnifiedSimulationModule:
                 async def _runner(cfg: Dict[str, Any]) -> Any:
                     return await run_agent(cfg)
 
-                result = await run_parallel_simulations(_runner, sim_config.get("tasks", []))
+                result = await run_parallel_simulations(
+                    _runner, sim_config.get("tasks", [])
+                )
             elif sim_type == "agent":
                 AgentConfig(**sim_config)
                 result = await run_agent(sim_config)
@@ -405,9 +434,13 @@ class UnifiedSimulationModule:
                 raise ValueError(f"Unknown simulation type: {sim_type}")
 
             duration = time.time() - start
-            SIM_MODULE_METRICS["simulation_run_total"].labels(type=sim_type, status="success").inc()
+            SIM_MODULE_METRICS["simulation_run_total"].labels(
+                type=sim_type, status="success"
+            ).inc()
             # FIX: histogram has label 'type'; supply it before observe
-            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(type=sim_type).observe(duration)
+            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(
+                type=sim_type
+            ).observe(duration)
             await self.db.save_audit_record(
                 {
                     "event_type": "simulation_completed",
@@ -419,9 +452,13 @@ class UnifiedSimulationModule:
             return result
         except Exception as e:  # noqa: BLE001
             duration = time.time() - start
-            SIM_MODULE_METRICS["simulation_run_total"].labels(type=sim_type, status="failed").inc()
+            SIM_MODULE_METRICS["simulation_run_total"].labels(
+                type=sim_type, status="failed"
+            ).inc()
             # FIX: histogram label requirement
-            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(type=sim_type).observe(duration)
+            SIM_MODULE_METRICS["simulation_duration_seconds"].labels(
+                type=sim_type
+            ).observe(duration)
             # FIX: audit failure only once across retries for the same simulation id
             # Use hash of sim_config if no id is present to distinguish different simulations
             sim_id = sim_config.get("id")
@@ -445,8 +482,13 @@ class UnifiedSimulationModule:
             logger.error(f"Simulation of type '{sim_type}' failed: {e}", exc_info=True)
             raise
 
-    @async_retry(max_retries=settings.SIM_RETRY_ATTEMPTS, backoff_factor=settings.SIM_BACKOFF_FACTOR)
-    async def perform_quantum_op(self, op_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    @async_retry(
+        max_retries=settings.SIM_RETRY_ATTEMPTS,
+        backoff_factor=settings.SIM_BACKOFF_FACTOR,
+    )
+    async def perform_quantum_op(
+        self, op_type: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         start = time.time()
         try:
             if not self.quantum_api:
@@ -466,7 +508,9 @@ class UnifiedSimulationModule:
             if result.get("status") == "ERROR":
                 raise RuntimeError(f"Quantum operation failed: {result.get('reason')}")
 
-            SIM_MODULE_METRICS["quantum_op_total"].labels(op_type=op_type, status="success").inc()
+            SIM_MODULE_METRICS["quantum_op_total"].labels(
+                op_type=op_type, status="success"
+            ).inc()
             await self.db.save_audit_record(
                 {
                     "event_type": "quantum_op_completed",
@@ -477,7 +521,9 @@ class UnifiedSimulationModule:
             )
             return result
         except Exception as e:  # noqa: BLE001
-            SIM_MODULE_METRICS["quantum_op_total"].labels(op_type=op_type, status="failed").inc()
+            SIM_MODULE_METRICS["quantum_op_total"].labels(
+                op_type=op_type, status="failed"
+            ).inc()
             await self.db.save_audit_record(
                 {
                     "event_type": "quantum_op_failed",
@@ -489,7 +535,10 @@ class UnifiedSimulationModule:
             logger.error(f"Quantum op '{op_type}' failed: {e}", exc_info=True)
             raise
 
-    @async_retry(max_retries=settings.SIM_RETRY_ATTEMPTS, backoff_factor=settings.SIM_BACKOFF_FACTOR)
+    @async_retry(
+        max_retries=settings.SIM_RETRY_ATTEMPTS,
+        backoff_factor=settings.SIM_BACKOFF_FACTOR,
+    )
     async def explain_result(self, result: Dict[str, Any]) -> str:
         if not self.reasoner_plugin:
             raise RuntimeError("Explainable Reasoner Plugin not initialized.")
@@ -497,7 +546,11 @@ class UnifiedSimulationModule:
             raise ValueError("Invalid simulation result format for explanation.")
 
         explanation = await self.reasoner_plugin.explain_result(
-            ExplanationInput(result_id=result["id"], result_data=result, context={"timestamp": time.time()})
+            ExplanationInput(
+                result_id=result["id"],
+                result_data=result,
+                context={"timestamp": time.time()},
+            )
         )
         await self.db.save_audit_record(
             {
@@ -530,17 +583,23 @@ class UnifiedSimulationModule:
             response_topic = f"responses.simulation.{payload.get('type', 'default')}"
             await self.message_bus.publish(
                 topic=response_topic,
-                payload=safe_serialize({"request_id": message_id, "status": "success", "result": result}),
+                payload=safe_serialize(
+                    {"request_id": message_id, "status": "success", "result": result}
+                ),
             )
 
             if payload.get("explain") and result:
                 explanation = await self.explain_result(result)
                 await self.message_bus.publish(
                     topic=f"{response_topic}.explanation",
-                    payload=safe_serialize({"request_id": message_id, "explanation": explanation}),
+                    payload=safe_serialize(
+                        {"request_id": message_id, "explanation": explanation}
+                    ),
                 )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Error processing simulation request {message_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error processing simulation request {message_id}: {e}", exc_info=True
+            )
             await self.message_bus.publish(
                 topic="errors.simulation",
                 payload=safe_serialize(
@@ -572,18 +631,25 @@ class UnifiedSimulationModule:
 # Public factory & helper API --------------------------------------------------
 
 db_circuit_breaker = CircuitBreaker(
-    name="simulation_db", failure_threshold=5, recovery_timeout=30.0, exception_types=[ConnectionError, TimeoutError]
+    name="simulation_db",
+    failure_threshold=5,
+    recovery_timeout=30.0,
+    exception_types=[ConnectionError, TimeoutError],
 )
 
 
-async def create_simulation_module(config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus) -> UnifiedSimulationModule:
+async def create_simulation_module(
+    config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus
+) -> UnifiedSimulationModule:
     module = UnifiedSimulationModule(config, db, message_bus)
     await module.initialize()
     await module.register_message_handlers()
     return module
 
 
-async def run_simulation(config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus) -> Dict[str, Any]:
+async def run_simulation(
+    config: Dict[str, Any], db: Database, message_bus: ShardedMessageBus
+) -> Dict[str, Any]:
     module = UnifiedSimulationModule({"SIM_MAX_WORKERS": 4}, db, message_bus)
     await module.initialize()
     try:
@@ -608,6 +674,7 @@ async def run_import_healer(
     # Dynamic imports to avoid circulars and to support multiple package layouts.
     # Try common qualified names first, then fall back.
     import importlib
+
     def _import_local(mod_name: str):
         for cand in (
             f"self_healing_import_fixer.import_fixer.{mod_name}",
@@ -643,22 +710,22 @@ async def run_import_healer(
 
     # 4. Find and heal cycles
     cycle_healer_report = {}
-    
+
     # We'll simulate a single cycle fix for the test
     # In a real scenario, this would iterate through detected cycles.
     cycle_healer = fixer_ast.CycleHealer(
-        file_path=str(Path(project_root) / 'pkg' / 'b.py'),
-        cycle=['pkg.b', 'pkg.a'],
-        graph=None, # Mocking the graph for this test
+        file_path=str(Path(project_root) / "pkg" / "b.py"),
+        cycle=["pkg.b", "pkg.a"],
+        graph=None,  # Mocking the graph for this test
         project_root=project_root,
-        whitelisted_paths=whitelisted_paths
+        whitelisted_paths=whitelisted_paths,
     )
-    
+
     await cycle_healer.heal()
     cycle_healer_report = {"status": "success", "fix_applied": True}
-    
+
     return {
         "summary": "Healing process completed.",
         "dependency_report": dep_results,
-        "cycle_healing_report": cycle_healer_report
+        "cycle_healing_report": cycle_healer_report,
     }

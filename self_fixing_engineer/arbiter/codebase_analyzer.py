@@ -5,13 +5,11 @@ import importlib.util
 import json
 import logging
 import os
-import shutil
 import sys
 import threading
 from concurrent.futures import ProcessPoolExecutor
-from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Callable, Tuple, Coroutine
+from typing import Any, Dict, List, Optional, TypedDict, Tuple
 from xml.sax.saxutils import escape
 import aiofiles
 import toml
@@ -19,21 +17,32 @@ import typer
 import yaml
 from datetime import datetime
 import ast
-import traceback
 import collections
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from prometheus_client import Counter, Histogram, REGISTRY
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
+from prometheus_client import Counter
 
 try:
-    from arbiter.arbiter_plugin_registry import register as arbiter_register, PlugInKind as ArbiterPlugInKind, registry as arbiter_registry
+    from arbiter.arbiter_plugin_registry import (
+        register as arbiter_register,
+        PlugInKind as ArbiterPlugInKind,
+        registry as arbiter_registry,
+    )
 except ImportError:
     # Create mock versions
     def arbiter_register(kind, name, version, author):
         def decorator(func):
             return func
+
         return decorator
+
     class ArbiterPlugInKind:
         ANALYTICS = "analytics"
+
     class arbiter_registry:
         @staticmethod
         def get_metadata(kind, name):
@@ -49,39 +58,55 @@ try:
     from arbiter.config import ArbiterConfig
     from arbiter.otel_config import get_tracer
 except ImportError:
+
     class registry:
         @staticmethod
         def register(kind, name, version, author, description, tags, dependencies):
             def decorator(cls):
                 return cls
+
             return decorator
+
     class PlugInKind:
         ANALYTICS = "analytics"
+
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):
             return True
+
     class PostgresClient:
         def __init__(self, db_url):
             pass
+
         async def connect(self):
             pass
+
         async def disconnect(self):
             pass
+
     class PermissionManager:
         def __init__(self, config):
             pass
+
         def check_permission(self, role, permission):
             return True
+
     class ArbiterConfig:
         def __init__(self):
             pass
+
     # Mock get_tracer if otel_config is missing
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
             class MockSpan:
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    pass
+
             return MockSpan()
+
     def get_tracer(name):
         return MockTracer()
 
@@ -90,6 +115,7 @@ try:
     from radon.complexity import cc_visit
     from radon.metrics import mi_visit
     from radon.raw import analyze as radon_analyze
+
     RADON_AVAILABLE = True
 except ImportError as e:
     RADON_AVAILABLE = False
@@ -97,6 +123,7 @@ except ImportError as e:
 
 try:
     from mypy.api import run as mypy_run
+
     MYPY_AVAILABLE = True
 except ImportError as e:
     MYPY_AVAILABLE = False
@@ -105,6 +132,7 @@ except ImportError as e:
 try:
     from bandit.core import manager as bandit_manager
     from bandit.core import config as bandit_config_mod
+
     BANDIT_AVAILABLE = True
 except ImportError as e:
     BANDIT_AVAILABLE = False
@@ -112,6 +140,7 @@ except ImportError as e:
 
 try:
     from coverage import Coverage
+
     COVERAGE_AVAILABLE = True
 except ImportError as e:
     COVERAGE_AVAILABLE = False
@@ -120,6 +149,7 @@ except ImportError as e:
 
 try:
     import safety
+
     SAFETY_AVAILABLE = True
 except ImportError as e:
     SAFETY_AVAILABLE = False
@@ -127,6 +157,7 @@ except ImportError as e:
 
 try:
     import pylint
+
     PYLINT_AVAILABLE = True
 except ImportError as e:
     PYLINT_AVAILABLE = False
@@ -142,23 +173,38 @@ logging.basicConfig(
 logger = logging.getLogger("arbiter.codebase_analyzer")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
 # Prometheus Metrics
-analyzer_ops_total = Counter("analyzer_ops_total", "Total analyzer operations", ["operation"])
-analyzer_errors_total = Counter("analyzer_errors_total", "Total analyzer errors", ["error_type"])
+analyzer_ops_total = Counter(
+    "analyzer_ops_total", "Total analyzer operations", ["operation"]
+)
+analyzer_errors_total = Counter(
+    "analyzer_errors_total", "Total analyzer errors", ["error_type"]
+)
+
 
 class AnalyzerError(Exception):
     """Base exception for analyzer errors."""
+
     pass
+
+
 class ConfigurationError(AnalyzerError):
     """Configuration-related errors."""
+
     pass
+
+
 class AnalysisError(AnalyzerError):
     """Analysis-related errors."""
+
     pass
+
 
 class Defect(TypedDict):
     file: str
@@ -166,6 +212,7 @@ class Defect(TypedDict):
     column: int
     message: str
     source: str
+
 
 class Dependency(TypedDict):
     file: str
@@ -177,11 +224,13 @@ class Dependency(TypedDict):
     line: int
     is_external: bool
 
+
 class ToolInfo(TypedDict):
     name: str
     type: str
     available: bool
     installed_via: Optional[str]
+
 
 class ComplexityInfo(TypedDict):
     file: str
@@ -190,6 +239,7 @@ class ComplexityInfo(TypedDict):
     complexity: int
     maintainability_index: float
 
+
 class FileSummary(TypedDict):
     files: int
     modules: List[str]
@@ -197,6 +247,7 @@ class FileSummary(TypedDict):
     complexity: List[ComplexityInfo]
     coverage: Optional[Dict[str, Any]]
     dependency_summary: Dict[str, Any]
+
 
 class Plugin:
     def __init__(self, name: str, type: str):
@@ -209,12 +260,14 @@ class Plugin:
     def metadata(self) -> Dict[str, Any]:
         return {"name": self.name, "type": self.type}
 
+
 class CodebaseAnalyzer:
     """
     A comprehensive, asynchronous, and pluggable codebase analysis tool.
     Analyzes Python code for defects, complexity, and dependencies.
     This class is thread-safe.
     """
+
     DEFAULT_IGNORE_PATTERNS = [
         "__pycache__",
         ".git",
@@ -246,14 +299,18 @@ class CodebaseAnalyzer:
             raise ValueError(f"Invalid root directory: {self.root_dir}")
         self._lock = threading.Lock()
         self.config = self._load_config(config_file)
-        self.ignore_patterns = ignore_patterns or self.config.get("ignore_patterns", self.DEFAULT_IGNORE_PATTERNS)
-        self.max_workers = min(max_workers, int(os.getenv("ANALYZER_MAX_WORKERS", "10")))
-        
+        self.ignore_patterns = ignore_patterns or self.config.get(
+            "ignore_patterns", self.DEFAULT_IGNORE_PATTERNS
+        )
+        self.max_workers = min(
+            max_workers, int(os.getenv("ANALYZER_MAX_WORKERS", "10"))
+        )
+
         # These will be initialized in __aenter__
         self.semaphore = None
         self.executor = None
         self.db_client = None
-        
+
         self._tool_cache: Optional[List[ToolInfo]] = None
         self.plugins: List[Plugin] = []
         self.baseline: Dict[str, List[Defect]] = self._load_baseline()
@@ -317,9 +374,15 @@ class CodebaseAnalyzer:
                     config = data.get("tool", {}).get("codebaseanalyzer", {}) or {}
                 else:
                     config = yaml.safe_load(f) or {}
-            
+
             # Validate config
-            valid_keys = {"exclude_patterns", "analysis_tools", "baseline_file", "plugins", "ignore_patterns"}
+            valid_keys = {
+                "exclude_patterns",
+                "analysis_tools",
+                "baseline_file",
+                "plugins",
+                "ignore_patterns",
+            }
             for key in config.keys():
                 if key not in valid_keys:
                     logger.warning(f"Unknown config key: {key}")
@@ -354,16 +417,21 @@ class CodebaseAnalyzer:
             try:
                 mod = importlib.import_module(module)
                 plugin_class = getattr(mod, plugin_config.get("class", "CustomPlugin"))
-                self.plugins.append(plugin_class(name, plugin_config.get("type", "custom")))
+                self.plugins.append(
+                    plugin_class(name, plugin_config.get("type", "custom"))
+                )
                 logger.debug(f"Loaded plugin from config: {name}")
             except Exception as e:
-                logger.warning(f"Failed to load plugin '{name}' from config: {e}", exc_info=True)
+                logger.warning(
+                    f"Failed to load plugin '{name}' from config: {e}", exc_info=True
+                )
                 try:
                     analyzer_errors_total.labels(error_type="plugin_load_fail").inc()
                 except AttributeError:
                     pass
         try:
             from importlib.metadata import entry_points
+
             if sys.version_info >= (3, 10):
                 eps = entry_points(group="codebaseanalyzer.plugins")
             else:
@@ -374,9 +442,14 @@ class CodebaseAnalyzer:
                     self.plugins.append(plugin_class(ep.name, "custom"))
                     logger.debug(f"Loaded entry point plugin: {ep.name}")
                 except Exception as e:
-                    logger.warning(f"Failed to load entry point plugin '{ep.name}': {e}", exc_info=True)
+                    logger.warning(
+                        f"Failed to load entry point plugin '{ep.name}': {e}",
+                        exc_info=True,
+                    )
                     try:
-                        analyzer_errors_total.labels(error_type="ep_plugin_load_fail").inc()
+                        analyzer_errors_total.labels(
+                            error_type="ep_plugin_load_fail"
+                        ).inc()
                     except AttributeError:
                         pass
         except ImportError:
@@ -384,7 +457,9 @@ class CodebaseAnalyzer:
 
     def _should_ignore(self, path: Path) -> bool:
         """Checks if a path should be ignored."""
-        return any(fnmatch.fnmatch(path.name, pattern) for pattern in self.ignore_patterns)
+        return any(
+            fnmatch.fnmatch(path.name, pattern) for pattern in self.ignore_patterns
+        )
 
     async def _collect_py_files(self, path: Path) -> List[Path]:
         """Collects all Python files to be analyzed, respecting ignore patterns."""
@@ -416,31 +491,41 @@ class CodebaseAnalyzer:
                 pass
             return None, str(e)
 
-    def _analyze_file_defects_and_complexity_blocking(self, file_path: Path) -> Tuple[List[Defect], List[ComplexityInfo]]:
+    def _analyze_file_defects_and_complexity_blocking(
+        self, file_path: Path
+    ) -> Tuple[List[Defect], List[ComplexityInfo]]:
         """Performs blocking analysis tasks for a single file."""
         defects: List[Defect] = []
         complexity_info: List[ComplexityInfo] = []
         source, error = self._read_file(file_path)
         if error:
-            defects.append({
-                "file": str(file_path), "line": 0, "column": 0, "message": error, "source": "io",
-            })
+            defects.append(
+                {
+                    "file": str(file_path),
+                    "line": 0,
+                    "column": 0,
+                    "message": error,
+                    "source": "io",
+                }
+            )
             return defects, complexity_info
-        
+
         try:
             tree = ast.parse(source)
             if RADON_AVAILABLE:
                 complexity_info.extend(self._analyze_complexity_sync(file_path, source))
-            
+
             defects.extend(self._run_linters_sync(file_path, source, tree))
         except SyntaxError as se:
-            defects.append({
-                "file": str(file_path),
-                "line": se.lineno or 0,
-                "column": se.offset or 0,
-                "message": str(se),
-                "source": "syntax",
-            })
+            defects.append(
+                {
+                    "file": str(file_path),
+                    "line": se.lineno or 0,
+                    "column": se.offset or 0,
+                    "message": str(se),
+                    "source": "syntax",
+                }
+            )
             try:
                 analyzer_errors_total.labels(error_type="syntax_error").inc()
             except AttributeError:
@@ -448,18 +533,22 @@ class CodebaseAnalyzer:
         except Exception as e:
             logger.error(f"Unexpected error analyzing {file_path}: {e}")
             try:
-                analyzer_errors_total.labels(error_type="unexpected_analysis_error").inc()
+                analyzer_errors_total.labels(
+                    error_type="unexpected_analysis_error"
+                ).inc()
             except AttributeError:
                 pass
 
         defects.extend(self._run_plugins_sync(file_path, source))
-        
+
         with self._lock:
             baseline_defects = self.baseline.get(str(file_path), [])
-        
+
         return [d for d in defects if d not in baseline_defects], complexity_info
 
-    def _run_linters_sync(self, file_path: Path, source: str, tree: ast.AST) -> List[Defect]:
+    def _run_linters_sync(
+        self, file_path: Path, source: str, tree: ast.AST
+    ) -> List[Defect]:
         """Runs synchronous linters on a file."""
         defects: List[Defect] = []
         with self._lock:
@@ -474,40 +563,72 @@ class CodebaseAnalyzer:
                 if tool["name"] == "Pylint" and PYLINT_AVAILABLE:
                     from pylint.lint import Run
                     from pylint.reporters import BaseReporter
-                    
+
                     class DefectReporter(BaseReporter):
-                        def __init__(self): self.messages = []
-                        def handle_message(self, message): self.messages.append(message)
+                        def __init__(self):
+                            self.messages = []
+
+                        def handle_message(self, message):
+                            self.messages.append(message)
+
                     reporter = DefectReporter()
                     # Pylint needs an external runner, which is blocking, so this is called within to_thread
                     Run([str(file_path)], reporter=reporter, do_exit=False)
-                    defects.extend([
-                        {"file": str(file_path), "line": msg.line, "column": msg.column, "message": msg.msg, "source": "pylint"} 
-                        for msg in reporter.messages
-                    ])
+                    defects.extend(
+                        [
+                            {
+                                "file": str(file_path),
+                                "line": msg.line,
+                                "column": msg.column,
+                                "message": msg.msg,
+                                "source": "pylint",
+                            }
+                            for msg in reporter.messages
+                        ]
+                    )
                 elif tool["name"] == "Bandit" and BANDIT_AVAILABLE:
-                    b_mgr = bandit_manager.BanditManager(bandit_config_mod.BanditConfig(), "file")
+                    b_mgr = bandit_manager.BanditManager(
+                        bandit_config_mod.BanditConfig(), "file"
+                    )
                     b_mgr.discover_files([str(file_path)])
                     b_mgr.run_tests()
-                    defects.extend([
-                        {"file": str(file_path), "line": issue.lineno, "column": issue.col_offset or 0, "message": issue.text, "source": "bandit"}
-                        for issue in b_mgr.get_issue_list()
-                    ])
+                    defects.extend(
+                        [
+                            {
+                                "file": str(file_path),
+                                "line": issue.lineno,
+                                "column": issue.col_offset or 0,
+                                "message": issue.text,
+                                "source": "bandit",
+                            }
+                            for issue in b_mgr.get_issue_list()
+                        ]
+                    )
                 elif tool["name"] == "Mypy" and MYPY_AVAILABLE:
                     stdout, stderr, _ = mypy_run([str(file_path)])
                     for line in (stdout + stderr).splitlines():
                         if ":" in line and "error:" in line:
                             parts = line.split(":", 4)
                             if len(parts) >= 4:
-                                defects.append({
-                                    "file": parts[0], "line": int(parts[1]),
-                                    "column": int(parts[2]) if parts[2].isdigit() else 0,
-                                    "message": parts[3].strip(), "source": "mypy",
-                                })
+                                defects.append(
+                                    {
+                                        "file": parts[0],
+                                        "line": int(parts[1]),
+                                        "column": (
+                                            int(parts[2]) if parts[2].isdigit() else 0
+                                        ),
+                                        "message": parts[3].strip(),
+                                        "source": "mypy",
+                                    }
+                                )
             except Exception as e:
-                logger.warning(f"Linter '{tool['name']}' failed on {file_path}: {e}", exc_info=True)
+                logger.warning(
+                    f"Linter '{tool['name']}' failed on {file_path}: {e}", exc_info=True
+                )
                 try:
-                    analyzer_errors_total.labels(error_type=f"linter_{tool['name']}_fail").inc()
+                    analyzer_errors_total.labels(
+                        error_type=f"linter_{tool['name']}_fail"
+                    ).inc()
                 except AttributeError:
                     pass
         return defects
@@ -520,13 +641,15 @@ class CodebaseAnalyzer:
         for plugin in plugins:
             try:
                 # Plugins need to have sync run method or we skip them
-                if hasattr(plugin, 'run_sync'):
+                if hasattr(plugin, "run_sync"):
                     defects.extend(plugin.run_sync(file_path, source))
             except Exception as e:
                 logger.warning(f"Plugin '{plugin.name}' failed on {file_path}: {e}")
         return defects
 
-    def _analyze_complexity_sync(self, file_path: Path, source: str) -> List[ComplexityInfo]:
+    def _analyze_complexity_sync(
+        self, file_path: Path, source: str
+    ) -> List[ComplexityInfo]:
         """Performs synchronous complexity analysis."""
         try:
             cc_results = cc_visit(source)
@@ -538,10 +661,13 @@ class CodebaseAnalyzer:
                     "type": block.__class__.__name__,
                     "complexity": block.complexity,
                     "maintainability_index": mi_value,
-                } for block in cc_results
+                }
+                for block in cc_results
             ]
         except Exception as e:
-            logger.warning(f"Complexity analysis failed on {file_path}: {e}", exc_info=True)
+            logger.warning(
+                f"Complexity analysis failed on {file_path}: {e}", exc_info=True
+            )
             try:
                 analyzer_errors_total.labels(error_type="complexity_fail").inc()
             except AttributeError:
@@ -557,7 +683,9 @@ class CodebaseAnalyzer:
             cov.start()
             # This part requires a separate test runner process, which is out of scope here
             # for a purely in-process scan. Mocking the result for now.
-            logger.warning("Code coverage analysis requires a test runner, skipping for a standalone scan.")
+            logger.warning(
+                "Code coverage analysis requires a test runner, skipping for a standalone scan."
+            )
             cov.stop()
             cov.save()
             # A mock report for demonstration purposes
@@ -575,29 +703,36 @@ class CodebaseAnalyzer:
                 pass
             return {"error": str(e)}
 
-    async def scan_codebase(self, path: Optional[str] = None, use_baseline: bool = False) -> FileSummary:
+    async def scan_codebase(
+        self, path: Optional[str] = None, use_baseline: bool = False
+    ) -> FileSummary:
         """
         Scans the codebase for defects, complexity, and dependencies.
         """
         path = Path(path or self.root_dir).resolve()
         logger.info(f"Scanning codebase at: {path}")
         py_files = await self._collect_py_files(path)
-        
+
         # Initialize semaphore if not already done
         if self.semaphore is None:
             self.semaphore = asyncio.Semaphore(self.max_workers)
-        
+
         # Auditing tools is a blocking operation, so run once in a thread
         with self._lock:
             if self._tool_cache is None:
-                self._tool_cache = await asyncio.to_thread(self._audit_repair_tools_sync)
+                self._tool_cache = await asyncio.to_thread(
+                    self._audit_repair_tools_sync
+                )
 
         defects_and_complexity_tasks = [
-            asyncio.to_thread(self._analyze_file_defects_and_complexity_blocking, f) for f in py_files
+            asyncio.to_thread(self._analyze_file_defects_and_complexity_blocking, f)
+            for f in py_files
         ]
-        
-        all_results = await asyncio.gather(*defects_and_complexity_tasks, return_exceptions=True)
-        
+
+        all_results = await asyncio.gather(
+            *defects_and_complexity_tasks, return_exceptions=True
+        )
+
         defects = []
         complexity_info = []
         for res in all_results:
@@ -618,10 +753,12 @@ class CodebaseAnalyzer:
 
         coverage_summary = None
         if any(t["name"] == "Coverage" and t["available"] for t in self._tool_cache):
-            coverage_summary = await asyncio.to_thread(self._analyze_coverage_sync, path)
-            
+            coverage_summary = await asyncio.to_thread(
+                self._analyze_coverage_sync, path
+            )
+
         deps = await self.map_dependencies(path)
-        
+
         results: FileSummary = {
             "files": len(py_files),
             "modules": [str(f) for f in py_files],
@@ -638,9 +775,10 @@ class CodebaseAnalyzer:
         return results
 
     @retry(
-        stop=stop_after_attempt(3), 
-        wait=wait_exponential(multiplier=1, min=2, max=10), 
-        retry=retry_if_exception_type(AnalysisError))
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(AnalysisError),
+    )
     async def analyze_and_propose(self, path: str) -> List[Dict[str, Any]]:
         """
         Analyzes a file and proposes fixes for detected issues.
@@ -658,10 +796,10 @@ class CodebaseAnalyzer:
         # Conceptual access control
         # if not self.check_permission("user", "read"):
         #     raise PermissionError("Read permission required")
-            
+
         if not Path(path).exists():
             raise FileNotFoundError(f"Path {path} does not exist")
-        
+
         with tracer.start_as_current_span("analyze_and_propose"):
             return await asyncio.to_thread(self._analyze_and_propose_sync, path)
 
@@ -675,27 +813,37 @@ class CodebaseAnalyzer:
             # Add complexity issues from radon
             if RADON_AVAILABLE:
                 for block in cc_visit(source):
-                    issues.append({
-                        "type": "COMPLEXITY",
-                        "risk_level": "medium" if block.complexity < 10 else "high",
-                        "details": {"message": f"Complexity {block.complexity} at line {block.lineno}"},
-                        "suggested_fixer": "refactor",
-                        "confidence": 0.8
-                    })
+                    issues.append(
+                        {
+                            "type": "COMPLEXITY",
+                            "risk_level": "medium" if block.complexity < 10 else "high",
+                            "details": {
+                                "message": f"Complexity {block.complexity} at line {block.lineno}"
+                            },
+                            "suggested_fixer": "refactor",
+                            "confidence": 0.8,
+                        }
+                    )
 
             # Add security issues from bandit
             if BANDIT_AVAILABLE:
-                b_mgr = bandit_manager.BanditManager(bandit_config_mod.BanditConfig(), "file")
+                b_mgr = bandit_manager.BanditManager(
+                    bandit_config_mod.BanditConfig(), "file"
+                )
                 b_mgr.discover_files([path], False)
                 b_mgr.run_tests()
                 for issue in b_mgr.get_issue_list():
-                    issues.append({
-                        "type": issue.test_id,
-                        "risk_level": "high" if issue.severity == "HIGH" else "medium",
-                        "details": {"message": issue.text, "line": issue.lineno},
-                        "suggested_fixer": "manual_review",
-                        "confidence": issue.confidence
-                    })
+                    issues.append(
+                        {
+                            "type": issue.test_id,
+                            "risk_level": (
+                                "high" if issue.severity == "HIGH" else "medium"
+                            ),
+                            "details": {"message": issue.text, "line": issue.lineno},
+                            "suggested_fixer": "manual_review",
+                            "confidence": issue.confidence,
+                        }
+                    )
 
             try:
                 analyzer_ops_total.labels(operation="analyze_and_propose").inc()
@@ -716,12 +864,42 @@ class CodebaseAnalyzer:
             A list of dictionaries, each describing a tool's availability and type.
         """
         tools = [
-            {"name": "radon", "type": "complexity", "available": RADON_AVAILABLE, "installed_via": "pip"},
-            {"name": "mypy", "type": "type_checker", "available": MYPY_AVAILABLE, "installed_via": "pip"},
-            {"name": "bandit", "type": "security", "available": BANDIT_AVAILABLE, "installed_via": "pip"},
-            {"name": "coverage", "type": "coverage", "available": COVERAGE_AVAILABLE, "installed_via": "pip"},
-            {"name": "safety", "type": "dependency", "available": SAFETY_AVAILABLE, "installed_via": "pip"},
-            {"name": "pylint", "type": "linter", "available": PYLINT_AVAILABLE, "installed_via": "pip"},
+            {
+                "name": "radon",
+                "type": "complexity",
+                "available": RADON_AVAILABLE,
+                "installed_via": "pip",
+            },
+            {
+                "name": "mypy",
+                "type": "type_checker",
+                "available": MYPY_AVAILABLE,
+                "installed_via": "pip",
+            },
+            {
+                "name": "bandit",
+                "type": "security",
+                "available": BANDIT_AVAILABLE,
+                "installed_via": "pip",
+            },
+            {
+                "name": "coverage",
+                "type": "coverage",
+                "available": COVERAGE_AVAILABLE,
+                "installed_via": "pip",
+            },
+            {
+                "name": "safety",
+                "type": "dependency",
+                "available": SAFETY_AVAILABLE,
+                "installed_via": "pip",
+            },
+            {
+                "name": "pylint",
+                "type": "linter",
+                "available": PYLINT_AVAILABLE,
+                "installed_via": "pip",
+            },
         ]
         try:
             analyzer_ops_total.labels(operation="audit_repair_tools").inc()
@@ -750,12 +928,14 @@ class CodebaseAnalyzer:
                     installed_via = "pip"
                 except ImportError:
                     pass
-            available_tools.append({
-                "name": tool["name"],
-                "type": tool["type"],
-                "available": available,
-                "installed_via": installed_via,
-            })
+            available_tools.append(
+                {
+                    "name": tool["name"],
+                    "type": tool["type"],
+                    "available": available,
+                    "installed_via": installed_via,
+                }
+            )
         return available_tools
 
     async def map_dependencies(self, path: Optional[str] = None) -> List[Dependency]:
@@ -763,10 +943,10 @@ class CodebaseAnalyzer:
         path = Path(path or self.root_dir).resolve()
         logger.info(f"Mapping dependencies in: {path}")
         py_files = await self._collect_py_files(path)
-        
+
         dep_tasks = [self._extract_dependencies_from_file(f) for f in py_files]
         all_deps = await asyncio.gather(*dep_tasks, return_exceptions=True)
-        
+
         dependencies = []
         for deps in all_deps:
             if isinstance(deps, list):
@@ -777,14 +957,16 @@ class CodebaseAnalyzer:
                     analyzer_errors_total.labels(error_type="dependency_map_fail").inc()
                 except AttributeError:
                     pass
-                
+
         return dependencies
 
-    async def _extract_dependencies_from_file(self, file_path: Path) -> List[Dependency]:
+    async def _extract_dependencies_from_file(
+        self, file_path: Path
+    ) -> List[Dependency]:
         """Extracts import dependencies from a single file."""
         if self.semaphore is None:
             self.semaphore = asyncio.Semaphore(self.max_workers)
-        
+
         async with self.semaphore:
             deps: List[Dependency] = []
             source, error = self._read_file(file_path)
@@ -796,36 +978,48 @@ class CodebaseAnalyzer:
                     if isinstance(node, ast.Import):
                         for alias in node.names:
                             spec = importlib.util.find_spec(alias.name)
-                            is_external = spec is None or not str(spec.origin).startswith(str(self.root_dir))
-                            deps.append({
-                                "file": str(file_path),
-                                "import_name": alias.name,
-                                "asname": alias.asname,
-                                "level": None,
-                                "from_import": False,
-                                "is_external": is_external,
-                                "module": None,
-                                "line": node.lineno
-                            })
+                            is_external = spec is None or not str(
+                                spec.origin
+                            ).startswith(str(self.root_dir))
+                            deps.append(
+                                {
+                                    "file": str(file_path),
+                                    "import_name": alias.name,
+                                    "asname": alias.asname,
+                                    "level": None,
+                                    "from_import": False,
+                                    "is_external": is_external,
+                                    "module": None,
+                                    "line": node.lineno,
+                                }
+                            )
                     elif isinstance(node, ast.ImportFrom):
                         module = node.module or ""
                         spec = importlib.util.find_spec(module)
-                        is_external = spec is None or not str(spec.origin).startswith(str(self.root_dir))
+                        is_external = spec is None or not str(spec.origin).startswith(
+                            str(self.root_dir)
+                        )
                         for alias in node.names:
-                            deps.append({
-                                "file": str(file_path),
-                                "import_name": alias.name,
-                                "asname": alias.asname,
-                                "level": node.level,
-                                "from_import": True,
-                                "is_external": is_external,
-                                "module": module,
-                                "line": node.lineno
-                            })
+                            deps.append(
+                                {
+                                    "file": str(file_path),
+                                    "import_name": alias.name,
+                                    "asname": alias.asname,
+                                    "level": node.level,
+                                    "from_import": True,
+                                    "is_external": is_external,
+                                    "module": module,
+                                    "line": node.lineno,
+                                }
+                            )
             except Exception as e:
-                logger.error(f"Error parsing dependencies in {file_path}: {e}", exc_info=True)
+                logger.error(
+                    f"Error parsing dependencies in {file_path}: {e}", exc_info=True
+                )
                 try:
-                    analyzer_errors_total.labels(error_type="dependency_extract_fail").inc()
+                    analyzer_errors_total.labels(
+                        error_type="dependency_extract_fail"
+                    ).inc()
                 except AttributeError:
                     pass
             return deps
@@ -841,7 +1035,7 @@ class CodebaseAnalyzer:
         """
         summary = await self.scan_codebase(use_baseline=use_baseline)
         output_path = Path(output_path or f"codebase_report.{output_format}")
-        
+
         report = ""
         if output_format == "markdown":
             report = self._generate_markdown_report(summary)
@@ -856,7 +1050,7 @@ class CodebaseAnalyzer:
             async with aiofiles.open(str(output_path), "w", encoding="utf-8") as f:
                 await f.write(report)
             logger.info(f"Report generated at: {output_path}")
-        
+
         try:
             analyzer_ops_total.labels(operation="generate_report").inc()
         except AttributeError:
@@ -865,7 +1059,9 @@ class CodebaseAnalyzer:
 
     def _generate_markdown_report(self, summary: FileSummary) -> str:
         """Helper to generate a markdown-formatted report."""
-        report = f"# Codebase Analysis Report\n\nGenerated: {datetime.now().isoformat()}\n\n"
+        report = (
+            f"# Codebase Analysis Report\n\nGenerated: {datetime.now().isoformat()}\n\n"
+        )
         report += f"**Root Directory**: {self.root_dir}\n"
         report += f"**Files Analyzed**: {summary['files']}\n\n"
         report += "## Defects\n"
@@ -877,16 +1073,18 @@ class CodebaseAnalyzer:
         for source, count in defect_counts.items():
             report += f"- {source}: {count}\n"
         report += "\n## Complexity\n"
-        top_complex = sorted(summary["complexity"], key=lambda x: x["complexity"], reverse=True)[:10]
+        top_complex = sorted(
+            summary["complexity"], key=lambda x: x["complexity"], reverse=True
+        )[:10]
         for comp in top_complex:
             report += f"- {comp['file']}:{comp['name']} ({comp['type']}): Complexity {comp['complexity']}, MI {comp['maintainability_index']:.2f}\n"
         if summary["coverage"]:
-            report += f"\n## Coverage\n"
+            report += "\n## Coverage\n"
             report += f"- Total Coverage: {summary['coverage']['total_coverage']}%\n"
             # Assuming 'by_module' is a dict of lists of missing lines
             for module, missing_lines in summary["coverage"]["by_module"].items():
                 report += f"- {module}: {len(missing_lines)} lines missing\n"
-        report += f"\n## Dependencies\n"
+        report += "\n## Dependencies\n"
         report += f"- Total Imports: {summary['dependency_summary']['total_imports']}\n"
         report += f"- External: {summary['dependency_summary']['external_imports']}\n"
         report += f"- Local: {summary['dependency_summary']['local_imports']}\n"
@@ -895,16 +1093,20 @@ class CodebaseAnalyzer:
     def _generate_junit_xml_report(self, summary: FileSummary) -> str:
         """Helper to generate a JUnit XML report for CI/CD integration."""
         report = '<?xml version="1.0" encoding="UTF-8"?>\n'
-        report += f'<testsuites name="CodebaseAnalyzer" tests="{len(summary["defects"])}">\n'
-        report += f'  <testsuite name="analysis_results" tests="{len(summary["defects"])}">\n'
+        report += (
+            f'<testsuites name="CodebaseAnalyzer" tests="{len(summary["defects"])}">\n'
+        )
+        report += (
+            f'  <testsuite name="analysis_results" tests="{len(summary["defects"])}">\n'
+        )
         for defect in summary["defects"]:
             report += f'    <testcase classname="{escape(defect["file"])}" name="{escape(defect["source"])}">\n'
             report += f'      <failure message="{escape(defect["message"])}" type="{defect["source"]}">'
             report += f'Line {defect["line"]}:{defect["column"]}</failure>\n'
-            report += '    </testcase>\n'
-        report += '  </testsuite>\n</testsuites>'
+            report += "    </testcase>\n"
+        report += "  </testsuite>\n</testsuites>"
         return report
-        
+
     async def analyze_file(self, file_path: str) -> Dict[str, Any]:
         """Backward compatibility wrapper for analyze_file."""
         path = Path(file_path)
@@ -914,17 +1116,19 @@ class CodebaseAnalyzer:
         return {
             "defects": defects,
             "complexity": complexity[0].complexity if complexity else 0,
-            "maintainability_index": complexity[0].maintainability_index if complexity else 0,
-            "loc": 100  # Mock value for tests
+            "maintainability_index": (
+                complexity[0].maintainability_index if complexity else 0
+            ),
+            "loc": 100,  # Mock value for tests
         }
-        
+
     def discover_files(self) -> List[str]:
         """Backward compatibility wrapper for discover_files."""
         loop = asyncio.new_event_loop()
         py_files = loop.run_until_complete(self._collect_py_files(self.root_dir))
         loop.close()
         return [str(f) for f in py_files]
-        
+
     def _filter_baseline(self, defects: List[Defect]) -> List[Defect]:
         """Filter defects against baseline."""
         filtered = []
@@ -935,20 +1139,22 @@ class CodebaseAnalyzer:
                 filtered.append(defect)
         return filtered
 
+
 async def analyze_codebase(
     root_dir: str,
     config_file: Optional[str] = None,
     output_format: str = "markdown",
     output_path: Optional[str] = None,
-    use_baseline: bool = False
+    use_baseline: bool = False,
 ) -> Dict[str, Any]:
     async with CodebaseAnalyzer(root_dir=root_dir, config_file=config_file) as analyzer:
         summary = await analyzer.generate_report(
-            output_format=output_format, 
-            output_path=output_path, 
-            use_baseline=use_baseline
+            output_format=output_format,
+            output_path=output_path,
+            use_baseline=use_baseline,
         )
         return {"analysis": summary}
+
 
 # Only register if not already registered to avoid duplicate registration error
 if not arbiter_registry.get_metadata(ArbiterPlugInKind.ANALYTICS, "codebase_analyzer"):
@@ -956,39 +1162,57 @@ if not arbiter_registry.get_metadata(ArbiterPlugInKind.ANALYTICS, "codebase_anal
         kind=ArbiterPlugInKind.ANALYTICS,
         name="codebase_analyzer",
         version="1.0.3",
-        author="Arbiter Team"
+        author="Arbiter Team",
     )(analyze_codebase)
 
-app = typer.Typer(name="codebase-analyzer", help="Analyze Python codebases for defects, complexity, and dependencies.")
+app = typer.Typer(
+    name="codebase-analyzer",
+    help="Analyze Python codebases for defects, complexity, and dependencies.",
+)
+
 
 @app.command()
 def scan(
     root_dir: str = typer.Option(".", help="Root directory to analyze"),
     config_file: Optional[str] = typer.Option(None, help="Path to config file"),
-    output_format: str = typer.Option("markdown", help="Output format: markdown, json, junit"),
+    output_format: str = typer.Option(
+        "markdown", help="Output format: markdown, json, junit"
+    ),
     output_path: Optional[str] = typer.Option(None, help="Output file path"),
-    use_baseline: bool = typer.Option(False, help="Use baseline to ignore known defects"),
+    use_baseline: bool = typer.Option(
+        False, help="Use baseline to ignore known defects"
+    ),
 ):
     """Scan a codebase and generate a report."""
+
     async def _scan():
-        async with CodebaseAnalyzer(root_dir=root_dir, config_file=config_file) as analyzer:
+        async with CodebaseAnalyzer(
+            root_dir=root_dir, config_file=config_file
+        ) as analyzer:
             await analyzer.generate_report(
-                output_format=output_format, 
+                output_format=output_format,
                 output_path=output_path,
-                use_baseline=use_baseline
+                use_baseline=use_baseline,
             )
+
     asyncio.run(_scan())
+
 
 @app.command()
 def tools(root_dir: str = typer.Option(".", help="Root directory to analyze")):
     """List available analysis tools."""
+
     async def _tools():
         async with CodebaseAnalyzer(root_dir=root_dir) as analyzer:
             tools = await analyzer.audit_repair_tools()
             for tool in tools:
                 status = "Available" if tool["available"] else "Not installed"
-                print(f"{tool['name']} ({tool['type']}): {status} via {tool['installed_via'] or 'N/A'}")
+                print(
+                    f"{tool['name']} ({tool['type']}): {status} via {tool['installed_via'] or 'N/A'}"
+                )
+
     asyncio.run(_tools())
+
 
 if __name__ == "__main__":
     # Register as a plugin for dynamic loading
@@ -999,7 +1223,7 @@ if __name__ == "__main__":
         author="Arbiter Team",
         description="A comprehensive codebase analysis tool.",
         tags={"static-analysis", "security", "complexity"},
-        dependencies=[]
+        dependencies=[],
     )(CodebaseAnalyzer)
-    
+
     app()

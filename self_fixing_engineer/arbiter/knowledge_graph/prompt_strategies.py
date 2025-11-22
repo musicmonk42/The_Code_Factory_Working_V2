@@ -2,9 +2,8 @@ import os
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
-from langchain_core.prompts import PromptTemplate
-from .config import Config, MultiModalData
+from typing import List, Optional
+from .config import MultiModalData
 
 # Use standard logging for a regular logger instance
 logger = logging.getLogger(__name__)
@@ -45,8 +44,9 @@ Based on your initial response, your self-reflection, and a peer critique, gener
 Initial AI Response: {ai_response}
 Self-Reflection: {reflection}
 Peer Critique: {critique}
-Your final, corrected response: """
+Your final, corrected response: """,
 }
+
 
 def _load_templates() -> None:
     """
@@ -54,18 +54,35 @@ def _load_templates() -> None:
     """
     global PROMPT_TEMPLATES
     try:
-        with open(PROMPT_TEMPLATE_FILE, 'r', encoding='utf-8') as f:
+        with open(PROMPT_TEMPLATE_FILE, "r", encoding="utf-8") as f:
             PROMPT_TEMPLATES = json.load(f)
-        logger.info("Prompt templates loaded from file.", extra={"file": PROMPT_TEMPLATE_FILE, "templates": list(PROMPT_TEMPLATES.keys())})
+        logger.info(
+            "Prompt templates loaded from file.",
+            extra={
+                "file": PROMPT_TEMPLATE_FILE,
+                "templates": list(PROMPT_TEMPLATES.keys()),
+            },
+        )
     except FileNotFoundError:
-        logger.warning("Prompt template file not found. Using hardcoded fallback templates.", extra={"file": PROMPT_TEMPLATE_FILE})
+        logger.warning(
+            "Prompt template file not found. Using hardcoded fallback templates.",
+            extra={"file": PROMPT_TEMPLATE_FILE},
+        )
         PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
     except json.JSONDecodeError as e:
-        logger.error("Failed to parse prompt template file. Using hardcoded fallback.", extra={"file": PROMPT_TEMPLATE_FILE, "error": str(e)})
+        logger.error(
+            "Failed to parse prompt template file. Using hardcoded fallback.",
+            extra={"file": PROMPT_TEMPLATE_FILE, "error": str(e)},
+        )
         PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
     except Exception as e:
-        logger.error("An unexpected error occurred while loading prompt templates. Using hardcoded fallback.", extra={"error": str(e)}, exc_info=True)
+        logger.error(
+            "An unexpected error occurred while loading prompt templates. Using hardcoded fallback.",
+            extra={"error": str(e)},
+            exc_info=True,
+        )
         PROMPT_TEMPLATES = PROMPT_TEMPLATES_FALLBACK
+
 
 _load_templates()
 
@@ -74,12 +91,14 @@ REFLECTION_PROMPT_TEMPLATE = PROMPT_TEMPLATES["REFLECTION_PROMPT_TEMPLATE"]
 CRITIQUE_PROMPT_TEMPLATE = PROMPT_TEMPLATES["CRITIQUE_PROMPT_TEMPLATE"]
 SELF_CORRECT_PROMPT_TEMPLATE = PROMPT_TEMPLATES["SELF_CORRECT_PROMPT_TEMPLATE"]
 
+
 # --- Prompt Strategies ---
 class PromptStrategy(ABC):
     """
     Abstract base class for defining prompt strategies.
     This separates the logic for crafting the prompt from the core agent behavior.
     """
+
     def __init__(self, logger: logging.Logger):
         self._logger = logger
         self.history_transcript: Optional[str] = None
@@ -96,11 +115,11 @@ class PromptStrategy(ABC):
         user_input: str,
         persona: str,
         language: str,
-        multi_modal_context: List[MultiModalData]
+        multi_modal_context: List[MultiModalData],
     ) -> str:
         """
         Creates the full prompt for the agent's LLM call.
-        
+
         Args:
             base_template: The base prompt template string.
             history: The conversation history transcript.
@@ -108,16 +127,18 @@ class PromptStrategy(ABC):
             persona: The agent's persona string.
             language: The communication language.
             multi_modal_context: A list of processed MultiModalData objects.
-            
+
         Returns:
             The formatted prompt string.
         """
         pass
 
+
 class DefaultPromptStrategy(PromptStrategy):
     """
     A basic prompt strategy that uses the default template with no frills.
     """
+
     async def create_agent_prompt(
         self,
         base_template: str,
@@ -125,28 +146,38 @@ class DefaultPromptStrategy(PromptStrategy):
         user_input: str,
         persona: str,
         language: str,
-        multi_modal_context: List[MultiModalData]
+        multi_modal_context: List[MultiModalData],
     ) -> str:
-        
+
         mm_context_summary = ""
         if multi_modal_context:
-            mm_context_summary = "\n".join([f"- {item.data_type}: {item.metadata.get('summary', 'No summary available.')}" for item in multi_modal_context])
-        
+            mm_context_summary = "\n".join(
+                [
+                    f"- {item.data_type}: {item.metadata.get('summary', 'No summary available.')}"
+                    for item in multi_modal_context
+                ]
+            )
+
         prompt = base_template.format(
             persona=persona,
             language=language,
             multi_modal_context=mm_context_summary,
             history=history,
-            input=user_input
+            input=user_input,
         )
-        self._logger.debug("Generated prompt using DefaultPromptStrategy.", extra={"prompt_length": len(prompt)})
+        self._logger.debug(
+            "Generated prompt using DefaultPromptStrategy.",
+            extra={"prompt_length": len(prompt)},
+        )
         return prompt
+
 
 class ConcisePromptStrategy(PromptStrategy):
     """
     A prompt strategy focused on brevity for a specific persona or task.
     This could truncate history or simplify the base template.
     """
+
     async def create_agent_prompt(
         self,
         base_template: str,
@@ -154,25 +185,33 @@ class ConcisePromptStrategy(PromptStrategy):
         user_input: str,
         persona: str,
         language: str,
-        multi_modal_context: List[MultiModalData]
+        multi_modal_context: List[MultiModalData],
     ) -> str:
-        
+
         # In a real implementation, this would use a different template or logic.
         # For this example, it's a simple, conceptual demonstration.
         mm_context_summary = ""
         if multi_modal_context:
-            mm_context_summary = "\n".join([f"- {item.data_type}: {item.metadata.get('summary', 'No summary available.')}" for item in multi_modal_context])
+            mm_context_summary = "\n".join(
+                [
+                    f"- {item.data_type}: {item.metadata.get('summary', 'No summary available.')}"
+                    for item in multi_modal_context
+                ]
+            )
 
         concise_history = self._truncate_history(history, max_chars=500)
-        
+
         prompt = base_template.format(
             persona=persona,
             language=language,
             multi_modal_context=mm_context_summary,
             history=concise_history,
-            input=user_input
+            input=user_input,
         )
-        self._logger.debug("Generated prompt using ConcisePromptStrategy.", extra={"prompt_length": len(prompt)})
+        self._logger.debug(
+            "Generated prompt using ConcisePromptStrategy.",
+            extra={"prompt_length": len(prompt)},
+        )
         return prompt
 
     def _truncate_history(self, history: str, max_chars: int) -> str:

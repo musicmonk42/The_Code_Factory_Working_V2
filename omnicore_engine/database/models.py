@@ -14,7 +14,6 @@ from sqlalchemy import (
     Integer,
     Float,
     JSON,
-    text,
     Index,
 )
 from sqlalchemy.orm import (
@@ -35,11 +34,12 @@ class AgentState(ArbiterAgentState):
     DO NOT set __tablename__.
     DO NOT redeclare id, name, x, y, energy, world_size, agent_type, etc.
     Only add NEW columns that do NOT exist in the parent.
-    
+
     Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
     For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
     should set agent_type appropriately in their values.
     """
+
     # --- NO __tablename__ ---
     # --- NO id column ---
     # --- NO world_size, agent_type, etc. if already in parent ---
@@ -63,6 +63,7 @@ class ExplainAuditRecord(Base):
     Immutable audit record for all system events.
     Includes Merkle root for tamper-proof integrity.
     """
+
     __tablename__ = "explain_audit"
 
     uuid: Mapped[str] = mapped_column(String, primary_key=True)
@@ -93,6 +94,7 @@ class GeneratorAgentState(AgentState):
     """
     State for code-generating agents.
     """
+
     __tablename__ = "generator_agent_state"
 
     id: Mapped[int] = mapped_column(
@@ -122,6 +124,7 @@ class SFEAgentState(AgentState):
     """
     State for self-fixing engineer agents.
     """
+
     __tablename__ = "sfe_agent_state"
 
     id: Mapped[int] = mapped_column(
@@ -131,7 +134,9 @@ class SFEAgentState(AgentState):
     )
 
     fixed_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     trust_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     __mapper_args__ = {
@@ -139,7 +144,9 @@ class SFEAgentState(AgentState):
     }
 
     def __repr__(self) -> str:
-        return f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
+        return (
+            f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
+        )
 
 
 # ----------------------------------------------------------------------

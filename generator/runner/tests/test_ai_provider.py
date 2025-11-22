@@ -14,18 +14,13 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from _pytest.logging import LogCaptureFixture
 
 # Make the *runner* package importable from the repo root
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,18 +51,19 @@ def mock_openai_response():
 @pytest.fixture
 def mock_openai_stream():
     """Mock OpenAI streaming response."""
+
     async def mock_stream():
         chunk1 = MagicMock()
         chunk1.choices = [MagicMock()]
         chunk1.choices[0].delta.content = "chunk1"
-        
+
         chunk2 = MagicMock()
         chunk2.choices = [MagicMock()]
         chunk2.choices[0].delta.content = "chunk2"
-        
+
         yield chunk1
         yield chunk2
-    
+
     return mock_stream()
 
 
@@ -99,9 +95,9 @@ def test_register_custom_endpoint(provider: OpenAIProvider) -> None:
     custom_url = "https://custom.openai.endpoint.com/v1"
     provider.register_custom_endpoint(custom_url)
     assert provider.custom_endpoint == custom_url
-    
+
     # --- FIX: The client.base_url is an httpx.URL object with a trailing slash ---
-    assert str(provider.client.base_url) == custom_url + '/'
+    assert str(provider.client.base_url) == custom_url + "/"
 
 
 def test_register_model(provider: OpenAIProvider) -> None:
@@ -148,21 +144,31 @@ async def test_count_tokens_empty_string(provider: OpenAIProvider) -> None:
 
 # 4. API call method with SDK error translation
 @pytest.mark.asyncio
-async def test_api_call_non_stream(provider: OpenAIProvider, mock_openai_response) -> None:
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+async def test_api_call_non_stream(
+    provider: OpenAIProvider, mock_openai_response
+) -> None:
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_response
-        
-        result = await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
+
+        result = await provider._api_call(
+            "gpt-4", [{"role": "user", "content": "test"}], False
+        )
         assert result == mock_openai_response
         mock_create.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_api_call_stream(provider: OpenAIProvider, mock_openai_stream) -> None:
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_stream
-        
-        result = await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], True)
+
+        result = await provider._api_call(
+            "gpt-4", [{"role": "user", "content": "test"}], True
+        )
         # Result should be the stream itself
         chunks = []
         async for chunk in result:
@@ -173,75 +179,101 @@ async def test_api_call_stream(provider: OpenAIProvider, mock_openai_stream) -> 
 @pytest.mark.asyncio
 async def test_api_call_authentication_error(provider: OpenAIProvider) -> None:
     from openai import AuthenticationError
-    
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
-        mock_create.side_effect = AuthenticationError("Invalid API key", response=MagicMock(), body=None)
-        
+
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.side_effect = AuthenticationError(
+            "Invalid API key", response=MagicMock(), body=None
+        )
+
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
-        
+            await provider._api_call(
+                "gpt-4", [{"role": "user", "content": "test"}], False
+            )
+
         assert "Authentication failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_api_call_rate_limit_error(provider: OpenAIProvider) -> None:
     from openai import RateLimitError
-    
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
-        mock_create.side_effect = RateLimitError("Rate limit exceeded", response=MagicMock(), body=None)
-        
+
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
+        mock_create.side_effect = RateLimitError(
+            "Rate limit exceeded", response=MagicMock(), body=None
+        )
+
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
-        
+            await provider._api_call(
+                "gpt-4", [{"role": "user", "content": "test"}], False
+            )
+
         assert "Rate limit" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_api_call_connection_error(provider: OpenAIProvider) -> None:
     from openai import APIConnectionError
-    
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         # --- FIX: APIConnectionError requires keyword arguments (message, request) ---
-        mock_create.side_effect = APIConnectionError(message="Connection failed", request=MagicMock())
-        
+        mock_create.side_effect = APIConnectionError(
+            message="Connection failed", request=MagicMock()
+        )
+
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
-        
+            await provider._api_call(
+                "gpt-4", [{"role": "user", "content": "test"}], False
+            )
+
         assert "Connection error" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_api_call_generic_openai_error(provider: OpenAIProvider) -> None:
     from openai import OpenAIError
-    
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = OpenAIError("Generic error")
-        
+
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
-        
+            await provider._api_call(
+                "gpt-4", [{"role": "user", "content": "test"}], False
+            )
+
         assert "OpenAI API error" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_api_call_unexpected_error(provider: OpenAIProvider) -> None:
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = RuntimeError("Unexpected error")
-        
+
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
-        
+            await provider._api_call(
+                "gpt-4", [{"role": "user", "content": "test"}], False
+            )
+
         assert "Unexpected error" in str(exc_info.value)
 
 
 # 5. Public call() method
 @pytest.mark.asyncio
 async def test_call_non_stream(provider: OpenAIProvider, mock_openai_response) -> None:
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_openai_response
-        
+
         result = await provider.call("test prompt", "gpt-4")
-        
+
         assert isinstance(result, dict)
         assert "content" in result
         assert "model" in result
@@ -251,15 +283,15 @@ async def test_call_non_stream(provider: OpenAIProvider, mock_openai_response) -
 
 @pytest.mark.asyncio
 async def test_call_stream(provider: OpenAIProvider, mock_openai_stream) -> None:
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_openai_stream
-        
+
         result = await provider.call("test prompt", "gpt-4", stream=True)
-        
+
         chunks = []
         async for chunk in result:
             chunks.append(chunk)
-        
+
         assert chunks == ["chunk1", "chunk2"]
 
 
@@ -267,7 +299,7 @@ async def test_call_stream(provider: OpenAIProvider, mock_openai_stream) -> None
 async def test_call_unregistered_model(provider: OpenAIProvider) -> None:
     with pytest.raises(ValueError) as exc_info:
         await provider.call("test", "unregistered-model")
-    
+
     assert "not registered" in str(exc_info.value)
 
 
@@ -276,28 +308,32 @@ async def test_call_stream_error(provider: OpenAIProvider) -> None:
     async def bad_stream():
         yield MagicMock(choices=[MagicMock(delta=MagicMock(content="ok"))])
         raise RuntimeError("Stream error")
-    
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = bad_stream()
-        
+
         result = await provider.call("test", "gpt-4", stream=True)
-        
+
         with pytest.raises(LLMError):
             async for _ in result:
                 pass
 
 
 @pytest.mark.asyncio
-async def test_call_with_custom_headers(provider: OpenAIProvider, mock_openai_response) -> None:
+async def test_call_with_custom_headers(
+    provider: OpenAIProvider, mock_openai_response
+) -> None:
     provider.register_custom_headers({"X-Custom": "test"})
-    
+
     # --- FIX: Mock the client 'create' method, which receives the headers, ---
     # --- not '_api_call', which adds them. ---
-    with patch.object(provider.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_response
-        
+
         result = await provider.call("test", "gpt-4")
-        
+
         # Verify custom headers were passed
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args[1]
@@ -310,10 +346,10 @@ async def test_call_with_custom_headers(provider: OpenAIProvider, mock_openai_re
 async def test_health_check_success(provider: OpenAIProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     with patch("aiohttp.ClientSession.get") as mock_get:
         mock_get.return_value.__aenter__.return_value = mock_resp
-        
+
         result = await provider.health_check()
         assert result is True
 
@@ -329,10 +365,10 @@ async def test_health_check_failure(provider: OpenAIProvider) -> None:
 async def test_health_check_bad_status(provider: OpenAIProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 401
-    
+
     with patch("aiohttp.ClientSession.get") as mock_get:
         mock_get.return_value.__aenter__.return_value = mock_resp
-        
+
         result = await provider.health_check()
         assert result is False
 
@@ -342,10 +378,10 @@ async def test_health_check_with_custom_endpoint(provider: OpenAIProvider) -> No
     provider.register_custom_endpoint("https://custom.endpoint.com/v1")
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     with patch("aiohttp.ClientSession.get") as mock_get:
         mock_get.return_value.__aenter__.return_value = mock_resp
-        
+
         result = await provider.health_check()
         assert result is True
 
@@ -383,11 +419,11 @@ def test_get_provider_no_key(mock_load: MagicMock) -> None:
 # 8. Edge cases and integration
 @pytest.mark.asyncio
 async def test_call_with_kwargs(provider: OpenAIProvider, mock_openai_response) -> None:
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_openai_response
-        
+
         result = await provider.call("test", "gpt-4", temperature=0.7, max_tokens=100)
-        
+
         call_kwargs = mock_api.call_args[1]
         assert call_kwargs["temperature"] == 0.7
         assert call_kwargs["max_tokens"] == 100
@@ -398,7 +434,7 @@ async def test_multiple_tokenizers(provider: OpenAIProvider) -> None:
     # Test that different models use appropriate tokenizers
     count1 = await provider.count_tokens("test", "gpt-4")
     count2 = await provider.count_tokens("test", "gpt-3.5-turbo")
-    
+
     # Both should work
     assert count1 > 0
     assert count2 > 0

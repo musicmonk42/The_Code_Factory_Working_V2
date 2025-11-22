@@ -6,14 +6,10 @@ Focused on essential test coverage with high quality.
 
 import asyncio
 import json
-import os
-import tempfile
 import time
 import uuid
 import hashlib
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
-from collections import OrderedDict
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -29,7 +25,6 @@ from simulation.plugins.dlt_clients.dlt_simple_clients import (
 from simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientTransactionError,
-    DLTClientQueryError,
     DLTClientValidationError,
 )
 
@@ -38,6 +33,7 @@ from simulation.plugins.dlt_clients.dlt_base import (
 # Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_off_chain_client():
     """Creates a mock off-chain client."""
@@ -45,11 +41,9 @@ def mock_off_chain_client():
     client.client_type = "MockOffChain"
     client.save_blob = AsyncMock(return_value=f"off-chain-{uuid.uuid4().hex[:8]}")
     client.get_blob = AsyncMock(return_value=b"test_payload_data")
-    client.health_check = AsyncMock(return_value={
-        "status": True,
-        "message": "Healthy",
-        "details": {}
-    })
+    client.health_check = AsyncMock(
+        return_value={"status": True, "message": "Healthy", "details": {}}
+    )
     client.close = AsyncMock()
     return client
 
@@ -61,7 +55,7 @@ def config():
         "simpledlt": {
             "log_format": "json",
             "temp_file_ttl": 3600.0,
-            "cleanup_interval": 300.0
+            "cleanup_interval": 300.0,
         }
     }
 
@@ -83,7 +77,7 @@ def sample_data():
         "hash": hashlib.sha256(b"test").hexdigest(),
         "prev_hash": hashlib.sha256(b"prev").hexdigest(),
         "metadata": {"author": "test", "version": "1.0"},
-        "payload": b"test_payload_data"
+        "payload": b"test_payload_data",
     }
 
 
@@ -91,15 +85,14 @@ def sample_data():
 # Configuration Tests
 # ============================================================================
 
+
 class TestConfiguration:
     """Tests for configuration validation."""
 
     def test_valid_config(self):
         """Test valid configuration."""
         config = SimpleDLTConfig(
-            log_format="json",
-            temp_file_ttl=3600.0,
-            cleanup_interval=300.0
+            log_format="json", temp_file_ttl=3600.0, cleanup_interval=300.0
         )
         assert config.log_format == "json"
         assert config.temp_file_ttl == 3600.0
@@ -116,7 +109,7 @@ class TestConfiguration:
         with pytest.raises(DLTClientConfigurationError):
             SimpleDLTClient(invalid_config, mock_off_chain_client)
 
-    @patch('simulation.plugins.dlt_clients.dlt_simple_clients.PRODUCTION_MODE', True)
+    @patch("simulation.plugins.dlt_clients.dlt_simple_clients.PRODUCTION_MODE", True)
     def test_production_requires_chain_path(self):
         """Test production mode requires chain state path."""
         with pytest.raises(ValidationError) as exc:
@@ -127,6 +120,7 @@ class TestConfiguration:
 # ============================================================================
 # Core Operations Tests
 # ============================================================================
+
 
 class TestCoreOperations:
     """Tests for core DLT operations."""
@@ -139,7 +133,7 @@ class TestCoreOperations:
             prev_hash=sample_data["prev_hash"],
             metadata=sample_data["metadata"],
             payload_blob=sample_data["payload"],
-            correlation_id="test-001"
+            correlation_id="test-001",
         )
 
         assert tx_id.startswith(sample_data["name"])
@@ -159,23 +153,23 @@ class TestCoreOperations:
             hash=sample_data["hash"],
             prev_hash=sample_data["prev_hash"],
             metadata=sample_data["metadata"],
-            payload_blob=sample_data["payload"]
+            payload_blob=sample_data["payload"],
         )
 
         # Read back
         result = await client.read_checkpoint(sample_data["name"])
-        
+
         assert result["metadata"]["hash"] == sample_data["hash"]
         assert result["metadata"]["metadata"] == sample_data["metadata"]
         assert result["payload_blob"] == b"test_payload_data"
-        
+
         # Verify off-chain get was called
         client.off_chain_client.get_blob.assert_called_once()
 
     async def test_read_specific_version(self, client):
         """Test reading a specific version."""
         name = "versioned_checkpoint"
-        
+
         # Write multiple versions
         for i in range(3):
             await client.write_checkpoint(
@@ -183,7 +177,7 @@ class TestCoreOperations:
                 hash=f"hash_{i}",
                 prev_hash=f"prev_{i}",
                 metadata={"version": i},
-                payload_blob=f"data_{i}".encode()
+                payload_blob=f"data_{i}".encode(),
             )
 
         # Read version 2
@@ -194,7 +188,7 @@ class TestCoreOperations:
     async def test_rollback_checkpoint(self, client):
         """Test rolling back to a previous version."""
         name = "rollback_test"
-        
+
         # Create history
         hashes = []
         for i in range(3):
@@ -203,15 +197,12 @@ class TestCoreOperations:
                 hash=f"hash_{i}",
                 prev_hash=f"prev_{i}",
                 metadata={"iteration": i},
-                payload_blob=f"data_{i}".encode()
+                payload_blob=f"data_{i}".encode(),
             )
             hashes.append(f"hash_{i}")
 
         # Rollback to first version
-        result = await client.rollback_checkpoint(
-            name=name,
-            rollback_hash=hashes[0]
-        )
+        result = await client.rollback_checkpoint(name=name, rollback_hash=hashes[0])
 
         assert result["version"] == 4  # New version after 3 writes
         assert result["hash"] == hashes[0]
@@ -229,7 +220,7 @@ class TestCoreOperations:
             hash=sample_data["hash"],
             prev_hash=sample_data["prev_hash"],
             metadata=sample_data["metadata"],
-            payload_blob=sample_data["payload"]
+            payload_blob=sample_data["payload"],
         )
 
         result = await client.get_version_tx(sample_data["name"], version=1)
@@ -239,6 +230,7 @@ class TestCoreOperations:
 # ============================================================================
 # Validation Tests
 # ============================================================================
+
 
 class TestValidation:
     """Tests for input validation."""
@@ -251,7 +243,7 @@ class TestValidation:
                 hash="hash",
                 prev_hash="prev",
                 metadata={},
-                payload_blob=b"data"
+                payload_blob=b"data",
             )
         assert "Checkpoint name cannot be empty" in str(exc.value)
 
@@ -263,7 +255,7 @@ class TestValidation:
                 hash="",
                 prev_hash="prev",
                 metadata={},
-                payload_blob=b"data"
+                payload_blob=b"data",
             )
         assert "Hash cannot be empty" in str(exc.value)
 
@@ -275,7 +267,7 @@ class TestValidation:
                 hash="hash",
                 prev_hash="prev",
                 metadata={},
-                payload_blob=b""
+                payload_blob=b"",
             )
         assert "Payload blob cannot be empty" in str(exc.value)
 
@@ -284,52 +276,53 @@ class TestValidation:
 # Chain State Persistence Tests
 # ============================================================================
 
+
 class TestPersistence:
     """Tests for chain state persistence."""
 
     async def test_dump_and_load_chain(self, tmp_path, mock_off_chain_client):
         """Test dumping and loading chain state."""
         chain_file = tmp_path / "test_chain.json"
-        
+
         # First client without chain_state_path for initial creation
         config1 = {
             "simpledlt": {
                 "log_format": "json",
                 "temp_file_ttl": 3600.0,
-                "cleanup_interval": 300.0
+                "cleanup_interval": 300.0,
             }
         }
-        
+
         # Create and populate client
         client1 = SimpleDLTClient(config1, mock_off_chain_client)
         await client1.initialize()
-        
+
         await client1.write_checkpoint(
             checkpoint_name="test",
             hash="hash1",
             prev_hash="prev1",
             metadata={"test": "data"},
-            payload_blob=b"payload1"
+            payload_blob=b"payload1",
         )
-        
+
         # Manually dump to file
         await client1.dump_chain(str(chain_file))
         await client1.close()
-        
+
         # Now create config with chain_state_path for loading
         config2 = {
             "simpledlt": {
                 "chain_state_path": str(chain_file),
                 "log_format": "json",
                 "temp_file_ttl": 3600.0,
-                "cleanup_interval": 300.0
+                "cleanup_interval": 300.0,
             }
         }
-        
+
         # Load in new client
         client2 = SimpleDLTClient(config2, mock_off_chain_client)
         await client2.initialize()  # This will load the chain
-        
+
         assert "test" in client2.chain
         assert client2.chain["test"][0]["hash"] == "hash1"
         await client2.close()
@@ -337,11 +330,11 @@ class TestPersistence:
     async def test_checksum_calculation(self, client):
         """Test chain checksum calculation."""
         test_chain = {"test": [{"hash": "test_hash"}]}
-        
+
         checksum1 = client._calculate_chain_checksum(test_chain)
         checksum2 = client._calculate_chain_checksum(test_chain)
         assert checksum1 == checksum2
-        
+
         # Modify and verify different checksum
         test_chain["test"][0]["hash"] = "modified"
         checksum3 = client._calculate_chain_checksum(test_chain)
@@ -352,13 +345,14 @@ class TestPersistence:
 # Health Check Tests
 # ============================================================================
 
+
 class TestHealthCheck:
     """Tests for health check functionality."""
 
     async def test_health_check_success(self, client):
         """Test successful health check."""
         result = await client.health_check()
-        
+
         assert result["status"] is True
         assert "SimpleDLT client is healthy" in result["message"]
         assert result["details"]["off_chain_status"] is True
@@ -367,9 +361,9 @@ class TestHealthCheck:
         """Test health check with unhealthy off-chain client."""
         client.off_chain_client.health_check.return_value = {
             "status": False,
-            "message": "Storage unavailable"
+            "message": "Storage unavailable",
         }
-        
+
         result = await client.health_check()
         assert result["status"] is False
         assert "Off-chain client health check failed" in result["message"]
@@ -379,26 +373,27 @@ class TestHealthCheck:
 # Concurrency Tests
 # ============================================================================
 
+
 class TestConcurrency:
     """Tests for concurrent operations."""
 
     async def test_concurrent_writes(self, client):
         """Test concurrent writes are properly serialized."""
         name = "concurrent_test"
-        
+
         async def write(index):
             return await client.write_checkpoint(
                 checkpoint_name=name,
                 hash=f"hash_{index}",
                 prev_hash=f"prev_{index}",
                 metadata={"index": index},
-                payload_blob=f"data_{index}".encode()
+                payload_blob=f"data_{index}".encode(),
             )
-        
+
         # Execute concurrent writes
         tasks = [write(i) for i in range(10)]
         results = await asyncio.gather(*tasks)
-        
+
         # Verify all succeeded with unique versions
         versions = [r[2] for r in results]
         assert len(set(versions)) == 10
@@ -412,13 +407,13 @@ class TestConcurrency:
             hash=sample_data["hash"],
             prev_hash=sample_data["prev_hash"],
             metadata=sample_data["metadata"],
-            payload_blob=sample_data["payload"]
+            payload_blob=sample_data["payload"],
         )
-        
+
         # Concurrent reads
         tasks = [client.read_checkpoint(sample_data["name"]) for _ in range(10)]
         results = await asyncio.gather(*tasks)
-        
+
         # All should return same data
         for result in results:
             assert result["metadata"]["hash"] == sample_data["hash"]
@@ -428,20 +423,21 @@ class TestConcurrency:
 # Error Handling Tests
 # ============================================================================
 
+
 class TestErrorHandling:
     """Tests for error handling and recovery."""
 
     async def test_off_chain_failure_propagation(self, client):
         """Test that off-chain failures are properly propagated."""
         client.off_chain_client.save_blob.side_effect = Exception("Storage error")
-        
+
         with pytest.raises(DLTClientTransactionError) as exc:
             await client.write_checkpoint(
                 checkpoint_name="test",
                 hash="hash",
                 prev_hash="prev",
                 metadata={},
-                payload_blob=b"data"
+                payload_blob=b"data",
             )
         assert "Storage error" in str(exc.value)
 
@@ -454,8 +450,8 @@ class TestErrorHandling:
     async def test_credential_rotation_not_supported(self, client):
         """Test when off-chain client doesn't support rotation."""
         # Remove the rotation method
-        delattr(client.off_chain_client, '_rotate_credentials')
-        
+        delattr(client.off_chain_client, "_rotate_credentials")
+
         # Should not raise exception
         await client._rotate_credentials()
 
@@ -463,6 +459,7 @@ class TestErrorHandling:
 # ============================================================================
 # Plugin System Tests
 # ============================================================================
+
 
 class TestPluginSystem:
     """Tests for plugin system integration."""
@@ -489,25 +486,26 @@ class TestPluginSystem:
 # Performance Tests
 # ============================================================================
 
+
 class TestPerformance:
     """Basic performance tests."""
 
     async def test_write_performance(self, client):
         """Test write operation performance."""
         start = time.time()
-        
+
         for i in range(100):
             await client.write_checkpoint(
                 checkpoint_name=f"perf_test_{i}",
                 hash=f"hash_{i}",
                 prev_hash=f"prev_{i}",
                 metadata={"index": i},
-                payload_blob=b"x" * 1024
+                payload_blob=b"x" * 1024,
             )
-        
+
         elapsed = time.time() - start
         avg_time = elapsed / 100
-        
+
         # Should average less than 50ms per checkpoint
         assert avg_time < 0.05
         assert len(client.chain) == 100
@@ -515,7 +513,7 @@ class TestPerformance:
     async def test_read_performance(self, client):
         """Test read operation performance."""
         name = "read_perf_test"
-        
+
         # Write 100 versions
         for i in range(100):
             await client.write_checkpoint(
@@ -523,14 +521,14 @@ class TestPerformance:
                 hash=f"hash_{i}",
                 prev_hash=f"prev_{i}",
                 metadata={"v": i},
-                payload_blob=b"data"
+                payload_blob=b"data",
             )
-        
+
         # Time reading specific version from deep history
         start = time.time()
         result = await client.read_checkpoint(name, version=50)
         elapsed = time.time() - start
-        
+
         assert result["metadata"]["version"] == 50
         assert elapsed < 0.1  # Should be fast even with deep history
 
@@ -539,40 +537,37 @@ class TestPerformance:
 # Edge Cases
 # ============================================================================
 
+
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
     async def test_unicode_metadata(self, client):
         """Test Unicode in metadata."""
-        metadata = {
-            "author": "张三",
-            "description": "テスト",
-            "emoji": "🚀✨"
-        }
-        
+        metadata = {"author": "张三", "description": "テスト", "emoji": "🚀✨"}
+
         await client.write_checkpoint(
             checkpoint_name="unicode_test",
             hash="hash",
             prev_hash="prev",
             metadata=metadata,
-            payload_blob=b"data"
+            payload_blob=b"data",
         )
-        
+
         result = await client.read_checkpoint("unicode_test")
         assert result["metadata"]["metadata"] == metadata
 
     async def test_special_characters_in_name(self, client):
         """Test special characters in checkpoint name."""
         name = "test-checkpoint_2024.v1@#$"
-        
+
         await client.write_checkpoint(
             checkpoint_name=name,
             hash="hash",
             prev_hash="prev",
             metadata={},
-            payload_blob=b"data"
+            payload_blob=b"data",
         )
-        
+
         result = await client.read_checkpoint(name)
         assert result is not None
 
@@ -583,9 +578,9 @@ class TestEdgeCases:
             hash="hash",
             prev_hash="prev",
             metadata=None,
-            payload_blob=b"data"
+            payload_blob=b"data",
         )
-        
+
         result = await client.read_checkpoint("none_meta")
         assert result["metadata"]["metadata"] == {}
 
@@ -594,6 +589,7 @@ class TestEdgeCases:
 # Cleanup Tests
 # ============================================================================
 
+
 class TestCleanup:
     """Tests for resource cleanup."""
 
@@ -601,42 +597,42 @@ class TestCleanup:
         """Test proper cleanup on close."""
         # Add a cleanup task
         client._cleanup_task = asyncio.create_task(asyncio.sleep(10))
-        
+
         await client.close()
-        
+
         assert client._cleanup_task.cancelled()
         assert len(client.chain) == 0
 
     async def test_close_with_persistence(self, tmp_path, mock_off_chain_client):
         """Test close persists chain state."""
         chain_file = tmp_path / "close_test.json"
-        
+
         # Start without chain_state_path
         config = {
             "simpledlt": {
                 "log_format": "json",
                 "temp_file_ttl": 3600.0,
-                "cleanup_interval": 300.0
+                "cleanup_interval": 300.0,
             }
         }
-        
+
         client = SimpleDLTClient(config, mock_off_chain_client)
         await client.initialize()
-        
+
         await client.write_checkpoint(
             checkpoint_name="test",
             hash="hash",
             prev_hash="prev",
             metadata={},
-            payload_blob=b"data"
+            payload_blob=b"data",
         )
-        
+
         # Set the chain_state_path after initialization
         client._chain_state_path = str(chain_file)
-        
+
         # Close should persist state
         await client.close()
-        
+
         # Verify persistence
         assert chain_file.exists()
         with open(chain_file) as f:

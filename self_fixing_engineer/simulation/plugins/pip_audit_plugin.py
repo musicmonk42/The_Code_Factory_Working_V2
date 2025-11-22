@@ -17,13 +17,16 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 # --- Dynamic imports for optional dependencies ---
 try:
     from pydantic import BaseModel, Field, ValidationError
+
     pydantic_available = True
 except ImportError:
     pydantic_available = False
@@ -31,17 +34,28 @@ except ImportError:
 try:
     # Prometheus client (with access to REGISTRY for metric reuse)
     from prometheus_client import Counter, Histogram, REGISTRY
+
     prometheus_available = True
 except ImportError:
     prometheus_available = False
-    logger.warning("Prometheus client not found. Metrics for pip-audit plugin will be disabled.")
+    logger.warning(
+        "Prometheus client not found. Metrics for pip-audit plugin will be disabled."
+    )
 
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+    from tenacity import (
+        retry,
+        stop_after_attempt,
+        wait_exponential,
+        retry_if_exception_type,
+    )
+
     tenacity_available = True
 except ImportError:
     tenacity_available = False
-    logger.warning("tenacity not found. Retry/backoff for pip-audit plugin will be disabled.")
+    logger.warning(
+        "tenacity not found. Retry/backoff for pip-audit plugin will be disabled."
+    )
 
     def retry(*args, **kwargs):  # type: ignore
         return lambda f: f
@@ -55,14 +69,17 @@ except ImportError:
     def retry_if_exception_type(e):  # type: ignore
         return lambda x: False
 
+
 try:
     from detect_secrets.core import SecretsCollection
+
     detect_secrets_available = True
 except ImportError:
     detect_secrets_available = False
 
 try:
     from redis.asyncio import Redis  # Use async redis client
+
     redis_available = True
 except ImportError:
     redis_available = False
@@ -70,19 +87,26 @@ except ImportError:
 
 # --- Pydantic Config Model ---
 if pydantic_available:
+
     class PipAuditConfig(BaseModel):
         pip_audit_cli_path: str = Field(default="pip-audit")
-        default_scan_method: str = Field(default="installed", pattern="^(installed|requirements)$")
+        default_scan_method: str = Field(
+            default="installed", pattern="^(installed|requirements)$"
+        )
         default_timeout_seconds: int = Field(default=300, ge=1)
         retry_attempts: int = Field(default=2, ge=0)
         retry_backoff_factor: float = Field(default=2.0, ge=0)
         max_log_output_size_kb: int = Field(default=512, ge=1)
         redis_cache_url: Optional[str] = None
         redis_cache_ttl: int = Field(default=3600, ge=1)
-        scrub_raw_output: bool = Field(default=False, description="Scrub potential secrets from raw stdout/stderr before returning/caching")
+        scrub_raw_output: bool = Field(
+            default=False,
+            description="Scrub potential secrets from raw stdout/stderr before returning/caching",
+        )
 
     _default_config = PipAuditConfig()
 else:
+
     class PipAuditConfig:  # minimal fallback
         def __init__(self):
             self.pip_audit_cli_path = "pip-audit"
@@ -107,7 +131,9 @@ def _load_config() -> PipAuditConfig:
             with open(config_file_path, "r", encoding="utf-8") as f:
                 config_dict = json.load(f)
         except (IOError, json.JSONDecodeError) as e:
-            logger.warning(f"Could not load config file {config_file_path}: {e}. Using environment variables and defaults.")
+            logger.warning(
+                f"Could not load config file {config_file_path}: {e}. Using environment variables and defaults."
+            )
 
     # Derive keys and types from the defaults (robust for both pydantic and fallback)
     base_items = vars(_default_config)
@@ -126,7 +152,10 @@ def _load_config() -> PipAuditConfig:
             else:
                 config_dict[key] = env_var
         except ValueError:
-            logger.warning(f"Invalid type for environment variable PIP_AUDIT_{key.upper()}. Using default.", exc_info=False)
+            logger.warning(
+                f"Invalid type for environment variable PIP_AUDIT_{key.upper()}. Using default.",
+                exc_info=False,
+            )
 
     if pydantic_available:
         try:
@@ -139,7 +168,9 @@ def _load_config() -> PipAuditConfig:
         cfg.__dict__.update(config_dict)
 
     # Default to scrubbing in CI unless explicitly overridden by env
-    if "PIP_AUDIT_SCRUB_RAW_OUTPUT" not in os.environ and (os.getenv("CI") or os.getenv("GITHUB_ACTIONS")):
+    if "PIP_AUDIT_SCRUB_RAW_OUTPUT" not in os.environ and (
+        os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
+    ):
         try:
             # Pydantic or fallback both support attribute assignment
             cfg.scrub_raw_output = True
@@ -157,9 +188,14 @@ _METRICS: Dict[str, Any] = {}
 if prometheus_available:
 
     class _NoopMetric:
-        def labels(self, *a, **k): return self
-        def inc(self, *a, **k): pass
-        def observe(self, *a, **k): pass
+        def labels(self, *a, **k):
+            return self
+
+        def inc(self, *a, **k):
+            pass
+
+        def observe(self, *a, **k):
+            pass
 
     def _get_or_create_metric(factory, name: str, documentation: str, **kwargs):
         # Return cached instance if available
@@ -173,31 +209,71 @@ if prometheus_available:
         except ValueError:
             # If already registered elsewhere, try to reuse from REGISTRY (best-effort)
             try:
-                existing = getattr(REGISTRY, "_names_to_collectors", {}).get(name)  # private but pragmatic
+                existing = getattr(REGISTRY, "_names_to_collectors", {}).get(
+                    name
+                )  # private but pragmatic
                 if existing is not None:
                     _METRICS[name] = existing
                     logger.info(f"Reusing already-registered Prometheus metric: {name}")
                     return existing
             except Exception:
                 pass
-            logger.warning(f"Metric '{name}' is already registered and cannot be reused portably; disabling local metric.")
+            logger.warning(
+                f"Metric '{name}' is already registered and cannot be reused portably; disabling local metric."
+            )
             metric = _NoopMetric()
             _METRICS[name] = metric
             return metric
 
     # Keep labels low-cardinality
-    PIP_AUDIT_SCANS_TOTAL = _get_or_create_metric(Counter, 'pip_audit_scans_total', 'Total pip-audit scans performed', labelnames=("status", "reason", "method"))
-    PIP_AUDIT_VULNERABILITIES_DETECTED = _get_or_create_metric(Counter, 'pip_audit_vulnerabilities_detected_total', 'Total vulnerabilities detected by pip-audit', labelnames=("severity",))
-    PIP_AUDIT_LATENCY_SECONDS = _get_or_create_metric(Histogram, 'pip_audit_latency_seconds', 'Latency of pip-audit scans', labelnames=("method",))
-    PIP_AUDIT_ERRORS_TOTAL = _get_or_create_metric(Counter, 'pip_audit_errors_total', 'Total errors during pip-audit scans', labelnames=("error_type",))
-    DEPENDENCIES_SCANNED = _get_or_create_metric(Counter, 'pip_audit_dependencies_scanned_total', 'Total dependencies scanned', labelnames=("scan_method",))
+    PIP_AUDIT_SCANS_TOTAL = _get_or_create_metric(
+        Counter,
+        "pip_audit_scans_total",
+        "Total pip-audit scans performed",
+        labelnames=("status", "reason", "method"),
+    )
+    PIP_AUDIT_VULNERABILITIES_DETECTED = _get_or_create_metric(
+        Counter,
+        "pip_audit_vulnerabilities_detected_total",
+        "Total vulnerabilities detected by pip-audit",
+        labelnames=("severity",),
+    )
+    PIP_AUDIT_LATENCY_SECONDS = _get_or_create_metric(
+        Histogram,
+        "pip_audit_latency_seconds",
+        "Latency of pip-audit scans",
+        labelnames=("method",),
+    )
+    PIP_AUDIT_ERRORS_TOTAL = _get_or_create_metric(
+        Counter,
+        "pip_audit_errors_total",
+        "Total errors during pip-audit scans",
+        labelnames=("error_type",),
+    )
+    DEPENDENCIES_SCANNED = _get_or_create_metric(
+        Counter,
+        "pip_audit_dependencies_scanned_total",
+        "Total dependencies scanned",
+        labelnames=("scan_method",),
+    )
 else:
+
     class DummyMetric:
-        def inc(self, amount: float = 1.0): pass
-        def set(self, value: float): pass
-        def observe(self, value: float): pass
-        def labels(self, *args, **kwargs): return self
-    PIP_AUDIT_SCANS_TOTAL = PIP_AUDIT_VULNERABILITIES_DETECTED = PIP_AUDIT_LATENCY_SECONDS = PIP_AUDIT_ERRORS_TOTAL = DEPENDENCIES_SCANNED = DummyMetric()
+        def inc(self, amount: float = 1.0):
+            pass
+
+        def set(self, value: float):
+            pass
+
+        def observe(self, value: float):
+            pass
+
+        def labels(self, *args, **kwargs):
+            return self
+
+    PIP_AUDIT_SCANS_TOTAL = PIP_AUDIT_VULNERABILITIES_DETECTED = (
+        PIP_AUDIT_LATENCY_SECONDS
+    ) = PIP_AUDIT_ERRORS_TOTAL = DEPENDENCIES_SCANNED = DummyMetric()
 
 
 PLUGIN_MANIFEST = {
@@ -209,28 +285,31 @@ PLUGIN_MANIFEST = {
     "permissions_required": ["process_execution", "filesystem_read"],
     "compatibility": {
         "min_sim_runner_version": "1.0.0",
-        "max_sim_runner_version": "2.0.0"
+        "max_sim_runner_version": "2.0.0",
     },
     "entry_points": {
         "scan_dependencies": {
             "description": "Scans Python dependencies (from requirements.txt or installed env) for vulnerabilities.",
-            "parameters": ["target_path", "scan_method", "pip_audit_args"]
+            "parameters": ["target_path", "scan_method", "pip_audit_args"],
         }
     },
     "health_check": "plugin_health",
     "api_version": "v1",
     "license": "MIT",
     "homepage": "https://www.self-fixing.engineer",
-    "tags": ["security", "pip-audit", "dependencies", "vulnerabilities", "python"]
+    "tags": ["security", "pip-audit", "dependencies", "vulnerabilities", "python"],
 }
 
 
 # --- Audit Logger Integration (Conceptual) ---
 try:
     from simulation.audit_log import AuditLogger as SFE_AuditLogger
+
     _sfe_audit_logger = SFE_AuditLogger.from_environment()
 except ImportError:
-    logger.warning("SFE AuditLogger not found. Audit events will be logged to plugin's logger only.")
+    logger.warning(
+        "SFE AuditLogger not found. Audit events will be logged to plugin's logger only."
+    )
 
     class MockAuditLogger:
         async def log(self, event_type: str, details: Dict[str, Any], **kwargs: Any):
@@ -273,10 +352,10 @@ async def _which(cmd: str) -> Optional[str]:
             "which" if os.name != "nt" else "where",
             cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
-        return stdout.decode().strip().split('\n')[0] if proc.returncode == 0 else None
+        return stdout.decode().strip().split("\n")[0] if proc.returncode == 0 else None
     except (FileNotFoundError, subprocess.SubprocessError) as e:
         logger.debug(f"Error finding executable '{cmd}': {e}")
         return None
@@ -287,6 +366,7 @@ async def _which(cmd: str) -> Optional[str]:
 
 class TransientScanError(Exception):
     """Used to trigger retry for transient scan failures."""
+
     pass
 
 
@@ -300,7 +380,10 @@ async def _get_pip_audit_version(base_cmd: List[str]) -> str:
         return _pip_audit_version_cache[key]
     try:
         proc = await asyncio.create_subprocess_exec(
-            *base_cmd, "--version", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *base_cmd,
+            "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         if proc.returncode == 0:
@@ -317,8 +400,12 @@ async def _pip_freeze_hash(python_executable: Optional[str]) -> Optional[str]:
     py = python_executable or sys.executable
     try:
         proc = await asyncio.create_subprocess_exec(
-            py, "-m", "pip", "freeze",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            py,
+            "-m",
+            "pip",
+            "freeze",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
         if proc.returncode == 0:
@@ -349,8 +436,10 @@ async def plugin_health(python_executable: Optional[str] = None) -> Dict[str, An
         details.append(f"pip-audit CLI found at: {pip_audit_path}")
         try:
             proc = await asyncio.create_subprocess_exec(
-                pip_audit_path, "--version",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                pip_audit_path,
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
@@ -367,16 +456,24 @@ async def plugin_health(python_executable: Optional[str] = None) -> Dict[str, An
     if python_executable:
         try:
             proc = await asyncio.create_subprocess_exec(
-                python_executable, "-m", "pip_audit", "--version",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                python_executable,
+                "-m",
+                "pip_audit",
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
                 version_line = stdout.decode().strip().splitlines()[0]
-                details.append(f"Module mode OK: {python_executable} -m pip_audit --version: {version_line}")
+                details.append(
+                    f"Module mode OK: {python_executable} -m pip_audit --version: {version_line}"
+                )
                 module_ok = True
             else:
-                details.append(f"Module mode failed: rc={proc.returncode} stderr={stderr.decode().strip()}")
+                details.append(
+                    f"Module mode failed: rc={proc.returncode} stderr={stderr.decode().strip()}"
+                )
         except Exception as e:
             details.append(f"Module mode execution failed: {e}")
 
@@ -411,8 +508,10 @@ def _validate_safe_args(args: List[str]) -> List[str]:
     """
     safe_args = []
     for arg in args:
-        if any(c in arg for c in ['\x00', '\n', '\r']):
-            raise ValueError(f"Invalid control character in pip-audit argument: {arg!r}")
+        if any(c in arg for c in ["\x00", "\n", "\r"]):
+            raise ValueError(
+                f"Invalid control character in pip-audit argument: {arg!r}"
+            )
         safe_args.append(arg)
     return safe_args
 
@@ -450,7 +549,9 @@ async def _cache_scan_result(cache_key: str, result: Dict[str, Any]):
         slim = dict(result)
         slim["raw_output"] = None
         redis = Redis.from_url(PIP_AUDIT_CONFIG.redis_cache_url, decode_responses=True)
-        await redis.set(cache_key, json.dumps(slim), ex=PIP_AUDIT_CONFIG.redis_cache_ttl)
+        await redis.set(
+            cache_key, json.dumps(slim), ex=PIP_AUDIT_CONFIG.redis_cache_ttl
+        )
         logger.info(f"Cached result for key: {cache_key}")
     except Exception as e:
         logger.error(f"Failed to set Redis cache: {e}", exc_info=True)
@@ -464,7 +565,12 @@ async def _cache_scan_result(cache_key: str, result: Dict[str, Any]):
 
 def _build_cache_key(payload: Dict[str, Any]) -> str:
     # Stable JSON-based SHA256 key
-    return "pip_audit:" + hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return (
+        "pip_audit:"
+        + hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
 
 
 def _trim_and_optionally_scrub(stdout_data: str, stderr_data: str) -> Tuple[str, str]:
@@ -479,15 +585,21 @@ def _trim_and_optionally_scrub(stdout_data: str, stderr_data: str) -> Tuple[str,
 
 @retry(
     stop=stop_after_attempt(PIP_AUDIT_CONFIG.retry_attempts),
-    wait=wait_exponential(multiplier=PIP_AUDIT_CONFIG.retry_backoff_factor, min=1, max=10),
-    retry=retry_if_exception_type((TransientScanError, asyncio.TimeoutError)) if tenacity_available else None,
+    wait=wait_exponential(
+        multiplier=PIP_AUDIT_CONFIG.retry_backoff_factor, min=1, max=10
+    ),
+    retry=(
+        retry_if_exception_type((TransientScanError, asyncio.TimeoutError))
+        if tenacity_available
+        else None
+    ),
 )
 async def scan_dependencies(
     target_path: Optional[str] = None,
     scan_method: str = PIP_AUDIT_CONFIG.default_scan_method,
     pip_audit_args: Optional[List[str]] = None,
     python_executable: Optional[str] = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Scans Python dependencies using pip-audit.
@@ -506,9 +618,20 @@ async def scan_dependencies(
         if not pip_audit_cli_path:
             error_msg = f"'{PIP_AUDIT_CONFIG.pip_audit_cli_path}' not found in PATH."
             logger.error(f"[{scan_id}] {error_msg}")
-            PIP_AUDIT_ERRORS_TOTAL.labels(error_type='cli_not_found').inc()
-            PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='cli_not_found', method=scan_method).inc()
-            return {"success": False, "reason": error_msg, "vulnerabilities_found": False, "vulnerability_count": 0, "vulnerabilities": [], "raw_output": "", "target_path": target_path, "scan_id": scan_id}
+            PIP_AUDIT_ERRORS_TOTAL.labels(error_type="cli_not_found").inc()
+            PIP_AUDIT_SCANS_TOTAL.labels(
+                status="failed", reason="cli_not_found", method=scan_method
+            ).inc()
+            return {
+                "success": False,
+                "reason": error_msg,
+                "vulnerabilities_found": False,
+                "vulnerability_count": 0,
+                "vulnerabilities": [],
+                "raw_output": "",
+                "target_path": target_path,
+                "scan_id": scan_id,
+            }
         base_cmd = [pip_audit_cli_path]
         invocation_mode = "cli"
 
@@ -521,9 +644,20 @@ async def scan_dependencies(
             final_pip_audit_args.extend(_validate_safe_args(pip_audit_args))
         except ValueError as e:
             error_msg = f"Invalid pip-audit arguments: {e}"
-            PIP_AUDIT_ERRORS_TOTAL.labels(error_type='invalid_args').inc()
-            PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='invalid_args', method=scan_method).inc()
-            return {"success": False, "reason": error_msg, "vulnerabilities_found": False, "vulnerability_count": 0, "vulnerabilities": [], "raw_output": "", "target_path": target_path, "scan_id": scan_id}
+            PIP_AUDIT_ERRORS_TOTAL.labels(error_type="invalid_args").inc()
+            PIP_AUDIT_SCANS_TOTAL.labels(
+                status="failed", reason="invalid_args", method=scan_method
+            ).inc()
+            return {
+                "success": False,
+                "reason": error_msg,
+                "vulnerabilities_found": False,
+                "vulnerability_count": 0,
+                "vulnerabilities": [],
+                "raw_output": "",
+                "target_path": target_path,
+                "scan_id": scan_id,
+            }
 
     # Build command based on method and normalize CWD/paths
     cwd = Path.cwd()
@@ -538,21 +672,34 @@ async def scan_dependencies(
     cmd: List[str] = list(base_cmd)
 
     if scan_method == "installed":
-        DEPENDENCIES_SCANNED.labels(scan_method='installed').inc()
+        DEPENDENCIES_SCANNED.labels(scan_method="installed").inc()
         if target_path and Path(target_path).is_dir():
             cwd = Path(target_path)
         cmd.extend(final_pip_audit_args)
         env_fp = await _pip_freeze_hash(python_executable)
         cache_payload["env_fp"] = env_fp
     elif scan_method == "requirements":
-        DEPENDENCIES_SCANNED.labels(scan_method='requirements').inc()
+        DEPENDENCIES_SCANNED.labels(scan_method="requirements").inc()
         target_path_obj = Path(target_path or "")
         if not target_path_obj.exists():
             error_msg = f"Requirements file or directory not found at: {target_path}"
             logger.error(f"[{scan_id}] {error_msg}")
-            PIP_AUDIT_ERRORS_TOTAL.labels(error_type='requirements_file_not_found').inc()
-            PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='requirements_not_found', method=scan_method).inc()
-            return {"success": False, "reason": error_msg, "vulnerabilities_found": False, "vulnerability_count": 0, "vulnerabilities": [], "raw_output": "", "target_path": target_path, "scan_id": scan_id}
+            PIP_AUDIT_ERRORS_TOTAL.labels(
+                error_type="requirements_file_not_found"
+            ).inc()
+            PIP_AUDIT_SCANS_TOTAL.labels(
+                status="failed", reason="requirements_not_found", method=scan_method
+            ).inc()
+            return {
+                "success": False,
+                "reason": error_msg,
+                "vulnerabilities_found": False,
+                "vulnerability_count": 0,
+                "vulnerabilities": [],
+                "raw_output": "",
+                "target_path": target_path,
+                "scan_id": scan_id,
+            }
 
         final_requirements_file = target_path_obj
         if target_path_obj.is_dir():
@@ -561,14 +708,33 @@ async def scan_dependencies(
             if not candidate.exists():
                 error_msg = f"No requirements.txt found in directory: {target_path}"
                 logger.error(f"[{scan_id}] {error_msg}")
-                PIP_AUDIT_ERRORS_TOTAL.labels(error_type='requirements_file_not_found_in_dir').inc()
-                PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='requirements_not_found_in_dir', method=scan_method).inc()
-                return {"success": False, "reason": error_msg, "vulnerabilities_found": False, "vulnerability_count": 0, "vulnerabilities": [], "raw_output": "", "target_path": target_path, "scan_id": scan_id}
+                PIP_AUDIT_ERRORS_TOTAL.labels(
+                    error_type="requirements_file_not_found_in_dir"
+                ).inc()
+                PIP_AUDIT_SCANS_TOTAL.labels(
+                    status="failed",
+                    reason="requirements_not_found_in_dir",
+                    method=scan_method,
+                ).inc()
+                return {
+                    "success": False,
+                    "reason": error_msg,
+                    "vulnerabilities_found": False,
+                    "vulnerability_count": 0,
+                    "vulnerabilities": [],
+                    "raw_output": "",
+                    "target_path": target_path,
+                    "scan_id": scan_id,
+                }
             final_requirements_file = candidate
 
         cmd.extend(["--requirements", str(final_requirements_file)])
         cmd.extend(final_pip_audit_args)
-        cwd = final_requirements_file.parent if final_requirements_file.is_file() else target_path_obj
+        cwd = (
+            final_requirements_file.parent
+            if final_requirements_file.is_file()
+            else target_path_obj
+        )
 
         try:
             data = final_requirements_file.read_bytes()
@@ -581,19 +747,34 @@ async def scan_dependencies(
     else:
         error_msg = f"Unsupported scan_method: {scan_method}. Choose 'installed' or 'requirements'."
         logger.error(f"[{scan_id}] {error_msg}")
-        PIP_AUDIT_ERRORS_TOTAL.labels(error_type='unsupported_method').inc()
-        PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='unsupported_method', method=scan_method).inc()
-        return {"success": False, "reason": error_msg, "vulnerabilities_found": False, "vulnerability_count": 0, "vulnerabilities": [], "raw_output": "", "target_path": target_path, "scan_id": scan_id}
+        PIP_AUDIT_ERRORS_TOTAL.labels(error_type="unsupported_method").inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="failed", reason="unsupported_method", method=scan_method
+        ).inc()
+        return {
+            "success": False,
+            "reason": error_msg,
+            "vulnerabilities_found": False,
+            "vulnerability_count": 0,
+            "vulnerabilities": [],
+            "raw_output": "",
+            "target_path": target_path,
+            "scan_id": scan_id,
+        }
 
     # --- Check cache before running scan ---
     cache_key = _build_cache_key(cache_payload)
     cached_result = await _get_cached_result(cache_key)
     if cached_result:
-        PIP_AUDIT_SCANS_TOTAL.labels(status='success', reason='cached', method=scan_method).inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="success", reason="cached", method=scan_method
+        ).inc()
         cached_result.setdefault("scan_id", scan_id)
         return cached_result
 
-    logger.info(f"[{scan_id}] Running pip-audit scan (Method: {scan_method}, Mode: {invocation_mode}, Version: {version_str}, CWD: {cwd}): {' '.join(cmd)}")
+    logger.info(
+        f"[{scan_id}] Running pip-audit scan (Method: {scan_method}, Mode: {invocation_mode}, Version: {version_str}, CWD: {cwd}): {' '.join(cmd)}"
+    )
 
     stdout_data = ""
     stderr_data = ""
@@ -607,11 +788,10 @@ async def scan_dependencies(
         )
 
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(),
-            timeout=PIP_AUDIT_CONFIG.default_timeout_seconds
+            proc.communicate(), timeout=PIP_AUDIT_CONFIG.default_timeout_seconds
         )
-        stdout_data = stdout_bytes.decode(errors='replace')
-        stderr_data = stderr_bytes.decode(errors='replace')
+        stdout_data = stdout_bytes.decode(errors="replace")
+        stderr_data = stderr_bytes.decode(errors="replace")
 
         # pip-audit returns 0 (no vulns) or 1 (vulns found) for successful runs
         # >1 considered errors
@@ -624,35 +804,43 @@ async def scan_dependencies(
                 audit_json = json.loads(stdout_data)
             except json.JSONDecodeError:
                 # Fallback: attempt to locate a JSON object
-                json_start = stdout_data.find('{')
-                json_end = stdout_data.rfind('}')
+                json_start = stdout_data.find("{")
+                json_end = stdout_data.rfind("}")
                 if json_start != -1 and json_end != -1 and json_end > json_start:
-                    audit_json = json.loads(stdout_data[json_start:json_end + 1])
+                    audit_json = json.loads(stdout_data[json_start : json_end + 1])
                 else:
                     raise
 
-            for vuln_entry in audit_json.get('vulnerabilities', []):
-                pkg = vuln_entry.get('package', {}).get('name')
-                version = vuln_entry.get('package', {}).get('version')
-                vuln = vuln_entry.get('vuln', {})
-                severity = vuln.get('severity') or _parse_severity_from_description(vuln.get('description', ''))
-                parsed_vulnerabilities.append({
-                    "package": pkg,
-                    "version": version,
-                    "vulnerability_id": vuln.get('id'),
-                    "description": vuln.get('description'),
-                    "severity": severity,
-                    "aliases": vuln.get('aliases', []),
-                    "fix_versions": vuln.get('fix_versions', []),
-                    "source_tool": "pip-audit"
-                })
+            for vuln_entry in audit_json.get("vulnerabilities", []):
+                pkg = vuln_entry.get("package", {}).get("name")
+                version = vuln_entry.get("package", {}).get("version")
+                vuln = vuln_entry.get("vuln", {})
+                severity = vuln.get("severity") or _parse_severity_from_description(
+                    vuln.get("description", "")
+                )
+                parsed_vulnerabilities.append(
+                    {
+                        "package": pkg,
+                        "version": version,
+                        "vulnerability_id": vuln.get("id"),
+                        "description": vuln.get("description"),
+                        "severity": severity,
+                        "aliases": vuln.get("aliases", []),
+                        "fix_versions": vuln.get("fix_versions", []),
+                        "source_tool": "pip-audit",
+                    }
+                )
         except json.JSONDecodeError as e:
-            logger.error(f"[{scan_id}] Failed to parse pip-audit JSON output: {e}", exc_info=True)
+            logger.error(
+                f"[{scan_id}] Failed to parse pip-audit JSON output: {e}", exc_info=True
+            )
             stderr_data += "\nJSON_PARSE_ERROR: " + str(e)
             # Consider JSON parse failure transient (retriable) if tenacity is enabled
             raise TransientScanError("Failed to parse JSON output from pip-audit")
         except Exception as e:
-            logger.error(f"[{scan_id}] Error processing pip-audit output: {e}", exc_info=True)
+            logger.error(
+                f"[{scan_id}] Error processing pip-audit output: {e}", exc_info=True
+            )
             stderr_data += "\nPROCESSING_ERROR: " + str(e)
             scan_process_success = False
 
@@ -660,13 +848,25 @@ async def scan_dependencies(
 
         if not scan_process_success:
             # Retry transient errors where appropriate (heuristic)
-            if tenacity_available and any(s in (stderr_data or "").lower() for s in ["temporary failure", "timed out", "connection reset", "network", "rate limit", "retry later"]):
+            if tenacity_available and any(
+                s in (stderr_data or "").lower()
+                for s in [
+                    "temporary failure",
+                    "timed out",
+                    "connection reset",
+                    "network",
+                    "rate limit",
+                    "retry later",
+                ]
+            ):
                 raise TransientScanError("Transient pip-audit failure detected")
 
         trimmed_out, trimmed_err = _trim_and_optionally_scrub(stdout_data, stderr_data)
         result = {
             "success": scan_process_success,
-            "reason": "Scan completed." if scan_process_success else "Scan process failed.",
+            "reason": (
+                "Scan completed." if scan_process_success else "Scan process failed."
+            ),
             "vulnerabilities_found": vulnerabilities_found,
             "vulnerability_count": len(parsed_vulnerabilities),
             "vulnerabilities": parsed_vulnerabilities,
@@ -678,19 +878,31 @@ async def scan_dependencies(
             "pip_audit_version": version_str,
         }
 
-        PIP_AUDIT_LATENCY_SECONDS.labels(method=scan_method).observe(time.monotonic() - start_time)
+        PIP_AUDIT_LATENCY_SECONDS.labels(method=scan_method).observe(
+            time.monotonic() - start_time
+        )
         if result["success"]:
-            PIP_AUDIT_SCANS_TOTAL.labels(status='success', reason='completed', method=scan_method).inc()
+            PIP_AUDIT_SCANS_TOTAL.labels(
+                status="success", reason="completed", method=scan_method
+            ).inc()
             if vulnerabilities_found:
-                logger.warning(f"[{scan_id}] pip-audit scan completed: {len(parsed_vulnerabilities)} vulnerabilities found.")
+                logger.warning(
+                    f"[{scan_id}] pip-audit scan completed: {len(parsed_vulnerabilities)} vulnerabilities found."
+                )
                 for vuln in parsed_vulnerabilities:
-                    detected_severity = vuln.get('severity', 'UNKNOWN')
-                    PIP_AUDIT_VULNERABILITIES_DETECTED.labels(severity=detected_severity).inc()
+                    detected_severity = vuln.get("severity", "UNKNOWN")
+                    PIP_AUDIT_VULNERABILITIES_DETECTED.labels(
+                        severity=detected_severity
+                    ).inc()
             else:
-                logger.info(f"[{scan_id}] pip-audit scan completed: No vulnerabilities found.")
+                logger.info(
+                    f"[{scan_id}] pip-audit scan completed: No vulnerabilities found."
+                )
         else:
-            PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='process_error', method=scan_method).inc()
-            PIP_AUDIT_ERRORS_TOTAL.labels(error_type='cli_execution_failure').inc()
+            PIP_AUDIT_SCANS_TOTAL.labels(
+                status="failed", reason="process_error", method=scan_method
+            ).inc()
+            PIP_AUDIT_ERRORS_TOTAL.labels(error_type="cli_execution_failure").inc()
 
         await _audit_event(
             "pip_audit_scan_completed",
@@ -703,9 +915,12 @@ async def scan_dependencies(
                 "target_path": target_path,
                 "reason": result["reason"],
                 "error": result["error"],
-                "audit_summary": [{"id": v.get("vulnerability_id"), "severity": v.get("severity")} for v in parsed_vulnerabilities[:100]],  # cap summary
+                "audit_summary": [
+                    {"id": v.get("vulnerability_id"), "severity": v.get("severity")}
+                    for v in parsed_vulnerabilities[:100]
+                ],  # cap summary
                 "pip_audit_version": version_str,
-            }
+            },
         )
 
         # Cache result if successful
@@ -717,8 +932,10 @@ async def scan_dependencies(
     except (FileNotFoundError, subprocess.SubprocessError) as e:
         error_msg = f"pip-audit CLI invocation failed: {e}"
         logger.error(f"[{scan_id}] {error_msg}", exc_info=True)
-        PIP_AUDIT_ERRORS_TOTAL.labels(error_type='subprocess_error').inc()
-        PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='subprocess_error', method=scan_method).inc()
+        PIP_AUDIT_ERRORS_TOTAL.labels(error_type="subprocess_error").inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="failed", reason="subprocess_error", method=scan_method
+        ).inc()
         return {
             "success": False,
             "reason": error_msg,
@@ -728,25 +945,31 @@ async def scan_dependencies(
             "raw_output": str(e),
             "error": error_msg,
             "target_path": target_path,
-            "scan_id": scan_id
+            "scan_id": scan_id,
         }
     except asyncio.TimeoutError:
         error_msg = f"pip-audit CLI timed out after {PIP_AUDIT_CONFIG.default_timeout_seconds} seconds."
         logger.error(f"[{scan_id}] {error_msg}")
-        PIP_AUDIT_ERRORS_TOTAL.labels(error_type='timeout').inc()
-        PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='timeout', method=scan_method).inc()
+        PIP_AUDIT_ERRORS_TOTAL.labels(error_type="timeout").inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="failed", reason="timeout", method=scan_method
+        ).inc()
         # Let tenacity retry on TimeoutError (decorator covers it)
         raise
     except TransientScanError as e:
-        logger.warning(f"[{scan_id}] Transient scan error: {e}. Will retry if configured.")
-        PIP_AUDIT_ERRORS_TOTAL.labels(error_type='transient').inc()
+        logger.warning(
+            f"[{scan_id}] Transient scan error: {e}. Will retry if configured."
+        )
+        PIP_AUDIT_ERRORS_TOTAL.labels(error_type="transient").inc()
         # Re-raise to trigger tenacity retry
         raise
     except Exception as e:
         error_msg = f"An unexpected error occurred during pip-audit scan: {e}"
         logger.error(f"[{scan_id}] {error_msg}", exc_info=True)
-        PIP_AUDIT_ERRORS_TOTAL.labels(error_type='unexpected_exception').inc()
-        PIP_AUDIT_SCANS_TOTAL.labels(status='failed', reason='unexpected_error', method=scan_method).inc()
+        PIP_AUDIT_ERRORS_TOTAL.labels(error_type="unexpected_exception").inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="failed", reason="unexpected_error", method=scan_method
+        ).inc()
         return {
             "success": False,
             "reason": error_msg,
@@ -756,7 +979,7 @@ async def scan_dependencies(
             "raw_output": str(e),
             "error": error_msg,
             "target_path": target_path,
-            "scan_id": scan_id
+            "scan_id": scan_id,
         }
 
 
@@ -766,30 +989,48 @@ def register_plugin_entrypoints(register_func: Callable):
     register_func(
         name="scan_dependencies",
         executor_func=scan_dependencies,
-        capabilities=["dependency_vulnerability_scanning", "security_auditing"]
+        capabilities=["dependency_vulnerability_scanning", "security_auditing"],
     )
 
 
 # --- Standalone CLI and API Wrapper for Direct Testing ---
 if __name__ == "__main__":
     import argparse
+
     try:
         from fastapi import FastAPI, HTTPException, status
         from pydantic import BaseModel as _ApiBaseModel
         import uvicorn
+
         FASTAPI_AVAILABLE_FOR_MAIN = True
     except ImportError:
         FASTAPI_AVAILABLE_FOR_MAIN = False
 
-    parser = argparse.ArgumentParser(description="Run pip-audit plugin in standalone mode.")
+    parser = argparse.ArgumentParser(
+        description="Run pip-audit plugin in standalone mode."
+    )
     parser.add_argument("--api", action="store_true", help="Run as FastAPI API server.")
     parser.add_argument("--host", default="0.0.0.0", help="Host for API server.")
     parser.add_argument("--port", type=int, default=8000, help="Port for API server.")
     parser.add_argument("--scan", action="store_true", help="Run a direct CLI scan.")
-    parser.add_argument("--target-path", help="Path to project or requirements.txt (for --scan).")
-    parser.add_argument("--scan-method", default="installed", choices=["installed", "requirements"], help="Scan method (for --scan).")
-    parser.add_argument("--pip-audit-arg", action="append", help="Additional pip-audit CLI arguments (e.g., --pip-audit-arg='--verbose').")
-    parser.add_argument("--python-executable", help="Python executable to use for pip-audit (e.g., /usr/bin/python3).")
+    parser.add_argument(
+        "--target-path", help="Path to project or requirements.txt (for --scan)."
+    )
+    parser.add_argument(
+        "--scan-method",
+        default="installed",
+        choices=["installed", "requirements"],
+        help="Scan method (for --scan).",
+    )
+    parser.add_argument(
+        "--pip-audit-arg",
+        action="append",
+        help="Additional pip-audit CLI arguments (e.g., --pip-audit-arg='--verbose').",
+    )
+    parser.add_argument(
+        "--python-executable",
+        help="Python executable to use for pip-audit (e.g., /usr/bin/python3).",
+    )
 
     args = parser.parse_args()
 
@@ -812,12 +1053,16 @@ if __name__ == "__main__":
                     target_path=request.target_path,
                     scan_method=request.scan_method,
                     pip_audit_args=request.pip_audit_args,
-                    python_executable=request.python_executable
+                    python_executable=request.python_executable,
                 )
                 return result
             except Exception as e:
-                logger.error(f"API call to scan_dependencies failed: {e}", exc_info=True)
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+                logger.error(
+                    f"API call to scan_dependencies failed: {e}", exc_info=True
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+                )
 
         @app.get("/health", response_model=Dict[str, Any])
         async def health_endpoint():
@@ -827,25 +1072,29 @@ if __name__ == "__main__":
         print(f"Starting PipAudit Plugin API server on {args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port)
     elif args.scan:
+
         async def _run_cli_scan():
             print("\n--- Running PipAudit Plugin CLI Scan ---")
             extra_args: List[str] = []
             if args.pip_audit_arg:
                 for arg_str in args.pip_audit_arg:
                     # Split by space but respect simple quotes stripping
-                    split_args = [a.strip().strip("'\"") for a in arg_str.split(' ')]
+                    split_args = [a.strip().strip("'\"") for a in arg_str.split(" ")]
                     extra_args.extend([a for a in split_args if a])
             result = await scan_dependencies(
                 target_path=args.target_path,
                 scan_method=args.scan_method,
                 pip_audit_args=extra_args,
-                python_executable=args.python_executable
+                python_executable=args.python_executable,
             )
             print("\n--- Scan Result ---")
             print(json.dumps(result, indent=2))
             if not result.get("success"):
                 sys.exit(1)
+
         asyncio.run(_run_cli_scan())
     else:
         parser.print_help()
-        print("\nTo run tests, execute `python -m unittest` in the project root after installation.")
+        print(
+            "\nTo run tests, execute `python -m unittest` in the project root after installation."
+        )

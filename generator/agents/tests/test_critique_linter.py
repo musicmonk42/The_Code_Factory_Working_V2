@@ -1,5 +1,4 @@
 import json
-import pytest
 
 from agents.critique_agent.critique_linter import (  # type: ignore
     ruff_json,

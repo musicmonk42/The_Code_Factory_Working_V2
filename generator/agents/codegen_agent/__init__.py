@@ -10,8 +10,8 @@ from pathlib import Path
 
 # Testing environment detection
 TESTING = (
-    os.getenv("TESTING") == "1" 
-    or "pytest" in sys.modules 
+    os.getenv("TESTING") == "1"
+    or "pytest" in sys.modules
     or os.getenv("PYTEST_CURRENT_TEST") is not None
 )
 
@@ -23,49 +23,49 @@ if TESTING or True:  # Always ensure proper imports
 
 try:
     # Try importing from the runner foundation
-    from runner.llm_client import (
-        call_llm_api, 
-        LLMError
-    )
+    from runner.llm_client import call_llm_api, LLMError
     from runner.runner_config import load_config, ConfigurationError
     from runner.runner_logging import logger, log_audit_event
     from runner.runner_security_utils import redact_secrets
     from runner.runner_errors import ValidationError, RunnerError
-    
+
 except ImportError as e:
     # Fallback for testing or when runner not fully available
     import logging
+
     logger = logging.getLogger(__name__)
     logger.warning(f"Runner imports not available: {e}")
-    
+
     # Define mock implementations for testing
     async def call_llm_api(*args, **kwargs):
         return {"content": "Mock generated code", "model": "test"}
-    
+
     def load_config():
         class MockConfig:
             llm_provider = "openai"
             max_tokens = 4000
             temperature = 0.1
+
         return MockConfig()
-    
+
     def log_audit_event(*args, **kwargs):
         pass
-    
+
     def redact_secrets(text):
         return text
-    
+
     class LLMError(Exception):
         pass
-    
+
     class ConfigurationError(Exception):
         pass
-    
+
     class ValidationError(Exception):
         pass
-    
+
     class RunnerError(Exception):
         pass
+
 
 # Import the available classes from the codegen_agent module
 from .codegen_agent import (
@@ -78,13 +78,13 @@ from .codegen_agent import (
 # Export main symbols (removed CodegenAgent since it doesn't exist)
 __all__ = [
     "CodeGenConfig",
-    "EnsembleGenerationError", 
+    "EnsembleGenerationError",
     "SecurityUtils",
     "call_llm_api",
     "LLMError",
-    "ConfigurationError", 
+    "ConfigurationError",
     "ValidationError",
-    "RunnerError"
+    "RunnerError",
 ]
 
 __version__ = "1.0.0"

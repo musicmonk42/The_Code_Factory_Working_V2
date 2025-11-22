@@ -85,7 +85,9 @@ try:
     from prometheus_client import Counter, Gauge
     from runner.runner_metrics import LLM_PROVIDER_HEALTH as BASE_LLM_PROVIDER_HEALTH
 except ImportError:
-    logger.warning("prometheus_client or runner.runner_metrics not found. Using dummy metrics.")
+    logger.warning(
+        "prometheus_client or runner.runner_metrics not found. Using dummy metrics."
+    )
 
     class DummyCounter:
         def labels(self, *args, **kwargs):
@@ -168,16 +170,19 @@ else:
 
 class PluginError(Exception):
     """Base class for plugin-related errors."""
+
     pass
 
 
 class PluginIntegrityError(PluginError):
     """Raised when a plugin fails integrity verification."""
+
     pass
 
 
 class PluginValidationError(PluginError):
     """Raised when a plugin does not satisfy the expected interface."""
+
     pass
 
 
@@ -544,11 +549,15 @@ class LLMPluginManager:
         Stop watcher, cancel background tasks, and clean up resources.
         """
         # CRITICAL FIX: Cancel the initial _load_task if it's still running
-        if hasattr(self, '_load_task') and self._load_task and not self._load_task.done():
+        if (
+            hasattr(self, "_load_task")
+            and self._load_task
+            and not self._load_task.done()
+        ):
             self._load_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._load_task
-        
+
         # Stop filesystem watcher.
         if self._watcher:
             try:

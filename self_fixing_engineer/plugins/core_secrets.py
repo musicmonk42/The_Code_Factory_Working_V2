@@ -20,7 +20,7 @@ def _cast_to_bool(value: str) -> bool:
     Recognized 'True' values (case-insensitive): 'true', '1', 't', 'y', 'yes'.
     All other values are considered False.
     """
-    return str(value).strip().lower() in ('true', '1', 't', 'y', 'yes')
+    return str(value).strip().lower() in ("true", "1", "t", "y", "yes")
 
 
 def cast_bool_strict(value: str) -> bool:
@@ -31,8 +31,8 @@ def cast_bool_strict(value: str) -> bool:
         TypeError: If the value is not a recognized boolean representation.
     """
     v = str(value).strip().lower()
-    true_set = {'true', '1', 't', 'y', 'yes', 'on'}
-    false_set = {'false', '0', 'f', 'n', 'no', 'off'}
+    true_set = {"true", "1", "t", "y", "yes", "on"}
+    false_set = {"false", "0", "f", "n", "no", "off"}
     if v in true_set:
         return True
     if v in false_set:
@@ -50,6 +50,7 @@ class SecretsManager:
     handling with type casting. By default, it treats blank secrets as missing
     to prevent common production errors with empty credentials or endpoints.
     """
+
     _instance = None
     _class_lock = threading.Lock()  # Lock for singleton creation only
 
@@ -61,7 +62,12 @@ class SecretsManager:
                 cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, env_file: str = ".env", logger: Optional[logging.Logger] = None, allow_dotenv: Optional[bool] = None):
+    def __init__(
+        self,
+        env_file: str = ".env",
+        logger: Optional[logging.Logger] = None,
+        allow_dotenv: Optional[bool] = None,
+    ):
         """
         Initializes the SecretsManager. This is called only once per instance.
         """
@@ -81,7 +87,11 @@ class SecretsManager:
                 self._logger.addHandler(logging.NullHandler())
 
             env = os.getenv("ENVIRONMENT", "").strip().lower()
-            allow = allow_dotenv if allow_dotenv is not None else (not env.startswith("prod"))
+            allow = (
+                allow_dotenv
+                if allow_dotenv is not None
+                else (not env.startswith("prod"))
+            )
             if env.startswith("prod"):
                 override = os.getenv("SECRETS_ALLOW_DOTENV_IN_PROD", "")
                 if override.strip().lower() in {"1", "true", "yes", "on"}:
@@ -92,15 +102,17 @@ class SecretsManager:
 
             # Stricter name validation by default in prod
             strict_names_default = env.startswith("prod")
-            self._strict_names = os.getenv("SECRETS_STRICT_NAMES", "1" if strict_names_default else "0").strip().lower() in {
-                "1", "true", "yes", "on"
-            }
+            self._strict_names = os.getenv(
+                "SECRETS_STRICT_NAMES", "1" if strict_names_default else "0"
+            ).strip().lower() in {"1", "true", "yes", "on"}
 
             self._allow_dotenv = bool(allow)
             if self._allow_dotenv:
                 self._load_env()
             else:
-                self._logger.info("Skipping .env file load: disabled for this environment.")
+                self._logger.info(
+                    "Skipping .env file load: disabled for this environment."
+                )
 
             self._initialized = True
 
@@ -113,7 +125,7 @@ class SecretsManager:
         except ImportError:
             self._logger.warning(
                 "python-dotenv not installed; cannot load %s. To install, run 'pip install python-dotenv'.",
-                self._env_file
+                self._env_file,
             )
             return
 
@@ -126,13 +138,17 @@ class SecretsManager:
 
     def _validate_name(self, name: str, *, strict: Optional[bool] = None) -> None:
         if not name or not isinstance(name, str) or "=" in name:
-            raise ValueError("Secret name must be a non-empty string and cannot contain '='")
+            raise ValueError(
+                "Secret name must be a non-empty string and cannot contain '='"
+            )
         if any(ch.isspace() for ch in name):
             raise ValueError("Secret name cannot contain whitespace")
 
         use_strict = self._strict_names if strict is None else strict
         if use_strict and not _ENV_NAME_RE.match(name):
-            raise ValueError(f"Invalid secret name format: {name!r}. Must match {_ENV_NAME_RE.pattern}")
+            raise ValueError(
+                f"Invalid secret name format: {name!r}. Must match {_ENV_NAME_RE.pattern}"
+            )
 
     def get_secret(
         self,
@@ -165,10 +181,14 @@ class SecretsManager:
 
         if type_cast:
             try:
-                val_str = str(value).strip() if type_cast in (int, float, _cast_to_bool, cast_bool_strict) else str(value)
+                val_str = (
+                    str(value).strip()
+                    if type_cast in (int, float, _cast_to_bool, cast_bool_strict)
+                    else str(value)
+                )
                 return type_cast(val_str)
             except (ValueError, TypeError) as e:
-                type_name = getattr(type_cast, '__name__', 'custom type')
+                type_name = getattr(type_cast, "__name__", "custom type")
                 msg = f"Failed to cast secret '{name}' to type '{type_name}': {e}"
                 self._logger.error(msg)
                 raise TypeError(msg) from e
@@ -191,7 +211,7 @@ class SecretsManager:
         internal_kwargs["required"] = False
 
         for i, name in enumerate(names):
-            is_last = (i == len(names) - 1)
+            is_last = i == len(names) - 1
             val = self.get_secret(name, **(kwargs if is_last else internal_kwargs))
             if val is not None:
                 return val
@@ -212,7 +232,9 @@ class SecretsManager:
 
     def set_secret(self, name: str, value: Any) -> str:
         if value is None:
-            raise ValueError("Cannot set None for secret; pass a string or use a dedicated method to remove the key.")
+            raise ValueError(
+                "Cannot set None for secret; pass a string or use a dedicated method to remove the key."
+            )
         self._validate_name(name)
         with self._lock:
             s_value = str(value)
@@ -241,7 +263,7 @@ class SecretsManager:
         *,
         casefold: bool = True,
         return_normalized: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Optional[str]:
         """
         Retrieves a secret and validates it against a set of allowed choices.
@@ -253,7 +275,9 @@ class SecretsManager:
         norm_val = s_val.casefold() if casefold else s_val
         valid_map = {(c.casefold() if casefold else c): c for c in choices}
         if norm_val not in valid_map:
-            raise TypeError(f"Secret '{name}' must be one of {sorted(choices)}; got {s_val!r}")
+            raise TypeError(
+                f"Secret '{name}' must be one of {sorted(choices)}; got {s_val!r}"
+            )
         return valid_map[norm_val] if return_normalized else s_val
 
     def get_json(self, name: str, **kwargs) -> Any:
@@ -265,12 +289,12 @@ class SecretsManager:
         except _json.JSONDecodeError as e:
             raise TypeError(f"Invalid JSON format for secret '{name}': {e}") from e
 
-    def get_list(self, name: str, sep: str = ',', **kwargs) -> List[str]:
+    def get_list(self, name: str, sep: str = ",", **kwargs) -> List[str]:
         raw = self.get_secret(name, blank_ok=False, **kwargs)
         if raw is None:
             return kwargs.get("default", [])
         items = str(raw).split(sep)
-        return [i.strip() for i in items] if kwargs.get('strip', True) else items
+        return [i.strip() for i in items] if kwargs.get("strip", True) else items
 
     def get_int(self, name: str, **kwargs) -> Optional[int]:
         return self.get_secret(name, type_cast=int, **kwargs)
@@ -279,20 +303,26 @@ class SecretsManager:
         return self.get_secret(name, type_cast=float, **kwargs)
 
     def get_bool(self, name: str, **kwargs) -> Optional[bool]:
-        caster = cast_bool_strict if kwargs.get('strict') else _cast_to_bool
+        caster = cast_bool_strict if kwargs.get("strict") else _cast_to_bool
         return self.get_secret(name, type_cast=caster, **kwargs)
 
     def get_path(self, name: str, **kwargs) -> Optional[Path]:
         value = self.get_secret(name, **kwargs)
         if value is None:
             return None
-        return Path(os.path.expanduser(os.path.expandvars(str(value)))).resolve(strict=False)
+        return Path(os.path.expanduser(os.path.expandvars(str(value)))).resolve(
+            strict=False
+        )
 
-    def get_int_in_range(self, name: str, *, min_val: int, max_val: int, **kwargs) -> Optional[int]:
+    def get_int_in_range(
+        self, name: str, *, min_val: int, max_val: int, **kwargs
+    ) -> Optional[int]:
         """Retrieves an integer secret, validating it's within a given range."""
         v = self.get_int(name, **kwargs)
         if v is not None and not (min_val <= v <= max_val):
-            raise TypeError(f"Secret '{name}' must be in range [{min_val}, {max_val}]; got {v}")
+            raise TypeError(
+                f"Secret '{name}' must be in range [{min_val}, {max_val}]; got {v}"
+            )
         return v
 
     def get_bytes(self, name: str, **kwargs) -> Optional[int]:
@@ -304,7 +334,7 @@ class SecretsManager:
         if val is None:
             return None
         s = str(val).strip().lower()
-        multipliers = {'k': 1024, 'm': 1024**2, 'g': 1024**3, 't': 1024**4}
+        multipliers = {"k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}
         try:
             if s[-1] in multipliers:
                 return int(float(s[:-1]) * multipliers[s[-1]])
@@ -321,11 +351,11 @@ class SecretsManager:
         if val is None:
             return None
         s = str(val).strip().lower()
-        multipliers = {'ms': 0.001, 's': 1, 'm': 60, 'h': 3600, 'd': 86400}
+        multipliers = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}
         try:
             for suffix, mult in multipliers.items():
                 if s.endswith(suffix):
-                    return float(s[:-len(suffix)]) * mult
+                    return float(s[: -len(suffix)]) * mult
             return float(s)
         except ValueError as e:
             raise TypeError(f"Invalid duration format for '{name}': {e}") from e
@@ -341,7 +371,10 @@ class SecretsManager:
             cached = {k: self._cache.get(k) for k in keys if k in self._cache}
             uncached = {k: os.environ.get(k) for k in keys if k not in self._cache}
             all_vals = {**cached, **uncached}
-            return {k: ("set" if all_vals.get(k) not in (None, "") else "missing") for k in keys}
+            return {
+                k: ("set" if all_vals.get(k) not in (None, "") else "missing")
+                for k in keys
+            }
 
 
 SECRETS_MANAGER = SecretsManager()

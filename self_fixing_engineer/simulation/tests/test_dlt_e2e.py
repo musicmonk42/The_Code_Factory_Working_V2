@@ -33,6 +33,7 @@ import pytest
 # Minimal mock "DLT client"
 # -----------------------------
 
+
 @dataclass
 class Checkpoint:
     hash: str
@@ -67,20 +68,33 @@ class MockDLTClient:
         }
         key = os.getenv("DLT_AUDIT_HMAC_KEY")
         if key:
-            mac = hmac.new(key.encode("utf-8"), json.dumps(payload, sort_keys=True).encode("utf-8"), hashlib.sha256)
+            mac = hmac.new(
+                key.encode("utf-8"),
+                json.dumps(payload, sort_keys=True).encode("utf-8"),
+                hashlib.sha256,
+            )
             payload["hmac_sha256"] = mac.hexdigest()
 
         with open(self._audit_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(payload, separators=(",", ":")) + "\n")
 
     # ---- API under test ----
-    def write_checkpoint(self, name: str, hash: str, prevHash: Optional[str], metadata: str, offChainRef: str) -> int:
+    def write_checkpoint(
+        self,
+        name: str,
+        hash: str,
+        prevHash: Optional[str],
+        metadata: str,
+        offChainRef: str,
+    ) -> int:
         chain = self._chains.setdefault(name, [])
         if chain:
             tip = chain[-1]
             # Accept explicit matching prevHash or allow "" / None as "append to tip"
             if prevHash not in (None, "", tip.hash):
-                raise ValueError(f"prevHash mismatch: expected {tip.hash!r}, got {prevHash!r}")
+                raise ValueError(
+                    f"prevHash mismatch: expected {tip.hash!r}, got {prevHash!r}"
+                )
             version = tip.version + 1
             new_prev = tip.hash
         else:
@@ -90,9 +104,23 @@ class MockDLTClient:
             version = 1
             new_prev = None
 
-        cp = Checkpoint(hash=hash, prevHash=new_prev, metadata=metadata, offChainRef=offChainRef, version=version)
+        cp = Checkpoint(
+            hash=hash,
+            prevHash=new_prev,
+            metadata=metadata,
+            offChainRef=offChainRef,
+            version=version,
+        )
         chain.append(cp)
-        self._audit({"op": "write", "name": name, "hash": hash, "prevHash": new_prev, "version": version})
+        self._audit(
+            {
+                "op": "write",
+                "name": name,
+                "hash": hash,
+                "prevHash": new_prev,
+                "version": version,
+            }
+        )
         return version
 
     def read_checkpoint(self, name: str) -> Dict:
@@ -107,7 +135,9 @@ class MockDLTClient:
             "offChainRef": tip.offChainRef,
             "version": tip.version,
         }
-        self._audit({"op": "read", "name": name, "hash": tip.hash, "version": tip.version})
+        self._audit(
+            {"op": "read", "name": name, "hash": tip.hash, "version": tip.version}
+        )
         return out
 
     def rollback_checkpoint(self, name: str, targetHash: str) -> Dict:
@@ -115,13 +145,20 @@ class MockDLTClient:
         if not chain:
             raise KeyError(f"no checkpoint for {name!r}")
         # find target from the end for speed
-        idx = next((i for i in range(len(chain) - 1, -1, -1) if chain[i].hash == targetHash), None)
+        idx = next(
+            (i for i in range(len(chain) - 1, -1, -1) if chain[i].hash == targetHash),
+            None,
+        )
         if idx is None:
-            raise ValueError(f"target hash {targetHash!r} not found in chain for {name!r}")
+            raise ValueError(
+                f"target hash {targetHash!r} not found in chain for {name!r}"
+            )
         # trim to target
         chain[:] = chain[: idx + 1]
         tip = chain[-1]
-        self._audit({"op": "rollback", "name": name, "hash": tip.hash, "version": tip.version})
+        self._audit(
+            {"op": "rollback", "name": name, "hash": tip.hash, "version": tip.version}
+        )
         return {
             "hash": tip.hash,
             "prevHash": tip.prevHash,
@@ -134,6 +171,7 @@ class MockDLTClient:
 # -----------------------------
 # Fixtures
 # -----------------------------
+
 
 @pytest.fixture(params=["evm", "quorum", "fabric", "corda"])
 def dlt_client(tmp_path, request):
@@ -149,6 +187,7 @@ def dlt_client(tmp_path, request):
 # -----------------------------
 # Tests
 # -----------------------------
+
 
 def test_write_read_rollback_roundtrip(dlt_client: MockDLTClient):
     # genesis
@@ -234,7 +273,11 @@ def test_audit_log_file_and_hmac(monkeypatch, tmp_path):
     client.rollback_checkpoint("Z", "z1")
 
     assert audit_path.exists()
-    lines = [json.loads(x) for x in audit_path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    lines = [
+        json.loads(x)
+        for x in audit_path.read_text(encoding="utf-8").splitlines()
+        if x.strip()
+    ]
     assert {e["op"] for e in lines} == {"write", "read", "rollback"}
     # presence and basic shape of HMAC
     assert all("hmac_sha256" in e and len(e["hmac_sha256"]) == 64 for e in lines)

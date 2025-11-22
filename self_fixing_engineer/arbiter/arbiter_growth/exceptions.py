@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 # Configure a logger for this module.
 logger = logging.getLogger(__name__)
 
+
 class ArbiterGrowthError(Exception):
     """
     Base exception for all errors originating from the ArbiterGrowthManager.
@@ -11,6 +12,7 @@ class ArbiterGrowthError(Exception):
     This exception is not typically raised directly but serves as a parent class
     for more specific exceptions, allowing for consolidated error handling.
     """
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         """
         Initializes the base exception.
@@ -23,13 +25,16 @@ class ArbiterGrowthError(Exception):
         super().__init__(message)
         self.message = message
         self.details = details or {}
-        logger.error("Exception raised: %s, Details: %s", self.__class__.__name__, self.details)
+        logger.error(
+            "Exception raised: %s, Details: %s", self.__class__.__name__, self.details
+        )
 
     def __str__(self) -> str:
         """Returns a string representation of the exception, including details."""
         if self.details:
             return f"{self.message} (Details: {self.details})"
         return self.message
+
 
 class OperationQueueFullError(ArbiterGrowthError):
     """
@@ -38,6 +43,7 @@ class OperationQueueFullError(ArbiterGrowthError):
     This indicates that the system is currently processing at its maximum configured
     capacity and cannot accept new work until some existing operations complete.
     """
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         """
         Initializes the OperationQueueFullError.
@@ -49,6 +55,7 @@ class OperationQueueFullError(ArbiterGrowthError):
         """
         super().__init__(message, details)
 
+
 class RateLimitError(ArbiterGrowthError):
     """
     Raised when an operation is rejected due to rate limiting.
@@ -56,6 +63,7 @@ class RateLimitError(ArbiterGrowthError):
     This error occurs when the number of operations exceeds a predefined threshold
     within a specific time window, protecting the system from being overwhelmed.
     """
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         """
         Initializes the RateLimitError.
@@ -67,6 +75,7 @@ class RateLimitError(ArbiterGrowthError):
         """
         super().__init__(message, details)
 
+
 class CircuitBreakerOpenError(ArbiterGrowthError):
     """
     Raised when an operation fails because the circuit breaker is in the 'open' state.
@@ -75,6 +84,7 @@ class CircuitBreakerOpenError(ArbiterGrowthError):
     experiencing repeated failures, and the circuit breaker has tripped to prevent
     further requests, allowing the failing component time to recover.
     """
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         """
         Initializes the CircuitBreakerOpenError.
@@ -86,6 +96,7 @@ class CircuitBreakerOpenError(ArbiterGrowthError):
         """
         super().__init__(message, details)
 
+
 class AuditChainTamperedError(ArbiterGrowthError):
     """
     Raised when a validation check of the audit log's hash chain fails.
@@ -93,6 +104,7 @@ class AuditChainTamperedError(ArbiterGrowthError):
     This is a critical security exception, indicating that the integrity of the
     audit log may have been compromised and the log has been tampered with.
     """
+
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         """
         Initializes the AuditChainTamperedError.

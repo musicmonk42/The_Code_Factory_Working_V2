@@ -1,20 +1,16 @@
 # File: test_custom_llm_provider_plugin.py
 """Test cases for custom_llm_provider_plugin.py."""
 
-import asyncio
-import json
 import os
 import sys
-import time
-from typing import Any, Dict, List, Iterable
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import aiohttp
-from pydantic import ValidationError  # Keep for old tests if needed
 
 # Add the parent directory of 'simulation' to the path for correct imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
 
 # Create test doubles for prometheus_client components when not available
 class MockMetric:
@@ -52,6 +48,7 @@ class MockMetric:
         self.set_called.append(value)
         return self
 
+
 @pytest.fixture(autouse=True)
 def mock_prometheus_metrics(monkeypatch):
     """Mock prometheus metrics for all tests."""
@@ -60,17 +57,25 @@ def mock_prometheus_metrics(monkeypatch):
 
     def create_metric_double(metric_type):
         """Factory to create metric doubles."""
+
         def factory(name, doc, labelnames=None, **kwargs):
             # Accept **kwargs to handle any additional parameters like 'buckets'
             metric = MockMetric()
             metric_doubles[name] = metric
             return metric
+
         return factory
 
     # Patch prometheus_client before importing the module
-    monkeypatch.setattr("prometheus_client.Counter", create_metric_double('Counter'), raising=False)
-    monkeypatch.setattr("prometheus_client.Gauge", create_metric_double('Gauge'), raising=False)
-    monkeypatch.setattr("prometheus_client.Histogram", create_metric_double('Histogram'), raising=False)
+    monkeypatch.setattr(
+        "prometheus_client.Counter", create_metric_double("Counter"), raising=False
+    )
+    monkeypatch.setattr(
+        "prometheus_client.Gauge", create_metric_double("Gauge"), raising=False
+    )
+    monkeypatch.setattr(
+        "prometheus_client.Histogram", create_metric_double("Histogram"), raising=False
+    )
 
     # Now import the module which will use our mocked metrics
     try:
@@ -79,6 +84,7 @@ def mock_prometheus_metrics(monkeypatch):
         pass  # The module might not exist for some tests
 
     return metric_doubles
+
 
 @pytest.fixture
 def valid_config_dict():
@@ -93,8 +99,9 @@ def valid_config_dict():
         "cache_ttl_seconds": 3600,
         "circuit_breaker_threshold": 5,
         "allow_insecure_http": False,
-        "allowed_hosts": ["api.example.com"]
+        "allowed_hosts": ["api.example.com"],
     }
+
 
 @pytest.fixture
 def llm_provider(valid_config_dict, monkeypatch):
@@ -104,13 +111,17 @@ def llm_provider(valid_config_dict, monkeypatch):
     monkeypatch.setenv("ALLOWED_LLM_HOSTS", "api.example.com,api.backup.com")
 
     # Import after mocking
-    from simulation.plugins.custom_llm_provider_plugin import LLMConfig, CustomLLMProvider
-    
+    from simulation.plugins.custom_llm_provider_plugin import (
+        LLMConfig,
+        CustomLLMProvider,
+    )
+
     # Create provider
     config = LLMConfig(**valid_config_dict)
     provider = CustomLLMProvider(config=config)
 
     return provider
+
 
 class TestLLMConfiguration:
     """Test LLM configuration validation."""
@@ -147,7 +158,9 @@ class TestLLMConfiguration:
             LLMConfig(**valid_config_dict).validate()
         assert "HTTPS is required in production" in str(exc.value)
 
-    def test_known_hosts_enforcement_in_production(self, valid_config_dict, monkeypatch):
+    def test_known_hosts_enforcement_in_production(
+        self, valid_config_dict, monkeypatch
+    ):
         """Test that known hosts are enforced in production."""
         from simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
@@ -160,10 +173,13 @@ class TestLLMConfiguration:
             LLMConfig(**valid_config_dict).validate()
         assert "Unknown or disallowed host in production" in str(exc.value)
 
-    @pytest.mark.parametrize("field,value,error_msg", [
-        ("max_tokens", 0, "max_tokens must be positive"),
-        ("timeout", 0, "timeout must be positive"),
-    ])
+    @pytest.mark.parametrize(
+        "field,value,error_msg",
+        [
+            ("max_tokens", 0, "max_tokens must be positive"),
+            ("timeout", 0, "timeout must be positive"),
+        ],
+    )
     def test_invalid_int_params(self, valid_config_dict, field, value, error_msg):
         """Test validation of integer parameters."""
         from simulation.plugins.custom_llm_provider_plugin import LLMConfig
@@ -173,6 +189,7 @@ class TestLLMConfiguration:
             LLMConfig(**valid_config_dict).validate()
         assert error_msg in str(exc.value)
 
+
 class TestCustomLLMProvider:
     """Test CustomLLMProvider class."""
 
@@ -181,8 +198,9 @@ class TestCustomLLMProvider:
         """Test successful API call."""
         mock_response = "Test response"
 
-        with patch.object(llm_provider, '_make_request', return_value=mock_response):
+        with patch.object(llm_provider, "_make_request", return_value=mock_response):
             from langchain_core.messages import HumanMessage
+
             messages = [HumanMessage(content="Test prompt")]
 
             result = await llm_provider._acall(messages)
@@ -198,9 +216,12 @@ class TestCustomLLMProvider:
         # Configure responses
         responses = [rate_limit_response, success_response]
 
-        with patch.object(llm_provider, '_make_request', side_effect=responses) as mock_make_request:
-            with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+        with patch.object(
+            llm_provider, "_make_request", side_effect=responses
+        ) as mock_make_request:
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
                 from langchain_core.messages import HumanMessage
+
                 messages = [HumanMessage(content="Test")]
 
                 # Should retry and succeed
@@ -214,24 +235,31 @@ class TestCustomLLMProvider:
     async def test_acall_fallback_on_client_error(self, llm_provider):
         """Test fallback to secondary model on client error."""
         llm_provider._failure_count = 0
-        
+
         # Import ClientError from the same place the implementation does
         from aiohttp.client_exceptions import ClientError
-        
+
         # Create a fallback provider
         fallback_provider = AsyncMock()
         fallback_provider._acall = AsyncMock(return_value="Fallback response")
 
         # Mock _get_fallback_provider to return our fallback
-        with patch.object(llm_provider, '_get_fallback_provider', return_value=fallback_provider):
+        with patch.object(
+            llm_provider, "_get_fallback_provider", return_value=fallback_provider
+        ):
             # Mock _make_request to raise ClientError
-            with patch.object(llm_provider, '_make_request', side_effect=ClientError("Connection failed")):
+            with patch.object(
+                llm_provider,
+                "_make_request",
+                side_effect=ClientError("Connection failed"),
+            ):
                 from langchain_core.messages import HumanMessage
+
                 messages = [HumanMessage(content="Test")]
 
                 # Call the method and expect it to use fallback
                 result = await llm_provider._acall(messages)
-                
+
                 # Verify the result came from fallback
                 assert result == "Fallback response"
                 fallback_provider._acall.assert_called_once()
@@ -239,14 +267,18 @@ class TestCustomLLMProvider:
     @pytest.mark.asyncio
     async def test_astream_yields_chunks(self, llm_provider):
         """Test that streaming yields chunks properly."""
+
         # Mock streaming response
         async def mock_async_generator():
             yield '{"choices": [{"delta": {"content": "Hello"}}]}'
             yield '{"choices": [{"delta": {"content": " world"}}]}'
             yield '{"choices": [{"delta": {"content": ""}}]}'
 
-        with patch.object(llm_provider, '_make_streaming_request', return_value=mock_async_generator()):
+        with patch.object(
+            llm_provider, "_make_streaming_request", return_value=mock_async_generator()
+        ):
             from langchain_core.messages import HumanMessage
+
             messages = [HumanMessage(content="Test")]
 
             chunks = []
@@ -258,13 +290,17 @@ class TestCustomLLMProvider:
     @pytest.mark.asyncio
     async def test_astream_handles_malformed_data(self, llm_provider):
         """Test that streaming handles malformed JSON gracefully."""
+
         async def mock_async_generator():
             yield '{"choices": [{"delta": {"content": "Valid"}}]}'
-            yield '{malformed json}'
+            yield "{malformed json}"
             yield '{"choices": [{"delta": {"content": " data"}}]}'
 
-        with patch.object(llm_provider, '_make_streaming_request', return_value=mock_async_generator()):
+        with patch.object(
+            llm_provider, "_make_streaming_request", return_value=mock_async_generator()
+        ):
             from langchain_core.messages import HumanMessage
+
             messages = [HumanMessage(content="Test")]
 
             chunks = []
@@ -279,6 +315,7 @@ class TestCustomLLMProvider:
         """Test that caching prevents duplicate API calls."""
         mock_response_content = "Cached response"
         from langchain_core.messages import HumanMessage
+
         messages = [HumanMessage(content="Test prompt")]
 
         # Generate the cache key for consistent mocking
@@ -286,15 +323,23 @@ class TestCustomLLMProvider:
         cache_key = llm_provider._cache_key(prompt, llm_provider.config.model, None)
 
         # Mock _make_request and caching methods
-        with patch.object(llm_provider, '_make_request', return_value=mock_response_content) as mock_make_request:
-            with patch.object(llm_provider, '_get_cached_response', AsyncMock()) as mock_get_cached:
-                with patch.object(llm_provider, '_set_cached_response', AsyncMock()) as mock_set_cached:
+        with patch.object(
+            llm_provider, "_make_request", return_value=mock_response_content
+        ) as mock_make_request:
+            with patch.object(
+                llm_provider, "_get_cached_response", AsyncMock()
+            ) as mock_get_cached:
+                with patch.object(
+                    llm_provider, "_set_cached_response", AsyncMock()
+                ) as mock_set_cached:
                     # First call: Simulate cache miss
                     mock_get_cached.return_value = None
                     result1 = await llm_provider._acall(messages)
                     assert result1 == "Cached response"
                     mock_make_request.assert_called_once_with(messages)
-                    mock_set_cached.assert_called_once_with(cache_key, llm_provider.config.model, "Cached response")
+                    mock_set_cached.assert_called_once_with(
+                        cache_key, llm_provider.config.model, "Cached response"
+                    )
 
                     # Reset mocks for second call
                     mock_get_cached.reset_mock()
@@ -305,7 +350,9 @@ class TestCustomLLMProvider:
                     mock_get_cached.return_value = "Cached response"
                     result2 = await llm_provider._acall(messages)
                     assert result2 == "Cached response"
-                    mock_get_cached.assert_called_once_with(cache_key, llm_provider.config.model)
+                    mock_get_cached.assert_called_once_with(
+                        cache_key, llm_provider.config.model
+                    )
                     mock_make_request.assert_not_called()
                     mock_set_cached.assert_not_called()
 
@@ -335,12 +382,15 @@ class TestCustomLLMProvider:
         from simulation.plugins.custom_llm_provider_plugin import plugin_health
 
         mock_session = AsyncMock()
-        mock_session.get = AsyncMock(side_effect=aiohttp.ClientError("Connection failed"))
+        mock_session.get = AsyncMock(
+            side_effect=aiohttp.ClientError("Connection failed")
+        )
 
         health = await plugin_health(session=mock_session)
 
         assert health["status"] == "error"
         assert "Connection failed" in health["reason"]
+
 
 class TestPluginFunctions:
     """Test module-level plugin functions."""
@@ -348,18 +398,23 @@ class TestPluginFunctions:
     @pytest.mark.asyncio
     async def test_generate_custom_llm_response_runs(self, monkeypatch):
         """Test the main generate function runs without error."""
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider, generate_custom_llm_response
+        from simulation.plugins.custom_llm_provider_plugin import (
+            CustomLLMProvider,
+            generate_custom_llm_response,
+        )
 
         # Mock the provider
         mock_provider = AsyncMock(spec=CustomLLMProvider)
         mock_provider._acall = AsyncMock(return_value="Generated text")
 
-        with patch('simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider', return_value=mock_provider):
+        with patch(
+            "simulation.plugins.custom_llm_provider_plugin.CustomLLMProvider",
+            return_value=mock_provider,
+        ):
             from langchain_core.messages import HumanMessage
 
             result = await generate_custom_llm_response(
-                provider=mock_provider,
-                messages=[HumanMessage(content="Test prompt")]
+                provider=mock_provider, messages=[HumanMessage(content="Test prompt")]
             )
 
             assert result == "Generated text"
@@ -374,10 +429,15 @@ class TestPluginFunctions:
             call_count += 1
             return f"key-{call_count}"
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider, get_vault_key
+        from simulation.plugins.custom_llm_provider_plugin import (
+            CustomLLMProvider,
+        )
 
         # Patch the module-level function
-        monkeypatch.setattr('simulation.plugins.custom_llm_provider_plugin.get_vault_key', mock_get_vault_key)
+        monkeypatch.setattr(
+            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            mock_get_vault_key,
+        )
 
         # Clear any existing cache
         CustomLLMProvider._vault_key_cache.clear()
@@ -400,9 +460,14 @@ class TestPluginFunctions:
             call_count += 1
             raise Exception("Vault unavailable")
 
-        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider, get_vault_key
+        from simulation.plugins.custom_llm_provider_plugin import (
+            CustomLLMProvider,
+        )
 
-        monkeypatch.setattr('simulation.plugins.custom_llm_provider_plugin.get_vault_key', mock_failing_vault)
+        monkeypatch.setattr(
+            "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
+            mock_failing_vault,
+        )
 
         CustomLLMProvider._vault_key_cache.clear()
 
@@ -421,6 +486,7 @@ class TestPluginFunctions:
         llm_provider.circuit_breaker_threshold = 5  # Explicit threshold
 
         from langchain_core.messages import HumanMessage
+
         messages = [HumanMessage(content="Test")]
 
         # Create a custom implementation that properly handles the failure path
@@ -428,13 +494,15 @@ class TestPluginFunctions:
             # Simulate the real implementation's behavior
             if llm_provider._failure_count >= llm_provider.circuit_breaker_threshold:
                 raise RuntimeError("circuit breaker open")
-            
+
             # Simulate a failed request with no fallback
             llm_provider._failure_count += 1
             raise RuntimeError("request failed")
 
         # Replace _acall with our mock implementation
-        with patch.object(llm_provider, '_acall', side_effect=mock_acall_that_increments_failure):
+        with patch.object(
+            llm_provider, "_acall", side_effect=mock_acall_that_increments_failure
+        ):
             # Trigger failures up to threshold
             for i in range(llm_provider.circuit_breaker_threshold):
                 with pytest.raises(RuntimeError) as excinfo:

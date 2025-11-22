@@ -8,15 +8,12 @@ import tempfile
 import time
 import uuid
 import re
-import xml.etree.ElementTree as ET
-import aiohttp
 import inspect
 import shutil
 import random
-import aiofiles
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional, Union, Tuple, Type
+from typing import Dict, Any, List, Callable, Optional, Tuple, Type
 
 from dotenv import load_dotenv
 from opentelemetry import metrics, trace
@@ -29,10 +26,16 @@ from pydantic import BaseModel, ValidationError, Field, root_validator
 try:
     # Central Utilities from Runner
     from runner.runner_logging import log_audit_event
-    from runner.runner_security_utils import scan_for_vulnerabilities  # Central security scan utility
+    from runner.runner_security_utils import (
+        scan_for_vulnerabilities,
+    )  # Central security scan utility
     from runner.llm_client import call_llm_api, call_ensemble_api  # Unified LLM Clients
-    from runner.runner_core import run_tests as runner_run_tests  # Central test runner for safety checks
-    from runner.runner_file_utils import save_files_to_output  # Use canonical file saver
+    from runner.runner_core import (
+        run_tests as runner_run_tests,
+    )  # Central test runner for safety checks
+    from runner.runner_file_utils import (
+        save_files_to_output,
+    )  # Use canonical file saver
 
     # Imports from Sibling Critique Modules
     from .critique_prompt import build_semantic_critique_prompt
@@ -79,13 +82,16 @@ except ImportError as e:
             except Exception as e:
                 logging.error(f"Fallback save_files_to_output failed: {e}")
 
+
 # Import omnicore plugin decorator
 try:
     from omnicore_engine.plugin_registry import plugin, PlugInKind
 except ImportError:
+
     def plugin(**kwargs):
         def decorator(func):
             return func
+
         return decorator
 
     class PlugInKind:
@@ -105,13 +111,15 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+
 # --- FIX: Setup OpenTelemetry tracing ---
 def setup_tracing():
     tracer_provider = TracerProvider()
     # Check if an exporter is already configured, if not, add console exporter
     if not getattr(tracer_provider, "_span_processors", []):
-         tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(tracer_provider)
+
 
 setup_tracing()
 # --- END FIX ---
@@ -235,11 +243,15 @@ class CritiqueConfig(BaseModel):
         langs = values.get("languages") or []
         if not isinstance(langs, list):
             raise ValueError("languages must be a list of strings")
-        sanitized_langs = [lang for lang in langs if isinstance(lang, str) and lang in allowed_langs]
+        sanitized_langs = [
+            lang for lang in langs if isinstance(lang, str) and lang in allowed_langs
+        ]
 
         if langs and not sanitized_langs:
             # Only invalid languages were provided: fail fast.
-            raise ValueError("No valid languages specified in CritiqueConfig.languages.")
+            raise ValueError(
+                "No valid languages specified in CritiqueConfig.languages."
+            )
         if sanitized_langs:
             values["languages"] = sanitized_langs
         else:
@@ -259,7 +271,9 @@ class CritiqueConfig(BaseModel):
         steps = values.get("pipeline_steps") or []
         if not isinstance(steps, list):
             raise ValueError("pipeline_steps must be a list of strings")
-        sanitized_steps = [s for s in steps if isinstance(s, str) and s in allowed_steps]
+        sanitized_steps = [
+            s for s in steps if isinstance(s, str) and s in allowed_steps
+        ]
 
         if steps and not sanitized_steps:
             # Caller attempted only invalid steps: hard fail.
@@ -379,8 +393,7 @@ class LanguageCritiquePlugin(ABC):
         code_files: Dict[str, str],
         temp_dir: Path,
         config: CritiqueConfig,
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     @abstractmethod
     async def run_unit_tests(
@@ -389,8 +402,7 @@ class LanguageCritiquePlugin(ABC):
         code_files: Dict[str, str],
         temp_dir: Path,
         config: CritiqueConfig,
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     @abstractmethod
     async def run_e2e_tests(
@@ -398,8 +410,7 @@ class LanguageCritiquePlugin(ABC):
         code_files: Dict[str, str],
         temp_dir: Path,
         config: CritiqueConfig,
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     @abstractmethod
     async def run_stress_tests(
@@ -407,8 +418,7 @@ class LanguageCritiquePlugin(ABC):
         code_files: Dict[str, str],
         temp_dir: Path,
         config: CritiqueConfig,
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     @abstractmethod
     async def vulnerability_scan(
@@ -418,8 +428,7 @@ class LanguageCritiquePlugin(ABC):
         tools: List[str],
         timeout: int,
         config: CritiqueConfig,
-    ) -> Dict[str, Any]:
-        ...
+    ) -> Dict[str, Any]: ...
 
     async def _run_tool(
         self,
@@ -540,11 +549,7 @@ class LanguageCritiquePlugin(ABC):
                     pass
 
             # Try line-delimited JSON
-            lines = [
-                line.strip()
-                for line in stdout_dec.splitlines()
-                if line.strip()
-            ]
+            lines = [line.strip() for line in stdout_dec.splitlines() if line.strip()]
             if lines and all(
                 line.startswith("{") and line.endswith("}") for line in lines
             ):
@@ -561,9 +566,7 @@ class LanguageCritiquePlugin(ABC):
                         "line_delimited_json_results": parsed_lines,
                     }
 
-            logger.debug(
-                f"{tool_name} produced no valid JSON; returning raw output."
-            )
+            logger.debug(f"{tool_name} produced no valid JSON; returning raw output.")
             return True, {"raw_output": stdout_dec}
         except FileNotFoundError:
             logger.error(f"Tool '{full_command[0]}' not found.")
@@ -853,9 +856,7 @@ def detect_language(code_files: Dict[str, str]) -> str:
             lang_counts["go"] = lang_counts.get("go", 0) + 1
 
     if not lang_counts:
-        logger.warning(
-            "No recognizable language extensions; defaulting to 'python'."
-        )
+        logger.warning("No recognizable language extensions; defaulting to 'python'.")
         return "python"
 
     most_common_lang = max(lang_counts, key=lang_counts.get)
@@ -908,14 +909,14 @@ async def resilient_step(
                 # --- FIX START ---
                 # Inject 'config' and 'step_name' if the wrapped function's signature accepts them
                 sig = inspect.signature(func)
-                
+
                 # 1. Handle 'config' argument
                 if "config" in sig.parameters:
                     kwargs["config"] = config
                 # If function *doesn't* want 'config', pop it if it was passed by mistake.
                 elif "config" in kwargs:
-                     kwargs.pop("config", None)
-                
+                    kwargs.pop("config", None)
+
                 # 2. Handle 'step_name' argument (this is a separate, independent check)
                 if "step_name" in sig.parameters:
                     kwargs["step_name"] = step_name
@@ -930,14 +931,11 @@ async def resilient_step(
                         "code_files": kwargs.get("code_files", {}),
                     }
                     if not config.hitl_callback(hitl_context):
-                        raise ValueError(
-                            "HITL rejected; triggering re-evaluation."
-                        )
+                        raise ValueError("HITL rejected; triggering re-evaluation.")
 
                 score = (
                     result.get("semantic_alignment_score", 1.0)
-                    if isinstance(result, dict)
-                    and step_name == "semantic"
+                    if isinstance(result, dict) and step_name == "semantic"
                     else 1.0
                 )
                 if score < config.self_heal_threshold:
@@ -945,9 +943,7 @@ async def resilient_step(
                         "feedback_for_self_heal",
                         "Improve based on prior low score.",
                     )
-                    raise RuntimeError(
-                        f"Triggering self-healing retry: {score}"
-                    )
+                    raise RuntimeError(f"Triggering self-healing retry: {score}")
 
                 log_action(
                     "step_success",
@@ -961,9 +957,7 @@ async def resilient_step(
             except (ValueError, RuntimeError) as e:
                 logger.warning(f"{step_name} (attempt {attempt}): {e}")
                 if attempt == attempts:
-                    logger.error(
-                        f"{step_name} failed after {attempts} attempts."
-                    )
+                    logger.error(f"{step_name} failed after {attempts} attempts.")
                     CRITIQUE_ERRORS.labels(
                         step_name,
                         type(e).__name__,
@@ -1000,12 +994,8 @@ def chaos_injection(step_name: str, config: CritiqueConfig) -> None:
     if config.enable_chaos_injection and os.getenv("ENABLE_CHAOS_TESTING") == "true":
         r = random.random()
         if r < 0.1:
-            logger.warning(
-                f"CHAOS INJECTION: Simulating failure for {step_name}!"
-            )
-            raise RuntimeError(
-                f"Simulated chaos failure during {step_name}."
-            )
+            logger.warning(f"CHAOS INJECTION: Simulating failure for {step_name}!")
+            raise RuntimeError(f"Simulated chaos failure during {step_name}.")
         if r < 0.3:
             delay = random.uniform(0.5, 2.0)
             logger.warning(
@@ -1073,8 +1063,7 @@ async def orchestrate_critique_pipeline(
             not isinstance(code_files, dict)
             or not code_files
             or not all(
-                isinstance(k, str) and isinstance(v, str)
-                for k, v in code_files.items()
+                isinstance(k, str) and isinstance(v, str) for k, v in code_files.items()
             )
         ):
             CRITIQUE_ERRORS.labels(
@@ -1089,8 +1078,7 @@ async def orchestrate_critique_pipeline(
 
         if test_files:
             if not isinstance(test_files, dict) or not all(
-                isinstance(k, str) and isinstance(v, str)
-                for k, v in test_files.items()
+                isinstance(k, str) and isinstance(v, str) for k, v in test_files.items()
             ):
                 CRITIQUE_ERRORS.labels(
                     "orchestrate",
@@ -1108,9 +1096,7 @@ async def orchestrate_critique_pipeline(
         # Auto-detect language if needed
         if config.target_language == "auto":
             config.target_language = detect_language(code_files)
-            logger.info(
-                f"Auto-detected target language: {config.target_language}"
-            )
+            logger.info(f"Auto-detected target language: {config.target_language}")
 
         results: Dict[str, Any] = {"provenance_chain": []}
 
@@ -1141,9 +1127,7 @@ async def orchestrate_critique_pipeline(
             # --- Prepare parallelizable steps ---
             for step in config.pipeline_steps:
                 provenance_id = generate_provenance_id()
-                results["provenance_chain"].append(
-                    {"step": step, "id": provenance_id}
-                )
+                results["provenance_chain"].append({"step": step, "id": provenance_id})
 
                 if step == "lint":
                     tasks.append(
@@ -1224,9 +1208,7 @@ async def orchestrate_critique_pipeline(
 
                 elif step in ("semantic", "fix"):
                     # These are handled sequentially after parallel phase.
-                    logger.debug(
-                        f"Step {step} deferred for sequential execution."
-                    )
+                    logger.debug(f"Step {step} deferred for sequential execution.")
                 else:
                     # Unknown steps should already be stripped by CritiqueConfig;
                     # if any slip through, we refuse to silently accept them.
@@ -1310,10 +1292,10 @@ async def orchestrate_critique_pipeline(
                         "ambiguities": [],
                         "semantic_rationale": None,
                         "verdict": None,  # <-- ADDED to capture from mock
-                        "score": 0.0,     # <-- ADDED to capture from mock
+                        "score": 0.0,  # <-- ADDED to capture from mock
                     }
                     # --- END FIX ---
-                    
+
                     merged = {k: semantic_result.get(k, v) for k, v in template.items()}
                     results.update(merged)
 
@@ -1340,9 +1322,7 @@ async def orchestrate_critique_pipeline(
             # --- Sequential: Auto-fix ---
             if "fix" in config.pipeline_steps:
                 provenance_id = generate_provenance_id()
-                results["provenance_chain"].append(
-                    {"step": "fix", "id": provenance_id}
-                )
+                results["provenance_chain"].append({"step": "fix", "id": provenance_id})
 
                 fixes_suggested = results.get("fixes_suggested", {})
                 if not isinstance(fixes_suggested, dict) or not fixes_suggested:
@@ -1370,10 +1350,7 @@ async def orchestrate_critique_pipeline(
                             step_name="fix",
                             config=config,
                         )
-                        if (
-                            isinstance(fix_result, dict)
-                            and "error" in fix_result
-                        ):
+                        if isinstance(fix_result, dict) and "error" in fix_result:
                             results["fix_error"] = fix_result["error"]
                             results["fixes_applied"] = False
                         else:
@@ -1388,14 +1365,12 @@ async def orchestrate_critique_pipeline(
         # --- FIX: Ensure 'code_files' key exists to satisfy test assertion ---
         results["code_files"] = code_files
         # --- END FIX ---
-        
+
         log_action(
             "Critique Pipeline Completed",
             {
                 "final_results_summary": {
-                    k: v
-                    for k, v in results.items()
-                    if k != "provenance_chain"
+                    k: v for k, v in results.items() if k != "provenance_chain"
                 }
             },
         )

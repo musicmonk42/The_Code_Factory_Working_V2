@@ -21,7 +21,7 @@ __all__ = [
     "BackendRegistry",
     "PolicyEngine",
     "EventBus",
-    "PathError"
+    "PathError",
 ]
 
 import os
@@ -31,15 +31,17 @@ import asyncio
 import traceback
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from importlib.metadata import version, PackageNotFoundError # Migrated from pkg_resources to importlib.metadata per PEP 420
+from importlib.metadata import (
+    version,
+    PackageNotFoundError,
+)  # Migrated from pkg_resources to importlib.metadata per PEP 420
 from packaging.version import Version
 import types
 import importlib
 
 # --- Set up basic logging before any other imports to catch early errors ---
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,8 @@ try:
 except Exception as e:
     logger.warning(
         "Warning: Arbiter audit_log import failed (%s). Using stub audit_logger. "
-        "Some logging features will be disabled.", e
+        "Some logging features will be disabled.",
+        e,
     )
 
     async def _stub_log_event(event_type, data, critical=False, **kwargs):
@@ -59,7 +62,7 @@ except Exception as e:
         # Use root logger to ensure output even if `logger` is reconfigured
         logging.getLogger().log(
             log_level,
-            f"Stub audit_logger invoked for event '{event_type}' with data: {data}"
+            f"Stub audit_logger invoked for event '{event_type}' with data: {data}",
         )
 
     audit_logger = types.SimpleNamespace(log_event=_stub_log_event)
@@ -67,24 +70,30 @@ except Exception as e:
 # Inject a synthetic submodule for `test_generation.audit_log` to expose `AuditLogger`
 try:
     from .policy_and_audit import AuditLogger as _AuditLogger
+
     _audit_mod = types.ModuleType(__name__ + ".audit_log")
     _audit_mod.AuditLogger = _AuditLogger
     sys.modules[__name__ + ".audit_log"] = _audit_mod
 except ImportError as e:
     logger.warning(f"Failed to create synthetic audit_log submodule: {e}")
 
+
 # Define stubs for testing purposes (only used if imports fail)
 class PathError(ValueError):
     pass
 
+
 class BackendRegistry:
     pass
+
 
 class PolicyEngine:
     pass
 
+
 class EventBus:
     pass
+
 
 onboard = None
 OnboardConfig = None
@@ -96,6 +105,7 @@ main_runner_logger = None
 try:
     import builtins as _b
     from unittest.mock import patch as _patch
+
     if not hasattr(_b, "patch"):
         _b.patch = _patch
 except Exception:
@@ -104,7 +114,11 @@ except Exception:
 # Correctly handle the import of internal and external dependencies
 try:
     from . import utils as _utils
-    from .utils import PathError, validate_and_resolve_path as validate_path, secure_write_file as sanitize_path
+    from .utils import (
+        PathError,
+        validate_and_resolve_path as validate_path,
+        secure_write_file as sanitize_path,
+    )
     from .onboard import onboard, OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION
     from .backends import BackendRegistry
     from .policy_and_audit import PolicyEngine, EventBus
@@ -112,23 +126,32 @@ try:
     # Core utils version check
     try:
         # Check for presence of __version__ first
-        if not hasattr(_utils, '__version__'):
-            logger.warning("Warning: utils module has no __version__ attribute. Skipping version check.")
+        if not hasattr(_utils, "__version__"):
+            logger.warning(
+                "Warning: utils module has no __version__ attribute. Skipping version check."
+            )
         else:
             try:
-                utils_version = Version(version('test_generation.utils'))
-                if utils_version < Version('3.0'):
+                utils_version = Version(version("test_generation.utils"))
+                if utils_version < Version("3.0"):
                     error_msg = f"CRITICAL: Outdated utils version detected: {utils_version}. Expected 3.0+. Aborting."
                     logger.critical(error_msg)
                     sys.exit(1)
             except PackageNotFoundError:
-                logger.warning("Warning: test_generation.utils not installed as a package; skipping version check.")
+                logger.warning(
+                    "Warning: test_generation.utils not installed as a package; skipping version check."
+                )
     except AttributeError:
         # This catch is for cases where getattr fails for some reason
-        logger.warning("Warning: Could not check utils version due to AttributeError. Skipping version check.")
+        logger.warning(
+            "Warning: Could not check utils version due to AttributeError. Skipping version check."
+        )
 
 except ImportError as e:
-    logger.warning(f"Warning: Failed to import a core component: {e}. Using stubs for testing.")
+    logger.warning(
+        f"Warning: Failed to import a core component: {e}. Using stubs for testing."
+    )
+
 
 def validate_project_root(project_root_str: str):
     """
@@ -141,54 +164,66 @@ def validate_project_root(project_root_str: str):
         if not project_root.exists():
             error_msg = f"Project root path does not exist: {project_root}"
             logger.critical(f"CRITICAL: {error_msg}")
-            asyncio.run(audit_logger.log_event(
-                "core_init_failure",
-                {"error": error_msg, "path": str(project_root)},
-                critical=True
-            ))
+            asyncio.run(
+                audit_logger.log_event(
+                    "core_init_failure",
+                    {"error": error_msg, "path": str(project_root)},
+                    critical=True,
+                )
+            )
             sys.exit(1)
 
         if not project_root.is_dir():
             error_msg = f"Project root path is not a directory: {project_root}"
             logger.critical(f"CRITICAL: {error_msg}")
-            asyncio.run(audit_logger.log_event(
-                "core_init_failure",
-                {"error": error_msg, "path": str(project_root)},
-                critical=True
-            ))
+            asyncio.run(
+                audit_logger.log_event(
+                    "core_init_failure",
+                    {"error": error_msg, "path": str(project_root)},
+                    critical=True,
+                )
+            )
             sys.exit(1)
 
         if not os.access(project_root, os.W_OK):
             error_msg = f"Project root path is not writable: {project_root}"
             logger.critical(f"CRITICAL: {error_msg}")
-            asyncio.run(audit_logger.log_event(
-                "core_init_failure",
-                {"error": error_msg, "path": str(project_root)},
-                critical=True
-            ))
+            asyncio.run(
+                audit_logger.log_event(
+                    "core_init_failure",
+                    {"error": error_msg, "path": str(project_root)},
+                    critical=True,
+                )
+            )
             sys.exit(1)
 
         # Iterate through path parts to check for symlinks and hidden components
         for part in project_root.parts:
-            path_so_far = Path(*project_root.parts[:project_root.parts.index(part) + 1])
+            path_so_far = Path(
+                *project_root.parts[: project_root.parts.index(part) + 1]
+            )
             if path_so_far.is_symlink():
                 error_msg = f"Project root path contains a symbolic link: {path_so_far}"
                 logger.critical(f"CRITICAL: {error_msg}")
-                asyncio.run(audit_logger.log_event(
-                    "core_init_failure",
-                    {"error": error_msg, "path": str(path_so_far)},
-                    critical=True
-                ))
+                asyncio.run(
+                    audit_logger.log_event(
+                        "core_init_failure",
+                        {"error": error_msg, "path": str(path_so_far)},
+                        critical=True,
+                    )
+                )
                 sys.exit(1)
 
-            if part.startswith('.'):
+            if part.startswith("."):
                 error_msg = f"Project root path contains hidden file/directory components: {project_root}"
                 logger.critical(f"CRITICAL: {error_msg}")
-                asyncio.run(audit_logger.log_event(
-                    "core_init_failure",
-                    {"error": error_msg, "path": str(project_root)},
-                    critical=True
-                ))
+                asyncio.run(
+                    audit_logger.log_event(
+                        "core_init_failure",
+                        {"error": error_msg, "path": str(project_root)},
+                        critical=True,
+                    )
+                )
                 sys.exit(1)
 
         logger.info(f"Project root '{project_root}' successfully validated.")
@@ -197,19 +232,30 @@ def validate_project_root(project_root_str: str):
         logger.critical(
             f"CRITICAL: An unexpected error occurred during project root validation: {e}. Aborting."
         )
-        asyncio.run(audit_logger.log_event(
-            "core_init_failure",
-            {"error": str(e), "path": project_root_str, "traceback": traceback.format_exc()},
-            critical=True
-        ))
+        asyncio.run(
+            audit_logger.log_event(
+                "core_init_failure",
+                {
+                    "error": str(e),
+                    "path": project_root_str,
+                    "traceback": traceback.format_exc(),
+                },
+                critical=True,
+            )
+        )
         sys.exit(1)
+
 
 # Default project root is parent directory of this file unless overridden
 _project_root_path = os.getenv("PROJECT_ROOT", str(Path(__file__).parent.parent))
 validate_project_root(_project_root_path)
 
 # --- Compat shim: expose top-level plugin as test_generation.gen_agent.gen_plugins ---
-import os, sys, types, importlib.util, logging
+import os
+import sys
+import types
+import importlib.util
+import logging
 
 _pkg_dir = os.path.dirname(__file__)
 
@@ -233,7 +279,9 @@ try:
             setattr(sys.modules[__name__], "gen_plugins", mod)  # <-- add this
         else:
             logging.getLogger(__name__).warning(
-                "gen_plugins source file not found (looked for %s and %s)", _src_normal, _src_weird
+                "gen_plugins source file not found (looked for %s and %s)",
+                _src_normal,
+                _src_weird,
             )
 except Exception as _e:
     logging.getLogger(__name__).warning("Plugin shim load failed: %s", _e)
@@ -242,7 +290,7 @@ except Exception as _e:
 _ga_pkg = __name__ + ".gen_agent"
 if _ga_pkg not in sys.modules:
     ga = types.ModuleType(_ga_pkg)
-    ga.__path__ = []           # mark as namespace-like package
+    ga.__path__ = []  # mark as namespace-like package
     ga.__package__ = __name__
     sys.modules[_ga_pkg] = ga
 

@@ -26,6 +26,7 @@ THIS_FILE = Path(__file__).resolve()
 # repo root ≈ .../generator
 REPO_ROOT = THIS_FILE.parents[2] if len(THIS_FILE.parents) >= 2 else THIS_FILE.parent
 
+
 def _find_core_file() -> Path:
     # Search for audit_backend_core.py anywhere under the repo root
     candidates = [p for p in REPO_ROOT.rglob("audit_backend_core.py") if p.is_file()]
@@ -40,18 +41,22 @@ def _find_core_file() -> Path:
     # Fallback to first candidate
     return candidates[0]
 
+
 CORE_PATH = _find_core_file()
 
 # CRITICAL: Set environment variables BEFORE importing the module
 # to avoid validation errors at import time
 import os
+
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 
 # Dynaconf expects variables with "AUDIT_" prefix (envvar_prefix="AUDIT")
 # Provide minimal valid configuration for testing
 encryption_key = Fernet.generate_key().decode()
 # Use @json prefix so dynaconf parses the string as JSON
-os.environ["AUDIT_ENCRYPTION_KEYS"] = f'@json [{{"key_id": "mock_test_key", "key": "{encryption_key}"}}]'
+os.environ["AUDIT_ENCRYPTION_KEYS"] = (
+    f'@json [{{"key_id": "mock_test_key", "key": "{encryption_key}"}}]'
+)
 os.environ["AUDIT_COMPRESSION_ALGO"] = "zstd"
 os.environ["AUDIT_COMPRESSION_LEVEL"] = "3"
 os.environ["AUDIT_BATCH_FLUSH_INTERVAL"] = "5"
@@ -88,11 +93,13 @@ get_backend = core.get_backend
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _cancel_backend_tasks(backend: LogBackend) -> None:
     """Cancel background tasks created by LogBackend to avoid leaks."""
     tasks = getattr(backend, "_async_tasks", set())
     for t in list(tasks):
         t.cancel()
+
 
 def _counter_total_for_labels(counter, **expected_labels) -> float:
     """Sum counter samples that match expected label values."""
@@ -104,9 +111,11 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
                 total += float(sample.value)
     return total
 
+
 # ---------------------------------------------------------------------------
 # Event loop fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -114,9 +123,11 @@ def event_loop():
     yield loop
     loop.close()
 
+
 # ---------------------------------------------------------------------------
 # Core fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def secure_encryption_env(monkeypatch):
@@ -134,6 +145,7 @@ async def secure_encryption_env(monkeypatch):
 
     yield encrypter
 
+
 @pytest_asyncio.fixture
 async def mock_send_alert(monkeypatch):
     """Patch send_alert so we can assert alerts without side effects."""
@@ -141,6 +153,7 @@ async def mock_send_alert(monkeypatch):
     if hasattr(core, "send_alert"):
         monkeypatch.setattr(core, "send_alert", mock, raising=False)
     return mock
+
 
 @pytest_asyncio.fixture
 async def kms_mock():
@@ -150,6 +163,7 @@ async def kms_mock():
         kms.decrypt.return_value = {"Plaintext": Fernet.generate_key()}
         mock_client.return_value = kms
         yield kms
+
 
 @pytest_asyncio.fixture
 async def test_backend(secure_encryption_env, mock_send_alert):
@@ -174,7 +188,9 @@ async def test_backend(secure_encryption_env, mock_send_alert):
         async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
             self.storage.append(prepared_entry)
 
-        async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+        async def _query_single(
+            self, filters: Dict[str, Any], limit: int
+        ) -> List[Dict[str, Any]]:
             results: List[Dict[str, Any]] = []
             for entry in reversed(self.storage):
                 if all(entry.get(k) == v for k, v in filters.items()):
@@ -199,13 +215,19 @@ async def test_backend(secure_encryption_env, mock_send_alert):
         _cancel_backend_tasks(backend)
         await asyncio.sleep(0)
 
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_append_and_query_round_trip(test_backend):
-    entry = {"event_type": "user_login", "actor": "user-123", "details": {"ip": "127.0.0.1"}}
+    entry = {
+        "event_type": "user_login",
+        "actor": "user-123",
+        "details": {"ip": "127.0.0.1"},
+    }
 
     await test_backend.append(dict(entry))
     await test_backend.flush_batch()
@@ -223,18 +245,25 @@ async def test_append_and_query_round_trip(test_backend):
     assert "entry_id" in decoded
     assert "_audit_hash" in decoded
 
+
 @pytest.mark.asyncio
-async def test_tamper_detection_flags_and_skips(test_backend, monkeypatch, mock_send_alert):
+async def test_tamper_detection_flags_and_skips(
+    test_backend, monkeypatch, mock_send_alert
+):
     await test_backend.append({"event_type": "x"})
     await test_backend.flush_batch()
     assert len(test_backend.storage) == 1
 
     backend_label = test_backend.__class__.__name__
-    before = _counter_total_for_labels(BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label)
+    before = _counter_total_for_labels(
+        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+    )
 
     original_compute = core.compute_hash
+
     def evil_hash(_data: bytes) -> str:
         return "DELIBERATELY_WRONG_HASH"
+
     monkeypatch.setattr(core, "compute_hash", evil_hash)
 
     results = await test_backend.query({}, limit=10)
@@ -243,7 +272,9 @@ async def test_tamper_detection_flags_and_skips(test_backend, monkeypatch, mock_
     # Give scheduled tasks (send_alert via create_task) time to execute
     await asyncio.sleep(0.1)
 
-    after = _counter_total_for_labels(BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label)
+    after = _counter_total_for_labels(
+        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+    )
     assert after > before
 
     if mock_send_alert is not None:
@@ -251,9 +282,11 @@ async def test_tamper_detection_flags_and_skips(test_backend, monkeypatch, mock_
 
     monkeypatch.setattr(core, "compute_hash", original_compute)
 
+
 @pytest.mark.asyncio
 async def test_retry_operation_respects_limits(monkeypatch):
     attempts = {"count": 0}
+
     async def failing_op():
         attempts["count"] += 1
         raise ValueError("expected failure")
@@ -263,7 +296,9 @@ async def test_retry_operation_respects_limits(monkeypatch):
     if hasattr(core, "RETRY_MAX_ATTEMPTS"):
         monkeypatch.setattr(core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
 
-    before = _counter_total_for_labels(BACKEND_ERRORS, backend="TestBackend", type="ValueError")
+    before = _counter_total_for_labels(
+        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+    )
 
     with pytest.raises(ValueError, match="expected failure"):
         await retry_operation(
@@ -275,11 +310,16 @@ async def test_retry_operation_respects_limits(monkeypatch):
         )
 
     assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
-    after = _counter_total_for_labels(BACKEND_ERRORS, backend="TestBackend", type="ValueError")
+    after = _counter_total_for_labels(
+        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+    )
     assert after > before
 
+
 @pytest.mark.asyncio
-async def test_inmemory_backend_basic_integration(secure_encryption_env, mock_send_alert):
+async def test_inmemory_backend_basic_integration(
+    secure_encryption_env, mock_send_alert
+):
     backend = InMemoryBackend(params={"name": "inmemory-test"})
     try:
         await backend.append({"event_type": "ping"})
@@ -290,6 +330,7 @@ async def test_inmemory_backend_basic_integration(secure_encryption_env, mock_se
     finally:
         _cancel_backend_tasks(backend)
         await asyncio.sleep(0)
+
 
 def test_register_and_get_backend_round_trip():
     class DummyBackend(LogBackend):
@@ -321,6 +362,7 @@ def test_register_and_get_backend_round_trip():
 
     with pytest.raises(BackendNotFoundError):
         get_backend("nonexistent-backend-type", params={})
+
 
 def test_crypto_initialization_strictness(monkeypatch):
     class MinimalBackend(LogBackend):

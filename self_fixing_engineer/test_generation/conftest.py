@@ -16,14 +16,15 @@ if not logging.getLogger().handlers:
 # even when pytest sets rootdir to .../test_generation
 # -----------------------------------------------------------------------------
 THIS_FILE = Path(__file__).resolve()
-TESTS_DIR = THIS_FILE.parent                   # .../test_generation/tests
-PKG_DIR = TESTS_DIR.parent                     # .../test_generation
-REPO_DIR = PKG_DIR.parent                      # .../
+TESTS_DIR = THIS_FILE.parent  # .../test_generation/tests
+PKG_DIR = TESTS_DIR.parent  # .../test_generation
+REPO_DIR = PKG_DIR.parent  # .../
 
 # Put the repo root at the *front* of sys.path
 repo_str = str(REPO_DIR)
 if repo_str not in sys.path:
     sys.path.insert(0, repo_str)
+
 
 # -----------------------------------------------------------------------------
 # If direct import of "test_generation" fails (or resolves to a broken stub),
@@ -60,9 +61,10 @@ def _alias_test_generation_if_needed() -> None:
     alt_prefix = alt + "."
     for name, mod in list(sys.modules.items()):
         if name.startswith(alt_prefix):
-            sys.modules[primary + name[len(alt):]] = mod
+            sys.modules[primary + name[len(alt) :]] = mod
 
     logger.warning("Aliased %s -> %s for pytest collection", primary, alt)
+
 
 _alias_test_generation_if_needed()
 
@@ -103,12 +105,15 @@ try:
     import werkzeug  # noqa: F401
 except Exception:
     wz = types.ModuleType("werkzeug")
+
     # Minimal surface so "from werkzeug.exceptions import HTTPException" won't explode
     class _HTTPException(Exception):
         code = 500
         description = "Stubbed HTTP exception"
+
     wz.exceptions = types.SimpleNamespace(HTTPException=_HTTPException)
     sys.modules["werkzeug"] = wz
+
 
 # -----------------------------------------------------------------------------
 # Normalize/repair the gen_agent package so "from test_generation.gen_agent import agents" works
@@ -118,7 +123,11 @@ def _repair_gen_agent_package():
 
     # If some previous run inserted a broken stub (no __file__/__path__), drop it
     existing = sys.modules.get(pkg_name)
-    if existing and not getattr(existing, "__file__", None) and not getattr(existing, "__path__", None):
+    if (
+        existing
+        and not getattr(existing, "__file__", None)
+        and not getattr(existing, "__path__", None)
+    ):
         sys.modules.pop(pkg_name, None)
 
     # Import the real package (must exist as a directory with __init__.py)
@@ -133,6 +142,7 @@ def _repair_gen_agent_package():
     else:
         if not hasattr(pkg, "agents") and f"{pkg_name}.agents" in sys.modules:
             setattr(pkg, "agents", sys.modules[f"{pkg_name}.agents"])
+
 
 try:
     _repair_gen_agent_package()

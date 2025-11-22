@@ -9,8 +9,6 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import sys
 from pathlib import Path
@@ -73,17 +71,19 @@ async def test_count_tokens(provider: GrokProvider) -> None:
 async def test_api_call_non_stream(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    mock_resp.json = AsyncMock(return_value={"choices": [{"message": {"content": "Hi"}}]})
-    
+    mock_resp.json = AsyncMock(
+        return_value={"choices": [{"message": {"content": "Hi"}}]}
+    )
+
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
-        
+
         result = await provider._api_call(
             "https://api.x.ai/v1/chat/completions",
             {"Authorization": "Bearer test-key"},
             {"model": "grok-4", "messages": []},
             False,
-            "test-run"
+            "test-run",
         )
         assert result == {"choices": [{"message": {"content": "Hi"}}]}
 
@@ -92,16 +92,16 @@ async def test_api_call_non_stream(provider: GrokProvider) -> None:
 async def test_api_call_stream(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
-        
+
         result = await provider._api_call(
             "https://api.x.ai/v1/chat/completions",
             {"Authorization": "Bearer test-key"},
             {"model": "grok-4", "messages": []},
             True,
-            "test-run"
+            "test-run",
         )
         assert result == mock_resp
 
@@ -111,17 +111,17 @@ async def test_api_call_error(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 500
     mock_resp.text = AsyncMock(return_value="Server error")
-    
+
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
-        
+
         with pytest.raises(LLMError):
             await provider._api_call(
                 "https://api.x.ai/v1/chat/completions",
                 {"Authorization": "Bearer test-key"},
                 {"model": "grok-4", "messages": []},
                 False,
-                "test-run"
+                "test-run",
             )
 
 
@@ -129,10 +129,10 @@ async def test_api_call_error(provider: GrokProvider) -> None:
 @pytest.mark.asyncio
 async def test_call_non_stream(provider: GrokProvider) -> None:
     mock_resp = {"choices": [{"message": {"content": "Hello"}}]}
-    
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_resp
-        
+
         result = await provider.call("test", "grok-4")
         assert result["content"] == "Hello"
         assert result["model"] == "grok-4"
@@ -142,17 +142,17 @@ async def test_call_non_stream(provider: GrokProvider) -> None:
 async def test_call_stream(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     async def mock_content():
         yield b'data: {"choices": [{"delta": {"content": "chunk1"}}]}\n'
         yield b'data: {"choices": [{"delta": {"content": "chunk2"}}]}\n'
-        yield b'data: [DONE]\n'
-    
+        yield b"data: [DONE]\n"
+
     mock_resp.content = mock_content()
-    
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_resp
-        
+
         result = await provider.call("test", "grok-4", stream=True)
         chunks = [c async for c in result]
         assert chunks == ["chunk1", "chunk2"]
@@ -162,12 +162,12 @@ async def test_call_stream(provider: GrokProvider) -> None:
 async def test_call_with_hooks(provider: GrokProvider) -> None:
     provider.add_pre_hook(lambda x: x.upper())
     provider.add_post_hook(lambda r: {**r, "content": r["content"] + "!"})
-    
+
     mock_resp = {"choices": [{"message": {"content": "hello"}}]}
-    
-    with patch.object(provider, '_api_call', new_callable=AsyncMock) as mock_api:
+
+    with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_resp
-        
+
         result = await provider.call("test", "grok-4")
         assert result["content"] == "hello!"
 
@@ -177,7 +177,7 @@ async def test_call_with_hooks(provider: GrokProvider) -> None:
 async def test_health_check_success(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     with patch("aiohttp.ClientSession.get") as mock_get:
         mock_get.return_value.__aenter__.return_value = mock_resp
         assert await provider.health_check() is True

@@ -8,8 +8,7 @@ import time
 import json
 import hashlib
 import datetime
-from typing import Dict, Any, List, Optional, Tuple, Callable, Union
-import re
+from typing import Dict, Any, List, Optional
 import asyncio
 from abc import ABC, abstractmethod
 
@@ -31,22 +30,29 @@ DLTLogger = None
 PROMETHEUS_AVAILABLE = False
 try:
     from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
+
     PROMETHEUS_AVAILABLE = True
 except ImportError:
-    logging.getLogger(__name__).warning("Prometheus client not available. Metrics will not be collected in quantum.py.")
+    logging.getLogger(__name__).warning(
+        "Prometheus client not available. Metrics will not be collected in quantum.py."
+    )
 
 # --- Pydantic for input validation ---
 PYDANTIC_AVAILABLE = False
 try:
     from pydantic import BaseModel, Field, ValidationError, validator
+
     PYDANTIC_AVAILABLE = True
 except ImportError:
-    logging.getLogger(__name__).warning("Pydantic not available. Input validation will be skipped in quantum.py.")
+    logging.getLogger(__name__).warning(
+        "Pydantic not available. Input validation will be skipped in quantum.py."
+    )
 
 # --- aiofiles for fallback audit logging ---
 AIOFILES_AVAILABLE = False
 try:
     import aiofiles
+
     AIOFILES_AVAILABLE = True
 except ImportError:
     AIOFILES_AVAILABLE = False
@@ -55,7 +61,7 @@ quantum_logger = logging.getLogger("simulation.quantum")
 quantum_logger.setLevel(logging.INFO)
 if not quantum_logger.hasHandlers():
     handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
     handler.setFormatter(formatter)
     quantum_logger.addHandler(handler)
 
@@ -64,7 +70,10 @@ _metrics_registry = CollectorRegistry(auto_describe=True)
 _metrics_lock = threading.Lock()
 
 if PROMETHEUS_AVAILABLE:
-    def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
+
+    def get_or_create_metric(
+        metric_type, name, documentation, labelnames=None, buckets=None
+    ):
         if labelnames is None:
             labelnames = ()
         with _metrics_lock:
@@ -73,25 +82,68 @@ if PROMETHEUS_AVAILABLE:
                 if isinstance(existing_metric, metric_type):
                     return existing_metric
                 else:
-                    quantum_logger.warning(f"Metric '{name}' already registered with a different type. Reusing existing.")
+                    quantum_logger.warning(
+                        f"Metric '{name}' already registered with a different type. Reusing existing."
+                    )
                     return existing_metric
             except KeyError:
                 if metric_type == Histogram:
-                    metric = metric_type(name, documentation, labelnames=labelnames, buckets=buckets or Histogram.DEFAULT_BUCKETS, registry=_metrics_registry)
+                    metric = metric_type(
+                        name,
+                        documentation,
+                        labelnames=labelnames,
+                        buckets=buckets or Histogram.DEFAULT_BUCKETS,
+                        registry=_metrics_registry,
+                    )
                 elif metric_type == Counter:
-                    metric = metric_type(name, documentation, labelnames=labelnames, registry=_metrics_registry)
+                    metric = metric_type(
+                        name,
+                        documentation,
+                        labelnames=labelnames,
+                        registry=_metrics_registry,
+                    )
                 elif metric_type == Gauge:
-                    metric = metric_type(name, documentation, labelnames=labelnames, registry=_metrics_registry)
+                    metric = metric_type(
+                        name,
+                        documentation,
+                        labelnames=labelnames,
+                        registry=_metrics_registry,
+                    )
                 else:
                     raise ValueError(f"Unsupported metric type: {metric_type}")
                 return metric
 
     QUANTUM_METRICS = {
-        "operation_total": get_or_create_metric(Counter, "quantum_operation_total", "Total quantum operations processed", ["operation_type", "backend", "status"]),
-        "backend_health": get_or_create_metric(Gauge, "quantum_backend_health", "Health status of quantum/classical backends (1=healthy, 0=unhealthy)", ["backend_name"]),
-        "input_validation_errors": get_or_create_metric(Counter, "quantum_input_validation_errors_total", "Total input validation errors for quantum operations", ["operation_type"]),
-        "operation_latency": get_or_create_metric(Histogram, "quantum_operation_latency_seconds", "Latency of quantum operations", ["operation_type", "backend"]),
-        "alerts_total": get_or_create_metric(Counter, "quantum_alerts_total", "Total alerts raised by the quantum module", ["level"]),
+        "operation_total": get_or_create_metric(
+            Counter,
+            "quantum_operation_total",
+            "Total quantum operations processed",
+            ["operation_type", "backend", "status"],
+        ),
+        "backend_health": get_or_create_metric(
+            Gauge,
+            "quantum_backend_health",
+            "Health status of quantum/classical backends (1=healthy, 0=unhealthy)",
+            ["backend_name"],
+        ),
+        "input_validation_errors": get_or_create_metric(
+            Counter,
+            "quantum_input_validation_errors_total",
+            "Total input validation errors for quantum operations",
+            ["operation_type"],
+        ),
+        "operation_latency": get_or_create_metric(
+            Histogram,
+            "quantum_operation_latency_seconds",
+            "Latency of quantum operations",
+            ["operation_type", "backend"],
+        ),
+        "alerts_total": get_or_create_metric(
+            Counter,
+            "quantum_alerts_total",
+            "Total alerts raised by the quantum module",
+            ["level"],
+        ),
     }
 else:
     QUANTUM_METRICS = {}
@@ -101,56 +153,76 @@ QISKIT_AVAILABLE = False
 try:
     from qiskit import QuantumCircuit, transpile
     from qiskit.providers.aer import AerSimulator
+
     QISKIT_AVAILABLE = True
     quantum_logger.info("Qiskit available.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(1)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(1)
 except ImportError:
-    quantum_logger.warning("Qiskit not available. Real quantum circuit backend disabled.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(0)
+    quantum_logger.warning(
+        "Qiskit not available. Real quantum circuit backend disabled."
+    )
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(0)
 
 DWAVE_AVAILABLE = False
 try:
     import dwavebinarycsp
     from dwave.system import EmbeddingComposite, DWaveSampler
+
     DWAVE_AVAILABLE = True
     quantum_logger.info("D-Wave Ocean available.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(1)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(1)
 except ImportError:
     quantum_logger.warning("D-Wave Ocean not available. D-Wave backend disabled.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(0)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(0)
 
 SCIPY_AVAILABLE = False
 try:
     from scipy.optimize import dual_annealing
+
     SCIPY_AVAILABLE = True
     quantum_logger.info("scipy available.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(1)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(1)
 except ImportError:
-    quantum_logger.warning("scipy not available. Simulated Annealing backend will not function.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(0)
+    quantum_logger.warning(
+        "scipy not available. Simulated Annealing backend will not function."
+    )
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(0)
 
 DEAP_AVAILABLE = False
 try:
     from deap import base, creator, tools
+
     DEAP_AVAILABLE = True
     quantum_logger.info("deap available.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(1)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(1)
 except ImportError:
     quantum_logger.warning("deap not available. GA backend will not function.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(0)
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(0)
 
 TORCH_RL_AVAILABLE = False
 try:
     import torch
     from torch import nn
+
     TORCH_RL_AVAILABLE = True
     quantum_logger.info("PyTorch available for QuantumRLAgent.")
 except ImportError:
-    quantum_logger.warning("PyTorch not available for QuantumRLAgent. Classical RL agent will not function.")
+    quantum_logger.warning(
+        "PyTorch not available for QuantumRLAgent. Classical RL agent will not function."
+    )
 
 try:
     import boto3
     from botocore.exceptions import ClientError
+
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
@@ -158,17 +230,27 @@ except ImportError:
 
 try:
     from tenacity import retry, stop_after_attempt, wait_exponential, reraise
+
     TENACITY_AVAILABLE = True
 except ImportError:
     TENACITY_AVAILABLE = False
+
     def retry(*args, **kwargs):
-        def wrap(f): return f
+        def wrap(f):
+            return f
+
         return wrap
-    def stop_after_attempt(x): return None
-    def wait_exponential(*args, **kwargs): return None
+
+    def stop_after_attempt(x):
+        return None
+
+    def wait_exponential(*args, **kwargs):
+        return None
+
 
 try:
     from test_generation.audit_log import AuditLogger as DLTLogger
+
     AUDIT_LOGGER_AVAILABLE = True
 except ImportError:
     AUDIT_LOGGER_AVAILABLE = False
@@ -185,6 +267,7 @@ async def send_pagerduty_alert(message, level):
     except Exception as e:
         quantum_logger.error(f"Failed to send PagerDuty alert: {e}")
 
+
 async def send_slack_alert(message, level):
     """Send alert to Slack."""
     try:
@@ -193,6 +276,7 @@ async def send_slack_alert(message, level):
         pass
     except Exception as e:
         quantum_logger.error(f"Failed to send Slack alert: {e}")
+
 
 async def alert_operator(message: str, level: str = "CRITICAL"):
     """
@@ -222,56 +306,66 @@ async def alert_operator(message: str, level: str = "CRITICAL"):
 # --- Flexible Credential Management System ---
 class CredentialProvider(ABC):
     """Abstract base class for credential providers."""
+
     @abstractmethod
     async def get_credentials(self, key: str) -> Dict[str, Any]:
         """Get credentials for the given key."""
         pass
 
+
 class AWSCredentialProvider(CredentialProvider):
     """AWS Secrets Manager credential provider."""
+
     async def get_credentials(self, key: str) -> Dict[str, Any]:
         if not BOTO3_AVAILABLE:
             raise RuntimeError("Boto3 not available for AWS secrets")
         client = boto3.client("secretsmanager")
         try:
             response = await asyncio.to_thread(
-                client.get_secret_value,
-                SecretId=f"quantum/{key}"
+                client.get_secret_value, SecretId=f"quantum/{key}"
             )
             return json.loads(response["SecretString"])
         except Exception as e:
             quantum_logger.error(f"Failed to load credentials from AWS: {e}")
             raise
 
+
 class VaultCredentialProvider(CredentialProvider):
     """HashiCorp Vault credential provider."""
+
     async def get_credentials(self, key: str) -> Dict[str, Any]:
         quantum_logger.debug("Vault provider not implemented.")
         raise NotImplementedError("VaultCredentialProvider not implemented")
 
+
 class EnvCredentialProvider(CredentialProvider):
     """Environment-based credential provider."""
+
     async def get_credentials(self, key: str) -> Dict[str, Any]:
-        env_var = key.upper().replace('-', '_')
+        env_var = key.upper().replace("-", "_")
         creds = os.environ.get(f"QUANTUM_CREDS_{env_var}")
         if creds:
             return json.loads(creds)
         raise ValueError(f"Environment variable QUANTUM_CREDS_{env_var} not found")
 
+
 class FileCredentialProvider(CredentialProvider):
     """File-based credential provider (for development)."""
+
     async def get_credentials(self, key: str) -> Dict[str, Any]:
-        file_path = os.environ.get("QUANTUM_CRED_FILE_PATH", f"~/.quantum/creds.json")
+        file_path = os.environ.get("QUANTUM_CRED_FILE_PATH", "~/.quantum/creds.json")
         path = os.path.expanduser(file_path)
         if os.path.exists(path):
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 all_creds = json.load(f)
                 if key in all_creds:
                     return all_creds[key]
         raise FileNotFoundError(f"Credentials for {key} not found in {path}")
 
+
 class CredentialManager:
     """Manages credentials from various providers."""
+
     def __init__(self):
         self.providers: List[CredentialProvider] = []
         self.credentials_cache: Dict[str, Any] = {}
@@ -281,7 +375,10 @@ class CredentialManager:
 
     def _register_providers(self):
         """Register credential providers based on configuration."""
-        if os.environ.get("QUANTUM_CRED_PROVIDER_AWS", "true").lower() == "true" and BOTO3_AVAILABLE:
+        if (
+            os.environ.get("QUANTUM_CRED_PROVIDER_AWS", "true").lower() == "true"
+            and BOTO3_AVAILABLE
+        ):
             self.providers.append(AWSCredentialProvider())
         if os.environ.get("QUANTUM_CRED_PROVIDER_VAULT", "false").lower() == "true":
             self.providers.append(VaultCredentialProvider())
@@ -293,7 +390,9 @@ class CredentialManager:
     async def get_credentials(self, key: str) -> Dict[str, Any]:
         """Get credentials from the first successful provider."""
         async with self._cache_lock:
-            if key in self.credentials_cache and time.time() < self.cache_expiry.get(key, 0):
+            if key in self.credentials_cache and time.time() < self.cache_expiry.get(
+                key, 0
+            ):
                 return self.credentials_cache[key]
         for provider in self.providers:
             try:
@@ -303,11 +402,15 @@ class CredentialManager:
                     self.cache_expiry[key] = time.time() + 3600
                 return credentials
             except Exception as e:
-                quantum_logger.warning(f"Provider {provider.__class__.__name__} failed: {e}")
+                quantum_logger.warning(
+                    f"Provider {provider.__class__.__name__} failed: {e}"
+                )
                 continue
         raise RuntimeError(f"Failed to get credentials for {key} from any provider")
 
+
 credential_manager = CredentialManager()
+
 
 async def load_quantum_credentials(backend: str) -> Dict[str, Any]:
     """Load credentials for the specified quantum backend."""
@@ -318,9 +421,11 @@ async def load_quantum_credentials(backend: str) -> Dict[str, Any]:
         await alert_operator(f"Failed to load credentials for {backend}", "CRITICAL")
         raise RuntimeError(f"Cannot load credentials for {backend}") from e
 
+
 # --- Connection Pooling and Resource Management ---
 class BackendClientPool:
     """Manages connections to quantum backends."""
+
     def __init__(self):
         self.clients: Dict[str, Any] = {}
         self.last_used: Dict[str, float] = {}
@@ -350,7 +455,9 @@ class BackendClientPool:
             now = time.time()
             expired_keys = []
             for key, last_used_time in self.last_used.items():
-                if (now - last_used_time > 1800) or (now - self.creation_time.get(key, now) > 7200):
+                if (now - last_used_time > 1800) or (
+                    now - self.creation_time.get(key, now) > 7200
+                ):
                     expired_keys.append(key)
             for key in expired_keys:
                 client = self.clients.pop(key, None)
@@ -360,7 +467,8 @@ class BackendClientPool:
 
     async def _close_client(self, key, client):
         """Close a client connection."""
-        if client is None: return
+        if client is None:
+            return
         try:
             if hasattr(client, "close") and callable(client.close):
                 await asyncio.to_thread(client.close)
@@ -375,7 +483,7 @@ class BackendClientPool:
             if client_key in self.clients:
                 self.last_used[client_key] = time.time()
                 return self.clients[client_key]
-            
+
             client = await self._create_client(backend, **kwargs)
             self.clients[client_key] = client
             self.last_used[client_key] = time.time()
@@ -394,11 +502,13 @@ class BackendClientPool:
         raise ValueError(f"Unknown backend for client creation: {backend}")
 
     def _create_qiskit_client(self, **kwargs):
-        if not QISKIT_AVAILABLE: raise RuntimeError("Qiskit not available")
+        if not QISKIT_AVAILABLE:
+            raise RuntimeError("Qiskit not available")
         return AerSimulator()
 
     def _create_dwave_client(self, token: str):
-        if not DWAVE_AVAILABLE: raise RuntimeError("D-Wave not available")
+        if not DWAVE_AVAILABLE:
+            raise RuntimeError("D-Wave not available")
         return EmbeddingComposite(DWaveSampler(token=token))
 
     def _hash_kwargs(self, kwargs):
@@ -421,11 +531,14 @@ class BackendClientPool:
             self.last_used.clear()
             self.creation_time.clear()
 
+
 backend_client_pool = BackendClientPool()
+
 
 # --- Robust Audit Logging ---
 class AuditLogger:
     """Handles audit logging with fallback mechanisms."""
+
     def __init__(self):
         self.dlt_logger: Optional[DLTLogger] = None
         self.fallback_file: Optional[str] = None
@@ -435,29 +548,46 @@ class AuditLogger:
 
     async def initialize(self):
         """Initialize the audit logger."""
-        if self.initialized: return
+        if self.initialized:
+            return
         async with self._lock:
-            if self.initialized: return
+            if self.initialized:
+                return
             if AUDIT_LOGGER_AVAILABLE:
                 try:
                     self.dlt_logger = DLTLogger.from_environment()
                     quantum_logger.info("DLT audit logger initialized.")
                 except Exception as e:
-                    quantum_logger.warning(f"Failed to initialize DLT logger: {e}, using fallbacks")
-            
+                    quantum_logger.warning(
+                        f"Failed to initialize DLT logger: {e}, using fallbacks"
+                    )
+
             if not self.dlt_logger and AIOFILES_AVAILABLE:
                 try:
                     audit_dir = os.environ.get("QUANTUM_AUDIT_DIR", "./audit_logs")
                     os.makedirs(audit_dir, exist_ok=True)
-                    self.fallback_file = os.path.join(audit_dir, f"quantum_audit_{time.strftime('%Y%m%d')}.log")
-                    quantum_logger.info(f"Using file-based audit logging: {self.fallback_file}")
+                    self.fallback_file = os.path.join(
+                        audit_dir, f"quantum_audit_{time.strftime('%Y%m%d')}.log"
+                    )
+                    quantum_logger.info(
+                        f"Using file-based audit logging: {self.fallback_file}"
+                    )
                 except Exception as e:
-                    quantum_logger.error(f"Failed to set up fallback audit logging: {e}")
+                    quantum_logger.error(
+                        f"Failed to set up fallback audit logging: {e}"
+                    )
             self.initialized = True
 
-    async def log_event(self, kind: str, name: str, details: Dict[str, Any], correlation_id: Optional[str] = None):
+    async def log_event(
+        self,
+        kind: str,
+        name: str,
+        details: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+    ):
         """Log an audit event."""
-        if not self.initialized: await self.initialize()
+        if not self.initialized:
+            await self.initialize()
 
         async with self._lock:
             self.sequence += 1
@@ -467,16 +597,24 @@ class AuditLogger:
         log_entry = {
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "correlation_id": correlation_id,
-            "kind": kind, "name": name, "details": details
+            "kind": kind,
+            "name": name,
+            "details": details,
         }
-        
+
         if self.dlt_logger:
             try:
-                await self.dlt_logger.add_entry(kind=kind, name=name, detail=details, agent_id="quantum_plugin", correlation_id=correlation_id)
+                await self.dlt_logger.add_entry(
+                    kind=kind,
+                    name=name,
+                    detail=details,
+                    agent_id="quantum_plugin",
+                    correlation_id=correlation_id,
+                )
                 return
             except Exception as e:
                 quantum_logger.warning(f"DLT audit logging failed: {e}, using fallback")
-        
+
         if self.fallback_file:
             try:
                 async with aiofiles.open(self.fallback_file, "a") as f:
@@ -484,8 +622,9 @@ class AuditLogger:
                 return
             except Exception as e:
                 quantum_logger.warning(f"File audit logging failed: {e}, using console")
-        
+
         quantum_logger.info(f"AUDIT: {json.dumps(log_entry)}")
+
 
 audit_logger = AuditLogger()
 
@@ -494,12 +633,21 @@ audit_logger = AuditLogger()
 def check_any_backend_available():
     """Checks if at least one quantum or classical backend is available."""
     if not (QISKIT_AVAILABLE or DWAVE_AVAILABLE or SCIPY_AVAILABLE or DEAP_AVAILABLE):
-        quantum_logger.critical("CRITICAL: No quantum or classical backends are available. Aborting.")
+        quantum_logger.critical(
+            "CRITICAL: No quantum or classical backends are available. Aborting."
+        )
         if PROMETHEUS_AVAILABLE:
-            QUANTUM_METRICS["backend_health"].labels(backend_name="overall_quantum_module").set(0)
-        raise RuntimeError("No quantum or classical backends are available. Quantum features disabled.")
+            QUANTUM_METRICS["backend_health"].labels(
+                backend_name="overall_quantum_module"
+            ).set(0)
+        raise RuntimeError(
+            "No quantum or classical backends are available. Quantum features disabled."
+        )
     if PROMETHEUS_AVAILABLE:
-        QUANTUM_METRICS["backend_health"].labels(backend_name="overall_quantum_module").set(1)
+        QUANTUM_METRICS["backend_health"].labels(
+            backend_name="overall_quantum_module"
+        ).set(1)
+
 
 async def check_backend_health(backend: str) -> bool:
     """Performs a health check on a given quantum backend."""
@@ -507,22 +655,27 @@ async def check_backend_health(backend: str) -> bool:
         if backend == "qiskit" and QISKIT_AVAILABLE:
             client = await backend_client_pool.get_client("qiskit")
             client.status()
-            if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(1)
+            if PROMETHEUS_AVAILABLE:
+                QUANTUM_METRICS["backend_health"].labels(backend_name="qiskit").set(1)
             return True
         if backend == "dwave" and DWAVE_AVAILABLE:
             client = await backend_client_pool.get_client("dwave")
             client.sampler.client.is_solvent()
-            if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(1)
+            if PROMETHEUS_AVAILABLE:
+                QUANTUM_METRICS["backend_health"].labels(backend_name="dwave").set(1)
             return True
         if backend == "scipy" and SCIPY_AVAILABLE:
-            if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(1)
+            if PROMETHEUS_AVAILABLE:
+                QUANTUM_METRICS["backend_health"].labels(backend_name="scipy").set(1)
             return True
         if backend == "ga" and DEAP_AVAILABLE:
-            if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(1)
+            if PROMETHEUS_AVAILABLE:
+                QUANTUM_METRICS["backend_health"].labels(backend_name="ga").set(1)
             return True
     except Exception as e:
         quantum_logger.warning(f"Health check for backend '{backend}' failed: {e}")
-        if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["backend_health"].labels(backend_name=backend).set(0)
+        if PROMETHEUS_AVAILABLE:
+            QUANTUM_METRICS["backend_health"].labels(backend_name=backend).set(0)
     return False
 
 
@@ -531,52 +684,85 @@ def _validate_secure_path_logic(v: str) -> str:
     """Shared logic for secure path validation."""
     if not isinstance(v, str) or not v:
         raise ValueError("code_file must be a non-empty string")
-    
+
     v_norm = os.path.normpath(v)
-    if '..' in v_norm.split(os.path.sep):
+    if ".." in v_norm.split(os.path.sep):
         raise ValueError("Path traversal detected in code_file")
-    
+
     allowed_dirs_str = os.environ.get("QUANTUM_ALLOWED_DIRS", "")
-    allowed_dirs = allowed_dirs_str.split(":") if allowed_dirs_str else ["/opt/quantum/code", "./code", "./examples"]
-    
+    allowed_dirs = (
+        allowed_dirs_str.split(":")
+        if allowed_dirs_str
+        else ["/opt/quantum/code", "./code", "./examples"]
+    )
+
     abs_path = os.path.abspath(v_norm)
     allowed_abs_dirs = [os.path.abspath(d) for d in allowed_dirs]
     if not any(abs_path.startswith(allowed_dir) for allowed_dir in allowed_abs_dirs):
-        raise ValueError(f"Code file must be in one of the allowed directories: {', '.join(allowed_dirs)}")
-    
+        raise ValueError(
+            f"Code file must be in one of the allowed directories: {', '.join(allowed_dirs)}"
+        )
+
     if not os.path.isfile(abs_path):
         raise ValueError(f"File does not exist: {v}")
-    
-    allowed_extensions = ['.py', '.qasm', '.qiskit']
-    if not any(abs_path.endswith(ext) for ext in allowed_extensions):
-        raise ValueError(f"File must have one of the following extensions: {', '.join(allowed_extensions)}")
 
-    if os.name != 'nt':
+    allowed_extensions = [".py", ".qasm", ".qiskit"]
+    if not any(abs_path.endswith(ext) for ext in allowed_extensions):
+        raise ValueError(
+            f"File must have one of the following extensions: {', '.join(allowed_extensions)}"
+        )
+
+    if os.name != "nt":
         file_stat = os.stat(abs_path)
         if file_stat.st_mode & 0o777 & ~0o644:
-            raise ValueError(f"File has unsafe permissions: {oct(file_stat.st_mode & 0o777)}")
+            raise ValueError(
+                f"File has unsafe permissions: {oct(file_stat.st_mode & 0o777)}"
+            )
     return v_norm
 
+
 if PYDANTIC_AVAILABLE:
+
     class RunMutationCircuitParams(BaseModel):
-        code_file: str = Field(..., min_length=1, max_length=255, description="Path to the code file for mutation.")
-        backend: str = Field("auto", pattern="^(auto|qiskit|dwave|scipy)$", description="Backend to use for mutation.")
-        n_qubits: int = Field(5, ge=1, le=10, description="Number of qubits for Qiskit circuit.")
-        n_vars: int = Field(5, ge=1, le=10, description="Number of variables for D-Wave problem.")
-        backend_config: Dict[str, Any] = Field(default_factory=dict, description="Configuration specific to the chosen backend.")
-        
-        @validator('code_file')
+        code_file: str = Field(
+            ...,
+            min_length=1,
+            max_length=255,
+            description="Path to the code file for mutation.",
+        )
+        backend: str = Field(
+            "auto",
+            pattern="^(auto|qiskit|dwave|scipy)$",
+            description="Backend to use for mutation.",
+        )
+        n_qubits: int = Field(
+            5, ge=1, le=10, description="Number of qubits for Qiskit circuit."
+        )
+        n_vars: int = Field(
+            5, ge=1, le=10, description="Number of variables for D-Wave problem."
+        )
+        backend_config: Dict[str, Any] = Field(
+            default_factory=dict,
+            description="Configuration specific to the chosen backend.",
+        )
+
+        @validator("code_file")
         def validate_secure_path(cls, v):
             return _validate_secure_path_logic(v)
 
     class ForecastFailureTrendParams(BaseModel):
-        trend_data: List[float] = Field(..., min_items=2, description="List of historical trend data points.")
-        @validator('trend_data')
+        trend_data: List[float] = Field(
+            ..., min_items=2, description="List of historical trend data points."
+        )
+
+        @validator("trend_data")
         def check_trend_data_values(cls, v):
             if not all(isinstance(x, (int, float)) for x in v):
                 raise ValueError("All trend_data elements must be numbers.")
             return v
+
 else:
+
     class RunMutationCircuitParams:
         def __init__(self, **kwargs):
             self.code_file = kwargs.get("code_file", "N/A")
@@ -585,7 +771,7 @@ else:
             self.n_vars = kwargs.get("n_vars", 5)
             self.backend_config = kwargs.get("backend_config", {})
             self.validate()
-        
+
         def validate(self):
             self.code_file = _validate_secure_path_logic(self.code_file)
             if self.backend not in ["auto", "qiskit", "dwave", "scipy"]:
@@ -604,217 +790,499 @@ else:
 
         def validate(self):
             if not isinstance(self.trend_data, list) or len(self.trend_data) < 2:
-                raise ValueError("trend_data must be a list with at least two elements.")
+                raise ValueError(
+                    "trend_data must be a list with at least two elements."
+                )
             if not all(isinstance(x, (int, float)) for x in self.trend_data):
                 raise ValueError("All trend_data elements must be numbers.")
 
 
 # --- Circuit Optimization ---
-def optimize_quantum_circuit(circuit: QuantumCircuit, optimization_level: int = 1) -> QuantumCircuit:
-    if not QISKIT_AVAILABLE: return circuit
+def optimize_quantum_circuit(
+    circuit: QuantumCircuit, optimization_level: int = 1
+) -> QuantumCircuit:
+    if not QISKIT_AVAILABLE:
+        return circuit
     try:
         return transpile(circuit, optimization_level=optimization_level)
     except Exception as e:
-        quantum_logger.warning(f"Circuit optimization failed: {e}, using original circuit")
+        quantum_logger.warning(
+            f"Circuit optimization failed: {e}, using original circuit"
+        )
         return circuit
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+)
 def _execute_qiskit_job(qc, backend_sim, shots):
     optimized_qc = optimize_quantum_circuit(qc)
     transpiled = transpile(optimized_qc, backend_sim)
     job = backend_sim.run(transpiled, shots=shots)
     return job.result()
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+)
 def _execute_dwave_sampler(bqm, sampler, num_reads):
     return sampler.sample(bqm, num_reads=num_reads)
 
+
 # --- Quantum Mutation using Qiskit, D-Wave, or Classical ---
-async def run_quantum_mutation(code_file: str, backend: str = "auto", config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def run_quantum_mutation(
+    code_file: str, backend: str = "auto", config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     correlation_id = f"quantum-mutation-{code_file}-{time.time()}"
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend=backend, status="attempt").inc()
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["operation_total"].labels(
+            operation_type="run_mutation_circuit", backend=backend, status="attempt"
+        ).inc()
 
     try:
-        params_class = RunMutationCircuitParams if PYDANTIC_AVAILABLE else RunMutationCircuitParams
+        params_class = (
+            RunMutationCircuitParams if PYDANTIC_AVAILABLE else RunMutationCircuitParams
+        )
         params = params_class(code_file=code_file, backend=backend, **(config or {}))
         validated_config = params.backend_config
         n_qubits = params.n_qubits
         n_vars = params.n_vars
     except (ValidationError, ValueError) as e:
         quantum_logger.error(f"Input validation failed for run_quantum_mutation: {e}")
-        if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["input_validation_errors"].labels(operation_type="run_mutation_circuit").inc()
-        await audit_logger.log_event("quantum", "mutation_error", {"code_file": code_file, "backend": backend, "error": str(e)}, correlation_id)
+        if PROMETHEUS_AVAILABLE:
+            QUANTUM_METRICS["input_validation_errors"].labels(
+                operation_type="run_mutation_circuit"
+            ).inc()
+        await audit_logger.log_event(
+            "quantum",
+            "mutation_error",
+            {"code_file": code_file, "backend": backend, "error": str(e)},
+            correlation_id,
+        )
         return {"status": "ERROR", "reason": f"Input validation failed: {e}"}
 
-    with QUANTUM_METRICS["operation_latency"].labels(operation_type="run_mutation_circuit", backend=backend).time():
+    with QUANTUM_METRICS["operation_latency"].labels(
+        operation_type="run_mutation_circuit", backend=backend
+    ).time():
         # Qiskit Backend
         if backend in ("auto", "qiskit") and QISKIT_AVAILABLE:
             try:
                 qc = QuantumCircuit(n_qubits)
-                for i in range(n_qubits): qc.h(i)
-                for i in range(n_qubits - 1): qc.cx(i, i + 1)
+                for i in range(n_qubits):
+                    qc.h(i)
+                for i in range(n_qubits - 1):
+                    qc.cx(i, i + 1)
                 qc.measure_all()
                 backend_sim = await backend_client_pool.get_client("qiskit")
-                result = await asyncio.to_thread(_execute_qiskit_job, qc, backend_sim, 1024)
+                result = await asyncio.to_thread(
+                    _execute_qiskit_job, qc, backend_sim, 1024
+                )
                 counts = result.get_counts()
                 bitstring = max(counts, key=counts.get)
                 fitness = int(bitstring, 2)
-                quantum_logger.info(f"Qiskit mutation: best={bitstring} (fitness={fitness})")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="qiskit", status="completed").inc()
-                await audit_logger.log_event("quantum", "mutation", {"code_file": code_file, "backend": "qiskit", "result": fitness}, correlation_id)
-                return {"status": "COMPLETED", "quantum_result": fitness, "mutated_state": bitstring, "backend": "qiskit"}
+                quantum_logger.info(
+                    f"Qiskit mutation: best={bitstring} (fitness={fitness})"
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="qiskit",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation",
+                    {"code_file": code_file, "backend": "qiskit", "result": fitness},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "quantum_result": fitness,
+                    "mutated_state": bitstring,
+                    "backend": "qiskit",
+                }
             except Exception as e:
-                quantum_logger.error(f"Qiskit quantum mutation failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="qiskit", status="failed").inc()
-                await audit_logger.log_event("quantum", "mutation_error", {"code_file": code_file, "backend": "qiskit", "error": str(e)}, correlation_id)
-                if backend == "qiskit": return {"status": "ERROR", "reason": f"Qiskit backend failed: {e}"}
+                quantum_logger.error(
+                    f"Qiskit quantum mutation failed: {e}", exc_info=True
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="qiskit",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation_error",
+                    {"code_file": code_file, "backend": "qiskit", "error": str(e)},
+                    correlation_id,
+                )
+                if backend == "qiskit":
+                    return {"status": "ERROR", "reason": f"Qiskit backend failed: {e}"}
 
         # D-Wave Backend
         if backend in ("auto", "dwave") and DWAVE_AVAILABLE:
             try:
-                csp = dwavebinarycsp.ConstraintSatisfactionProblem(dwavebinarycsp.BINARY)
-                for i in range(n_vars): csp.add_constraint(lambda *args: sum(args) % 2 == 0, [f"x{i}", f"x{(i+1)%n_vars}"])
+                csp = dwavebinarycsp.ConstraintSatisfactionProblem(
+                    dwavebinarycsp.BINARY
+                )
+                for i in range(n_vars):
+                    csp.add_constraint(
+                        lambda *args: sum(args) % 2 == 0, [f"x{i}", f"x{(i+1)%n_vars}"]
+                    )
                 bqm = dwavebinarycsp.stitch(csp)
                 sampler = await backend_client_pool.get_client("dwave")
-                sample = await asyncio.to_thread(_execute_dwave_sampler, bqm, sampler, 10)
+                sample = await asyncio.to_thread(
+                    _execute_dwave_sampler, bqm, sampler, 10
+                )
                 best = next(iter(sample))
                 fitness = sum(best.values())
-                quantum_logger.info(f"D-Wave mutation: result={best}, fitness={fitness}")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="dwave", status="completed").inc()
-                await audit_logger.log_event("quantum", "mutation", {"code_file": code_file, "backend": "dwave", "result": fitness}, correlation_id)
-                return {"status": "COMPLETED", "quantum_result": fitness, "mutated_state": dict(best), "backend": "dwave"}
+                quantum_logger.info(
+                    f"D-Wave mutation: result={best}, fitness={fitness}"
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="dwave",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation",
+                    {"code_file": code_file, "backend": "dwave", "result": fitness},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "quantum_result": fitness,
+                    "mutated_state": dict(best),
+                    "backend": "dwave",
+                }
             except Exception as e:
-                quantum_logger.error(f"D-Wave quantum mutation failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="dwave", status="failed").inc()
-                await audit_logger.log_event("quantum", "mutation_error", {"code_file": code_file, "backend": "dwave", "error": str(e)}, correlation_id)
-                if backend == "dwave": return {"status": "ERROR", "reason": f"D-Wave backend failed: {e}"}
+                quantum_logger.error(
+                    f"D-Wave quantum mutation failed: {e}", exc_info=True
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="dwave",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation_error",
+                    {"code_file": code_file, "backend": "dwave", "error": str(e)},
+                    correlation_id,
+                )
+                if backend == "dwave":
+                    return {"status": "ERROR", "reason": f"D-Wave backend failed: {e}"}
 
         # Scipy (Classical) Fallback
         if SCIPY_AVAILABLE:
             try:
-                def fitness(x): return np.sum(x ** 2)
+
+                def fitness(x):
+                    return np.sum(x**2)
+
                 bounds = [(-5, 5)] * 10
                 result = await asyncio.to_thread(dual_annealing, fitness, bounds)
                 quantum_logger.info(f"SA mutation: best fitness={result.fun}")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="scipy", status="completed").inc()
-                await audit_logger.log_event("quantum", "mutation", {"code_file": code_file, "backend": "scipy", "result": result.fun}, correlation_id)
-                return {"status": "COMPLETED", "quantum_result": float(result.fun), "mutated_state": result.x.tolist(), "backend": "scipy"}
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="scipy",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation",
+                    {"code_file": code_file, "backend": "scipy", "result": result.fun},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "quantum_result": float(result.fun),
+                    "mutated_state": result.x.tolist(),
+                    "backend": "scipy",
+                }
             except Exception as e:
                 quantum_logger.error(f"Scipy SA mutation failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="scipy", status="failed").inc()
-                await audit_logger.log_event("quantum", "mutation_error", {"code_file": code_file, "backend": "scipy", "error": str(e)}, correlation_id)
-                if backend == "scipy": return {"status": "ERROR", "reason": f"Scipy backend failed: {e}"}
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="run_mutation_circuit",
+                        backend="scipy",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "mutation_error",
+                    {"code_file": code_file, "backend": "scipy", "error": str(e)},
+                    correlation_id,
+                )
+                if backend == "scipy":
+                    return {"status": "ERROR", "reason": f"Scipy backend failed: {e}"}
 
         quantum_logger.error("No suitable backend available for mutation.")
-        if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="run_mutation_circuit", backend="none", status="failed").inc()
-        await audit_logger.log_event("quantum", "mutation_error", {"code_file": code_file, "backend": "none", "error": "No suitable backend"}, correlation_id)
-        return {"status": "ERROR", "reason": "No suitable backend available for mutation."}
+        if PROMETHEUS_AVAILABLE:
+            QUANTUM_METRICS["operation_total"].labels(
+                operation_type="run_mutation_circuit", backend="none", status="failed"
+            ).inc()
+        await audit_logger.log_event(
+            "quantum",
+            "mutation_error",
+            {"code_file": code_file, "backend": "none", "error": "No suitable backend"},
+            correlation_id,
+        )
+        return {
+            "status": "ERROR",
+            "reason": "No suitable backend available for mutation.",
+        }
+
 
 # --- Quantum Forecast using Qiskit, D-Wave, or Classical GA ---
 async def quantum_forecast_failure(trend_data: List[float]) -> Dict[str, Any]:
     correlation_id = f"quantum-forecast-{time.time()}"
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="auto", status="attempt").inc()
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["operation_total"].labels(
+            operation_type="forecast_failure_trend", backend="auto", status="attempt"
+        ).inc()
 
     try:
         params = ForecastFailureTrendParams(trend_data=trend_data)
         validated_trend = params.trend_data
     except (ValidationError, ValueError) as e:
-        quantum_logger.error(f"Input validation failed for quantum_forecast_failure: {e}")
-        if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["input_validation_errors"].labels(operation_type="forecast_failure_trend").inc()
-        await audit_logger.log_event("quantum", "forecast_error", {"error": str(e)}, correlation_id)
+        quantum_logger.error(
+            f"Input validation failed for quantum_forecast_failure: {e}"
+        )
+        if PROMETHEUS_AVAILABLE:
+            QUANTUM_METRICS["input_validation_errors"].labels(
+                operation_type="forecast_failure_trend"
+            ).inc()
+        await audit_logger.log_event(
+            "quantum", "forecast_error", {"error": str(e)}, correlation_id
+        )
         return {"status": "ERROR", "reason": f"Input validation failed: {e}"}
 
-    with QUANTUM_METRICS["operation_latency"].labels(operation_type="forecast_failure_trend", backend="auto").time():
+    with QUANTUM_METRICS["operation_latency"].labels(
+        operation_type="forecast_failure_trend", backend="auto"
+    ).time():
         if QISKIT_AVAILABLE:
             try:
                 n_qubits = min(5, len(validated_trend))
                 qc = QuantumCircuit(n_qubits)
-                for i in range(n_qubits): qc.h(i)
+                for i in range(n_qubits):
+                    qc.h(i)
                 qc.measure_all()
                 backend_sim = await backend_client_pool.get_client("qiskit")
-                result = await asyncio.to_thread(_execute_qiskit_job, qc, backend_sim, 256)
+                result = await asyncio.to_thread(
+                    _execute_qiskit_job, qc, backend_sim, 256
+                )
                 counts = result.get_counts()
                 bitstrings = [int(b, 2) for b in counts.keys()]
                 weights = np.array(list(counts.values())) / sum(counts.values())
                 forecast = np.average(bitstrings, weights=weights)
                 quantum_logger.info(f"Qiskit forecast: {forecast}")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="qiskit", status="completed").inc()
-                await audit_logger.log_event("quantum", "forecast", {"backend": "qiskit", "result": forecast}, correlation_id)
-                return {"status": "COMPLETED", "forecast": float(forecast), "backend": "qiskit"}
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="qiskit",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast",
+                    {"backend": "qiskit", "result": forecast},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "forecast": float(forecast),
+                    "backend": "qiskit",
+                }
             except Exception as e:
-                quantum_logger.error(f"Qiskit quantum forecast failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="qiskit", status="failed").inc()
-                await audit_logger.log_event("quantum", "forecast_error", {"backend": "qiskit", "error": str(e)}, correlation_id)
+                quantum_logger.error(
+                    f"Qiskit quantum forecast failed: {e}", exc_info=True
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="qiskit",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast_error",
+                    {"backend": "qiskit", "error": str(e)},
+                    correlation_id,
+                )
 
         if DWAVE_AVAILABLE:
             try:
                 n_vars = min(5, len(validated_trend))
-                csp = dwavebinarycsp.ConstraintSatisfactionProblem(dwavebinarycsp.BINARY)
-                for i in range(n_vars): csp.add_constraint(lambda *args: sum(args) % 2 == 1, [f"x{i}", f"x{(i+1)%n_vars}"])
+                csp = dwavebinarycsp.ConstraintSatisfactionProblem(
+                    dwavebinarycsp.BINARY
+                )
+                for i in range(n_vars):
+                    csp.add_constraint(
+                        lambda *args: sum(args) % 2 == 1, [f"x{i}", f"x{(i+1)%n_vars}"]
+                    )
                 bqm = dwavebinarycsp.stitch(csp)
                 sampler = await backend_client_pool.get_client("dwave")
-                sample = await asyncio.to_thread(_execute_dwave_sampler, bqm, sampler, 10)
+                sample = await asyncio.to_thread(
+                    _execute_dwave_sampler, bqm, sampler, 10
+                )
                 best = next(iter(sample))
                 forecast = sum(best.values()) + random.uniform(-1, 1)
                 quantum_logger.info(f"D-Wave forecast: {forecast}")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="dwave", status="completed").inc()
-                await audit_logger.log_event("quantum", "forecast", {"backend": "dwave", "result": forecast}, correlation_id)
-                return {"status": "COMPLETED", "forecast": float(forecast), "backend": "dwave"}
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="dwave",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast",
+                    {"backend": "dwave", "result": forecast},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "forecast": float(forecast),
+                    "backend": "dwave",
+                }
             except Exception as e:
-                quantum_logger.error(f"D-Wave quantum forecast failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="dwave", status="failed").inc()
-                await audit_logger.log_event("quantum", "forecast_error", {"backend": "dwave", "error": str(e)}, correlation_id)
+                quantum_logger.error(
+                    f"D-Wave quantum forecast failed: {e}", exc_info=True
+                )
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="dwave",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast_error",
+                    {"backend": "dwave", "error": str(e)},
+                    correlation_id,
+                )
 
         if DEAP_AVAILABLE and len(validated_trend) >= 2:
             try:
                 n = len(validated_trend)
                 target = validated_trend[-1]
-                if not hasattr(creator, "FitnessMin"): creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-                if not hasattr(creator, "Individual"): creator.create("Individual", list, fitness=creator.FitnessMin)
+                if not hasattr(creator, "FitnessMin"):
+                    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+                if not hasattr(creator, "Individual"):
+                    creator.create("Individual", list, fitness=creator.FitnessMin)
                 toolbox = base.Toolbox()
-                toolbox.register("individual", tools.initRepeat, creator.Individual, lambda: random.uniform(-1, 1), n=n)
-                toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+                toolbox.register(
+                    "individual",
+                    tools.initRepeat,
+                    creator.Individual,
+                    lambda: random.uniform(-1, 1),
+                    n=n,
+                )
+                toolbox.register(
+                    "population", tools.initRepeat, list, toolbox.individual
+                )
                 toolbox.register("mate", tools.cxTwoPoint)
                 toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=1, indpb=0.2)
                 toolbox.register("select", tools.selTournament, tournsize=3)
-                def evaluate(ind): return (np.sqrt(np.mean((np.array(ind) - target) ** 2)),)
-                if "evaluate" in toolbox.__dict__: del toolbox.evaluate
+
+                def evaluate(ind):
+                    return (np.sqrt(np.mean((np.array(ind) - target) ** 2)),)
+
+                if "evaluate" in toolbox.__dict__:
+                    del toolbox.evaluate
                 toolbox.register("evaluate", evaluate)
                 pop, NGEN, CXPB, MUTPB = toolbox.population(n=50), 10, 0.5, 0.2
                 for gen in range(NGEN):
                     offspring = list(map(toolbox.clone, toolbox.select(pop, len(pop))))
                     for c1, c2 in zip(offspring[::2], offspring[1::2]):
-                        if random.random() < CXPB: toolbox.mate(c1, c2); del c1.fitness.values; del c2.fitness.values
+                        if random.random() < CXPB:
+                            toolbox.mate(c1, c2)
+                            del c1.fitness.values
+                            del c2.fitness.values
                     for m in offspring:
-                        if random.random() < MUTPB: toolbox.mutate(m); del m.fitness.values
+                        if random.random() < MUTPB:
+                            toolbox.mutate(m)
+                            del m.fitness.values
                     invalid = [ind for ind in offspring if not ind.fitness.valid]
                     fitnesses = map(toolbox.evaluate, invalid)
-                    for ind, fit in zip(invalid, fitnesses): ind.fitness.values = fit
+                    for ind, fit in zip(invalid, fitnesses):
+                        ind.fitness.values = fit
                     pop[:] = offspring
                 best = tools.selBest(pop, 1)[0]
                 forecast = np.mean(best)
                 quantum_logger.info(f"GA forecast: {forecast}")
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="ga", status="completed").inc()
-                await audit_logger.log_event("quantum", "forecast", {"backend": "ga", "result": forecast}, correlation_id)
-                return {"status": "COMPLETED", "forecast": float(forecast), "backend": "ga"}
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="ga",
+                        status="completed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast",
+                    {"backend": "ga", "result": forecast},
+                    correlation_id,
+                )
+                return {
+                    "status": "COMPLETED",
+                    "forecast": float(forecast),
+                    "backend": "ga",
+                }
             except Exception as e:
                 quantum_logger.error(f"DEAP GA forecast failed: {e}", exc_info=True)
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="ga", status="failed").inc()
-                await audit_logger.log_event("quantum", "forecast_error", {"backend": "ga", "error": str(e)}, correlation_id)
-    
-    quantum_logger.warning("No suitable backend for forecasting. Returning mean as fallback.")
-    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type="forecast_failure_trend", backend="none", status="fallback").inc()
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type="forecast_failure_trend",
+                        backend="ga",
+                        status="failed",
+                    ).inc()
+                await audit_logger.log_event(
+                    "quantum",
+                    "forecast_error",
+                    {"backend": "ga", "error": str(e)},
+                    correlation_id,
+                )
+
+    quantum_logger.warning(
+        "No suitable backend for forecasting. Returning mean as fallback."
+    )
+    if PROMETHEUS_AVAILABLE:
+        QUANTUM_METRICS["operation_total"].labels(
+            operation_type="forecast_failure_trend", backend="none", status="fallback"
+        ).inc()
     fallback_result = float(np.mean(validated_trend)) if validated_trend else 0.5
-    await audit_logger.log_event("quantum", "forecast", {"backend": "fallback_mean", "result": fallback_result}, correlation_id)
-    return {"status": "COMPLETED", "forecast": fallback_result, "backend": "fallback_mean"}
+    await audit_logger.log_event(
+        "quantum",
+        "forecast",
+        {"backend": "fallback_mean", "result": fallback_result},
+        correlation_id,
+    )
+    return {
+        "status": "COMPLETED",
+        "forecast": fallback_result,
+        "backend": "fallback_mean",
+    }
 
 
 # --- QuantumRLAgent ---
 class QuantumRLAgent(nn.Module if TORCH_RL_AVAILABLE else object):
     """Hybrid Quantum-Classical Reinforcement Learning Agent."""
+
     def __init__(self, state_dim: int, action_dim: int):
         if not TORCH_RL_AVAILABLE:
-            raise RuntimeError("PyTorch not available! Cannot initialize QuantumRLAgent.")
+            raise RuntimeError(
+                "PyTorch not available! Cannot initialize QuantumRLAgent."
+            )
         super().__init__()
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -823,17 +1291,25 @@ class QuantumRLAgent(nn.Module if TORCH_RL_AVAILABLE else object):
         if self.use_quantum:
             quantum_logger.info("Initializing hybrid quantum-classical RL agent")
             self.pre_process = nn.Linear(state_dim, 4)
-            self.post_process_actor = nn.Sequential(nn.Linear(4, action_dim), nn.Softmax(dim=-1))
-            self.critic = nn.Sequential(nn.Linear(state_dim, 64), nn.Tanh(), nn.Linear(64, 1))
+            self.post_process_actor = nn.Sequential(
+                nn.Linear(4, action_dim), nn.Softmax(dim=-1)
+            )
+            self.critic = nn.Sequential(
+                nn.Linear(state_dim, 64), nn.Tanh(), nn.Linear(64, 1)
+            )
             try:
                 self.simulator = AerSimulator()
                 self._build_quantum_circuit()
             except Exception as e:
-                quantum_logger.warning(f"Failed to init quantum circuit: {e}, falling back to classical")
+                quantum_logger.warning(
+                    f"Failed to init quantum circuit: {e}, falling back to classical"
+                )
                 self.use_quantum = False
                 self._fallback_to_classical()
         else:
-            quantum_logger.info("Initializing classical RL agent (quantum backend unavailable)")
+            quantum_logger.info(
+                "Initializing classical RL agent (quantum backend unavailable)"
+            )
             self._fallback_to_classical()
 
     def _build_quantum_circuit(self):
@@ -841,21 +1317,26 @@ class QuantumRLAgent(nn.Module if TORCH_RL_AVAILABLE else object):
 
     def _fallback_to_classical(self):
         self.actor = nn.Sequential(
-            nn.Linear(self.state_dim, 64), nn.Tanh(),
-            nn.Linear(64, self.action_dim), nn.Softmax(dim=-1)
+            nn.Linear(self.state_dim, 64),
+            nn.Tanh(),
+            nn.Linear(64, self.action_dim),
+            nn.Softmax(dim=-1),
         )
         self.critic = nn.Sequential(
-            nn.Linear(self.state_dim, 64), nn.Tanh(),
-            nn.Linear(64, 1)
+            nn.Linear(self.state_dim, 64), nn.Tanh(), nn.Linear(64, 1)
         )
 
     def _execute_quantum_circuit(self, x):
         qc = QuantumCircuit(4, 4)
         params = self.pre_process(x)
-        for i in range(4): qc.rx(params[i].item() + self.q_params[i].item(), i)
-        for i in range(4): qc.rz(self.q_params[i + 4].item(), i)
-        for i in range(3): qc.cx(i, i + 1)
-        for i in range(4): qc.ry(self.q_params[i + 8].item(), i)
+        for i in range(4):
+            qc.rx(params[i].item() + self.q_params[i].item(), i)
+        for i in range(4):
+            qc.rz(self.q_params[i + 4].item(), i)
+        for i in range(3):
+            qc.cx(i, i + 1)
+        for i in range(4):
+            qc.ry(self.q_params[i + 8].item(), i)
         qc.measure_all()
         result = self.simulator.run(qc, shots=100).result()
         counts = result.get_counts(qc)
@@ -867,7 +1348,8 @@ class QuantumRLAgent(nn.Module if TORCH_RL_AVAILABLE else object):
         return probs
 
     def forward(self, x):
-        if not self.use_quantum: return self.actor(x), self.critic(x)
+        if not self.use_quantum:
+            return self.actor(x), self.critic(x)
         try:
             with torch.no_grad():
                 quantum_probs = self._execute_quantum_circuit(x)
@@ -875,8 +1357,14 @@ class QuantumRLAgent(nn.Module if TORCH_RL_AVAILABLE else object):
             value = self.critic(x)
             return action_probs, value
         except Exception as e:
-            quantum_logger.warning(f"Quantum circuit execution failed: {e}, using classical fallback")
-            actor_output = self.actor(x) if hasattr(self, 'actor') else self.post_process_actor(torch.zeros(4))
+            quantum_logger.warning(
+                f"Quantum circuit execution failed: {e}, using classical fallback"
+            )
+            actor_output = (
+                self.actor(x)
+                if hasattr(self, "actor")
+                else self.post_process_actor(torch.zeros(4))
+            )
             return actor_output, self.critic(x)
 
 
@@ -887,6 +1375,7 @@ async def initialize_quantum_module():
     await backend_client_pool.initialize()
     await audit_logger.initialize()
     quantum_logger.info("Quantum module initialization complete.")
+
 
 async def shutdown_quantum_module():
     quantum_logger.info("Shutting down quantum module...")
@@ -899,7 +1388,7 @@ class QuantumPluginAPI:
     def __init__(self):
         self._initialized = False
         quantum_logger.info("QuantumPluginAPI created (not yet initialized).")
-    
+
     async def initialize(self):
         """Initialize the quantum API and its resources."""
         if not self._initialized:
@@ -911,7 +1400,7 @@ class QuantumPluginAPI:
                 quantum_logger.critical(f"Failed to initialize QuantumPluginAPI: {e}")
                 # Raising the exception here allows the caller to handle it gracefully
                 raise e
-    
+
     async def shutdown(self):
         """Shutdown the quantum API and release resources."""
         if self._initialized:
@@ -920,29 +1409,63 @@ class QuantumPluginAPI:
             quantum_logger.info("QuantumPluginAPI shut down.")
 
     def get_available_backends(self) -> List[str]:
-        return [b for b, available in [("qiskit", QISKIT_AVAILABLE), ("dwave", DWAVE_AVAILABLE), ("scipy", SCIPY_AVAILABLE), ("ga", DEAP_AVAILABLE)] if available]
+        return [
+            b
+            for b, available in [
+                ("qiskit", QISKIT_AVAILABLE),
+                ("dwave", DWAVE_AVAILABLE),
+                ("scipy", SCIPY_AVAILABLE),
+                ("ga", DEAP_AVAILABLE),
+            ]
+            if available
+        ]
 
-    async def perform_quantum_operation(self, operation_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        quantum_logger.info(f"Plugin requested quantum operation: {operation_type} with params: {params}")
+    async def perform_quantum_operation(
+        self, operation_type: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        quantum_logger.info(
+            f"Plugin requested quantum operation: {operation_type} with params: {params}"
+        )
         if not self._initialized:
-            return {"status": "ERROR", "reason": "API not initialized. Call initialize() first."}
+            return {
+                "status": "ERROR",
+                "reason": "API not initialized. Call initialize() first.",
+            }
         try:
             if operation_type == "run_mutation_circuit":
                 return await run_quantum_mutation(**params)
             elif operation_type == "forecast_failure_trend":
                 if "trend_data" not in params:
-                    if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["input_validation_errors"].labels(operation_type="forecast_failure_trend").inc()
-                    return {"status": "ERROR", "reason": "Missing 'trend_data' parameter."}
+                    if PROMETHEUS_AVAILABLE:
+                        QUANTUM_METRICS["input_validation_errors"].labels(
+                            operation_type="forecast_failure_trend"
+                        ).inc()
+                    return {
+                        "status": "ERROR",
+                        "reason": "Missing 'trend_data' parameter.",
+                    }
                 return await quantum_forecast_failure(params["trend_data"])
             else:
-                if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type=operation_type, backend="n/a", status="unsupported").inc()
+                if PROMETHEUS_AVAILABLE:
+                    QUANTUM_METRICS["operation_total"].labels(
+                        operation_type=operation_type,
+                        backend="n/a",
+                        status="unsupported",
+                    ).inc()
                 return {"status": "UNSUPPORTED_OPERATION", "operation": operation_type}
         except Exception as e:
-            quantum_logger.error(f"Error performing quantum op '{operation_type}': {e}", exc_info=True)
-            if PROMETHEUS_AVAILABLE: QUANTUM_METRICS["operation_total"].labels(operation_type=operation_type, backend="n/a", status="error").inc()
-            await alert_operator(f"Error in quantum operation '{operation_type}': {e}", level="ERROR")
+            quantum_logger.error(
+                f"Error performing quantum op '{operation_type}': {e}", exc_info=True
+            )
+            if PROMETHEUS_AVAILABLE:
+                QUANTUM_METRICS["operation_total"].labels(
+                    operation_type=operation_type, backend="n/a", status="error"
+                ).inc()
+            await alert_operator(
+                f"Error in quantum operation '{operation_type}': {e}", level="ERROR"
+            )
             return {"status": "ERROR", "reason": str(e)}
-    
+
     async def check_all_backends_health(self) -> Dict[str, bool]:
         if not self._initialized:
             return {"error": "API not initialized"}
@@ -951,64 +1474,106 @@ class QuantumPluginAPI:
             results[backend] = await check_backend_health(backend)
         quantum_logger.info(f"Backend health check results: {results}")
         return results
-    
-    async def execute_benchmark(self, backend: str = "auto", comprehensive: bool = False) -> Dict[str, Any]:
-        if not self._initialized: return {"status": "ERROR", "reason": "API not initialized."}
-        quantum_logger.info(f"Running {'comprehensive' if comprehensive else 'basic'} benchmark on backend: {backend}")
-        
-        backends_to_test = self.get_available_backends() if backend == "auto" else [backend]
+
+    async def execute_benchmark(
+        self, backend: str = "auto", comprehensive: bool = False
+    ) -> Dict[str, Any]:
+        if not self._initialized:
+            return {"status": "ERROR", "reason": "API not initialized."}
+        quantum_logger.info(
+            f"Running {'comprehensive' if comprehensive else 'basic'} benchmark on backend: {backend}"
+        )
+
+        backends_to_test = (
+            self.get_available_backends() if backend == "auto" else [backend]
+        )
         if backend != "auto" and backend not in self.get_available_backends():
             return {"status": "ERROR", "reason": f"Backend '{backend}' not available."}
-        
+
         dummy_file = "./benchmark_test.py"
-        with open(dummy_file, "w") as f: f.write("pass")
+        with open(dummy_file, "w") as f:
+            f.write("pass")
 
         benchmark_results = {}
         for test_backend in backends_to_test:
             start_time = time.time()
-            small_result = await run_quantum_mutation(code_file=dummy_file, backend=test_backend, config={"n_qubits": 3, "n_vars": 3})
-            benchmark_results[test_backend] = {"basic": {"status": small_result.get("status"), "duration_seconds": time.time() - start_time, "result": small_result.get("quantum_result")}}
+            small_result = await run_quantum_mutation(
+                code_file=dummy_file,
+                backend=test_backend,
+                config={"n_qubits": 3, "n_vars": 3},
+            )
+            benchmark_results[test_backend] = {
+                "basic": {
+                    "status": small_result.get("status"),
+                    "duration_seconds": time.time() - start_time,
+                    "result": small_result.get("quantum_result"),
+                }
+            }
 
             if comprehensive:
                 comp_results = {}
                 for size in [5, 10]:
                     start_size = time.time()
-                    res = await run_quantum_mutation(code_file=dummy_file, backend=test_backend, config={"n_qubits": size, "n_vars": size})
-                    comp_results[f"size_{size}"] = {"status": res.get("status"), "duration_seconds": time.time() - start_size, "result": res.get("quantum_result")}
-                
+                    res = await run_quantum_mutation(
+                        code_file=dummy_file,
+                        backend=test_backend,
+                        config={"n_qubits": size, "n_vars": size},
+                    )
+                    comp_results[f"size_{size}"] = {
+                        "status": res.get("status"),
+                        "duration_seconds": time.time() - start_size,
+                        "result": res.get("quantum_result"),
+                    }
+
                 start_forecast = time.time()
                 forecast_res = await quantum_forecast_failure([1.0, 1.5, 2.0, 2.5, 3.0])
-                comp_results["forecast"] = {"status": forecast_res.get("status"), "duration_seconds": time.time() - start_forecast, "result": forecast_res.get("forecast")}
+                comp_results["forecast"] = {
+                    "status": forecast_res.get("status"),
+                    "duration_seconds": time.time() - start_forecast,
+                    "result": forecast_res.get("forecast"),
+                }
                 benchmark_results[test_backend]["comprehensive"] = comp_results
 
         os.remove(dummy_file)
-        return {"status": "COMPLETED", "timestamp": time.time(), "results": benchmark_results}
+        return {
+            "status": "COMPLETED",
+            "timestamp": time.time(),
+            "results": benchmark_results,
+        }
 
 
 # --- Example Usage ---
 if __name__ == "__main__":
+
     async def demo():
         api = QuantumPluginAPI()
         try:
             await api.initialize()
             print(f"Available backends: {api.get_available_backends()}")
-            
+
             os.makedirs("./examples", exist_ok=True)
             dummy_code_file = "./examples/example_code.py"
             with open(dummy_code_file, "w") as f:
                 f.write("# dummy code\n")
 
-            mutation_result = await api.perform_quantum_operation("run_mutation_circuit", {"code_file": dummy_code_file, "backend": "auto"})
+            mutation_result = await api.perform_quantum_operation(
+                "run_mutation_circuit",
+                {"code_file": dummy_code_file, "backend": "auto"},
+            )
             print(f"\nQuantum mutation result: {mutation_result}")
-            
-            forecast_result = await api.perform_quantum_operation("forecast_failure_trend", {"trend_data": [1.2, 1.5, 2.1, 2.7, 3.1, 3.8]})
+
+            forecast_result = await api.perform_quantum_operation(
+                "forecast_failure_trend", {"trend_data": [1.2, 1.5, 2.1, 2.7, 3.1, 3.8]}
+            )
             print(f"\nQuantum forecast result: {forecast_result}")
-            
+
             health_status = await api.check_all_backends_health()
             print(f"\nBackend health status: {health_status}")
-            
+
             if api.get_available_backends():
-                benchmark = await api.execute_benchmark(backend="auto", comprehensive=True)
+                benchmark = await api.execute_benchmark(
+                    backend="auto", comprehensive=True
+                )
                 print(f"\nBenchmark results: {json.dumps(benchmark, indent=2)}")
 
         except Exception as e:
@@ -1016,7 +1581,7 @@ if __name__ == "__main__":
         finally:
             await api.shutdown()
 
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         asyncio.run(demo())
     else:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

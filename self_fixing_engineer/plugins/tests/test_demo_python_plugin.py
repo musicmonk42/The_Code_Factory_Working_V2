@@ -1,13 +1,12 @@
 import os
 import sys
-import json
 import logging
 import pytest
 import importlib.util
 import importlib
 import re
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any
+from typing import Dict
 
 # Dynamically import the plugin to be tested
 try:
@@ -22,9 +21,9 @@ from plugins.demo_python_plugin import (
     PLUGIN_MANIFEST,
     plugin_health,
     PLUGIN_API,
-    NonCriticalError,
-    logger
+    logger,
 )
+
 
 # --- Test Setup ---
 @pytest.fixture(autouse=True)
@@ -32,11 +31,14 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s'))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
     logger.handlers = []
+
 
 @pytest.fixture
 def mock_audit_logger():
@@ -45,18 +47,23 @@ def mock_audit_logger():
     with patch("demo_python_plugin.audit_logger", mock):
         yield mock
 
+
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function."""
     with patch("demo_python_plugin.alert_operator") as mock:
         yield mock
 
+
 @pytest.fixture
 def mock_scrub_secrets():
     """Mock the scrub_secrets function."""
     with patch("demo_python_plugin.scrub_secrets") as mock:
-        mock.side_effect = lambda x: x  # Default behavior is to return the input un-scrubbed
+        mock.side_effect = (
+            lambda x: x
+        )  # Default behavior is to return the input un-scrubbed
         yield mock
+
 
 @pytest.fixture
 def mock_importlib():
@@ -64,22 +71,41 @@ def mock_importlib():
     with patch("importlib.util.find_spec") as mock:
         yield mock
 
+
 @pytest.fixture
 def set_env(monkeypatch):
     """Fixture to set environment variables for tests."""
+
     def _set_env(vars: Dict[str, str]):
         for key, value in vars.items():
             monkeypatch.setenv(key, value)
+
     return _set_env
+
 
 # --- Manifest Tests ---
 def test_plugin_manifest_structure():
     """Test that the plugin manifest has all required fields."""
     required_fields = [
-        "name", "version", "description", "entrypoint", "type", "author",
-        "capabilities", "permissions", "dependencies", "min_core_version",
-        "max_core_version", "health_check", "api_version", "license",
-        "homepage", "tags", "generated_with", "is_demo_plugin", "signature"
+        "name",
+        "version",
+        "description",
+        "entrypoint",
+        "type",
+        "author",
+        "capabilities",
+        "permissions",
+        "dependencies",
+        "min_core_version",
+        "max_core_version",
+        "health_check",
+        "api_version",
+        "license",
+        "homepage",
+        "tags",
+        "generated_with",
+        "is_demo_plugin",
+        "signature",
     ]
     for field in required_fields:
         assert field in PLUGIN_MANIFEST, f"Manifest missing required field: {field}"
@@ -90,12 +116,20 @@ def test_plugin_manifest_structure():
     assert isinstance(PLUGIN_MANIFEST["generated_with"], dict)
     assert "wizard_version" in PLUGIN_MANIFEST["generated_with"]
 
+
 def test_manifest_version_format():
     """Test that version fields follow semantic versioning."""
     version_pattern = r"^\d+\.\d+\.\d+$"
-    assert re.match(version_pattern, PLUGIN_MANIFEST["version"]), "Invalid version format"
-    assert re.match(version_pattern, PLUGIN_MANIFEST["min_core_version"]), "Invalid min_core_version format"
-    assert re.match(version_pattern, PLUGIN_MANIFEST["max_core_version"]), "Invalid max_core_version format"
+    assert re.match(
+        version_pattern, PLUGIN_MANIFEST["version"]
+    ), "Invalid version format"
+    assert re.match(
+        version_pattern, PLUGIN_MANIFEST["min_core_version"]
+    ), "Invalid min_core_version format"
+    assert re.match(
+        version_pattern, PLUGIN_MANIFEST["max_core_version"]
+    ), "Invalid max_core_version format"
+
 
 # --- Production Mode Tests ---
 def test_production_mode_block(monkeypatch, mock_audit_logger, mock_alert_operator):
@@ -106,8 +140,9 @@ def test_production_mode_block(monkeypatch, mock_audit_logger, mock_alert_operat
     assert exc.value.code == 1
     mock_alert_operator.assert_called_with(
         "CRITICAL: Demo plugin 'demo_python_plugin.py' detected in PRODUCTION_MODE. Aborting.",
-        level="CRITICAL"
+        level="CRITICAL",
     )
+
 
 # --- Health Check Tests ---
 def test_plugin_health_healthy(mock_importlib, mock_audit_logger, mock_scrub_secrets):
@@ -122,12 +157,15 @@ def test_plugin_health_healthy(mock_importlib, mock_audit_logger, mock_scrub_sec
         "plugin_health_check",
         plugin="demo_python_plugin",
         status="ok",
-        details=mock_scrub_secrets.return_value
+        details=mock_scrub_secrets.return_value,
     )
+
 
 def test_plugin_health_degraded(mock_importlib, mock_audit_logger, mock_scrub_secrets):
     """Test plugin_health when dependencies are missing."""
-    mock_importlib.side_effect = lambda x: None if x in ["requests", "numpy"] else MagicMock()
+    mock_importlib.side_effect = lambda x: (
+        None if x in ["requests", "numpy"] else MagicMock()
+    )
     health_status = plugin_health()
     assert health_status["status"] == "degraded"
     assert "Missing optional dependencies: requests, numpy" in health_status["message"]
@@ -137,39 +175,37 @@ def test_plugin_health_degraded(mock_importlib, mock_audit_logger, mock_scrub_se
         "plugin_health_degraded",
         plugin="demo_python_plugin",
         reason="missing_dependencies",
-        details=mock_scrub_secrets.return_value
+        details=mock_scrub_secrets.return_value,
     )
 
+
 def test_plugin_health_unhealthy_runtime(
-    mock_importlib,
-    mock_audit_logger,
-    mock_alert_operator,
-    mock_scrub_secrets,
-    set_env
+    mock_importlib, mock_audit_logger, mock_alert_operator, mock_scrub_secrets, set_env
 ):
     """Test plugin_health with a simulated runtime failure."""
     set_env({"DEMO_PLUGIN_HEALTH_FAIL": "true"})
     health_status = plugin_health()
     assert health_status["status"] == "unhealthy"
-    assert "Runtime check failed: Simulated runtime failure for demo plugin." in health_status["message"]
+    assert (
+        "Runtime check failed: Simulated runtime failure for demo plugin."
+        in health_status["message"]
+    )
     assert health_status["details"]["runtime_check"] == "failed"
     mock_alert_operator.assert_called_with(
         "WARNING: Demo plugin 'demo_python_plugin' health check failed: Simulated runtime failure for demo plugin.",
-        level="WARNING"
+        level="WARNING",
     )
     mock_scrub_secrets.assert_called_with("Simulated runtime failure for demo plugin.")
     mock_audit_logger.log_event.assert_called_with(
         "plugin_health_unhealthy",
         plugin="demo_python_plugin",
         reason="runtime_failure",
-        error=mock_scrub_secrets.return_value
+        error=mock_scrub_secrets.return_value,
     )
 
+
 def test_plugin_health_unhandled_exception(
-    mock_importlib,
-    mock_audit_logger,
-    mock_alert_operator,
-    mock_scrub_secrets
+    mock_importlib, mock_audit_logger, mock_alert_operator, mock_scrub_secrets
 ):
     """Test plugin_health with an unhandled exception."""
     mock_importlib.side_effect = Exception("Unexpected error")
@@ -179,15 +215,16 @@ def test_plugin_health_unhandled_exception(
     assert health_status["details"]["runtime_check"] == "failed"
     mock_alert_operator.assert_called_with(
         "WARNING: Demo plugin 'demo_python_plugin' health check failed: Unexpected error",
-        level="WARNING"
+        level="WARNING",
     )
     mock_scrub_secrets.assert_called_with("Unexpected error")
     mock_audit_logger.log_event.assert_called_with(
         "plugin_health_unhealthy",
         plugin="demo_python_plugin",
         reason="runtime_failure",
-        error=mock_scrub_secrets.return_value
+        error=mock_scrub_secrets.return_value,
     )
+
 
 # --- API Tests ---
 def test_plugin_api_hello(mock_audit_logger):
@@ -197,6 +234,7 @@ def test_plugin_api_hello(mock_audit_logger):
     assert result == "Hello from the safe mode demo Python plugin!"
     mock_audit_logger.log_event.assert_not_called()
 
+
 def test_plugin_api_hello_qa_mode(mock_audit_logger, set_env):
     """Test the PLUGIN_API.hello method in QA mode."""
     set_env({"RUN_QA_TESTS": "true"})
@@ -204,9 +242,9 @@ def test_plugin_api_hello_qa_mode(mock_audit_logger, set_env):
     result = api.hello()
     assert result == "Hello from the safe mode demo Python plugin!"
     mock_audit_logger.log_event.assert_called_with(
-        "demo_plugin_hello_executed_in_qa",
-        plugin="demo_python_plugin"
+        "demo_plugin_hello_executed_in_qa", plugin="demo_python_plugin"
     )
+
 
 # --- Security Tests ---
 def test_no_hardcoded_secrets():
@@ -216,10 +254,11 @@ def test_no_hardcoded_secrets():
     forbidden_patterns = [
         r"api_key\s*=\s*['\"][^'\"]+['\"]",
         r"password\s*=\s*['\"][^'\"]+['\"]",
-        r"secret\s*=\s*['\"][^'\"]+['\"]"
+        r"secret\s*=\s*['\"][^'\"]+['\"]",
     ]
     for pattern in forbidden_patterns:
         assert not re.search(pattern, code), f"Hardcoded secret detected: {pattern}"
+
 
 # --- Integration Tests (Verifying fallback functionality) ---
 def test_plugin_load_with_missing_core_utils(monkeypatch):
@@ -234,17 +273,20 @@ def test_plugin_load_with_missing_core_utils(monkeypatch):
     demo_python_plugin.alert_operator("Test message", level="INFO")
     # The fallback alert_operator calls logger.critical
     # Check that logger.critical was called.
-    with patch.object(demo_python_plugin.logger, 'critical') as mock_critical:
+    with patch.object(demo_python_plugin.logger, "critical") as mock_critical:
         demo_python_plugin.alert_operator("Test message", level="INFO")
-        mock_critical.assert_called_with('[OPS ALERT - INFO] Test message')
+        mock_critical.assert_called_with("[OPS ALERT - INFO] Test message")
 
     # Check that the fallback audit logger works
     mock_audit_logger_instance = demo_python_plugin.audit_logger
     assert isinstance(mock_audit_logger_instance, demo_python_plugin.DummyAuditLogger)
-    
-    with patch.object(demo_python_plugin.logger, 'info') as mock_info:
+
+    with patch.object(demo_python_plugin.logger, "info") as mock_info:
         mock_audit_logger_instance.log_event("test_event", detail="test")
-        mock_info.assert_called_with('[AUDIT_LOG_DISABLED] test_event: {\'detail\': \'test\'}')
+        mock_info.assert_called_with(
+            "[AUDIT_LOG_DISABLED] test_event: {'detail': 'test'}"
+        )
+
 
 # --- Cleanup Fixture ---
 @pytest.fixture(autouse=True)
@@ -256,6 +298,7 @@ def cleanup_env(monkeypatch):
             monkeypatch.delenv(key, raising=False)
     # Reload the module to its original state to avoid side effects between tests
     importlib.reload(demo_python_plugin)
+
 
 # --- Main block for running tests ---
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import os
 # Make sentry_sdk available for mocking in tests
 try:
     import sentry_sdk
+
     SENTRY_AVAILABLE = True
 except ImportError:
     sentry_sdk = None
@@ -22,6 +23,7 @@ class ReasonerErrorCode:
     A collection of standard, structured error codes for the Reasoner application.
     Using a class with attributes provides a clear, discoverable, and auto-completable list of codes.
     """
+
     # General & Operational Errors
     GENERIC_ERROR = "GENERIC_ERROR"
     UNEXPECTED_ERROR = "UNEXPECTED_ERROR"
@@ -72,7 +74,14 @@ class ReasonerError(Exception):
     error code and a user-friendly message. It automatically logs itself upon
     creation and can hold a reference to the original underlying exception.
     """
-    def __init__(self, message: str, code: str, original_exception: Optional[Exception] = None, **kwargs):
+
+    def __init__(
+        self,
+        message: str,
+        code: str,
+        original_exception: Optional[Exception] = None,
+        **kwargs,
+    ):
         """
         Initializes the ReasonerError instance and immediately logs the event.
 
@@ -96,7 +105,7 @@ class ReasonerError(Exception):
             message=message,
             code=code,
             exc_info=True,  # Always pass True as tests expect
-            **kwargs
+            **kwargs,
         )
 
         # If Sentry is available and configured, capture the exception
@@ -117,9 +126,11 @@ class ReasonerError(Exception):
 
     def __repr__(self) -> str:
         """Returns a detailed representation for debugging."""
-        return (f"{self.__class__.__name__}(message='{self.message}', "
-                f"code='{self.code}', "
-                f"original_exception={repr(self.original_exception)})")
+        return (
+            f"{self.__class__.__name__}(message='{self.message}', "
+            f"code='{self.code}', "
+            f"original_exception={repr(self.original_exception)})"
+        )
 
     def to_api_response(self, include_traceback: bool = False) -> Dict[str, Any]:
         """
@@ -143,36 +154,40 @@ class ReasonerError(Exception):
 
         # Build details dict only if there's something to include
         details = {}
-        
+
         # Include extra_kwargs in details if any exist
         if self.extra_kwargs:
             details.update(self.extra_kwargs)
-        
+
         if self.original_exception:
             details["original_exception"] = str(self.original_exception)
 
         if include_traceback and (self.original_exception or sys.exc_info()[2]):
             # Only try to include traceback if there's actually an exception to trace
             tb_str = None
-            
+
             # First try to get the current exception traceback
             exc_type, exc_value, exc_traceback = sys.exc_info()
             if exc_traceback:
-                tb_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-            
+                tb_str = "".join(
+                    traceback.format_exception(exc_type, exc_value, exc_traceback)
+                )
+
             # If that didn't work and we have an original exception, try to format it
             if not tb_str and self.original_exception:
                 # Check if the original exception has __traceback__
-                if hasattr(self.original_exception, '__traceback__'):
-                    tb_str = ''.join(traceback.format_exception(
-                        type(self.original_exception),
-                        self.original_exception,
-                        self.original_exception.__traceback__
-                    ))
+                if hasattr(self.original_exception, "__traceback__"):
+                    tb_str = "".join(
+                        traceback.format_exception(
+                            type(self.original_exception),
+                            self.original_exception,
+                            self.original_exception.__traceback__,
+                        )
+                    )
                 else:
                     # Fallback to a simple format
                     tb_str = f"{type(self.original_exception).__name__}: {str(self.original_exception)}"
-            
+
             # Only add traceback if we actually got one
             if tb_str:
                 details["traceback"] = tb_str
@@ -180,7 +195,7 @@ class ReasonerError(Exception):
         # Only add details to response if there are any
         if details:
             response_body["error"]["details"] = details
-        
+
         return response_body
 
     def to_json(self, indent: Optional[int] = None) -> str:
@@ -197,7 +212,7 @@ class ReasonerError(Exception):
 
 
 # Example Usage & Test:
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Configure structlog for simple console output for the example
     structlog.configure(
         processors=[
@@ -207,7 +222,7 @@ if __name__ == '__main__':
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
-    
+
     print("--- Testing ReasonerError Logging and Formatting ---")
     try:
         # Simulate an inner error
@@ -216,20 +231,22 @@ if __name__ == '__main__':
         except ZeroDivisionError as e:
             # When this is created, it will be logged automatically.
             raise ReasonerError(
-                "A mathematical operation failed.", 
-                code=ReasonerErrorCode.UNEXPECTED_ERROR, 
+                "A mathematical operation failed.",
+                code=ReasonerErrorCode.UNEXPECTED_ERROR,
                 original_exception=e,
-                user_id="test_user_123"  # example of extra context
+                user_id="test_user_123",  # example of extra context
             )
     except ReasonerError as re:
         print("\nCaught ReasonerError successfully.")
         print(f"Representation: {re!r}")
         print(f"Original exception was: {re.original_exception!r}")
-        
+
         print("\n--- API Response (Secure - Default) ---")
         print(json.dumps(re.to_api_response(), indent=2))
 
         print("\n--- API Response (Insecure - with Traceback) ---")
         print(json.dumps(re.to_api_response(include_traceback=True), indent=2))
     print("\n--- Test Complete ---")
-    print("Check the console output above for the automatically generated JSON log message.")
+    print(
+        "Check the console output above for the automatically generated JSON log message."
+    )

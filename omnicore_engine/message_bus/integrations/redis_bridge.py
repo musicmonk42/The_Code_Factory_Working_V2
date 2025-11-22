@@ -9,8 +9,7 @@ import random
 import time
 import uuid
 from copy import copy
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable, Awaitable, Tuple, Set
+from typing import Any, Dict, List, Optional, Callable, Awaitable, Set
 
 # Attempt to import redis, which is assumed to be installed in a production environment
 try:
@@ -23,8 +22,8 @@ except ImportError:
     redis = None
     Redis = None
     PubSub = None
-    ConnectionError = type('MockConnectionError', (Exception,), {})
-    TimeoutError = type('MockTimeoutError', (Exception,), {})
+    ConnectionError = type("MockConnectionError", (Exception,), {})
+    TimeoutError = type("MockTimeoutError", (Exception,), {})
 
 
 from pydantic import BaseModel, Field
@@ -35,6 +34,7 @@ from ..resilience import CircuitBreaker  # Assumes resilience.py is available
 # Optional Prometheus metrics
 try:
     from prometheus_client import Counter, Gauge, Histogram  # type: ignore
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
@@ -48,21 +48,46 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 class RedisBridgeConfig(BaseModel):
     """Configuration model for the Redis Bridge."""
-    REDIS_URL: str = Field(default="redis://localhost:6379/0", description="The connection URL for Redis.")
-    POOL_SIZE: int = Field(default=10, description="Maximum number of connections in the pool.")
-    TIMEOUT_SECONDS: float = Field(default=5.0, description="Connection and operation timeout in seconds.")
-    USE_STREAM_PUB_SUB: bool = Field(default=False, description="Use Redis Streams instead of traditional Pub/Sub for complex consumption.")
-    DEDUP_KEY_TTL_SECONDS: int = Field(default=3600, description="TTL for message deduplication keys.")
-    HANDLER_MAX_RETRIES: int = Field(default=3, description="Maximum retries for message handlers.")
-    HANDLER_RETRY_BASE_DELAY: float = Field(default=0.1, description="Base delay for handler retries (seconds).")
-    HANDLER_RETRY_MAX_DELAY: float = Field(default=10.0, description="Maximum delay for handler retries (seconds).")
-    HANDLER_RETRY_JITTER: float = Field(default=0.5, description="Jitter factor for retry delays (0-1).")
-    DLQ_CHANNEL_SUFFIX: str = Field(default="_dlq", description="Suffix for dead-letter channels.")
-    ENABLE_METRICS: bool = Field(default=True, description="Enable Prometheus metrics if available.")
+
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0", description="The connection URL for Redis."
+    )
+    POOL_SIZE: int = Field(
+        default=10, description="Maximum number of connections in the pool."
+    )
+    TIMEOUT_SECONDS: float = Field(
+        default=5.0, description="Connection and operation timeout in seconds."
+    )
+    USE_STREAM_PUB_SUB: bool = Field(
+        default=False,
+        description="Use Redis Streams instead of traditional Pub/Sub for complex consumption.",
+    )
+    DEDUP_KEY_TTL_SECONDS: int = Field(
+        default=3600, description="TTL for message deduplication keys."
+    )
+    HANDLER_MAX_RETRIES: int = Field(
+        default=3, description="Maximum retries for message handlers."
+    )
+    HANDLER_RETRY_BASE_DELAY: float = Field(
+        default=0.1, description="Base delay for handler retries (seconds)."
+    )
+    HANDLER_RETRY_MAX_DELAY: float = Field(
+        default=10.0, description="Maximum delay for handler retries (seconds)."
+    )
+    HANDLER_RETRY_JITTER: float = Field(
+        default=0.5, description="Jitter factor for retry delays (0-1)."
+    )
+    DLQ_CHANNEL_SUFFIX: str = Field(
+        default="_dlq", description="Suffix for dead-letter channels."
+    )
+    ENABLE_METRICS: bool = Field(
+        default=True, description="Enable Prometheus metrics if available."
+    )
 
     class Config:
         """Pydantic configuration settings."""
-        extra = 'ignore'  # Allow extra fields from core ArbiterConfig
+
+        extra = "ignore"  # Allow extra fields from core ArbiterConfig
 
 
 # --- Metrics (Prometheus if available) ---
@@ -131,6 +156,7 @@ MessageHandler = Callable[[str, Message], Awaitable[None]]  # topic, message
 
 # --- Bridge Implementation ---
 
+
 class RedisBridge:
     """
     Asynchronous Redis bridge for the Sharded Message Bus.
@@ -146,14 +172,17 @@ class RedisBridge:
     - DLQ simulation via suffixed channels.
     - Typed handlers and full error surfacing.
     """
+
     def __init__(
         self,
         message_bus: Any,  # Use Any to avoid circular dependency hell
         config: RedisBridgeConfig,
-        circuit_breaker: CircuitBreaker
+        circuit_breaker: CircuitBreaker,
     ):
         if redis is None:
-            raise RuntimeError("RedisBridge requires 'redis-py' with asyncio support. Please install it.")
+            raise RuntimeError(
+                "RedisBridge requires 'redis-py' with asyncio support. Please install it."
+            )
 
         self.message_bus = message_bus
         self.cfg = config
@@ -182,7 +211,7 @@ class RedisBridge:
         """Initializes the Redis connection pool and starts listener if subscribed."""
         if self._running:
             return
-        
+
         try:
             self.redis_client = redis.from_url(
                 self.cfg.REDIS_URL,
@@ -208,7 +237,10 @@ class RedisBridge:
                 self._listener_task = asyncio.create_task(self._listener_loop())
 
             self.circuit.record_success()
-            logger.info("RedisBridge started successfully.", topics=list(self._subscribed_topics))
+            logger.info(
+                "RedisBridge started successfully.",
+                topics=list(self._subscribed_topics),
+            )
         except (ConnectionError, TimeoutError) as e:
             self.circuit.record_failure()
             logger.error(f"Failed to start RedisBridge due to connection error: {e}")
@@ -260,36 +292,47 @@ class RedisBridge:
             await self.redis_client.publish(message.topic, payload_str)
             self.circuit.record_success()
             _metrics_inc_publish("success", message.topic)
-            logger.debug("Published message to Redis.", topic=message.topic, trace_id=message.trace_id)
+            logger.debug(
+                "Published message to Redis.",
+                topic=message.topic,
+                trace_id=message.trace_id,
+            )
             return True
         except (ConnectionError, TimeoutError) as e:
             self.circuit.record_failure()
             _metrics_inc_publish("conn_fail", message.topic)
-            logger.error(f"Redis publish failed due to connection/timeout error: {e}", topic=message.topic)
+            logger.error(
+                f"Redis publish failed due to connection/timeout error: {e}",
+                topic=message.topic,
+            )
             return False
         except Exception as e:
             self.circuit.record_failure()
             _metrics_inc_publish("error", message.topic)
-            logger.error(f"Unexpected error during Redis publish: {e}", topic=message.topic, exc_info=True)
+            logger.error(
+                f"Unexpected error during Redis publish: {e}",
+                topic=message.topic,
+                exc_info=True,
+            )
             return False
 
     async def publish_dlq(self, message: Message, original_error: str) -> bool:
         """Simulates DLQ by publishing to a suffixed channel."""
         dlq_channel = f"{message.topic}{self.cfg.DLQ_CHANNEL_SUFFIX}"
-        
+
         # Create a copy to avoid mutating original
         dlq_message = copy(message)
         dlq_message.topic = dlq_channel
-        
+
         # Safely add error to payload
         if isinstance(dlq_message.payload, dict):
             dlq_message.payload["dlq_original_error"] = original_error
         else:
             dlq_message.payload = {
                 "original_payload": dlq_message.payload,
-                "dlq_original_error": original_error
+                "dlq_original_error": original_error,
             }
-        
+
         return await self.publish(dlq_message)
 
     # --- Subscription ---
@@ -300,7 +343,7 @@ class RedisBridge:
             self._subscribers[topic] = []
         self._subscribers[topic].append(handler)
         self._subscribed_topics.add(topic)
-        
+
         if self._running and self.pubsub_client and self._should_start_listener():
             # If we subscribe while running, we need to ensure the listener is active
             if self._listener_task and self._listener_task.done():
@@ -318,15 +361,17 @@ class RedisBridge:
                     logger.warning("PubSub client not available, waiting...")
                     await asyncio.sleep(1)
                     continue
-                    
-                message = await self.pubsub_client.get_message(ignore_subscribe_messages=True, timeout=1.0)
+
+                message = await self.pubsub_client.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
                 if message is None:
                     continue
 
-                topic = message['channel']
-                payload_str = message['data']
-                
-                if payload_str == 'ping':  # Ignore pings if any
+                topic = message["channel"]
+                payload_str = message["data"]
+
+                if payload_str == "ping":  # Ignore pings if any
                     continue
 
                 # Deserialize and create Message
@@ -335,15 +380,33 @@ class RedisBridge:
                     internal_message = Message(
                         topic=topic,
                         payload=payload,
-                        priority=payload.get('priority', 0) if isinstance(payload, dict) else 0,
+                        priority=(
+                            payload.get("priority", 0)
+                            if isinstance(payload, dict)
+                            else 0
+                        ),
                         timestamp=time.time(),
-                        trace_id=payload.get('trace_id', str(uuid.uuid4())) if isinstance(payload, dict) else str(uuid.uuid4()),
+                        trace_id=(
+                            payload.get("trace_id", str(uuid.uuid4()))
+                            if isinstance(payload, dict)
+                            else str(uuid.uuid4())
+                        ),
                         encrypted=False,  # Redis messages come as plain JSON
-                        idempotency_key=payload.get('idempotency_key') if isinstance(payload, dict) else None,
-                        context=payload.get('context', {}) if isinstance(payload, dict) else {}
+                        idempotency_key=(
+                            payload.get("idempotency_key")
+                            if isinstance(payload, dict)
+                            else None
+                        ),
+                        context=(
+                            payload.get("context", {})
+                            if isinstance(payload, dict)
+                            else {}
+                        ),
                     )
                 except json.JSONDecodeError as e:
-                    logger.error(f"Failed to decode JSON from Redis topic {topic}: {e}. Payload: {payload_str[:100]}...")
+                    logger.error(
+                        f"Failed to decode JSON from Redis topic {topic}: {e}. Payload: {payload_str[:100]}..."
+                    )
                     _metrics_inc_consume("decode_fail", topic)
                     continue
 
@@ -359,7 +422,9 @@ class RedisBridge:
                 logger.warning(f"Redis listener connection issue: {e}. Retrying...")
                 await asyncio.sleep(1)
             except Exception as e:
-                logger.error(f"Unexpected error in Redis listener loop: {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error in Redis listener loop: {e}", exc_info=True
+                )
                 await asyncio.sleep(1)
 
         logger.info("Redis listener loop exited.")
@@ -370,9 +435,14 @@ class RedisBridge:
         if not handlers:
             # Fallback to internal bus dispatch
             # Check if executors exist
-            if hasattr(self.message_bus, 'callback_executors') and self.message_bus.callback_executors:
+            if (
+                hasattr(self.message_bus, "callback_executors")
+                and self.message_bus.callback_executors
+            ):
                 executor = self.message_bus.callback_executors[0]
-                await self.message_bus._dispatch_message_to_subscribers_and_externals(message, executor)
+                await self.message_bus._dispatch_message_to_subscribers_and_externals(
+                    message, executor
+                )
             else:
                 logger.warning(f"No callback executors available for topic {topic}")
             return
@@ -388,13 +458,18 @@ class RedisBridge:
                     attempt += 1
                     _metrics_inc_handler_error(topic)
                     if attempt >= self.cfg.HANDLER_MAX_RETRIES:
-                        logger.error(f"Handler failed after {attempt} retries for topic {topic}: {e}")
+                        logger.error(
+                            f"Handler failed after {attempt} retries for topic {topic}: {e}"
+                        )
                         # Route to DLQ
                         await self.publish_dlq(message, str(e))
                         break
 
                     # Exponential backoff with jitter
-                    jitter = random.uniform(-self.cfg.HANDLER_RETRY_JITTER * delay, self.cfg.HANDLER_RETRY_JITTER * delay)
+                    jitter = random.uniform(
+                        -self.cfg.HANDLER_RETRY_JITTER * delay,
+                        self.cfg.HANDLER_RETRY_JITTER * delay,
+                    )
                     await asyncio.sleep(max(delay + jitter, 0))
                     delay = min(delay * 2, self.cfg.HANDLER_RETRY_MAX_DELAY)
 
@@ -417,7 +492,9 @@ class RedisBridge:
             return False  # Conservative fail: assume not seen if Redis is down
         except Exception as e:
             self.circuit.record_failure()
-            logger.error(f"Unexpected error during Redis dedup check: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error during Redis dedup check: {e}", exc_info=True
+            )
             return False
 
     async def set_dedup_cache(self, key: str, value: str) -> None:
@@ -427,9 +504,7 @@ class RedisBridge:
 
         try:
             await self.redis_client.set(
-                self._dedup_key(key),
-                value,
-                ex=self.cfg.DEDUP_KEY_TTL_SECONDS
+                self._dedup_key(key), value, ex=self.cfg.DEDUP_KEY_TTL_SECONDS
             )
             self.circuit.record_success()
         except (ConnectionError, TimeoutError) as e:

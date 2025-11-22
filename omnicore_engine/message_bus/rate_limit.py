@@ -24,13 +24,10 @@ Upgrades from original:
 from __future__ import annotations
 
 import asyncio
-import json
-import logging
 import time
-import uuid
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple, Callable, Awaitable
+from typing import Dict, List, Optional, Any
 
 import structlog
 
@@ -38,6 +35,7 @@ import structlog
 try:
     import redis.asyncio as redis
     from redis.exceptions import ConnectionError, TimeoutError
+
     _REDIS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _REDIS_AVAILABLE = False
@@ -47,6 +45,7 @@ except ImportError:  # pragma: no cover
 # Optional Prometheus
 try:
     from prometheus_client import Counter, Gauge
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
@@ -63,6 +62,7 @@ logger = logger.bind(component="RateLimiter")
 @dataclass
 class RateLimitConfig:
     """Per-client rate limit configuration."""
+
     max_requests: int = 1000
     window_seconds: int = 60
     redis_ttl_seconds: int = 120  # Keep keys a bit longer than window
@@ -72,6 +72,7 @@ class RateLimiterConfig:
     """
     Global rate limiter configuration.
     """
+
     def __init__(
         self,
         default_max_requests: int = 1000,
@@ -96,7 +97,9 @@ class RateLimiterConfig:
         # Per-client overrides
         self.client_overrides: Dict[str, RateLimitConfig] = {}
 
-    def set_client_limit(self, client_id: str, max_requests: int, window_seconds: int) -> None:
+    def set_client_limit(
+        self, client_id: str, max_requests: int, window_seconds: int
+    ) -> None:
         """Override limits for a specific client."""
         self.client_overrides[client_id] = RateLimitConfig(
             max_requests=max_requests,
@@ -148,6 +151,7 @@ def _set_active_clients(count: int) -> None:
 # --------------------------------------------------------------------------- #
 class RateLimitError(Exception):
     """Base exception for rate limiting errors."""
+
     pass
 
 
@@ -156,10 +160,13 @@ class RateLimitError(Exception):
 # --------------------------------------------------------------------------- #
 class RateLimitExceeded(RateLimitError):
     """Raised when rate limit is exceeded. Includes retry-after."""
+
     def __init__(self, client_id: str, retry_after: float):
         self.client_id = client_id
         self.retry_after = retry_after
-        super().__init__(f"Rate limit exceeded for {client_id}. Retry after {retry_after:.2f}s.")
+        super().__init__(
+            f"Rate limit exceeded for {client_id}. Retry after {retry_after:.2f}s."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -228,7 +235,8 @@ class RateLimiter:
                 await asyncio.sleep(self.config.cleanup_interval)
                 now = time.time()
                 expired = [
-                    cid for cid, times in self._in_memory.items()
+                    cid
+                    for cid, times in self._in_memory.items()
                     if times and now - times[0] >= self.config.default.window_seconds
                 ]
                 for cid in expired:
@@ -236,7 +244,9 @@ class RateLimiter:
                     self._client_locks.pop(cid, None)
                 if expired and self.config.enable_metrics:
                     _set_active_clients(len(self._in_memory))
-                logger.debug("Cleaned up expired rate limit entries.", count=len(expired))
+                logger.debug(
+                    "Cleaned up expired rate limit entries.", count=len(expired)
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -264,14 +274,15 @@ class RateLimiter:
         else:
             return await self._check_in_memory(client_id, cfg, now)
 
-    async def _check_in_memory(self, client_id: str, cfg: RateLimitConfig, now: float) -> bool:
+    async def _check_in_memory(
+        self, client_id: str, cfg: RateLimitConfig, now: float
+    ) -> bool:
         """In-memory sliding window check."""
         lock = self._client_locks[client_id]
         async with lock:
             # Prune expired
             self._in_memory[client_id] = [
-                t for t in self._in_memory[client_id]
-                if now - t < cfg.window_seconds
+                t for t in self._in_memory[client_id] if now - t < cfg.window_seconds
             ]
             count = len(self._in_memory[client_id])
 
@@ -293,7 +304,9 @@ class RateLimiter:
                 _set_active_clients(len(self._in_memory))
             return True
 
-    async def _check_redis(self, client_id: str, cfg: RateLimitConfig, now: float) -> bool:
+    async def _check_redis(
+        self, client_id: str, cfg: RateLimitConfig, now: float
+    ) -> bool:
         """Redis-backed distributed check using Lua script for atomicity."""
         script = """
         local key = KEYS[1]
@@ -339,7 +352,9 @@ class RateLimiter:
             _inc_metric("allowed", client_id)
             return True
         except (ConnectionError, TimeoutError) as e:
-            logger.error("Redis rate limit check failed, falling back to in-memory.", exc_info=e)
+            logger.error(
+                "Redis rate limit check failed, falling back to in-memory.", exc_info=e
+            )
             _inc_metric("error", client_id)
             return await self._check_in_memory(client_id, cfg, now)
         except Exception as e:
@@ -381,7 +396,6 @@ async def rate_limit_middleware(
     Usage in ShardedMessageBus:
         bus.add_pre_publish_hook(partial(rate_limit_middleware, limiter))
     """
-    from .message_types import Message  # Late import to avoid cycles
 
     cid = client_id or getattr(message, "client_id", None) or "anonymous"
     try:

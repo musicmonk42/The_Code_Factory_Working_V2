@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable, Tuple, Literal
 from packaging import version
 
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -19,37 +18,48 @@ PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 # --- Custom Exceptions for the WASM runner ---
 class WasmRunnerError(Exception):
     """Base exception for WASM runner errors."""
+
     pass
+
 
 class WasmStartupError(WasmRunnerError):
     """Exception for critical errors during WASM runner startup."""
+
     pass
+
 
 class WasmExecutionError(WasmRunnerError):
     """Exception for errors during WASM function execution."""
+
     pass
+
 
 class AnalyzerCriticalError(Exception):
     """
     Custom exception for critical errors that should halt execution and alert ops.
     """
+
     def __init__(self, message: str, alert_level: str = "CRITICAL"):
         super().__init__(message)
         alert_operator(message, alert_level)
+
 
 class NonCriticalError(Exception):
     """
     Custom exception for recoverable issues that should be logged but not halt execution.
     """
+
     pass
+
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
@@ -64,21 +74,29 @@ except ImportError as e:
 try:
     import wasmtime
 except ImportError as e:
-    alert_operator(f"CRITICAL: wasmtime-py missing. WASM runner aborted.", level="CRITICAL")
+    alert_operator(
+        "CRITICAL: wasmtime-py missing. WASM runner aborted.", level="CRITICAL"
+    )
     raise WasmStartupError(f"wasmtime-py is not installed: {e}") from e
 
 try:
     from pydantic import BaseModel, ValidationError, Field, validator
 except ImportError as e:
-    alert_operator(f"CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL")
+    alert_operator(
+        "CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL"
+    )
     raise WasmStartupError(f"pydantic is not installed: {e}") from e
+
 
 # --- Manifest Schema Validation (MANDATORY) ---
 class WasmManifestModel(BaseModel):
     """A Pydantic model to validate the structure of a WASM plugin manifest."""
+
     name: str = Field(..., min_length=1)
     version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
-    entrypoint: str = Field(..., min_length=1)  # Export to call as main (expects ABI below)
+    entrypoint: str = Field(
+        ..., min_length=1
+    )  # Export to call as main (expects ABI below)
     type: Literal["wasm"]
     health_check: str = Field("plugin_health", min_length=1)
     api_version: str = Field("v1", min_length=1)
@@ -87,7 +105,14 @@ class WasmManifestModel(BaseModel):
 
     # Resource Controls
     sandbox: Dict[str, Any] = Field(
-        default_factory=lambda: {"enabled": True, "resource_limits": {"memory": "64MB", "runtime_seconds": 5, "network": False}}
+        default_factory=lambda: {
+            "enabled": True,
+            "resource_limits": {
+                "memory": "64MB",
+                "runtime_seconds": 5,
+                "network": False,
+            },
+        }
     )
 
     capabilities: List[str] = Field(default_factory=list)
@@ -102,33 +127,47 @@ class WasmManifestModel(BaseModel):
 
     signature: Optional[str] = None
 
-    @validator('name', 'entrypoint', 'health_check', 'api_version')
+    @validator("name", "entrypoint", "health_check", "api_version")
     def check_no_dummy_fields(cls, v):
-        if PRODUCTION_MODE and ("dummy" in v.lower() or "test" in v.lower() or "mock" in v.lower()):
-            raise ValueError(f"Dummy/test field value '{v}' detected in manifest. Not allowed in production.")
+        if PRODUCTION_MODE and (
+            "dummy" in v.lower() or "test" in v.lower() or "mock" in v.lower()
+        ):
+            raise ValueError(
+                f"Dummy/test field value '{v}' detected in manifest. Not allowed in production."
+            )
         return v
 
-    @validator('sandbox')
+    @validator("sandbox")
     def validate_sandbox_config(cls, v):
         if not v.get("enabled", True):
             if PRODUCTION_MODE:
                 raise ValueError("Sandbox must be enabled in PRODUCTION_MODE.")
             else:
-                logger.warning("Sandbox disabled in manifest. Not recommended for non-prod.")
+                logger.warning(
+                    "Sandbox disabled in manifest. Not recommended for non-prod."
+                )
         resource_limits = v.get("resource_limits", {})
-        if "memory" in resource_limits and (not isinstance(resource_limits["memory"], str) or "MB" not in resource_limits.get("memory", "")):
+        if "memory" in resource_limits and (
+            not isinstance(resource_limits["memory"], str)
+            or "MB" not in resource_limits.get("memory", "")
+        ):
             raise ValueError("Memory limit must be a string like '128MB'.")
-        if "runtime_seconds" in resource_limits and (not isinstance(resource_limits["runtime_seconds"], (int, float)) or resource_limits["runtime_seconds"] <= 0):
+        if "runtime_seconds" in resource_limits and (
+            not isinstance(resource_limits["runtime_seconds"], (int, float))
+            or resource_limits["runtime_seconds"] <= 0
+        ):
             raise ValueError("Runtime limit must be a positive number in seconds.")
         return v
 
     class Config:
         extra = "forbid"
 
+
 # --- WASM Host Functions Security: Only expose host functions that are explicitly whitelisted ---
 WHITELISTED_HOST_FUNCTIONS: Dict[str, Callable] = {
     "env.host_log": None,
 }
+
 
 def _is_in_allowlist(path: str, allowed_dirs: List[str]) -> bool:
     """
@@ -142,17 +181,26 @@ def _is_in_allowlist(path: str, allowed_dirs: List[str]) -> bool:
     except OSError:
         return False
 
-def _safe_exports_get(store: wasmtime.Store, instance: wasmtime.Instance, name: str, typ):
+
+def _safe_exports_get(
+    store: wasmtime.Store, instance: wasmtime.Instance, name: str, typ
+):
     exp = instance.exports(store).get(name)
     if not isinstance(exp, typ):
-        raise WasmExecutionError(f"Required export '{name}' with type {typ.__name__} not found")
+        raise WasmExecutionError(
+            f"Required export '{name}' with type {typ.__name__} not found"
+        )
     return exp
+
 
 def host_log_closure(runner_instance: "WasmRunner"):
     MAX_LOG_BYTES = 64 * 1024  # hard cap
+
     def _inner_host_log(store, ptr: int, length: int):
         try:
-            mem = _safe_exports_get(store, runner_instance.instance, "memory", wasmtime.Memory)
+            mem = _safe_exports_get(
+                store, runner_instance.instance, "memory", wasmtime.Memory
+            )
             length_capped = min(int(length), MAX_LOG_BYTES)
             if ptr < 0 or ptr + length_capped > mem.data_len(store):
                 raise WasmExecutionError("Memory read out of bounds.")
@@ -161,11 +209,15 @@ def host_log_closure(runner_instance: "WasmRunner"):
             if len(message) > 2048:
                 message = message[:2035] + " ...(truncated)"
             logger.info(f"[WASM LOG] {message}")
-            audit_logger.log_event("wasm_host_log_call", ptr=int(ptr), length=int(length), message=message)
+            audit_logger.log_event(
+                "wasm_host_log_call", ptr=int(ptr), length=int(length), message=message
+            )
         except Exception as e:
             logger.error(f"[WASM LOG] Failed to read log message from WASM: {e}")
             audit_logger.log_event("wasm_host_log_error", error=str(e))
+
     return _inner_host_log
+
 
 # --- WASM Runner Class ---
 class WasmRunner:
@@ -178,11 +230,21 @@ class WasmRunner:
       - Output: function returns two i32 values (out_ptr, out_len) pointing to a UTF-8 JSON buffer.
       - Module must export: memory, alloc(len)->ptr, and (optionally) free(ptr,len).
     """
-    def __init__(self, plugin_name: str, manifest: Dict[str, Any], plugins_dir: str, whitelisted_plugin_dirs: List[str], core_version: str = "1.1.0"):
+
+    def __init__(
+        self,
+        plugin_name: str,
+        manifest: Dict[str, Any],
+        plugins_dir: str,
+        whitelisted_plugin_dirs: List[str],
+        core_version: str = "1.1.0",
+    ):
         # Synchronous validation; async I/O happens later.
         self.plugin_name = plugin_name
         self.plugins_dir = os.path.abspath(plugins_dir)
-        self.whitelisted_plugin_dirs = [os.path.abspath(d) for d in whitelisted_plugin_dirs]
+        self.whitelisted_plugin_dirs = [
+            os.path.abspath(d) for d in whitelisted_plugin_dirs
+        ]
         self.core_version = core_version
 
         # Manifest Signature Validation (BLOCKER)
@@ -191,26 +253,70 @@ class WasmRunner:
         try:
             self.manifest = WasmManifestModel(**manifest)
         except ValidationError as e:
-            audit_logger.log_event("wasm_plugin_load_failure", plugin=plugin_name, reason="manifest_validation_failed", error=str(e))
-            alert_operator(f"CRITICAL: Invalid WASM plugin manifest for {plugin_name}: {e}. Aborting.", level="CRITICAL")
+            audit_logger.log_event(
+                "wasm_plugin_load_failure",
+                plugin=plugin_name,
+                reason="manifest_validation_failed",
+                error=str(e),
+            )
+            alert_operator(
+                f"CRITICAL: Invalid WASM plugin manifest for {plugin_name}: {e}. Aborting.",
+                level="CRITICAL",
+            )
             raise WasmStartupError(f"Invalid plugin manifest for {plugin_name}") from e
 
         if PRODUCTION_MODE and self.manifest.is_demo_plugin:
-            audit_logger.log_event("wasm_plugin_load_failure", plugin=plugin_name, reason="demo_plugin_in_prod")
-            alert_operator(f"CRITICAL: WASM plugin '{plugin_name}' detected in PRODUCTION_MODE. Aborting.", level="CRITICAL")
-            raise WasmStartupError(f"Demo plugin '{plugin_name}' is forbidden in production.")
+            audit_logger.log_event(
+                "wasm_plugin_load_failure",
+                plugin=plugin_name,
+                reason="demo_plugin_in_prod",
+            )
+            alert_operator(
+                f"CRITICAL: WASM plugin '{plugin_name}' detected in PRODUCTION_MODE. Aborting.",
+                level="CRITICAL",
+            )
+            raise WasmStartupError(
+                f"Demo plugin '{plugin_name}' is forbidden in production."
+            )
 
         if not _is_in_allowlist(self.plugins_dir, self.whitelisted_plugin_dirs):
-            audit_logger.log_event("wasm_plugin_load_failure", plugin=plugin_name, reason="unwhitelisted_plugin_dir", dir=self.plugins_dir)
-            alert_operator(f"CRITICAL: WASM plugin dir '{self.plugins_dir}' not whitelisted. Aborting.", level="CRITICAL")
-            raise WasmStartupError(f"Plugin directory '{self.plugins_dir}' is not whitelisted.")
+            audit_logger.log_event(
+                "wasm_plugin_load_failure",
+                plugin=plugin_name,
+                reason="unwhitelisted_plugin_dir",
+                dir=self.plugins_dir,
+            )
+            alert_operator(
+                f"CRITICAL: WASM plugin dir '{self.plugins_dir}' not whitelisted. Aborting.",
+                level="CRITICAL",
+            )
+            raise WasmStartupError(
+                f"Plugin directory '{self.plugins_dir}' is not whitelisted."
+            )
 
-        self.wasm_filepath = os.path.join(self.plugins_dir, self.plugin_name, f"{self.plugin_name}.wasm")
+        self.wasm_filepath = os.path.join(
+            self.plugins_dir, self.plugin_name, f"{self.plugin_name}.wasm"
+        )
 
-        if not (version.parse(self.manifest.min_core_version) <= version.parse(self.core_version) <= version.parse(self.manifest.max_core_version)):
-            audit_logger.log_event("wasm_plugin_load_failure", plugin=self.plugin_name, reason="core_version_incompatibility", plugin_version=self.manifest.version, core_version=self.core_version)
-            alert_operator(f"CRITICAL: WASM plugin '{self.plugin_name}' incompatible with core version. Aborting.", level="CRITICAL")
-            raise WasmStartupError(f"Plugin {self.plugin_name} is incompatible with core version {self.core_version}")
+        if not (
+            version.parse(self.manifest.min_core_version)
+            <= version.parse(self.core_version)
+            <= version.parse(self.manifest.max_core_version)
+        ):
+            audit_logger.log_event(
+                "wasm_plugin_load_failure",
+                plugin=self.plugin_name,
+                reason="core_version_incompatibility",
+                plugin_version=self.manifest.version,
+                core_version=self.core_version,
+            )
+            alert_operator(
+                f"CRITICAL: WASM plugin '{self.plugin_name}' incompatible with core version. Aborting.",
+                level="CRITICAL",
+            )
+            raise WasmStartupError(
+                f"Plugin {self.plugin_name} is incompatible with core version {self.core_version}"
+            )
 
         # Configure wasmtime
         self.config = wasmtime.Config()
@@ -234,13 +340,25 @@ class WasmRunner:
 
         if PRODUCTION_MODE:
             if not key or not sig:
-                raise WasmStartupError("Manifest signature required in PRODUCTION_MODE.")
-            expect = hmac.new(key.encode(), json.dumps(data_to_hash, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+                raise WasmStartupError(
+                    "Manifest signature required in PRODUCTION_MODE."
+                )
+            expect = hmac.new(
+                key.encode(),
+                json.dumps(data_to_hash, sort_keys=True).encode(),
+                hashlib.sha256,
+            ).hexdigest()
             if not hmac.compare_digest(expect, sig):
                 raise WasmStartupError("Manifest signature mismatch.")
 
     @classmethod
-    async def create(cls, plugin_name: str, manifest: Dict[str, Any], plugins_dir: str, whitelisted_plugin_dirs: List[str]):
+    async def create(
+        cls,
+        plugin_name: str,
+        manifest: Dict[str, Any],
+        plugins_dir: str,
+        whitelisted_plugin_dirs: List[str],
+    ):
         """Async factory method to correctly initialize the runner."""
         instance = cls(plugin_name, manifest, plugins_dir, whitelisted_plugin_dirs)
         await instance._load_module_async()
@@ -256,9 +374,16 @@ class WasmRunner:
             try:
                 self.config.consume_fuel = True  # Use direct attribute access
                 logger.info(f"[{self.plugin_name}] Fuel-based runtime limiting enabled")
-                audit_logger.log_event("wasm_resource_limit_set", plugin=self.plugin_name, resource="runtime_seconds", limit=limits["runtime_seconds"])
+                audit_logger.log_event(
+                    "wasm_resource_limit_set",
+                    plugin=self.plugin_name,
+                    resource="runtime_seconds",
+                    limit=limits["runtime_seconds"],
+                )
             except AttributeError as e:
-                raise WasmStartupError(f"Failed to enable fuel-based limiting (config attribute not available): {e}") from e
+                raise WasmStartupError(
+                    f"Failed to enable fuel-based limiting (config attribute not available): {e}"
+                ) from e
 
         # Memory cap (best-effort; also validate module memories at load)
         mem = limits.get("memory")
@@ -273,8 +398,15 @@ class WasmRunner:
                 except Exception:
                     # If unsupported, rely solely on module memory validation below
                     pass
-                logger.info(f"[{self.plugin_name}] Static memory cap configured (~{mb}MB)")
-                audit_logger.log_event("wasm_resource_limit_set", plugin=self.plugin_name, resource="memory", limit=mem)
+                logger.info(
+                    f"[{self.plugin_name}] Static memory cap configured (~{mb}MB)"
+                )
+                audit_logger.log_event(
+                    "wasm_resource_limit_set",
+                    plugin=self.plugin_name,
+                    resource="memory",
+                    limit=mem,
+                )
             except Exception as e:
                 raise WasmStartupError(f"Invalid memory limit '{mem}': {e}") from e
 
@@ -287,11 +419,23 @@ class WasmRunner:
                     self.linker.define(
                         "env",
                         "host_log",
-                        wasmtime.Func(self.store, wasmtime.FuncType([wasmtime.ValType.i32(), wasmtime.ValType.i32()], []), host_log_closure(self)),
+                        wasmtime.Func(
+                            self.store,
+                            wasmtime.FuncType(
+                                [wasmtime.ValType.i32(), wasmtime.ValType.i32()], []
+                            ),
+                            host_log_closure(self),
+                        ),
                     )
-                    audit_logger.log_event("wasm_host_function_defined", plugin=self.plugin_name, host_function=host_func_name)
+                    audit_logger.log_event(
+                        "wasm_host_function_defined",
+                        plugin=self.plugin_name,
+                        host_function=host_func_name,
+                    )
                 else:
-                    raise WasmStartupError(f"Plugin {self.plugin_name} requests unwhitelisted host function '{host_func_name}'")
+                    raise WasmStartupError(
+                        f"Plugin {self.plugin_name} requests unwhitelisted host function '{host_func_name}'"
+                    )
 
     def _validate_module_memory_constraints(self, module: wasmtime.Module) -> None:
         """Reject modules with unbounded or oversized memories vs. configured cap."""
@@ -306,8 +450,12 @@ class WasmRunner:
             try:
                 if isinstance(et.type, wasmtime.MemoryType):
                     mt = et.type
-                    if mt.maximum is None or (mt.maximum is not None and mt.maximum > cap_pages):
-                        raise WasmStartupError(f"Exported memory exceeds cap or is unbounded for plugin {self.plugin_name}")
+                    if mt.maximum is None or (
+                        mt.maximum is not None and mt.maximum > cap_pages
+                    ):
+                        raise WasmStartupError(
+                            f"Exported memory exceeds cap or is unbounded for plugin {self.plugin_name}"
+                        )
             except AttributeError:
                 # API compatibility: older wasmtime may wrap types differently
                 pass
@@ -317,8 +465,12 @@ class WasmRunner:
             try:
                 if isinstance(it.type, wasmtime.MemoryType):
                     mt = it.type
-                    if mt.maximum is None or (mt.maximum is not None and mt.maximum > cap_pages):
-                        raise WasmStartupError(f"Imported memory exceeds cap or is unbounded for plugin {self.plugin_name}")
+                    if mt.maximum is None or (
+                        mt.maximum is not None and mt.maximum > cap_pages
+                    ):
+                        raise WasmStartupError(
+                            f"Imported memory exceeds cap or is unbounded for plugin {self.plugin_name}"
+                        )
             except AttributeError:
                 pass
 
@@ -327,24 +479,41 @@ class WasmRunner:
         if not os.path.exists(self.wasm_filepath):
             raise WasmStartupError(f"WASM module not found: {self.wasm_filepath}")
         if not os.access(self.wasm_filepath, os.R_OK):
-            raise WasmStartupError(f"No read access to WASM binary: {self.wasm_filepath}")
+            raise WasmStartupError(
+                f"No read access to WASM binary: {self.wasm_filepath}"
+            )
         if not _is_in_allowlist(self.wasm_filepath, self.whitelisted_plugin_dirs):
-            raise WasmStartupError(f"WASM binary '{self.wasm_filepath}' is outside whitelisted directories.")
+            raise WasmStartupError(
+                f"WASM binary '{self.wasm_filepath}' is outside whitelisted directories."
+            )
 
-        file_hash = await asyncio.to_thread(lambda: hashlib.sha256(Path(self.wasm_filepath).read_bytes()).hexdigest())
+        file_hash = await asyncio.to_thread(
+            lambda: hashlib.sha256(Path(self.wasm_filepath).read_bytes()).hexdigest()
+        )
 
         if self.last_loaded_hash == file_hash and self.module is not None:
-            logger.debug(f"[{self.plugin_name}] WASM module unchanged, skipping reload.")
+            logger.debug(
+                f"[{self.plugin_name}] WASM module unchanged, skipping reload."
+            )
             return
 
         try:
-            module = await asyncio.to_thread(wasmtime.Module.from_file, self.engine, self.wasm_filepath)
+            module = await asyncio.to_thread(
+                wasmtime.Module.from_file, self.engine, self.wasm_filepath
+            )
             # Memory constraints validation
             self._validate_module_memory_constraints(module)
             self.module = module
             self.last_loaded_hash = file_hash
-            logger.info(f"[{self.plugin_name}] WASM module loaded from {self.wasm_filepath}")
-            audit_logger.log_event("wasm_module_loaded", plugin=self.plugin_name, file=self.wasm_filepath, hash=file_hash)
+            logger.info(
+                f"[{self.plugin_name}] WASM module loaded from {self.wasm_filepath}"
+            )
+            audit_logger.log_event(
+                "wasm_module_loaded",
+                plugin=self.plugin_name,
+                file=self.wasm_filepath,
+                hash=file_hash,
+            )
         except wasmtime.WasmtimeError as e:
             raise WasmStartupError(f"Failed to load WASM: {e}") from e
 
@@ -388,13 +557,15 @@ class WasmRunner:
         """
         async with self._call_lock:
             if not self.instance:
-                raise WasmExecutionError(f"WASM module for {self.plugin_name} not instantiated.")
+                raise WasmExecutionError(
+                    f"WASM module for {self.plugin_name} not instantiated."
+                )
 
             audit_logger.log_event(
                 "wasm_function_run_start",
                 plugin=self.plugin_name,
                 function=func_name,
-                args_summary=scrub_sensitive_data(str(args)[:200])
+                args_summary=scrub_sensitive_data(str(args)[:200]),
             )
             t0 = time.time()
 
@@ -417,7 +588,9 @@ class WasmRunner:
                     logger.warning(f"[{self.plugin_name}] Unable to add fuel: {e}")
 
             try:
-                exported_func = _safe_exports_get(self.store, self.instance, func_name, wasmtime.Func)
+                exported_func = _safe_exports_get(
+                    self.store, self.instance, func_name, wasmtime.Func
+                )
 
                 # Marshal args: JSON -> bytes -> (ptr, len) pairs
                 processed: List[int] = []
@@ -439,11 +612,17 @@ class WasmRunner:
                 result = await asyncio.to_thread(_call)
 
                 # Normalize: wasmtime returns tuple or list or ints
-                if isinstance(result, (tuple, list)) and len(result) == 2 and all(isinstance(x, int) for x in result):
+                if (
+                    isinstance(result, (tuple, list))
+                    and len(result) == 2
+                    and all(isinstance(x, int) for x in result)
+                ):
                     out_ptr, out_len = int(result[0]), int(result[1])
                 elif isinstance(result, int):
                     # Some ABIs return only ptr; not supported here
-                    raise WasmExecutionError("WASM returned single int; expected (ptr,len)")
+                    raise WasmExecutionError(
+                        "WASM returned single int; expected (ptr,len)"
+                    )
                 else:
                     raise WasmExecutionError("WASM did not return (ptr,len)")
 
@@ -466,58 +645,110 @@ class WasmRunner:
             except wasmtime.Trap as t:
                 msg = str(t)
                 if "all fuel consumed" in msg:
-                    raise WasmExecutionError(f"runtime limit exceeded ({runtime_limit_seconds}s)") from t
+                    raise WasmExecutionError(
+                        f"runtime limit exceeded ({runtime_limit_seconds}s)"
+                    ) from t
                 raise WasmExecutionError(f"WASM execution trapped: {msg}") from t
             except Exception as e:
-                raise WasmExecutionError(f"Error during WASM function '{func_name}' call: {e}") from e
+                raise WasmExecutionError(
+                    f"Error during WASM function '{func_name}' call: {e}"
+                ) from e
             finally:
-                audit_logger.log_event("wasm_function_run_end", plugin=self.plugin_name, function=func_name, duration=time.time() - t0)
+                audit_logger.log_event(
+                    "wasm_function_run_end",
+                    plugin=self.plugin_name,
+                    function=func_name,
+                    duration=time.time() - t0,
+                )
 
     async def plugin_health(self) -> Dict[str, Any]:
         """Performs a health check on the WASM plugin."""
         health_check_method = self.manifest.health_check
         if not health_check_method:
-            logger.warning(f"[{self.plugin_name}] No health_check method defined in manifest.")
-            return {"status": "warning", "message": "No health_check method defined in manifest."}
+            logger.warning(
+                f"[{self.plugin_name}] No health_check method defined in manifest."
+            )
+            return {
+                "status": "warning",
+                "message": "No health_check method defined in manifest.",
+            }
 
         try:
             health_result = await self.run_function(health_check_method)
             if isinstance(health_result, dict) and "status" in health_result:
                 status = str(health_result.get("status", "unknown")).lower()
                 if status in ("ok", "healthy"):
-                    return {"status": "ok", "message": "Plugin is healthy.", "details": health_result}
+                    return {
+                        "status": "ok",
+                        "message": "Plugin is healthy.",
+                        "details": health_result,
+                    }
                 else:
-                    logger.error(f"[{self.plugin_name}] Health check returned non-ok status: {status}. Details: {health_result}")
-                    return {"status": "fail", "message": f"Plugin reported {status} status.", "details": health_result}
+                    logger.error(
+                        f"[{self.plugin_name}] Health check returned non-ok status: {status}. Details: {health_result}"
+                    )
+                    return {
+                        "status": "fail",
+                        "message": f"Plugin reported {status} status.",
+                        "details": health_result,
+                    }
             else:
-                logger.error(f"[{self.plugin_name}] Health check returned unexpected format: {type(health_result).__name__}")
-                return {"status": "error", "message": "Health check returned unexpected format."}
+                logger.error(
+                    f"[{self.plugin_name}] Health check returned unexpected format: {type(health_result).__name__}"
+                )
+                return {
+                    "status": "error",
+                    "message": "Health check returned unexpected format.",
+                }
         except Exception as e:
-            logger.critical(f"CRITICAL: [{self.plugin_name}] Health check failed unexpectedly: {e}.", exc_info=True)
-            return {"status": "error", "message": f"Health check failed unexpectedly: {e}"}
+            logger.critical(
+                f"CRITICAL: [{self.plugin_name}] Health check failed unexpectedly: {e}.",
+                exc_info=True,
+            )
+            return {
+                "status": "error",
+                "message": f"Health check failed unexpectedly: {e}",
+            }
 
     async def reload_if_changed(self, operator_approved: bool = False):
         """Hot reload module if file has changed, with a concurrency lock."""
         if PRODUCTION_MODE and not operator_approved:
-            raise WasmRunnerError("Hot-reload forbidden without operator approval in production.")
+            raise WasmRunnerError(
+                "Hot-reload forbidden without operator approval in production."
+            )
 
         async with self._call_lock:
-            current_hash = hashlib.sha256(Path(self.wasm_filepath).read_bytes()).hexdigest()
+            current_hash = hashlib.sha256(
+                Path(self.wasm_filepath).read_bytes()
+            ).hexdigest()
             if current_hash != self.last_loaded_hash:
                 logger.info(f"Hot-reloading plugin {self.plugin_name} (file changed).")
-                audit_logger.log_event("wasm_plugin_reload_start", plugin=self.plugin_name, old_hash=self.last_loaded_hash, new_hash=current_hash, operator_approved=operator_approved)
+                audit_logger.log_event(
+                    "wasm_plugin_reload_start",
+                    plugin=self.plugin_name,
+                    old_hash=self.last_loaded_hash,
+                    new_hash=current_hash,
+                    operator_approved=operator_approved,
+                )
                 await self._load_module_async()
                 self._instantiate_module()
-                logger.info(f"WASM plugin {self.plugin_name} hot-reloaded successfully.")
-                audit_logger.log_event("wasm_plugin_reload_success", plugin=self.plugin_name)
+                logger.info(
+                    f"WASM plugin {self.plugin_name} hot-reloaded successfully."
+                )
+                audit_logger.log_event(
+                    "wasm_plugin_reload_success", plugin=self.plugin_name
+                )
                 return True
-            logger.debug(f"Plugin {self.plugin_name} WASM file unchanged. No reload needed.")
+            logger.debug(
+                f"Plugin {self.plugin_name} WASM file unchanged. No reload needed."
+            )
             return False
 
     def close(self) -> None:
         """Cleans up WASM runtime resources."""
         logger.info(f"[{self.plugin_name}] WasmRunner closed.")
         audit_logger.log_event("wasm_runner_closed", plugin=self.plugin_name)
+
 
 # --- CLI Tooling ---
 def _validate_manifest_signature_dict(manifest: Dict[str, Any]) -> None:
@@ -528,15 +759,22 @@ def _validate_manifest_signature_dict(manifest: Dict[str, Any]) -> None:
     if PRODUCTION_MODE:
         if not key or not sig:
             raise WasmRunnerError("Manifest signature required in PRODUCTION_MODE.")
-        expect = hmac.new(key.encode(), json.dumps(data_to_hash, sort_keys=True).encode(), hashlib.sha256).hexdigest()
+        expect = hmac.new(
+            key.encode(),
+            json.dumps(data_to_hash, sort_keys=True).encode(),
+            hashlib.sha256,
+        ).hexdigest()
         if not hmac.compare_digest(expect, sig):
             raise WasmRunnerError("Manifest signature mismatch.")
+
 
 def list_plugins(plugins_dir: str, whitelisted_plugin_dirs: List[str]):
     """Lists and validates all plugin manifest files in a given directory."""
     abs_plugins_dir = os.path.abspath(plugins_dir)
     if not _is_in_allowlist(abs_plugins_dir, whitelisted_plugin_dirs):
-        raise WasmRunnerError(f"Listing plugins from non-whitelisted directory {abs_plugins_dir} is forbidden.")
+        raise WasmRunnerError(
+            f"Listing plugins from non-whitelisted directory {abs_plugins_dir} is forbidden."
+        )
 
     if not os.path.exists(abs_plugins_dir) or not os.path.isdir(abs_plugins_dir):
         logger.warning(f"Plugins directory not found: {abs_plugins_dir}")
@@ -548,26 +786,36 @@ def list_plugins(plugins_dir: str, whitelisted_plugin_dirs: List[str]):
         manifest_file = os.path.join(plugin_folder, "manifest.json")
         if os.path.isdir(plugin_folder) and os.path.exists(manifest_file):
             try:
-                with open(manifest_file, 'r', encoding='utf-8') as f:
+                with open(manifest_file, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
                 _validate_manifest_signature_dict(manifest)
                 WasmManifestModel(**manifest)
                 available_plugins.append(plugin_name)
             except Exception as e:
-                logger.warning(f"Skipping invalid plugin manifest for {plugin_name}: {e}")
+                logger.warning(
+                    f"Skipping invalid plugin manifest for {plugin_name}: {e}"
+                )
     logger.info(f"Available WASM plugins in {abs_plugins_dir}: {available_plugins}")
     return available_plugins
+
 
 def _allow_out_path(out_file: str, allowed_dirs: List[str]) -> None:
     """Ensure the output file is inside an allowed directory."""
     if not _is_in_allowlist(out_file, allowed_dirs):
         raise WasmRunnerError(f"Output path not allowed: {out_file}")
 
-def generate_plugin_docs(plugins_dir: str, whitelisted_plugin_dirs: List[str], out_file: str = "WASM_PLUGIN_DOCS.md"):
+
+def generate_plugin_docs(
+    plugins_dir: str,
+    whitelisted_plugin_dirs: List[str],
+    out_file: str = "WASM_PLUGIN_DOCS.md",
+):
     """Generates documentation for all valid WASM plugins."""
     abs_plugins_dir = os.path.abspath(plugins_dir)
     if not _is_in_allowlist(abs_plugins_dir, whitelisted_plugin_dirs):
-        raise WasmRunnerError(f"Generating docs from non-whitelisted directory {abs_plugins_dir} is forbidden.")
+        raise WasmRunnerError(
+            f"Generating docs from non-whitelisted directory {abs_plugins_dir} is forbidden."
+        )
 
     out_file = os.path.abspath(out_file)
     _allow_out_path(out_file, whitelisted_plugin_dirs)
@@ -578,7 +826,7 @@ def generate_plugin_docs(plugins_dir: str, whitelisted_plugin_dirs: List[str], o
     for plugin_name in valid_plugins:
         manifest_path = os.path.join(plugins_dir, plugin_name, "manifest.json")
         try:
-            with open(manifest_path, 'r', encoding='utf-8') as f:
+            with open(manifest_path, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
             _validate_manifest_signature_dict(manifest)
             validated_manifest = WasmManifestModel(**manifest)
@@ -587,40 +835,73 @@ def generate_plugin_docs(plugins_dir: str, whitelisted_plugin_dirs: List[str], o
             doc_lines.append(f"- **Version:** {validated_manifest.version}")
             doc_lines.append(f"- **Description:** {validated_manifest.description}\n")
             doc_lines.append(f"- **Entrypoint:** `{validated_manifest.entrypoint}`")
-            doc_lines.append(f"- **Health Check Function:** `{validated_manifest.health_check}`")
+            doc_lines.append(
+                f"- **Health Check Function:** `{validated_manifest.health_check}`"
+            )
             doc_lines.append(f"- **API Version:** `{validated_manifest.api_version}`")
-            doc_lines.append(f"- **Core Compatibility:** `{validated_manifest.min_core_version}` - `{validated_manifest.max_core_version}`")
-            doc_lines.append(f"- **Capabilities:** {', '.join(validated_manifest.capabilities) or 'None'}")
-            doc_lines.append(f"- **Tags:** {', '.join(validated_manifest.tags) or 'None'}")
+            doc_lines.append(
+                f"- **Core Compatibility:** `{validated_manifest.min_core_version}` - `{validated_manifest.max_core_version}`"
+            )
+            doc_lines.append(
+                f"- **Capabilities:** {', '.join(validated_manifest.capabilities) or 'None'}"
+            )
+            doc_lines.append(
+                f"- **Tags:** {', '.join(validated_manifest.tags) or 'None'}"
+            )
             doc_lines.append(f"- **Author:** {validated_manifest.author}")
             doc_lines.append(f"- **License:** {validated_manifest.license}")
-            doc_lines.append(f"- **Homepage:** {validated_manifest.homepage or 'N/A'}\n")
+            doc_lines.append(
+                f"- **Homepage:** {validated_manifest.homepage or 'N/A'}\n"
+            )
 
             doc_lines.append("### Sandbox Configuration:\n")
-            doc_lines.append(f"- **Enabled:** {validated_manifest.sandbox.get('enabled', True)}")
-            resource_limits = validated_manifest.sandbox.get('resource_limits', {})
-            doc_lines.append(f"- **Memory Limit:** {resource_limits.get('memory', 'N/A')}")
-            doc_lines.append(f"- **Runtime Limit:** {resource_limits.get('runtime_seconds', 'N/A')} seconds")
-            doc_lines.append(f"- **Network Access:** {'Enabled' if resource_limits.get('network', True) else 'Disabled'}\n")
+            doc_lines.append(
+                f"- **Enabled:** {validated_manifest.sandbox.get('enabled', True)}"
+            )
+            resource_limits = validated_manifest.sandbox.get("resource_limits", {})
+            doc_lines.append(
+                f"- **Memory Limit:** {resource_limits.get('memory', 'N/A')}"
+            )
+            doc_lines.append(
+                f"- **Runtime Limit:** {resource_limits.get('runtime_seconds', 'N/A')} seconds"
+            )
+            doc_lines.append(
+                f"- **Network Access:** {'Enabled' if resource_limits.get('network', True) else 'Disabled'}\n"
+            )
 
             doc_lines.append("### Approved Paths & Commands:\n")
-            doc_lines.append(f"- **Whitelisted Paths:** {', '.join(validated_manifest.whitelisted_paths) or 'None'}")
-            doc_lines.append(f"- **Whitelisted Commands:** {', '.join(validated_manifest.whitelisted_commands) or 'None'}\n")
+            doc_lines.append(
+                f"- **Whitelisted Paths:** {', '.join(validated_manifest.whitelisted_paths) or 'None'}"
+            )
+            doc_lines.append(
+                f"- **Whitelisted Commands:** {', '.join(validated_manifest.whitelisted_commands) or 'None'}\n"
+            )
 
             doc_lines.append("\n---\n")
 
         except Exception as e:
-            logger.error(f"Error processing manifest for documentation {plugin_name}: {e}", exc_info=True)
-            audit_logger.log_event("wasm_doc_gen_error", plugin_name=plugin_name, error=str(e))
+            logger.error(
+                f"Error processing manifest for documentation {plugin_name}: {e}",
+                exc_info=True,
+            )
+            audit_logger.log_event(
+                "wasm_doc_gen_error", plugin_name=plugin_name, error=str(e)
+            )
 
     try:
-        Path(out_file).write_text("\n".join(doc_lines), encoding='utf-8')
+        Path(out_file).write_text("\n".join(doc_lines), encoding="utf-8")
         logger.info(f"Generated WASM plugin documentation to {out_file}")
-        audit_logger.log_event("wasm_doc_gen_success", file=out_file, plugin_count=len(valid_plugins))
+        audit_logger.log_event(
+            "wasm_doc_gen_success", file=out_file, plugin_count=len(valid_plugins)
+        )
     except OSError as e:
         logger.error(f"Failed to write documentation to {out_file}: {e}", exc_info=True)
-        alert_operator(f"ERROR: Failed to write WASM documentation to {out_file}: {e}.", level="ERROR")
+        alert_operator(
+            f"ERROR: Failed to write WASM documentation to {out_file}: {e}.",
+            level="ERROR",
+        )
         raise IOError(f"Failed to write documentation to {out_file}: {e}") from e
+
 
 # Optional: simple local test harness preserved (will fail in PRODUCTION_MODE with is_demo_plugin=True)
 async def main_test():
@@ -657,8 +938,8 @@ async def main_test():
             "resource_limits": {
                 "memory": "64MB",
                 "runtime_seconds": 5,
-                "network": False
-            }
+                "network": False,
+            },
         },
     }
     manifest_path = os.path.join(plugin_dir, "manifest.json")
@@ -669,28 +950,38 @@ async def main_test():
     dummy_wasm_path = os.path.join(plugin_dir, f"{plugin_name}.wasm")
     if not os.path.exists(dummy_wasm_path):
         with open(dummy_wasm_path, "wb") as f:
-            f.write(b'\x00\x61\x73\x6d\x01\x00\x00\x00')
-        logger.warning(f"\n--- WARNING: Dummy WASM file created at {dummy_wasm_path} ---")
-        logger.warning("For full functionality, replace it with a compiled WASM module.")
+            f.write(b"\x00\x61\x73\x6d\x01\x00\x00\x00")
+        logger.warning(
+            f"\n--- WARNING: Dummy WASM file created at {dummy_wasm_path} ---"
+        )
+        logger.warning(
+            "For full functionality, replace it with a compiled WASM module."
+        )
     else:
         logger.info(f"Using existing WASM file: {dummy_wasm_path}")
 
     runner = None
     try:
         whitelisted_dirs = [os.path.abspath(plugins_base_dir)]
-        runner = await WasmRunner.create(plugin_name, manifest_content, plugins_base_dir, whitelisted_dirs)
+        runner = await WasmRunner.create(
+            plugin_name, manifest_content, plugins_base_dir, whitelisted_dirs
+        )
 
         health = await runner.plugin_health()
         logger.info(f"Plugin Health Check: {health}")
 
         with open(dummy_wasm_path, "ab") as f:
-            f.write(b'changed')
+            f.write(b"changed")
         if await runner.reload_if_changed(operator_approved=True):
             logger.info("WASM plugin hot-reloaded successfully.")
             health_after_reload = await runner.plugin_health()
             logger.info(f"Plugin Health Check after reload: {health_after_reload}")
 
-        generate_plugin_docs(plugins_base_dir, whitelisted_dirs, out_file=os.path.join(plugins_base_dir, "WASM_PLUGIN_DOCS.md"))
+        generate_plugin_docs(
+            plugins_base_dir,
+            whitelisted_dirs,
+            out_file=os.path.join(plugins_base_dir, "WASM_PLUGIN_DOCS.md"),
+        )
 
     except WasmRunnerError as e:
         logger.error(f"WASM Runner Error in main: {e}")
@@ -704,6 +995,7 @@ async def main_test():
         if os.path.exists(plugins_base_dir):
             shutil.rmtree(plugins_base_dir)
         logger.info("Example cleanup complete.")
+
 
 if __name__ == "__main__":
     asyncio.run(main_test())

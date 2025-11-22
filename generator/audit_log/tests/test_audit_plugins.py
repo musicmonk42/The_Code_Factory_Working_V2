@@ -31,9 +31,9 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(
-    Fernet.generate_key()
-).decode("utf-8")
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
+    "utf-8"
+)
 
 # Backend config envs
 os.environ["AUDIT_LOG_BACKEND_TYPE"] = "file"
@@ -65,18 +65,15 @@ os.environ.setdefault("AUDIT_CRYPTO_ALERT_INITIAL_DELAY", "0.1")
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
-import pytest_asyncio
 from faker import Faker
-import aiofiles
 from freezegun import freeze_time
-from prometheus_client import Counter, Gauge, REGISTRY
-from hypothesis import given, settings, HealthCheck # Added HealthCheck import
+from prometheus_client import REGISTRY
+from hypothesis import given, settings, HealthCheck  # Added HealthCheck import
 from hypothesis.strategies import text, dictionaries
 import uuid
 from typing import Dict, Any, Optional
-import inspect # Added for module introspection in mocking
 
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
@@ -87,17 +84,20 @@ if str(REPO_ROOT) not in sys.path:
 
 # Platform-specific imports
 if sys.platform != "win32":
-    import resource
+    pass
 
 # --------------------------------------------------------------------------- #
 # 2. Import the module under test
 # --------------------------------------------------------------------------- #
 # FIX: Import 'plugins' by its actual name (not an alias like '_PLUGINS') for module reloading
 from generator.audit_log.audit_plugins import (
-    AuditPlugin, trigger_event, register_plugin, PLUGIN_INVOCATIONS, PLUGIN_ERRORS,
-    PLUGIN_LATENCY, PLUGIN_MODIFICATIONS, COMMERCIAL_PLUGIN_USAGE, PLUGIN_DIR, PLUGIN_CONFIG,
-    CommercialPlugin, plugins, discover_plugins  # Added discover_plugins import
+    AuditPlugin,
+    trigger_event,
+    register_plugin,
+    CommercialPlugin,
+    plugins,  # Added discover_plugins import
 )
+
 # We also need a local reference to the module for reloading purposes
 import generator.audit_log.audit_plugins as audit_plugins_module
 
@@ -113,8 +113,10 @@ MOCK_CORRELATION_ID = str(uuid.uuid4())
 
 # --- START FIX 1: Promote all test classes to module level ---
 
+
 class TestPlugin(AuditPlugin):
     """Pickleable Test Plugin promoted to module level."""
+
     def __init__(self):
         self.processed_entries_count = 0
         self.redacted_fields_count = 0
@@ -126,14 +128,14 @@ class TestPlugin(AuditPlugin):
             self.redacted_fields_count += 1
             data["sensitive_info"] = "[REDACTED]"
         data["augmented_data"] = "Test augmentation"
-        self.augmented_data_size += len("Test augmentation".encode('utf-8'))
+        self.augmented_data_size += len("Test augmentation".encode("utf-8"))
         return data
 
     def get_usage_data(self) -> Dict[str, Any]:
         return {
             "processed_entries": self.processed_entries_count,
             "redacted_fields": self.redacted_fields_count,
-            "augmented_data_bytes": self.augmented_data_size
+            "augmented_data_bytes": self.augmented_data_size,
         }
 
     def reset_usage_data(self):
@@ -144,17 +146,20 @@ class TestPlugin(AuditPlugin):
 
 class SlowPlugin(AuditPlugin):
     """Pickleable plugin for testing timeouts."""
+
     def __init__(self):
         pass
-        
+
     def process(self, event: str, data: Dict[str, Any]) -> Dict[str, Any]:
         import time
+
         time.sleep(10)  # Exceeds MAX_PLUGIN_TIME_SECONDS
         return data
 
 
 class MockConfigPlugin(AuditPlugin):
     """Pickleable Concrete class used for mocking discover_plugins config load."""
+
     def process(self, event: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # Perform a simple, allowed augmentation
         data["was_loaded"] = True
@@ -167,17 +172,22 @@ class MockConfigPlugin(AuditPlugin):
 
 class TestCommercialPlugin(CommercialPlugin):
     """Pickleable Commercial Plugin for testing usage counting."""
+
     def __init__(self):
         self.count = 0
+
     def process(self, event: str, data: Dict[str, Any]) -> Dict[str, Any]:
         # FIX: Don't increment counter for billing_report events
         if event != "billing_report":
             self.count += 1
         return data
+
     def get_usage_data(self) -> Dict[str, Any]:
         return {"processed_entries": self.count}
+
     def reset_usage_data(self):
         self.count = 0
+
 
 # --- END FIX 1 ---
 
@@ -189,54 +199,59 @@ def event_loop():
     yield loop
     loop.close()
 
+
 @pytest.fixture(autouse=True)
 def cleanup_test_environment():
     """Clean up test environment before and after tests."""
     for path in [TEST_PLUGIN_DIR]:
         Path(path).mkdir(parents=True, exist_ok=True)
-    
+
     # Clear global plugins registry before each test
     plugins.clear()
-    
+
     yield
-    
+
     # Cleanup after tests
     plugins.clear()
+
 
 @pytest.fixture
 def mock_compute_hash():
     """Mock compute_hash to return deterministic values."""
-    with patch('generator.audit_log.audit_plugins.compute_hash') as mock_hash:
+    with patch("generator.audit_log.audit_plugins.compute_hash") as mock_hash:
         mock_hash.return_value = "mock_hash_value_12345"
         yield mock_hash
+
 
 @pytest.fixture
 def mock_audit_log():
     """Mock log_action to prevent actual audit logging during tests."""
-    with patch('generator.audit_log.audit_plugins.log_action') as mock_log:
+    with patch("generator.audit_log.audit_plugins.log_action") as mock_log:
         # Since log_action should be an async function, use AsyncMock
         async_mock_log = AsyncMock()
         mock_log.side_effect = async_mock_log
         yield async_mock_log
 
+
 @pytest.fixture
 def mock_aiofiles():
     """Mock aiofiles for async file operations - FIXED VERSION."""
-    with patch('aiofiles.open') as mock_open:
+    with patch("aiofiles.open") as mock_open:
         # Create a proper async context manager mock
         mock_file = AsyncMock()
         mock_file.write = AsyncMock(return_value=None)
-        mock_file.read = AsyncMock(return_value='{}')
-        
+        mock_file.read = AsyncMock(return_value="{}")
+
         # Create the async context manager that returns mock_file
         async_context = AsyncMock()
         async_context.__aenter__ = AsyncMock(return_value=mock_file)
         async_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         # Make aiofiles.open return the async context manager
         mock_open.return_value = async_context
-        
+
         yield mock_file
+
 
 @pytest.fixture
 def test_plugin():
@@ -249,32 +264,38 @@ def test_plugin():
 
 class TestAuditPlugins:
     """Test suite for audit_plugins.py."""
-    
+
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)  # Reduced timeout from 30
-    async def test_plugin_registration_and_triggering(self, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_plugin_registration_and_triggering(
+        self, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test plugin registration and event triggering with modification."""
         # Plugin is already registered via fixture
         assert "TestPlugin" in plugins
         assert plugins["TestPlugin"] == test_plugin
-        
-        result = await trigger_event("pre_append", {
-            "sensitive_info": "test@example.com",
-            "data": "test"
-        })
+
+        result = await trigger_event(
+            "pre_append", {"sensitive_info": "test@example.com", "data": "test"}
+        )
 
         # Verify plugin execution
         assert result["sensitive_info"] == "[REDACTED]"
         assert result["augmented_data"] == "Test augmentation"
         assert test_plugin.processed_entries_count == 1
         assert test_plugin.redacted_fields_count == 1
-        assert test_plugin.augmented_data_size == len("Test augmentation".encode('utf-8'))
+        assert test_plugin.augmented_data_size == len(
+            "Test augmentation".encode("utf-8")
+        )
 
         # Verify metrics (may be 0 if Counter was cleared between tests)
         # --- FIX: The plugin name is 'TestPlugin' (class name) or 'test_plugin' (registration name)
-        invocations = REGISTRY.get_sample_value('audit_plugin_invocations_total', {'event': 'pre_append', 'plugin': 'TestPlugin'})
+        invocations = REGISTRY.get_sample_value(
+            "audit_plugin_invocations_total",
+            {"event": "pre_append", "plugin": "TestPlugin"},
+        )
         assert invocations is None or invocations >= 1
-        
+
         # Verify audit logging
         assert mock_audit_log.called
 
@@ -287,38 +308,40 @@ class TestAuditPlugins:
                 "test_plugin_from_config": {
                     "enabled": True,
                     "module": "my_plugin_module",
-                    "class": "MockConfigPlugin", # Uses the globally defined class name
+                    "class": "MockConfigPlugin",  # Uses the globally defined class name
                     "params": {"api_key": "123"},
-                    "controls": {"redact": True, "augment": True, "modify": False}
+                    "controls": {"redact": True, "augment": True, "modify": False},
                 }
             }
         }
-        
+
         # --- FIX: Use synchronous file operations for test setup ---
         # Create the test config directory if it doesn't exist
         os.makedirs(os.path.dirname(TEST_PLUGIN_CONFIG), exist_ok=True)
-        
+
         # Write the config file synchronously (no need for async in test setup)
         with open(TEST_PLUGIN_CONFIG, "w") as f:
             json.dump(config_data, f)
-        
+
         try:
             # --- FIX: Patch PLUGIN_CONFIG path to point to our test dir ---
-            with patch('generator.audit_log.audit_plugins.PLUGIN_CONFIG', TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Mock importlib to return the container module holding our real mock class
-                with patch('importlib.import_module') as mock_import:
-                    
+                with patch("importlib.import_module") as mock_import:
+
                     # Mock the container module itself
                     mock_mod = MagicMock()
                     # Crucially, ensure the mock module contains our *real* class definition
-                    mock_mod.MockConfigPlugin = MockConfigPlugin 
+                    mock_mod.MockConfigPlugin = MockConfigPlugin
                     mock_import.return_value = mock_mod
-                    
-                    # Clear old plugins and force discover_plugins() to run 
+
+                    # Clear old plugins and force discover_plugins() to run
                     # FIX: Call discover_plugins() explicitly instead of relying on module reload
                     audit_plugins_module.plugins.clear()
                     audit_plugins_module.discover_plugins()  # Explicitly call discover_plugins
-                    
+
                     # Get the fresh plugin dictionary reference
                     plugins = audit_plugins_module.plugins
 
@@ -329,31 +352,36 @@ class TestAuditPlugins:
                     plugin_instance = plugins["test_plugin_from_config"]
                     assert isinstance(plugin_instance, MockConfigPlugin)
                     assert plugin_instance.api_key == "123"
-                    
-                    audit_plugins_module.plugins.clear() # Clean up
+
+                    audit_plugins_module.plugins.clear()  # Clean up
         finally:
             # Clean up the test config file
             if os.path.exists(TEST_PLUGIN_CONFIG):
                 os.remove(TEST_PLUGIN_CONFIG)
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)  # Reduced timeout from 30, but needs more time for timeout test
+    @pytest.mark.timeout(
+        10
+    )  # Reduced timeout from 30, but needs more time for timeout test
     async def test_plugin_timeout(self, mock_audit_log, mock_compute_hash):
         """Test plugin execution timeout."""
         # Clear existing plugins
         plugins.clear()
-        
+
         # Use the globally defined SlowPlugin class
         register_plugin("SlowPlugin", SlowPlugin(), {"redact": False})
-        
+
         # trigger_event returns the original data on timeout
         result = await trigger_event("pre_append", {"data": "test"})
-        
+
         # The result should be the *original* data, as the plugin failed
         assert result == {"data": "test"}
-        
+
         # Check that error was logged (via metric)
-        errors = REGISTRY.get_sample_value('audit_plugin_errors_total', {'event': 'pre_append', 'plugin': 'SlowPlugin', 'type': 'timeout'})
+        errors = REGISTRY.get_sample_value(
+            "audit_plugin_errors_total",
+            {"event": "pre_append", "plugin": "SlowPlugin", "type": "timeout"},
+        )
         assert errors is None or errors >= 1
 
         # Check that audit log was still called (for the event itself)
@@ -361,26 +389,34 @@ class TestAuditPlugins:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)  # Reduced timeout from 30
-    async def test_plugin_resource_limits(self, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_plugin_resource_limits(
+        self, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test plugin execution within resource limits."""
         if sys.platform != "win32":
-            with patch('resource.setrlimit') as mock_setrlimit:
+            with patch("resource.setrlimit") as mock_setrlimit:
                 await trigger_event("pre_append", {"data": "test"})
                 # Resource limits should be called inside the sandboxed worker
                 pass
         else:
             # On Windows, just ensure the event can be triggered without error
             await trigger_event("pre_append", {"data": "test"})
-        
+
         # Ensure the audit log was still called
         assert mock_audit_log.called
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)  # Reduced timeout from 30
-    async def test_concurrent_plugin_execution(self, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_concurrent_plugin_execution(
+        self, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test concurrent plugin execution."""
+
         async def trigger_single_event(i):
-            await trigger_event("pre_append", {"sensitive_info": f"test{i}@example.com", "data": f"test_{i}"})
+            await trigger_event(
+                "pre_append",
+                {"sensitive_info": f"test{i}@example.com", "data": f"test_{i}"},
+            )
 
         tasks = [trigger_single_event(i) for i in range(5)]
         with freeze_time("2025-09-01T12:00:00Z"):
@@ -388,7 +424,7 @@ class TestAuditPlugins:
 
         assert test_plugin.processed_entries_count == 5
         assert test_plugin.redacted_fields_count == 5
-        assert mock_audit_log.call_count >= 5 # One call per event
+        assert mock_audit_log.call_count >= 5  # One call per event
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)  # Reduced timeout from 30
@@ -402,31 +438,40 @@ class TestAuditPlugins:
         register_plugin("TestCommercialPlugin", commercial_plugin)
 
         for i in range(3):
-            await trigger_event("pre_append", {"sensitive_info": f"test{i}@example.com", "data": "test"})
-        
+            await trigger_event(
+                "pre_append", {"sensitive_info": f"test{i}@example.com", "data": "test"}
+            )
+
         assert commercial_plugin.count == 3
-        
+
         result = await trigger_event("billing_report", {})
-        
+
         # Check that usage data was reset
         assert commercial_plugin.count == 0
-        
+
         # Check that the metric was incremented
-        billing_metric = REGISTRY.get_sample_value('audit_commercial_plugin_usage_total', {'plugin': 'TestCommercialPlugin', 'feature': 'billing_reported'})
+        billing_metric = REGISTRY.get_sample_value(
+            "audit_commercial_plugin_usage_total",
+            {"plugin": "TestCommercialPlugin", "feature": "billing_reported"},
+        )
         assert billing_metric is None or billing_metric >= 1
-        
+
         assert mock_audit_log.called
-        plugins.clear() # Cleanup
+        plugins.clear()  # Cleanup
 
     @given(data=dictionaries(keys=text(min_size=1), values=text()))
     @settings(
-        max_examples=5,  # Reduced from 10 for faster tests 
+        max_examples=5,  # Reduced from 10 for faster tests
         deadline=None,
-        suppress_health_check=[HealthCheck.function_scoped_fixture] # <-- FIX: Suppress health check
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture
+        ],  # <-- FIX: Suppress health check
     )
     @pytest.mark.asyncio
     @pytest.mark.timeout(20)  # Reduced timeout from 60
-    async def test_hypothesis_plugin_processing(self, data, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_hypothesis_plugin_processing(
+        self, data, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test plugin processing with Hypothesis-generated inputs."""
         # We need to reset the plugin count for each hypothesis example
         test_plugin.reset_usage_data()
@@ -437,31 +482,35 @@ class TestAuditPlugins:
     @pytest.mark.timeout(5)  # Reduced timeout from 30
     async def test_invalid_plugin_config(self, cleanup_test_environment):
         """Test handling of invalid plugin configuration."""
-        config_data = {"plugins": {"test_plugin": {"enabled": "invalid"}}}  # Invalid type
-        
+        config_data = {
+            "plugins": {"test_plugin": {"enabled": "invalid"}}
+        }  # Invalid type
+
         # --- FIX: Use synchronous file operations for test setup ---
         # Create the test config directory if it doesn't exist
         os.makedirs(os.path.dirname(TEST_PLUGIN_CONFIG), exist_ok=True)
-        
+
         # Write the config file synchronously
         with open(TEST_PLUGIN_CONFIG, "w") as f:
             json.dump(config_data, f)
-        
+
         try:
             # Patch PLUGIN_CONFIG path to point to our test dir
-            with patch('generator.audit_log.audit_plugins.PLUGIN_CONFIG', TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Import and test discover_plugins (which loads the config)
                 import generator.audit_log.audit_plugins as audit_plugins_module
-                
+
                 # FIX: Use the correct attribute name 'plugins'
                 audit_plugins_module.plugins.clear()
                 audit_plugins_module.discover_plugins()  # Explicitly call discover_plugins
 
                 plugins = audit_plugins_module.plugins
-                
+
                 # The plugin should *not* be loaded because enabled is not True
                 assert "test_plugin" not in plugins
-                plugins.clear() # Cleanup
+                plugins.clear()  # Cleanup
         finally:
             # Clean up the test config file
             if os.path.exists(TEST_PLUGIN_CONFIG):

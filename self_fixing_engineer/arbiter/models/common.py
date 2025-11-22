@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class Severity(str, Enum):
     """
     Canonical severity enum for the arbiter system.
-    
+
     This enum consolidates severity levels used across different components:
     - DEBUG: Diagnostic information for troubleshooting
     - INFO: General informational messages
@@ -25,6 +25,7 @@ class Severity(str, Enum):
     - ERROR: Error conditions (from feedback handlers)
     - CRITICAL: Critical issues requiring immediate attention
     """
+
     DEBUG = "debug"
     INFO = "info"
     LOW = "low"
@@ -33,18 +34,18 @@ class Severity(str, Enum):
     WARN = "warn"
     ERROR = "error"
     CRITICAL = "critical"
-    
+
     @classmethod
-    def from_string(cls, s: str) -> 'Severity':
+    def from_string(cls, s: str) -> "Severity":
         """
         Converts a string to a Severity enum member.
-        
+
         Args:
             s: String representation of severity level
-            
+
         Returns:
             Severity enum member
-            
+
         Raises:
             KeyError: If the string doesn't match any severity level
         """

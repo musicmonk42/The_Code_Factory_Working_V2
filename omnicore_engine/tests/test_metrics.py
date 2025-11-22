@@ -7,17 +7,18 @@ import pytest
 import os
 import json
 import tempfile
-from unittest.mock import Mock, MagicMock, patch, mock_open
+from unittest.mock import Mock, patch
 from datetime import datetime
-from prometheus_client import REGISTRY, CollectorRegistry
+from prometheus_client import CollectorRegistry
 from prometheus_client.core import Counter, Gauge, Histogram
 
 # Add the parent directory to path for imports
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import after mocking to prevent server startup
-with patch('omnicore_engine.metrics.start_http_server'):
+with patch("omnicore_engine.metrics.start_http_server"):
     from omnicore_engine.metrics import (
         _get_or_create_metric,
         MockInfluxWriteApi,
@@ -30,367 +31,357 @@ with patch('omnicore_engine.metrics.start_http_server'):
         # Import specific metrics for testing
         PLUGIN_EXECUTIONS_TOTAL,
         PLUGIN_EXECUTION_DURATION_SECONDS,
-        PLUGIN_ERRORS_TOTAL,
         PLUGIN_ACTIVE_COUNT,
         SIMULATIONS_TOTAL,
         ACTIVE_SIMULATIONS,
-        DB_OPERATIONS_TOTAL,
-        DB_ERRORS_TOTAL,
-        AUDIT_RECORDS,
-        API_REQUESTS_TOTAL,
         MESSAGE_BUS_QUEUE_SIZE,
-        FEATURE_FLAG_TOGGLES_TOTAL
+        FEATURE_FLAG_TOGGLES_TOTAL,
     )
 
 
 class TestMetricCreation:
     """Test metric creation and retrieval"""
-    
+
     def setup_method(self):
         """Clear registry before each test"""
         # Create a new registry for isolated testing
         self.test_registry = CollectorRegistry()
-    
+
     def test_get_or_create_metric_counter(self):
         """Test creating a counter metric"""
-        with patch('omnicore_engine.metrics.REGISTRY', self.test_registry):
+        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
             metric = _get_or_create_metric(
-                Counter,
-                'test_counter',
-                'Test counter metric',
-                ('label1', 'label2')
+                Counter, "test_counter", "Test counter metric", ("label1", "label2")
             )
-            
+
             assert isinstance(metric, Counter)
-            assert metric._name == 'test_counter'
-            assert metric._documentation == 'Test counter metric'
-    
+            assert metric._name == "test_counter"
+            assert metric._documentation == "Test counter metric"
+
     def test_get_or_create_metric_gauge(self):
         """Test creating a gauge metric"""
-        with patch('omnicore_engine.metrics.REGISTRY', self.test_registry):
-            metric = _get_or_create_metric(
-                Gauge,
-                'test_gauge',
-                'Test gauge metric'
-            )
-            
+        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
+            metric = _get_or_create_metric(Gauge, "test_gauge", "Test gauge metric")
+
             assert isinstance(metric, Gauge)
-            assert metric._name == 'test_gauge'
-    
+            assert metric._name == "test_gauge"
+
     def test_get_or_create_metric_histogram(self):
         """Test creating a histogram metric with buckets"""
-        with patch('omnicore_engine.metrics.REGISTRY', self.test_registry):
+        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
             metric = _get_or_create_metric(
                 Histogram,
-                'test_histogram',
-                'Test histogram metric',
+                "test_histogram",
+                "Test histogram metric",
                 (),
-                buckets=(0.1, 0.5, 1.0)
+                buckets=(0.1, 0.5, 1.0),
             )
-            
+
             assert isinstance(metric, Histogram)
-            assert metric._name == 'test_histogram'
-    
+            assert metric._name == "test_histogram"
+
     def test_get_existing_metric(self):
         """Test retrieving an existing metric"""
-        with patch('omnicore_engine.metrics.REGISTRY', self.test_registry):
+        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
             # Create metric first time
-            metric1 = _get_or_create_metric(
-                Counter,
-                'test_existing',
-                'Test metric'
-            )
-            
+            metric1 = _get_or_create_metric(Counter, "test_existing", "Test metric")
+
             # Try to create again - should return existing
             metric2 = _get_or_create_metric(
-                Counter,
-                'test_existing',
-                'Different description'
+                Counter, "test_existing", "Different description"
             )
-            
+
             assert metric1 is metric2
-    
+
     def test_get_metric_type_mismatch_warning(self):
         """Test warning when metric type doesn't match"""
-        with patch('omnicore_engine.metrics.REGISTRY', self.test_registry):
-            with patch('omnicore_engine.metrics.logger') as mock_logger:
+        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
+            with patch("omnicore_engine.metrics.logger") as mock_logger:
                 # Create as Counter
-                _get_or_create_metric(
-                    Counter,
-                    'test_mismatch',
-                    'Test metric'
-                )
-                
+                _get_or_create_metric(Counter, "test_mismatch", "Test metric")
+
                 # Try to get as Gauge - should warn
-                _get_or_create_metric(
-                    Gauge,
-                    'test_mismatch',
-                    'Test metric'
-                )
-                
+                _get_or_create_metric(Gauge, "test_mismatch", "Test metric")
+
                 mock_logger.warning.assert_called()
 
 
 class TestMockInfluxDB:
     """Test mock InfluxDB fallback classes"""
-    
+
     def test_mock_influx_write_api(self):
         """Test MockInfluxWriteApi writes to file"""
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
             temp_file = f.name
-        
+
         try:
-            with patch.dict(os.environ, {'INFLUXDB_FALLBACK_LOG': temp_file}):
+            with patch.dict(os.environ, {"INFLUXDB_FALLBACK_LOG": temp_file}):
                 api = MockInfluxWriteApi()
-                
+
                 # Create mock point
                 point = Mock()
-                point._name = 'test_measurement'
-                point._tags = {'tag1': 'value1'}
-                point._fields = {'field1': 42}
-                point._time = '2024-01-01T00:00:00'
-                
-                api.write('test_bucket', 'test_org', point)
-                
+                point._name = "test_measurement"
+                point._tags = {"tag1": "value1"}
+                point._fields = {"field1": 42}
+                point._time = "2024-01-01T00:00:00"
+
+                api.write("test_bucket", "test_org", point)
+
                 # Read and verify log file
-                with open(temp_file, 'r') as f:
+                with open(temp_file, "r") as f:
                     log_entry = json.loads(f.read())
-                    assert log_entry['measurement'] == 'test_measurement'
-                    assert log_entry['tags']['tag1'] == 'value1'
-                    assert log_entry['fields']['field1'] == 42
+                    assert log_entry["measurement"] == "test_measurement"
+                    assert log_entry["tags"]["tag1"] == "value1"
+                    assert log_entry["fields"]["field1"] == 42
         finally:
             os.unlink(temp_file)
-    
+
     def test_mock_influx_client(self):
         """Test MockInfluxDBClient initialization"""
-        client = MockInfluxDBClient(url='http://localhost:8086')
-        
-        assert hasattr(client, 'write_api')
+        client = MockInfluxDBClient(url="http://localhost:8086")
+
+        assert hasattr(client, "write_api")
         write_api = client.write_api()
         assert isinstance(write_api, MockInfluxWriteApi)
-        
+
         # Test close method
         client.close()  # Should not raise
-    
+
     def test_mock_point(self):
         """Test MockPoint builder pattern"""
-        point = MockPoint('test_measurement')
-        
-        result = (point
-                 .tag('location', 'server1')
-                 .tag('service', 'api')
-                 .field('cpu', 45.5)
-                 .field('memory', 1024)
-                 .time(datetime(2024, 1, 1)))
-        
+        point = MockPoint("test_measurement")
+
+        result = (
+            point.tag("location", "server1")
+            .tag("service", "api")
+            .field("cpu", 45.5)
+            .field("memory", 1024)
+            .time(datetime(2024, 1, 1))
+        )
+
         assert result is point  # Builder returns self
-        assert point._name == 'test_measurement'
-        assert point._tags == {'location': 'server1', 'service': 'api'}
-        assert point._fields == {'cpu': 45.5, 'memory': 1024}
-        assert '2024-01-01' in point._time
-    
+        assert point._name == "test_measurement"
+        assert point._tags == {"location": "server1", "service": "api"}
+        assert point._fields == {"cpu": 45.5, "memory": 1024}
+        assert "2024-01-01" in point._time
+
     def test_mock_write_precision(self):
         """Test MockWritePrecision enum values"""
-        assert MockWritePrecision.NS == 'ns'
-        assert MockWritePrecision.US == 'us'
-        assert MockWritePrecision.MS == 'ms'
-        assert MockWritePrecision.S == 's'
+        assert MockWritePrecision.NS == "ns"
+        assert MockWritePrecision.US == "us"
+        assert MockWritePrecision.MS == "ms"
+        assert MockWritePrecision.S == "s"
 
 
 class TestMetricOperations:
     """Test actual metric operations"""
-    
+
     def test_counter_increment(self):
         """Test counter metric increment"""
         # Reset counter for testing
         PLUGIN_EXECUTIONS_TOTAL._metrics.clear()
-        
-        PLUGIN_EXECUTIONS_TOTAL.labels(kind='test', name='plugin1').inc()
-        PLUGIN_EXECUTIONS_TOTAL.labels(kind='test', name='plugin1').inc(2)
-        
+
+        PLUGIN_EXECUTIONS_TOTAL.labels(kind="test", name="plugin1").inc()
+        PLUGIN_EXECUTIONS_TOTAL.labels(kind="test", name="plugin1").inc(2)
+
         # Get metric value
         metric_family = list(PLUGIN_EXECUTIONS_TOTAL.collect())[0]
         for sample in metric_family.samples:
-            if sample.labels == {'kind': 'test', 'name': 'plugin1'}:
+            if sample.labels == {"kind": "test", "name": "plugin1"}:
                 assert sample.value == 3
                 break
         else:
             pytest.fail("Metric sample not found")
-    
+
     def test_gauge_set(self):
         """Test gauge metric set/inc/dec"""
         PLUGIN_ACTIVE_COUNT.set(5)
         assert PLUGIN_ACTIVE_COUNT._value.get() == 5
-        
+
         PLUGIN_ACTIVE_COUNT.inc()
         assert PLUGIN_ACTIVE_COUNT._value.get() == 6
-        
+
         PLUGIN_ACTIVE_COUNT.dec(2)
         assert PLUGIN_ACTIVE_COUNT._value.get() == 4
-    
+
     def test_histogram_observe(self):
         """Test histogram metric observe"""
         # Clear histogram for testing
         PLUGIN_EXECUTION_DURATION_SECONDS._metrics.clear()
-        
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind='test', name='plugin1').observe(0.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind='test', name='plugin1').observe(1.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind='test', name='plugin1').observe(0.01)
-        
+
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            1.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.01
+        )
+
         # Check that observations were recorded
         metric_family = list(PLUGIN_EXECUTION_DURATION_SECONDS.collect())[0]
         for sample in metric_family.samples:
-            if sample.name.endswith('_count') and sample.labels == {'kind': 'test', 'name': 'plugin1'}:
+            if sample.name.endswith("_count") and sample.labels == {
+                "kind": "test",
+                "name": "plugin1",
+            }:
                 assert sample.value == 3  # 3 observations
                 break
 
 
 class TestUtilityFunctions:
     """Test utility functions"""
-    
+
     def test_get_all_metrics_data(self):
         """Test getting all metrics data"""
         # Set some known values
         SIMULATIONS_TOTAL.inc()
         ACTIVE_SIMULATIONS.set(2)
-        
+
         data = get_all_metrics_data()
-        
+
         assert isinstance(data, dict)
         # Check that some metrics are present
-        assert any('simulations_total' in key for key in data.keys())
-        assert any('active_simulations' in key for key in data.keys())
-    
+        assert any("simulations_total" in key for key in data.keys())
+        assert any("active_simulations" in key for key in data.keys())
+
     def test_get_plugin_metrics(self):
         """Test getting plugin metrics"""
         metrics = get_plugin_metrics()
-        
+
         assert isinstance(metrics, dict)
-        assert 'plugin_executions_total' in metrics
-        assert 'plugin_active_count' in metrics
-        assert 'plugin_load_errors_total' in metrics
-    
+        assert "plugin_executions_total" in metrics
+        assert "plugin_active_count" in metrics
+        assert "plugin_load_errors_total" in metrics
+
     def test_get_test_metrics(self):
         """Test getting test metrics (placeholder)"""
         metrics = get_test_metrics()
-        
+
         assert isinstance(metrics, dict)
-        assert 'test_suite_runs_total' in metrics
-        assert 'test_failures_total' in metrics
-        assert metrics['test_suite_runs_total'] == 0
-        assert metrics['test_failures_total'] == 0
+        assert "test_suite_runs_total" in metrics
+        assert "test_failures_total" in metrics
+        assert metrics["test_suite_runs_total"] == 0
+        assert metrics["test_failures_total"] == 0
 
 
 class TestMetricAliases:
     """Test metric aliases for backward compatibility"""
-    
+
     def test_api_errors_alias(self):
         """Test API_ERRORS points to API_ERRORS_TOTAL"""
         from omnicore_engine.metrics import API_ERRORS, API_ERRORS_TOTAL
+
         assert API_ERRORS is API_ERRORS_TOTAL
-    
+
     def test_db_operations_alias(self):
         """Test DB_OPERATIONS points to DB_OPERATIONS_TOTAL"""
         from omnicore_engine.metrics import DB_OPERATIONS, DB_OPERATIONS_TOTAL
+
         assert DB_OPERATIONS is DB_OPERATIONS_TOTAL
-    
+
     def test_plugin_executions_alias(self):
         """Test plugin_executions legacy alias"""
         from omnicore_engine.metrics import plugin_executions, PLUGIN_EXECUTIONS_TOTAL
+
         assert plugin_executions is PLUGIN_EXECUTIONS_TOTAL
 
 
 class TestMessageBusMetrics:
     """Test message bus specific metrics"""
-    
+
     def test_message_bus_queue_size(self):
         """Test message bus queue size gauge"""
-        MESSAGE_BUS_QUEUE_SIZE.labels(shard_id='shard_0').set(10)
-        MESSAGE_BUS_QUEUE_SIZE.labels(shard_id='shard_1').set(25)
-        
+        MESSAGE_BUS_QUEUE_SIZE.labels(shard_id="shard_0").set(10)
+        MESSAGE_BUS_QUEUE_SIZE.labels(shard_id="shard_1").set(25)
+
         # Verify values are set correctly
         metric_family = list(MESSAGE_BUS_QUEUE_SIZE.collect())[0]
         values = {}
         for sample in metric_family.samples:
-            if sample.name == 'omnicore_message_bus_queue_size':
-                values[sample.labels['shard_id']] = sample.value
-        
-        assert values.get('shard_0') == 10
-        assert values.get('shard_1') == 25
-    
+            if sample.name == "omnicore_message_bus_queue_size":
+                values[sample.labels["shard_id"]] = sample.value
+
+        assert values.get("shard_0") == 10
+        assert values.get("shard_1") == 25
+
     def test_message_bus_throughput(self):
         """Test message bus topic throughput counter"""
         from omnicore_engine.metrics import MESSAGE_BUS_TOPIC_THROUGHPUT
-        
-        MESSAGE_BUS_TOPIC_THROUGHPUT.labels(topic='test.topic').inc()
-        MESSAGE_BUS_TOPIC_THROUGHPUT.labels(topic='test.topic').inc(5)
-        
+
+        MESSAGE_BUS_TOPIC_THROUGHPUT.labels(topic="test.topic").inc()
+        MESSAGE_BUS_TOPIC_THROUGHPUT.labels(topic="test.topic").inc(5)
+
         # Check counter value
         metric_family = list(MESSAGE_BUS_TOPIC_THROUGHPUT.collect())[0]
         for sample in metric_family.samples:
-            if sample.labels == {'topic': 'test.topic'}:
+            if sample.labels == {"topic": "test.topic"}:
                 assert sample.value >= 6  # At least 6 (may have existing value)
                 break
 
 
 class TestFeatureFlagMetrics:
     """Test feature flag metrics"""
-    
+
     def test_feature_flag_toggle(self):
         """Test feature flag toggle tracking"""
         FEATURE_FLAG_TOGGLES_TOTAL.labels(
-            flag_name='experimental_feature',
-            new_state='enabled'
+            flag_name="experimental_feature", new_state="enabled"
         ).inc()
-        
+
         FEATURE_FLAG_TOGGLES_TOTAL.labels(
-            flag_name='experimental_feature',
-            new_state='disabled'
+            flag_name="experimental_feature", new_state="disabled"
         ).inc()
-        
+
         # Verify both states are tracked
         metric_family = list(FEATURE_FLAG_TOGGLES_TOTAL.collect())[0]
         toggles = {}
         for sample in metric_family.samples:
-            if sample.labels.get('flag_name') == 'experimental_feature':
-                toggles[sample.labels['new_state']] = sample.value
-        
-        assert 'enabled' in toggles
-        assert 'disabled' in toggles
+            if sample.labels.get("flag_name") == "experimental_feature":
+                toggles[sample.labels["new_state"]] = sample.value
+
+        assert "enabled" in toggles
+        assert "disabled" in toggles
 
 
 class TestPrometheusServerStartup:
     """Test Prometheus HTTP server startup"""
-    
-    @patch('omnicore_engine.metrics.start_http_server')
-    @patch.dict(os.environ, {'PROMETHEUS_PORT': '9090'})
+
+    @patch("omnicore_engine.metrics.start_http_server")
+    @patch.dict(os.environ, {"PROMETHEUS_PORT": "9090"})
     def test_server_startup_with_env_port(self, mock_start_server):
         """Test server starts with environment variable port"""
         # Re-import to trigger startup code
         import importlib
         import omnicore_engine.metrics
+
         importlib.reload(omnicore_engine.metrics)
-        
+
         mock_start_server.assert_called_with(9090)
-    
-    @patch('omnicore_engine.metrics.start_http_server')
+
+    @patch("omnicore_engine.metrics.start_http_server")
     def test_server_startup_default_port(self, mock_start_server):
         """Test server starts with default port"""
         with patch.dict(os.environ, {}, clear=True):
             import importlib
             import omnicore_engine.metrics
+
             importlib.reload(omnicore_engine.metrics)
-            
+
             mock_start_server.assert_called_with(8000)
-    
-    @patch('omnicore_engine.metrics.start_http_server', side_effect=OSError("Port in use"))
-    @patch('omnicore_engine.metrics.logger')
+
+    @patch(
+        "omnicore_engine.metrics.start_http_server", side_effect=OSError("Port in use")
+    )
+    @patch("omnicore_engine.metrics.logger")
     def test_server_startup_port_in_use(self, mock_logger, mock_start_server):
         """Test handling when port is already in use"""
         import importlib
         import omnicore_engine.metrics
+
         importlib.reload(omnicore_engine.metrics)
-        
+
         mock_logger.warning.assert_called()
         assert "already started" in mock_logger.warning.call_args[0][0]
 

@@ -13,6 +13,7 @@ This package contains data models and client interfaces for:
 """
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 __all__ = []
@@ -30,21 +31,25 @@ try:
         QueryError,
         SchemaValidationError,
     )
-    __all__.extend([
-        'PostgresClient',
-        'PostgresClientError',
-        'PostgresClientConnectionError',
-        'PostgresClientSchemaError',
-        'PostgresClientQueryError',
-        'PostgresClientTimeoutError',
-    ])
+
+    __all__.extend(
+        [
+            "PostgresClient",
+            "PostgresClientError",
+            "PostgresClientConnectionError",
+            "PostgresClientSchemaError",
+            "PostgresClientQueryError",
+            "PostgresClientTimeoutError",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import postgres_client: {e}")
 
 # Redis Client
 try:
     from .redis_client import RedisClient
-    __all__.append('RedisClient')
+
+    __all__.append("RedisClient")
 except ImportError as e:
     logger.warning(f"Could not import redis_client: {e}")
 
@@ -58,11 +63,14 @@ try:
         SchemaValidationError as KGSchemaValidationError,
         NodeNotFoundError,
     )
-    __all__.extend([
-        'Neo4jKnowledgeGraph',
-        'KnowledgeGraphError',
-        'NodeNotFoundError',
-    ])
+
+    __all__.extend(
+        [
+            "Neo4jKnowledgeGraph",
+            "KnowledgeGraphError",
+            "NodeNotFoundError",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import knowledge_graph_db: {e}")
 
@@ -77,15 +85,18 @@ try:
         DLTTransactionError,
         DLTUnsupportedError,
     )
-    __all__.extend([
-        'AuditLedgerClient',
-        'AuditEvent', 
-        'DLTError',
-        'DLTConnectionError',
-        'DLTContractError',
-        'DLTTransactionError',
-        'DLTUnsupportedError',
-    ])
+
+    __all__.extend(
+        [
+            "AuditLedgerClient",
+            "AuditEvent",
+            "DLTError",
+            "DLTConnectionError",
+            "DLTContractError",
+            "DLTTransactionError",
+            "DLTUnsupportedError",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import audit_ledger_client: {e}")
 
@@ -96,9 +107,12 @@ try:
         ConnectionError as FSConnectionError,
         SchemaValidationError as FSSchemaValidationError,
     )
-    __all__.extend([
-        'FeatureStoreClient',
-    ])
+
+    __all__.extend(
+        [
+            "FeatureStoreClient",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import feature_store_client: {e}")
 
@@ -117,19 +131,22 @@ try:
         MetaLearningBackendError,
         MetaLearningEncryptionError,
     )
-    __all__.extend([
-        'MetaLearningRecord',
-        'MetaLearningDataStoreConfig',
-        'BaseMetaLearningDataStore',
-        'InMemoryMetaLearningDataStore',
-        'RedisMetaLearningDataStore',
-        'get_meta_learning_data_store',
-        'MetaLearningDataStoreError',
-        'MetaLearningRecordNotFound',
-        'MetaLearningRecordValidationError',
-        'MetaLearningBackendError',
-        'MetaLearningEncryptionError',
-    ])
+
+    __all__.extend(
+        [
+            "MetaLearningRecord",
+            "MetaLearningDataStoreConfig",
+            "BaseMetaLearningDataStore",
+            "InMemoryMetaLearningDataStore",
+            "RedisMetaLearningDataStore",
+            "get_meta_learning_data_store",
+            "MetaLearningDataStoreError",
+            "MetaLearningRecordNotFound",
+            "MetaLearningRecordValidationError",
+            "MetaLearningBackendError",
+            "MetaLearningEncryptionError",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import meta_learning_data_store: {e}")
 
@@ -141,12 +158,15 @@ try:
         MerkleTreeEmptyError,
         MerkleProofError,
     )
-    __all__.extend([
-        'MerkleTree',
-        'MerkleTreeError',
-        'MerkleTreeEmptyError',
-        'MerkleProofError',
-    ])
+
+    __all__.extend(
+        [
+            "MerkleTree",
+            "MerkleTreeError",
+            "MerkleTreeEmptyError",
+            "MerkleProofError",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import merkle_tree: {e}")
 
@@ -164,24 +184,29 @@ try:
         Sentiment,
         Severity,
     )
-    __all__.extend([
-        'ImageAnalysisResult',
-        'AudioAnalysisResult',
-        'VideoAnalysisResult',
-        'ImageOCRResult',
-        'ImageCaptioningResult',
-        'AudioTranscriptionResult',
-        'VideoSummaryResult',
-        'MultiModalAnalysisResult',
-        'Sentiment',
-        'Severity',
-    ])
+
+    __all__.extend(
+        [
+            "ImageAnalysisResult",
+            "AudioAnalysisResult",
+            "VideoAnalysisResult",
+            "ImageOCRResult",
+            "ImageCaptioningResult",
+            "AudioTranscriptionResult",
+            "VideoSummaryResult",
+            "MultiModalAnalysisResult",
+            "Sentiment",
+            "Severity",
+        ]
+    )
 except ImportError as e:
     logger.warning(f"Could not import multi_modal_schemas: {e}")
 
 # Version info
-__version__ = '1.0.0'
+__version__ = "1.0.0"
 
 # Log summary of what's available
 if logger.isEnabledFor(logging.DEBUG):
-    logger.debug(f"Models package initialized. Available components: {', '.join(__all__)}")
+    logger.debug(
+        f"Models package initialized. Available components: {', '.join(__all__)}"
+    )

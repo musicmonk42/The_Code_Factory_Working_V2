@@ -11,26 +11,28 @@ except ImportError:
     # Mock Database for testing when actual implementation isn't available
     class Database:
         """Mock Database implementation for testing."""
+
         def __init__(self, *args, **kwargs):
             self.connection = None
             self.is_connected = False
-            
+
         async def connect(self):
             self.is_connected = True
             return True
-            
+
         async def disconnect(self):
             self.is_connected = False
             return True
-            
+
         async def execute(self, query, params=None):
             return {"status": "ok", "rows": []}
-            
+
         async def fetch_one(self, query, params=None):
             return {"id": 1, "data": "mock"}
-            
+
         async def fetch_all(self, query, params=None):
             return [{"id": 1, "data": "mock"}]
+
 
 # Import other components that might be needed
 try:
@@ -65,11 +67,11 @@ __version__ = "1.0.0"
 
 # Export all main components
 __all__ = [
-    'Database',
-    'arbiter',
-    'Arbiter',
-    'ArbiterArena',
-    'FeedbackManager',
-    'HumanInLoop',
-    'ArbiterConfig',
+    "Database",
+    "arbiter",
+    "Arbiter",
+    "ArbiterArena",
+    "FeedbackManager",
+    "HumanInLoop",
+    "ArbiterConfig",
 ]

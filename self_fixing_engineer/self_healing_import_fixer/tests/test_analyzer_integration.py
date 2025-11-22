@@ -1,9 +1,6 @@
 # tests/test_analyzer_integration.py
-import os
-import sys
 import json
 import time
-import types
 import asyncio
 import subprocess
 from pathlib import Path
@@ -13,40 +10,64 @@ import importlib.util
 
 import pytest
 
+
 # -----------------------------
 # Helpers (inline, no conftest)
 # -----------------------------
 class FakeRedis:
     def __init__(self):
         self._store = {}
-    def setex(self, key, ttl, value): self._store[key] = value; return True
-    def get(self, key): return self._store.get(key)
-    def incr(self, key): self._store[key] = int(self._store.get(key, 0) or 0) + 1; return self._store[key]
+
+    def setex(self, key, ttl, value):
+        self._store[key] = value
+        return True
+
+    def get(self, key):
+        return self._store.get(key)
+
+    def incr(self, key):
+        self._store[key] = int(self._store.get(key, 0) or 0) + 1
+        return self._store[key]
+
 
 class FakeLLMClient:
-    def __init__(self, *a, **k): pass
-    async def aclose(self): pass
+    def __init__(self, *a, **k):
+        pass
+
+    async def aclose(self):
+        pass
+
 
 class FakeAIManager:
     """Minimal stand-in for core_ai.AIManager used by analyzer flows."""
+
     def __init__(self, *a, **k):
         self.http_client = object()
         self.llm_client = FakeLLMClient()
+
     async def generate_async(self, *a, **k) -> Dict[str, Any]:
         # Deterministic "suggestion"
-        return {"suggestion": "Move import inside function to break cycle", "confidence": 0.91}
+        return {
+            "suggestion": "Move import inside function to break cycle",
+            "confidence": 0.91,
+        }
+
     def generate_sync(self, *a, **k):
         return asyncio.get_event_loop().run_until_complete(self.generate_async(*a, **k))
+
     async def aclose(self):
         await self.llm_client.aclose()
+
 
 class AuditSink:
     def __init__(self):
         self.events: List[Dict[str, Any]] = []
+
     def emit(self, *a, **k):
         evt = {"args": a, "kwargs": k, "ts": time.time()}
         self.events.append(evt)
         return True
+
 
 def import_module_with_fallback() -> Any:
     """
@@ -77,9 +98,10 @@ def import_module_with_fallback() -> Any:
             return mod
     raise ImportError("Could not import analyzer.analyzer via package or file path")
 
+
 def find_click_root_command(mod) -> Any:
     try:
-        import click
+        pass
     except Exception:
         return None
     # Heuristically pick the first click Group/Command defined at module level
@@ -89,17 +111,16 @@ def find_click_root_command(mod) -> Any:
             return obj
     return None
 
+
 def write_min_policy(path: Path, proj_root: Path):
     policy = {
         "version": 1,
         "approved_roots": [str(proj_root)],
-        "deny_rules": {
-            "forbid_dynamic_imports": True,
-            "forbid_cycles": True
-        },
+        "deny_rules": {"forbid_dynamic_imports": True, "forbid_cycles": True},
         "naming": {"module_case": "snake"},
     }
     path.write_text(json.dumps(policy))
+
 
 def make_tiny_project(base: Path) -> Path:
     proj = base / "proj"
@@ -107,9 +128,7 @@ def make_tiny_project(base: Path) -> Path:
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
     (pkg / "a.py").write_text(
-        "import pkg.b\n"
-        "def greet():\n"
-        "    return 'hi ' + pkg.b.name()\n"
+        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
     )
     (pkg / "b.py").write_text(
         "def name():\n"
@@ -119,6 +138,7 @@ def make_tiny_project(base: Path) -> Path:
         "    return 'world'\n"
     )
     return proj
+
 
 # -----------------------------
 # The single integration test
@@ -142,16 +162,31 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
     analyzer = import_module_with_fallback()
 
     # Patch Redis in any analyzer submodule that references it
-    for sub in ("core_ai", "core_policy", "core_audit", "core_security", "core_graph", "core_report"):
+    for sub in (
+        "core_ai",
+        "core_policy",
+        "core_audit",
+        "core_security",
+        "core_graph",
+        "core_report",
+    ):
         try:
-            m = importlib.import_module(f"{analyzer.__package__}.{sub}") if analyzer.__package__ else importlib.import_module(sub)
+            m = (
+                importlib.import_module(f"{analyzer.__package__}.{sub}")
+                if analyzer.__package__
+                else importlib.import_module(sub)
+            )
             monkeypatch.setattr(m, "Redis", lambda *a, **k: FakeRedis(), raising=False)
         except Exception:
             pass
 
     # --- Stub AI manager so LLM calls are deterministic & offline
     try:
-        core_ai = importlib.import_module(f"{analyzer.__package__}.core_ai") if analyzer.__package__ else importlib.import_module("core_ai")
+        core_ai = (
+            importlib.import_module(f"{analyzer.__package__}.core_ai")
+            if analyzer.__package__
+            else importlib.import_module("core_ai")
+        )
         monkeypatch.setattr(core_ai, "AIManager", FakeAIManager, raising=False)
     except Exception:
         pass
@@ -159,29 +194,53 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
     # --- Stub audit emitter (e.g., Splunk/HEC) to local sink
     audit_sink = AuditSink()
     try:
-        core_audit = importlib.import_module(f"{analyzer.__package__}.core_audit") if analyzer.__package__ else importlib.import_module("core_audit")
+        core_audit = (
+            importlib.import_module(f"{analyzer.__package__}.core_audit")
+            if analyzer.__package__
+            else importlib.import_module("core_audit")
+        )
         if hasattr(core_audit, "emit_event"):
-            monkeypatch.setattr(core_audit, "emit_event", lambda *a, **k: audit_sink.emit(*a, **k), raising=False)
+            monkeypatch.setattr(
+                core_audit,
+                "emit_event",
+                lambda *a, **k: audit_sink.emit(*a, **k),
+                raising=False,
+            )
         if hasattr(core_audit, "flush_buffer"):
             monkeypatch.setattr(core_audit, "flush_buffer", lambda: True, raising=False)
     except Exception:
         pass
 
     # --- Stub security tool subprocess calls
-    def fake_run(cmd, timeout=60, capture_output=True, text=True, check=False, **kwargs):
+    def fake_run(
+        cmd, timeout=60, capture_output=True, text=True, check=False, **kwargs
+    ):
         joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
         if "bandit" in joined.lower():
             # Minimal Bandit JSON with 1 low-sev issue
-            data = {"results": [{"filename": str(proj_root / "pkg" / "b.py"), "issue_severity": "LOW", "issue_text": "Test issue"}]}
+            data = {
+                "results": [
+                    {
+                        "filename": str(proj_root / "pkg" / "b.py"),
+                        "issue_severity": "LOW",
+                        "issue_text": "Test issue",
+                    }
+                ]
+            }
             return subprocess.CompletedProcess(cmd, 0, json.dumps(data), "")
         if "pip-audit" in joined.lower():
             data = {"dependencies": [], "vulnerabilities": []}
             return subprocess.CompletedProcess(cmd, 0, json.dumps(data), "")
         # default safe
         return subprocess.CompletedProcess(cmd, 0, "", "")
+
     # Patch at module level (most robust)
     try:
-        core_sec = importlib.import_module(f"{analyzer.__package__}.core_security") if analyzer.__package__ else importlib.import_module("core_security")
+        core_sec = (
+            importlib.import_module(f"{analyzer.__package__}.core_security")
+            if analyzer.__package__
+            else importlib.import_module("core_security")
+        )
         monkeypatch.setattr(core_sec.subprocess, "run", fake_run, raising=False)
     except Exception:
         pass
@@ -198,13 +257,17 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
 
     # 2) policy check
     if hasattr(analyzer, "_handle_check_policy"):
-        res = analyzer._handle_check_policy(project_root=str(proj_root), policy_file=str(policy_path))
+        res = analyzer._handle_check_policy(
+            project_root=str(proj_root), policy_file=str(policy_path)
+        )
         results["check_policy"] = res
         handler_calls += 1
 
     # 3) security scan
     if hasattr(analyzer, "_handle_security_scan"):
-        res = analyzer._handle_security_scan(project_root=str(proj_root), tools=["bandit", "pip-audit"])
+        res = analyzer._handle_security_scan(
+            project_root=str(proj_root), tools=["bandit", "pip-audit"]
+        )
         results["security_scan"] = res
         handler_calls += 1
 
@@ -224,13 +287,18 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
     if handler_calls == 0:
         # Fallback to CLI via click if handlers aren't exported
         click_cmd = find_click_root_command(analyzer)
-        assert click_cmd is not None, "No handler functions or click command found in analyzer module"
+        assert (
+            click_cmd is not None
+        ), "No handler functions or click command found in analyzer module"
         from click.testing import CliRunner
+
         runner = CliRunner()
         # CLI subcommands guessed from typical analyzer; tweak if your CLI differs
         r1 = runner.invoke(click_cmd, ["analyze", str(proj_root)])
         assert r1.exit_code == 0, f"analyze failed: {r1.output}"
-        r2 = runner.invoke(click_cmd, ["check-policy", "--policy", str(policy_path), str(proj_root)])
+        r2 = runner.invoke(
+            click_cmd, ["check-policy", "--policy", str(policy_path), str(proj_root)]
+        )
         assert r2.exit_code == 0, f"check-policy failed: {r2.output}"
         r3 = runner.invoke(click_cmd, ["security-scan", str(proj_root)])
         assert r3.exit_code == 0, f"security-scan failed: {r3.output}"
@@ -247,17 +315,23 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
     sec = results.get("security_scan")
     if isinstance(sec, dict):
         # tolerant schema: look for a bandit/pip-audit key or a finding
-        assert any(k in sec for k in ("bandit", "pip-audit", "findings", "results")), f"Unexpected security_scan payload: {sec}"
+        assert any(
+            k in sec for k in ("bandit", "pip-audit", "findings", "results")
+        ), f"Unexpected security_scan payload: {sec}"
 
     # C) Policy check honored allowlists and rules (no crash; some decision produced)
     pol = results.get("check_policy")
-    assert pol is None or isinstance(pol, (dict, list, str)), "Policy check did not return a simple payload"
+    assert pol is None or isinstance(
+        pol, (dict, list, str)
+    ), "Policy check did not return a simple payload"
 
     # D) AI suggestion path returns a deterministic suggestion (from FakeAIManager)
     sug = results.get("suggest_patch")
     if sug is not None:
         if isinstance(sug, dict):
-            assert "Move import inside function" in json.dumps(sug), f"Unexpected AI suggestion payload: {sug}"
+            assert "Move import inside function" in json.dumps(
+                sug
+            ), f"Unexpected AI suggestion payload: {sug}"
         else:
             assert "Move import inside function" in str(sug)
 
@@ -267,7 +341,9 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
     for p in out_dir.rglob("*"):
         if p.is_file():
             wrote_any = True
-            assert str(p.resolve()).startswith(str(out_dir.resolve())), f"Artifact escaped approved dir: {p}"
+            assert str(p.resolve()).startswith(
+                str(out_dir.resolve())
+            ), f"Artifact escaped approved dir: {p}"
     # It's fine if nothing was written in dev; but if something was written, it must be inside out_dir
     if wrote_any:
         assert True

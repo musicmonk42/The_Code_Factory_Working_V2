@@ -13,12 +13,10 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import sys
-import time
 import yaml  # FIX: Added missing import
 from pathlib import Path
 from typing import Any, Dict
@@ -43,8 +41,9 @@ from runner.providers.local_provider import (  # type: ignore
     stream_chunk_latency,
     PRICING,
 )
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
+from runner.runner_errors import LLMError  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+
 
 # Fixtures
 @pytest.fixture
@@ -99,7 +98,7 @@ async def test_pre_hook(provider: LocalProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "ok", "done": true}')
-    
+
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
         result = await provider.call("hello", "model")
         # FIX: Check that the call was made (prompt was transformed by hook)
@@ -121,7 +120,7 @@ async def test_post_hook(provider: LocalProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "world", "done": true}')
-    
+
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
         out = await provider.call("hi", "model")
         assert out["content"] == "world-suf"
@@ -146,9 +145,9 @@ async def test_load_plugins_success(provider: LocalProvider, tmp_path: Path) -> 
     dummy_post = MagicMock(return_value={"content": "POST"})
 
     # FIX: Added yaml import and proper mocking
-    with patch("builtins.open", mock_open(read_data=yaml_content)), \
-         patch("yaml.safe_load", return_value=yaml.safe_load(yaml_content)), \
-         patch("importlib.import_module") as mock_import:
+    with patch("builtins.open", mock_open(read_data=yaml_content)), patch(
+        "yaml.safe_load", return_value=yaml.safe_load(yaml_content)
+    ), patch("importlib.import_module") as mock_import:
         mock_import.side_effect = [
             MagicMock(dummy_pre=dummy_pre),
             MagicMock(dummy_post=dummy_post),
@@ -161,11 +160,17 @@ async def test_load_plugins_success(provider: LocalProvider, tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_load_plugins_missing_file(provider: LocalProvider, caplog: LogCaptureFixture) -> None:
+async def test_load_plugins_missing_file(
+    provider: LocalProvider, caplog: LogCaptureFixture
+) -> None:
     # FIX: load_plugins now accepts a file_path parameter
     provider.load_plugins("/nonexistent.yaml")
-    assert any("No plugin file found" in rec.message or "Error loading local plugins" in rec.message or "Plugins loaded" in rec.message
-               for rec in caplog.records)
+    assert any(
+        "No plugin file found" in rec.message
+        or "Error loading local plugins" in rec.message
+        or "Plugins loaded" in rec.message
+        for rec in caplog.records
+    )
 
 
 # 4. Low-level _api_call
@@ -184,7 +189,7 @@ async def test_api_call_non_stream(provider: LocalProvider) -> None:
             {"Content-Type": "application/json"},
             {"model": "test", "prompt": "test"},
             False,
-            "test-run-id"
+            "test-run-id",
         )
         assert out == mock_resp
 
@@ -207,7 +212,7 @@ async def test_api_call_stream(provider: LocalProvider) -> None:
             {"Content-Type": "application/json"},
             {"model": "test", "prompt": "test"},
             True,
-            "test-run-id"
+            "test-run-id",
         )
         assert resp == mock_resp
 
@@ -227,7 +232,7 @@ async def test_api_call_http_error(provider: LocalProvider) -> None:
                 {"Content-Type": "application/json"},
                 {"model": "test", "prompt": "test"},
                 False,
-                "test-run-id"
+                "test-run-id",
             )
 
 
@@ -246,7 +251,7 @@ async def test_api_call_retry_rate_limit(provider: LocalProvider) -> None:
                 {"Content-Type": "application/json"},
                 {"model": "test", "prompt": "test"},
                 False,
-                "test-run-id"
+                "test-run-id",
             )
 
 
@@ -257,7 +262,7 @@ async def test_call_non_stream(provider: LocalProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "hi", "done": true}')
-    
+
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
         out = await provider.call("p", "m")
         assert out["content"] == "hi"
@@ -269,15 +274,15 @@ async def test_call_stream(provider: LocalProvider) -> None:
     # FIX: Mock response to simulate aiohttp streaming response
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     # <<< START FIX
     async def fake_content(*args, **kwargs):
-    # <<< END FIX
+        # <<< END FIX
         yield b'{"response":"a"}\n'
         yield b'{"response":"b"}\n'
-    
+
     mock_resp.content.__aiter__ = fake_content
-    
+
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
         gen = await provider.call("p", "m", stream=True)
         assert [c async for c in gen] == ["a", "b"]
@@ -299,7 +304,13 @@ async def test_count_tokens_default(provider: LocalProvider) -> None:
 
 @pytest.mark.asyncio
 async def test_count_tokens_custom(provider: LocalProvider) -> None:
-    provider.register_custom_model("c", {"endpoint": "http://localhost:11434/api/generate", "token_counter": lambda t: len(t.split())})
+    provider.register_custom_model(
+        "c",
+        {
+            "endpoint": "http://localhost:11434/api/generate",
+            "token_counter": lambda t: len(t.split()),
+        },
+    )
     assert await provider.count_tokens("a b c", "c") == 3
 
 
@@ -368,11 +379,11 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
     # FIX: Mock response to simulate aiohttp streaming response
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     async def fake_content(*args, **kwargs):
         yield b'{"response":"c1"}\n'
         yield b'{"response":"c2"}\n'
-    
+
     mock_resp.content.__aiter__ = fake_content
 
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
@@ -380,7 +391,7 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
         _ = [c async for c in gen]
 
     assert stream_chunks_total.labels("m")._value.get() == 2
-    
+
     # <<< START FIX: Use the _samples() method to find the count
     # This is the only reliable, public-facing way to test a Histogram.
     count_value = None
@@ -391,8 +402,10 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
         if sample.name == count_metric_name and sample.labels.get("model") == "m":
             count_value = sample.value
             break
-            
-    assert count_value is not None, f"Could not find sample '{count_metric_name}' with labels {{'model': 'm'}}"
+
+    assert (
+        count_value is not None
+    ), f"Could not find sample '{count_metric_name}' with labels {{'model': 'm'}}"
     assert count_value == 2
     # <<< END FIX
 
@@ -403,11 +416,11 @@ async def test_stream_error(provider: LocalProvider) -> None:
     # FIX: Mock response to simulate aiohttp streaming response that errors
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    
+
     async def bad_content():
         yield b'{"response":"ok"}\n'
         raise RuntimeError("boom")
-    
+
     mock_resp.content.__aiter__ = bad_content
 
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):

@@ -5,21 +5,15 @@ Uses import hooks to properly isolate the module from its dependencies
 
 from __future__ import annotations
 
-import asyncio
 import json
-import sys
-import os
 import random
 import importlib.util
 from pathlib import Path
-from typing import Any, Dict
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock, Mock
 from contextlib import contextmanager
 
 import pytest
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -28,18 +22,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 # SECTION 1: Import agent_state with mocked dependencies
 # ===========================
 
+
 @contextmanager
 def mock_imports():
     """Context manager to mock imports during agent_state loading."""
     import builtins
+
     original_import = builtins.__import__
-    
+
     def custom_import(name, *args, **kwargs):
         # Intercept config imports
-        if name == 'arbiter.config' or name == 'config':
+        if name == "arbiter.config" or name == "config":
             import types
+
             mock_config = types.ModuleType(name)
-            
+
             class MockArbiterConfig:
                 DATABASE_URL = "sqlite:///:memory:"
                 VALIDATION_TIMEOUT_SECONDS = 1.0
@@ -49,34 +46,38 @@ def mock_imports():
                 AGENT_METADATA_TABLE = "agent_metadata"
                 MAX_MEMORY_SIZE = 1000
                 MAX_INVENTORY_SIZE = 500
+
                 def __call__(self):
                     return self
-            
+
             mock_config.ArbiterConfig = MockArbiterConfig
             return mock_config
-            
+
         # Intercept otel_config imports
-        if name == 'arbiter.otel_config':
+        if name == "arbiter.otel_config":
             import types
+
             mock_otel = types.ModuleType(name)
-            
+
             class MockTracer:
                 def start_as_current_span(self, *args, **kwargs):
                     from contextlib import contextmanager
+
                     @contextmanager
                     def span():
                         yield
+
                     return span()
-            
+
             def mock_get_tracer(name):
                 return MockTracer()
-            
+
             mock_otel.get_tracer = mock_get_tracer
             return mock_otel
-            
+
         # Default to original import for everything else
         return original_import(name, *args, **kwargs)
-    
+
     builtins.__import__ = custom_import
     try:
         yield
@@ -90,22 +91,24 @@ def load_agent_state_module():
     # Find the agent_state.py file
     current_dir = Path(__file__).parent
     agent_state_path = current_dir.parent / "agent_state.py"
-    
+
     if not agent_state_path.exists():
         # Try alternative path
         agent_state_path = current_dir.parent.parent / "arbiter" / "agent_state.py"
-    
+
     if not agent_state_path.exists():
         raise FileNotFoundError(f"Cannot find agent_state.py at {agent_state_path}")
-    
+
     # Create module spec
-    spec = importlib.util.spec_from_file_location("agent_state_test", str(agent_state_path))
+    spec = importlib.util.spec_from_file_location(
+        "agent_state_test", str(agent_state_path)
+    )
     module = importlib.util.module_from_spec(spec)
-    
+
     # Mock the imports and load the module
     with mock_imports():
         spec.loader.exec_module(module)
-    
+
     return module
 
 
@@ -122,6 +125,7 @@ SCHEMA_VALIDATION_ERRORS = agent_state_module.SCHEMA_VALIDATION_ERRORS
 # ===========================
 # SECTION 2: Fixtures
 # ===========================
+
 
 @pytest.fixture
 def engine():
@@ -152,10 +156,10 @@ async def async_session(async_engine):
     """Provide async session for async tests."""
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     async with AsyncSession(async_engine) as session:
         yield session
-    
+
     await async_engine.dispose()
 
 
@@ -169,15 +173,17 @@ def metrics():
 # SECTION 3: Validation Tests (Sync)
 # ===========================
 
+
 class TestValidation:
     """Tests focused on field validation and metrics."""
-    
+
     @pytest.mark.asyncio
     async def test_agent_state_validate_success(self, metrics):
         """Test successful validation of well-formed AgentState."""
         ok = AgentState(
             name="alpha",
-            x=0.0, y=0.0,
+            x=0.0,
+            y=0.0,
             energy=98.5,
             inventory=[],
             language=["en"],
@@ -203,7 +209,8 @@ class TestValidation:
         """Test validation failures with proper metrics tracking."""
         good_agent = AgentState(
             name="beta",
-            x=0.0, y=0.0,
+            x=0.0,
+            y=0.0,
             energy=50.0,
             inventory=[],
             language=[],
@@ -211,10 +218,10 @@ class TestValidation:
             personality={},
             world_size=10,
         )
-        
+
         table, error_type = label
         initial_count = metrics.get(table=table, error_type=error_type)
-        
+
         with pytest.raises(ValueError):
             setattr(good_agent, field, value)
 
@@ -232,14 +239,16 @@ class TestValidation:
 # SECTION 4: Database Tests (Sync)
 # ===========================
 
+
 class TestDatabaseSync:
     """Synchronous database integration tests."""
-    
+
     def test_db_insert_valid_agent_state(self, session):
         """Test database insertion with JSON field serialization."""
         obj = AgentState(
             name="delta",
-            x=1.0, y=2.0,
+            x=1.0,
+            y=2.0,
             energy=75.0,
             inventory=[],
             language=["en"],
@@ -256,19 +265,26 @@ class TestDatabaseSync:
         with pytest.raises(ValueError, match="energy must be between"):
             AgentState(
                 name="epsilon",
-                x=0.0, y=0.0,
+                x=0.0,
+                y=0.0,
                 energy=150.0,
-                inventory=[], language=[], memory=[], personality={}, world_size=10,
+                inventory=[],
+                language=[],
+                memory=[],
+                personality={},
+                world_size=10,
             )
 
     def test_json_field_serialization(self, session):
         """Test JSON field storage and retrieval mechanisms."""
         test_inventory = ["item1", "item2"]
         test_personality = {"openness": 0.8, "conscientiousness": 0.6}
-        
+
         obj = AgentState(
             name="json_test",
-            x=0.0, y=0.0, energy=50.0,
+            x=0.0,
+            y=0.0,
+            energy=50.0,
             inventory=test_inventory,
             language=["en", "es"],
             memory=["memory1"],
@@ -277,13 +293,13 @@ class TestDatabaseSync:
         )
         session.add(obj)
         session.commit()
-        
+
         retrieved = session.query(AgentState).filter_by(name="json_test").first()
         assert retrieved is not None
-        
+
         assert isinstance(retrieved.inventory, str)
         assert isinstance(retrieved.personality, str)
-        
+
         assert json.loads(retrieved.inventory) == test_inventory
         assert json.loads(retrieved.personality) == test_personality
 
@@ -292,9 +308,10 @@ class TestDatabaseSync:
 # SECTION 5: Async Model Tests
 # ===========================
 
+
 class TestAsyncModels:
     """Async SQLAlchemy model tests."""
-    
+
     @pytest.mark.asyncio
     async def test_agent_state_init(self, async_session):
         """Test AgentState model initialization."""
@@ -307,12 +324,12 @@ class TestAsyncModels:
             language=["en"],
             memory=["mem1"],
             personality={"trait": "bold"},
-            world_size=200
+            world_size=200,
         )
         # Check values before committing (while still in memory)
         assert agent.name == "TestAgent"
         assert agent.x == 10.0
-        
+
         # Commit to database
         async with async_session.begin():
             async_session.add(agent)
@@ -321,21 +338,21 @@ class TestAsyncModels:
     async def test_agent_state_defaults(self, async_session):
         """Test AgentState defaults."""
         agent = AgentState(name="DefaultAgent")
-        
+
         # SQLAlchemy column defaults are applied when the object is added to a session
         async_session.add(agent)
         await async_session.flush()  # Flush to apply defaults without committing
-        
+
         # Now check the defaults
         assert agent.x == 0.0
         assert agent.energy == 100.0
-        
+
         # Check JSON fields - they should be stored as strings
-        assert agent.inventory == '[]'  # Default empty list as JSON string
-        assert agent.language == '[]'
-        assert agent.memory == '[]'
-        assert agent.personality == '{}'
-        
+        assert agent.inventory == "[]"  # Default empty list as JSON string
+        assert agent.language == "[]"
+        assert agent.memory == "[]"
+        assert agent.personality == "{}"
+
         # Commit to database
         await async_session.commit()
 
@@ -345,7 +362,7 @@ class TestAsyncModels:
         agent1 = AgentState(name="UniqueAgent")
         async with async_session.begin():
             async_session.add(agent1)
-        
+
         agent2 = AgentState(name="UniqueAgent")
         with pytest.raises(IntegrityError):
             async with async_session.begin():
@@ -358,12 +375,12 @@ class TestAsyncModels:
         for i in range(10):
             agent = AgentState(name=f"Agent{i}", x=float(random.randint(0, 100)))
             agents.append(agent)
-        
+
         # Add all agents in a single transaction
         async with async_session.begin():
             for agent in agents:
                 async_session.add(agent)
-        
+
         # Verify they were all added
         result = await async_session.execute(select(AgentState))
         retrieved_agents = result.scalars().all()
@@ -374,12 +391,15 @@ class TestAsyncModels:
 # SECTION 6: Representation Tests
 # ===========================
 
+
 class TestRepresentations:
     """Test model string representations."""
-    
+
     def test_agent_state_repr(self):
         """Test AgentState __repr__ method."""
-        agent = AgentState(id=1, name="TestAgent", x=10.0, y=20.0, energy=50.0, world_size=100)
+        agent = AgentState(
+            id=1, name="TestAgent", x=10.0, y=20.0, energy=50.0, world_size=100
+        )
         repr_str = repr(agent)
         # Check that key components are present
         assert "AgentState" in repr_str

@@ -11,13 +11,12 @@ workflows, such as enforcing a policy before saving a checkpoint or publishing
 an event after a state change.
 """
 
-import asyncio
 import os
 import time
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, ANY
+from unittest.mock import patch, AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -33,12 +32,10 @@ TEST_ENV = {
     "PROD_MODE": "false",
     "ENV": "integration",
     "TENANT": "integration_tenant",
-    
     # Shared Keys
     "EVENT_BUS_ENCRYPTION_KEY": TEST_KEYS[0],
     "POLICY_ENCRYPTION_KEY": ",".join(TEST_KEYS),
     "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS),
-    
     # Backend Config
     "MESH_BACKEND_URL": os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/13"),
     "CHECKPOINT_BACKEND": "local",
@@ -53,22 +50,29 @@ for key, value in TEST_ENV.items():
 # Import modules after setting the environment
 from mesh import event_bus, mesh_policy, checkpoint_manager
 
+
 @pytest_asyncio.fixture(scope="module")
 async def policy_enforcer():
     """Fixture for a configured MeshPolicyEnforcer."""
     backend = mesh_policy.MeshPolicyBackend(backend_type="local")
-    enforcer = mesh_policy.MeshPolicyEnforcer(policy_id="integration_policy", backend=backend)
-    
+    enforcer = mesh_policy.MeshPolicyEnforcer(
+        policy_id="integration_policy", backend=backend
+    )
+
     # Pre-load a policy for the tests - include required fields
-    await backend.save("integration_policy", {
-        "id": "integration_policy",  # Added required field
-        "version": "1.0",  # Added required field
-        "allow": ["save_checkpoint", "publish_event"],
-        "deny": ["delete_checkpoint"]
-    })
+    await backend.save(
+        "integration_policy",
+        {
+            "id": "integration_policy",  # Added required field
+            "version": "1.0",  # Added required field
+            "allow": ["save_checkpoint", "publish_event"],
+            "deny": ["delete_checkpoint"],
+        },
+    )
     await enforcer.load_policy()
-    
+
     yield enforcer
+
 
 @pytest_asyncio.fixture(scope="module")
 async def checkpoint_manager_service():
@@ -78,7 +82,9 @@ async def checkpoint_manager_service():
     yield manager
     await manager.close()
 
+
 # --- Integration Test Classes ---
+
 
 class TestPolicyAndEvents:
     """Tests the integration between policy enforcement and event publishing."""
@@ -97,11 +103,14 @@ class TestPolicyAndEvents:
         if is_allowed:
             event_type = "policy_approved_event"
             event_data = {"status": "approved", "timestamp": time.time()}
-            
+
             # Mock the event bus to avoid real Redis dependency
-            with patch.object(event_bus, 'publish_event', new=AsyncMock()) as mock_publish:
+            with patch.object(
+                event_bus, "publish_event", new=AsyncMock()
+            ) as mock_publish:
                 await event_bus.publish_event(event_type, event_data)
                 mock_publish.assert_called_once_with(event_type, event_data)
+
 
 class TestCheckpointAndEvents:
     """Tests the integration between state checkpointing and event signaling."""
@@ -119,20 +128,23 @@ class TestCheckpointAndEvents:
         with patch("mesh.event_bus.publish_event", new=AsyncMock()) as mock_publish:
             # 1. Save the checkpoint
             await checkpoint_manager_service.save(checkpoint_name, checkpoint_state)
-            
+
             # 2. Simulate the application logic that publishes an event upon success
             event_type = "checkpoint_saved_notification"
             event_data = {"name": checkpoint_name, "status": "saved"}
             await event_bus.publish_event(event_type, event_data)
-            
+
             # 3. Assert that the event was published correctly
             mock_publish.assert_called_once_with(event_type, event_data)
+
 
 class TestFullWorkflow:
     """Tests a more complex workflow integrating all three components."""
 
     @pytest.mark.asyncio
-    async def test_policy_checkpoint_event_workflow(self, policy_enforcer, checkpoint_manager_service):
+    async def test_policy_checkpoint_event_workflow(
+        self, policy_enforcer, checkpoint_manager_service
+    ):
         """
         Simulates a full workflow:
         1. An operation is approved by the policy enforcer.
@@ -149,21 +161,23 @@ class TestFullWorkflow:
 
         # 2. Save the initial state
         await checkpoint_manager_service.save(workflow_id, initial_state)
-        
+
         # ... application logic runs ...
-        
+
         # 3. Save the updated state
         await checkpoint_manager_service.save(workflow_id, updated_state)
-        
+
         # 4. Publish an event with the final state (mocked to avoid Redis dependency)
         event_type = f"workflow_completed_{workflow_id}"
         assert await policy_enforcer.enforce_policy("publish_event")
-        
-        with patch.object(event_bus, 'publish_event', new=AsyncMock()) as mock_publish:
+
+        with patch.object(event_bus, "publish_event", new=AsyncMock()) as mock_publish:
             await event_bus.publish_event(event_type, updated_state)
             mock_publish.assert_called_once_with(event_type, updated_state)
 
+
 # --- Cleanup ---
+
 
 @pytest.fixture(scope="module", autouse=True)
 def cleanup():

@@ -16,8 +16,6 @@ from __future__ import annotations
 import os
 import asyncio
 import time
-import logging
-import platform
 from typing import List, Optional, AsyncIterator, Sequence, NamedTuple
 from contextlib import asynccontextmanager, suppress
 import json
@@ -29,7 +27,6 @@ import filelock
 import uuid
 import random
 import traceback
-from asyncio import get_running_loop
 import subprocess  # ensure attribute exists as venvs.subprocess
 import secrets
 
@@ -37,6 +34,7 @@ import secrets
 # Absolute imports for reliability
 from test_generation.orchestrator.config import VENV_TEMP_DIR, CONFIG
 from test_generation.orchestrator.console import log
+
 # FIX: Corrected import to use the renamed function directly
 from .audit import audit_event
 from test_generation import utils
@@ -80,7 +78,10 @@ def _cfg_int(key: str, default: int, *aliases: str) -> int:
             try:
                 return int(v)
             except (TypeError, ValueError):
-                log(f"Invalid int for config '{k}': {v!r}. Using default {default}.", level="WARNING")
+                log(
+                    f"Invalid int for config '{k}': {v!r}. Using default {default}.",
+                    level="WARNING",
+                )
                 continue
     return default
 
@@ -92,7 +93,10 @@ def _cfg_float(key: str, default: float, *aliases: str) -> float:
             try:
                 return float(v)
             except (TypeError, ValueError):
-                log(f"Invalid float for config '{k}': {v!r}. Using default {default}.", level="WARNING")
+                log(
+                    f"Invalid float for config '{k}': {v!r}. Using default {default}.",
+                    level="WARNING",
+                )
                 continue
     return default
 
@@ -111,7 +115,9 @@ def _cfg_bool(key: str, default: bool, *aliases: str) -> bool:
     return default
 
 
-async def create_and_install_venv(project_root: str, deps: list[str]) -> tuple[bool, str]:
+async def create_and_install_venv(
+    project_root: str, deps: list[str]
+) -> tuple[bool, str]:
     """
     Create a venv and install deps. Returns (success, python_exec_path).
     Designed to be monkeypatched in tests.
@@ -119,11 +125,7 @@ async def create_and_install_venv(project_root: str, deps: list[str]) -> tuple[b
     # delegate to internal creator to keep behavior centralized
     try:
         async with _create_and_manage_python_env(
-            project_root,
-            deps,
-            persist=True,
-            keep_on_failure=True,
-            env_subdir=None
+            project_root, deps, persist=True, keep_on_failure=True, env_subdir=None
         ) as py_exec:
             return (True, py_exec.exec_path)
     except Exception as e:
@@ -177,9 +179,13 @@ async def temporary_env(
 
     provider = lang_strategies.get(isolation_strategy)
     if not provider:
-        raise ValueError(f"Unknown isolation strategy for {language}: {isolation_strategy}")
+        raise ValueError(
+            f"Unknown isolation strategy for {language}: {isolation_strategy}"
+        )
 
-    async with provider(project_root, deps, persist, keep_on_failure, env_subdir) as handle:
+    async with provider(
+        project_root, deps, persist, keep_on_failure, env_subdir
+    ) as handle:
         yield handle
 
 
@@ -204,7 +210,11 @@ async def _create_and_manage_python_env(
         log(f"CRITICAL: Unsafe env_subdir '{env_path_relative}': {e}", level="CRITICAL")
         await audit_event(
             "venv_path_validation_failure",
-            {"event": "venv_path_validation_failure", "env_path": env_path_relative, "error": str(e)},
+            {
+                "event": "venv_path_validation_failure",
+                "env_path": env_path_relative,
+                "error": str(e),
+            },
             critical=True,
             run_id=run_id,
         )
@@ -231,15 +241,17 @@ async def _create_and_manage_python_env(
         raise PermissionError(err)
 
     Path(base_dir).mkdir(parents=True, exist_ok=True)
-    
+
     venv_dir = Path(base_dir, f"venv_{secrets.token_hex(4)}")
-    lock: Optional[filelock.FileLock] = filelock.FileLock(Path(base_dir, f"{venv_dir.name}.lock"), timeout=lock_timeout)
-    
+    lock: Optional[filelock.FileLock] = filelock.FileLock(
+        Path(base_dir, f"{venv_dir.name}.lock"), timeout=lock_timeout
+    )
+
     succeeded = False
     t0_total = time.perf_counter()
     try:
         await asyncio.to_thread(lock.acquire)
-        
+
         log(f"Attempting to create virtual environment at {venv_dir}", level="INFO")
         await asyncio.to_thread(venv.create, str(venv_dir), with_pip=True, prompt=None)
         log(f"Virtual environment created successfully at {venv_dir}", level="INFO")
@@ -260,7 +272,11 @@ async def _create_and_manage_python_env(
             log(f"CRITICAL: {err}", level="CRITICAL")
             await audit_event(
                 "venv_validation_failure",
-                {"event": "venv_validation_failure", "path": str(venv_dir), "error": err},
+                {
+                    "event": "venv_validation_failure",
+                    "path": str(venv_dir),
+                    "error": err,
+                },
                 run_id=run_id,
                 critical=True,
             )
@@ -293,7 +309,11 @@ async def _create_and_manage_python_env(
                     log(f"CRITICAL: {err}", level="CRITICAL")
                     await audit_event(
                         "venv_requirements_failure",
-                        {"event": "venv_requirements_failure", "path": str(venv_dir), "error": err},
+                        {
+                            "event": "venv_requirements_failure",
+                            "path": str(venv_dir),
+                            "error": err,
+                        },
                         run_id=run_id,
                         critical=True,
                     )
@@ -305,14 +325,22 @@ async def _create_and_manage_python_env(
         elapsed = time.perf_counter() - t0_total
         await audit_event(
             "venv_creation_success",
-            {"event": "venv_creation_success", "venv_path": str(venv_dir), "duration": elapsed},
+            {
+                "event": "venv_creation_success",
+                "venv_path": str(venv_dir),
+                "duration": elapsed,
+            },
             run_id=run_id,
         )
 
     except asyncio.CancelledError:
         await audit_event(
             "venv_creation_cancelled",
-            {"event": "venv_creation_cancelled", "venv_path": str(venv_dir), "error": "Cancelled"},
+            {
+                "event": "venv_creation_cancelled",
+                "venv_path": str(venv_dir),
+                "error": "Cancelled",
+            },
             run_id=run_id,
             critical=True,
         )
@@ -344,7 +372,9 @@ async def _create_and_manage_python_env(
             log(f"Cleaning up virtual environment at {venv_dir}", level="INFO")
             # Ensure removal even if cleanup hook is mocked in tests
             with suppress(Exception):
-                await asyncio.to_thread(shutil.rmtree, str(venv_dir), ignore_errors=True)
+                await asyncio.to_thread(
+                    shutil.rmtree, str(venv_dir), ignore_errors=True
+                )
             # Still invoke shared cleanup hook for metrics/logging parity
             await asyncio.shield(utils.cleanup_temp_dir(str(venv_dir)))
 
@@ -378,11 +408,20 @@ async def _create_and_manage_npm_env(
 
         pkg_json = work_dir / "package.json"
         if not pkg_json.exists():
-            pkg_json.write_text(json.dumps({"name": "atco-temp-env", "version": "1.0.0", "dependencies": {}}))
+            pkg_json.write_text(
+                json.dumps(
+                    {"name": "atco-temp-env", "version": "1.0.0", "dependencies": {}}
+                )
+            )
 
         if required_deps:
             log(f"Installing npm dependencies: {required_deps}", level="INFO")
-            await utils.run_command(["npm", "install", *required_deps], cwd=str(work_dir), timeout=install_timeout, check=True)
+            await utils.run_command(
+                ["npm", "install", *required_deps],
+                cwd=str(work_dir),
+                timeout=install_timeout,
+                check=True,
+            )
 
         yield EnvHandle(exec_path="npm", root_path=str(work_dir))
         succeeded = True
@@ -406,7 +445,11 @@ async def _create_and_manage_npm_env(
     except Exception as e:
         await audit_event(
             "npm_env_creation_failure",
-            {"env_path": str(work_dir or base_dir), "error": str(e), "traceback": traceback.format_exc()},
+            {
+                "env_path": str(work_dir or base_dir),
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
             run_id=run_id,
             critical=True,
         )
@@ -473,7 +516,11 @@ async def _create_and_manage_java_env(
     except Exception as e:
         await audit_event(
             "java_env_creation_failure",
-            {"env_path": str(work_dir or base_dir), "error": str(e), "traceback": traceback.format_exc()},
+            {
+                "env_path": str(work_dir or base_dir),
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
             run_id=run_id,
             critical=True,
         )
@@ -512,7 +559,10 @@ async def _create_and_manage_rust_env(
         work_dir = Path(tempfile.mkdtemp(dir=base_dir, prefix="rust_"))
 
         if required_deps:
-            log(f"Note: Rust dependencies {required_deps} should be in Cargo.toml.", level="WARNING")
+            log(
+                f"Note: Rust dependencies {required_deps} should be in Cargo.toml.",
+                level="WARNING",
+            )
 
         yield EnvHandle(exec_path="cargo", root_path=str(work_dir))
         succeeded = True
@@ -536,7 +586,11 @@ async def _create_and_manage_rust_env(
     except Exception as e:
         await audit_event(
             "rust_env_creation_failure",
-            {"env_path": str(work_dir or base_dir), "error": str(e), "traceback": traceback.format_exc()},
+            {
+                "env_path": str(work_dir or base_dir),
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
             run_id=run_id,
             critical=True,
         )
@@ -576,11 +630,18 @@ async def _create_and_manage_go_env(
         work_dir = Path(tempfile.mkdtemp(dir=base_dir, prefix="go_"))
 
         # go mod init
-        await utils.run_command(["go", "mod", "init", "temp-module"], cwd=str(work_dir), check=True)
+        await utils.run_command(
+            ["go", "mod", "init", "temp-module"], cwd=str(work_dir), check=True
+        )
 
         if required_deps:
             log(f"Installing Go dependencies: {required_deps}", level="INFO")
-            await utils.run_command(["go", "get", *required_deps], cwd=str(work_dir), timeout=install_timeout, check=True)
+            await utils.run_command(
+                ["go", "get", *required_deps],
+                cwd=str(work_dir),
+                timeout=install_timeout,
+                check=True,
+            )
 
         yield EnvHandle(exec_path="go", root_path=str(work_dir))
         succeeded = True
@@ -604,7 +665,11 @@ async def _create_and_manage_go_env(
     except Exception as e:
         await audit_event(
             "go_env_creation_failure",
-            {"env_path": str(work_dir or base_dir), "error": str(e), "traceback": traceback.format_exc()},
+            {
+                "env_path": str(work_dir or base_dir),
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
             run_id=run_id,
             critical=True,
         )

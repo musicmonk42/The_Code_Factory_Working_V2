@@ -2,9 +2,7 @@
 import logging
 import sys
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
-import importlib
 
 import pytest
 
@@ -36,7 +34,9 @@ def test_load_config_with_env_override(tmp_path):
     config_path = tmp_path / "config.json"
     # Fix: Use a valid JSON string for the config file.
     config_path.write_text(json.dumps({"TEST_KEY": "file_value"}))
-    with patch("test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}):
+    with patch(
+        "test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}
+    ):
         cfg = runtime._load_config(config_file=config_path)
         assert cfg["TEST_KEY"] == "env_value"
 
@@ -60,6 +60,7 @@ def test_load_config_with_pydantic(tmp_path):
         cfg = runtime._load_config()
     assert cfg["B"] == 2
 
+
 def test_init_llm_pydantic():
     """
     Tests that load_config uses pydantic settings.
@@ -79,7 +80,9 @@ def test_load_config_fallback():
 def test_dependency_flags_set_correctly():
     """_load_and_check_deps should set *_AVAILABLE flags."""
     # Fix: The test needs to patch the existence of the modules, not just the mock.
-    with patch.dict("sys.modules", {"aiofiles": MagicMock(), "flask": MagicMock(), "psutil": None}):
+    with patch.dict(
+        "sys.modules", {"aiofiles": MagicMock(), "flask": MagicMock(), "psutil": None}
+    ):
         runtime._load_and_check_deps()
         assert runtime.AIOFILES_AVAILABLE is True
         assert runtime.FLASK_AVAILABLE is True
@@ -100,12 +103,13 @@ def test_audit_logger_fallback_when_missing():
         ({"password": "123"}, {"password": "[REDACTED]"}),
         ({"api_key": "abc"}, {"api_key": "[REDACTED]"}),
         ("this has api_key=12345", "this has [REDACTED]"),
-    ]
+    ],
 )
 def test_redact_sensitive(input_data, expected):
     """redact_sensitive should hide sensitive values."""
     redacted = runtime.redact_sensitive(input_data)
     assert redacted == expected
+
 
 def test_runtime_import():
     """
@@ -113,4 +117,5 @@ def test_runtime_import():
     This serves as a guard against import chain failures.
     """
     from test_generation.gen_agent import runtime
+
     assert callable(runtime._load_config)

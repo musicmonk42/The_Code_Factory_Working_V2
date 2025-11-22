@@ -1,7 +1,7 @@
 import logging
 import re
 import threading
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 from pathlib import Path
 import smtplib
 from email.message import EmailMessage
@@ -26,27 +26,32 @@ from core_audit import AuditLogger
 _SENSITIVE_KV = re.compile(
     r'(?i)(?P<k>\b(pass(word)?|token|secret|api[_-]?key|access[_-]?key|private[_-]?key)\b)\s*[:=]\s*(?P<v>[^,\s;\'"]+)'
 )
-_SENSITIVE_QP = re.compile(r'(?i)([?&](?:token|key|signature|sig|auth)=)([^&]+)')
-_JWT = re.compile(r'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b')
-_AUTH = re.compile(r'(?i)\b(authorization:?\s*(?:bearer|token)\s+)[^\s]+')
-_SLACK_WEBHOOK = re.compile(r'https://hooks\.slack\.com/[^ \t\r\n]+', re.I)
-_API_KEY = re.compile(r'\b(?:sk|pk)_[A-Za-z0-9]{16,}\b')
-_AWS_KEY = re.compile(r'\bAKIA[0-9A-Z]{16}\b')
-_GCP_KEY = re.compile(r'AIza[0-9A-Za-z\-_]{35}')
-_PRIVATE_KEY_BLOCK = re.compile(r'-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----.+?-----END (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----', re.S)
+_SENSITIVE_QP = re.compile(r"(?i)([?&](?:token|key|signature|sig|auth)=)([^&]+)")
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")
+_AUTH = re.compile(r"(?i)\b(authorization:?\s*(?:bearer|token)\s+)[^\s]+")
+_SLACK_WEBHOOK = re.compile(r"https://hooks\.slack\.com/[^ \t\r\n]+", re.I)
+_API_KEY = re.compile(r"\b(?:sk|pk)_[A-Za-z0-9]{16,}\b")
+_AWS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
+_GCP_KEY = re.compile(r"AIza[0-9A-Za-z\-_]{35}")
+_PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----.+?-----END (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----",
+    re.S,
+)
+
 
 def _scrub_str(s: str) -> str:
     """Redacts sensitive patterns from a string."""
-    s = re.sub(_PRIVATE_KEY_BLOCK, '***REDACTED***', s)
-    s = re.sub(_AUTH, r'\1***REDACTED***', s)
-    s = re.sub(_SENSITIVE_QP, r'\1***REDACTED***', s)
-    s = re.sub(_SENSITIVE_KV, r'\g<k>=***REDACTED***', s)
-    s = _JWT.sub('***REDACTED***', s)
-    s = _SLACK_WEBHOOK.sub('***REDACTED***', s)
-    s = _API_KEY.sub('***REDACTED***', s)
-    s = _AWS_KEY.sub('***REDACTED***', s)
-    s = _GCP_KEY.sub('***REDACTED***', s)
+    s = re.sub(_PRIVATE_KEY_BLOCK, "***REDACTED***", s)
+    s = re.sub(_AUTH, r"\1***REDACTED***", s)
+    s = re.sub(_SENSITIVE_QP, r"\1***REDACTED***", s)
+    s = re.sub(_SENSITIVE_KV, r"\g<k>=***REDACTED***", s)
+    s = _JWT.sub("***REDACTED***", s)
+    s = _SLACK_WEBHOOK.sub("***REDACTED***", s)
+    s = _API_KEY.sub("***REDACTED***", s)
+    s = _AWS_KEY.sub("***REDACTED***", s)
+    s = _GCP_KEY.sub("***REDACTED***", s)
     return s
+
 
 def scrub(obj: Any) -> str:
     """Best-effort redaction for strings and simple containers, returning a string."""
@@ -61,13 +66,16 @@ def scrub(obj: Any) -> str:
             return _scrub_str(str(obj))
     return _scrub_str(str(obj))
 
+
 def safe_err(exc: Exception) -> str:
     """Safely converts an exception to a string with redaction."""
     return scrub(str(exc))
 
+
 def _truncate(s: str, max_len: int) -> str:
     """Truncates a string to a maximum length, adding ellipsis if truncated."""
     return s if len(s) <= max_len else (s[: max_len - 3] + "...")
+
 
 def _reject_header_injection(*values: str) -> None:
     """Raises a ValueError if a newline character is found in any of the provided strings."""
@@ -75,16 +83,20 @@ def _reject_header_injection(*values: str) -> None:
         if v and any(ch in v for ch in ("\r", "\n")):
             raise ValueError("Email header injection detected.")
 
+
 # --- Classes ---
 class AlertDispatcher(threading.Thread):
     """
     A worker thread to asynchronously dispatch alerts to external sinks like Slack and email.
     """
-    def __init__(self, operator: 'AlertOperator'):
+
+    def __init__(self, operator: "AlertOperator"):
         super().__init__(daemon=True, name="alert-dispatcher")
         self.operator = operator
         self.queue = queue.Queue(
-            maxsize=self.operator.secrets_manager.get_int("ALERT_QUEUE_MAX_SIZE", default=1000)
+            maxsize=self.operator.secrets_manager.get_int(
+                "ALERT_QUEUE_MAX_SIZE", default=1000
+            )
         )
         self._stop_event = threading.Event()
         self._accepting = True
@@ -115,9 +127,13 @@ class AlertDispatcher(threading.Thread):
                 else:
                     self.operator.logger.error(f"Unknown sink type: {sink_type!r}")
             except Exception as e:
-                self.operator.logger.error(f"Unhandled error in AlertDispatcher worker: {safe_err(e)}")
+                self.operator.logger.error(
+                    f"Unhandled error in AlertDispatcher worker: {safe_err(e)}"
+                )
                 self.operator.audit_logger.log_event(
-                    event_type="alert_worker_error", message=safe_err(e), severity="ERROR"
+                    event_type="alert_worker_error",
+                    message=safe_err(e),
+                    severity="ERROR",
                 )
             finally:
                 if item is not None:
@@ -129,10 +145,10 @@ class AlertDispatcher(threading.Thread):
         """Gracefully shuts down the dispatcher."""
         self.operator.logger.info("AlertDispatcher shutdown initiated...")
         self._accepting = False
-    
+
         if drain:
             self.queue.join()
-    
+
         self._stop_event.set()
         try:
             self.queue.put_nowait(None)
@@ -146,28 +162,32 @@ class AlertDispatcher(threading.Thread):
             self._session.close()
         except Exception:
             pass
-    
+
     def enqueue(self, sink_type: str, data: Dict[str, Any]):
         """Adds an alert to the queue for processing."""
         if not self._accepting:
             self.operator.logger.debug("Dispatcher not accepting new alerts; dropping.")
             return
-        
+
         try:
             self.queue.put_nowait((sink_type, data))
         except queue.Full:
             self.operator.logger.warning("Alert queue is full. Dropping message.")
             self.operator._log_rate_limited_alert("queue_full")
 
-    def _post_with_retry(self, url: str, payload: dict, timeout: int, attempts: int) -> None:
+    def _post_with_retry(
+        self, url: str, payload: dict, timeout: int, attempts: int
+    ) -> None:
         """Handles HTTP POST requests with retries and exponential backoff."""
         last_exc = None
         connect_timeout = timeout[0] if isinstance(timeout, tuple) else timeout
         read_timeout = timeout[1] if isinstance(timeout, tuple) else timeout
-        
+
         for i in range(attempts):
             try:
-                r = self._session.post(url, json=payload, timeout=(connect_timeout, read_timeout))
+                r = self._session.post(
+                    url, json=payload, timeout=(connect_timeout, read_timeout)
+                )
                 if r.status_code in (429, 500, 502, 503, 504):
                     jitter = random.uniform(0, 1.0)
                     if r.status_code == 429:
@@ -182,15 +202,22 @@ class AlertDispatcher(threading.Thread):
                                     # parsedate_to_datetime returns a naive datetime object
                                     # Assume UTC timezone for comparison
                                     if retry_time.tzinfo is None:
-                                        retry_time = retry_time.replace(tzinfo=timezone.utc)
-                                    base = max(0, (retry_time - datetime.now(timezone.utc)).total_seconds())
+                                        retry_time = retry_time.replace(
+                                            tzinfo=timezone.utc
+                                        )
+                                    base = max(
+                                        0,
+                                        (
+                                            retry_time - datetime.now(timezone.utc)
+                                        ).total_seconds(),
+                                    )
                                 except Exception:
-                                    base = (2 ** i)
+                                    base = 2**i
                         else:
-                            base = (2 ** i)
+                            base = 2**i
                         sleep = min(60, max(0, base)) + jitter
                     else:
-                        sleep = min(30, (2 ** i)) + jitter
+                        sleep = min(30, (2**i)) + jitter
                     self.operator.logger.warning(
                         f"POST {url} failed with {r.status_code}; retrying in {sleep:.2f}s"
                     )
@@ -200,7 +227,7 @@ class AlertDispatcher(threading.Thread):
                 return
             except requests.RequestException as e:
                 last_exc = e
-                backoff = min(30, (2 ** i)) + random.uniform(0, 1)
+                backoff = min(30, (2**i)) + random.uniform(0, 1)
                 self.operator.logger.warning(
                     f"Request error (attempt {i+1}/{attempts}); retrying in {backoff:.2f}s: {safe_err(e)}"
                 )
@@ -212,22 +239,23 @@ class AlertDispatcher(threading.Thread):
         url = self.operator.secrets_manager.get_secret("SLACK_WEBHOOK_URL")
         if not url:
             return
-        
+
         if not url.startswith("https://hooks.slack.com/"):
             self.operator.logger.error("Invalid Slack webhook URL configured.")
             return
-            
+
         timeout = self.operator.secrets_manager.get_int("SLACK_TIMEOUT", default=5)
-        attempts = self.operator.secrets_manager.get_int("SLACK_RETRY_ATTEMPTS", default=3)
-        
+        attempts = self.operator.secrets_manager.get_int(
+            "SLACK_RETRY_ATTEMPTS", default=3
+        )
+
         payload = {
             "text": f"[{data['level']}] {data['message']}",
-            "attachments": [{
-                "text": json.dumps(data, indent=2, default=str),
-                "mrkdwn_in": ["text"]
-            }]
+            "attachments": [
+                {"text": json.dumps(data, indent=2, default=str), "mrkdwn_in": ["text"]}
+            ],
         }
-        
+
         try:
             self._post_with_retry(url, payload, timeout, attempts)
         except Exception as e:
@@ -238,9 +266,15 @@ class AlertDispatcher(threading.Thread):
         """Configures and returns an SMTP client with TLS support."""
         host = self.operator.secrets_manager.get_secret("ALERT_SMTP_SERVER")
         port = self.operator.secrets_manager.get_int("ALERT_SMTP_PORT", default=587)
-        timeout = self.operator.secrets_manager.get_int("ALERT_SMTP_TIMEOUT", default=10)
-        use_ssl = self.operator.secrets_manager.get_bool("ALERT_SMTP_SSL", default=False)
-        use_starttls = self.operator.secrets_manager.get_bool("ALERT_SMTP_STARTTLS", default=True)
+        timeout = self.operator.secrets_manager.get_int(
+            "ALERT_SMTP_TIMEOUT", default=10
+        )
+        use_ssl = self.operator.secrets_manager.get_bool(
+            "ALERT_SMTP_SSL", default=False
+        )
+        use_starttls = self.operator.secrets_manager.get_bool(
+            "ALERT_SMTP_STARTTLS", default=True
+        )
 
         ctx = ssl.create_default_context()
         if use_ssl:
@@ -263,34 +297,41 @@ class AlertDispatcher(threading.Thread):
 
         if not (email_to and email_from and smtp_server):
             return
-        
+
         subject_data = data.get("app_name", "unknown_app")
         _reject_header_injection(
-            email_from or "",
-            email_to or "",
-            f'[ALERT][{data["level"]}] {subject_data}'
+            email_from or "", email_to or "", f'[ALERT][{data["level"]}] {subject_data}'
         )
 
         smtp_user = self.operator.secrets_manager.get_secret("ALERT_SMTP_USER")
         smtp_pass = self.operator.secrets_manager.get_secret("ALERT_SMTP_PASS")
-        
-        recipients = [recip.strip() for recip in re.split(r'[,;]', email_to) if recip.strip()]
+
+        recipients = [
+            recip.strip() for recip in re.split(r"[,;]", email_to) if recip.strip()
+        ]
         if not recipients:
             self.operator.logger.error("No valid email recipients found.")
             return
 
-        message = _truncate(data['message'], self.operator.secrets_manager.get_int("ALERT_MAX_MESSAGE_LEN", default=3500))
+        message = _truncate(
+            data["message"],
+            self.operator.secrets_manager.get_int(
+                "ALERT_MAX_MESSAGE_LEN", default=3500
+            ),
+        )
         subject = _truncate(
             f'[ALERT][{data["level"]}] {subject_data}',
-            self.operator.secrets_manager.get_int("ALERT_EMAIL_SUBJECT_MAX", default=200)
+            self.operator.secrets_manager.get_int(
+                "ALERT_EMAIL_SUBJECT_MAX", default=200
+            ),
         )
-        
+
         msg = EmailMessage()
-        msg['Subject'] = subject
-        msg['From'] = email_from
-        msg['To'] = ", ".join(recipients)
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = ", ".join(recipients)
         msg.set_content(message)
-        
+
         try:
             with self._smtp_client() as server:
                 if smtp_user and smtp_pass:
@@ -300,10 +341,12 @@ class AlertDispatcher(threading.Thread):
             self.operator.logger.error(f"Email alert failed: {safe_err(e)}")
             raise
 
+
 class AlertOperator:
     """
     A thread-safe utility for sending alerts via logging, Slack, or email.
     """
+
     _instance = None
     _lock = threading.Lock()
     _log_file_warning_issued = False
@@ -316,13 +359,17 @@ class AlertOperator:
                 cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, secrets_manager: SecretsManager = None, audit_logger: AuditLogger = None):
+    def __init__(
+        self, secrets_manager: SecretsManager = None, audit_logger: AuditLogger = None
+    ):
         """
         Initialize the AlertOperator with configuration from SecretsManager and AuditLogger.
         """
         if not self._initialized:
             self.secrets_manager = secrets_manager or SecretsManager()
-            self.audit_logger = audit_logger or AuditLogger(secrets_manager=self.secrets_manager)
+            self.audit_logger = audit_logger or AuditLogger(
+                secrets_manager=self.secrets_manager
+            )
             self._lock = threading.Lock()
             self.logger = logging.getLogger("alert_operator")
             self._configure_logger()
@@ -353,24 +400,32 @@ class AlertOperator:
         log_file_path = self.secrets_manager.get_secret("ALERT_LOG_FILE", default=None)
 
         if log_file_path:
-            log_file = Path(_ospath.expanduser(_ospath.expandvars(log_file_path))).resolve()
+            log_file = Path(
+                _ospath.expanduser(_ospath.expandvars(log_file_path))
+            ).resolve()
             log_file.parent.mkdir(parents=True, exist_ok=True)
             try:
                 log_file.touch(exist_ok=True)
                 log_file.chmod(0o600)
             except OSError as e:
                 if not AlertOperator._log_file_warning_issued:
-                    self.logger.warning(f"Failed to set secure permissions on log file '{log_file}': {e}")
+                    self.logger.warning(
+                        f"Failed to set secure permissions on log file '{log_file}': {e}"
+                    )
                     AlertOperator._log_file_warning_issued = True
 
             handler = RotatingFileHandler(
                 filename=str(log_file),
-                maxBytes=self.secrets_manager.get_int("ALERT_LOG_MAX_BYTES", default=10 * 1024 * 1024),
-                backupCount=self.secrets_manager.get_int("ALERT_LOG_BACKUP_COUNT", default=5),
+                maxBytes=self.secrets_manager.get_int(
+                    "ALERT_LOG_MAX_BYTES", default=10 * 1024 * 1024
+                ),
+                backupCount=self.secrets_manager.get_int(
+                    "ALERT_LOG_BACKUP_COUNT", default=5
+                ),
                 encoding="utf-8",
                 delay=True,
             )
-            fmt = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
+            fmt = logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
         else:
             handler = logging.StreamHandler(sys.stdout)
             fmt = logging.Formatter(
@@ -379,20 +434,26 @@ class AlertOperator:
 
         handler.setFormatter(fmt)
         self.logger.addHandler(handler)
-        
-        level = self.secrets_manager.get_secret("ALERT_LOG_LEVEL", default="INFO").upper()
+
+        level = self.secrets_manager.get_secret(
+            "ALERT_LOG_LEVEL", default="INFO"
+        ).upper()
         self.logger.setLevel(getattr(logging, level, logging.INFO))
 
     def _load_context(self) -> Dict[str, Any]:
         """Load global context metadata from SecretsManager."""
         return {
-            "app_name": self.secrets_manager.get_secret("APP_NAME", default="unknown_app"),
-            "environment": self.secrets_manager.get_secret("ENVIRONMENT", default="unknown")
+            "app_name": self.secrets_manager.get_secret(
+                "APP_NAME", default="unknown_app"
+            ),
+            "environment": self.secrets_manager.get_secret(
+                "ENVIRONMENT", default="unknown"
+            ),
         }
 
     def _get_signature(self, message: str) -> str:
         """Generates a short, consistent signature for a message."""
-        return sha256(message.encode('utf-8')).hexdigest()[:16]
+        return sha256(message.encode("utf-8")).hexdigest()[:16]
 
     def _log_rate_limited_alert(self, key: str):
         """Logs a single message for a rate-limited event."""
@@ -401,11 +462,13 @@ class AlertOperator:
             now = time.time()
             if rl_key not in self._rl:
                 self._rl[rl_key] = deque()
-            
+
             q = self._rl[rl_key]
-            while q and now - q[0] > self.secrets_manager.get_int("ALERT_RL_WINDOW_SEC", default=60):
+            while q and now - q[0] > self.secrets_manager.get_int(
+                "ALERT_RL_WINDOW_SEC", default=60
+            ):
                 q.popleft()
-            
+
             if not q:
                 self.logger.warning(f"Alerts for '{key}' are being rate-limited.")
                 q.append(now)
@@ -416,16 +479,20 @@ class AlertOperator:
             now = time.time()
             q = self._rl.get(key)
             if q is None:
-                if len(self._rl) >= self.secrets_manager.get_int("ALERT_RL_MAX_KEYS", default=2000):
+                if len(self._rl) >= self.secrets_manager.get_int(
+                    "ALERT_RL_MAX_KEYS", default=2000
+                ):
                     self._rl.pop(next(iter(self._rl)))
                 q = self._rl[key] = deque()
-            
-            while q and now - q[0] > self.secrets_manager.get_int("ALERT_RL_WINDOW_SEC", default=60):
+
+            while q and now - q[0] > self.secrets_manager.get_int(
+                "ALERT_RL_WINDOW_SEC", default=60
+            ):
                 q.popleft()
-            
+
             if len(q) >= self.secrets_manager.get_int("ALERT_RL_MAX_EVENTS", default=5):
                 return False
-            
+
             q.append(now)
             return True
 
@@ -448,17 +515,17 @@ class AlertOperator:
             raise ValueError("Alert level must be a non-empty string")
 
         level = level.upper()
-        
+
         safe_message = scrub(message)
         message_signature = self._get_signature(safe_message)
-        
+
         if not self._allow_event(f"{level}_{message_signature}"):
             self.logger.info(f"Rate-limiting alert with signature {message_signature}.")
             return
-            
+
         with self._lock:
             ctx_copy = dict(self._context)
-        
+
         try:
             log_level_val = getattr(logging, level, logging.CRITICAL)
             self.logger.log(log_level_val, safe_message)
@@ -471,28 +538,36 @@ class AlertOperator:
                 message=safe_message,
                 alert_level=level,
                 message_signature=message_signature,
-                **ctx_copy
+                **ctx_copy,
             )
         except Exception as e:
             self.logger.error(f"Audit logging failed: {e}")
 
         if self.secrets_manager.get_secret("SLACK_WEBHOOK_URL"):
-            self._dispatcher.enqueue("slack", {
-                "level": level,
-                "message": safe_message,
-                "app_name": ctx_copy.get("app_name"),
-                "environment": ctx_copy.get("environment")
-            })
+            self._dispatcher.enqueue(
+                "slack",
+                {
+                    "level": level,
+                    "message": safe_message,
+                    "app_name": ctx_copy.get("app_name"),
+                    "environment": ctx_copy.get("environment"),
+                },
+            )
 
-        if self.secrets_manager.get_secret("ALERT_EMAIL_TO") and \
-           self.secrets_manager.get_secret("ALERT_EMAIL_FROM") and \
-           self.secrets_manager.get_secret("ALERT_SMTP_SERVER"):
-            self._dispatcher.enqueue("email", {
-                "level": level,
-                "message": safe_message,
-                "app_name": ctx_copy.get("app_name"),
-                "environment": ctx_copy.get("environment")
-            })
+        if (
+            self.secrets_manager.get_secret("ALERT_EMAIL_TO")
+            and self.secrets_manager.get_secret("ALERT_EMAIL_FROM")
+            and self.secrets_manager.get_secret("ALERT_SMTP_SERVER")
+        ):
+            self._dispatcher.enqueue(
+                "email",
+                {
+                    "level": level,
+                    "message": safe_message,
+                    "app_name": ctx_copy.get("app_name"),
+                    "environment": ctx_copy.get("environment"),
+                },
+            )
 
     def update_context(self, **kwargs: Any) -> None:
         """
@@ -507,19 +582,21 @@ class AlertOperator:
         with self._lock:
             self.secrets_manager.reload()
             self.audit_logger.reload()
-            
+
             if self._dispatcher and self._dispatcher.is_alive():
                 self._dispatcher.stop(drain=True)
-            
+
             self._configure_logger()
             self._context = self._load_context()
             self._dispatcher = AlertDispatcher(self)
             self._dispatcher.start()
-            
+
             self.logger.info("AlertOperator configuration reloaded")
+
 
 # Global singleton factory
 _alert_operator_singleton: Optional[AlertOperator] = None
+
 
 def get_alert_operator() -> AlertOperator:
     """Returns the thread-safe singleton instance of AlertOperator."""
@@ -527,6 +604,7 @@ def get_alert_operator() -> AlertOperator:
     if _alert_operator_singleton is None:
         _alert_operator_singleton = AlertOperator()
     return _alert_operator_singleton
+
 
 def send_alert(*args, **kwargs):
     """Stub: send an alert/notification."""

@@ -110,7 +110,7 @@ import hashlib
 import logging
 from typing import Dict, Any, Callable, Awaitable, List, Optional, Type
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from queue import Queue, Empty
 from threading import Thread
 
@@ -118,34 +118,49 @@ from threading import Thread
 try:
     import redis.asyncio as redis
     from redis.asyncio.connection import ConnectionPool, ClusterConnectionPool
-    from redis.exceptions import ConnectionError, RedisError, TimeoutError, ResponseError
+    from redis.exceptions import (
+        ConnectionError,
+        RedisError,
+        TimeoutError,
+        ResponseError,
+    )
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-    
+
 try:
     from cryptography.fernet import Fernet, MultiFernet
+
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
 
 try:
     from pydantic import BaseModel, ValidationError
+
     PYDANTIC_AVAILABLE = True
 except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
     from aiolimiter import AsyncLimiter
+
     AIOLIMITER_AVAILABLE = True
 except ImportError:
     AIOLIMITER_AVAILABLE = False
-    
+
 try:
-    from prometheus_async.aio import Counter as AsyncCounter, Gauge as AsyncGauge, Histogram as AsyncHistogram
+    from prometheus_async.aio import (
+        Counter as AsyncCounter,
+        Gauge as AsyncGauge,
+        Histogram as AsyncHistogram,
+    )
+
     PROMETHEUS_ASYNC_AVAILABLE = True
 except ImportError:
     from prometheus_client import Counter, Gauge, Histogram
+
     PROMETHEUS_ASYNC_AVAILABLE = False
 
 try:
@@ -156,14 +171,20 @@ try:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
+
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
             import contextlib
+
             @contextlib.contextmanager
-            def mock_span(): yield
+            def mock_span():
+                yield
+
             return mock_span()
+
     tracer = MockTracer()
     OPENTELEMETRY_AVAILABLE = False
 
@@ -189,7 +210,7 @@ IS_TEST_ENV = os.environ.get("PYTEST_CURRENT_TEST") is not None
 # ---- Async-Safe Logger Implementation ----
 class AsyncSafeLogger:
     """Thread-safe, async-safe logger that doesn't block the event loop."""
-    
+
     def __init__(self, name: str, level=logging.INFO):
         self.name = name
         self.level = level
@@ -197,20 +218,22 @@ class AsyncSafeLogger:
         self._worker_thread = None
         self._shutdown = threading.Event()
         self._started = False
-        
+
         # Setup the actual logger
         self._logger = logging.getLogger(name)
         self._logger.setLevel(level)
         self._logger.propagate = False
-        
+
         # Only add console handler (no file handlers that can block)
         if not self._logger.handlers:
             handler = logging.StreamHandler(sys.stderr)
             handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                logging.Formatter(
+                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                )
             )
             self._logger.addHandler(handler)
-    
+
     def _worker(self):
         """Background worker thread for processing log messages."""
         while not self._shutdown.is_set():
@@ -223,14 +246,14 @@ class AsyncSafeLogger:
             except Exception as e:
                 # Emergency fallback - print to stderr
                 print(f"Logging error: {e}", file=sys.stderr)
-    
+
     def start(self):
         """Start the background logging thread."""
         if not self._started:
             self._worker_thread = Thread(target=self._worker, daemon=True)
             self._worker_thread.start()
             self._started = True
-    
+
     def stop(self):
         """Stop the background logging thread."""
         if self._started:
@@ -238,12 +261,12 @@ class AsyncSafeLogger:
             if self._worker_thread:
                 self._worker_thread.join(timeout=2)
             self._started = False
-    
+
     def _log(self, level: int, msg: str, **kwargs):
         """Queue a log message (non-blocking)."""
         if not self._started:
             self.start()
-        
+
         try:
             # Non-blocking put
             self._queue.put_nowait((level, msg, kwargs))
@@ -252,26 +275,29 @@ class AsyncSafeLogger:
             if PROD_MODE:
                 pass
             else:
-                print(f"[{self.name}] {logging.getLevelName(level)}: {msg}", file=sys.stderr)
-    
+                print(
+                    f"[{self.name}] {logging.getLevelName(level)}: {msg}",
+                    file=sys.stderr,
+                )
+
     def debug(self, msg: str, **kwargs):
         self._log(logging.DEBUG, msg, **kwargs)
-    
+
     def info(self, msg: str, **kwargs):
         self._log(logging.INFO, msg, **kwargs)
-    
+
     def warning(self, msg: str, **kwargs):
         self._log(logging.WARNING, msg, **kwargs)
-    
+
     def error(self, msg: str, exc_info=False, **kwargs):
         if exc_info:
-            import traceback
-            kwargs['exc_info'] = True
+
+            kwargs["exc_info"] = True
         self._log(logging.ERROR, msg, **kwargs)
-    
+
     def critical(self, msg: str, exc_info=False, **kwargs):
         if exc_info:
-            kwargs['exc_info'] = True
+            kwargs["exc_info"] = True
         self._log(logging.CRITICAL, msg, **kwargs)
 
 
@@ -284,13 +310,19 @@ logger.start()
 def _enforce_prod_requirements():
     """Checks for and enforces production-critical dependencies and configs."""
     if not REDIS_AVAILABLE:
-        logger.critical("CRITICAL: redis-py is required for production but not installed.")
+        logger.critical(
+            "CRITICAL: redis-py is required for production but not installed."
+        )
         sys.exit(1)
     if not CRYPTOGRAPHY_AVAILABLE:
-        logger.critical("CRITICAL: cryptography is required for encryption in production but not installed.")
+        logger.critical(
+            "CRITICAL: cryptography is required for encryption in production but not installed."
+        )
         sys.exit(1)
     if not PYDANTIC_AVAILABLE:
-        logger.critical("CRITICAL: pydantic is required for schema validation in production but not installed.")
+        logger.critical(
+            "CRITICAL: pydantic is required for schema validation in production but not installed."
+        )
         sys.exit(1)
     if not ENCRYPTION_KEY:
         logger.critical("CRITICAL: EVENT_BUS_ENCRYPTION_KEY required in production.")
@@ -299,7 +331,9 @@ def _enforce_prod_requirements():
         logger.critical("CRITICAL: EVENT_BUS_HMAC_KEY required in production.")
         sys.exit(1)
     if not REDIS_USER or not REDIS_PASSWORD:
-        logger.critical("CRITICAL: REDIS_USER and REDIS_PASSWORD required in production.")
+        logger.critical(
+            "CRITICAL: REDIS_USER and REDIS_PASSWORD required in production."
+        )
         sys.exit(1)
     if not REDIS_URL:
         logger.critical("CRITICAL: REDIS_URL environment variable is not set.")
@@ -307,9 +341,12 @@ def _enforce_prod_requirements():
     if not REDIS_URL.startswith("rediss://"):
         logger.critical("CRITICAL: Redis URL must use SSL (rediss://) in production.")
         sys.exit(1)
-    if ("redis://localhost" in REDIS_URL or "redis://127.0.0.1" in REDIS_URL):
-        logger.critical("CRITICAL: Redis URL points to localhost, which is not allowed in production.")
+    if "redis://localhost" in REDIS_URL or "redis://127.0.0.1" in REDIS_URL:
+        logger.critical(
+            "CRITICAL: Redis URL points to localhost, which is not allowed in production."
+        )
         sys.exit(1)
+
 
 if PROD_MODE:
     _enforce_prod_requirements()
@@ -317,6 +354,8 @@ if PROD_MODE:
 
 # ---- Security & Helpers ----
 fernet = None
+
+
 def _get_fernet() -> Optional[MultiFernet]:
     """Initializes and returns a MultiFernet instance for key rotation."""
     global fernet
@@ -325,6 +364,7 @@ def _get_fernet() -> Optional[MultiFernet]:
         fernet = MultiFernet([Fernet(k.encode()) for k in keys])
     return fernet
 
+
 def _sign_payload(payload: bytes) -> str:
     """Creates an HMAC signature for the given payload."""
     if HMAC_KEY:
@@ -332,6 +372,7 @@ def _sign_payload(payload: bytes) -> str:
         signer.update(payload)
         return signer.hexdigest()
     raise RuntimeError("HMAC key is not configured.")
+
 
 def _verify_signature(payload: bytes, signature: str) -> bool:
     """Verifies an HMAC signature against the given payload."""
@@ -346,7 +387,11 @@ def _verify_signature(payload: bytes, signature: str) -> bool:
 if OPENTELEMETRY_AVAILABLE and not IS_TEST_ENV:
     resource = Resource(attributes={SERVICE_NAME: f"mesh-event-bus-tenant:{TENANT}"})
     trace_provider = TracerProvider(resource=resource)
-    trace_exporter = OTLPSpanExporter(endpoint=os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4318/v1/traces"))
+    trace_exporter = OTLPSpanExporter(
+        endpoint=os.environ.get(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://localhost:4318/v1/traces"
+        )
+    )
     trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
     trace.set_tracer_provider(trace_provider)
     tracer = trace.get_tracer(__name__)
@@ -354,48 +399,93 @@ if OPENTELEMETRY_AVAILABLE and not IS_TEST_ENV:
     RedisInstrumentor().instrument()
     logger.info("OpenTelemetry initialized and configured.")
 else:
+
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
             import contextlib
+
             @contextlib.contextmanager
-            def mock_span(): yield
+            def mock_span():
+                yield
+
             return mock_span()
+
     tracer = MockTracer()
     if not IS_TEST_ENV:
-        logger.warning("OpenTelemetry SDK not found. Distributed tracing will be disabled.")
+        logger.warning(
+            "OpenTelemetry SDK not found. Distributed tracing will be disabled."
+        )
 
 
 # Prometheus Metrics with tenant/environment labels
 if PROMETHEUS_ASYNC_AVAILABLE:
-    EVENTS_PUBLISHED = AsyncCounter("event_bus_published_total", "Total events published.", ["event_type", "status", "env", "tenant", "protocol"])
-    EVENTS_SUBSCRIBED = AsyncCounter("event_bus_subscribed_total", "Total events subscribed.", ["event_type", "status", "env", "tenant", "protocol"])
-    PUBLISH_LATENCY = AsyncHistogram("event_bus_publish_latency_seconds", "Latency of publishing an event.")
-    SUBSCRIBE_LATENCY = AsyncHistogram("event_bus_subscribe_latency_seconds", "Latency of processing a subscribed event.")
-    BUS_LIVENESS = AsyncGauge("event_bus_liveness_status", "Status of the event bus connection (1=live, 0=down).")
+    EVENTS_PUBLISHED = AsyncCounter(
+        "event_bus_published_total",
+        "Total events published.",
+        ["event_type", "status", "env", "tenant", "protocol"],
+    )
+    EVENTS_SUBSCRIBED = AsyncCounter(
+        "event_bus_subscribed_total",
+        "Total events subscribed.",
+        ["event_type", "status", "env", "tenant", "protocol"],
+    )
+    PUBLISH_LATENCY = AsyncHistogram(
+        "event_bus_publish_latency_seconds", "Latency of publishing an event."
+    )
+    SUBSCRIBE_LATENCY = AsyncHistogram(
+        "event_bus_subscribe_latency_seconds",
+        "Latency of processing a subscribed event.",
+    )
+    BUS_LIVENESS = AsyncGauge(
+        "event_bus_liveness_status",
+        "Status of the event bus connection (1=live, 0=down).",
+    )
     logger.info("Prometheus async metrics enabled.")
 else:
-    EVENTS_PUBLISHED = Counter("event_bus_published_total", "Total events published.", ["event_type", "status", "env", "tenant", "protocol"])
-    EVENTS_SUBSCRIBED = Counter("event_bus_subscribed_total", "Total events subscribed.", ["event_type", "status", "env", "tenant", "protocol"])
-    PUBLISH_LATENCY = Histogram("event_bus_publish_latency_seconds", "Latency of publishing an event.")
-    SUBSCRIBE_LATENCY = Histogram("event_bus_subscribe_latency_seconds", "Latency of processing a subscribed event.")
-    BUS_LIVENESS = Gauge("event_bus_liveness_status", "Status of the event bus connection (1=live, 0=down).")
+    EVENTS_PUBLISHED = Counter(
+        "event_bus_published_total",
+        "Total events published.",
+        ["event_type", "status", "env", "tenant", "protocol"],
+    )
+    EVENTS_SUBSCRIBED = Counter(
+        "event_bus_subscribed_total",
+        "Total events subscribed.",
+        ["event_type", "status", "env", "tenant", "protocol"],
+    )
+    PUBLISH_LATENCY = Histogram(
+        "event_bus_publish_latency_seconds", "Latency of publishing an event."
+    )
+    SUBSCRIBE_LATENCY = Histogram(
+        "event_bus_subscribe_latency_seconds",
+        "Latency of processing a subscribed event.",
+    )
+    BUS_LIVENESS = Gauge(
+        "event_bus_liveness_status",
+        "Status of the event bus connection (1=live, 0=down).",
+    )
     if not IS_TEST_ENV:
         logger.warning("prometheus-async not available. Using blocking metrics.")
 
 
 async def _inc_counter(counter, **labels):
     # Cap event_type cardinality for metrics
-    labels['event_type'] = labels['event_type'] if labels['event_type'] in ['user_created', 'order_placed', 'payment_failed'] else 'other'
+    labels["event_type"] = (
+        labels["event_type"]
+        if labels["event_type"] in ["user_created", "order_placed", "payment_failed"]
+        else "other"
+    )
     if PROMETHEUS_ASYNC_AVAILABLE:
         await counter.labels(**labels).inc()
     else:
         counter.labels(**labels).inc()
+
 
 async def _set_gauge(gauge, value):
     if PROMETHEUS_ASYNC_AVAILABLE:
         await gauge.set(value)
     else:
         gauge.set(value)
+
 
 def _observe_histogram(histogram, value):
     histogram.observe(value)
@@ -419,37 +509,48 @@ class CircuitBreaker:
     def can_proceed(self):
         if not self.is_open:
             return True
-        if self.last_failure and (datetime.now() - self.last_failure).total_seconds() > self.reset_timeout:
+        if (
+            self.last_failure
+            and (datetime.now() - self.last_failure).total_seconds()
+            > self.reset_timeout
+        ):
             self.is_open = False
             self.failures = 0
             return True
         return False
-        
+
+
 circuit_breaker = CircuitBreaker()
 
 
 # ---- Secure Redis Configuration and DLQ ----
 _redis_connection_pool: Optional[ConnectionPool] = None
 
+
 def _setup_bus():
     """Initializes module-level resources like the Redis connection pool."""
     global _redis_connection_pool
     if not _redis_connection_pool and REDIS_URL:
-        if 'cluster' in REDIS_URL:
+        if "cluster" in REDIS_URL:
             # Note: redis-py handles cluster discovery from a single seed URL
-            _redis_connection_pool = ClusterConnectionPool.from_url(REDIS_URL,
-                username=REDIS_USER, password=REDIS_PASSWORD, max_connections=100)
+            _redis_connection_pool = ClusterConnectionPool.from_url(
+                REDIS_URL,
+                username=REDIS_USER,
+                password=REDIS_PASSWORD,
+                max_connections=100,
+            )
             logger.info("Redis ClusterConnectionPool initialized.")
         else:
             _redis_connection_pool = ConnectionPool.from_url(
-                REDIS_URL, 
-                username=REDIS_USER, 
+                REDIS_URL,
+                username=REDIS_USER,
                 password=REDIS_PASSWORD,
-                encoding="utf-8", 
+                encoding="utf-8",
                 decode_responses=True,
-                max_connections=100
+                max_connections=100,
             )
             logger.info("Redis ConnectionPool initialized.")
+
 
 def get_redis_client() -> redis.Redis:
     """Retrieves a securely configured Redis client from the module-level pool."""
@@ -457,7 +558,10 @@ def get_redis_client() -> redis.Redis:
         _setup_bus()
     return redis.Redis(connection_pool=_redis_connection_pool)
 
-async def _write_to_dlq(event_type: str, payload: str, error: str, original_id: Optional[str] = None):
+
+async def _write_to_dlq(
+    event_type: str, payload: str, error: str, original_id: Optional[str] = None
+):
     """Writes a failed event to the Redis Stream dead-letter queue."""
     try:
         r = get_redis_client()
@@ -466,13 +570,25 @@ async def _write_to_dlq(event_type: str, payload: str, error: str, original_id: 
             "payload": payload,
             "error": error,
             "timestamp": time.time(),
-            "original_id": original_id if original_id else ""
+            "original_id": original_id if original_id else "",
         }
-        await r.xadd(DLQ_STREAM_NAME, dlq_entry, maxlen=MAX_STREAM_LENGTH, approximate=True)
+        await r.xadd(
+            DLQ_STREAM_NAME, dlq_entry, maxlen=MAX_STREAM_LENGTH, approximate=True
+        )
         logger.warning(f"Event {event_type} written to DLQ stream {DLQ_STREAM_NAME}.")
-        await _inc_counter(EVENTS_PUBLISHED, event_type=event_type, status="dlq", env=ENV, tenant=TENANT, protocol="stream")
+        await _inc_counter(
+            EVENTS_PUBLISHED,
+            event_type=event_type,
+            status="dlq",
+            env=ENV,
+            tenant=TENANT,
+            protocol="stream",
+        )
     except Exception as e:
-        logger.error(f"Failed to write to DLQ for event {event_type}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to write to DLQ for event {event_type}: {e}", exc_info=True
+        )
+
 
 async def replay_dlq():
     """Reads all messages from the DLQ and attempts to republish them."""
@@ -480,7 +596,7 @@ async def replay_dlq():
     try:
         r = get_redis_client()
         messages = await r.xread(count=1000, streams={DLQ_STREAM_NAME: "0-0"})
-        
+
         if not messages:
             logger.info("DLQ is empty.")
             return
@@ -488,19 +604,28 @@ async def replay_dlq():
         dlq_stream, dlq_entries = messages[0]
         for msg_id, fields in dlq_entries:
             try:
-                dlq_data = {k.decode('utf-8'): v.decode('utf-8') for k, v in fields.items()}
+                dlq_data = {
+                    k.decode("utf-8"): v.decode("utf-8") for k, v in fields.items()
+                }
                 event_type = dlq_data.get("event_type")
                 payload_str = dlq_data.get("payload")
-                
-                logger.info(f"Replaying event ID {msg_id.decode()} for type {event_type}")
-                
+
+                logger.info(
+                    f"Replaying event ID {msg_id.decode()} for type {event_type}"
+                )
+
                 await publish_event(event_type, json.loads(payload_str), is_replay=True)
-                
+
                 await r.xdel(DLQ_STREAM_NAME, msg_id)
-                logger.info(f"Successfully replayed and deleted event ID {msg_id.decode()} from DLQ.")
+                logger.info(
+                    f"Successfully replayed and deleted event ID {msg_id.decode()} from DLQ."
+                )
             except Exception as e:
-                logger.error(f"Failed to replay DLQ message {msg_id.decode()}: {e}", exc_info=True)
-        
+                logger.error(
+                    f"Failed to replay DLQ message {msg_id.decode()}: {e}",
+                    exc_info=True,
+                )
+
         logger.info("DLQ replay complete.")
     except Exception as e:
         logger.error(f"Critical error during DLQ replay: {e}", exc_info=True)
@@ -508,27 +633,39 @@ async def replay_dlq():
 
 # ---- Publish/Subscribe Logic ----
 if AIOLIMITER_AVAILABLE:
-    publish_limiter = AsyncLimiter(PUBLISH_RATE_LIMIT_RPS, 1) # r/s
+    publish_limiter = AsyncLimiter(PUBLISH_RATE_LIMIT_RPS, 1)  # r/s
 else:
+
     class MockLimiter:
-        def __init__(self): pass
-        async def __aenter__(self): pass
-        async def __aexit__(self, exc_type, exc, tb): pass
+        def __init__(self):
+            pass
+
+        async def __aenter__(self):
+            pass
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
     publish_limiter = MockLimiter()
     logger.warning("aiolimiter not available. Rate limiting is disabled.")
 
-async def _prepare_payload(event_type: str, data: Dict[str, Any], schema: Optional[Type[BaseModel]] = None) -> Dict[str, str]:
+
+async def _prepare_payload(
+    event_type: str, data: Dict[str, Any], schema: Optional[Type[BaseModel]] = None
+) -> Dict[str, str]:
     """Serializes, validates, and secures the event payload."""
     if schema and PYDANTIC_AVAILABLE:
         try:
             schema(**data)
         except ValidationError as e:
-            logger.error(f"Event validation failed for {event_type}: {e.errors()}", exc_info=True)
+            logger.error(
+                f"Event validation failed for {event_type}: {e.errors()}", exc_info=True
+            )
             raise ValueError("Event data does not match schema.") from e
-            
+
     payload_str = json.dumps(data)
-    payload_bytes = payload_str.encode('utf-8')
-    
+    payload_bytes = payload_str.encode("utf-8")
+
     # The payload for signing should be the raw data, before encryption
     encrypted_payload_bytes = payload_bytes
     fernet_client = _get_fernet()
@@ -539,10 +676,8 @@ async def _prepare_payload(event_type: str, data: Dict[str, Any], schema: Option
 
     signature = _sign_payload(encrypted_payload_bytes)
 
-    return {
-        "payload": encrypted_payload_bytes.decode('utf-8'),
-        "signature": signature
-    }
+    return {"payload": encrypted_payload_bytes.decode("utf-8"), "signature": signature}
+
 
 async def _process_received_payload(message: Dict[str, bytes]) -> Dict[str, Any]:
     """Verifies and decrypts a received event payload."""
@@ -551,35 +686,45 @@ async def _process_received_payload(message: Dict[str, bytes]) -> Dict[str, Any]
 
     if not encrypted_payload_bytes or not signature:
         raise ValueError("Malformed message: missing payload or signature.")
-        
+
     if not _verify_signature(encrypted_payload_bytes, signature.decode()):
-        raise ValueError("HMAC signature verification failed. Message may be tampered with.")
-    
+        raise ValueError(
+            "HMAC signature verification failed. Message may be tampered with."
+        )
+
     fernet_client = _get_fernet()
     if fernet_client:
         decrypted_payload_bytes = fernet_client.decrypt(encrypted_payload_bytes)
     else:
         decrypted_payload_bytes = encrypted_payload_bytes
-        
-    return json.loads(decrypted_payload_bytes.decode('utf-8'))
+
+    return json.loads(decrypted_payload_bytes.decode("utf-8"))
+
 
 async def publish_event(
-    event_type: str, 
-    data: Dict[str, Any], 
+    event_type: str,
+    data: Dict[str, Any],
     schema: Optional[Type[BaseModel]] = None,
-    is_replay: bool = False
+    is_replay: bool = False,
 ):
     """
     Publishes a single event to the mesh event bus.
     """
     if not REDIS_AVAILABLE:
         raise RuntimeError("Redis client library is not available.")
-    
+
     if not circuit_breaker.can_proceed():
         logger.critical(f"Circuit breaker open for {event_type}. Skipping publish.")
-        await _inc_counter(EVENTS_PUBLISHED, event_type=event_type, status="circuit_breaker", env=ENV, tenant=TENANT, protocol="n/a")
+        await _inc_counter(
+            EVENTS_PUBLISHED,
+            event_type=event_type,
+            status="circuit_breaker",
+            env=ENV,
+            tenant=TENANT,
+            protocol="n/a",
+        )
         raise RuntimeError("Circuit breaker open.")
-        
+
     start_time = time.perf_counter()
     protocol = "stream" if USE_REDIS_STREAMS else "pubsub"
     with tracer.start_as_current_span(f"publish_event_{event_type}") as span:
@@ -590,68 +735,127 @@ async def publish_event(
 
         try:
             # Prepare payload for pub/sub (json string) and streams (dict)
-            payload_bytes = json.dumps(data).encode('utf-8')
-            
+            payload_bytes = json.dumps(data).encode("utf-8")
+
             # Encrypt if needed
             encrypted_payload_bytes = payload_bytes
             fernet_client = _get_fernet()
             if fernet_client:
                 encrypted_payload_bytes = fernet_client.encrypt(payload_bytes)
-            
+
             # Sign the (potentially encrypted) payload
             signature = _sign_payload(encrypted_payload_bytes)
-            
+
             payload_to_send = {
                 "payload": encrypted_payload_bytes,
-                "signature": signature.encode('utf-8')
+                "signature": signature.encode("utf-8"),
             }
-            
+
         except (ValueError, RuntimeError) as e:
-            logger.critical(f"Event serialization, validation, or security failed for {event_type}: {e}")
-            await _inc_counter(EVENTS_PUBLISHED, event_type=event_type, status="serialization_error", env=ENV, tenant=TENANT, protocol=protocol)
-            span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
+            logger.critical(
+                f"Event serialization, validation, or security failed for {event_type}: {e}"
+            )
+            await _inc_counter(
+                EVENTS_PUBLISHED,
+                event_type=event_type,
+                status="serialization_error",
+                env=ENV,
+                tenant=TENANT,
+                protocol=protocol,
+            )
+            span.set_status(
+                trace.status.Status(trace.status.StatusCode.ERROR, description=str(e))
+            )
             raise
 
         async with publish_limiter:
             for i in range(MAX_RETRIES):
                 try:
                     r = get_redis_client()
-                    logger.info(f"Attempting to publish event: {event_type} via {protocol}")
-                    
+                    logger.info(
+                        f"Attempting to publish event: {event_type} via {protocol}"
+                    )
+
                     if USE_REDIS_STREAMS:
-                        await r.xadd(f"{TENANT}:{event_type}", payload_to_send, maxlen=MAX_STREAM_LENGTH, approximate=True)
+                        await r.xadd(
+                            f"{TENANT}:{event_type}",
+                            payload_to_send,
+                            maxlen=MAX_STREAM_LENGTH,
+                            approximate=True,
+                        )
                     else:
                         pubsub_payload = {
-                            "payload": encrypted_payload_bytes.decode('utf-8'),
-                            "signature": signature
+                            "payload": encrypted_payload_bytes.decode("utf-8"),
+                            "signature": signature,
                         }
-                        await r.publish(f"{TENANT}:{event_type}", json.dumps(pubsub_payload))
-                    
+                        await r.publish(
+                            f"{TENANT}:{event_type}", json.dumps(pubsub_payload)
+                        )
+
                     logger.info(f"Published event successfully: {event_type}")
-                    await _inc_counter(EVENTS_PUBLISHED, event_type=event_type, status="success", env=ENV, tenant=TENANT, protocol=protocol)
-                    _observe_histogram(PUBLISH_LATENCY, time.perf_counter() - start_time)
+                    await _inc_counter(
+                        EVENTS_PUBLISHED,
+                        event_type=event_type,
+                        status="success",
+                        env=ENV,
+                        tenant=TENANT,
+                        protocol=protocol,
+                    )
+                    _observe_histogram(
+                        PUBLISH_LATENCY, time.perf_counter() - start_time
+                    )
                     await _set_gauge(BUS_LIVENESS, 1)
                     span.set_attribute("publish.attempt", i + 1)
                     span.set_status(trace.status.Status(trace.status.StatusCode.OK))
                     return
                 except (ConnectionError, TimeoutError, RedisError) as e:
                     circuit_breaker.record_failure()
-                    wait_time = RETRY_DELAY * (2**i) + random.uniform(0, 0.1) # Add jitter
-                    logger.error(f"Publish retry {i+1}/{MAX_RETRIES} failed for {event_type}: {e}. Retrying in {wait_time:.2f}s...", exc_info=True)
+                    wait_time = RETRY_DELAY * (2**i) + random.uniform(
+                        0, 0.1
+                    )  # Add jitter
+                    logger.error(
+                        f"Publish retry {i+1}/{MAX_RETRIES} failed for {event_type}: {e}. Retrying in {wait_time:.2f}s...",
+                        exc_info=True,
+                    )
                     await _set_gauge(BUS_LIVENESS, 0)
-                    span.add_event(f"publish_retry", {"error": str(e), "attempt": i + 1})
+                    span.add_event(
+                        "publish_retry", {"error": str(e), "attempt": i + 1}
+                    )
                     if i < MAX_RETRIES - 1:
                         await asyncio.sleep(wait_time)
                 except Exception as e:
-                    logger.critical(f"An unexpected error occurred during publish for {event_type}: {e}", exc_info=True)
-                    await _inc_counter(EVENTS_PUBLISHED, event_type=event_type, status="unexpected_error", env=ENV, tenant=TENANT, protocol=protocol)
-                    span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
+                    logger.critical(
+                        f"An unexpected error occurred during publish for {event_type}: {e}",
+                        exc_info=True,
+                    )
+                    await _inc_counter(
+                        EVENTS_PUBLISHED,
+                        event_type=event_type,
+                        status="unexpected_error",
+                        env=ENV,
+                        tenant=TENANT,
+                        protocol=protocol,
+                    )
+                    span.set_status(
+                        trace.status.Status(
+                            trace.status.StatusCode.ERROR, description=str(e)
+                        )
+                    )
                     raise
-        
-        await _write_to_dlq(event_type, json.dumps(data), "Publish failed after multiple retries.")
-        logger.critical(f"Publish failed for event '{event_type}' after {MAX_RETRIES} retries. Event written to DLQ.")
-        span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description="All retries failed"))
+
+        await _write_to_dlq(
+            event_type, json.dumps(data), "Publish failed after multiple retries."
+        )
+        logger.critical(
+            f"Publish failed for event '{event_type}' after {MAX_RETRIES} retries. Event written to DLQ."
+        )
+        span.set_status(
+            trace.status.Status(
+                trace.status.StatusCode.ERROR, description="All retries failed"
+            )
+        )
         raise RuntimeError(f"Event publish failed permanently for {event_type}.")
+
 
 async def publish_events(events: List[Dict[str, Any]]):
     """
@@ -659,7 +863,7 @@ async def publish_events(events: List[Dict[str, Any]]):
     """
     if not REDIS_AVAILABLE:
         raise RuntimeError("Redis client library is not available.")
-    
+
     start_time = time.perf_counter()
     protocol = "stream" if USE_REDIS_STREAMS else "pubsub"
     with tracer.start_as_current_span("publish_events_batch") as span:
@@ -676,39 +880,65 @@ async def publish_events(events: List[Dict[str, Any]]):
                         event_type = event.get("event_type")
                         data = event.get("data")
                         schema = event.get("schema")
-                        
+
                         if not event_type or data is None:
                             logger.error("Skipping malformed event in batch.")
                             continue
-                        
+
                         payload_dict = await _prepare_payload(event_type, data, schema)
 
                         if USE_REDIS_STREAMS:
                             stream_payload = {
-                                "payload": payload_dict["payload"].encode('utf-8'),
-                                "signature": payload_dict["signature"].encode('utf-8')
+                                "payload": payload_dict["payload"].encode("utf-8"),
+                                "signature": payload_dict["signature"].encode("utf-8"),
                             }
-                            pipe.xadd(f"{TENANT}:{event_type}", stream_payload, maxlen=MAX_STREAM_LENGTH, approximate=True)
+                            pipe.xadd(
+                                f"{TENANT}:{event_type}",
+                                stream_payload,
+                                maxlen=MAX_STREAM_LENGTH,
+                                approximate=True,
+                            )
                         else:
-                            pipe.publish(f"{TENANT}:{event_type}", json.dumps(payload_dict))
-                    
+                            pipe.publish(
+                                f"{TENANT}:{event_type}", json.dumps(payload_dict)
+                            )
+
                     await pipe.execute()
-                
-                await _inc_counter(EVENTS_PUBLISHED, event_type="batch", status="success", env=ENV, tenant=TENANT, protocol=protocol)
+
+                await _inc_counter(
+                    EVENTS_PUBLISHED,
+                    event_type="batch",
+                    status="success",
+                    env=ENV,
+                    tenant=TENANT,
+                    protocol=protocol,
+                )
                 _observe_histogram(PUBLISH_LATENCY, time.perf_counter() - start_time)
                 await _set_gauge(BUS_LIVENESS, 1)
                 span.set_status(trace.status.Status(trace.status.StatusCode.OK))
             except Exception as e:
                 logger.critical(f"Batch publish failed: {e}", exc_info=True)
-                await _inc_counter(EVENTS_PUBLISHED, event_type="batch", status="failure", env=ENV, tenant=TENANT, protocol=protocol)
-                span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
+                await _inc_counter(
+                    EVENTS_PUBLISHED,
+                    event_type="batch",
+                    status="failure",
+                    env=ENV,
+                    tenant=TENANT,
+                    protocol=protocol,
+                )
+                span.set_status(
+                    trace.status.Status(
+                        trace.status.StatusCode.ERROR, description=str(e)
+                    )
+                )
                 raise
 
+
 async def subscribe_event(
-    event_type: str, 
+    event_type: str,
     handler: Callable[[Dict[str, Any]], Awaitable[None]],
     consumer_group: str = "default_group",
-    consumer_name: str = "consumer_1"
+    consumer_name: str = "consumer_1",
 ):
     """
     Subscribes to an event type. This function runs a persistent, monitored
@@ -716,19 +946,23 @@ async def subscribe_event(
     """
     if not REDIS_AVAILABLE:
         raise RuntimeError("Redis client library is not available.")
-    
+
     async def listener_loop_streams():
         stream_name = f"{TENANT}:{event_type}"
         r = None
-        
+
         try:
             r = get_redis_client()
             try:
-                await r.xgroup_create(name=stream_name, groupname=consumer_group, id="$", mkstream=True)
+                await r.xgroup_create(
+                    name=stream_name, groupname=consumer_group, id="$", mkstream=True
+                )
             except ResponseError:
                 pass
-            logger.info(f"Subscribed to stream {stream_name} with group {consumer_group}")
-            
+            logger.info(
+                f"Subscribed to stream {stream_name} with group {consumer_group}"
+            )
+
             while True:
                 pending_messages = await r.xautoclaim(
                     name=stream_name,
@@ -736,26 +970,44 @@ async def subscribe_event(
                     consumername=consumer_name,
                     min_idle_time=10000,
                     start_id="0-0",
-                    count=100
+                    count=100,
                 )
-                
+
                 if pending_messages and pending_messages[1]:
-                    logger.info(f"Claimed and processing {len(pending_messages[1])} pending messages...")
+                    logger.info(
+                        f"Claimed and processing {len(pending_messages[1])} pending messages..."
+                    )
                     for msg_id, fields in pending_messages[1]:
-                        await _handle_message(r, stream_name, msg_id, fields, handler, consumer_group, event_type)
-                
+                        await _handle_message(
+                            r,
+                            stream_name,
+                            msg_id,
+                            fields,
+                            handler,
+                            consumer_group,
+                            event_type,
+                        )
+
                 messages = await r.xreadgroup(
                     groupname=consumer_group,
                     consumername=consumer_name,
                     streams={stream_name: ">"},
                     count=1,
-                    block=5000
+                    block=5000,
                 )
-                
+
                 if messages:
                     for stream, msgs in messages:
                         for msg_id, fields in msgs:
-                            await _handle_message(r, stream_name, msg_id, fields, handler, consumer_group, event_type)
+                            await _handle_message(
+                                r,
+                                stream_name,
+                                msg_id,
+                                fields,
+                                handler,
+                                consumer_group,
+                                event_type,
+                            )
                 else:
                     await r.ping()
                     await _set_gauge(BUS_LIVENESS, 1)
@@ -787,42 +1039,93 @@ async def subscribe_event(
                 await pubsub.subscribe(channel_name)
                 logger.info(f"Subscribed to event channel: {channel_name}")
                 await _set_gauge(BUS_LIVENESS, 1)
-                
+
                 while True:
-                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    message = await pubsub.get_message(
+                        ignore_subscribe_messages=True, timeout=1.0
+                    )
                     if message:
                         start_time = time.perf_counter()
-                        with tracer.start_as_current_span(f"handle_event_{event_type}") as span:
+                        with tracer.start_as_current_span(
+                            f"handle_event_{event_type}"
+                        ) as span:
                             span.set_attribute("event.type", event_type)
                             span.set_attribute("env", ENV)
                             span.set_attribute("tenant", TENANT)
                             span.set_attribute("protocol", "pubsub")
                             try:
-                                payload_dict_str = message['data']
+                                payload_dict_str = message["data"]
                                 payload_dict = json.loads(payload_dict_str)
-                                received_payload = await _process_received_payload({
-                                    b"payload": payload_dict["payload"].encode(),
-                                    b"signature": payload_dict["signature"].encode()
-                                })
+                                received_payload = await _process_received_payload(
+                                    {
+                                        b"payload": payload_dict["payload"].encode(),
+                                        b"signature": payload_dict[
+                                            "signature"
+                                        ].encode(),
+                                    }
+                                )
                                 logger.info(f"Received event: {event_type}")
                                 await handler(received_payload)
-                                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="success", env=ENV, tenant=TENANT, protocol="pubsub")
-                                _observe_histogram(SUBSCRIBE_LATENCY, time.perf_counter() - start_time)
-                                span.set_status(trace.status.Status(trace.status.StatusCode.OK))
+                                await _inc_counter(
+                                    EVENTS_SUBSCRIBED,
+                                    event_type=event_type,
+                                    status="success",
+                                    env=ENV,
+                                    tenant=TENANT,
+                                    protocol="pubsub",
+                                )
+                                _observe_histogram(
+                                    SUBSCRIBE_LATENCY, time.perf_counter() - start_time
+                                )
+                                span.set_status(
+                                    trace.status.Status(trace.status.StatusCode.OK)
+                                )
                             except (json.JSONDecodeError, ValueError) as e:
-                                logger.error(f"Failed to decode or verify event {event_type}: {e}", exc_info=True)
-                                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="decode_error", env=ENV, tenant=TENANT, protocol="pubsub")
-                                span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
+                                logger.error(
+                                    f"Failed to decode or verify event {event_type}: {e}",
+                                    exc_info=True,
+                                )
+                                await _inc_counter(
+                                    EVENTS_SUBSCRIBED,
+                                    event_type=event_type,
+                                    status="decode_error",
+                                    env=ENV,
+                                    tenant=TENANT,
+                                    protocol="pubsub",
+                                )
+                                span.set_status(
+                                    trace.status.Status(
+                                        trace.status.StatusCode.ERROR,
+                                        description=str(e),
+                                    )
+                                )
                             except Exception as e:
-                                logger.error(f"Error in handler for {event_type}: {e}", exc_info=True)
-                                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="handler_error", env=ENV, tenant=TENANT, protocol="pubsub")
-                                span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description="Handler failed"))
+                                logger.error(
+                                    f"Error in handler for {event_type}: {e}",
+                                    exc_info=True,
+                                )
+                                await _inc_counter(
+                                    EVENTS_SUBSCRIBED,
+                                    event_type=event_type,
+                                    status="handler_error",
+                                    env=ENV,
+                                    tenant=TENANT,
+                                    protocol="pubsub",
+                                )
+                                span.set_status(
+                                    trace.status.Status(
+                                        trace.status.StatusCode.ERROR,
+                                        description="Handler failed",
+                                    )
+                                )
                     else:
                         await r.ping()
                         await _set_gauge(BUS_LIVENESS, 1)
 
             except (ConnectionError, TimeoutError, RedisError) as e:
-                logger.critical(f"Event bus connection lost. Retrying in 5s... Error: {e}")
+                logger.critical(
+                    f"Event bus connection lost. Retrying in 5s... Error: {e}"
+                )
                 await _set_gauge(BUS_LIVENESS, 0)
                 if r:
                     await r.close()
@@ -833,7 +1136,9 @@ async def subscribe_event(
                     await r.close()
                 break
             except Exception as e:
-                logger.critical(f"Critical failure in listener loop for {event_type}: {e}")
+                logger.critical(
+                    f"Critical failure in listener loop for {event_type}: {e}"
+                )
                 await _set_gauge(BUS_LIVENESS, 0)
                 if r:
                     await r.close()
@@ -843,56 +1148,117 @@ async def subscribe_event(
                     await r.close()
                 logger.info(f"Listener for {event_type} shutting down.")
 
-    async def _handle_message(r, stream_name, msg_id, fields, handler, consumer_group, event_type):
+    async def _handle_message(
+        r, stream_name, msg_id, fields, handler, consumer_group, event_type
+    ):
         start_time = time.perf_counter()
         with tracer.start_as_current_span(f"handle_event_{event_type}") as span:
             span.set_attribute("event.type", event_type)
             span.set_attribute("env", ENV)
             span.set_attribute("tenant", TENANT)
             span.set_attribute("protocol", "stream")
-            
+
             # Decode msg_id if it's bytes
             msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
-            
+
             try:
                 # Reliability Fix: Check redelivery count before processing
-                pending_info = await r.xpending_range(stream_name, consumer_group, min=msg_id, max=msg_id, count=1)
-                delivered_times = (pending_info[0]['delivered'] 
-                                   if pending_info and len(pending_info) > 0 
-                                   else 0)
+                pending_info = await r.xpending_range(
+                    stream_name, consumer_group, min=msg_id, max=msg_id, count=1
+                )
+                delivered_times = (
+                    pending_info[0]["delivered"]
+                    if pending_info and len(pending_info) > 0
+                    else 0
+                )
                 if delivered_times > 3:  # Example threshold
-                    logger.warning(f"Max redeliveries exceeded for {msg_id_str}. Moving to DLQ.")
-                    await _write_to_dlq(event_type, json.dumps({k.decode(): v.decode() for k, v in fields.items()}), "Max redeliveries exceeded", msg_id_str)
+                    logger.warning(
+                        f"Max redeliveries exceeded for {msg_id_str}. Moving to DLQ."
+                    )
+                    await _write_to_dlq(
+                        event_type,
+                        json.dumps({k.decode(): v.decode() for k, v in fields.items()}),
+                        "Max redeliveries exceeded",
+                        msg_id_str,
+                    )
                     await r.xack(stream_name, consumer_group, msg_id)
-                    await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="dlq_max_retries", env=ENV, tenant=TENANT, protocol="stream")
+                    await _inc_counter(
+                        EVENTS_SUBSCRIBED,
+                        event_type=event_type,
+                        status="dlq_max_retries",
+                        env=ENV,
+                        tenant=TENANT,
+                        protocol="stream",
+                    )
                     return
 
                 payload_dict = await _process_received_payload(fields)
-                
+
                 logger.info(f"Received event {msg_id_str} from stream {stream_name}")
                 await handler(payload_dict)
-                
+
                 await r.xack(stream_name, consumer_group, msg_id)
                 logger.debug(f"Acknowledged event {msg_id_str}")
-                
-                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="success", env=ENV, tenant=TENANT, protocol="stream")
+
+                await _inc_counter(
+                    EVENTS_SUBSCRIBED,
+                    event_type=event_type,
+                    status="success",
+                    env=ENV,
+                    tenant=TENANT,
+                    protocol="stream",
+                )
                 _observe_histogram(SUBSCRIBE_LATENCY, time.perf_counter() - start_time)
                 span.set_status(trace.status.Status(trace.status.StatusCode.OK))
             except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"Failed to decode or verify event {msg_id_str} for {event_type}: {e}", exc_info=True)
-                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="decode_error", env=ENV, tenant=TENANT, protocol="stream")
-                span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description=str(e)))
-                await r.xack(stream_name, consumer_group, msg_id) # Ack to prevent re-processing of bad messages
+                logger.error(
+                    f"Failed to decode or verify event {msg_id_str} for {event_type}: {e}",
+                    exc_info=True,
+                )
+                await _inc_counter(
+                    EVENTS_SUBSCRIBED,
+                    event_type=event_type,
+                    status="decode_error",
+                    env=ENV,
+                    tenant=TENANT,
+                    protocol="stream",
+                )
+                span.set_status(
+                    trace.status.Status(
+                        trace.status.StatusCode.ERROR, description=str(e)
+                    )
+                )
+                await r.xack(
+                    stream_name, consumer_group, msg_id
+                )  # Ack to prevent re-processing of bad messages
             except Exception as e:
-                logger.error(f"Error in handler for {event_type} (id: {msg_id_str}): {e}", exc_info=True)
-                await _inc_counter(EVENTS_SUBSCRIBED, event_type=event_type, status="handler_error", env=ENV, tenant=TENANT, protocol="stream")
-                span.set_status(trace.status.Status(trace.status.StatusCode.ERROR, description="Handler failed"))
+                logger.error(
+                    f"Error in handler for {event_type} (id: {msg_id_str}): {e}",
+                    exc_info=True,
+                )
+                await _inc_counter(
+                    EVENTS_SUBSCRIBED,
+                    event_type=event_type,
+                    status="handler_error",
+                    env=ENV,
+                    tenant=TENANT,
+                    protocol="stream",
+                )
+                span.set_status(
+                    trace.status.Status(
+                        trace.status.StatusCode.ERROR, description="Handler failed"
+                    )
+                )
                 # No XACK here, message remains in PEL for potential redelivery
 
     if USE_REDIS_STREAMS:
-        return asyncio.create_task(listener_loop_streams(), name=f"listener_task_{event_type}")
+        return asyncio.create_task(
+            listener_loop_streams(), name=f"listener_task_{event_type}"
+        )
     else:
-        return asyncio.create_task(listener_loop_pubsub(), name=f"listener_task_{event_type}")
+        return asyncio.create_task(
+            listener_loop_pubsub(), name=f"listener_task_{event_type}"
+        )
 
 
 # ---- Cleanup Functions ----
@@ -900,36 +1266,46 @@ def cleanup():
     """Cleanup function to stop background threads."""
     logger.stop()
 
+
 import atexit
+
 atexit.register(cleanup)
 
 
 # --- Test Harness ---
 if __name__ == "__main__":
     if PROD_MODE:
-        logger.critical("Test harness not allowed in production. Use separate test scripts.")
+        logger.critical(
+            "Test harness not allowed in production. Use separate test scripts."
+        )
         sys.exit(1)
 
     logger.warning("Running in DEVELOPMENT mode. Not all production checks are active.")
-    
+
     os.environ["REDIS_URL"] = os.environ.get("REDIS_URL", "redis://localhost:6379")
-    os.environ["EVENT_BUS_ENCRYPTION_KEY"] = os.environ.get("EVENT_BUS_ENCRYPTION_KEY", Fernet.generate_key().decode())
-    os.environ["EVENT_BUS_HMAC_KEY"] = os.environ.get("EVENT_BUS_HMAC_KEY", os.urandom(32).hex())
+    os.environ["EVENT_BUS_ENCRYPTION_KEY"] = os.environ.get(
+        "EVENT_BUS_ENCRYPTION_KEY", Fernet.generate_key().decode()
+    )
+    os.environ["EVENT_BUS_HMAC_KEY"] = os.environ.get(
+        "EVENT_BUS_HMAC_KEY", os.urandom(32).hex()
+    )
     os.environ["REDIS_USER"] = os.environ.get("REDIS_USER", "default")
     os.environ["REDIS_PASSWORD"] = os.environ.get("REDIS_PASSWORD", "")
     os.environ["TENANT"] = os.environ.get("TENANT", "dev_tenant")
     os.environ["ENV"] = os.environ.get("ENV", "dev")
-    
+
     async def run_integration_tests():
         try:
             logger.info("--- Testing DLQ replay ---")
             await replay_dlq()
-            
+
             if not USE_REDIS_STREAMS:
                 test_event_type = "test:pubsub:event"
+
                 async def test_handler(data):
                     logger.info(f"Pub/Sub Test Handler received: {data}")
                     assert data["message"] == "Hello, Pub/Sub!"
+
                 subscribe_task = await subscribe_event(test_event_type, test_handler)
                 await asyncio.sleep(1)
                 await publish_event(test_event_type, {"message": "Hello, Pub/Sub!"})
@@ -938,40 +1314,43 @@ if __name__ == "__main__":
                 try:
                     await subscribe_task
                 except asyncio.CancelledError:
-                    pass # Expected
+                    pass  # Expected
                 logger.info("Pub/Sub test passed.")
-            
+
             if USE_REDIS_STREAMS:
                 test_event_type = "test:stream:event"
+
                 class TestSchema(BaseModel):
                     message: str
                     number: int
+
                 async def test_handler_streams(data):
                     logger.info(f"Streams Test Handler received: {data}")
                     assert data["message"] == "Hello, Streams!"
                     assert data["number"] == 42
+
                 subscribe_task = await subscribe_event(
-                    test_event_type, 
+                    test_event_type,
                     test_handler_streams,
                     consumer_group="test_group",
-                    consumer_name="test_consumer"
+                    consumer_name="test_consumer",
                 )
                 await asyncio.sleep(1)
                 await publish_event(
-                    test_event_type, 
+                    test_event_type,
                     {"message": "Hello, Streams!", "number": 42},
-                    schema=TestSchema
+                    schema=TestSchema,
                 )
                 await asyncio.sleep(1)
                 subscribe_task.cancel()
                 try:
                     await subscribe_task
                 except asyncio.CancelledError:
-                    pass # Expected
+                    pass  # Expected
                 logger.info("Streams test passed.")
-            
+
             logger.info("All tests passed successfully.")
-            
+
         except Exception as e:
             logger.critical(f"Test harness failed: {e}", exc_info=True)
             sys.exit(1)

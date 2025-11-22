@@ -9,17 +9,18 @@ import pytest
 import asyncio
 import json
 import tempfile
-import subprocess
 import time
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import AsyncMock, patch, MagicMock
 
 # Import all modules under test
 # FIX: Use correct import paths from generator.agents.deploy_agent
-from generator.agents.deploy_agent.deploy_agent import DeployAgent, PluginRegistry
+from generator.agents.deploy_agent.deploy_agent import DeployAgent
 from generator.agents.deploy_agent.deploy_prompt import DeployPromptAgent
-from generator.agents.deploy_agent.deploy_response_handler import handle_deploy_response, HandlerRegistry
+from generator.agents.deploy_agent.deploy_response_handler import (
+    handle_deploy_response,
+    HandlerRegistry,
+)
 from generator.agents.deploy_agent.deploy_validator import ValidatorRegistry
 
 
@@ -27,25 +28,27 @@ from generator.agents.deploy_agent.deploy_validator import ValidatorRegistry
 # FIXTURES
 # ============================================================================
 
+
 @pytest.fixture
 def full_test_repo():
     """Create a complete test repository with real project structure."""
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
-        
+
         # Initialize git repo
         (repo_path / ".git").mkdir()
-        
+
         # Create directory structure
         (repo_path / "src").mkdir()
         (repo_path / "tests").mkdir()
         (repo_path / "docs").mkdir()
         (repo_path / "deploy_templates").mkdir()
         (repo_path / "few_shot_examples").mkdir()
-        
+
         # Create source files
         (repo_path / "src" / "__init__.py").write_text("")
-        (repo_path / "src" / "app.py").write_text("""
+        (repo_path / "src" / "app.py").write_text(
+            """
 from flask import Flask, jsonify
 import logging
 
@@ -62,27 +65,33 @@ def health():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)
-""")
-        
-        (repo_path / "src" / "config.py").write_text("""
+"""
+        )
+
+        (repo_path / "src" / "config.py").write_text(
+            """
 import os
 
 class Config:
     DEBUG = os.getenv('DEBUG', 'False') == 'True'
     PORT = int(os.getenv('PORT', 8000))
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///app.db')
-""")
-        
+"""
+        )
+
         # Create requirements.txt
-        (repo_path / "requirements.txt").write_text("""
+        (repo_path / "requirements.txt").write_text(
+            """
 flask==2.0.1
 gunicorn==20.1.0
 requests==2.26.0
 python-dotenv==0.19.0
-""")
-        
+"""
+        )
+
         # Create README
-        (repo_path / "README.md").write_text("""
+        (repo_path / "README.md").write_text(
+            """
 # Test Application
 
 A sample Flask application for testing deployment automation.
@@ -101,11 +110,13 @@ python src/app.py
 
 ## Deployment
 This application can be deployed using Docker, Kubernetes, or traditional hosting.
-""")
-        
+"""
+        )
+
         # Create test files
         (repo_path / "tests" / "__init__.py").write_text("")
-        (repo_path / "tests" / "test_app.py").write_text("""
+        (repo_path / "tests" / "test_app.py").write_text(
+            """
 import pytest
 from src.app import app
 
@@ -119,10 +130,12 @@ def test_health():
     client = app.test_client()
     response = client.get('/health')
     assert response.status_code == 200
-""")
-        
+"""
+        )
+
         # Create templates for prompt generation
-        (repo_path / "deploy_templates" / "docker_default.jinja").write_text("""
+        (repo_path / "deploy_templates" / "docker_default.jinja").write_text(
+            """
 Generate a production-ready Dockerfile for a {{ target }} application.
 
 Files in the project:
@@ -141,9 +154,11 @@ Requirements:
 6. Optimize for size
 
 Output only the Dockerfile content, no explanations.
-""")
-        
-        (repo_path / "deploy_templates" / "helm_default.jinja").write_text("""
+"""
+        )
+
+        (repo_path / "deploy_templates" / "helm_default.jinja").write_text(
+            """
 Generate a Helm chart values.yaml for deploying a {{ target }} application.
 
 Files: {{ files | join(', ') }}
@@ -154,12 +169,15 @@ Include:
 - Health/readiness probes
 - Service configuration
 - Ingress setup
-""")
-        
+"""
+        )
+
         # Create few-shot examples
-        (repo_path / "few_shot_examples" / "docker_python_flask.json").write_text(json.dumps({
-            "query": "python flask web application",
-            "example": """FROM python:3.9-slim
+        (repo_path / "few_shot_examples" / "docker_python_flask.json").write_text(
+            json.dumps(
+                {
+                    "query": "python flask web application",
+                    "example": """FROM python:3.9-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -169,11 +187,14 @@ USER appuser
 EXPOSE 8000
 HEALTHCHECK CMD curl --fail http://localhost:8000/health || exit 1
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "src.app:app"]
-"""
-        }))
-        
+""",
+                }
+            )
+        )
+
         # Create .gitignore
-        (repo_path / ".gitignore").write_text("""
+        (repo_path / ".gitignore").write_text(
+            """
 __pycache__/
 *.py[cod]
 *$py.class
@@ -182,44 +203,45 @@ __pycache__/
 venv/
 *.db
 .DS_Store
-""")
-        
+"""
+        )
+
         yield repo_path
 
 
 @pytest.fixture
 def mock_external_tools():
     """Mock all external tool calls (docker, helm, trivy, etc.)."""
-    with patch('subprocess.run') as mock_run, \
-         patch('asyncio.create_subprocess_exec') as mock_async_exec:
-        
+    with patch("subprocess.run") as mock_run, patch(
+        "asyncio.create_subprocess_exec"
+    ) as mock_async_exec:
+
         # Mock successful subprocess calls
         mock_process = MagicMock()
         mock_process.returncode = 0
         mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
         mock_async_exec.return_value = mock_process
-        
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=b"Success",
-            stderr=b""
-        )
-        
-        yield {
-            'sync': mock_run,
-            'async': mock_async_exec
-        }
+
+        mock_run.return_value = MagicMock(returncode=0, stdout=b"Success", stderr=b"")
+
+        yield {"sync": mock_run, "async": mock_async_exec}
 
 
 @pytest.fixture
 def mock_llm_calls():
     """Mock all LLM API calls."""
-    with patch('generator.agents.deploy_agent.deploy_agent.call_llm_api') as mock_agent_llm, \
-         patch('generator.agents.deploy_agent.deploy_agent.call_ensemble_api') as mock_agent_ensemble, \
-         patch('generator.agents.deploy_agent.deploy_prompt.call_ensemble_api') as mock_prompt_ensemble, \
-         patch('generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api') as mock_handler_ensemble, \
-         patch('generator.agents.deploy_agent.deploy_validator.call_ensemble_api') as mock_validator_ensemble:
-        
+    with patch(
+        "generator.agents.deploy_agent.deploy_agent.call_llm_api"
+    ) as mock_agent_llm, patch(
+        "generator.agents.deploy_agent.deploy_agent.call_ensemble_api"
+    ) as mock_agent_ensemble, patch(
+        "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
+    ) as mock_prompt_ensemble, patch(
+        "generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api"
+    ) as mock_handler_ensemble, patch(
+        "generator.agents.deploy_agent.deploy_validator.call_ensemble_api"
+    ) as mock_validator_ensemble:
+
         # Default LLM responses
         def dockerfile_response(*args, **kwargs):
             return {
@@ -236,36 +258,38 @@ CMD ["gunicorn", "--bind", "0.0.0.0:8000", "src.app:app"]
 """,
                 "model": "gpt-4",
                 "provider": "openai",
-                "tokens": 150
+                "tokens": 150,
             }
-        
+
         def json_response(*args, **kwargs):
             # For repair/fix operations that expect JSON
             return {
-                "content": json.dumps({
-                    "config": """FROM python:3.9-slim
+                "content": json.dumps(
+                    {
+                        "config": """FROM python:3.9-slim
 WORKDIR /app
 COPY . .
 CMD ["python", "src/app.py"]
 """
-                }),
+                    }
+                ),
                 "model": "gpt-4",
                 "provider": "openai",
-                "valid": True
+                "valid": True,
             }
-        
+
         mock_agent_llm.side_effect = dockerfile_response
         mock_agent_ensemble.side_effect = json_response
         mock_prompt_ensemble.side_effect = dockerfile_response
         mock_handler_ensemble.side_effect = dockerfile_response
         mock_validator_ensemble.side_effect = json_response
-        
+
         yield {
-            'agent_llm': mock_agent_llm,
-            'agent_ensemble': mock_agent_ensemble,
-            'prompt_ensemble': mock_prompt_ensemble,
-            'handler_ensemble': mock_handler_ensemble,
-            'validator_ensemble': mock_validator_ensemble
+            "agent_llm": mock_agent_llm,
+            "agent_ensemble": mock_agent_ensemble,
+            "prompt_ensemble": mock_prompt_ensemble,
+            "handler_ensemble": mock_handler_ensemble,
+            "validator_ensemble": mock_validator_ensemble,
         }
 
 
@@ -273,9 +297,10 @@ CMD ["python", "src/app.py"]
 # INTEGRATION TEST: Full Pipeline
 # ============================================================================
 
+
 class TestFullDeploymentPipeline:
     """Integration tests for the complete deployment pipeline."""
-    
+
     @pytest.mark.asyncio
     async def test_end_to_end_dockerfile_generation(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -291,26 +316,26 @@ class TestFullDeploymentPipeline:
         # Initialize agent
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         # Generate documentation/configs
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt", "README.md"],
             targets=["docker"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         # Verify results
         assert "configs" in result
         assert "docker" in result["configs"]
         assert "FROM python" in result["configs"]["docker"]
         assert "validations" in result
         assert "provenance" in result
-        
+
         # Check validation ran
         assert "docker" in result["validations"]
         assert "build_status" in result["validations"]["docker"]
-    
+
     @pytest.mark.asyncio
     async def test_multi_target_generation(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -323,23 +348,23 @@ class TestFullDeploymentPipeline:
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt"],
             targets=["docker", "helm", "docs"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         # All targets should be generated
         assert len(result["configs"]) == 3
         assert "docker" in result["configs"]
         assert "helm" in result["configs"]
         assert "docs" in result["configs"]
-        
+
         # All should be validated
         assert len(result["validations"]) >= 1  # At least docker validated
-    
+
     @pytest.mark.asyncio
     async def test_generation_with_validation_failure_and_healing(
         self, full_test_repo, mock_llm_calls
@@ -352,9 +377,11 @@ class TestFullDeploymentPipeline:
         4. Re-validation
         """
         # Mock validation to fail first time, succeed second time
-        with patch('generator.agents.deploy_agent.deploy_agent.ValidatorRegistry') as mock_validator_registry:
+        with patch(
+            "generator.agents.deploy_agent.deploy_agent.ValidatorRegistry"
+        ) as mock_validator_registry:
             mock_validator = MagicMock()
-            
+
             # First call fails
             validation_results = [
                 {
@@ -362,35 +389,39 @@ class TestFullDeploymentPipeline:
                     "lint_status": "failed",
                     "lint_issues": ["Missing FROM instruction"],
                     "security_findings": [],
-                    "compliance_score": 0.3
+                    "compliance_score": 0.3,
                 },
                 {
                     "build_status": "success",
                     "lint_status": "passed",
                     "lint_issues": [],
                     "security_findings": [],
-                    "compliance_score": 1.0
-                }
+                    "compliance_score": 1.0,
+                },
             ]
-            
+
             mock_validator.validate = AsyncMock(side_effect=validation_results)
-            mock_validator.fix = AsyncMock(return_value="FROM python:3.9\nWORKDIR /app\nCMD python app.py")
-            mock_validator_registry.return_value.get_validator.return_value = mock_validator
-            
+            mock_validator.fix = AsyncMock(
+                return_value="FROM python:3.9\nWORKDIR /app\nCMD python app.py"
+            )
+            mock_validator_registry.return_value.get_validator.return_value = (
+                mock_validator
+            )
+
             agent = DeployAgent(str(full_test_repo))
             await agent._init_db()  # FIX: Initialize database
-            
+
             # Generate with issues
             result = await agent.generate_documentation(
                 target_files=["src/app.py"],
                 targets=["docker"],
                 doc_type="deployment",
-                human_approval=False
+                human_approval=False,
             )
-            
+
             # Attempt self-heal
             healed_result = await agent.self_heal()
-            
+
             # Should have attempted healing
             if healed_result:
                 assert "configs" in healed_result
@@ -401,13 +432,12 @@ class TestFullDeploymentPipeline:
 # INTEGRATION TEST: Prompt → Response → Validation Flow
 # ============================================================================
 
+
 class TestPromptResponseValidationFlow:
     """Test the flow from prompt building through response handling to validation."""
-    
+
     @pytest.mark.asyncio
-    async def test_prompt_to_response_flow(
-        self, full_test_repo, mock_llm_calls
-    ):
+    async def test_prompt_to_response_flow(self, full_test_repo, mock_llm_calls):
         """
         Test the complete flow:
         1. Build prompt using DeployPromptAgent
@@ -417,8 +447,10 @@ class TestPromptResponseValidationFlow:
         """
         # Step 1: Build prompt
         # FIX: DeployPromptAgent doesn't take repo_path in __init__, only few_shot_dir
-        prompt_agent = DeployPromptAgent(few_shot_dir=str(full_test_repo / "few_shot_examples"))
-        
+        prompt_agent = DeployPromptAgent(
+            few_shot_dir=str(full_test_repo / "few_shot_examples")
+        )
+
         prompt = await prompt_agent.build_deploy_prompt(
             target="docker",
             files=["src/app.py", "requirements.txt"],
@@ -431,47 +463,48 @@ class TestPromptResponseValidationFlow:
                 "name": "gpt-4",
                 "few_shot_support": True,
                 "token_limit": 8000,
-                "optimization_model": "gpt-4"
-            }
+                "optimization_model": "gpt-4",
+            },
         )
-        
+
         assert isinstance(prompt, str)
         assert len(prompt) > 0
-        
+
         # Step 2: Get LLM response (mocked)
-        llm_response = mock_llm_calls['agent_llm']()["content"]
-        
+        llm_response = mock_llm_calls["agent_llm"]()["content"]
+
         # Step 3: Handle response
-        with patch('generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings') as mock_scan:
+        with patch(
+            "generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings"
+        ) as mock_scan:
             mock_scan.return_value = []
-            
+
             # FIX: handle_deploy_response now requires handler_registry argument
             handler_registry = HandlerRegistry()
             handled_response = await handle_deploy_response(
                 raw_response=llm_response,
                 handler_registry=handler_registry,
                 output_format="dockerfile",
-                repo_path=str(full_test_repo)
+                repo_path=str(full_test_repo),
             )
-        
+
         assert "final_config_output" in handled_response
         assert "FROM python" in handled_response["final_config_output"]
-        
+
         # Step 4: Validate
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = MagicMock()
             mock_process.returncode = 0
             mock_process.communicate = AsyncMock(return_value=(b"Success", b""))
             mock_subprocess.return_value = mock_process
-            
+
             validator_registry = ValidatorRegistry()
             validator = validator_registry.get_validator("docker")
-            
+
             validation_result = await validator.validate(
-                handled_response["final_config_output"],
-                "docker"
+                handled_response["final_config_output"], "docker"
             )
-        
+
         assert "build_status" in validation_result
 
 
@@ -479,13 +512,12 @@ class TestPromptResponseValidationFlow:
 # INTEGRATION TEST: Security Pipeline
 # ============================================================================
 
+
 class TestSecurityPipeline:
     """Test security scanning throughout the pipeline."""
-    
+
     @pytest.mark.asyncio
-    async def test_security_scanning_integration(
-        self, full_test_repo, mock_llm_calls
-    ):
+    async def test_security_scanning_integration(self, full_test_repo, mock_llm_calls):
         """
         Test that security scanning works at each stage:
         1. Prompt scrubbing
@@ -502,36 +534,40 @@ COPY . .
 ENV API_KEY=sk-1234567890abcdef
 CMD ["python", "src/app.py"]
 """
-        
+
         # Handle response - should detect security issues
-        with patch('generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings') as mock_scan:
+        with patch(
+            "generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings"
+        ) as mock_scan:
             mock_scan.return_value = [
                 {
                     "type": "Security",
                     "category": "RootUser",
                     "description": "Running as root",
-                    "severity": "High"
+                    "severity": "High",
                 },
                 {
                     "type": "Security",
                     "category": "HardcodedCredentials",
                     "description": "API key exposed",
-                    "severity": "Critical"
-                }
+                    "severity": "Critical",
+                },
             ]
-            
-            with patch('generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api') as mock_llm:
+
+            with patch(
+                "generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api"
+            ) as mock_llm:
                 mock_llm.return_value = {"content": "Summary", "model": "gpt-4"}
-                
+
                 # FIX: handle_deploy_response now requires handler_registry argument
                 handler_registry = HandlerRegistry()
                 result = await handle_deploy_response(
                     raw_response=insecure_config,
                     handler_registry=handler_registry,
                     output_format="dockerfile",
-                    repo_path=str(full_test_repo)
+                    repo_path=str(full_test_repo),
                 )
-        
+
         # Check security findings were recorded
         findings = result["provenance"]["security_findings"]
         assert len(findings) > 0
@@ -542,9 +578,10 @@ CMD ["python", "src/app.py"]
 # INTEGRATION TEST: Multi-Stage Pipeline
 # ============================================================================
 
+
 class TestMultiStagePipeline:
     """Test multi-stage operations (generate → validate → fix → deploy)."""
-    
+
     @pytest.mark.asyncio
     async def test_full_deployment_lifecycle(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -559,35 +596,35 @@ class TestMultiStagePipeline:
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         # Stage 1: Generate
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt"],
             targets=["docker"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         assert "configs" in result
-        
+
         # Stage 2: Validate (already done in generate_documentation)
         assert "validations" in result
-        
+
         # Stage 3: Fix if needed (self-heal)
         if result["validations"]["docker"].get("lint_issues"):
             healed = await agent.self_heal()
             if healed:
                 result = healed
-        
+
         # Stage 4: Deploy (mock)
-        with patch.object(agent.registry.get_plugin("docker"), 'deploy') as mock_deploy:
+        with patch.object(agent.registry.get_plugin("docker"), "deploy") as mock_deploy:
             mock_deploy.return_value = AsyncMock(return_value=True)
-            
+
             # In real scenario, would call:
             # success = await agent.registry.get_plugin("docker").deploy(result["configs"]["docker"])
             # For test:
             success = True
-        
+
         assert success
 
 
@@ -595,9 +632,10 @@ class TestMultiStagePipeline:
 # INTEGRATION TEST: Error Recovery
 # ============================================================================
 
+
 class TestErrorRecovery:
     """Test error handling and recovery across components."""
-    
+
     @pytest.mark.asyncio
     async def test_llm_failure_recovery(self, full_test_repo):
         """
@@ -606,34 +644,36 @@ class TestErrorRecovery:
         2. System retries or provides fallback
         3. Continues operation
         """
-        with patch('generator.agents.deploy_agent.deploy_agent.call_llm_api') as mock_llm:
+        with patch(
+            "generator.agents.deploy_agent.deploy_agent.call_llm_api"
+        ) as mock_llm:
             # First call fails, second succeeds
             mock_llm.side_effect = [
                 Exception("LLM API timeout"),
                 {
                     "content": "FROM python:3.9\nCMD python app.py",
                     "model": "gpt-4",
-                    "provider": "openai"
-                }
+                    "provider": "openai",
+                },
             ]
-            
+
             agent = DeployAgent(str(full_test_repo))
             await agent._init_db()  # FIX: Initialize database
-            
+
             # Should handle the failure
             try:
                 result = await agent.generate_documentation(
                     target_files=["src/app.py"],
                     targets=["docker"],
                     doc_type="deployment",
-                    human_approval=False
+                    human_approval=False,
                 )
                 # If it succeeds after retry
                 assert "configs" in result
             except Exception as e:
                 # Or it might raise - both acceptable
                 assert "LLM" in str(e) or "timeout" in str(e)
-    
+
     @pytest.mark.asyncio
     async def test_validation_tool_failure_recovery(
         self, full_test_repo, mock_llm_calls
@@ -644,33 +684,37 @@ class TestErrorRecovery:
         2. System provides fallback validation
         3. Documents the limitation
         """
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_subprocess.side_effect = FileNotFoundError("docker not found")
-            
+
             agent = DeployAgent(str(full_test_repo))
             await agent._init_db()  # FIX: Initialize database
-            
+
             result = await agent.generate_documentation(
                 target_files=["src/app.py"],
                 targets=["docker"],
                 doc_type="deployment",
-                human_approval=False
+                human_approval=False,
             )
-            
+
             # Should complete but note validation limitations
             assert "configs" in result
             if "validations" in result:
-                assert "tool_not_found" in str(result["validations"]).lower() or \
-                       result["validations"]["docker"].get("build_status") == "tool_not_found"
+                assert (
+                    "tool_not_found" in str(result["validations"]).lower()
+                    or result["validations"]["docker"].get("build_status")
+                    == "tool_not_found"
+                )
 
 
 # ============================================================================
 # INTEGRATION TEST: Performance and Concurrency
 # ============================================================================
 
+
 class TestPerformanceConcurrency:
     """Test performance and concurrent operations."""
-    
+
     @pytest.mark.asyncio
     async def test_concurrent_generations(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -683,26 +727,26 @@ class TestPerformanceConcurrency:
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         # Launch multiple concurrent generations
         tasks = [
             agent.generate_documentation(
                 target_files=["src/app.py"],
                 targets=["docker"],
                 doc_type="deployment",
-                human_approval=False
+                human_approval=False,
             )
             for _ in range(3)
         ]
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # All should succeed
         assert len(results) == 3
         for result in results:
             if not isinstance(result, Exception):
                 assert "configs" in result
-    
+
     @pytest.mark.asyncio
     async def test_large_codebase_handling(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -718,21 +762,21 @@ class TestPerformanceConcurrency:
             (full_test_repo / "src" / f"module_{i}.py").write_text(
                 f"def function_{i}():\n    return {i}"
             )
-        
+
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         start_time = time.time()
-        
+
         result = await agent.generate_documentation(
             target_files=[f"src/module_{i}.py" for i in range(20)],
             targets=["docker"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         elapsed = time.time() - start_time
-        
+
         assert "configs" in result
         # Should complete in reasonable time (adjust threshold as needed)
         # assert elapsed < 30  # seconds
@@ -742,9 +786,10 @@ class TestPerformanceConcurrency:
 # INTEGRATION TEST: History and Rollback
 # ============================================================================
 
+
 class TestHistoryRollback:
     """Test history tracking and rollback functionality."""
-    
+
     @pytest.mark.asyncio
     async def test_history_and_rollback_flow(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -758,36 +803,38 @@ class TestHistoryRollback:
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         # Generate v1
         result_v1 = await agent.generate_documentation(
             target_files=["src/app.py"],
             targets=["docker"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         run_id_v1 = result_v1["run_id"]
-        
+
         # Modify the codebase
         (full_test_repo / "src" / "app.py").write_text(
             (full_test_repo / "src" / "app.py").read_text() + "\n# Modified\n"
         )
-        
+
         # Generate v2
         result_v2 = await agent.generate_documentation(
             target_files=["src/app.py"],
             targets=["docker"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         # Rollback to v1
-        with patch.object(agent.registry.get_plugin("docker"), 'rollback') as mock_rollback:
+        with patch.object(
+            agent.registry.get_plugin("docker"), "rollback"
+        ) as mock_rollback:
             mock_rollback.return_value = AsyncMock(return_value=True)
-            
+
             success = await agent.rollback(run_id_v1)
-        
+
         # Verify rollback worked
         # In real scenario, would check that config matches v1
         assert success or mock_rollback.called
@@ -797,9 +844,10 @@ class TestHistoryRollback:
 # INTEGRATION TEST: Report Generation
 # ============================================================================
 
+
 class TestReportGenerationIntegration:
     """Test report generation with real data."""
-    
+
     @pytest.mark.asyncio
     async def test_comprehensive_report_generation(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -813,23 +861,23 @@ class TestReportGenerationIntegration:
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
-        
+
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt", "README.md"],
             targets=["docker", "helm", "docs"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         # Generate report
         report = await agent.generate_report(result)
-        
+
         # Verify report structure
         assert isinstance(report, str)
         assert "Deployment Configuration Report" in report
         assert result["run_id"] in report
         assert "docker" in report.lower()
-        
+
         # Should include all sections
         for target in ["docker", "helm", "docs"]:
             assert target in report.lower() or target.upper() in report
@@ -839,9 +887,10 @@ class TestReportGenerationIntegration:
 # INTEGRATION TEST: Plugin System
 # ============================================================================
 
+
 class TestPluginSystemIntegration:
     """Test plugin system integration."""
-    
+
     @pytest.mark.asyncio
     async def test_custom_plugin_integration(
         self, full_test_repo, mock_llm_calls, mock_external_tools
@@ -855,41 +904,39 @@ class TestPluginSystemIntegration:
         """
         # FIX: Use correct import path
         from generator.agents.deploy_agent.deploy_agent import TargetPlugin
-        
+
         class CustomPlugin(TargetPlugin):
             # FIX: Implement correct abstract methods from TargetPlugin
-            async def generate_config(self, target_files, instructions, context, previous_configs):
+            async def generate_config(
+                self, target_files, instructions, context, previous_configs
+            ):
                 return {"config": "# Custom config\ncustom_setting: true"}
-            
+
             async def validate_config(self, config):
-                return {
-                    "status": "valid",
-                    "lint_issues": [],
-                    "security_findings": []
-                }
-            
+                return {"status": "valid", "lint_issues": [], "security_findings": []}
+
             async def simulate_deployment(self, config):
                 return {"result": "simulated"}
-            
+
             async def rollback(self, config):
                 return True
-            
+
             def health_check(self):
                 return True
-        
+
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
         custom_plugin = CustomPlugin()
         agent.register_plugin("custom", custom_plugin)
-        
+
         # Generate using custom plugin
         result = await agent.generate_documentation(
             target_files=["src/app.py"],
             targets=["custom"],
             doc_type="deployment",
-            human_approval=False
+            human_approval=False,
         )
-        
+
         assert "configs" in result
         assert "custom" in result["configs"]
         assert "custom_setting" in result["configs"]["custom"]

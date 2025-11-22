@@ -3,7 +3,7 @@
 import uuid
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +18,7 @@ class Message:
     idempotency_key: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     processing_start: Optional[int] = None
+
 
 class MessageSchema(BaseModel):
     topic: str

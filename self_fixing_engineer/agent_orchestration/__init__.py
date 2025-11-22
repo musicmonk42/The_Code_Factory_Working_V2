@@ -21,29 +21,30 @@ try:
         NAME_REGEX,
         MAX_CONFIG_SIZE,
     )
-    
+
     __all__ = [
-        'CrewManager',
-        'CrewAgentBase',
-        'ResourceError',
-        'CrewPermissionError',
-        'AgentError',
-        'structured_log',
-        'sanitize_dict',
-        'NAME_REGEX',
-        'MAX_CONFIG_SIZE',
+        "CrewManager",
+        "CrewAgentBase",
+        "ResourceError",
+        "CrewPermissionError",
+        "AgentError",
+        "structured_log",
+        "sanitize_dict",
+        "NAME_REGEX",
+        "MAX_CONFIG_SIZE",
     ]
 except ImportError as e:
     # Graceful fallback if dependencies are missing
     import warnings
+
     warnings.warn(f"Agent Orchestration module not fully available: {e}")
-    
+
     CrewManager = None
     CrewAgentBase = None
     ResourceError = Exception
     CrewPermissionError = Exception
     AgentError = Exception
-    
+
     __all__ = []
 
 __version__ = "1.0.0"

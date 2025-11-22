@@ -1,14 +1,11 @@
 # tests/test_import_fixer_integration.py
-import os
 import re
 import json
-import time
 import asyncio
 import importlib
 import importlib.util
-import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import types
 import sys
 
@@ -21,43 +18,68 @@ import pytest
 class FakeRedis:
     def __init__(self):
         self._store = {}
-    def setex(self, key, ttl, value): self._store[key] = value; return True
-    def get(self, key): return self._store.get(key)
-    def incr(self, key): self._store[key] = int(self._store.get(key, 0) or 0) + 1; return self._store[key]
+
+    def setex(self, key, ttl, value):
+        self._store[key] = value
+        return True
+
+    def get(self, key):
+        return self._store.get(key)
+
+    def incr(self, key):
+        self._store[key] = int(self._store.get(key, 0) or 0) + 1
+        return self._store[key]
+
 
 class FakeLLMClient:
-    def __init__(self, *a, **k): pass
-    async def aclose(self): pass
+    def __init__(self, *a, **k):
+        pass
+
+    async def aclose(self):
+        pass
+
 
 class FakeAIManager:
     def __init__(self, *a, **k):
         self.http_client = object()
         self.llm_client = FakeLLMClient()
+
     async def generate_async(self, *a, **k) -> Dict[str, Any]:
         # Deterministic suggestion used by AST fixer when requested
-        return {"suggestion": "Move import inside function to break cycle", "confidence": 0.92}
+        return {
+            "suggestion": "Move import inside function to break cycle",
+            "confidence": 0.92,
+        }
+
     def generate_sync(self, *a, **k):
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.generate_async(*a, **k))
+
     async def aclose(self):
         await self.llm_client.aclose()
+
 
 class DummyProc:
     def __init__(self, returncode=0, stdout="", stderr=""):
         self.returncode = returncode
         self._stdout = stdout
         self._stderr = stderr
+
     async def communicate(self, *a, **k):
         await asyncio.sleep(0)
         return (self._stdout.encode(), self._stderr.encode())
 
+
 class PluginProbe:
     """Collects plugin hook invocations if the plugin manager calls them."""
+
     def __init__(self):
         self.calls: List[str] = []
+
     def __call__(self, *a, **k):
         self.calls.append(f"call:{k.get('hook') or a[0] if a else 'unknown'}")
         return True
+
 
 def install_core_stubs():
     fake_core_utils = types.SimpleNamespace(
@@ -70,7 +92,9 @@ def install_core_stubs():
         )
     )
     fake_core_secrets = types.SimpleNamespace(
-        SECRETS_MANAGER=types.SimpleNamespace(get_secret=lambda key, required=False: "dummy_secret")
+        SECRETS_MANAGER=types.SimpleNamespace(
+            get_secret=lambda key, required=False: "dummy_secret"
+        )
     )
 
     sys.modules["core_utils"] = fake_core_utils
@@ -81,7 +105,9 @@ def install_core_stubs():
 # -----------------------------
 # Module import helpers
 # -----------------------------
-def _import_by_candidates(name_candidates: List[str], file_candidates: List[Path]) -> Any:
+def _import_by_candidates(
+    name_candidates: List[str], file_candidates: List[Path]
+) -> Any:
     for name in name_candidates:
         try:
             return importlib.import_module(name)
@@ -94,7 +120,10 @@ def _import_by_candidates(name_candidates: List[str], file_candidates: List[Path
             assert spec and spec.loader
             spec.loader.exec_module(mod)  # type: ignore[attr-defined]
             return mod
-    raise ImportError(f"Could not import any of: {name_candidates} or files: {file_candidates}")
+    raise ImportError(
+        f"Could not import any of: {name_candidates} or files: {file_candidates}"
+    )
+
 
 def load_import_fixer_modules(test_dir: Path) -> Dict[str, Any]:
     root = test_dir.parent
@@ -102,6 +131,7 @@ def load_import_fixer_modules(test_dir: Path) -> Dict[str, Any]:
         "self_healing_import_fixer.import_fixer",
         "import_fixer",
     ]
+
     # Build candidates per module
     def pkg_candidates(modname: str) -> List[str]:
         return [f"{pkg}.{modname}" for pkg in cand_pkgs]
@@ -151,9 +181,7 @@ def make_tiny_project(base: Path) -> Path:
     # a -> b
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
     (pkg / "a.py").write_text(
-        "import pkg.b\n"
-        "def greet():\n"
-        "    return 'hi ' + pkg.b.name()\n"
+        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
     )
     # b -> a (cycle) + dynamic import pattern + third-party import
     (pkg / "b.py").write_text(
@@ -167,10 +195,7 @@ def make_tiny_project(base: Path) -> Path:
 
     # minimal pyproject (no deps initially)
     (proj / "pyproject.toml").write_text(
-        "[project]\n"
-        "name = 'tiny-proj'\n"
-        "version = '0.1.0'\n"
-        "dependencies = []\n"
+        "[project]\n" "name = 'tiny-proj'\n" "version = '0.1.0'\n" "dependencies = []\n"
     )
     return proj
 
@@ -196,8 +221,12 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
 
     # --- Import modules
     mods = load_import_fixer_modules(Path(__file__).resolve().parent)
-    engine = mods["engine"]; validate = mods["validate"]; plugins = mods["plugins"]
-    dep = mods["dep"]; astfix = mods["ast"]; ai = mods["ai"]
+    engine = mods["engine"]
+    validate = mods["validate"]
+    plugins = mods["plugins"]
+    dep = mods["dep"]
+    astfix = mods["ast"]
+    ai = mods["ai"]
 
     # --- Patch Redis where present
     for m in (engine, validate, plugins, dep, astfix, ai):
@@ -215,8 +244,11 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
         if re.search(r"ruff|mypy|pytest|pip-?audit|bandit", tool, re.IGNORECASE):
             return DummyProc(returncode=0, stdout="", stderr="")
         return DummyProc(returncode=0, stdout="", stderr="")
+
     if hasattr(validate, "asyncio"):
-        monkeypatch.setattr(validate.asyncio, "create_subprocess_exec", fake_cse, raising=False)
+        monkeypatch.setattr(
+            validate.asyncio, "create_subprocess_exec", fake_cse, raising=False
+        )
 
     # --- Plugin probe (if manager supports hooks)
     probe = PluginProbe()
@@ -224,7 +256,7 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
     if hasattr(plugins, "register_hook"):
         try:
             plugins.register_hook("before_validate", probe)  # type: ignore[arg-type]
-            plugins.register_hook("after_validate", probe)   # type: ignore[arg-type]
+            plugins.register_hook("after_validate", probe)  # type: ignore[arg-type]
         except Exception:
             pass
 
@@ -254,7 +286,9 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
         heal_deps = getattr(dep, "heal_dependencies", None)
         if callable(heal_deps):
             res_deps = asyncio.get_event_loop().run_until_complete(
-                heal_deps(project_roots=[str(proj_root)], dry_run=True, python_version="3.10")
+                heal_deps(
+                    project_roots=[str(proj_root)], dry_run=True, python_version="3.10"
+                )
             )
             result["deps"] = res_deps
 
@@ -265,14 +299,26 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
             if cls:
                 try:
                     # Healer classes have a `whitelisted_paths` argument
-                    h = cls(file_path=str(proj_root / "pkg" / "b.py"), cycle=["pkg.b", "pkg.a"], graph=None, project_root=str(proj_root), whitelisted_paths=[str(proj_root)])
+                    h = cls(
+                        file_path=str(proj_root / "pkg" / "b.py"),
+                        cycle=["pkg.b", "pkg.a"],
+                        graph=None,
+                        project_root=str(proj_root),
+                        whitelisted_paths=[str(proj_root)],
+                    )
                     detects = h.find_problematic_import()
                     # If fixer returns patches, collect them (don't mutate files in this dry-run)
                     patches = h.heal()
-                    result.setdefault("ast", {})[cls_name] = {"detects": detects, "patches": patches}
-                except Exception as e:
+                    result.setdefault("ast", {})[cls_name] = {
+                        "detects": detects,
+                        "patches": patches,
+                    }
+                except Exception:
                     # Tolerate features that need more context; integration should still proceed
-                    result.setdefault("ast", {})[cls_name] = {"detects": [], "patches": []}
+                    result.setdefault("ast", {})[cls_name] = {
+                        "detects": [],
+                        "patches": [],
+                    }
 
         # 3) Validation (pretend tools passed)
         Validator = getattr(validate, "Validator", None)
@@ -298,14 +344,18 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
     # -----------------------------
 
     # A) Engine or manual pipeline produced a structured result
-    assert isinstance(result, (dict, list, type(None))), f"Unexpected engine result shape: {type(result)}"
+    assert isinstance(
+        result, (dict, list, type(None))
+    ), f"Unexpected engine result shape: {type(result)}"
 
     # B) Dep fixer proposed something about 'requests' or at least scanned imports
     #    (be flexible about schema)
     deps = result.get("deps") if isinstance(result, dict) else None
     if deps:
         dump = json.dumps(deps)
-        assert "requests" in dump or "added" in dump or "imports" in dump, f"Dep-fixer result too empty: {deps}"
+        assert (
+            "requests" in dump or "added" in dump or "imports" in dump
+        ), f"Dep-fixer result too empty: {deps}"
 
     # C) AST detectors ran (or engine aggregated their signals)
     ast_part = result.get("ast") if isinstance(result, dict) else None
@@ -327,7 +377,9 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
     for p in out_dir.rglob("*"):
         if p.is_file():
             wrote_any = True
-            assert str(p.resolve()).startswith(str(out_dir.resolve())), f"Artifact escaped approved dir: {p}"
+            assert str(p.resolve()).startswith(
+                str(out_dir.resolve())
+            ), f"Artifact escaped approved dir: {p}"
     if wrote_any:
         assert True  # explicit “some output happened and stayed sandboxed”
 

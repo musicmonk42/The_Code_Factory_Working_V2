@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch, MagicMock
 
@@ -40,8 +39,10 @@ PKG_PATH = "self_healing_import_fixer.import_fixer.cache_layer"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 class FakeRedisClient:
     """Minimal async-friendly Redis-like client for tests."""
+
     def __init__(self):
         self._store: dict[str, Any] = {}
 
@@ -63,8 +64,10 @@ class FakeRedisClient:
 
 class FakeRedisModule:
     """Provides a .Redis() returning our FakeRedisClient"""
+
     def __init__(self):
         self._client = FakeRedisClient()
+
     def Redis(self, *a, **k):
         return self._client
 
@@ -73,24 +76,27 @@ class FakeRedisModule:
 # Fixtures to properly mock dependencies
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def mock_metrics():
     """Mock the metrics to avoid AttributeError"""
     mock_counter = MagicMock()
     mock_counter.labels.return_value = mock_counter
     mock_counter.inc.return_value = None
-    
+
     mock_histogram = MagicMock()
     mock_histogram.labels.return_value = mock_histogram
     mock_histogram.time.return_value.__enter__ = MagicMock()
     mock_histogram.time.return_value.__exit__ = MagicMock()
     mock_histogram.observe.return_value = None
-    
-    with patch(f"{PKG_PATH}.cache_hits", mock_counter), \
-         patch(f"{PKG_PATH}.cache_misses", mock_counter), \
-         patch(f"{PKG_PATH}.cache_op_latency", mock_histogram), \
-         patch(f"{PKG_PATH}.redis_connection_failures", mock_counter), \
-         patch(f"{PKG_PATH}.file_hmac_failures", mock_counter):
+
+    with patch(f"{PKG_PATH}.cache_hits", mock_counter), patch(
+        f"{PKG_PATH}.cache_misses", mock_counter
+    ), patch(f"{PKG_PATH}.cache_op_latency", mock_histogram), patch(
+        f"{PKG_PATH}.redis_connection_failures", mock_counter
+    ), patch(
+        f"{PKG_PATH}.file_hmac_failures", mock_counter
+    ):
         yield
 
 
@@ -102,7 +108,7 @@ def mock_loggers():
     mock_json_logger.warning = MagicMock()
     mock_json_logger.error = MagicMock()
     mock_json_logger.critical = MagicMock()
-    
+
     with patch(f"{PKG_PATH}.json_logger", mock_json_logger):
         yield mock_json_logger
 
@@ -113,7 +119,7 @@ def mock_audit_logger():
     mock_audit = MagicMock()
     mock_audit.info = MagicMock()
     mock_audit.error = MagicMock()
-    
+
     with patch(f"{PKG_PATH}.audit_logger", mock_audit):
         yield mock_audit
 
@@ -121,6 +127,7 @@ def mock_audit_logger():
 # ---------------------------------------------------------------------------
 # Selection logic
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_cache_uses_in_memory_when_no_redis_and_no_project_root(monkeypatch):
@@ -138,7 +145,9 @@ async def test_get_cache_uses_in_memory_when_no_redis_and_no_project_root(monkey
 
 
 @pytest.mark.asyncio
-async def test_get_cache_uses_file_cache_when_project_root_provided(tmp_path, monkeypatch):
+async def test_get_cache_uses_file_cache_when_project_root_provided(
+    tmp_path, monkeypatch
+):
     with patch(f"{PKG_PATH}._HAS_REDIS", False):
         root = tmp_path / "proj"
         root.mkdir(parents=True)
@@ -159,9 +168,9 @@ async def test_get_cache_uses_file_cache_when_project_root_provided(tmp_path, mo
 async def test_get_cache_prefers_redis_when_available(monkeypatch):
     fake_redis_mod = FakeRedisModule()
 
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), \
-         patch(f"{PKG_PATH}._redis", fake_redis_mod), \
-         patch(f"{PKG_PATH}.json_logger.info") as mock_log_info:
+    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(
+        f"{PKG_PATH}._redis", fake_redis_mod
+    ), patch(f"{PKG_PATH}.json_logger.info") as mock_log_info:
         cache = await get_cache(project_root=None)
         # The redis path returns the underlying client (FakeRedisClient)
         assert hasattr(cache, "ping")
@@ -173,6 +182,7 @@ async def test_get_cache_prefers_redis_when_available(monkeypatch):
 # ---------------------------------------------------------------------------
 # InMemory & File cache behaviours
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_inmemory_cache_expiration():
@@ -190,7 +200,9 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
         def get_secret(self, key: str):
             return "dev-hmac-key"
 
-    cache = _FileCache(tmp_path, secrets_manager=_Secrets())  # secrets required by implementation
+    cache = _FileCache(
+        tmp_path, secrets_manager=_Secrets()
+    )  # secrets required by implementation
     await cache.setex("fk", 1, json.dumps({"a": 1}))
     assert json.loads(await cache.get("fk")) == {"a": 1}
     await asyncio.sleep(1.1)
@@ -201,13 +213,14 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
 # _connect_redis success and failure
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test__connect_redis_success(monkeypatch):
     """Ensure _connect_redis returns a client and pings it."""
     fake = FakeRedisModule()
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), \
-         patch(f"{PKG_PATH}._redis", fake), \
-         patch(f"{PKG_PATH}.json_logger.info"):
+    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(
+        f"{PKG_PATH}._redis", fake
+    ), patch(f"{PKG_PATH}.json_logger.info"):
         client = await _connect_redis()
         assert hasattr(client, "ping")
         assert await client.ping() is True
@@ -216,15 +229,16 @@ async def test__connect_redis_success(monkeypatch):
 @pytest.mark.asyncio
 async def test__connect_redis_failure(monkeypatch):
     """Simulate a ping failure → _connect_redis should raise or bubble cleanly."""
+
     class BadClient:
         async def ping(self):
             raise RuntimeError("boom")
+
     class BadRedis:
         def Redis(self, *a, **k):
             return BadClient()
 
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), \
-         patch(f"{PKG_PATH}._redis", BadRedis()):
+    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(f"{PKG_PATH}._redis", BadRedis()):
         with pytest.raises(Exception):
             await _connect_redis(timeout_s=1)
 
@@ -234,11 +248,13 @@ async def test__connect_redis_failure(monkeypatch):
 # not its internal rate limiter implementation).
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_fallback_warning_helper_is_called(monkeypatch):
     # Force the "no redis" path and ensure the fallback helper is invoked at least once
-    with patch(f"{PKG_PATH}._HAS_REDIS", False), \
-         patch(f"{PKG_PATH}._check_fallback_usage", new=AsyncMock()) as mock_fallback:
+    with patch(f"{PKG_PATH}._HAS_REDIS", False), patch(
+        f"{PKG_PATH}._check_fallback_usage", new=AsyncMock()
+    ) as mock_fallback:
         await get_cache(project_root=None)
         mock_fallback.assert_awaited()
         # call many times to ensure it doesn't explode; we don't assert call count

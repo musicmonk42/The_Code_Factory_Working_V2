@@ -3,6 +3,7 @@ import asyncio
 import shutil
 import logging
 import tempfile
+
 # Security fix: Use defusedxml to prevent XXE attacks
 import defusedxml.ElementTree as ET
 from pathlib import Path
@@ -16,33 +17,50 @@ PLUGIN_MANIFEST = {
     "version": "1.2.0",  # Further hardened for production readiness
     "description": "Runs Maven-based Java tests with coverage (JaCoCo), parses JUnit/Failsafe reports, supports mvnw, timeouts, robust path handling, and multi-module selection.",
     "author": "Self-Fixing Engineer Team",
-    "capabilities": ["java_test_execution", "java_coverage_analysis", "maven_integration"],
-    "permissions_required": ["filesystem_read", "filesystem_write", "process_execution"],
+    "capabilities": [
+        "java_test_execution",
+        "java_coverage_analysis",
+        "maven_integration",
+    ],
+    "permissions_required": [
+        "filesystem_read",
+        "filesystem_write",
+        "process_execution",
+    ],
     "compatibility": {
         "min_sim_runner_version": "1.0.0",
-        "max_sim_runner_version": "2.0.0"
+        "max_sim_runner_version": "2.0.0",
     },
     "entry_points": {
         "run_java_tests": {
             "description": "Executes Java (Maven) tests for a given source/test file.",
-            "parameters": ["test_file_path", "target_identifier", "project_root", "temp_coverage_report_path_relative", "extra_maven_args"]
+            "parameters": [
+                "test_file_path",
+                "target_identifier",
+                "project_root",
+                "temp_coverage_report_path_relative",
+                "extra_maven_args",
+            ],
         }
     },
     "health_check": "plugin_health",
     "api_version": "v1",
     "license": "MIT",
     "homepage": "",
-    "tags": ["java", "maven", "junit", "jacoco", "test_runner"]
+    "tags": ["java", "maven", "junit", "jacoco", "test_runner"],
 }
 
 # ---------------- Utilities ----------------
 
+
 def _shutil_which(cmd: str) -> Optional[str]:
     try:
         from shutil import which
+
         return which(cmd)
     except Exception:
         return None
+
 
 async def _which(cmd: str) -> Optional[str]:
     """
@@ -56,7 +74,7 @@ async def _which(cmd: str) -> Optional[str]:
             "which" if os.name != "nt" else "where",
             cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         return stdout.decode().strip().splitlines()[0] if proc.returncode == 0 else None
@@ -64,12 +82,15 @@ async def _which(cmd: str) -> Optional[str]:
         logger.debug(f"Error finding executable '{cmd}': {e}")
         return None
 
+
 async def _get_maven_version(mvn_path: str) -> Optional[str]:
     """Retrieves the Maven version (supports mvnw/mvn)."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            mvn_path, "--version",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            mvn_path,
+            "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         out = (stdout or b"").decode() + (stderr or b"").decode()
@@ -85,12 +106,15 @@ async def _get_maven_version(mvn_path: str) -> Optional[str]:
         logger.debug(f"Error getting Maven version: {e}")
         return None
 
+
 def _hostname() -> str:
     try:
         import socket
+
         return socket.gethostname()
     except Exception:
         return "unknown-host"
+
 
 def _cap_text_tail(s: str, max_bytes: int) -> str:
     if max_bytes <= 0:
@@ -101,13 +125,17 @@ def _cap_text_tail(s: str, max_bytes: int) -> str:
     tail = encoded[-max_bytes:]
     return tail.decode(errors="replace")
 
+
 def _is_path_under(base: Path, child: Path) -> bool:
     try:
         base_res = base.resolve()
         child_res = child.resolve()
-        return str(child_res).startswith(str(base_res) + os.sep) or child_res == base_res
+        return (
+            str(child_res).startswith(str(base_res) + os.sep) or child_res == base_res
+        )
     except Exception:
         return False
+
 
 def _find_nearest_pom(start_at: Path, stop_at: Optional[Path] = None) -> Optional[Path]:
     """
@@ -128,6 +156,7 @@ def _find_nearest_pom(start_at: Path, stop_at: Optional[Path] = None) -> Optiona
         cur = cur.parent
     return None
 
+
 def _detect_maven_exec(maven_root: Path) -> Optional[str]:
     """
     Prefer Maven Wrapper (mvnw/mvnw.cmd) if present in maven_root; otherwise use 'mvn' from PATH.
@@ -141,6 +170,7 @@ def _detect_maven_exec(maven_root: Path) -> Optional[str]:
             pass
         return str(mvnw)
     return _shutil_which("mvn")
+
 
 def _junit_patterns_for_target(target_identifier: str) -> Optional[str]:
     """
@@ -164,6 +194,7 @@ def _junit_patterns_for_target(target_identifier: str) -> Optional[str]:
     ]
     return ",".join(patterns)
 
+
 def _parse_junit_dir(dir_path: Path) -> Dict[str, int]:
     """
     Aggregate JUnit-compatible XML reports in a directory.
@@ -179,6 +210,7 @@ def _parse_junit_dir(dir_path: Path) -> Dict[str, int]:
             summary["errors"] += sub["errors"]
             summary["skipped"] += sub["skipped"]
     return summary
+
 
 def _parse_junit_xml(xml_path: Any) -> Dict[str, Any]:
     """
@@ -208,6 +240,7 @@ def _parse_junit_xml(xml_path: Any) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Error parsing JUnit XML {xml_path}: {e}")
     return summary
+
 
 def _parse_jacoco_xml(xml_path: Any) -> float:
     """
@@ -241,7 +274,10 @@ def _parse_jacoco_xml(xml_path: Any) -> float:
         logger.warning(f"Error parsing JaCoCo XML {xml_path}: {e}")
         return 0.0
 
-def _create_minimal_pom_xml(group_id: str, artifact_id: str, version: str, java_release: str = "17") -> str:
+
+def _create_minimal_pom_xml(
+    group_id: str, artifact_id: str, version: str, java_release: str = "17"
+) -> str:
     """Generates a minimal Maven pom.xml content with Surefire and JaCoCo plugins and configurable Java release."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -319,9 +355,11 @@ def _create_minimal_pom_xml(group_id: str, artifact_id: str, version: str, java_
 </project>
 """
 
+
 def _java_class_name_to_path(class_name: str) -> str:
     """Converts a Java fully-qualified class name to a file path."""
-    return class_name.replace('.', os.sep) + ".java"
+    return class_name.replace(".", os.sep) + ".java"
+
 
 def _copytree_compat(src: Path, dst: Path) -> None:
     """
@@ -340,6 +378,7 @@ def _copytree_compat(src: Path, dst: Path) -> None:
             for f in files:
                 shutil.copy2(str(Path(root) / f), str(target_dir))
 
+
 def _filter_maven_args(args: List[str], strict: bool) -> List[str]:
     """
     Optionally filter extra Maven args for safety in multi-tenant contexts.
@@ -347,16 +386,31 @@ def _filter_maven_args(args: List[str], strict: bool) -> List[str]:
     """
     if not strict:
         return args
-    allowed = {"-pl", "-am", "-B", "-q", "-e", "-fae", "-T", "--fail-at-end", "--batch-mode", "--no-transfer-progress"}
+    allowed = {
+        "-pl",
+        "-am",
+        "-B",
+        "-q",
+        "-e",
+        "-fae",
+        "-T",
+        "--fail-at-end",
+        "--batch-mode",
+        "--no-transfer-progress",
+    }
+
     def ok(a: str) -> bool:
         return a.startswith("-D") or a.startswith("-P") or a in allowed
+
     filtered = [a for a in args if ok(a)]
     dropped = [a for a in args if a not in filtered]
     if dropped:
         logger.warning(f"Dropped disallowed Maven args (strict mode): {dropped}")
     return filtered
 
+
 # ---------------- Health Check ----------------
+
 
 async def plugin_health() -> Dict[str, Any]:
     """
@@ -374,12 +428,18 @@ async def plugin_health() -> Dict[str, Any]:
     else:
         try:
             proc = await asyncio.create_subprocess_exec(
-                java_path, "-version",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                java_path,
+                "-version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             out = (await proc.communicate())[1].decode(errors="replace")
-            version_line = next((line for line in out.splitlines() if "version" in line.lower()), None)
-            details.append(f"Java detected: {version_line.strip() if version_line else 'version unknown'}")
+            version_line = next(
+                (line for line in out.splitlines() if "version" in line.lower()), None
+            )
+            details.append(
+                f"Java detected: {version_line.strip() if version_line else 'version unknown'}"
+            )
         except Exception as e:
             status = "degraded"
             details.append(f"Error running java -version: {e}")
@@ -399,14 +459,16 @@ async def plugin_health() -> Dict[str, Any]:
     logger.info(f"JavaTestRunnerPlugin health: {status} | {details}")
     return {"status": status, "details": details}
 
+
 # ---------------- Main Functionality ----------------
+
 
 async def run_java_tests(
     test_file_path: str,
     target_identifier: str,
     project_root: str,
     temp_coverage_report_path_relative: str,
-    **kwargs
+    **kwargs,
 ) -> Dict[str, Any]:
     """
     Executes Java (Maven) tests and analyzes coverage using JaCoCo.
@@ -443,7 +505,9 @@ async def run_java_tests(
     """
     project_root_path = Path(project_root).resolve()
     full_test_file_path = (project_root_path / test_file_path).resolve()
-    full_coverage_report_path = (project_root_path / temp_coverage_report_path_relative).resolve()
+    full_coverage_report_path = (
+        project_root_path / temp_coverage_report_path_relative
+    ).resolve()
 
     result: Dict[str, Any] = {
         "success": False,
@@ -454,12 +518,14 @@ async def run_java_tests(
         "temp_dirs_used": [],
         "maven_version": "N/A",
         "maven_project_root": "",
-        "used_maven_executable": ""
+        "used_maven_executable": "",
     }
 
     # Path safety
     if not _is_path_under(project_root_path, full_test_file_path):
-        error_msg = f"Invalid test_file_path outside project_root: {full_test_file_path}"
+        error_msg = (
+            f"Invalid test_file_path outside project_root: {full_test_file_path}"
+        )
         logger.error(error_msg)
         result["reason"] = error_msg
         return result
@@ -478,7 +544,9 @@ async def run_java_tests(
         return result
 
     # Determine Maven project root (nearest pom.xml upwards from test file), bounded by project_root
-    nearest_pom_root = _find_nearest_pom(full_test_file_path.parent, stop_at=project_root_path)
+    nearest_pom_root = _find_nearest_pom(
+        full_test_file_path.parent, stop_at=project_root_path
+    )
     maven_project_root = nearest_pom_root if nearest_pom_root else project_root_path
     result["maven_project_root"] = str(maven_project_root)
 
@@ -505,7 +573,9 @@ async def run_java_tests(
     enable_pl = bool(kwargs.get("enable_module_selection", True))
     log_max_bytes = int(kwargs.get("log_max_bytes", 262144))
     strict_extra_args = bool(kwargs.get("strict_extra_args", True))
-    java_release = str(kwargs.get("java_release", os.getenv("JAVA_TEST_RUNNER_JAVA_RELEASE", "17")))
+    java_release = str(
+        kwargs.get("java_release", os.getenv("JAVA_TEST_RUNNER_JAVA_RELEASE", "17"))
+    )
 
     extra_args = kwargs.get("extra_maven_args", []) or []
     extra_args = _filter_maven_args(list(extra_args), strict=strict_extra_args)
@@ -526,7 +596,9 @@ async def run_java_tests(
     # If no pom.xml found, build a temp minimal Maven project and copy sources
     temp_maven_dir_context = None
     used_root_for_build = maven_project_root
-    reports_root_for_readback = maven_project_root  # where to read surefire/failsafe and jacoco from
+    reports_root_for_readback = (
+        maven_project_root  # where to read surefire/failsafe and jacoco from
+    )
     degraded_note = ""
     module_root: Optional[Path] = None
     aggregator_root: Optional[Path] = None
@@ -536,7 +608,9 @@ async def run_java_tests(
         # Degraded fallback
         artifacts_dir = project_root_path / "atco_artifacts"
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir_obj = tempfile.TemporaryDirectory(prefix="maven_run_", dir=str(artifacts_dir))
+        temp_dir_obj = tempfile.TemporaryDirectory(
+            prefix="maven_run_", dir=str(artifacts_dir)
+        )
         temp_maven_dir = Path(temp_dir_obj.name)
         temp_maven_dir_context = temp_dir_obj
         result["temp_dirs_used"].append(str(temp_maven_dir))
@@ -546,7 +620,7 @@ async def run_java_tests(
             group_id="com.atco.temp",
             artifact_id="java-temp-test",
             version="1.0.0",
-            java_release=java_release
+            java_release=java_release,
         )
         (temp_maven_dir / "pom.xml").write_text(pom_xml_content, encoding="utf-8")
         logger.debug(f"Generated pom.xml in {temp_maven_dir}")
@@ -559,14 +633,24 @@ async def run_java_tests(
         if src_main_java.exists():
             _copytree_compat(src_main_java, temp_maven_dir / "src" / "main" / "java")
         if src_main_resources.exists():
-            _copytree_compat(src_main_resources, temp_maven_dir / "src" / "main" / "resources")
+            _copytree_compat(
+                src_main_resources, temp_maven_dir / "src" / "main" / "resources"
+            )
 
         # Copy test file into standard test location
         try:
-            try_rel = full_test_file_path.relative_to(project_root_path / "src" / "test" / "java")
+            try_rel = full_test_file_path.relative_to(
+                project_root_path / "src" / "test" / "java"
+            )
             dest_test_path = temp_maven_dir / "src" / "test" / "java" / try_rel
         except Exception:
-            dest_test_path = temp_maven_dir / "src" / "test" / "java" / Path(full_test_file_path.name)
+            dest_test_path = (
+                temp_maven_dir
+                / "src"
+                / "test"
+                / "java"
+                / Path(full_test_file_path.name)
+            )
         dest_test_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(full_test_file_path), str(dest_test_path))
         logger.info(f"Copied test file to temp Maven project: {dest_test_path}")
@@ -579,7 +663,9 @@ async def run_java_tests(
         module_root = nearest_pom_root
         # Search for a parent (aggregator) pom above module_root but not above project_root
         parent_search_start = module_root.parent
-        aggregator_root = _find_nearest_pom(parent_search_start, stop_at=project_root_path)
+        aggregator_root = _find_nearest_pom(
+            parent_search_start, stop_at=project_root_path
+        )
         if enable_pl and aggregator_root and aggregator_root != module_root:
             used_root_for_build = aggregator_root
             # Compute -pl path relative to aggregator
@@ -587,7 +673,9 @@ async def run_java_tests(
                 rel_module = module_root.relative_to(aggregator_root)
                 module_pl_arg = ["-pl", str(rel_module), "-am"]
                 reports_root_for_readback = module_root  # reports are under the module
-                logger.info(f"Detected aggregator at {aggregator_root}, module at {module_root}; using -pl {rel_module}")
+                logger.info(
+                    f"Detected aggregator at {aggregator_root}, module at {module_root}; using -pl {rel_module}"
+                )
             except Exception:
                 # Fallback: build from module root without -pl
                 used_root_for_build = module_root
@@ -602,11 +690,15 @@ async def run_java_tests(
     goals = [
         "org.jacoco:jacoco-maven-plugin:prepare-agent",
         "verify" if include_it else "test",
-        "org.jacoco:jacoco-maven-plugin:report"
+        "org.jacoco:jacoco-maven-plugin:report",
     ]
-    cmd: List[str] = [mvn_exec] + base_flags + goals + module_pl_arg + surefire_test_arg + extra_args
+    cmd: List[str] = (
+        [mvn_exec] + base_flags + goals + module_pl_arg + surefire_test_arg + extra_args
+    )
 
-    logger.info(f"[host={_hostname()}] Running Maven command: {' '.join(cmd)} in {used_root_for_build}")
+    logger.info(
+        f"[host={_hostname()}] Running Maven command: {' '.join(cmd)} in {used_root_for_build}"
+    )
     stdout_data = ""
     stderr_data = ""
 
@@ -620,9 +712,13 @@ async def run_java_tests(
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_seconds
+            )
         except asyncio.TimeoutError:
-            logger.warning(f"Maven process timed out after {timeout_seconds}s; terminating...")
+            logger.warning(
+                f"Maven process timed out after {timeout_seconds}s; terminating..."
+            )
             if proc.returncode is None:
                 try:
                     proc.terminate()
@@ -637,8 +733,8 @@ async def run_java_tests(
                         pass
             stdout_bytes = b""
             stderr_bytes = f"Process timed out after {timeout_seconds}s".encode()
-        stdout_data = (stdout_bytes or b"").decode(errors='replace')
-        stderr_data = (stderr_bytes or b"").decode(errors='replace')
+        stdout_data = (stdout_bytes or b"").decode(errors="replace")
+        stderr_data = (stderr_bytes or b"").decode(errors="replace")
 
         full_log = f"Maven STDOUT:\n{stdout_data}\n\nMaven STDERR:\n{stderr_data}"
 
@@ -651,9 +747,13 @@ async def run_java_tests(
                 try:
                     artifact_path.write_text(full_log, encoding="utf-8")
                 except Exception as e:
-                    logger.warning(f"Failed to write log artifact to {artifact_path}: {e}")
+                    logger.warning(
+                        f"Failed to write log artifact to {artifact_path}: {e}"
+                    )
             else:
-                logger.error(f"Invalid log artifact path outside project_root: {artifact_path}")
+                logger.error(
+                    f"Invalid log artifact path outside project_root: {artifact_path}"
+                )
 
         # Cap logs in result
         result["raw_log"] = _cap_text_tail(full_log, log_max_bytes)
@@ -667,10 +767,17 @@ async def run_java_tests(
             for k in test_summary:
                 test_summary[k] += sub[k]
 
-        if test_summary["tests"] > 0 and test_summary["failures"] == 0 and test_summary["errors"] == 0:
+        if (
+            test_summary["tests"] > 0
+            and test_summary["failures"] == 0
+            and test_summary["errors"] == 0
+        ):
             note = " (including integration tests)" if include_it else ""
             result["success"] = True
-            result["reason"] = f"Maven tests passed{note}. {test_summary['tests']} tests, {test_summary['skipped']} skipped." + degraded_note
+            result["reason"] = (
+                f"Maven tests passed{note}. {test_summary['tests']} tests, {test_summary['skipped']} skipped."
+                + degraded_note
+            )
             logger.info(result["reason"])
         else:
             note = " (including integration tests)" if include_it else ""
@@ -682,7 +789,9 @@ async def run_java_tests(
             logger.warning(result["reason"])
 
         # Parse JaCoCo XML report for coverage (prefer module reports when building with -pl)
-        jacoco_xml_candidate = (reports_root_for_readback / "target" / "site" / "jacoco" / "jacoco.xml")
+        jacoco_xml_candidate = (
+            reports_root_for_readback / "target" / "site" / "jacoco" / "jacoco.xml"
+        )
         if reports_root_for_readback == maven_project_root:
             jacoco_xml_candidate = jacoco_xml_report_path_default
         coverage_percent = _parse_jacoco_xml(jacoco_xml_candidate)
@@ -694,13 +803,21 @@ async def run_java_tests(
         try:
             full_coverage_report_path.parent.mkdir(parents=True, exist_ok=True)
             if jacoco_xml_candidate.exists():
-                shutil.copyfile(str(jacoco_xml_candidate), str(full_coverage_report_path))
-                logger.info(f"JaCoCo coverage XML report saved to {full_coverage_report_path}")
+                shutil.copyfile(
+                    str(jacoco_xml_candidate), str(full_coverage_report_path)
+                )
+                logger.info(
+                    f"JaCoCo coverage XML report saved to {full_coverage_report_path}"
+                )
             else:
-                logger.warning(f"JaCoCo XML report not found at {jacoco_xml_candidate}.")
+                logger.warning(
+                    f"JaCoCo XML report not found at {jacoco_xml_candidate}."
+                )
                 result["reason"] += " JaCoCo XML report not found."
         except Exception as e:
-            logger.warning(f"Failed to write coverage XML to {full_coverage_report_path}: {e}")
+            logger.warning(
+                f"Failed to write coverage XML to {full_coverage_report_path}: {e}"
+            )
             result["reason"] += f" Failed to write coverage XML: {e}"
 
     except asyncio.CancelledError:
@@ -712,7 +829,9 @@ async def run_java_tests(
                 pass
         raise
     except FileNotFoundError:
-        result["reason"] = "Maven (mvn/mvnw) not found. Please ensure Java and Maven are installed."
+        result["reason"] = (
+            "Maven (mvn/mvnw) not found. Please ensure Java and Maven are installed."
+        )
         logger.error(result["reason"])
     except Exception as e:
         result["reason"] = f"An unexpected error occurred during Maven execution: {e}"
@@ -727,7 +846,9 @@ async def run_java_tests(
 
     return result
 
+
 # ---------------- Auto-registration ----------------
+
 
 def register_plugin_entrypoints(register_func: Callable):
     """
@@ -737,11 +858,14 @@ def register_plugin_entrypoints(register_func: Callable):
     register_func(
         language_or_framework="java",
         runner_info={
-            "command": ["mvn", "test"],  # Placeholder; actual execution uses run_java_tests
+            "command": [
+                "mvn",
+                "test",
+            ],  # Placeholder; actual execution uses run_java_tests
             "extensions": [".java"],
             "test_discovery": ["test", "IT"],
-            "runner_function": run_java_tests
-        }
+            "runner_function": run_java_tests,
+        },
     )
     register_func(
         language_or_framework="java_maven",
@@ -749,12 +873,16 @@ def register_plugin_entrypoints(register_func: Callable):
             "command": ["mvn", "test"],
             "extensions": [".java"],
             "test_discovery": ["test", "IT"],
-            "runner_function": run_java_tests
-        }
+            "runner_function": run_java_tests,
+        },
     )
 
+
 if __name__ == "__main__":
-    async def _mock_register_test_runner(lang_or_framework: str, runner_info: Dict[str, Any]):
+
+    async def _mock_register_test_runner(
+        lang_or_framework: str, runner_info: Dict[str, Any]
+    ):
         print(f"Mocked registration for {lang_or_framework}: {runner_info}")
 
     register_plugin_entrypoints(_mock_register_test_runner)
@@ -767,17 +895,21 @@ if __name__ == "__main__":
             # Create a dummy Java source file
             dummy_src = temp_root / "src" / "main" / "java" / "com" / "example" / "app"
             dummy_src.mkdir(parents=True, exist_ok=True)
-            (dummy_src / "Calculator.java").write_text("""
+            (dummy_src / "Calculator.java").write_text(
+                """
 package com.example.app;
 public class Calculator {
     public int add(int a, int b) { return a + b; }
 }
-""", encoding="utf-8")
+""",
+                encoding="utf-8",
+            )
 
             # Create a dummy Java test file
             dummy_test = temp_root / "src" / "test" / "java" / "com" / "example" / "app"
             dummy_test.mkdir(parents=True, exist_ok=True)
-            (dummy_test / "CalculatorTest.java").write_text("""
+            (dummy_test / "CalculatorTest.java").write_text(
+                """
 package com.example.app;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -788,14 +920,20 @@ public class CalculatorTest {
         assertEquals(3, calculator.add(1, 2), "1 + 2 should equal 3");
     }
 }
-""", encoding="utf-8")
+""",
+                encoding="utf-8",
+            )
 
             # Coverage output location
-            coverage_rel = Path("atco_artifacts") / "coverage_reports" / "java_coverage_output.xml"
+            coverage_rel = (
+                Path("atco_artifacts") / "coverage_reports" / "java_coverage_output.xml"
+            )
             (temp_root / coverage_rel).parent.mkdir(parents=True, exist_ok=True)
 
             result = await run_java_tests(
-                test_file_path=str(dummy_test / "CalculatorTest.java").replace(str(temp_root) + os.sep, ""),
+                test_file_path=str(dummy_test / "CalculatorTest.java").replace(
+                    str(temp_root) + os.sep, ""
+                ),
                 target_identifier="com.example.app.Calculator",
                 project_root=str(temp_root),
                 temp_coverage_report_path_relative=str(coverage_rel),
@@ -804,7 +942,9 @@ public class CalculatorTest {
                 quiet=False,
                 include_integration_tests=True,
                 timeout_seconds=600,
-                log_artifact_path_relative=str(Path("atco_artifacts") / "logs" / "maven_run.log"),
+                log_artifact_path_relative=str(
+                    Path("atco_artifacts") / "logs" / "maven_run.log"
+                ),
             )
 
             print(f"\nTest Result: {'PASS' if result['success'] else 'FAIL'}")

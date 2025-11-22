@@ -12,8 +12,6 @@ from runner.llm_plugin_manager import (
     PLUGIN_LOADS,
     PLUGIN_ERRORS,
     LLM_PROVIDER_HEALTH,
-    PluginIntegrityError,
-    PluginValidationError,
     settings,
 )
 
@@ -54,7 +52,9 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
                 load_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await load_task
-                raise AssertionError("LLMPluginManager initial load timed out after 5 seconds")
+                raise AssertionError(
+                    "LLMPluginManager initial load timed out after 5 seconds"
+                )
 
     async def asyncTearDown(self):
         # Clean up manager + temp dir with timeout protection
@@ -62,9 +62,12 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
             await asyncio.wait_for(self.manager.close(), timeout=3.0)
         except asyncio.TimeoutError:
             # If close times out, force cancel any remaining tasks
-            if hasattr(self.manager, '_load_task') and self.manager._load_task:
+            if hasattr(self.manager, "_load_task") and self.manager._load_task:
                 self.manager._load_task.cancel()
-            if hasattr(self.manager, '_watcher_consumer_task') and self.manager._watcher_consumer_task:
+            if (
+                hasattr(self.manager, "_watcher_consumer_task")
+                and self.manager._watcher_consumer_task
+            ):
                 self.manager._watcher_consumer_task.cancel()
         except Exception as e:
             # Log but don't fail the test on cleanup errors
@@ -103,11 +106,7 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
         Write a plugin missing get_provider() to trigger PluginValidationError.
         """
         path = self.temp_plugin_dir / f"{name}_provider.py"
-        path.write_text(
-            "import asyncio\n"
-            "async def dummy():\n"
-            "    return 'x'\n"
-        )
+        path.write_text("import asyncio\n" "async def dummy():\n" "    return 'x'\n")
         return path
 
     # ------------------------------------------------------------------ #
@@ -214,7 +213,9 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
         """
         Direct registry manipulation (for dynamic providers) works as expected.
         """
-        provider = SimpleNamespace(name="dynamic", call=asyncio.sleep, health_check=asyncio.sleep)
+        provider = SimpleNamespace(
+            name="dynamic", call=asyncio.sleep, health_check=asyncio.sleep
+        )
         self.manager.registry["dynamic"] = provider
 
         self.assertIn("dynamic", self.manager.list_providers())

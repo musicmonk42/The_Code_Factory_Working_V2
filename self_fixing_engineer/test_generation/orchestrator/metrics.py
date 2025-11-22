@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import Any, Callable, Dict, Optional, List
 import os
 
@@ -10,6 +9,7 @@ METRICS_AVAILABLE = False
 try:  # import may succeed in prod, fail in minimal test envs
     import prometheus_client  # type: ignore
     from prometheus_client import Counter, Histogram, Gauge  # type: ignore
+
     METRICS_AVAILABLE = True
 except ImportError:
     prometheus_client = None  # type: ignore
@@ -21,36 +21,65 @@ METRICS_ENABLED = bool(int(os.getenv("ATCO_ENABLE_METRICS", "1")))
 # Throttle “metrics disabled” warning to once per process
 _WARNED_DISABLED = False
 
+
 class _DummyTimerCtx:
     """A dummy async context manager for mocking `time()` on metrics."""
-    def __enter__(self): return self
-    def __exit__(self, exc_type, exc, tb): return False
-    async def __aenter__(self): return self
-    async def __aexit__(self, exc_type, exc, tb): return False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
 
 class _NoopTimer:
     """A no-op context manager for the .time() method when metrics are disabled."""
-    def __enter__(self): return self
-    def __exit__(self, *args): return False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
 
 class _NoopMetric:
     """A no-op metric that provides the same API as a real metric."""
-    def labels(self, **_): return self
-    def inc(self, *_): pass
-    def observe(self, *_): pass
-    def time(self): return _NoopTimer()
+
+    def labels(self, **_):
+        return self
+
+    def inc(self, *_):
+        pass
+
+    def observe(self, *_):
+        pass
+
+    def time(self):
+        return _NoopTimer()
+
 
 class _MetricProxy:
     """
     A proxy for Prometheus metrics that supports lazy instantiation and runtime switching.
-    
+
     This class serves as a layer of indirection, allowing the actual Prometheus
     metric object to be created only when it's first used. This enables tests
     to monkeypatch the underlying `prometheus_client` classes before any metric
     is instantiated. It also checks the `METRICS_AVAILABLE` flag on every call,
     ensuring that metrics are properly disabled when the environment requires it.
     """
-    def __init__(self, factory: Optional[Callable[[], Any]], label_names: Optional[List[str]] = None):
+
+    def __init__(
+        self,
+        factory: Optional[Callable[[], Any]],
+        label_names: Optional[List[str]] = None,
+    ):
         self._factory = factory
         self._metric: Optional[Any] = None
         self._labels: Optional[Dict[str, Any]] = None
@@ -65,7 +94,9 @@ class _MetricProxy:
         Also detect state flips to avoid leaking a cached metric across tests.
         """
         global _WARNED_DISABLED
-        current_state = bool(METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None)
+        current_state = bool(
+            METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None
+        )
 
         # Invalidate cached metric if the state flipped since last use
         if self._last_state is not None and self._last_state != current_state:
@@ -80,7 +111,9 @@ class _MetricProxy:
             try:
                 self._metric = self._factory()
             except Exception as e:
-                logger.warning("Failed to instantiate metric from factory: %s. Using no-op.", e)
+                logger.warning(
+                    "Failed to instantiate metric from factory: %s. Using no-op.", e
+                )
                 self._metric = self._no_op_metric
         else:
             if not _WARNED_DISABLED:
@@ -146,7 +179,7 @@ class _MetricProxy:
         self._ensure()
         if self._metric is self._no_op_metric:
             return _DummyTimerCtx()  # Use the async-compatible dummy timer
-        
+
         try:
             if self._labels:
                 child = self._metric.labels(**self._labels)
@@ -168,6 +201,7 @@ def _histogram_factory():
         ["language"],
     )
 
+
 def _counter_success_factory():
     return prometheus_client.Counter(
         "atco_integration_success_total",
@@ -175,12 +209,14 @@ def _counter_success_factory():
         ["language"],
     )
 
+
 def _counter_failure_factory():
     return prometheus_client.Counter(
         "atco_integration_failure_total",
         "Failed test integrations",
         ["language"],
     )
+
 
 # New metrics for tracking agent state
 def _gauge_state_factory():
@@ -190,12 +226,14 @@ def _gauge_state_factory():
         ["state"],
     )
 
+
 def _counter_repair_factory():
     return prometheus_client.Counter(
         "atco_repair_attempts_total",
         "Total repair attempts",
         ["language"],
     )
+
 
 generation_duration = _MetricProxy(_histogram_factory, ["language"])
 integration_success = _MetricProxy(_counter_success_factory, ["language"])

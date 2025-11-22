@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # --- Entry points for OmniCore ---
 def simulation_run_entrypoint(*args, **kwargs):
     """
@@ -16,7 +17,9 @@ def simulation_run_entrypoint(*args, **kwargs):
     Calls the core.main() function with async support.
     """
     from .core import main as simulation_main
+
     return asyncio.run(simulation_main(*args, **kwargs))
+
 
 def simulation_health_check():
     """
@@ -25,6 +28,7 @@ def simulation_health_check():
     """
     try:
         from .registry import get_registry
+
         registry = get_registry()
         # Handle case where registry might be None or not a dict
         plugin_count = 0
@@ -33,24 +37,23 @@ def simulation_health_check():
                 plugin_count = len(registry)
             else:
                 logger.warning(f"Registry returned unexpected type: {type(registry)}")
-        
+
         return {
             "status": "healthy",
             "module": "simulation",
-            "plugins_loaded": plugin_count
+            "plugins_loaded": plugin_count,
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "module": "simulation",
-            "error": str(e)
-        }
+        return {"status": "unhealthy", "module": "simulation", "error": str(e)}
+
 
 def simulation_get_registry():
     """Return the SIM_REGISTRY or other registry dict."""
     from .registry import get_registry
+
     return get_registry()
+
 
 # --- Register with OmniCore if running inside it ---
 def _register_with_omnicore():
@@ -60,13 +63,14 @@ def _register_with_omnicore():
     """
     try:
         from omnicore_engine.engines import register_engine
+
         register_engine(
             "simulation",
             entrypoints={
                 "run": simulation_run_entrypoint,
                 "health_check": simulation_health_check,
                 "get_registry": simulation_get_registry,
-            }
+            },
         )
         logger.info("Simulation engine registered with OmniCore successfully")
     except ImportError:
@@ -74,5 +78,6 @@ def _register_with_omnicore():
         logger.debug("OmniCore not available, skipping simulation engine registration")
     except Exception as e:
         logger.warning(f"Failed to register simulation engine with OmniCore: {e}")
+
 
 _register_with_omnicore()
