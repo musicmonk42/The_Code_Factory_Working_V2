@@ -9,7 +9,8 @@ import tempfile
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-import xml.etree.ElementTree as ET
+# Security fix: Use defusedxml to prevent XXE attacks
+import defusedxml.ElementTree as ET
 
 # Import the plugin from the correct directory
 # Try multiple possible locations for the plugin
