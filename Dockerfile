@@ -61,7 +61,8 @@ RUN if [ -f requirements.txt ]; then \
          pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
-    fi
+    fi && \
+    pip cache purge
 
 # Copy the rest of the application
 COPY . /app
