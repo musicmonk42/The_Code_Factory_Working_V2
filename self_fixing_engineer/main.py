@@ -401,6 +401,156 @@ async def _test_generation_health_check() -> dict:
 
 
 # -------------------------
+# Arbiter Module (optional)
+# -------------------------
+
+_arbiter_instance = None  # Global instance, initialized during startup
+
+def _init_arbiter():
+    """Initialize the Arbiter AI core engine for the SFE platform."""
+    try:
+        from arbiter.arbiter import Arbiter
+        from arbiter.config import ArbiterConfig
+        from sqlalchemy.ext.asyncio import create_async_engine
+        
+        # Get configuration
+        try:
+            config = ArbiterConfig.initialize()
+        except Exception:
+            # Fallback to basic config
+            config = ArbiterConfig()
+        
+        # Create async database engine
+        db_url = config.DATABASE_URL or os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./sfe_arbiter.db")
+        # Convert to async URL if needed
+        if db_url.startswith("sqlite:///"):
+            db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+        elif db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+        
+        db_engine = create_async_engine(db_url, echo=False)
+        
+        # Create engines dict with simulation and test_generation
+        engines = {}
+        if _simulation_module:
+            engines["simulation"] = _simulation_module
+        if _test_generation_orchestrator:
+            engines["test_generation"] = _test_generation_orchestrator
+        
+        # Create Arbiter instance
+        arbiter = Arbiter(
+            name=os.getenv("ARBITER_NAME", "main_arbiter"),
+            db_engine=db_engine,
+            settings=config,
+            engines=engines,
+            world_size=int(os.getenv("ARBITER_WORLD_SIZE", "10")),
+            port=int(os.getenv("ARBITER_PORT", "8001")),
+        )
+        
+        logger.info("Arbiter AI engine initialized successfully")
+        return arbiter
+    except Exception as e:
+        logger.warning("Failed to initialize Arbiter AI engine: %s. Arbiter features will be unavailable.", e)
+        return None
+
+
+async def _initialize_arbiter():
+    """Async initialization of Arbiter module."""
+    global _arbiter_instance
+    if _arbiter_instance is None:
+        _arbiter_instance = _init_arbiter()
+    
+    if _arbiter_instance:
+        try:
+            # Arbiter doesn't have explicit async_init, but state_manager might need setup
+            if hasattr(_arbiter_instance, "state_manager"):
+                # State manager initialization happens in __init__
+                pass
+            logger.info("Arbiter AI engine ready")
+        except Exception as e:
+            logger.error("Failed to complete Arbiter initialization: %s", e)
+
+
+async def _shutdown_arbiter():
+    """Gracefully shutdown Arbiter AI engine."""
+    global _arbiter_instance
+    if _arbiter_instance:
+        try:
+            # Close database connections
+            if hasattr(_arbiter_instance, "db_client") and _arbiter_instance.db_client:
+                await _arbiter_instance.db_client.close()
+            _arbiter_instance = None
+            logger.info("Arbiter AI engine shutdown complete")
+        except Exception as e:
+            logger.warning("Error during Arbiter shutdown: %s", e)
+
+
+async def _arbiter_health_check() -> dict:
+    """Check Arbiter AI engine health."""
+    if _arbiter_instance is None:
+        return {"status": "not_initialized", "available": False}
+    
+    try:
+        components_status = {}
+        
+        # Check core components
+        try:
+            if hasattr(_arbiter_instance, "db_client"):
+                db = _arbiter_instance.db_client
+                components_status["database"] = "initialized" if db is not None else "missing"
+            else:
+                components_status["database"] = "missing"
+        except Exception as e:
+            components_status["database"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_arbiter_instance, "state_manager"):
+                sm = _arbiter_instance.state_manager
+                components_status["state_manager"] = "initialized" if sm is not None else "missing"
+            else:
+                components_status["state_manager"] = "missing"
+        except Exception as e:
+            components_status["state_manager"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_arbiter_instance, "feedback"):
+                fb = _arbiter_instance.feedback
+                components_status["feedback"] = "initialized" if fb is not None else "missing"
+            else:
+                components_status["feedback"] = "missing"
+        except Exception as e:
+            components_status["feedback"] = f"error: {str(e)}"
+        
+        try:
+            # Check if engines are connected
+            if hasattr(_arbiter_instance, "engines") and _arbiter_instance.engines:
+                components_status["engines"] = f"{len(_arbiter_instance.engines)} engines"
+            else:
+                components_status["engines"] = "none"
+        except Exception as e:
+            components_status["engines"] = f"error: {str(e)}"
+        
+        # Determine overall status
+        initialized_count = sum(1 for v in components_status.values() if v == "initialized" or "engines" in str(v))
+        
+        if initialized_count >= 2:
+            status = "ok"
+        elif initialized_count > 0:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+        
+        return {
+            "status": status,
+            "components": components_status,
+            "available": True
+        }
+    except Exception as e:
+        logger.error("Arbiter health check failed: %s", e)
+        return {"status": "error", "error": str(e), "available": False}
+
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -474,6 +624,9 @@ async def startup_validation():
             
             # Initialize test generation orchestrator
             await _initialize_test_generation()
+            
+            # Initialize Arbiter AI engine (connects simulation & test_generation)
+            await _initialize_arbiter()
             
             logger.info("Startup validation OK (env=%s)", env)
         except Exception as e:
@@ -622,7 +775,15 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
             tg_status == "not_initialized" and testgen_health.get("available") is False
         )
         
-        overall_status = "ok" if (redis_ok and simulation_ok and testgen_ok) else "degraded"
+        # Check Arbiter AI engine health
+        # Note: Arbiter is optional, so not_initialized is acceptable
+        arbiter_health = await _arbiter_health_check()
+        arb_status = arbiter_health.get("status")
+        arbiter_ok = arb_status in ("ok", "healthy", "degraded") or (
+            arb_status == "not_initialized" and arbiter_health.get("available") is False
+        )
+        
+        overall_status = "ok" if (redis_ok and simulation_ok and testgen_ok and arbiter_ok) else "degraded"
         
         return {
             "status": overall_status,
@@ -631,7 +792,9 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
                 "simulation": simulation_ok,
                 "simulation_details": simulation_health,
                 "test_generation": testgen_ok,
-                "test_generation_details": testgen_health
+                "test_generation_details": testgen_health,
+                "arbiter": arbiter_ok,
+                "arbiter_details": arbiter_health
             },
             "version": VERSION,
         }
@@ -780,6 +943,10 @@ async def main():
         finally:
             sys.exit(1)
     finally:
+        try:
+            await _shutdown_arbiter()
+        except Exception:
+            pass
         try:
             await _shutdown_test_generation()
         except Exception:
