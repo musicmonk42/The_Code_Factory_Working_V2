@@ -10,15 +10,20 @@ The repository has `.pem`, `.key`, and other certificate files in `.gitignore` t
 
 ## Generate Audit Signing Private Key
 
-To generate a new RSA private key for audit signing:
+To generate a new private key for audit signing:
 
 ```bash
-# Generate a 2048-bit RSA private key
-openssl genrsa -out private.pem 2048
+# Recommended: Generate an Ed25519 key (modern, secure, compact)
+openssl genpkey -algorithm ED25519 -out private.pem
+
+# Alternative: Generate a 4096-bit RSA private key (stronger RSA)
+# openssl genrsa -out private.pem 4096
 
 # Set proper permissions (Unix/Linux/macOS)
 chmod 600 private.pem
 ```
+
+**Security Note:** Ed25519 is recommended for new deployments as it provides better security with smaller key sizes compared to RSA. For RSA keys, use at least 3072-bit (preferably 4096-bit) for adequate security.
 
 ## Configuration
 
@@ -59,5 +64,5 @@ The private key is used in:
 - `self_fixing_engineer/arbiter/meta_learning_orchestrator/audit_utils.py`
 
 For more information about security best practices, see:
-- [SECURITY_DEPLOYMENT_GUIDE.md](../SECURITY_DEPLOYMENT_GUIDE.md)
-- [SECURITY_AUDIT_REPORT.md](../SECURITY_AUDIT_REPORT.md)
+- [SECURITY_DEPLOYMENT_GUIDE.md](./SECURITY_DEPLOYMENT_GUIDE.md)
+- [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md)
