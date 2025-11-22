@@ -99,7 +99,7 @@ cycler==0.12.1
 cytoolz==1.0.1
 dask==2025.9.0
 dataclasses-json==0.6.7
-deap==1.4.3
+# deap==1.4.3  # LGPL license - removed due to license restrictions. Optional dependency for genetic algorithms (GA backend).
 detect-secrets==1.5.0
 diffprivlib==0.6.6
 dill==0.3.9
@@ -310,7 +310,7 @@ propcache==0.3.2
 proto-plus==1.26.1
 protobuf==5.26.1
 psutil==7.0.0
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.10  # LGPL with linking exception - for dev/testing only
 ptyprocess==0.7.0
 py-cpuinfo==9.0.0
 pyOpenSSL==25.1.0
@@ -342,7 +342,7 @@ python-dotenv==1.0.0
 python-engineio==4.12.2
 python-jose==3.5.0
 python-json-logger==3.3.0
-python-magic-bin==0.4.14
+python-magic==0.4.27
 python-multipart==0.0.20
 python-socketio==5.13.0
 pytz==2025.2
