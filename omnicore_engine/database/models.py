@@ -35,6 +35,10 @@ class AgentState(ArbiterAgentState):
     DO NOT set __tablename__.
     DO NOT redeclare id, name, x, y, energy, world_size, agent_type, etc.
     Only add NEW columns that do NOT exist in the parent.
+    
+    Note: The parent ArbiterAgentState uses 'agent_type' as a regular column.
+    For proper polymorphic inheritance, GeneratorAgentState and SFEAgentState
+    should set agent_type appropriately in their values.
     """
     # --- NO __tablename__ ---
     # --- NO id column ---

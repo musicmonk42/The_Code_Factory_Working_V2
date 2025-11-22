@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSessio
 from sqlalchemy import text, func, Column, Integer, String, JSON, DateTime, select, insert, delete
 from sqlalchemy.orm import sessionmaker
 from typing import Dict, Optional, Any, List, Coroutine, Set, TypeVar, Callable, Union
+from pydantic import SecretStr
 from circuitbreaker import circuit
 from omnicore_engine.retry_compat import retry
 import hashlib
@@ -36,37 +37,31 @@ logger = logging.getLogger(__name__)
 # Local imports from the refactored structure
 from .models import Base, AgentState, ExplainAuditRecord, GeneratorAgentState, SFEAgentState
 from .metrics_helpers import get_or_create_counter_local, get_or_create_gauge_local, get_or_create_histogram_local
-# --- FIX 1: Removed incorrect import ---
-# from .encryption import FernetEncryption # NEW IMPORT
+from omnicore_engine.message_bus.encryption import FernetEncryption
 
 # Corrected imports using the new arbiter package and centralized settings
 from arbiter.config import ArbiterConfig
 
 # --- optional feedback manager dependency -----------------------------------
 try:
-    from omnicore_engine.feedback_manager import FeedbackManager, FeedbackType  # noqa: F401
-except Exception:
-    # Provide a no-op shim so imports don't fail in environments/tests that
-    # don’t ship the feedback manager module.
-    class FeedbackType:
-        BUG_REPORT = "BUG_REPORT"
-        INFO = "INFO"
-        WARNING = "WARNING"
-        ERROR = "ERROR"
+    from omnicore_engine.feedback_manager import FeedbackManager, FeedbackType
+except ImportError:
+    try:
+        from arbiter.feedback import FeedbackManager, FeedbackType
+    except ImportError:
+        # Provide a no-op shim so imports don't fail in environments/tests that
+        # don't ship the feedback manager module.
+        class FeedbackType:
+            BUG_REPORT = "BUG_REPORT"
+            INFO = "INFO"
+            WARNING = "WARNING"
+            ERROR = "ERROR"
 
-    class FeedbackManager:
-        def __init__(self, *args, **kwargs):
-            pass
-        async def record_feedback(self, **kwargs):
-            return None
-# Local imports from the refactored structure
-from .models import Base, AgentState, ExplainAuditRecord, GeneratorAgentState, SFEAgentState
-from .metrics_helpers import get_or_create_counter_local, get_or_create_gauge_local, get_or_create_histogram_local
-from omnicore_engine.message_bus.encryption import FernetEncryption # NEW IMPORT
-
-# Corrected imports using the new arbiter package and centralized settings
-from arbiter.config import ArbiterConfig
-from arbiter.feedback import FeedbackManager, FeedbackType
+        class FeedbackManager:
+            def __init__(self, *args, **kwargs):
+                pass
+            async def record_feedback(self, **kwargs):
+                return None
 
 settings = ArbiterConfig()
 
@@ -150,6 +145,16 @@ def validate_user_id(user_id: str) -> str:
     return user_id
 
 class Database:
+    """
+    Database class for managing agent states, simulations, and audit records.
+    
+    Note on agent_id handling:
+    - AgentState.id in the models is defined as Integer (inherited from ArbiterAgentState)
+    - Throughout this class, agent_id parameters are treated as strings and hashed using SHA256
+    - The hashed value is stored in AgentState.name field (which is a String)
+    - This design provides privacy by not storing raw agent IDs directly
+    - When querying agents, the agent_id string is first hashed to match the stored name
+    """
     def __init__(self, db_path: str, system_audit_merkle_tree: Optional[Any] = None):
         if not db_path or not isinstance(db_path, str):
             raise ValueError("db_path must be a non-empty string")
@@ -282,9 +287,6 @@ class Database:
             sys.exit(1)
 
         self._serializers: Dict[type, Callable[[Any], Any]] = {}
-
-    def _get_safe_serialize_func(self):
-        return safe_serialize
 
     async def initialize(self) -> None:
         try:
@@ -1023,7 +1025,25 @@ class Database:
                 
                 result = await session.execute(query)
                 records = result.scalars().all()
-                return [record.model_dump() for record in records]
+                # Serialize SQLAlchemy objects to dictionaries
+                return [{
+                    "uuid": r.uuid,
+                    "kind": r.kind,
+                    "name": r.name,
+                    "detail": r.detail,
+                    "ts": r.ts,
+                    "hash": r.hash,
+                    "sim_id": r.sim_id,
+                    "error": r.error,
+                    "agent_id": r.agent_id,
+                    "context": r.context,
+                    "custom_attributes": r.custom_attributes,
+                    "rationale": r.rationale,
+                    "simulation_outcomes": r.simulation_outcomes,
+                    "tenant_id": r.tenant_id,
+                    "explanation_id": r.explanation_id,
+                    "root_merkle_hash": r.root_merkle_hash
+                } for r in records]
         except Exception as e:
             AUDIT_DB_ERRORS.labels(operation='query_audit_records').observe(time.time() - start_time)
             await self.feedback_manager.record_feedback(
@@ -1184,11 +1204,24 @@ class Database:
                 raise
 
     async def rotate_keys(self, new_key: bytes):
-        """Rotate by prepending new key and re-encrypting existing data."""
+        """
+        Rotate encryption keys by prepending new key and re-encrypting existing data.
+        
+        Note: This method temporarily switches from EnterpriseSecurityUtils to FernetEncryption
+        for key rotation operations. Both provide compatible encrypt/decrypt interfaces.
+        Thread-safety: This operation should be performed during maintenance windows or with
+        application-level coordination to prevent concurrent encryption operations.
+        """
+        # TODO: Add proper locking mechanism for production use
+        logger.warning("Key rotation modifies global settings without locking. Ensure no concurrent operations.")
+        
         old_encrypter = self.encrypter
         all_keys = [new_key.decode('utf-8')] + settings.FERNET_KEYS.get_secret_value().split(',')
+        
+        # Update settings (Note: This modifies global state without proper locking)
         settings.FERNET_KEYS = SecretStr(','.join(all_keys))
 
+        # Temporarily switch to FernetEncryption for multi-key support during rotation
         self.encrypter = FernetEncryption([k.encode('utf-8') for k in all_keys])
         
         logger.info("Starting key rotation and re-encryption of existing data...")
@@ -1244,21 +1277,24 @@ class Database:
         
         logger.info("Key rotation complete.")
 
-async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
-    async with self.AsyncSessionLocal() as session:
-        stmt = insert(GeneratorAgentState).values(
-            id=agent_id, name="generator", x=0, y=0, energy=100, world_size=100, agent_type="generator",
-            generated_code=data.get("code"), test_results=data.get("tests"),
-            deployment_config=data.get("deployment"), docs=data.get("docs")
-        )
-        await session.execute(stmt)
-        await session.commit()
-async def save_sfe_state(self, agent_id: str, data: Dict[str, Any]):
-    async with self.AsyncSessionLocal() as session:
-        stmt = insert(SFEAgentState).values(
-            id=agent_id, name="sfe", x=0, y=0, energy=100, world_size=100, agent_type="sfe",
-            fixed_code=data.get("fixed_code"), analysis_report=data.get("analysis"),
-            trust_score=data.get("trust_score")
-        )
-        await session.execute(stmt)
-        await session.commit()
+    async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
+        """Save state for a generator agent."""
+        async with self.AsyncSessionLocal() as session:
+            stmt = insert(GeneratorAgentState).values(
+                id=agent_id, name="generator", x=0, y=0, energy=100, world_size=100, agent_type="generator",
+                generated_code=data.get("code"), test_results=data.get("tests"),
+                deployment_config=data.get("deployment"), docs=data.get("docs")
+            )
+            await session.execute(stmt)
+            await session.commit()
+    
+    async def save_sfe_state(self, agent_id: str, data: Dict[str, Any]):
+        """Save state for a self-fixing engineer agent."""
+        async with self.AsyncSessionLocal() as session:
+            stmt = insert(SFEAgentState).values(
+                id=agent_id, name="sfe", x=0, y=0, energy=100, world_size=100, agent_type="sfe",
+                fixed_code=data.get("fixed_code"), analysis_report=data.get("analysis"),
+                trust_score=data.get("trust_score")
+            )
+            await session.execute(stmt)
+            await session.commit()
