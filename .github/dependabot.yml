@@ -1,0 +1,159 @@
+# Dependabot configuration for automated dependency updates
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Python dependencies - root
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    allow:
+      - dependency-type: "all"
+    ignore:
+      # Ignore major version updates for stability
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      security-updates:
+        patterns:
+          - "cryptography"
+          - "pyjwt"
+          - "requests"
+          - "urllib3"
+        update-types:
+          - "security"
+      
+      testing-dependencies:
+        patterns:
+          - "pytest*"
+          - "hypothesis"
+          - "mock"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      langchain-ecosystem:
+        patterns:
+          - "langchain*"
+          - "openai"
+          - "anthropic"
+        update-types:
+          - "minor"
+          - "patch"
+  
+  # Python dependencies - Generator
+  - package-ecosystem: "pip"
+    directory: "/generator"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "python"
+      - "generator"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  
+  # Python dependencies - OmniCore Engine
+  - package-ecosystem: "pip"
+    directory: "/omnicore_engine"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "python"
+      - "omnicore"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  
+  # Python dependencies - Self-Fixing Engineer
+  - package-ecosystem: "pip"
+    directory: "/self_fixing_engineer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "python"
+      - "sfe"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Pin to LTS versions for base images
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+  
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "02:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "musicmonk42"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

@@ -1,0 +1,284 @@
+# Alertmanager Configuration for Code Factory Platform
+# This configuration defines how alerts are routed and delivered
+
+global:
+  # Default time to wait before sending a notification again if it has already
+  # been sent successfully for an alert (usually ~3h by default)
+  resolve_timeout: 5m
+  
+  # SMTP configuration for email alerts
+  smtp_smarthost: '${SMTP_SERVER}:${SMTP_PORT}'
+  smtp_from: '${SMTP_FROM_EMAIL}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+# Templates for custom notification formats
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree for alerts
+route:
+  # Default receiver for all alerts
+  receiver: 'default-receiver'
+  
+  # How long to wait before sending a group of alerts
+  group_wait: 30s
+  
+  # How long to wait before sending an alert that has been added to a group
+  group_interval: 5m
+  
+  # How long to wait before re-sending a given alert
+  repeat_interval: 3h
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'service', 'severity']
+  
+  # Child routes for specific alert routing
+  routes:
+    # Critical alerts go to PagerDuty + Slack + Email
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: true  # Also send to default receiver
+      
+    # Warning alerts go to Slack + Email
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 2h
+      
+    # Info alerts go to Slack only
+    - match:
+        severity: info
+      receiver: 'info-alerts'
+      group_wait: 5m
+      repeat_interval: 12h
+      
+    # Security alerts always go to security team
+    - match:
+        component: security
+      receiver: 'security-team'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+      
+    # Database alerts go to database team
+    - match:
+        component: database
+      receiver: 'database-team'
+      
+    # Application alerts during business hours
+    - match:
+        component: application
+      receiver: 'dev-team'
+      mute_time_intervals:
+        - weekends
+        - nights
+        
+    # Backup alerts
+    - match:
+        component: backup
+      receiver: 'ops-team'
+      repeat_interval: 6h
+
+# Inhibition rules to prevent notification storms
+inhibit_rules:
+  # Inhibit warning alerts if critical alert is firing for same service
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['alertname', 'service', 'instance']
+    
+  # Inhibit all alerts if service is down
+  - source_match:
+      alertname: ServiceDown
+    target_match_re:
+      alertname: '.*'
+    equal: ['service', 'instance']
+    
+  # Inhibit individual component alerts if the whole service is down
+  - source_match:
+      alertname: ServiceDown
+    target_match_re:
+      alertname: 'High.*|Slow.*'
+    equal: ['service']
+
+# Mute time intervals (when not to send certain alerts)
+mute_time_intervals:
+  - name: nights
+    time_intervals:
+      - times:
+          - start_time: '22:00'
+            end_time: '08:00'
+        weekdays: ['monday:friday']
+        
+  - name: weekends
+    time_intervals:
+      - weekdays: ['saturday', 'sunday']
+        
+  - name: maintenance-window
+    time_intervals:
+      - times:
+          - start_time: '02:00'
+            end_time: '04:00'
+        weekdays: ['sunday']
+
+# Receivers define how to send notifications
+receivers:
+  # Default receiver (catch-all)
+  - name: 'default-receiver'
+    email_configs:
+      - to: '${ALERT_EMAIL}'
+        headers:
+          Subject: '[Code Factory] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        
+  # Critical alerts - multiple channels
+  - name: 'critical-alerts'
+    # PagerDuty for on-call escalation
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          num_firing: '{{ .Alerts.Firing | len }}'
+          num_resolved: '{{ .Alerts.Resolved | len }}'
+        client: 'Code Factory Alertmanager'
+        client_url: '{{ template "pagerduty.default.clientURL" . }}'
+        
+    # Slack for team visibility
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#code-factory-critical'
+        username: 'Alertmanager'
+        icon_emoji: ':fire:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: 'danger'
+        actions:
+          - type: button
+            text: 'Runbook'
+            url: '{{ (index .Alerts 0).Annotations.runbook_url }}'
+          - type: button
+            text: 'Query'
+            url: '{{ (index .Alerts 0).GeneratorURL }}'
+          - type: button
+            text: 'Silence'
+            url: '{{ template "__alertmanagerURL" . }}/#/silences/new?filter=%7B'
+        fields:
+          - title: 'Environment'
+            value: '{{ .CommonLabels.environment }}'
+            short: true
+          - title: 'Severity'
+            value: '{{ .CommonLabels.severity }}'
+            short: true
+            
+    # Email for record keeping
+    email_configs:
+      - to: '${ALERT_EMAIL}'
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        send_resolved: true
+        
+  # Warning alerts
+  - name: 'warning-alerts'
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#code-factory-alerts'
+        username: 'Alertmanager'
+        icon_emoji: ':warning:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: 'warning'
+        fields:
+          - title: 'Severity'
+            value: 'Warning'
+            short: true
+          - title: 'Environment'
+            value: '{{ .CommonLabels.environment }}'
+            short: true
+            
+    email_configs:
+      - to: '${ALERT_EMAIL}'
+        headers:
+          Subject: '[WARNING] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        
+  # Info alerts
+  - name: 'info-alerts'
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#code-factory-info'
+        username: 'Alertmanager'
+        icon_emoji: ':information_source:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: 'good'
+        
+  # Security team
+  - name: 'security-team'
+    email_configs:
+      - to: 'security-team@example.com'
+        headers:
+          Subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+          Priority: 'urgent'
+        html: '{{ template "email.default.html" . }}'
+        send_resolved: true
+        
+    slack_configs:
+      - api_url: '${SECURITY_SLACK_WEBHOOK}'
+        channel: '#security-alerts'
+        username: 'Security Alertmanager'
+        icon_emoji: ':lock:'
+        title: '[SECURITY] {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        color: 'danger'
+        
+  # Database team
+  - name: 'database-team'
+    email_configs:
+      - to: 'db-team@example.com'
+        headers:
+          Subject: '[DATABASE] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#database-alerts'
+        username: 'DB Alertmanager'
+        icon_emoji: ':database:'
+        
+  # Development team
+  - name: 'dev-team'
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#dev-team'
+        username: 'Alertmanager'
+        icon_emoji: ':computer:'
+        
+    email_configs:
+      - to: 'dev-team@example.com'
+        headers:
+          Subject: '[DEV] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        
+  # Operations team
+  - name: 'ops-team'
+    email_configs:
+      - to: 'ops-team@example.com'
+        headers:
+          Subject: '[OPS] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+        
+    slack_configs:
+      - api_url: '${ALERT_SLACK_WEBHOOK}'
+        channel: '#ops-team'
+        username: 'Ops Alertmanager'
+        icon_emoji: ':tools:'

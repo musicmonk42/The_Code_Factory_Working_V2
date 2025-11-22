@@ -1,0 +1,570 @@
+# Prometheus Alerting Rules for Code Factory Platform
+# These rules define alerts for critical, warning, and informational conditions
+
+groups:
+  # ===========================================================================
+  # Application Health Alerts
+  # ===========================================================================
+  - name: application_health
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"code-factory.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook_url: "https://runbooks.example.com/ServiceDown"
+          action: "Check service logs and restart if necessary"
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(http_requests_total{status=~"5.."}[5m]) 
+            / 
+            rate(http_requests_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.job }}. Threshold: 5%"
+          runbook_url: "https://runbooks.example.com/HighErrorRate"
+          action: "Check application logs and recent deployments"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High latency on {{ $labels.job }}"
+          description: "95th percentile latency is {{ $value }}s on {{ $labels.job }}. Threshold: 0.5s"
+          runbook_url: "https://runbooks.example.com/HighLatency"
+          action: "Check for database slow queries or increased load"
+
+      - alert: CriticalEndpointDown
+        expr: |
+          probe_success{job="blackbox",endpoint=~".*/health|.*/api/.*"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: endpoint
+        annotations:
+          summary: "Critical endpoint {{ $labels.endpoint }} is down"
+          description: "Endpoint {{ $labels.endpoint }} has been unreachable for more than 3 minutes."
+          runbook_url: "https://runbooks.example.com/EndpointDown"
+          action: "Check service health and network connectivity"
+
+  # ===========================================================================
+  # Resource Utilization Alerts
+  # ===========================================================================
+  - name: resource_utilization
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          (
+            rate(process_cpu_seconds_total{job=~"code-factory.*"}[5m]) 
+            * 100
+          ) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $value | humanize }}% on {{ $labels.instance }}. Threshold: 80%"
+          runbook_url: "https://runbooks.example.com/HighCPU"
+          action: "Consider scaling up or optimizing CPU-intensive operations"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job=~"code-factory.*"} 
+            / 
+            node_memory_MemTotal_bytes
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}. Threshold: 85%"
+          runbook_url: "https://runbooks.example.com/HighMemory"
+          action: "Check for memory leaks or scale up memory resources"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*"} 
+            / 
+            node_filesystem_size_bytes
+          ) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Disk {{ $labels.device }} on {{ $labels.instance }} has less than 10% free space."
+          runbook_url: "https://runbooks.example.com/DiskSpaceLow"
+          action: "Clean up old logs, backups, or increase disk capacity"
+
+      - alert: HighDiskIOWait
+        expr: |
+          rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "High disk I/O wait on {{ $labels.instance }}"
+          description: "Disk I/O wait time is high on {{ $labels.device }}."
+          runbook_url: "https://runbooks.example.com/HighDiskIO"
+          action: "Check for slow queries or optimize disk operations"
+
+  # ===========================================================================
+  # Database Alerts
+  # ===========================================================================
+  - name: database_health
+    interval: 30s
+    rules:
+      - alert: DatabaseDown
+        expr: |
+          up{job="postgresql"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database on {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook_url: "https://runbooks.example.com/DatabaseDown"
+          action: "Check database service and restart if necessary"
+
+      - alert: HighDatabaseConnections
+        expr: |
+          (
+            pg_stat_database_numbackends{datname!~"template.*|postgres"} 
+            / 
+            pg_settings_max_connections
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High database connections"
+          description: "Database {{ $labels.datname }} is using {{ $value | humanizePercentage }} of max connections."
+          runbook_url: "https://runbooks.example.com/HighDBConnections"
+          action: "Check for connection leaks or increase max_connections"
+
+      - alert: SlowDatabaseQueries
+        expr: |
+          rate(pg_stat_statements_mean_time_seconds[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average query time is {{ $value }}s on {{ $labels.datname }}."
+          runbook_url: "https://runbooks.example.com/SlowQueries"
+          action: "Review slow query log and optimize queries"
+
+      - alert: DatabaseReplicationLag
+        expr: |
+          pg_replication_lag_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database replication lag is high"
+          description: "Replication lag is {{ $value }}s on {{ $labels.instance }}. Threshold: 300s"
+          runbook_url: "https://runbooks.example.com/ReplicationLag"
+          action: "Check replica health and network connectivity"
+
+  # ===========================================================================
+  # Redis Alerts
+  # ===========================================================================
+  - name: redis_health
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: |
+          up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis on {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook_url: "https://runbooks.example.com/RedisDown"
+          action: "Check Redis service and restart if necessary"
+
+      - alert: RedisHighMemoryUsage
+        expr: |
+          (
+            redis_memory_used_bytes 
+            / 
+            redis_memory_max_bytes
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+          runbook_url: "https://runbooks.example.com/RedisHighMemory"
+          action: "Check eviction policy or increase memory limit"
+
+      - alert: RedisHighConnections
+        expr: |
+          redis_connected_clients > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis has too many connections"
+          description: "Redis has {{ $value }} connections on {{ $labels.instance }}."
+          runbook_url: "https://runbooks.example.com/RedisHighConnections"
+          action: "Check for connection leaks"
+
+  # ===========================================================================
+  # Message Bus (Kafka) Alerts
+  # ===========================================================================
+  - name: kafka_health
+    interval: 30s
+    rules:
+      - alert: KafkaBrokerDown
+        expr: |
+          kafka_brokers < kafka_brokers offset 5m
+        for: 5m
+        labels:
+          severity: critical
+          component: messaging
+        annotations:
+          summary: "Kafka broker is down"
+          description: "Number of Kafka brokers has decreased."
+          runbook_url: "https://runbooks.example.com/KafkaBrokerDown"
+          action: "Check broker health and restart if necessary"
+
+      - alert: KafkaConsumerLag
+        expr: |
+          kafka_consumer_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer lag is {{ $value }} messages on {{ $labels.topic }}."
+          runbook_url: "https://runbooks.example.com/KafkaConsumerLag"
+          action: "Scale up consumers or check consumer health"
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: |
+          kafka_cluster_partition_under_replicated > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "Kafka has under-replicated partitions"
+          description: "{{ $value }} partitions are under-replicated."
+          runbook_url: "https://runbooks.example.com/KafkaUnderReplicated"
+          action: "Check broker health and replication status"
+
+  # ===========================================================================
+  # Security Alerts
+  # ===========================================================================
+  - name: security
+    interval: 30s
+    rules:
+      - alert: HighFailedLoginAttempts
+        expr: |
+          rate(auth_failed_attempts_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High rate of failed login attempts"
+          description: "Failed login rate is {{ $value }} per second on {{ $labels.instance }}."
+          runbook_url: "https://runbooks.example.com/FailedLogins"
+          action: "Check for brute force attacks and review access logs"
+
+      - alert: UnauthorizedAccessAttempt
+        expr: |
+          rate(http_requests_total{status="401"}[5m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High rate of unauthorized access attempts"
+          description: "Unauthorized access rate is {{ $value }} per second."
+          runbook_url: "https://runbooks.example.com/UnauthorizedAccess"
+          action: "Review authentication logs for suspicious activity"
+
+      - alert: TLSCertificateExpiringSoon
+        expr: |
+          (ssl_cert_not_after - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "TLS certificate for {{ $labels.instance }} expires in {{ $value }} days."
+          runbook_url: "https://runbooks.example.com/CertExpiry"
+          action: "Renew TLS certificate"
+
+      - alert: AuditLogFailure
+        expr: |
+          rate(audit_log_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Audit log writing is failing"
+          description: "Audit log failures detected on {{ $labels.instance }}."
+          runbook_url: "https://runbooks.example.com/AuditLogFailure"
+          action: "Check audit log storage and permissions"
+
+  # ===========================================================================
+  # AI/LLM Service Alerts
+  # ===========================================================================
+  - name: llm_services
+    interval: 30s
+    rules:
+      - alert: LLMAPIFailureRate
+        expr: |
+          (
+            rate(llm_api_requests_total{status="error"}[5m]) 
+            / 
+            rate(llm_api_requests_total[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "High LLM API failure rate"
+          description: "LLM API failure rate is {{ $value | humanizePercentage }} for {{ $labels.provider }}."
+          runbook_url: "https://runbooks.example.com/LLMAPIFailure"
+          action: "Check API key validity and service status"
+
+      - alert: LLMAPIRateLimitApproaching
+        expr: |
+          (
+            llm_api_requests_used 
+            / 
+            llm_api_requests_limit
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "LLM API rate limit approaching"
+          description: "Using {{ $value | humanizePercentage }} of {{ $labels.provider }} rate limit."
+          runbook_url: "https://runbooks.example.com/LLMRateLimit"
+          action: "Consider upgrading plan or implementing request queuing"
+
+      - alert: LLMHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(llm_api_duration_seconds_bucket[5m])
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: llm
+        annotations:
+          summary: "High LLM API latency"
+          description: "95th percentile LLM latency is {{ $value }}s for {{ $labels.provider }}."
+          runbook_url: "https://runbooks.example.com/LLMLatency"
+          action: "Check provider status or switch to fallback provider"
+
+  # ===========================================================================
+  # Self-Fixing Engineer Alerts
+  # ===========================================================================
+  - name: self_fixing_engineer
+    interval: 30s
+    rules:
+      - alert: SFECheckpointFailure
+        expr: |
+          rate(sfe_checkpoint_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: sfe
+        annotations:
+          summary: "SFE checkpoint failures detected"
+          description: "SFE is failing to create checkpoints."
+          runbook_url: "https://runbooks.example.com/SFECheckpoint"
+          action: "Check S3 access and storage capacity"
+
+      - alert: SFEAnalysisBacklog
+        expr: |
+          sfe_pending_analyses > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: sfe
+        annotations:
+          summary: "SFE has a large analysis backlog"
+          description: "SFE has {{ $value }} pending analyses."
+          runbook_url: "https://runbooks.example.com/SFEBacklog"
+          action: "Scale up SFE workers or check for stuck tasks"
+
+      - alert: SFEHighFailureRate
+        expr: |
+          (
+            rate(sfe_fixes_total{status="failed"}[5m]) 
+            / 
+            rate(sfe_fixes_total[5m])
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+          component: sfe
+        annotations:
+          summary: "SFE has high failure rate"
+          description: "SFE fix failure rate is {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.example.com/SFEFailures"
+          action: "Review SFE logs for recurring errors"
+
+  # ===========================================================================
+  # Integration Alerts
+  # ===========================================================================
+  - name: integrations
+    interval: 30s
+    rules:
+      - alert: ExternalAPIDown
+        expr: |
+          probe_success{job="external-api"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: integration
+        annotations:
+          summary: "External API {{ $labels.api }} is down"
+          description: "External API {{ $labels.api }} has been unreachable for more than 5 minutes."
+          runbook_url: "https://runbooks.example.com/ExternalAPIDown"
+          action: "Check API status page or switch to fallback"
+
+      - alert: WebhookDeliveryFailure
+        expr: |
+          rate(webhook_delivery_failures_total[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: integration
+        annotations:
+          summary: "High webhook delivery failure rate"
+          description: "Webhook delivery failures to {{ $labels.endpoint }}."
+          runbook_url: "https://runbooks.example.com/WebhookFailure"
+          action: "Check webhook endpoint health and retry queue"
+
+  # ===========================================================================
+  # Business Metrics Alerts
+  # ===========================================================================
+  - name: business_metrics
+    interval: 60s
+    rules:
+      - alert: LowCodeGenerationRate
+        expr: |
+          rate(code_generations_total[1h]) < 10
+        for: 1h
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "Low code generation rate"
+          description: "Code generation rate is {{ $value }} per hour. Expected: >10/hour"
+          runbook_url: "https://runbooks.example.com/LowGenerationRate"
+          action: "Check for service issues or reduced user activity"
+
+      - alert: HighDeploymentFailureRate
+        expr: |
+          (
+            rate(deployments_total{status="failed"}[1h]) 
+            / 
+            rate(deployments_total[1h])
+          ) > 0.2
+        for: 30m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "High deployment failure rate"
+          description: "Deployment failure rate is {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.example.com/DeploymentFailures"
+          action: "Review deployment logs and rollback if necessary"
+
+  # ===========================================================================
+  # Backup and Recovery Alerts
+  # ===========================================================================
+  - name: backup_recovery
+    interval: 300s  # Check every 5 minutes
+    rules:
+      - alert: BackupFailed
+        expr: |
+          time() - backup_last_success_timestamp > 86400
+        for: 1h
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "Database backup has not succeeded in 24 hours"
+          description: "Last successful backup was {{ $value | humanizeDuration }} ago."
+          runbook_url: "https://runbooks.example.com/BackupFailed"
+          action: "Check backup service and manually trigger backup"
+
+      - alert: BackupStorageLow
+        expr: |
+          (
+            backup_storage_used_bytes 
+            / 
+            backup_storage_total_bytes
+          ) > 0.9
+        for: 1h
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup storage is running low"
+          description: "Backup storage is {{ $value | humanizePercentage }} full."
+          runbook_url: "https://runbooks.example.com/BackupStorageLow"
+          action: "Clean up old backups or increase storage capacity"
+
+      - alert: PITRDisabled
+        expr: |
+          pitr_enabled == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Point-in-Time Recovery is disabled"
+          description: "PITR is disabled on {{ $labels.instance }}."
+          runbook_url: "https://runbooks.example.com/PITRDisabled"
+          action: "Enable PITR for disaster recovery capability"

@@ -1,0 +1,158 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^.*\.(md|markdown)$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom YAML tags
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: ['--line-length=100']
+
+  # Python import sorting
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black', '--line-length=100']
+
+  # Python linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.5
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+
+  # Python type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: ['--ignore-missing-imports', '--no-strict-optional']
+        exclude: ^(tests/|docs/)
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json
+
+  # Markdown linting
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        args: ['--config', '.markdownlint.json']
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-c', '.yamllint.yml']
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+  # Dependency security check
+  - repo: local
+    hooks:
+      - id: safety-check
+        name: Safety dependency check
+        entry: bash -c 'safety check --json --file requirements.txt || true'
+        language: system
+        pass_filenames: false
+        
+      - id: pip-audit
+        name: Pip audit dependency check
+        entry: bash -c 'pip-audit --requirement requirements.txt || true'
+        language: system
+        pass_filenames: false
+
+  # Custom hooks
+  - repo: local
+    hooks:
+      - id: no-secrets-in-code
+        name: Check for hardcoded secrets
+        entry: bash -c 'if grep -r --exclude-dir={.git,.venv,node_modules} -E "(api[_-]?key|password|secret|token|bearer)" *.py; then echo "Potential secret found in code"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        
+      - id: check-requirements-sync
+        name: Check requirements files are synced
+        entry: python scripts/check_requirements_sync.py
+        language: system
+        pass_filenames: false
+        files: requirements.*\.txt$
+        
+      - id: run-unit-tests
+        name: Run unit tests (fast)
+        entry: bash -c 'pytest tests/ -v -m "not slow" --tb=short'
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+# Global settings
+default_language_version:
+  python: python3.11
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    .*\.egg-info/|
+    .*/__pycache__/|
+    .*\.pyc$|
+    .*/migrations/|
+    node_modules/|
+    .venv/|
+    dist/|
+    build/|
+    .*\.min\.(js|css)$|
+    .*\.lock$
+  )
+
+# Configuration
+fail_fast: false  # Continue running hooks even if one fails
