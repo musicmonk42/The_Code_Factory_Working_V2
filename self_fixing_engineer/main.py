@@ -432,10 +432,12 @@ def _init_arbiter():
         
         # Create engines dict with simulation and test_generation
         engines = {}
-        if _simulation_module:
+        if _simulation_module and hasattr(_simulation_module, '_is_initialized') and _simulation_module._is_initialized:
             engines["simulation"] = _simulation_module
+            logger.info("Connecting simulation engine to Arbiter")
         if _test_generation_orchestrator:
             engines["test_generation"] = _test_generation_orchestrator
+            logger.info("Connecting test_generation engine to Arbiter")
         
         # Create Arbiter instance
         arbiter = Arbiter(
@@ -478,11 +480,15 @@ async def _shutdown_arbiter():
         try:
             # Close database connections
             if hasattr(_arbiter_instance, "db_client") and _arbiter_instance.db_client:
-                await _arbiter_instance.db_client.close()
+                try:
+                    await _arbiter_instance.db_client.close()
+                except Exception as e:
+                    logger.warning("Error closing Arbiter database: %s", e)
             _arbiter_instance = None
             logger.info("Arbiter AI engine shutdown complete")
         except Exception as e:
             logger.warning("Error during Arbiter shutdown: %s", e)
+            _arbiter_instance = None  # Ensure reference is cleared even on error
 
 
 async def _arbiter_health_check() -> dict:
