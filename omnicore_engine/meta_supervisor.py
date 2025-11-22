@@ -2,9 +2,12 @@ import asyncio
 import logging
 import uuid
 import json
+import time
+import random
+import traceback
 import torch
 import numpy as np
-from typing import Dict, Any, List, Optional, Callable, Union
+from typing import Dict, Any, List, Optional, Callable, Union, Set
 from aiolimiter import AsyncLimiter
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from omnicore_engine.metrics import get_plugin_metrics, get_test_metrics, API_REQUESTS, \
@@ -23,6 +26,18 @@ try:
     from omnicore_engine.array_backend import ArrayBackend
 except ImportError:
     ArrayBackend = None
+try:
+    from arbiter.policy.policy_manager import PolicyEngine
+except ImportError:
+    PolicyEngine = None
+try:
+    from omnicore_engine.knowledge_graph import KnowledgeGraph
+except ImportError:
+    KnowledgeGraph = None
+try:
+    from omnicore_engine.plugins.explainable_reasoner_plugin import ExplainableReasonerPlugin
+except ImportError:
+    ExplainableReasonerPlugin = None
 from redis.asyncio import redis, RedisError
 
 logger = logging.getLogger("MetaSupervisor")
@@ -95,6 +110,107 @@ def validate_training_data(audit_records: List[Dict]) -> List[Dict]:
         validated.append(record)
     return validated
 
+def safe_serialize(obj: Any, _seen: Optional[Set[int]] = None) -> Any:
+    """
+    Safely serialize objects to JSON-compatible types.
+    Handles common non-serializable types like numpy arrays, datetime, etc.
+    """
+    if _seen is None:
+        _seen = set()
+    
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return "<circular reference>"
+    
+    if isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    if isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, dict):
+        _seen.add(obj_id)
+        result = {k: safe_serialize(v, _seen) for k, v in obj.items()}
+        _seen.remove(obj_id)
+        return result
+    if isinstance(obj, (list, tuple)):
+        _seen.add(obj_id)
+        result = [safe_serialize(item, _seen) for item in obj]
+        _seen.remove(obj_id)
+        return result
+    return str(obj)
+
+async def record_meta_audit_event(kind: str, name: str, details: Dict, db=None):
+    """
+    Record audit event for meta-supervisor actions.
+    
+    Args:
+        kind: Type of audit event
+        name: Name/identifier for the event
+        details: Dictionary with event details
+        db: Database instance (optional)
+    """
+    if db and hasattr(db, 'save_audit_record'):
+        try:
+            await db.save_audit_record({
+                'kind': kind,
+                'name': name,
+                'detail': json.dumps(details, default=safe_serialize),
+                'ts': time.time(),
+                'uuid': str(uuid.uuid4())
+            })
+        except Exception as e:
+            logger.warning(f"Failed to record audit event: {e}")
+
+def rollback_config(previous_config: Dict):
+    """
+    Rollback configuration to a previous state.
+    
+    Args:
+        previous_config: Dictionary containing the previous configuration
+        
+    Note:
+        This is a placeholder implementation. Actual rollback logic should be
+        implemented based on the specific configuration management system in use.
+    """
+    logger.info(f"Rolling back configuration to previous state")
+    # TODO: Implement actual rollback logic based on configuration system
+    # This would typically:
+    # 1. Validate previous_config structure
+    # 2. Apply the previous configuration to the system
+    # 3. Verify the rollback was successful
+    pass
+
+def run_all_tests(auto_repair: bool = False) -> Dict[str, Any]:
+    """
+    Run all tests in the system.
+    
+    Args:
+        auto_repair: Whether to attempt automatic repair of failures
+        
+    Returns:
+        Dictionary with test results
+        
+    Note:
+        This is a placeholder implementation. Actual test execution should be
+        implemented based on the test framework in use (pytest, unittest, etc.).
+    """
+    logger.info(f"Running all tests (auto_repair={auto_repair})")
+    # TODO: Implement actual test execution
+    # This would typically:
+    # 1. Discover all test files/modules
+    # 2. Execute tests using the appropriate test runner
+    # 3. Collect and aggregate results
+    # 4. If auto_repair=True, attempt to fix failures
+    # 5. Return detailed test results
+    return {
+        'total': 0,
+        'passed': 0,
+        'failed': 0,
+        'skipped': 0,
+        'auto_repaired': 0
+    }
+
 class MetaSupervisor:
     """
     The MetaSupervisor orchestrates and optimizes the OmniCore Omega Pro Engine.
@@ -119,9 +235,9 @@ class MetaSupervisor:
         self._stopped = asyncio.Event() # Event to signal stopping the main loop
         self.backend = ArrayBackend(mode=backend_mode, use_gpu=True, use_dask=True, 
                                  use_quantum=use_quantum, use_neuromorphic=use_neuromorphic)
-        self.policy_engine = PolicyEngine(settings=settings)
-        self.explainer = ExplainableReasonerPlugin(settings=settings)
-        self.knowledge_graph = KnowledgeGraph(settings=settings)
+        self.policy_engine = PolicyEngine(settings=settings) if PolicyEngine else None
+        self.explainer = ExplainableReasonerPlugin(settings=settings) if ExplainableReasonerPlugin else None
+        self.knowledge_graph = KnowledgeGraph(settings=settings) if KnowledgeGraph else None
         # REMOVED: self.multiverse_simulation_coordinator_ultra = MultiverseSimulationCoordinatorUltra(...)
         # REMOVED: self.dream_mode_plugin = DreamModePlugin(...)
         self.db: Optional[Database] = None # Will be initialized in async initialize
@@ -164,6 +280,10 @@ class MetaSupervisor:
         except Exception as e:
             self.logger.critical(f"MetaSupervisor initialization failed: {e}", exc_info=True)
             raise # Re-raise to prevent run loop from starting if init fails
+
+    async def _record_audit_event(self, kind: str, name: str, details: Dict):
+        """Helper method to record audit events with the supervisor's database."""
+        await record_meta_audit_event(kind, name, details, db=self.db)
 
     def _init_rl_model(self) -> Optional[torch.nn.Module]:
         """
@@ -261,7 +381,7 @@ class MetaSupervisor:
                 await self.publish_meta_status()
             except Exception as ex:
                 self.logger.exception("MetaSupervisor main loop encountered an error: %s", ex)
-                await self._rate_limited_operation(lambda: record_meta_audit_event(
+                await self._rate_limited_operation(lambda: self._record_audit_event(
                     "supervisor_run_loop_error", "run_loop", {"error": str(ex), "traceback": traceback.format_exc()}))
             
             # Calculate sleep duration to maintain interval
@@ -349,7 +469,7 @@ class MetaSupervisor:
                         explanation = await self.explainer.explain(
                             {"action": "proactive_plugin_hot_swap", "reason": f"Predicted high failure probability ({current_failure_prob:.2f})"}
                         )
-                        await self._rate_limited_operation(lambda: record_meta_audit_event(
+                        await self._rate_limited_operation(lambda: self._record_audit_event(
                             "plugin_hot_swap_predicted", plugin_id, {"stats": stats, "prediction_prob": float(current_failure_prob), "explanation": explanation}))
                     except Exception as hot_swap_e:
                         self.logger.error(f"Proactive hot-swap failed for plugin {plugin_id}: {hot_swap_e}", exc_info=True)
@@ -364,7 +484,7 @@ class MetaSupervisor:
                         explanation = await self.explainer.explain(
                             {"action": "reactive_plugin_hot_swap", "reason": f"Error rate exceeded threshold ({stats['error_rate']:.2f})"}
                         )
-                        await self._rate_limited_operation(lambda: record_meta_audit_event(
+                        await self._rate_limited_operation(lambda: self._record_audit_event(
                             "plugin_hot_swap", plugin_id, {"stats": stats, "explanation": explanation}))
                     except Exception as hot_swap_e:
                         self.logger.error(f"Reactive hot-swap failed for plugin {plugin_id}: {hot_swap_e}", exc_info=True)
@@ -409,7 +529,7 @@ class MetaSupervisor:
                 explanation = await self.explainer.explain(
                     {"action": "test_repair", "reason": f"Failures exceeded threshold ({test_metrics['failures']})"}
                 )
-                await self._rate_limited_operation(lambda: record_meta_audit_event(
+                await self._rate_limited_operation(lambda: self._record_audit_event(
                     "auto_test_repair", "test_harness", {"metrics": test_metrics, "explanation": explanation}))
             else:
                 self.logger.info(f"Test failures are within acceptable limits ({test_metrics['failures']}).")
@@ -440,7 +560,7 @@ class MetaSupervisor:
                     explanation = await self.explainer.explain(
                         {"action": "config_rollback", "reason": "Ethical drift detected in configuration"}
                     )
-                    await self._rate_limited_operation(lambda: record_meta_audit_event(
+                    await self._rate_limited_operation(lambda: self._record_audit_event(
                         "config_rollback", change.get('user_id', 'system'), {"change": change, "explanation": explanation}))
                 else:
                     self.logger.debug(f"No ethical drift detected for config change by user {change.get('user_id', 'N/A')}.")
@@ -590,7 +710,7 @@ class MetaSupervisor:
                 explanation = await self.explainer.explain(
                     {"action": "model_retrain", "reason": "Periodic model update based on system performance data"}
                 )
-                await self._rate_limited_operation(lambda: record_meta_audit_event(
+                await self._rate_limited_operation(lambda: self._record_audit_event(
                     "model_retrain", "meta_supervisor", {"explanation": explanation}))
                 
             except Exception as e:
@@ -722,7 +842,7 @@ class MetaSupervisor:
             explanation = await self.explainer.explain(
                 {"action": "self_reload", "reason": "Supervisor self-performance degraded or explicit reload request"}
             )
-            await self._rate_limited_operation(lambda: record_meta_audit_event(
+            await self._rate_limited_operation(lambda: self._record_audit_event(
                 "self_reload", "meta_supervisor", {"explanation": explanation}))
             self.logger.info("New MetaSupervisor instance launched successfully.")
         except Exception as e:
@@ -795,7 +915,7 @@ class MetaSupervisor:
             explanation = await self.explainer.explain(
                 {"action": "set_meta_policy", "policy": policy, "set_by": user_id}
             )
-            await self._rate_limited_operation(lambda: record_meta_audit_event(
+            await self._rate_limited_operation(lambda: self._record_audit_event(
                 "set_meta_policy", user_id, {"policy": policy, "explanation": explanation}))
             self.logger.info(f"Meta-policy successfully set for user {user_id}.")
             return True
@@ -868,7 +988,7 @@ class MetaSupervisor:
             )
             report['explanation_of_report'] = explanation.get('explanation', 'No explanation provided.') # Add explanation to the report
             
-            await self._rate_limited_operation(lambda: record_meta_audit_event(
+            await self._rate_limited_operation(lambda: self._record_audit_event(
                 "mentor_report", "meta_supervisor", {"report": report, "explanation": explanation}))
             self.logger.info("Mentor report generated successfully.")
             return report
@@ -1005,7 +1125,7 @@ class MetaSupervisor:
             explanation = await self.explainer.explain(
                 {"action": "audit_cleanup", "summary": summary, "snapshot_id": snapshot_id}
             )
-            await self._rate_limited_operation(lambda: record_meta_audit_event(
+            await self._rate_limited_operation(lambda: self._record_audit_event(
                 "audit_cleanup", "meta_supervisor", {"summary": summary, "explanation": explanation}))
         except Exception as e:
             self.logger.error(f"Audit log cleanup failed: {e}", exc_info=True)

@@ -236,32 +236,29 @@ def validate_array_size(shape):
     """
     Validates that the total number of elements in an array does not exceed a predefined limit.
     """
-    total_elements = xp.prod(shape)
-    if total_elements > MAX_ARRAY_SIZE:
-        raise ValueError(f"Array too large: {total_elements} elements")
-
-def sanitize_array_input(data: Any) -> xp.ndarray:
-    """
-    Sanitizes and validates array input data to prevent security vulnerabilities.
-    """
-    if not isinstance(data, (list, tuple, xp.ndarray, int, float)):
-        raise TypeError("Invalid array input type. Must be a list, tuple, number or array.")
-    
-    # Convert and validate
-    arr = xp.asarray(data)
     total_elements = np.prod(shape)
     if total_elements > MAX_ARRAY_SIZE:
         raise ValueError(f"Array too large: {total_elements} elements")
 
-def sanitize_array_input(data: Any) -> np.ndarray:
+def sanitize_array_input(data: Any, backend_module=None) -> Any:
     """
     Sanitizes and validates array input data to prevent security vulnerabilities.
+    
+    Args:
+        data: Input data to sanitize (list, tuple, array, or number)
+        backend_module: Optional backend module to use (defaults to np)
+    
+    Returns:
+        Sanitized numpy array
     """
+    if backend_module is None:
+        backend_module = np
+    
     if not isinstance(data, (list, tuple, np.ndarray, int, float)):
         raise TypeError("Invalid array input type. Must be a list, tuple, number or numpy array.")
     
     # Convert and validate
-    arr = np.asarray(data)
+    arr = backend_module.asarray(data)
     validate_array_size(arr.shape)
     
     # Check for suspicious values that could indicate an injection or unexpected data
@@ -1424,8 +1421,6 @@ class ArrayBackend:
         if self.enable_benchmarking:
             # FIX: Call a non-recursive operation for benchmarking
             self.benchmarker.run_benchmark(self.xp, "sum_operation", lambda: self.xp.sum(self.xp.random.rand(100,100), axis=0))
-        
-            self.benchmarker.run_benchmark(self.xp, "sum_operation", lambda: self.sum(self.array(np.random.rand(100,100)), axis=0))
 
         if hasattr(self.xp, "sum"):
             if self.mode == "torch" and TORCH_AVAILABLE:

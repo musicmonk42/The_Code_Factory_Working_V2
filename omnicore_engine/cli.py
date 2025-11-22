@@ -495,6 +495,9 @@ def main():
             sys.exit(EXIT_CODE_GENERIC_ERROR)
 
     async def _initialize_omnicore_engine():
+        if OmniCoreOmega_instance is None:
+            logger.critical("OmniCore Engine not available.")
+            sys.exit(EXIT_CODE_INITIALIZATION_ERROR)
         if not OmniCoreOmega_instance.is_initialized:
             logger.info("Initializing OmniCore Engine for CLI command...")
             await OmniCoreOmega_instance.initialize()
