@@ -363,8 +363,8 @@ class FeedbackManager:
             feedback_errors_total.labels(component='record_metric_invalid_value').inc()
             return
             
-        # Security: Use SHA-256 instead of MD5 for hashing
         metric_entry = {
+            # Security: Use SHA-256 instead of MD5 for hashing
             "id": hashlib.sha256(f"{name}-{value}-{datetime.now(timezone.utc).isoformat()}-{random.randint(0, 100000)}".encode('utf-8')).hexdigest(),
             "type": "metric",
             "name": name,

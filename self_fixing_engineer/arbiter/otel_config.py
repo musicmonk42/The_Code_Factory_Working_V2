@@ -516,8 +516,8 @@ class OpenTelemetryConfig:
                 return None
             
             # Wrap exporter with circuit breaker
-            # Security: Use SHA-256 instead of MD5 for hashing
-            breaker_name = hashlib.sha256(endpoint.url.encode()).hexdigest()[:16]
+            # Security: Use SHA-256 instead of MD5 for hashing (using 32 chars for better collision resistance)
+            breaker_name = hashlib.sha256(endpoint.url.encode()).hexdigest()[:32]
             
             @circuit(failure_threshold=5, recovery_timeout=60, name=breaker_name)
             def export_with_circuit_breaker(spans):
