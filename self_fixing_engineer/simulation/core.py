@@ -92,14 +92,14 @@ try:
 except ImportError:
     DLT_LOGGER_AVAILABLE = False
     DLTLogger = None
-    logging.warning("DLTLogger not available. Audit logging will be disabled.")
+    logging.warning("DLTLogger not available. This may be due to missing 'guardrails' module or incomplete setup. Audit logging will be disabled.")
 
 # SecretsManager is in agentic module
 try:
     from .agentic import SecretsManager as GlobalSecretsManager
 except (ImportError, AttributeError):
     GlobalSecretsManager = None
-    logging.warning("SecretsManager not available in agentic module.")
+    logging.warning("SecretsManager not available in agentic module. This may be due to missing dependencies or incomplete module setup.")
 
 
 # --- Directory and Path Setup ---

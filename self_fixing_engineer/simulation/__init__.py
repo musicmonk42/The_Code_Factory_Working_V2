@@ -26,10 +26,18 @@ def simulation_health_check():
     try:
         from .registry import get_registry
         registry = get_registry()
+        # Handle case where registry might be None or not a dict
+        plugin_count = 0
+        if registry:
+            if isinstance(registry, dict):
+                plugin_count = len(registry)
+            else:
+                logger.warning(f"Registry returned unexpected type: {type(registry)}")
+        
         return {
             "status": "healthy",
             "module": "simulation",
-            "plugins_loaded": len(registry) if registry else 0
+            "plugins_loaded": plugin_count
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")

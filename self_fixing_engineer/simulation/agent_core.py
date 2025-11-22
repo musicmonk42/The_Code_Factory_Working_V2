@@ -66,8 +66,18 @@ def get_policy_engine_instance(*args, **kwargs):
 
 def init_llm(provider="openai", **kwargs):
     """
-    Initialize an LLM instance.
-    This is a stub that should be connected to actual LLM initialization.
+    Initialize an LLM instance (stub implementation).
+    
+    Args:
+        provider (str): The LLM provider name (e.g., "openai", "anthropic")
+        **kwargs: Additional configuration parameters for the provider
+        
+    Returns:
+        MockLLM: A mock LLM instance that can generate text responses
+        
+    Note:
+        This is a stub implementation. In production, this should be connected
+        to actual LLM initialization logic from the main platform.
     """
     logger.warning(f"init_llm called with provider={provider} (stub implementation)")
     
@@ -78,6 +88,9 @@ def init_llm(provider="openai", **kwargs):
             self.config = config
         
         def generate(self, prompt, **kwargs):
+            # Validate prompt is a string
+            if not isinstance(prompt, str):
+                raise TypeError(f"prompt must be a string, got {type(prompt)}")
             return f"Mock response for: {prompt[:50]}..."
         
         def __call__(self, *args, **kwargs):
