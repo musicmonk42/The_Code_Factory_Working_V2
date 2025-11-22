@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, Patt
 from collections import defaultdict
 from pydantic import BaseModel, Field, ValidationError
 import asyncio
+import threading
 import inspect
 import traceback
 from pathlib import Path
@@ -37,6 +38,7 @@ try:
 except ImportError:
     resource = None
 import signal
+import platform
 import hmac
 import hashlib
 
@@ -186,9 +188,23 @@ def timeout_handler(signum, frame):
     raise TimeoutError("Plugin execution timed out")
 
 def execute_with_limits(func, *args, **kwargs):
-    """Executes a function with resource limits and a timeout."""
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(getattr(settings, 'PLUGIN_EXECUTION_TIMEOUT', 30))  # 30 second timeout
+    """Executes a function with resource limits and a timeout.
+    
+    Note: This function is called within a subprocess created by safe_execute_plugin().
+    The primary timeout mechanism is the process.join(timeout) call in safe_execute_plugin,
+    which works on both Unix and Windows. The signal-based timeout here is an additional
+    protection for Unix-like systems.
+    """
+    # SECURITY: SIGALRM is not available on Windows
+    # Use signal-based timeout only on Unix-like systems
+    timeout_seconds = getattr(settings, 'PLUGIN_EXECUTION_TIMEOUT', 30)
+    
+    if platform.system() != 'Windows' and hasattr(signal, 'SIGALRM'):
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+    else:
+        # On Windows, the parent process handles timeout via process.join(timeout)
+        logger.debug("Signal-based timeout not available on Windows, parent process handles timeout")
 
     # Limit memory usage (e.g., 512MB)
     try:
@@ -200,7 +216,9 @@ def execute_with_limits(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
     finally:
-        signal.alarm(0)
+        # Only cancel alarm on Unix-like systems
+        if platform.system() != 'Windows' and hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
 
 SAFE_BUILTINS = {
     'None': None,
@@ -230,7 +248,20 @@ SAFE_BUILTINS = {
 
 def safe_exec_plugin(code: str, filename: str):
     """
-    Safely executes plugin code by restricting imports and dangerous builtins.
+    Attempts to safely execute plugin code by restricting imports and dangerous builtins.
+    
+    SECURITY WARNING: This function has known vulnerabilities:
+    1. AST-based filtering can be bypassed using various Python tricks
+    2. The exec() call itself is inherently dangerous even with restricted globals
+    3. Malicious code can potentially escape the sandbox
+    
+    RECOMMENDATION: This should only be used with code from trusted sources.
+    For untrusted code, consider:
+    - Running in a separate process with strict resource limits
+    - Using a proper sandboxing solution (e.g., PyPy's sandboxlib, docker containers)
+    - Implementing a plugin interface with defined APIs instead of arbitrary code execution
+    
+    DO NOT use this with user-supplied code in production without additional security layers.
     """
     tree = ast.parse(code, filename)
     
@@ -282,6 +313,23 @@ def _all_picklable(*objs) -> bool:
         return False
 
 def safe_execute_plugin(fn: Callable, *args, **kwargs):
+    """
+    Execute a plugin function in a separate process with timeout and resource limits.
+    
+    SECURITY WARNING: This function uses pickle for inter-process communication,
+    which has known security vulnerabilities:
+    1. Pickle can deserialize arbitrary Python objects, allowing code execution
+    2. Malicious pickled data can exploit the unpickling process
+    3. This should NEVER be used with untrusted data
+    
+    RECOMMENDATION: Replace pickle-based IPC with safer alternatives:
+    - JSON for simple data types
+    - Protocol Buffers (protobuf) for structured data
+    - MessagePack for binary serialization
+    - Custom serialization with explicit type checking
+    
+    Only use this function with trusted plugin code and trusted data.
+    """
     """
     Runs a plugin function in an isolated process with restricted imports and a timeout.
     This provides a basic sandboxing mechanism to prevent malicious or buggy code from
@@ -474,6 +522,8 @@ class PluginRegistry:
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
         self._is_initialized = False
+        self._init_lock = asyncio.Lock()  # Lock for atomic initialization
+        self._register_lock = threading.Lock()  # Lock for plugin registration
         self.db: Optional[Database] = None
         self.audit_client: Optional[Any] = None
         self.message_bus: Optional[ShardedMessageBus] = None
@@ -501,31 +551,33 @@ class PluginRegistry:
                     plugin.message_bus_adapter.subscribe(topic_to_subscribe, plugin.execute, filter=filter_obj)
 
     async def initialize(self):
-        if self._is_initialized:
-            return
-        
-        self.logger.info("Initializing PluginRegistry...")
-        self._loop = asyncio.get_running_loop()
+        # Atomic initialization check with lock to prevent race conditions
+        async with self._init_lock:
+            if self._is_initialized:
+                return
+            
+            self.logger.info("Initializing PluginRegistry...")
+            self._loop = asyncio.get_running_loop()
 
-        if self.db:
-            self.performance_tracker = PluginPerformanceTracker(db=self.db, audit_client=self.audit_client)
-        
-        await self.load_arbiter_plugins()
-        await self.load_from_directory(settings.PLUGIN_DIR)
-        self.load_ai_assistant_plugins()
-        
-        # CodeHealthEnv
-        if CodeHealthEnv is not None:
-            try:
-                plugin_meta = PluginMeta(name="code_health_env", kind=PlugInKind.CORE_SERVICE.value,
-                                         description="Reinforcement learning environment for code health.")
-                self.register(PlugInKind.CORE_SERVICE.value, "code_health_env",
-                              Plugin(plugin_meta, CodeHealthEnv, performance_tracker=self.performance_tracker))
-                self.logger.info("Registered CodeHealthEnv plugin.")
-            except Exception as e:
-                self.logger.error(f"Failed to register CodeHealthEnv: {e}")
-        else:
-            self.logger.info("CodeHealthEnv not available; skipping.")
+            if self.db:
+                self.performance_tracker = PluginPerformanceTracker(db=self.db, audit_client=self.audit_client)
+            
+            await self.load_arbiter_plugins()
+            await self.load_from_directory(settings.PLUGIN_DIR)
+            self.load_ai_assistant_plugins()
+            
+            # CodeHealthEnv
+            if CodeHealthEnv is not None:
+                try:
+                    plugin_meta = PluginMeta(name="code_health_env", kind=PlugInKind.CORE_SERVICE.value,
+                                             description="Reinforcement learning environment for code health.")
+                    self.register(PlugInKind.CORE_SERVICE.value, "code_health_env",
+                                  Plugin(plugin_meta, CodeHealthEnv, performance_tracker=self.performance_tracker))
+                    self.logger.info("Registered CodeHealthEnv plugin.")
+                except Exception as e:
+                    self.logger.error(f"Failed to register CodeHealthEnv: {e}")
+            else:
+                self.logger.info("CodeHealthEnv not available; skipping.")
 
         # evolve_configs
         if evolve_configs is not None:
@@ -694,9 +746,13 @@ class PluginRegistry:
         config = ArbiterConfig()
         if not config.PLUGINS_ENABLED:
             raise ValueError("Plugins are disabled in ArbiterConfig")
-        if kind not in self._plugins:
-            self._plugins[kind] = {}
-        self._plugins[kind][name] = plugin
+        
+        # SECURITY: Use lock to prevent race conditions during concurrent plugin registration
+        with self._register_lock:
+            if kind not in self._plugins:
+                self._plugins[kind] = {}
+            self._plugins[kind][name] = plugin
+            
         self._attach_bus_adapter_if_any(name, kind, plugin)
         if name == "arbiter":
             self._entrypoints.update({
@@ -1032,11 +1088,25 @@ class PluginVersionManager:
                         self.logger.error(f"Failed to dynamically load code for plugin {name}:{version}: {compile_err}", exc_info=True)
                         loaded_fn = lambda *args, **kwargs: {"error": f"Dynamic code load failed: {compile_err}"}
                     finally:
-                        try:
-                            if temp_file_path.exists():
+                        # Improved temp file cleanup with multiple attempts
+                        if temp_file_path.exists():
+                            try:
                                 os.remove(temp_file_path)
-                        except OSError as cleanup_err:
-                            self.logger.warning(f"Failed to clean up temporary file {temp_file_path}: {cleanup_err}")
+                            except OSError as cleanup_err:
+                                self.logger.warning(f"Failed to clean up temporary file {temp_file_path}: {cleanup_err}")
+                                # Try to at least mark for deletion on Windows
+                                try:
+                                    if platform.system() == 'Windows':
+                                        import atexit
+                                        # Compatibility: Use try-except for unlink instead of missing_ok for Python < 3.8
+                                        def cleanup_on_exit(p):
+                                            try:
+                                                p.unlink()
+                                            except FileNotFoundError:
+                                                pass
+                                        atexit.register(cleanup_on_exit, temp_file_path)
+                                except Exception as fallback_err:
+                                    self.logger.debug(f"Fallback cleanup registration failed: {fallback_err}")
                 
                 if loaded_fn is None:
                     loaded_fn = lambda *args, **kwargs: {"error": "Plugin function not available or load failed."}

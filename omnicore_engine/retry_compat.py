@@ -29,7 +29,7 @@ def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):
         @wraps(func)
         @tenacity_retry(
             stop=stop_after_attempt(tries),
-            wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** tries)),
+            wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** (tries - 1))),
             retry=retry_if_exception_type(exceptions),
             reraise=True
         )
@@ -39,7 +39,7 @@ def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):
         @wraps(func)
         @tenacity_retry(
             stop=stop_after_attempt(tries),
-            wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** tries)),
+            wait=wait_exponential(multiplier=delay, min=delay, max=delay * (backoff ** (tries - 1))),
             retry=retry_if_exception_type(exceptions),
             reraise=True
         )

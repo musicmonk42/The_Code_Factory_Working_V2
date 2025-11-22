@@ -46,7 +46,14 @@ class ScenarioTemplate(BaseModel):
     priority: float = Field(..., ge=0.0, le=1.0, description="Priority for DecisionOptimizer")
 
 class TrackedDict(Mapping):
-    """Immutable dictionary that tracks access to metrics or templates using singleton Prometheus counters."""
+    """Immutable dictionary that tracks access to metrics or templates using singleton Prometheus counters.
+    
+    PERFORMANCE NOTE: Uses ProcessSafeLock() which is called on every __getitem__ access.
+    This can cause lock contention across processes on hot paths. Consider:
+    - Using thread-local or process-local counters if multi-process access is not required
+    - Caching frequently accessed items to reduce lock contention
+    - Monitoring lock wait times in production to identify bottlenecks
+    """
     _metrics_counter: Optional['Counter'] = None
     _templates_counter: Optional['Counter'] = None
     _lock = ProcessSafeLock()  # Process-safe lock for Counter initialization
