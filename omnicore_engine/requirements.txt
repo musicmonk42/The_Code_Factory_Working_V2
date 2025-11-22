@@ -30,7 +30,7 @@ python-dateutil>=2.8.0
 aiohttp>=3.8.0
 httpx>=0.24.0
 
-# HTTP / REST
+# YAML and JWT utilities
 PyYAML>=6.0
 PyJWT>=2.8.0
 
