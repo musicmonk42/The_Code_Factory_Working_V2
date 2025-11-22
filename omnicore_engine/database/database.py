@@ -1207,11 +1207,18 @@ class Database:
         """
         Rotate encryption keys by prepending new key and re-encrypting existing data.
         
+        Args:
+            new_key: The new encryption key as bytes
+        
         Note: This method temporarily switches from EnterpriseSecurityUtils to FernetEncryption
         for key rotation operations. Both provide compatible encrypt/decrypt interfaces.
         Thread-safety: This operation should be performed during maintenance windows or with
         application-level coordination to prevent concurrent encryption operations.
         """
+        # Validate input
+        if not isinstance(new_key, bytes):
+            raise TypeError("new_key must be bytes")
+        
         # TODO: Add proper locking mechanism for production use
         logger.warning("Key rotation modifies global settings without locking. Ensure no concurrent operations.")
         
@@ -1278,7 +1285,12 @@ class Database:
         logger.info("Key rotation complete.")
 
     async def save_generator_state(self, agent_id: str, data: Dict[str, Any]):
-        """Save state for a generator agent."""
+        """
+        Save state for a generator agent.
+        
+        Note: Default values (x=0, y=0, energy=100, world_size=100) are used for new agents.
+        These could be extracted as configuration values if customization is needed.
+        """
         async with self.AsyncSessionLocal() as session:
             stmt = insert(GeneratorAgentState).values(
                 id=agent_id, name="generator", x=0, y=0, energy=100, world_size=100, agent_type="generator",
@@ -1289,7 +1301,12 @@ class Database:
             await session.commit()
     
     async def save_sfe_state(self, agent_id: str, data: Dict[str, Any]):
-        """Save state for a self-fixing engineer agent."""
+        """
+        Save state for a self-fixing engineer agent.
+        
+        Note: Default values (x=0, y=0, energy=100, world_size=100) are used for new agents.
+        These could be extracted as configuration values if customization is needed.
+        """
         async with self.AsyncSessionLocal() as session:
             stmt = insert(SFEAgentState).values(
                 id=agent_id, name="sfe", x=0, y=0, energy=100, world_size=100, agent_type="sfe",
