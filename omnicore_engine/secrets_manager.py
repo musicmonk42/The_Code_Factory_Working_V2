@@ -567,7 +567,23 @@ def get_secret_manager(provider: Optional[SecretProvider] = None) -> SecretManag
             logger.warning(f"Unknown provider '{provider_str}', using ENV")
             provider = SecretProvider.ENV
     
-    # Create appropriate manager
+    # Use singleton for default provider
+    if _secret_manager is None and provider is None:
+        if provider == SecretProvider.ENV:
+            _secret_manager = EnvSecretManager()
+        elif provider == SecretProvider.AWS:
+            _secret_manager = AWSSecretsManager()
+        elif provider == SecretProvider.VAULT:
+            _secret_manager = VaultSecretManager()
+        elif provider == SecretProvider.GCP:
+            _secret_manager = GCPSecretManager()
+        elif provider == SecretProvider.AZURE:
+            _secret_manager = AzureKeyVaultManager()
+    
+    if _secret_manager and provider is None:
+        return _secret_manager
+    
+    # Create appropriate manager for explicit provider
     if provider == SecretProvider.ENV:
         return EnvSecretManager()
     elif provider == SecretProvider.AWS:

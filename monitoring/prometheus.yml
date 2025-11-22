@@ -47,3 +47,4 @@ alerting:
 
 rule_files:
   - 'alerts.yml'
+  - 'alerts/*.yml'

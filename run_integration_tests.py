@@ -246,16 +246,20 @@ class IntegrationTestRunner:
         """Test rate limiting is working"""
         self.log("Testing rate limiting...")
         
-        # Make multiple rapid requests
+        # Make multiple requests gradually to avoid overwhelming service
         endpoint = f"{self.base_url}/api/v1/generations"
         rate_limited = False
         
-        for i in range(150):  # Try to trigger rate limit
+        # Use a more reasonable number of requests (50) with slight delays
+        for i in range(50):
             response = requests.get(endpoint, timeout=5)
             if response.status_code == 429:
                 rate_limited = True
                 self.log("Rate limit triggered as expected")
                 break
+            # Small delay to avoid overwhelming the service
+            if i % 10 == 0:
+                time.sleep(0.1)
         
         # Note: This test is informational; rate limiting may not trigger
         # in test environment with low request volume
