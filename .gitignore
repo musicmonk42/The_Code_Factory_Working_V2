@@ -230,3 +230,13 @@ test_checkpoints/
 test_log.txt
 exceptions.log.*
 reasoner.log.*
+
+# Security - Private keys and certificates
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+!*.example.pem
+!*.example.key
