@@ -333,7 +333,8 @@ async def _shutdown_test_generation():
     if _test_generation_orchestrator:
         try:
             # Test generation orchestrator doesn't have explicit shutdown method
-            # Just clear the reference
+            # Clear the reference for proper cleanup
+            _test_generation_orchestrator = None
             logger.info("Test generation orchestrator shutdown complete")
         except Exception as e:
             logger.warning("Error during test generation orchestrator shutdown: %s", e)
@@ -346,31 +347,54 @@ async def _test_generation_health_check() -> dict:
     
     try:
         # Test generation orchestrator doesn't have health_check method
-        # Just verify components are present
-        has_policy = hasattr(_test_generation_orchestrator, "policy_engine")
-        has_event_bus = hasattr(_test_generation_orchestrator, "event_bus")
-        has_scanner = hasattr(_test_generation_orchestrator, "security_scanner")
+        # Verify components are functional by checking their presence and basic properties
+        components_status = {}
         
-        if has_policy and has_event_bus and has_scanner:
-            return {
-                "status": "ok",
-                "components": {
-                    "policy_engine": "initialized",
-                    "event_bus": "initialized",
-                    "security_scanner": "initialized"
-                },
-                "available": True
-            }
+        try:
+            if hasattr(_test_generation_orchestrator, "policy_engine"):
+                # Try to access the policy engine to ensure it's functional
+                pe = _test_generation_orchestrator.policy_engine
+                components_status["policy_engine"] = "initialized" if pe is not None else "missing"
+            else:
+                components_status["policy_engine"] = "missing"
+        except Exception as e:
+            components_status["policy_engine"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_test_generation_orchestrator, "event_bus"):
+                eb = _test_generation_orchestrator.event_bus
+                components_status["event_bus"] = "initialized" if eb is not None else "missing"
+            else:
+                components_status["event_bus"] = "missing"
+        except Exception as e:
+            components_status["event_bus"] = f"error: {str(e)}"
+        
+        try:
+            if hasattr(_test_generation_orchestrator, "security_scanner"):
+                ss = _test_generation_orchestrator.security_scanner
+                components_status["security_scanner"] = "initialized" if ss is not None else "missing"
+            else:
+                components_status["security_scanner"] = "missing"
+        except Exception as e:
+            components_status["security_scanner"] = f"error: {str(e)}"
+        
+        # Determine overall status
+        initialized_count = sum(1 for v in components_status.values() if v == "initialized")
+        missing_count = sum(1 for v in components_status.values() if v == "missing")
+        error_count = sum(1 for v in components_status.values() if "error" in str(v))
+        
+        if initialized_count == 3:
+            status = "ok"
+        elif initialized_count > 0:
+            status = "degraded"
         else:
-            return {
-                "status": "degraded",
-                "components": {
-                    "policy_engine": "initialized" if has_policy else "missing",
-                    "event_bus": "initialized" if has_event_bus else "missing",
-                    "security_scanner": "initialized" if has_scanner else "missing"
-                },
-                "available": True
-            }
+            status = "unhealthy"
+        
+        return {
+            "status": status,
+            "components": components_status,
+            "available": True
+        }
     except Exception as e:
         logger.error("Test generation health check failed: %s", e)
         return {"status": "error", "error": str(e), "available": False}
@@ -587,7 +611,7 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
         simulation_health = await _simulation_health_check()
         sim_status = simulation_health.get("status")
         simulation_ok = sim_status in ("ok", "healthy") or (
-            sim_status == "not_initialized" and simulation_health.get("available") == False
+            sim_status == "not_initialized" and simulation_health.get("available") is False
         )
         
         # Check test generation orchestrator health
@@ -595,7 +619,7 @@ async def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False,
         testgen_health = await _test_generation_health_check()
         tg_status = testgen_health.get("status")
         testgen_ok = tg_status in ("ok", "healthy", "degraded") or (
-            tg_status == "not_initialized" and testgen_health.get("available") == False
+            tg_status == "not_initialized" and testgen_health.get("available") is False
         )
         
         overall_status = "ok" if (redis_ok and simulation_ok and testgen_ok) else "degraded"
