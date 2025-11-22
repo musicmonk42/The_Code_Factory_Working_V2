@@ -15,7 +15,7 @@ from arbiter.arbiter import Arbiter
 from intent_capture.api import app as intent_capture_api
 from intent_capture.agent_core import CollaborativeAgent, AgentTeam
 from test_generation.orchestrator import TestGenerationOrchestrator
-from simulation.simulation_module import UnifiedSimulationModule
+from self_fixing_engineer.simulation.simulation_module import UnifiedSimulationModule
 from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
 from arbiter.utils import get_system_metrics_async # New import needed for helper function
 from envs.code_health_env import CodeHealthEnv # New import for the RL environment

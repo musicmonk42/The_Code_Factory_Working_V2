@@ -78,7 +78,8 @@ except ImportError:
     aiofiles_available = False
 
 try:
-    from simulation.audit_log import AuditLogger
+    # Try importing from guardrails as fallback since audit_log doesn't exist in simulation
+    from self_fixing_engineer.guardrails.audit_log import AuditLogger
     AUDIT_LOGGER_AVAILABLE = True
 except ImportError:
     AUDIT_LOGGER_AVAILABLE = False

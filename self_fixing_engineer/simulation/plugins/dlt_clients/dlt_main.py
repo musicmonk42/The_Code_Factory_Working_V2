@@ -7,8 +7,8 @@ import sys
 import uuid
 import click
 
-from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
-from simulation.plugins.dlt_clients.dlt_base import (
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_factory import DLTFactory
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     DLTClientConfigurationError,
     DLTClientError,
     PRODUCTION_MODE,

@@ -78,21 +78,28 @@ except ImportError:
     def wait_exponential(*args, **kwargs): return None
 
 
-# Import components from the simulation package
-from simulation.runners import run_agent
-from simulation.agentic import run_simulation_swarm
-from simulation.utils import hash_file, find_files_by_pattern, print_file_diff, summarize_result, save_sim_result
+# Import components from the simulation package (use relative imports)
+from .runners import run_agent
+from .agentic import run_simulation_swarm
+from .utils import hash_file, find_files_by_pattern, print_file_diff, summarize_result, save_sim_result
 
 # Fix for DLT_LOGGER_AVAILABLE not being defined
+# Note: audit_log.py doesn't exist in simulation, use fallback
 try:
-    from simulation.audit_log import AuditLogger as DLTLogger
-    from simulation.agentic import SecretsManager as GlobalSecretsManager
+    # Try to import from test_generation or other modules
+    from self_fixing_engineer.guardrails.audit_log import AuditLogger as DLTLogger
     DLT_LOGGER_AVAILABLE = True
 except ImportError:
     DLT_LOGGER_AVAILABLE = False
     DLTLogger = None
+    logging.warning("DLTLogger not available. Audit logging will be disabled.")
+
+# SecretsManager is in agentic module
+try:
+    from .agentic import SecretsManager as GlobalSecretsManager
+except (ImportError, AttributeError):
     GlobalSecretsManager = None
-    logging.warning("DLTLogger or SecretsManager not available. Audit logging will be disabled.")
+    logging.warning("SecretsManager not available in agentic module.")
 
 
 # --- Directory and Path Setup ---

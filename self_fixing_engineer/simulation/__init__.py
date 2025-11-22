@@ -1,26 +1,57 @@
 # simulation/__init__.py
+"""
+Simulation module for Self-Fixing Engineer platform.
+Provides entry points for OmniCore integration.
+"""
+
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- Entry points for OmniCore ---
 def simulation_run_entrypoint(*args, **kwargs):
-    # This should call your orchestrator's main run logic (async or sync as needed)
-    from .main import main as simulation_main
-    import asyncio
+    """
+    Main entrypoint for running simulation orchestrator.
+    Calls the core.main() function with async support.
+    """
+    from .core import main as simulation_main
     return asyncio.run(simulation_main(*args, **kwargs))
 
 def simulation_health_check():
-    # Returns a simple health dict or raises
-    from .main import health_check as simulation_health_check_func
-    return simulation_health_check_func()
+    """
+    Health check for simulation module.
+    Returns a simple health dict or raises an exception.
+    """
+    try:
+        from .registry import get_registry
+        registry = get_registry()
+        return {
+            "status": "healthy",
+            "module": "simulation",
+            "plugins_loaded": len(registry) if registry else 0
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "module": "simulation",
+            "error": str(e)
+        }
 
 def simulation_get_registry():
-    # Return the SIM_REGISTRY or other registry dict
+    """Return the SIM_REGISTRY or other registry dict."""
     from .registry import get_registry
     return get_registry()
 
 # --- Register with OmniCore if running inside it ---
 def _register_with_omnicore():
+    """
+    Register simulation engine with OmniCore.
+    Gracefully handles case where OmniCore is not available.
+    """
     try:
-        from omnicore_engine.engines import register_engine  # or omnicore.engine_registry, adjust as needed
+        from omnicore_engine.engines import register_engine
         register_engine(
             "simulation",
             entrypoints={
@@ -29,11 +60,11 @@ def _register_with_omnicore():
                 "get_registry": simulation_get_registry,
             }
         )
-        # Optionally emit to audit:
-        from .policy_and_audit import emit_audit_event
-        emit_audit_event("simulation_engine_registered", {"status": "success"})
+        logger.info("Simulation engine registered with OmniCore successfully")
     except ImportError:
         # Not running under OmniCore, skip registration
-        pass
+        logger.debug("OmniCore not available, skipping simulation engine registration")
+    except Exception as e:
+        logger.warning(f"Failed to register simulation engine with OmniCore: {e}")
 
 _register_with_omnicore()
