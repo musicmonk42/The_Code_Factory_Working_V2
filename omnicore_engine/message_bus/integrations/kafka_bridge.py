@@ -87,11 +87,16 @@ except Exception:  # pragma: no cover
 try:
     from ..resilience import CircuitBreaker  # Assumes resilience.py is available
 except ImportError:  # pragma: no cover
-    # Fallback if not available
+    # Fallback if not available - provides no-op implementation for testing
+    import warnings
+    warnings.warn("CircuitBreaker module not available, using no-op fallback", ImportWarning)
+    
     class CircuitBreaker:  # type: ignore
         """Fallback CircuitBreaker if resilience module is not available."""
         def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
             self.state = "closed"
+            self.failure_threshold = failure_threshold  # Store for reference
+            self.recovery_timeout = recovery_timeout  # Store for reference
         
         def record_failure(self):
             pass
