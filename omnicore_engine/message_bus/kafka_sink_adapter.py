@@ -166,13 +166,6 @@ class KafkaBusSink:
                 name="kafka_sink_emit",
             )
 
-        # Optional guardian registration
-        if MessageBusGuardian is not None:  # pragma: no cover
-            try:
-                MessageBusGuardian.register_component("kafka_sink_adapter")
-            except Exception:
-                pass
-
     # ----- class factories ------------------------------------------------- #
     @classmethod
     def from_env(cls) -> "KafkaBusSink":

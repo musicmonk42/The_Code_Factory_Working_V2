@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Pattern, Union, Tuple, cast, Set
 from collections import defaultdict
 from functools import partial
+from dataclasses import asdict
 import hmac
 import inspect
 
@@ -53,8 +54,6 @@ from omnicore_engine.database import Database
 from omnicore_engine.core import safe_serialize 
 import aiohttp
 from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
-# --- FIX 3: Removed duplicate/conflicting import ---
-# from omnicore_engine.message_bus.message_types import Message
 from omnicore_engine.message_bus.message_types import Message
 
 # New imports
@@ -112,7 +111,7 @@ def validate_message_size(payload: Any) -> bool:
 
 def sign_message(message: Message, key: bytes) -> str:
     """Signs a message using HMAC-SHA256."""
-    data_to_sign = json.dumps(message.model_dump(), default=safe_serialize).encode('utf-8')
+    data_to_sign = json.dumps(asdict(message), default=safe_serialize).encode('utf-8')
     return hmac.new(
         key,
         data_to_sign,
@@ -164,6 +163,7 @@ class ShardedMessageBus:
         self._subscriber_lock = asyncio.Lock()
         self._publish_lock = asyncio.Lock()
         self.shard_locks = [OrderedLock(i) for i in range(self.shard_count)]
+        self.shard_paused = [False] * self.shard_count  # Track paused state per shard
 
         self.hash_ring = ConsistentHashRing(nodes=[str(i) for i in range(self.shard_count)])
         self.topic_to_shard_cache = {}
@@ -214,7 +214,7 @@ class ShardedMessageBus:
         self.context_propagation_middleware = ContextPropagationMiddleware(self)
         self.guardian = MessageBusGuardian(self, check_interval=getattr(self.config, "MESSAGE_BUS_GUARDIAN_INTERVAL", 30)) if getattr(self.config, "ENABLE_MESSAGE_BUS_GUARDIAN", False) else None
         
-        # --- FIX 5 & 11: Store the event loop ---
+        # Store the event loop - we'll use _get_loop() for safer access
         try:
             self._loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -237,6 +237,14 @@ class ShardedMessageBus:
             use_kafka=self.kafka_bridge is not None,
             use_redis=self.redis_bridge is not None
         )
+
+    def _get_loop(self):
+        """Get the current running event loop, with fallback to stored loop."""
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            # Fallback to stored loop for backwards compatibility
+            return self._loop
         
     def _start_dispatchers(self) -> None:
         """Starts asynchronous dispatcher tasks for each queue."""
@@ -309,10 +317,9 @@ class ShardedMessageBus:
         for callback, filter in subscribers_to_dispatch:
             callback_executor.submit(
                 lambda cb=callback, msg=message, flt=filter:
-                # --- FIX 6: Use stored event loop ---
                 asyncio.run_coroutine_threadsafe(
                     self.context_propagation_middleware._restore_context_wrapper(cb, msg, flt),
-                    self._loop
+                    self._get_loop()
                 )
             )
         logger_for_dispatch.debug("Message submitted to internal subscribers.")
@@ -372,7 +379,9 @@ class ShardedMessageBus:
                     if self.db and message.priority >= getattr(self.config, 'message_persistence_priority_threshold', 5):
                         payload_to_persist = message.payload
                         if message.encrypted and self.encryption:
-                            payload_to_persist = json.loads(self.encryption.decrypt(message.payload.encode('utf-8'))) if self.encryption else message.payload
+                            # Decrypt returns bytes, so we need to decode it to string, then parse JSON
+                            decrypted_bytes = self.encryption.decrypt(message.payload)
+                            payload_to_persist = json.loads(decrypted_bytes.decode('utf-8'))
                         await self.db.save_preferences(
                             user_id=f"message_trace_{message.trace_id}",
                             prefs={"topic": message.topic, "payload": safe_serialize(payload_to_persist), "timestamp": message.timestamp, "idempotency_key": message.idempotency_key, "context": message.context}
@@ -473,12 +482,19 @@ class ShardedMessageBus:
             # The user's prompt is a mix of sync and async calls, so we'll go with the most likely correct approach.
             async def _run_workflow():
                 # A more robust implementation would check plugin existence and use it correctly
-                # This is a placeholder for the user's logic, adapted to be async-friendly
-                # Note: `PLUGIN_REGISTRY.execute` is not a standard method, but we'll adapt to what's provided.
                 try:
                     gen_plugin = PLUGIN_REGISTRY.get("scenario", "generator_workflow")
                     if gen_plugin:
-                        gen_result = await gen_plugin.execute(action="run_generator_workflow", requirements=payload.get("requirements"), config=payload.get("config"))
+                        if not hasattr(gen_plugin, 'execute'):
+                            logger.error("generator_workflow plugin does not have execute method.")
+                            return
+                        
+                        # Check if execute is async
+                        if asyncio.iscoroutinefunction(gen_plugin.execute):
+                            gen_result = await gen_plugin.execute(action="run_generator_workflow", requirements=payload.get("requirements"), config=payload.get("config"))
+                        else:
+                            gen_result = await asyncio.to_thread(gen_plugin.execute, action="run_generator_workflow", requirements=payload.get("requirements"), config=payload.get("config"))
+                        
                         await self.publish("analyze_code", gen_result, priority=10)
                     else:
                         logger.error("generator_workflow plugin not found.")
@@ -495,7 +511,16 @@ class ShardedMessageBus:
                 try:
                     analyzer_plugin = PLUGIN_REGISTRY.get("execution", "codebase_analyzer")
                     if analyzer_plugin:
-                        analyzer_result = await analyzer_plugin.execute(action="analyze_codebase", root_dir=payload.get("code"))
+                        if not hasattr(analyzer_plugin, 'execute'):
+                            logger.error("codebase_analyzer plugin does not have execute method.")
+                            return
+                        
+                        # Check if execute is async
+                        if asyncio.iscoroutinefunction(analyzer_plugin.execute):
+                            analyzer_result = await analyzer_plugin.execute(action="analyze_codebase", root_dir=payload.get("code"))
+                        else:
+                            analyzer_result = await asyncio.to_thread(analyzer_plugin.execute, action="analyze_codebase", root_dir=payload.get("code"))
+                        
                         await self.publish("manage_bug", analyzer_result, priority=10)
                     else:
                         logger.error("codebase_analyzer plugin not found.")
@@ -509,7 +534,16 @@ class ShardedMessageBus:
                 try:
                     bug_manager_plugin = PLUGIN_REGISTRY.get("fix", "bug_manager")
                     if bug_manager_plugin:
-                        bug_manager_result = await bug_manager_plugin.execute(action="manage_bug", code=payload.get("analysis"))
+                        if not hasattr(bug_manager_plugin, 'execute'):
+                            logger.error("bug_manager plugin does not have execute method.")
+                            return
+                        
+                        # Check if execute is async
+                        if asyncio.iscoroutinefunction(bug_manager_plugin.execute):
+                            bug_manager_result = await bug_manager_plugin.execute(action="manage_bug", code=payload.get("analysis"))
+                        else:
+                            bug_manager_result = await asyncio.to_thread(bug_manager_plugin.execute, action="manage_bug", code=payload.get("analysis"))
+                        
                         await self.publish("workflow_completed", bug_manager_result, priority=10)
                     else:
                         logger.error("bug_manager plugin not found.")
@@ -542,9 +576,8 @@ class ShardedMessageBus:
             if encrypt:
                 # Use security_utils encryption
                 try:
-                    processed_payload = self.security_utils.encrypt_data(
-                        json.dumps(payload),
-                        context=f"msgbus:{topic}"
+                    processed_payload = self.security_utils.encrypt(
+                        json.dumps(payload)
                     )
                 except Exception as e:
                     logger_for_publish.error(f"Failed to encrypt message: {e}")
@@ -575,7 +608,9 @@ class ShardedMessageBus:
                     validation_payload_dict = None
                     if message.encrypted and self.encryption:
                         try:
-                            decrypted_json = self.encryption.decrypt(message.payload.encode('utf-8')).decode('utf-8')
+                            # Decrypt returns bytes, need to decode to string then parse JSON
+                            decrypted_bytes = self.encryption.decrypt(message.payload)
+                            decrypted_json = decrypted_bytes.decode('utf-8')
                             validation_payload_dict = json.loads(decrypted_json)
                         except Exception as e:
                             logger_for_publish.warning(f"Failed to decrypt validation payload: {e}", exc_info=True)
@@ -609,8 +644,7 @@ class ShardedMessageBus:
     # --- FIX 4: Change MessageFilter to Any ---
     def subscribe(self, topic: Union[str, Pattern], handler: Callable, filter: Optional[Any] = None):
         logger_for_subscribe = logger.bind(topic=str(topic), handler=getattr(handler, '__name__', str(handler)))
-        # --- FIX 5: Use run_coroutine_threadsafe instead of asyncio.run ---
-        asyncio.run_coroutine_threadsafe(self._subscribe_async(topic, handler, filter), self._loop)
+        asyncio.run_coroutine_threadsafe(self._subscribe_async(topic, handler, filter), self._get_loop())
         # --- FIX 7: Add type check for startswith ---
         if isinstance(topic, str) and topic.startswith("requests.arbiter"):
             logger_for_subscribe.info(f"Registered arbiter task handler for {topic}")
@@ -627,8 +661,7 @@ class ShardedMessageBus:
 
     def unsubscribe(self, topic: Union[str, Pattern], callback: Callable[[Message], None]) -> None:
         logger_for_unsubscribe = logger.bind(topic=str(topic), callback=getattr(callback, '__name__', str(callback)))
-        # --- FIX 5: Use run_coroutine_threadsafe instead of asyncio.run ---
-        asyncio.run_coroutine_threadsafe(self._unsubscribe_async(topic, callback), self._loop)
+        asyncio.run_coroutine_threadsafe(self._unsubscribe_async(topic, callback), self._get_loop())
 
     async def _unsubscribe_async(self, topic: Union[str, Pattern], callback: Callable[[Message], None]) -> None:
         async with self._subscriber_lock:
@@ -942,6 +975,22 @@ class ShardedMessageBus:
         message.processing_start = time.time_ns() // 1000
         logger.debug("Added processing_start timestamp for trading message.", trace_id=message.trace_id, timestamp_us=message.processing_start)
         return message
+
+    async def pause_publishes(self, shard_id: int) -> None:
+        """Pause publishing to a specific shard due to backpressure."""
+        if 0 <= shard_id < self.shard_count:
+            self.shard_paused[shard_id] = True
+            logger.warning(f"Pausing publishes to shard {shard_id}")
+        else:
+            logger.error(f"Invalid shard_id {shard_id} for pause_publishes")
+    
+    async def resume_publishes(self, shard_id: int) -> None:
+        """Resume publishing to a specific shard."""
+        if 0 <= shard_id < self.shard_count:
+            self.shard_paused[shard_id] = False
+            logger.info(f"Resuming publishes to shard {shard_id}")
+        else:
+            logger.error(f"Invalid shard_id {shard_id} for resume_publishes")
 
     async def shutdown(self) -> None:
         logger.info("Initiating ShardedMessageBus shutdown...")
