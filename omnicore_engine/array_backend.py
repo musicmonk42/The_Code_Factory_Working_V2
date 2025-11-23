@@ -46,10 +46,24 @@ import os
 import threading  # FIXED: Added import threading to resolve NameError
 
 # ---- App/Internal Imports ----
-from arbiter.config import ArbiterConfig
 from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
 
-# Initialize the configuration object
+# arbiter is an optional app-level dependency. Provide a safe fallback stub for tests/CI
+try:
+    from arbiter.config import ArbiterConfig  # type: ignore
+except Exception:
+    logging.warning(
+        "Optional dependency 'arbiter' not found — using fallback ArbiterConfig stub for tests."
+    )
+    
+    class ArbiterConfig:
+        """Minimal fallback for tests and CI when arbiter is not installed."""
+        def __init__(self) -> None:
+            # keep defaults that your module expects
+            self.log_level = "INFO"
+            self.enable_array_backend_benchmarking = False
+
+# Initialize the configuration object (real or fallback)
 settings = ArbiterConfig()
 
 # Define these flags locally or import from a central constants file
