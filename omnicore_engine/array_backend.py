@@ -45,12 +45,9 @@ import numpy as np
 import os
 import threading  # FIXED: Added import threading to resolve NameError
 
-import types
-
 # ---- App/Internal Imports ----
-# Replace top-level config instantiation with a defensive lazy/fallback approach
+# Defensive lazy settings accessor to avoid import-time side-effects
 
-# Helper function to create fallback settings
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
     return types.SimpleNamespace(
@@ -58,33 +55,34 @@ def _create_fallback_settings():
         enable_array_backend_benchmarking=False,
     )
 
-# Safe import of ArbiterConfig: guard against ImportError and any runtime errors
-# inside arbiter.config (e.g. NameError from a broken module). If import or
-# instantiation fails, fall back to a minimal settings object so tests and
-# lightweight installs can import this module safely.
-try:
-    from arbiter.config import ArbiterConfig  # type: ignore
-except Exception as e:
-    # Avoid failing import time if arbiter.config contains runtime errors.
-    logging.warning(
-        "Could not import arbiter.config safely; using fallback settings. Import error: %s",
-        e,
-    )
-    ArbiterConfig = None
-
-# Instantiate settings defensively; if ArbiterConfig exists but its constructor
-# raises, fall back to the minimal settings object.
-if ArbiterConfig is not None:
+def _get_settings():
+    """Lazy import + defensive instantiation of settings."""
     try:
-        settings = ArbiterConfig()
+        from arbiter.config import ArbiterConfig  # type: ignore
+    except Exception as e:
+        logging.warning(
+            "Could not import arbiter.config; using fallback settings. Import error: %s", e
+        )
+        return _create_fallback_settings()
+
+    try:
+        return ArbiterConfig()
     except Exception as e:
         logging.warning(
             "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
             e,
         )
-        settings = _create_fallback_settings()
-else:
-    settings = _create_fallback_settings()
+        return _create_fallback_settings()
+
+# Module-wide settings are accessed via this variable; evaluate lazily when needed
+_settings: Optional[Any] = None
+
+def settings():
+    """Get settings instance, creating it lazily on first access."""
+    global _settings
+    if _settings is None:
+        _settings = _get_settings()
+    return _settings
 
 try:
     from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
@@ -144,47 +142,48 @@ except ImportError:
     logging.warning("NengoLoihi not found. Neuromorphic backend will be unavailable.")
 
 
-# FIXED: Centralized logging configuration to use the core logger.
-# This ensures consistent logging throughout the application.
+# Lazy logger initialization to avoid import-time side effects
 _using_structlog = False
-try:
-    from omnicore_engine.core import logger as core_logger
+_logger: Optional[Any] = None
 
-    logger = core_logger.bind(module="ArrayBackend")
-    _using_structlog = True
-except ImportError:
-    logger = logging.getLogger(__name__)
-    # Ensure logger.setLevel receives an integer level, not a string
-    log_level = getattr(settings, "log_level", "INFO")
-    if isinstance(log_level, str):
-        log_level = getattr(logging, log_level.upper(), logging.INFO)
-    logger.setLevel(log_level)
+def get_logger():
+    """Get logger instance, creating it lazily on first access."""
+    global _logger, _using_structlog
+    if _logger is not None:
+        return _logger
 
-# Structured logging with structlog if available
-try:
-    import structlog
-
-    logger = structlog.get_logger(__name__).bind(module="ArrayBackend")
-    _using_structlog = True
-except ImportError:
-    pass  # Fallback to standard logging
+    # Try to bind to core logger lazily (avoid importing at module import time)
+    try:
+        from omnicore_engine.core import logger as core_logger  # local import
+        _logger = core_logger.bind(module="ArrayBackend")
+        _using_structlog = True
+        return _logger
+    except Exception:
+        _logger = logging.getLogger(__name__)
+        log_level = getattr(settings(), "log_level", "INFO")
+        if isinstance(log_level, str):
+            log_level = getattr(logging, log_level.upper(), logging.INFO)
+        _logger.setLevel(log_level)
+        return _logger
 
 
 # Helper function to log with or without structlog
 def _log_info(msg: str, **kwargs) -> None:
     """Helper to log info messages compatible with both logging and structlog"""
+    log = get_logger()
     if _using_structlog:
-        logger.info(msg, **kwargs)
+        log.info(msg, **kwargs)
     else:
-        logger.info(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
+        log.info(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
 
 
 def _log_debug(msg: str, **kwargs) -> None:
     """Helper to log debug messages compatible with both logging and structlog"""
+    log = get_logger()
     if _using_structlog:
-        logger.debug(msg, **kwargs)
+        log.debug(msg, **kwargs)
     else:
-        logger.debug(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
+        log.debug(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
 
 # --------------------------------------------------------------------------- #
 #  Optional Prometheus
@@ -297,11 +296,52 @@ class _ArrayBackend:
 
 
 # --------------------------------------------------------------------------- #
-#  Public API – import these from the package
+#  Public API – lazy backend initialization
 # --------------------------------------------------------------------------- #
-backend = _ArrayBackend()  # singleton instance
-xp = backend.xp  # numpy or cupy module
-is_gpu = backend.is_gpu
+_backend_instance: Optional[_ArrayBackend] = None
+
+def get_backend() -> _ArrayBackend:
+    """Get backend instance, creating it lazily on first access."""
+    global _backend_instance
+    if _backend_instance is None:
+        _backend_instance = _ArrayBackend()
+    return _backend_instance
+
+# Note: cp is already defined at line 99 for test patching
+
+# Provide xp and is_gpu accessors rather than fixed values at import time
+def get_xp():
+    """Get the array processing module (numpy or cupy)."""
+    return get_backend().xp
+
+def get_is_gpu():
+    """Check if GPU backend is being used."""
+    return get_backend().is_gpu
+
+# Older code might rely on `xp` at import time; keep xp defined but None until backend created
+xp = None
+is_gpu = False
+
+# Provide a function to refresh module-level xp/is_gpu if you need them updated:
+def refresh_backend_globals():
+    """Refresh module-level xp/is_gpu variables from backend instance."""
+    global xp, is_gpu
+    b = get_backend()
+    xp = b.xp
+    is_gpu = b.is_gpu
+
+# For backward compatibility, expose backend as a property-like accessor
+# but don't create it at import time
+class _BackendProxy:
+    """Proxy to lazily access backend singleton."""
+    def __getattr__(self, name):
+        return getattr(get_backend(), name)
+    
+    def __bool__(self):
+        # Always return True for backward compatibility with truthiness checks
+        return True
+
+backend = _BackendProxy()
 
 
 # --------------------------------------------------------------------------- #
@@ -366,7 +406,7 @@ class Benchmarker:
         func()
         duration = time.time() - start
         self.results[operation].append(duration)
-        logger.debug(
+        get_logger().debug(
             f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}"
         )
 
@@ -383,10 +423,11 @@ class BackendBenchmarker:
     def __init__(self):
         self.results: Dict[str, List[float]] = defaultdict(list)
         # Handle logger binding safely
-        if _using_structlog and hasattr(logger, 'bind'):
-            self.logger = logger.bind(sub_module="BackendBenchmarker")
+        log = get_logger()
+        if _using_structlog and hasattr(log, 'bind'):
+            self.logger = log.bind(sub_module="BackendBenchmarker")
         else:
-            self.logger = logger
+            self.logger = log
 
     def run_benchmark(
         self,
@@ -455,7 +496,7 @@ class ArrayBackend:
             else:
                 self.mode = "numpy"
 
-        logger.info(f"ArrayBackend initialized in {self.mode} mode.")
+        get_logger().info(f"ArrayBackend initialized in {self.mode} mode.")
 
     def array(self, data: Any, dtype: Optional[Any] = None) -> Any:
         """
@@ -1148,7 +1189,7 @@ class ArrayBackend:
         self.benchmarker = BackendBenchmarker()
         # Control benchmarking overhead with a setting
         self.enable_benchmarking = getattr(
-            settings, "enable_array_backend_benchmarking", False
+            settings(), "enable_array_backend_benchmarking", False
         )
         if self.enable_benchmarking:
             self.logger.info("ArrayBackend benchmarking is enabled.")
@@ -1731,9 +1772,6 @@ class ArrayBackend:
                 return self.xp.sum(a, dim=axis) if axis is not None else self.xp.sum(a)
             return self.xp.sum(a, axis=axis)
 
-        logger.warning(
-            f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy."
-        )
         self.logger.warning(
             f"Sum operation not directly supported by current backend ({self.mode}), falling back to NumPy."
         )

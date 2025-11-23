@@ -31,10 +31,10 @@ def test_import_array_backend():
     
     # Verify settings fallback works
     assert hasattr(omnicore_engine.array_backend, "settings")
-    settings = omnicore_engine.array_backend.settings
+    settings_obj = omnicore_engine.array_backend.settings()
     
     # Should have at least log_level attribute (either from ArbiterConfig or SimpleNamespace)
-    assert hasattr(settings, "log_level")
+    assert hasattr(settings_obj, "log_level")
 
 
 def test_array_backend_instantiation():
@@ -59,5 +59,33 @@ def test_defensive_settings():
     from omnicore_engine.array_backend import settings
     
     # These should always be available (either from ArbiterConfig or fallback)
-    assert hasattr(settings, "log_level")
-    assert hasattr(settings, "enable_array_backend_benchmarking")
+    settings_obj = settings()
+    assert hasattr(settings_obj, "log_level")
+    assert hasattr(settings_obj, "enable_array_backend_benchmarking")
+
+
+def test_module_imports_cleanly():
+    """
+    Test that the module can be imported without triggering backend initialization.
+    This ensures import-time side effects are minimal.
+    """
+    import importlib
+    
+    # Clear module cache
+    if "omnicore_engine.array_backend" in sys.modules:
+        del sys.modules["omnicore_engine.array_backend"]
+    
+    # Import should not trigger backend creation
+    m = importlib.import_module("omnicore_engine.array_backend")
+    
+    # cp should be defined (even if None) for test patching
+    assert hasattr(m, "cp")
+    
+    # Backend should be a proxy, not the actual backend instance yet
+    assert hasattr(m, "backend")
+    
+    # xp should be None initially (not yet initialized)
+    assert m.xp is None
+    
+    # is_gpu should be False initially
+    assert m.is_gpu is False
