@@ -218,7 +218,14 @@ jobs:
             pytest-mock==3.11.0 \
             pytest-timeout \
             tomli_w \
-            typing-extensions
+            typing-extensions \
+            aiohttp==3.8.5
+          # Install self_fixing_engineer package first (contains arbiter)
+          if [ -f self_fixing_engineer/requirements.txt ]; then
+            pip install --no-cache-dir -r self_fixing_engineer/requirements.txt || true
+          fi
+          python -m pip install --no-cache-dir -e ./self_fixing_engineer || true
+          # Install omnicore_engine requirements and package
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
           fi
