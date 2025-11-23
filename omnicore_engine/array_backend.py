@@ -75,7 +75,7 @@ def _get_settings():
         return _create_fallback_settings()
 
 # Module-wide settings are accessed via this variable; evaluate lazily when needed
-_settings: Optional[types.SimpleNamespace] = None
+_settings: Optional[Any] = None
 
 def settings():
     """Get settings instance, creating it lazily on first access."""
@@ -144,7 +144,7 @@ except ImportError:
 
 # Lazy logger initialization to avoid import-time side effects
 _using_structlog = False
-_logger: Optional[logging.Logger] = None
+_logger: Optional[Any] = None
 
 def get_logger():
     """Get logger instance, creating it lazily on first access."""
