@@ -344,11 +344,13 @@ class DecisionOptimizer:
             if sfe_core_engine and hasattr(sfe_core_engine, "feedback_manager")
             else None
         )
+        # fmt: off
         self.knowledge_graph: Optional["KnowledgeGraph"] = (  # noqa: F821 - forward reference
             sfe_core_engine.knowledge_graph
             if sfe_core_engine and hasattr(sfe_core_engine, "knowledge_graph")
             else None
         )
+        # fmt: on
         self.explainable_reasoner: Optional[ExplainableReasoner] = (
             sfe_core_engine.explainable_reasoner
             if sfe_core_engine and hasattr(sfe_core_engine, "explainable_reasoner")

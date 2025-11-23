@@ -62,19 +62,25 @@ async def config_store_with_fallback(tmp_path):
 
     # 1. Create a mock file for text reads ('r')
     mock_text_file = mocker.AsyncMock()  # noqa: F821 - pytest fixture
-    mock_text_file.read = mocker.AsyncMock(return_value=content_str)  # noqa: F821 - pytest fixture
+    mock_text_file.read = mocker.AsyncMock(  # noqa: F821 - pytest fixture
+        return_value=content_str
+    )
     mock_text_file.__aenter__.return_value = mock_text_file
     mock_text_file.__aexit__ = mocker.AsyncMock()  # noqa: F821 - pytest fixture
 
     # 2. Create a mock file for binary reads ('rb')
     mock_bin_file = mocker.AsyncMock()  # noqa: F821 - pytest fixture
-    mock_bin_file.read = mocker.AsyncMock(return_value=content_bytes)  # noqa: F821 - pytest fixture
+    mock_bin_file.read = mocker.AsyncMock(  # noqa: F821 - pytest fixture
+        return_value=content_bytes
+    )
     mock_bin_file.__aenter__.return_value = mock_bin_file
     mock_bin_file.__aexit__ = mocker.AsyncMock()  # noqa: F821 - pytest fixture
 
     # 3. Create a mock file for the checksum read
     mock_checksum_file = mocker.AsyncMock()  # noqa: F821 - pytest fixture
-    mock_checksum_file.read = mocker.AsyncMock(return_value=computed_hash)  # noqa: F821 - pytest fixture
+    mock_checksum_file.read = mocker.AsyncMock(  # noqa: F821 - pytest fixture
+        return_value=computed_hash
+    )
     mock_checksum_file.__aenter__.return_value = mock_checksum_file
     mock_checksum_file.__aexit__ = mocker.AsyncMock()  # noqa: F821 - pytest fixture
 
