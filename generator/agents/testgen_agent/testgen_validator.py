@@ -136,7 +136,6 @@ class ValidatorRegistry:
     def __init__(self):
         self.observer = None
         # Initialize the built-in validators
-        global VALIDATORS
         VALIDATORS.clear()
         VALIDATORS["coverage"] = CoverageValidator()
         VALIDATORS["mutation"] = MutationValidator()
@@ -196,7 +195,6 @@ class ValidatorRegistry:
 
     async def _reload_plugins(self):
         """Reloads validator plugins from PLUGIN_DIR."""
-        global VALIDATORS
         VALIDATORS.clear()
         VALIDATORS["coverage"] = CoverageValidator()
         VALIDATORS["mutation"] = MutationValidator()
