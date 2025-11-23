@@ -7,8 +7,6 @@ the arbiter.config module has runtime errors during its initialization.
 """
 
 import sys
-import importlib
-import pytest
 from unittest import mock
 
 
