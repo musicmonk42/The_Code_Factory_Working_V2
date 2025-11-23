@@ -45,8 +45,6 @@ import numpy as np
 import os
 import threading  # FIXED: Added import threading to resolve NameError
 
-import types
-
 # ---- App/Internal Imports ----
 # Defensive lazy settings accessor to avoid import-time side-effects
 
