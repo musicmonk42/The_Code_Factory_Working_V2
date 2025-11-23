@@ -39,9 +39,30 @@ deploy_agent_history.db
 mock_history.db*
 agentic_audit_integrity.json
 dlt_audit*.json*
+pytest_report.xml
+conftest.py
+**/tests/
+**/__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
 
 # Documentation and audit files
 *.md
 !README.md
 LICENSE
 patent_doc.md
+
+# Development and CI files
+.pre-commit-config.yaml
+.ruff.toml
+Makefile
+run_integration_tests.py
+docker-compose.dev.yml
+.env.example
+.devcontainer/
+
+# Monitoring and health check scripts (not needed in runtime)
+monitoring/
+health_check.py
