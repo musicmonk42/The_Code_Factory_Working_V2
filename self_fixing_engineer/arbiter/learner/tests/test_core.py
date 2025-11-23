@@ -96,9 +96,7 @@ class TestLearner:
                     mock_audit_instance.log_event = AsyncMock()
                     mock_audit.from_environment.return_value = mock_audit_instance
 
-                    with patch(
-                        "arbiter.learner.core.get_meta_learning_data_store"
-                    ) as mock_meta:
+                    with patch("arbiter.learner.core.get_meta_learning_data_store") as mock_meta:
                         mock_meta_store = AsyncMock()
                         mock_meta_store.connect = AsyncMock()
                         mock_meta_store.disconnect = AsyncMock()
@@ -153,9 +151,7 @@ class TestLearner:
                 with patch("arbiter.learner.core.generate_explanation") as mock_explain:
                     mock_explain.return_value = "Test explanation"
 
-                    with patch(
-                        "arbiter.learner.core.persist_knowledge"
-                    ) as mock_persist:
+                    with patch("arbiter.learner.core.persist_knowledge") as mock_persist:
                         mock_persist.return_value = None
 
                         result = await learner.learn_new_thing(
@@ -172,9 +168,7 @@ class TestLearner:
 
                         # Verify the value was stored in memory
                         assert "TestDomain" in learner.arbiter.state["memory"]
-                        assert (
-                            "test_key" in learner.arbiter.state["memory"]["TestDomain"]
-                        )
+                        assert "test_key" in learner.arbiter.state["memory"]["TestDomain"]
 
     @pytest.mark.asyncio
     async def test_learn_new_thing_invalid_domain(self, learner):
@@ -248,9 +242,7 @@ class TestLearner:
                 with patch("arbiter.learner.core.generate_explanation") as mock_explain:
                     mock_explain.return_value = "Batch explanation"
 
-                    with patch(
-                        "arbiter.learner.core.persist_knowledge_batch"
-                    ) as mock_persist:
+                    with patch("arbiter.learner.core.persist_knowledge_batch") as mock_persist:
                         mock_persist.return_value = None
 
                         results = await learner.learn_batch(
@@ -352,9 +344,7 @@ class TestLearner:
             assert result["reason"] == "success"
 
             # Verify the fact was removed from memory
-            assert "test_key" not in learner.arbiter.state["memory"].get(
-                "TestDomain", {}
-            )
+            assert "test_key" not in learner.arbiter.state["memory"].get("TestDomain", {})
 
     @pytest.mark.asyncio
     async def test_forget_fact_not_found(self, learner):
@@ -474,9 +464,7 @@ class TestLearner:
                         assert result["status"] == "learned"
 
                         # Check that the value in memory is encrypted (bytes)
-                        stored = learner.arbiter.state["memory"]["SecretDomain"][
-                            "secret_key"
-                        ]
+                        stored = learner.arbiter.state["memory"]["SecretDomain"]["secret_key"]
                         assert isinstance(stored["value"], bytes)
                         assert stored["value"].startswith(b"v1:")  # Key ID prefix
 

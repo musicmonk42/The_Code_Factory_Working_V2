@@ -135,24 +135,18 @@ class ShardedMessageBus:
         self.db = db
         self.audit_client = audit_client
         self.running = True
-        self.dynamic_shards_enabled = getattr(
-            self.config, "dynamic_shards_enabled", False
-        )
+        self.dynamic_shards_enabled = getattr(self.config, "dynamic_shards_enabled", False)
 
         # Core components
         self.shard_count = max(1, getattr(self.config, "message_bus_shard_count", 4))
         self.max_queue_size = getattr(self.config, "message_bus_max_queue_size", 10000)
-        self.workers_per_shard = getattr(
-            self.config, "message_bus_workers_per_shard", 2
-        )
+        self.workers_per_shard = getattr(self.config, "message_bus_workers_per_shard", 2)
 
         self.queues = [
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-            for _ in range(self.shard_count)
+            asyncio.PriorityQueue(maxsize=self.max_queue_size) for _ in range(self.shard_count)
         ]
         self.high_priority_queues = [
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-            for _ in range(self.shard_count)
+            asyncio.PriorityQueue(maxsize=self.max_queue_size) for _ in range(self.shard_count)
         ]
 
         self.executors = [
@@ -177,9 +171,9 @@ class ShardedMessageBus:
             for i in range(self.shard_count)
         ]
 
-        self.subscribers: Dict[
-            str, List[Tuple[Callable[[Message], None], Optional[Any]]]
-        ] = defaultdict(list)
+        self.subscribers: Dict[str, List[Tuple[Callable[[Message], None], Optional[Any]]]] = (
+            defaultdict(list)
+        )
         self.regex_subscribers: Dict[
             Pattern, List[Tuple[Callable[[Message], None], Optional[Any]]]
         ] = defaultdict(list)
@@ -188,9 +182,7 @@ class ShardedMessageBus:
         self.shard_locks = [OrderedLock(i) for i in range(self.shard_count)]
         self.shard_paused = [False] * self.shard_count  # Track paused state per shard
 
-        self.hash_ring = ConsistentHashRing(
-            nodes=[str(i) for i in range(self.shard_count)]
-        )
+        self.hash_ring = ConsistentHashRing(nodes=[str(i) for i in range(self.shard_count)])
         self.topic_to_shard_cache = {}
         self.rebalancing_in_progress = asyncio.Event()
         # --- FIX 1: Set event immediately after creation ---
@@ -209,9 +201,7 @@ class ShardedMessageBus:
 
         self.retry_policies: Dict[str, RetryPolicy] = {
             topic_pattern: RetryPolicy(**policy_args)
-            for topic_pattern, policy_args in getattr(
-                self.config, "RETRY_POLICIES", {}
-            ).items()
+            for topic_pattern, policy_args in getattr(self.config, "RETRY_POLICIES", {}).items()
         }
         if "default" not in self.retry_policies:
             self.retry_policies["default"] = RetryPolicy()
@@ -254,9 +244,7 @@ class ShardedMessageBus:
         self.guardian = (
             MessageBusGuardian(
                 self,
-                check_interval=getattr(
-                    self.config, "MESSAGE_BUS_GUARDIAN_INTERVAL", 30
-                ),
+                check_interval=getattr(self.config, "MESSAGE_BUS_GUARDIAN_INTERVAL", 30),
             )
             if getattr(self.config, "ENABLE_MESSAGE_BUS_GUARDIAN", False)
             else None
@@ -332,21 +320,15 @@ class ShardedMessageBus:
         high_priority: bool,
     ) -> None:
         queue_type = "high_priority" if high_priority else "normal"
-        logger.info(
-            "Starting dispatcher loop.", shard_id=shard_id, queue_type=queue_type
-        )
+        logger.info("Starting dispatcher loop.", shard_id=shard_id, queue_type=queue_type)
         while self.running:
             try:
                 MESSAGE_BUS_QUEUE_SIZE.labels(shard_id=str(shard_id)).set(queue.qsize())
                 priority, message = await asyncio.wait_for(queue.get(), timeout=0.1)
                 await self.backpressure_manager.check_and_notify(shard_id)
                 message_age = time.time() - message.timestamp
-                MESSAGE_BUS_MESSAGE_AGE.labels(shard_id=str(shard_id)).observe(
-                    message_age
-                )
-                with MESSAGE_BUS_DISPATCH_DURATION.labels(
-                    shard_id=str(shard_id)
-                ).time():
+                MESSAGE_BUS_MESSAGE_AGE.labels(shard_id=str(shard_id)).observe(message_age)
+                with MESSAGE_BUS_DISPATCH_DURATION.labels(shard_id=str(shard_id)).time():
                     await self._dispatch_message_to_subscribers_and_externals(
                         message, self.callback_executors[shard_id]
                     )
@@ -359,9 +341,7 @@ class ShardedMessageBus:
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                logger.info(
-                    f"Dispatcher loop for shard {shard_id}, {queue_type} queue cancelled."
-                )
+                logger.info(f"Dispatcher loop for shard {shard_id}, {queue_type} queue cancelled.")
                 break
             except Exception as e:
                 logger.error(
@@ -371,9 +351,7 @@ class ShardedMessageBus:
                     error=e,
                 )
                 MESSAGE_BUS_CALLBACK_ERRORS.labels(shard_id="unknown").inc()
-                MESSAGE_BUS_CALLBACK_ERRORS.labels(
-                    shard_id=str(shard_id), topic="unknown"
-                ).inc()
+                MESSAGE_BUS_CALLBACK_ERRORS.labels(shard_id=str(shard_id), topic="unknown").inc()
 
     async def _safe_callback_internal(
         self,
@@ -412,22 +390,16 @@ class ShardedMessageBus:
         except Exception as e:
             logger_for_callback.error("Error in message callback.", error=e)
             shard_id_label = str(self.hash_ring.get_node(message.topic))
-            MESSAGE_BUS_CALLBACK_ERRORS.labels(
-                shard_id=shard_id_label, topic=message.topic
-            ).inc()
+            MESSAGE_BUS_CALLBACK_ERRORS.labels(shard_id=shard_id_label, topic=message.topic).inc()
 
             if message.priority >= self.dlq.priority_threshold:
                 await self.dlq.add(message, str(e))
-                logger_for_callback.warning(
-                    "Message sent to DLQ due to callback error."
-                )
+                logger_for_callback.warning("Message sent to DLQ due to callback error.")
 
     async def _dispatch_message_to_subscribers_and_externals(
         self, message: Message, callback_executor: ThreadPoolExecutor
     ) -> None:
-        logger_for_dispatch = logger.bind(
-            trace_id=message.trace_id, topic=message.topic
-        )
+        logger_for_dispatch = logger.bind(trace_id=message.trace_id, topic=message.topic)
         MESSAGE_BUS_TOPIC_THROUGHPUT.labels(topic=message.topic).inc()
 
         subscribers_to_dispatch = []
@@ -440,9 +412,7 @@ class ShardedMessageBus:
         for callback, filter in subscribers_to_dispatch:
             callback_executor.submit(
                 lambda cb=callback, msg=message, flt=filter: asyncio.run_coroutine_threadsafe(
-                    self.context_propagation_middleware._restore_context_wrapper(
-                        cb, msg, flt
-                    ),
+                    self.context_propagation_middleware._restore_context_wrapper(cb, msg, flt),
                     self._get_loop(),
                 )
             )
@@ -469,21 +439,15 @@ class ShardedMessageBus:
                     hook=getattr(hook, "__name__", str(hook)),
                 )
                 MESSAGE_BUS_CALLBACK_ERRORS.labels(shard_id="hook").inc()
-                MESSAGE_BUS_CALLBACK_ERRORS.labels(
-                    shard_id="hook", topic=message.topic
-                ).inc()
+                MESSAGE_BUS_CALLBACK_ERRORS.labels(shard_id="hook", topic=message.topic).inc()
 
     def add_pre_publish_hook(self, hook: Callable[[Message], Message]) -> None:
         self.pre_publish_hooks.append(hook)
-        logger.debug(
-            "Added pre-publish hook.", hook=getattr(hook, "__name__", str(hook))
-        )
+        logger.debug("Added pre-publish hook.", hook=getattr(hook, "__name__", str(hook)))
 
     def add_post_publish_hook(self, hook: Callable[[Message], None]) -> None:
         self.post_publish_hooks.append(hook)
-        logger.debug(
-            "Added post-publish hook.", hook=getattr(hook, "__name__", str(hook))
-        )
+        logger.debug("Added post-publish hook.", hook=getattr(hook, "__name__", str(hook)))
 
     async def _get_shard_id(self, message: Message) -> int:
         """Helper to get shard ID and handle rebalancing."""
@@ -494,9 +458,7 @@ class ShardedMessageBus:
             self.topic_to_shard_cache[message.topic] = shard_id_str
         return int(shard_id_str)
 
-    async def _publish_to_shard(
-        self, shard_id: int, message: Message, retries: int = 3
-    ) -> bool:
+    async def _publish_to_shard(self, shard_id: int, message: Message, retries: int = 3) -> bool:
         """Internal helper to publish a message to a specific shard's queue."""
         logger_for_publish = logger.bind(
             trace_id=message.trace_id, topic=message.topic, shard_id=shard_id
@@ -512,8 +474,7 @@ class ShardedMessageBus:
                 try:
                     queue_to_use = (
                         self.high_priority_queues[shard_id]
-                        if message.priority
-                        >= getattr(self.config, "priority_threshold", 5)
+                        if message.priority >= getattr(self.config, "priority_threshold", 5)
                         else self.queues[shard_id]
                     )
                     await queue_to_use.put((message.priority, message))
@@ -532,9 +493,7 @@ class ShardedMessageBus:
                         if message.encrypted and self.encryption:
                             # Decrypt returns bytes, so we need to decode it to string, then parse JSON
                             decrypted_bytes = self.encryption.decrypt(message.payload)
-                            payload_to_persist = json.loads(
-                                decrypted_bytes.decode("utf-8")
-                            )
+                            payload_to_persist = json.loads(decrypted_bytes.decode("utf-8"))
                         await self.db.save_preferences(
                             user_id=f"message_trace_{message.trace_id}",
                             prefs={
@@ -559,9 +518,7 @@ class ShardedMessageBus:
                             },
                             agent_id="ShardedMessageBus",
                         )
-                    logger_for_publish.info(
-                        "Message successfully published to internal queue."
-                    )
+                    logger_for_publish.info("Message successfully published to internal queue.")
                     return True
                 except asyncio.QueueFull:
                     MESSAGE_BUS_PUBLISH_RETRIES.labels(shard_id=str(shard_id)).inc()
@@ -574,12 +531,8 @@ class ShardedMessageBus:
                         logger_for_publish.error(
                             f"Message bus queue full for shard {shard_id}, topic {message.topic} after {actual_retries + 1} attempts."
                         )
-                        if self.redis_bridge and await self.redis_bridge.publish(
-                            message
-                        ):
-                            logger_for_publish.info(
-                                "Fallback: Published message to Redis."
-                            )
+                        if self.redis_bridge and await self.redis_bridge.publish(message):
+                            logger_for_publish.info("Fallback: Published message to Redis.")
                             if self.audit_client:
                                 await self.audit_client.add_entry_async(
                                     "message_published_redis_fallback",
@@ -599,9 +552,7 @@ class ShardedMessageBus:
                         return False
                     await asyncio.sleep(policy.backoff_factor * (2**attempt))
                 except Exception as e:
-                    logger_for_publish.error(
-                        f"Unexpected error during message publish: {e}"
-                    )
+                    logger_for_publish.error(f"Unexpected error during message publish: {e}")
                     if self.audit_client:
                         # --- FIX 2: Use message.topic instead of undefined 'topic' ---
                         await self.audit_client.add_entry_async(
@@ -690,9 +641,7 @@ class ShardedMessageBus:
             if not verify_message(
                 message, signature, signing_key.get_secret_value().encode("utf-8")
             ):
-                logger.warning(
-                    "Message signature verification failed. Aborting publish."
-                )
+                logger.warning("Message signature verification failed. Aborting publish.")
                 if self.audit_client:
                     await self.audit_client.add_entry_async(
                         "message_signature_failed",
@@ -725,9 +674,7 @@ class ShardedMessageBus:
                     gen_plugin = PLUGIN_REGISTRY.get("scenario", "generator_workflow")
                     if gen_plugin:
                         if not hasattr(gen_plugin, "execute"):
-                            logger.error(
-                                "generator_workflow plugin does not have execute method."
-                            )
+                            logger.error("generator_workflow plugin does not have execute method.")
                             return
 
                         # Check if execute is async
@@ -759,14 +706,10 @@ class ShardedMessageBus:
 
             async def _run_analyzer():
                 try:
-                    analyzer_plugin = PLUGIN_REGISTRY.get(
-                        "execution", "codebase_analyzer"
-                    )
+                    analyzer_plugin = PLUGIN_REGISTRY.get("execution", "codebase_analyzer")
                     if analyzer_plugin:
                         if not hasattr(analyzer_plugin, "execute"):
-                            logger.error(
-                                "codebase_analyzer plugin does not have execute method."
-                            )
+                            logger.error("codebase_analyzer plugin does not have execute method.")
                             return
 
                         # Check if execute is async
@@ -797,9 +740,7 @@ class ShardedMessageBus:
                     bug_manager_plugin = PLUGIN_REGISTRY.get("fix", "bug_manager")
                     if bug_manager_plugin:
                         if not hasattr(bug_manager_plugin, "execute"):
-                            logger.error(
-                                "bug_manager plugin does not have execute method."
-                            )
+                            logger.error("bug_manager plugin does not have execute method.")
                             return
 
                         # Check if execute is async
@@ -814,9 +755,7 @@ class ShardedMessageBus:
                                 code=payload.get("analysis"),
                             )
 
-                        await self.publish(
-                            "workflow_completed", bug_manager_result, priority=10
-                        )
+                        await self.publish("workflow_completed", bug_manager_result, priority=10)
                     else:
                         logger.error("bug_manager plugin not found.")
                 except Exception as e:
@@ -847,9 +786,7 @@ class ShardedMessageBus:
                         idempotency_key=idempotency_key,
                     )
                     return True
-                if self.redis_bridge and await self.redis_bridge.check_dedup_cache(
-                    idempotency_key
-                ):
+                if self.redis_bridge and await self.redis_bridge.check_dedup_cache(idempotency_key):
                     return True
 
             processed_payload = payload
@@ -941,9 +878,7 @@ class ShardedMessageBus:
                         )
                     return False
                 except Exception as e:
-                    logger_for_publish.error(
-                        f"Unexpected error during message validation: {e}"
-                    )
+                    logger_for_publish.error(f"Unexpected error during message validation: {e}")
                     return False
 
             shard_id = await self._get_shard_id(message)
@@ -993,15 +928,9 @@ class ShardedMessageBus:
                 self.regex_subscribers[topic].append((callback, filter))
                 logger_for_subscribe.info("Subscribed callback to regex pattern.")
 
-    def unsubscribe(
-        self, topic: Union[str, Pattern], callback: Callable[[Message], None]
-    ) -> None:
-        logger.bind(
-            topic=str(topic), callback=getattr(callback, "__name__", str(callback))
-        )
-        asyncio.run_coroutine_threadsafe(
-            self._unsubscribe_async(topic, callback), self._get_loop()
-        )
+    def unsubscribe(self, topic: Union[str, Pattern], callback: Callable[[Message], None]) -> None:
+        logger.bind(topic=str(topic), callback=getattr(callback, "__name__", str(callback)))
+        asyncio.run_coroutine_threadsafe(self._unsubscribe_async(topic, callback), self._get_loop())
 
     async def _unsubscribe_async(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
@@ -1016,24 +945,18 @@ class ShardedMessageBus:
 
             if isinstance(topic, str):
                 initial_len = len(self.subscribers[topic])
-                self.subscribers[topic] = list(
-                    filter(filter_out_callback, self.subscribers[topic])
-                )
+                self.subscribers[topic] = list(filter(filter_out_callback, self.subscribers[topic]))
                 if len(self.subscribers[topic]) < initial_len:
                     logger_for_unsubscribe.info("Unsubscribed callback from topic.")
                 else:
-                    logger_for_unsubscribe.warning(
-                        "Callback not found for unsubscribe from topic."
-                    )
+                    logger_for_unsubscribe.warning("Callback not found for unsubscribe from topic.")
             else:
                 initial_len = len(self.regex_subscribers[topic])
                 self.regex_subscribers[topic] = list(
                     filter(filter_out_callback, self.regex_subscribers[topic])
                 )
                 if len(self.regex_subscribers[topic]) < initial_len:
-                    logger_for_unsubscribe.info(
-                        "Unsubscribed callback from regex pattern."
-                    )
+                    logger_for_unsubscribe.info("Unsubscribed callback from regex pattern.")
                 else:
                     logger_for_unsubscribe.warning(
                         "Callback not found for unsubscribe from regex pattern."
@@ -1049,9 +972,7 @@ class ShardedMessageBus:
         def handle_reply(message: Message):
             if not response_future.done():
                 response_future.set_result(message.payload)
-                logger_for_request.debug(
-                    "Received reply for request.", reply_topic=message.topic
-                )
+                logger_for_request.debug("Received reply for request.", reply_topic=message.topic)
             else:
                 logger_for_request.warning(
                     "Received late reply for request.", reply_topic=message.topic
@@ -1070,9 +991,7 @@ class ShardedMessageBus:
             return result
         except asyncio.TimeoutError:
             logger_for_request.error("Request timed out waiting for reply.")
-            raise TimeoutError(
-                f"Request to topic '{topic}' timed out after {timeout} seconds."
-            )
+            raise TimeoutError(f"Request to topic '{topic}' timed out after {timeout} seconds.")
         finally:
             self.unsubscribe(reply_topic, handle_reply)
 
@@ -1089,17 +1008,13 @@ class ShardedMessageBus:
             )
             max_size = self.max_queue_size
 
-            if avg_load > max_size * getattr(
-                self.config, "message_bus_scale_up_threshold", 0.8
-            ):
+            if avg_load > max_size * getattr(self.config, "message_bus_scale_up_threshold", 0.8):
                 logger.info(
                     f"Average queue load ({avg_load}) is above threshold. Considering adding a new shard."
                 )
                 await self.add_shard()
             elif (
-                avg_load
-                < max_size
-                * getattr(self.config, "message_bus_scale_down_threshold", 0.2)
+                avg_load < max_size * getattr(self.config, "message_bus_scale_down_threshold", 0.2)
                 and self.shard_count > 1
             ):
                 logger.info(
@@ -1125,9 +1040,7 @@ class ShardedMessageBus:
         new_shard_id = self.shard_count
 
         self.queues.append(asyncio.PriorityQueue(maxsize=self.max_queue_size))
-        self.high_priority_queues.append(
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-        )
+        self.high_priority_queues.append(asyncio.PriorityQueue(maxsize=self.max_queue_size))
         self.executors.append(
             ThreadPoolExecutor(
                 max_workers=self.workers_per_shard,
@@ -1175,9 +1088,7 @@ class ShardedMessageBus:
         )
         self.shard_count += 1
         self.topic_to_shard_cache.clear()  # Invalidate cache after rebalance
-        logger.info(
-            f"Added new shard {new_shard_id}. New shard count: {self.shard_count}."
-        )
+        logger.info(f"Added new shard {new_shard_id}. New shard count: {self.shard_count}.")
         # --- FIX 1: Use .set() at the end ---
         self.rebalancing_in_progress.set()
 
@@ -1229,9 +1140,7 @@ class ShardedMessageBus:
         # --- FIX 1: Use .set() at the end ---
         self.rebalancing_in_progress.set()
 
-    async def _rebalance_callback(
-        self, node: str, affected_keys: List[str], old_shard_count: int
-    ):
+    async def _rebalance_callback(self, node: str, affected_keys: List[str], old_shard_count: int):
         """Rehash and move messages for affected topics."""
         logger.info(f"Rebalancing {len(affected_keys)} keys from node {node}.")
         for key in affected_keys:
@@ -1256,9 +1165,7 @@ class ShardedMessageBus:
         current_post_publish_hooks = self.post_publish_hooks
 
         buffered_messages: List[Tuple[int, Message]] = []
-        for i, (normal_q, hp_q) in enumerate(
-            zip(self.queues, self.high_priority_queues)
-        ):
+        for i, (normal_q, hp_q) in enumerate(zip(self.queues, self.high_priority_queues)):
             while not normal_q.empty():
                 buffered_messages.append(await normal_q.get())
             while not hp_q.empty():
@@ -1268,19 +1175,15 @@ class ShardedMessageBus:
             task.cancel()
         await asyncio.gather(*self.dispatcher_tasks, return_exceptions=True)
 
-        for executor in (
-            self.executors + self.high_priority_executors + self.callback_executors
-        ):
+        for executor in self.executors + self.high_priority_executors + self.callback_executors:
             executor.shutdown(wait=True)
 
         self.shard_count = target_shard_count
         self.queues = [
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-            for _ in range(self.shard_count)
+            asyncio.PriorityQueue(maxsize=self.max_queue_size) for _ in range(self.shard_count)
         ]
         self.high_priority_queues = [
-            asyncio.PriorityQueue(maxsize=self.max_queue_size)
-            for _ in range(self.shard_count)
+            asyncio.PriorityQueue(maxsize=self.max_queue_size) for _ in range(self.shard_count)
         ]
         self.executors = [
             ThreadPoolExecutor(
@@ -1303,9 +1206,7 @@ class ShardedMessageBus:
             )
             for i in range(self.shard_count)
         ]
-        self.hash_ring = ConsistentHashRing(
-            nodes=[str(i) for i in range(self.shard_count)]
-        )
+        self.hash_ring = ConsistentHashRing(nodes=[str(i) for i in range(self.shard_count)])
         self.dispatcher_tasks = []
         self._start_dispatchers()
 
@@ -1412,8 +1313,7 @@ class ShardedMessageBus:
             new_shard_count != self.shard_count
             or new_workers_per_shard != self.workers_per_shard
             or new_max_queue_size != self.max_queue_size
-            or new_callback_workers
-            != getattr(self.config, "message_bus_callback_workers", 8)
+            or new_callback_workers != getattr(self.config, "message_bus_callback_workers", 8)
         ):
 
             logger.info(
@@ -1422,9 +1322,7 @@ class ShardedMessageBus:
                     "shards": self.shard_count,
                     "workers": self.workers_per_shard,
                     "queue_size": self.max_queue_size,
-                    "callback_workers": getattr(
-                        self.config, "message_bus_callback_workers", 8
-                    ),
+                    "callback_workers": getattr(self.config, "message_bus_callback_workers", 8),
                 },
                 new_config={
                     "shards": new_shard_count,
@@ -1440,9 +1338,7 @@ class ShardedMessageBus:
             self.config.message_bus_callback_workers = new_callback_workers
 
             await self.shutdown()
-            self.__init__(
-                config=self.config, db=self.db, audit_client=self.audit_client
-            )
+            self.__init__(config=self.config, db=self.db, audit_client=self.audit_client)
 
             async with self._subscriber_lock:
                 self.subscribers = current_subscribers
@@ -1453,9 +1349,7 @@ class ShardedMessageBus:
 
             self._start_dispatchers()
         else:
-            logger.info(
-                "No significant configuration changes detected for re-initialization."
-            )
+            logger.info("No significant configuration changes detected for re-initialization.")
 
         logger.info(
             f"Message bus configured for {engine_type}.",
@@ -1488,9 +1382,7 @@ class ShardedMessageBus:
                     trace_id=message.trace_id,
                 )
             except Exception as e:
-                logger.error(
-                    f"Error in _simulation_hook: {e}", trace_id=message.trace_id
-                )
+                logger.error(f"Error in _simulation_hook: {e}", trace_id=message.trace_id)
         return message
 
     def _trading_hook(self, message: Message) -> Message:

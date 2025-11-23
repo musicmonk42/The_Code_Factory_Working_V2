@@ -236,9 +236,7 @@ def test_serialization_error(logger):
 
     with patch("sys.stderr.write") as serr:
         logger.log_event("bad_serial", bad=BadObj())
-        assert any(
-            "audit_serialization_error" in args[0] for args, _ in serr.call_args_list
-        )
+        assert any("audit_serialization_error" in args[0] for args, _ in serr.call_args_list)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="SIGHUP only on POSIX")

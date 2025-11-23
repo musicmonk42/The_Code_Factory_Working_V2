@@ -136,17 +136,11 @@ class DummyClientSession:
     print("\n" + "=" * 80)
     print("DUMMY DEVELOPMENT ENVIRONMENT BOOTSTRAP COMPLETE".center(80))
     print("".center(80))
-    print(
-        "You can now run `testgen_agent.py` locally for development and testing.".center(
-            80
-        )
-    )
+    print("You can now run `testgen_agent.py` locally for development and testing.".center(80))
     print("".center(80))
     print("REMEMBER: These are DUMMY implementations.".center(80))
     print("DO NOT package or deploy these dummy files to production.".center(80))
-    print(
-        "Your production environment MUST have the real modules installed.".center(80)
-    )
+    print("Your production environment MUST have the real modules installed.".center(80))
     print("=" * 80 + "\n")
 
 

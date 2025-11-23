@@ -51,9 +51,7 @@ def _import_constitution():
         if f.exists():
             import importlib.util
 
-            spec = importlib.util.spec_from_file_location(
-                "arbiter_constitution_fallback", str(f)
-            )
+            spec = importlib.util.spec_from_file_location("arbiter_constitution_fallback", str(f))
             if spec and spec.loader:
                 mod = importlib.util.module_from_spec(spec)
                 sys.modules[spec.name] = mod

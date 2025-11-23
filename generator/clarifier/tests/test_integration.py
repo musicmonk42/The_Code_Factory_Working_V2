@@ -13,9 +13,7 @@ import tempfile
 from unittest.mock import patch, AsyncMock, MagicMock
 
 # Add parent directory to path for imports
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 # --- Mock Configuration (MUST RUN BEFORE IMPORTS) ---
 
@@ -89,9 +87,7 @@ MockStatusCode.ERROR = "ERROR"
 patcher_dynaconf = patch(
     "generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance
 )
-patcher_boto3 = patch(
-    "generator.clarifier.clarifier.boto3.client", return_value=MagicMock()
-)
+patcher_boto3 = patch("generator.clarifier.clarifier.boto3.client", return_value=MagicMock())
 patcher_fernet_class = patch(
     "generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance
 )
@@ -213,9 +209,7 @@ patcher_send_alert = patch(
 )
 patcher_redact_sensitive = patch(
     "generator.clarifier.clarifier_updater.redact_sensitive",
-    side_effect=lambda x: x.replace("SECRET", "[REDACTED]").replace(
-        "@", "[REDACTED_EMAIL]"
-    ),
+    side_effect=lambda x: x.replace("SECRET", "[REDACTED]").replace("@", "[REDACTED_EMAIL]"),
 )
 
 MockLogAction = patcher_log_action.start()
@@ -228,13 +222,9 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         # Create temp files
-        self.temp_history = tempfile.NamedTemporaryFile(
-            delete=False, suffix="_integration.json"
-        )
+        self.temp_history = tempfile.NamedTemporaryFile(delete=False, suffix="_integration.json")
         self.temp_history.close()
-        self.temp_db = tempfile.NamedTemporaryFile(
-            delete=False, suffix="_integration.db"
-        )
+        self.temp_db = tempfile.NamedTemporaryFile(delete=False, suffix="_integration.db")
         self.temp_db.close()
         self.temp_profile_dir = tempfile.mkdtemp(prefix="user_profiles_")
 
@@ -349,9 +339,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
                 # Mock interaction channel
                 mock_channel = MagicMock()
-                mock_channel.prompt = AsyncMock(
-                    return_value=["user's clarification answer"]
-                )
+                mock_channel.prompt = AsyncMock(return_value=["user's clarification answer"])
                 clarifier.interaction = mock_channel
 
                 # Initialize context manager
@@ -364,9 +352,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
                 # 5. Run clarification
                 try:
-                    result = await clarifier.get_clarifications(
-                        ambiguities, initial_requirements
-                    )
+                    result = await clarifier.get_clarifications(ambiguities, initial_requirements)
 
                     # 6. Verify results
                     self.assertIsInstance(result, dict)
@@ -374,9 +360,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
                     # 7. Verify clarification was recorded
                     if "user authentication" in result.get("clarifications", {}):
-                        self.assertIsNotNone(
-                            result["clarifications"]["user authentication"]
-                        )
+                        self.assertIsNotNone(result["clarifications"]["user authentication"])
 
                     # 8. Verify version info was added
                     if "version" in result:
@@ -414,9 +398,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
             with patch.object(
                 self.RequirementsUpdater,
                 "_infer_updates",
-                AsyncMock(
-                    return_value={"inferred_features": [], "inferred_constraints": []}
-                ),
+                AsyncMock(return_value={"inferred_features": [], "inferred_constraints": []}),
             ):
 
                 prompt_clarifier = self.PromptClarifier()
@@ -501,9 +483,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("inferred_features", result)
 
                 # Verify clarification
-                self.assertEqual(
-                    result["clarifications"]["ambiguous_term"], "clarified_meaning"
-                )
+                self.assertEqual(result["clarifications"]["ambiguous_term"], "clarified_meaning")
 
                 # Verify inferred features
                 self.assertIn("feature_inferred", result["inferred_features"])
@@ -594,9 +574,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
                 # Should retry and succeed
                 with patch("builtins.input", return_value="answer"):
-                    result = await clarifier.get_clarifications(
-                        ambiguities, requirements
-                    )
+                    result = await clarifier.get_clarifications(ambiguities, requirements)
 
                 self.assertIsInstance(result, dict)
 
@@ -667,9 +645,7 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.RequirementsUpdater,
             "_infer_updates",
-            AsyncMock(
-                return_value={"inferred_features": [], "inferred_constraints": []}
-            ),
+            AsyncMock(return_value={"inferred_features": [], "inferred_constraints": []}),
         ):
 
             updater = self.RequirementsUpdater()
@@ -698,9 +674,7 @@ class TestComponentInteractions(unittest.IsolatedAsyncioTestCase):
     """Test interactions between components."""
 
     async def asyncSetUp(self):
-        self.temp_history = tempfile.NamedTemporaryFile(
-            delete=False, suffix="_comp.json"
-        )
+        self.temp_history = tempfile.NamedTemporaryFile(delete=False, suffix="_comp.json")
         self.temp_history.close()
         self.temp_db = tempfile.NamedTemporaryFile(delete=False, suffix="_comp.db")
         self.temp_db.close()
@@ -756,9 +730,7 @@ class TestComponentInteractions(unittest.IsolatedAsyncioTestCase):
 
                 try:
                     requirements = {"features": ["f1"], "schema_version": 1}
-                    clarified = await clarifier.get_clarifications(
-                        ["amb"], requirements
-                    )
+                    clarified = await clarifier.get_clarifications(["amb"], requirements)
 
                     self.assertIsInstance(clarified, dict)
                     self.assertIn("clarifications", clarified)

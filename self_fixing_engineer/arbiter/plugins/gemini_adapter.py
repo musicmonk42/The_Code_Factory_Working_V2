@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
     logger.addHandler(handler)
 
 # --- Prometheus Metrics ---
@@ -110,9 +108,7 @@ class GeminiAdapter:
             raise ValueError(f"Failed to initialize LLMClient: {e}") from e
 
         if self.client is None:
-            raise ValueError(
-                "LLMClient initialization failed, resulting in a None client."
-            )
+            raise ValueError("LLMClient initialization failed, resulting in a None client.")
 
         self.provider = "gemini"
         self.model = self.client.model
@@ -122,9 +118,7 @@ class GeminiAdapter:
         self.circuit_breaker_state = "closed"
         self.circuit_breaker_failures = 0
         self.circuit_breaker_threshold = settings.get("CIRCUIT_BREAKER_THRESHOLD", 5)
-        self.circuit_breaker_timeout = settings.get(
-            "CIRCUIT_BREAKER_TIMEOUT_SECONDS", 300
-        )
+        self.circuit_breaker_timeout = settings.get("CIRCUIT_BREAKER_TIMEOUT_SECONDS", 300)
         self.circuit_breaker_last_failure_time = 0.0
 
         self.logger.info("GeminiAdapter initialized.")
@@ -144,9 +138,7 @@ class GeminiAdapter:
                 await self.client.aclose_session()
                 self.logger.info("Gemini API session closed successfully.")
         except Exception as e:
-            self.logger.error(
-                f"Error during Gemini API session cleanup: {e}", exc_info=True
-            )
+            self.logger.error(f"Error during Gemini API session cleanup: {e}", exc_info=True)
 
     async def generate(
         self,
@@ -185,13 +177,9 @@ class GeminiAdapter:
                 f"Prompt is too long. Max length is 100,000 characters, but got {len(prompt)}."
             )
         if not (1 <= max_tokens <= 8192):
-            raise ValueError(
-                f"max_tokens must be between 1 and 8192, but got {max_tokens}."
-            )
+            raise ValueError(f"max_tokens must be between 1 and 8192, but got {max_tokens}.")
         if not (0.0 <= temperature <= 2.0):
-            raise ValueError(
-                f"temperature must be between 0.0 and 2.0, but was {temperature}."
-            )
+            raise ValueError(f"temperature must be between 0.0 and 2.0, but was {temperature}.")
 
         # --- Circuit Breaker State Check ---
         # Before making the API call, check the circuit breaker state.
@@ -214,9 +202,7 @@ class GeminiAdapter:
                     correlation_id=correlation_id,
                     error_type="circuit_breaker",
                 ).inc()
-                raise CircuitBreakerOpenError(
-                    "Circuit breaker is open due to repeated failures."
-                )
+                raise CircuitBreakerOpenError("Circuit breaker is open due to repeated failures.")
 
         start_time = time.monotonic()
         error_type = "unknown"
@@ -252,9 +238,7 @@ class GeminiAdapter:
                 f"Gemini generation failed after multiple retries. Last exception: {e.__cause__} [Correlation ID: {correlation_id}]"
             )
             self._update_circuit_breaker(success=False)
-            raise APIError(
-                f"Gemini API call failed after multiple retries: {e.__cause__}"
-            ) from e
+            raise APIError(f"Gemini API call failed after multiple retries: {e.__cause__}") from e
 
         except LLMClientError as e:
             # This block handles exceptions from the LLMClient's internal workings.
@@ -274,9 +258,7 @@ class GeminiAdapter:
                 # Attempt to get a status code from various places in the Google API exception.
                 status_code = getattr(original_exception, "code", None)
                 if status_code is None and hasattr(original_exception, "response"):
-                    status_code = getattr(
-                        original_exception.response, "status_code", None
-                    )
+                    status_code = getattr(original_exception.response, "status_code", None)
 
                 if status_code is not None:
                     if status_code in [401, 403]:

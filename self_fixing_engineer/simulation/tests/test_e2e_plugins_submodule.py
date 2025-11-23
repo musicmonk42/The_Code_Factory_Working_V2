@@ -155,9 +155,7 @@ class MockDLTClient:
         self.config = config
         self.storage = {}
 
-    async def write_checkpoint(
-        self, checkpoint_name, hash, prev_hash, metadata, payload_blob
-    ):
+    async def write_checkpoint(self, checkpoint_name, hash, prev_hash, metadata, payload_blob):
         """Mock writing a checkpoint."""
         self.storage[checkpoint_name] = {
             "hash": hash,
@@ -198,9 +196,7 @@ def setup_test_environment():
         # Create mock source files
         mock_src_dir = base_dir / "src"
         mock_src_dir.mkdir()
-        (mock_src_dir / "app.js").write_text(
-            "module.exports = { sum: (a, b) => a + b };"
-        )
+        (mock_src_dir / "app.js").write_text("module.exports = { sum: (a, b) => a + b };")
         (mock_src_dir / "app.py").write_text(
             "def main():\n    print('hello')\n    exec('print(\"dynamic\")')"
         )
@@ -289,9 +285,7 @@ async def mock_evolution_cycle(args):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_plugins_submodule_end_to_end(
-    setup_test_environment, mock_external_services
-):
+async def test_plugins_submodule_end_to_end(setup_test_environment, mock_external_services):
     """
     Main E2E test for the plugins submodule.
 
@@ -373,9 +367,7 @@ async def test_plugins_submodule_end_to_end(
     # c) Runtime Tracer
     trace_result = await mock_runtime_tracer(
         MagicMock(
-            plugin_args=[
-                f"target_code_path={setup_test_environment['mock_src_dir'] / 'app.py'}"
-            ]
+            plugin_args=[f"target_code_path={setup_test_environment['mock_src_dir'] / 'app.py'}"]
         )
     )
     assert trace_result["success"] is True

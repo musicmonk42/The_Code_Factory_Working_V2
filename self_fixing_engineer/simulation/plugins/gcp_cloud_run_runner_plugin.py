@@ -76,16 +76,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 # Load PLUGIN_MANIFEST from config file
-CONFIG_FILE = os.path.join(
-    os.path.dirname(__file__), "configs/gcp_cloud_run_config.json"
-)
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "configs/gcp_cloud_run_config.json")
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -171,9 +167,7 @@ def _safe_counter(name: str, doc: str, labelnames: tuple = ()):
         _METRICS[name] = m
         return m
     except ValueError:
-        logger.warning(
-            f"Metric '{name}' already registered. Using no-op for this instance."
-        )
+        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
         m = _noop_counter()
         _METRICS[name] = m
         return m
@@ -189,9 +183,7 @@ def _safe_hist(name: str, doc: str, labelnames: tuple = (), buckets=None):
         _METRICS[name] = m
         return m
     except ValueError:
-        logger.warning(
-            f"Metric '{name}' already registered. Using no-op for this instance."
-        )
+        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
         m = _noop_hist()
         _METRICS[name] = m
         return m
@@ -214,9 +206,7 @@ CREDENTIAL_SOURCE_TOTAL = _safe_counter(
 )
 
 # Pydantic models for validation
-_BUCKET_RE = re.compile(
-    r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$"
-)  # simplified GCS bucket name
+_BUCKET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$")  # simplified GCS bucket name
 _LOCATION_RE = re.compile(r"^[a-z]+(?:-[a-z0-9]+)+$")  # e.g., us-central1
 
 
@@ -234,39 +224,23 @@ class JobConfig(BaseModel):
     image_url: str = Field(
         ..., description="Docker image URL (e.g., gcr.io/my-project/image:latest)"
     )
-    command: Optional[List[str]] = Field(
-        None, description="Command to run in the container"
-    )
-    args: Optional[List[str]] = Field(
-        None, description="Arguments for the container command"
-    )
+    command: Optional[List[str]] = Field(None, description="Command to run in the container")
+    args: Optional[List[str]] = Field(None, description="Arguments for the container command")
     env_vars: List[EnvVar] = Field(
         default_factory=list, description="Environment variables for the container"
     )
     cpu_limit: Optional[str] = Field(None, description="CPU limit (e.g., 1 or 1000m)")
     memory_limit: Optional[str] = Field(None, description="Memory limit (e.g., 512Mi)")
-    timeout_seconds: int = Field(
-        600, ge=1, description="Max job execution time in seconds"
-    )
+    timeout_seconds: int = Field(600, ge=1, description="Max job execution time in seconds")
     max_retries: int = Field(0, ge=0, description="Max container retries")
     parallelism: int = Field(1, ge=1, description="Number of concurrent tasks")
     task_count: int = Field(1, ge=1, description="Total tasks to run")
     input_gcs_bucket: str = Field(..., description="GCS bucket for input artifacts")
-    output_gcs_bucket: Optional[str] = Field(
-        None, description="GCS bucket for output results"
-    )
-    output_gcs_key_prefix: str = Field(
-        "cloud_run_results", description="Prefix for output in GCS"
-    )
-    output_filename: str = Field(
-        "result.json", description="Filename for output artifact"
-    )
-    cleanup_gcs_input: bool = Field(
-        True, description="Delete input artifact after job completion"
-    )
-    retain_temp_archive: bool = Field(
-        False, description="Retain local archive after upload"
-    )
+    output_gcs_bucket: Optional[str] = Field(None, description="GCS bucket for output results")
+    output_gcs_key_prefix: str = Field("cloud_run_results", description="Prefix for output in GCS")
+    output_filename: str = Field("result.json", description="Filename for output artifact")
+    cleanup_gcs_input: bool = Field(True, description="Delete input artifact after job completion")
+    retain_temp_archive: bool = Field(False, description="Retain local archive after upload")
 
     @validator("image_url")
     def validate_image_url(cls, v):
@@ -302,9 +276,7 @@ class JobConfig(BaseModel):
 
 
 def _bucket_valid(name: str) -> bool:
-    return bool(_BUCKET_RE.match(name)) and not (
-        ".." in name or ".-" in name or "-." in name
-    )
+    return bool(_BUCKET_RE.match(name)) and not (".." in name or ".-" in name or "-." in name)
 
 
 # Secure credential loading (vault integration example)
@@ -336,16 +308,12 @@ async def _load_credentials_from_vault() -> Optional["service_account.Credential
                 data = payload.get("data", {}).get("data", {})
                 sa_json = data.get("sa_json")
                 if isinstance(sa_json, dict):
-                    creds = service_account.Credentials.from_service_account_info(
-                        sa_json
-                    )
+                    creds = service_account.Credentials.from_service_account_info(sa_json)
                     CREDENTIAL_SOURCE_TOTAL.labels(source="vault").inc()
                     return creds
                 creds_path = data.get("credentials_path")
                 if creds_path and os.path.exists(creds_path):
-                    creds = service_account.Credentials.from_service_account_file(
-                        creds_path
-                    )
+                    creds = service_account.Credentials.from_service_account_file(creds_path)
                     CREDENTIAL_SOURCE_TOTAL.labels(source="vault").inc()
                     return creds
                 logger.warning(
@@ -366,9 +334,7 @@ def _load_credentials_local() -> Optional["service_account.Credentials"]:
             CREDENTIAL_SOURCE_TOTAL.labels(source="file").inc()
             return creds
         except Exception as e:
-            logger.error(
-                f"Failed to load GOOGLE_APPLICATION_CREDENTIALS from {path}: {e}"
-            )
+            logger.error(f"Failed to load GOOGLE_APPLICATION_CREDENTIALS from {path}: {e}")
     # ADC fallback
     if google_auth_default:
         try:
@@ -425,9 +391,7 @@ async def plugin_health() -> Dict[str, Any]:
     # Check GCS connectivity
     try:
         gcs_client = storage.Client(credentials=credentials)
-        await asyncio.to_thread(
-            lambda: next(iter(gcs_client.list_buckets(page_size=1)), None)
-        )
+        await asyncio.to_thread(lambda: next(iter(gcs_client.list_buckets(page_size=1)), None))
         details.append("GCS connectivity confirmed.")
     except GoogleAPIError as e:
         status = "error"
@@ -443,9 +407,7 @@ async def plugin_health() -> Dict[str, Any]:
         jobs_client = run_v2.JobsClient(credentials=credentials)
         if project_id and location:
             parent = f"projects/{project_id}/locations/{location}"
-            await asyncio.to_thread(
-                lambda: next(iter(jobs_client.list_jobs(parent=parent)), None)
-            )
+            await asyncio.to_thread(lambda: next(iter(jobs_client.list_jobs(parent=parent)), None))
         details.append("Cloud Run Jobs client usable.")
     except GoogleAPIError as e:
         status = "error"
@@ -503,9 +465,7 @@ def _tar_directory_to_temp(project_root: str) -> str:
                 file_path = root_path / f
                 if _is_excluded(file_path):
                     continue
-                tar.add(
-                    file_path, arcname=str(file_path.relative_to(project_root_path))
-                )
+                tar.add(file_path, arcname=str(file_path.relative_to(project_root_path)))
 
     return str(archive_path)
 
@@ -585,21 +545,15 @@ async def run_cloud_run_job(
         JOB_SUBMISSIONS_TOTAL.labels(status="attempt").inc()
 
         # Step 1: Package and upload
-        temp_archive_path = await asyncio.to_thread(
-            _tar_directory_to_temp, project_root
-        )
+        temp_archive_path = await asyncio.to_thread(_tar_directory_to_temp, project_root)
         logger.info(f"Project archived: {temp_archive_path}")
 
         # Place under input prefix
         archive_base_name = os.path.basename(temp_archive_path)
         if archive_base_name.endswith(".tar.gz"):
             archive_base_name = archive_base_name[:-7]
-        temp_gcs_input_key = (
-            f"{config.output_gcs_key_prefix}/inputs/{archive_base_name}.tar.gz"
-        )
-        logger.info(
-            f"Uploading to gs://{config.input_gcs_bucket}/{temp_gcs_input_key}..."
-        )
+        temp_gcs_input_key = f"{config.output_gcs_key_prefix}/inputs/{archive_base_name}.tar.gz"
+        logger.info(f"Uploading to gs://{config.input_gcs_bucket}/{temp_gcs_input_key}...")
         upload_start = time.monotonic()
 
         @retry(
@@ -612,14 +566,10 @@ async def run_cloud_run_job(
             blob = bucket.blob(temp_gcs_input_key)
             with open(temp_archive_path, "rb") as f:
                 await asyncio.to_thread(blob.upload_from_file, f)
-            logger.info(
-                f"Uploaded to GCS: gs://{config.input_gcs_bucket}/{temp_gcs_input_key}"
-            )
+            logger.info(f"Uploaded to GCS: gs://{config.input_gcs_bucket}/{temp_gcs_input_key}")
 
         await upload_archive_to_gcs()
-        GCS_OPERATION_LATENCY.labels(operation="upload").observe(
-            time.monotonic() - upload_start
-        )
+        GCS_OPERATION_LATENCY.labels(operation="upload").observe(time.monotonic() - upload_start)
 
         # Step 2: Prepare Cloud Run Job definition
         job_name_to_use = (
@@ -629,9 +579,7 @@ async def run_cloud_run_job(
         job_id = os.path.basename(job_name_to_use)
 
         # Build container template
-        env_list = [
-            run_v2.EnvVar(name=ev.name, value=ev.value) for ev in config.env_vars
-        ] + [
+        env_list = [run_v2.EnvVar(name=ev.name, value=ev.value) for ev in config.env_vars] + [
             run_v2.EnvVar(
                 name="SFE_JOB_INPUT_ARCHIVE_GCS_PATH",
                 value=f"gs://{config.input_gcs_bucket}/{temp_gcs_input_key}",
@@ -664,9 +612,7 @@ async def run_cloud_run_job(
             try:
                 container_template.resources = run_v2.ResourceRequirements(limits=limits)  # type: ignore
             except Exception:
-                logger.debug(
-                    "Skipping resource limits assignment; API mismatch or not supported."
-                )
+                logger.debug("Skipping resource limits assignment; API mismatch or not supported.")
 
         task_template = run_v2.TaskTemplate(
             containers=[container_template],
@@ -701,19 +647,13 @@ async def run_cloud_run_job(
             )
             async def create_cloud_run_job_def():
                 try:
-                    op = await asyncio.to_thread(
-                        jobs_client.create_job, request=job_request
-                    )
+                    op = await asyncio.to_thread(jobs_client.create_job, request=job_request)
                     job_def_response = await asyncio.to_thread(op.result)
                     logger.info(f"Created job definition: {job_def_response.name}")
                     return job_def_response.name
                 except Conflict:
-                    logger.warning(
-                        f"Job definition '{job_id}' exists. Deleting and recreating..."
-                    )
-                    await asyncio.to_thread(
-                        jobs_client.delete_job, name=job_name_to_use
-                    )
+                    logger.warning(f"Job definition '{job_id}' exists. Deleting and recreating...")
+                    await asyncio.to_thread(jobs_client.delete_job, name=job_name_to_use)
                     await asyncio.sleep(5)
                     raise
 
@@ -730,9 +670,7 @@ async def run_cloud_run_job(
             retry=retry_if_exception_type(GoogleAPIError),
         )
         async def start_cloud_run_execution():
-            op = await asyncio.to_thread(
-                jobs_client.run_job, request=start_execution_request
-            )
+            op = await asyncio.to_thread(jobs_client.run_job, request=start_execution_request)
             execution_response = await asyncio.to_thread(op.result)
             return execution_response
 
@@ -768,9 +706,7 @@ async def run_cloud_run_job(
             async def get_execution_status():
                 # Prefer ExecutionsClient if available
                 if hasattr(exec_client, "get_execution"):
-                    return await asyncio.to_thread(
-                        exec_client.get_execution, name=execution_name
-                    )
+                    return await asyncio.to_thread(exec_client.get_execution, name=execution_name)
                 return await asyncio.to_thread(jobs_client.get_execution, name=execution_name)  # type: ignore[attr-defined]
 
             execution_info = await get_execution_status()
@@ -807,12 +743,8 @@ async def run_cloud_run_job(
                 break
 
         if exec_state not in ["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"]:
-            final_status_reason = (
-                f"Monitoring timed out after {max_monitor_seconds} seconds."
-            )
-            logger.error(
-                f"Execution {execution_name} monitoring timed out. Status: {exec_state}"
-            )
+            final_status_reason = f"Monitoring timed out after {max_monitor_seconds} seconds."
+            logger.error(f"Execution {execution_name} monitoring timed out. Status: {exec_state}")
             result.update(
                 {
                     "finalStatus": exec_state,
@@ -824,13 +756,13 @@ async def run_cloud_run_job(
         # Step 5: Process results
         if exec_state == "SUCCEEDED":
             result.update({"success": True, "reason": "Cloud Run job succeeded."})
-            output_gcs_key = f"{config.output_gcs_key_prefix}/outputs/{job_id}/{config.output_filename}"
+            output_gcs_key = (
+                f"{config.output_gcs_key_prefix}/outputs/{job_id}/{config.output_filename}"
+            )
             result["output_gcs_location"] = (
                 f"gs://{config.output_gcs_bucket or config.input_gcs_bucket}/{output_gcs_key}"
             )
-            local_output_path = os.path.join(
-                output_dir, f"{job_id}-{config.output_filename}"
-            )
+            local_output_path = os.path.join(output_dir, f"{job_id}-{config.output_filename}")
             os.makedirs(os.path.dirname(local_output_path), exist_ok=True)
             download_start = time.monotonic()
 
@@ -843,9 +775,7 @@ async def run_cloud_run_job(
                 logger.info(
                     f"Downloading results from gs://{config.output_gcs_bucket or config.input_gcs_bucket}/{output_gcs_key}..."
                 )
-                bucket = gcs_client.bucket(
-                    config.output_gcs_bucket or config.input_gcs_bucket
-                )
+                bucket = gcs_client.bucket(config.output_gcs_bucket or config.input_gcs_bucket)
                 blob = bucket.blob(output_gcs_key)
                 with open(local_output_path, "wb") as f:
                     await asyncio.to_thread(blob.download_to_file, f)
@@ -884,9 +814,7 @@ async def run_cloud_run_job(
                 raw_logs = []
                 for entry in logs_iter:
                     payload = getattr(entry, "payload", "")
-                    raw_logs.append(
-                        str(payload)[:2000]
-                    )  # truncate to avoid huge payloads
+                    raw_logs.append(str(payload)[:2000])  # truncate to avoid huge payloads
                     if len(raw_logs) >= 10:
                         break
                 result["raw_log"] = raw_logs
@@ -895,9 +823,7 @@ async def run_cloud_run_job(
                 logger.warning(f"Failed to retrieve logs: {e}")
 
     except QuotaExceeded as e:
-        logger.warning(
-            f"Quota exceeded: {e}. Will reduce resources and retry via decorator."
-        )
+        logger.warning(f"Quota exceeded: {e}. Will reduce resources and retry via decorator.")
         # Mutate job_config so that next retry sees reduced values
         if not job_config.get("_reduced_resources_once"):
             if job_config.get("cpu_limit") in ("1000m", "1"):
@@ -906,12 +832,8 @@ async def run_cloud_run_job(
                 job_config["memory_limit"] = "512Mi"
             # Also reduce parallelism/task_count by half, minimum 1
             try:
-                job_config["parallelism"] = max(
-                    1, int(job_config.get("parallelism", 1)) // 2 or 1
-                )
-                job_config["task_count"] = max(
-                    1, int(job_config.get("task_count", 1)) // 2 or 1
-                )
+                job_config["parallelism"] = max(1, int(job_config.get("parallelism", 1)) // 2 or 1)
+                job_config["task_count"] = max(1, int(job_config.get("task_count", 1)) // 2 or 1)
             except Exception:
                 job_config["parallelism"] = 1
                 job_config["task_count"] = max(1, int(job_config.get("task_count", 1)))
@@ -963,16 +885,10 @@ async def run_cloud_run_job(
             except Exception as e:
                 logger.warning(f"Failed to delete GCS input: {e}")
         # Cleanup ephemeral job definition
-        if (
-            job_created_for_cleanup
-            and not config.retain_temp_archive
-            and job_name_to_use
-        ):
+        if job_created_for_cleanup and not config.retain_temp_archive and job_name_to_use:
             try:
                 logger.info(f"Deleting ephemeral job definition: {job_name_to_use}...")
-                op = await asyncio.to_thread(
-                    jobs_client.delete_job, name=job_name_to_use
-                )
+                op = await asyncio.to_thread(jobs_client.delete_job, name=job_name_to_use)
                 await asyncio.to_thread(op.result)
                 logger.info(f"Deleted job definition: {job_name_to_use}")
             except NotFound:
@@ -980,12 +896,10 @@ async def run_cloud_run_job(
             except Exception as e:
                 logger.warning(f"Failed to delete job definition: {e}")
         # Metrics
-        JOB_SUBMISSIONS_TOTAL.labels(
-            status="success" if result["success"] else "failure"
-        ).inc()
-        JOB_DURATION_SECONDS.labels(
-            status=result.get("finalStatus", "UNKNOWN")
-        ).observe(float(result.get("duration_seconds") or 0.0))
+        JOB_SUBMISSIONS_TOTAL.labels(status="success" if result["success"] else "failure").inc()
+        JOB_DURATION_SECONDS.labels(status=result.get("finalStatus", "UNKNOWN")).observe(
+            float(result.get("duration_seconds") or 0.0)
+        )
 
     return result
 

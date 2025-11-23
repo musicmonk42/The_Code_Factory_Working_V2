@@ -201,9 +201,7 @@ async def check_service_health(
                         return await response.json()
                     except aiohttp.ContentTypeError:
                         content = await response.text()
-                        utils_errors_total.labels(
-                            operation="check_service_health"
-                        ).inc()
+                        utils_errors_total.labels(operation="check_service_health").inc()
                         logger.error(f"Non-JSON response from {url}: {content}")
                         return {"error": f"Non-JSON response from {url}: {content}"}
             except aiohttp.ClientError as e:

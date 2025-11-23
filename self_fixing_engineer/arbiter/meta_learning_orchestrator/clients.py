@@ -31,9 +31,7 @@ try:
 except ImportError:
 
     class PIIRedactorFilter:
-        def _redact_dict(
-            self, data: Dict[str, Any], seen=None, depth=0
-        ) -> Dict[str, Any]:
+        def _redact_dict(self, data: Dict[str, Any], seen=None, depth=0) -> Dict[str, Any]:
             """Fallback PII redactor with matching signature"""
             if seen is None:
                 seen = set()
@@ -73,9 +71,7 @@ except ImportError:
                     redacted_data[key] = redact_value(value)
             return redacted_data
 
-    logging.warning(
-        "logging_utils.py not found. Using enhanced placeholder PII redaction."
-    )
+    logging.warning("logging_utils.py not found. Using enhanced placeholder PII redaction.")
 
 # Create a module-level instance to avoid recreating on every request
 _pii_filter = PIIRedactorFilter()
@@ -134,17 +130,13 @@ def _with_client_logging_and_metrics(span_name: str, span_attributes: Dict[str, 
                 except asyncio.TimeoutError:
                     span.set_attribute("status", "timeout")
                     span.record_exception(TimeoutError("Client request timed out"))
-                    logger.error(
-                        f"Timeout in {method_name} for endpoint: {self.endpoint}"
-                    )
+                    logger.error(f"Timeout in {method_name} for endpoint: {self.endpoint}")
                     status_label = "timeout"
                     raise
                 except Exception as e:
                     span.set_attribute("status", "error")
                     span.record_exception(e)
-                    logger.error(
-                        f"Unexpected error in {method_name}: {e}", exc_info=True
-                    )
+                    logger.error(f"Unexpected error in {method_name}: {e}", exc_info=True)
                     status_label = "error"
                     raise
                 finally:
@@ -244,9 +236,7 @@ class _BaseHTTPClient:
         Handles response parsing with JSON fallback and content-type checks.
         """
         # Fix: Use module-level _pii_filter instance to avoid recreation
-        redacted_data = (
-            _pii_filter._redact_dict(data, seen=set(), depth=0) if data else None
-        )
+        redacted_data = _pii_filter._redact_dict(data, seen=set(), depth=0) if data else None
 
         try:
             async with self.session.request(
@@ -288,13 +278,9 @@ class MLPlatformClient(_BaseHTTPClient):
     """
 
     # Legacy method names for backward compatibility
-    async def trigger_training_job(
-        self, training_data_path: str, params: Dict[str, Any]
-    ) -> str:
+    async def trigger_training_job(self, training_data_path: str, params: Dict[str, Any]) -> str:
         """Legacy method name - redirects to train_model."""
-        return await self.train_model(
-            {"data_path": training_data_path, "params": params}
-        )
+        return await self.train_model({"data_path": training_data_path, "params": params})
 
     async def get_training_job_status(self, job_id: str) -> Dict[str, Any]:
         """Legacy method name - redirects to get_training_status."""
@@ -344,9 +330,7 @@ class MLPlatformClient(_BaseHTTPClient):
         retry=retry_if_exception_type(aiohttp.ClientError),
     )
     @_with_client_logging_and_metrics("evaluate_ml_model", {"ml.action": "evaluate"})
-    async def evaluate_model(
-        self, model_id: str, eval_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def evaluate_model(self, model_id: str, eval_data: Dict[str, Any]) -> Dict[str, Any]:
         """Evaluates an ML model via HTTP POST."""
         span = trace.get_current_span()
         span.set_attribute("ml.model_id", model_id)
@@ -403,9 +387,7 @@ class MLPlatformClient(_BaseHTTPClient):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(aiohttp.ClientError),
     )
-    @_with_client_logging_and_metrics(
-        "get_evaluation_metrics", {"ml.action": "metrics"}
-    )
+    @_with_client_logging_and_metrics("get_evaluation_metrics", {"ml.action": "metrics"})
     async def get_evaluation_metrics(self, model_id: str) -> Dict[str, Any]:
         """Gets evaluation metrics for a model via HTTP GET."""
         span = trace.get_current_span()
@@ -431,9 +413,7 @@ class AgentConfigurationService(_BaseHTTPClient):
     @_with_client_logging_and_metrics(
         "update_prioritization_weights", {"config.type": "prioritization_weights"}
     )
-    async def update_prioritization_weights(
-        self, weights: Dict[str, float], version: str
-    ) -> bool:
+    async def update_prioritization_weights(self, weights: Dict[str, float], version: str) -> bool:
         """Updates prioritization weights for DecisionOptimizer via HTTP."""
         span = trace.get_current_span()
         span.set_attribute("config.version", version)
@@ -450,9 +430,7 @@ class AgentConfigurationService(_BaseHTTPClient):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(aiohttp.ClientError),
     )
-    @_with_client_logging_and_metrics(
-        "update_policy_rules", {"config.type": "policy_rules"}
-    )
+    @_with_client_logging_and_metrics("update_policy_rules", {"config.type": "policy_rules"})
     async def update_policy_rules(self, rules: Dict[str, Any], version: str) -> bool:
         """Updates policy rules for PolicyEngine via HTTP."""
         span = trace.get_current_span()
@@ -489,9 +467,7 @@ class AgentConfigurationService(_BaseHTTPClient):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(aiohttp.ClientError),
     )
-    @_with_client_logging_and_metrics(
-        "delete_agent_config", {"config.action": "delete"}
-    )
+    @_with_client_logging_and_metrics("delete_agent_config", {"config.action": "delete"})
     async def delete_config(self, config_type: str, config_id: str) -> bool:
         """Deletes a specific configuration by type and ID."""
         span = trace.get_current_span()
@@ -511,12 +487,8 @@ class AgentConfigurationService(_BaseHTTPClient):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(aiohttp.ClientError),
     )
-    @_with_client_logging_and_metrics(
-        "rollback_agent_config", {"config.action": "rollback"}
-    )
-    async def rollback_config(
-        self, config_type: str, config_id: str, version: str
-    ) -> bool:
+    @_with_client_logging_and_metrics("rollback_agent_config", {"config.action": "rollback"})
+    async def rollback_config(self, config_type: str, config_id: str, version: str) -> bool:
         """Rolls back a specific configuration to a previous version."""
         span = trace.get_current_span()
         span.set_attribute("config.type", config_type)

@@ -117,9 +117,7 @@ def mock_websockets():
 @pytest.fixture
 def mock_logger():
     """Mock logger to capture logs."""
-    with patch(
-        "intent_capture.cli.logging.root.handlers", new=[MagicMock()]
-    ) as mock_handlers:
+    with patch("intent_capture.cli.logging.root.handlers", new=[MagicMock()]) as mock_handlers:
         yield mock_handlers
 
 

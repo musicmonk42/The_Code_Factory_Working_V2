@@ -187,9 +187,9 @@ async def postgres_manager(mock_audit_client, mock_metrics):
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
 
-    with patch(
-        "arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics
-    ), patch("arbiter.explainable_reasoner.history_manager.POSTGRES_AVAILABLE", True):
+    with patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics), patch(
+        "arbiter.explainable_reasoner.history_manager.POSTGRES_AVAILABLE", True
+    ):
 
         manager = PostgresHistoryManager(
             db_url="postgresql://test",
@@ -269,10 +269,7 @@ async def redis_manager(mock_audit_client, mock_metrics):
     )
     mock_client.zrange = AsyncMock(
         side_effect=lambda k, s, e: [
-            x[0]
-            for x in sorted(store.items(), key=lambda x: x[1])[
-                s : e + 1 if e >= 0 else None
-            ]
+            x[0] for x in sorted(store.items(), key=lambda x: x[1])[s : e + 1 if e >= 0 else None]
         ]
     )
     mock_client.zcard = AsyncMock(side_effect=lambda k: len(store))
@@ -281,13 +278,9 @@ async def redis_manager(mock_audit_client, mock_metrics):
             [store.pop(k) for k, v in list(store.items()) if min_s <= v <= max_s]
         )
     )
-    mock_client.delete = AsyncMock(
-        side_effect=lambda k: (c := len(store), store.clear(), c)[2]
-    )
+    mock_client.delete = AsyncMock(side_effect=lambda k: (c := len(store), store.clear(), c)[2])
     mock_client.zrem = AsyncMock(
-        side_effect=lambda k, *members: sum(
-            1 for m in members if store.pop(m, None) is not None
-        )
+        side_effect=lambda k, *members: sum(1 for m in members if store.pop(m, None) is not None)
     )
 
     async def mock_zscan_iter(key):
@@ -296,9 +289,9 @@ async def redis_manager(mock_audit_client, mock_metrics):
 
     mock_client.zscan_iter = mock_zscan_iter
 
-    with patch(
-        "arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics
-    ), patch("arbiter.explainable_reasoner.history_manager.REDIS_AVAILABLE", True):
+    with patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics), patch(
+        "arbiter.explainable_reasoner.history_manager.REDIS_AVAILABLE", True
+    ):
 
         manager = RedisHistoryManager(
             redis_url="redis://test",
@@ -322,9 +315,7 @@ async def redis_manager(mock_audit_client, mock_metrics):
 # --- Helper Functions ---
 
 
-def create_test_entry(
-    response="test_response", session_id="test_session", timestamp=None
-):
+def create_test_entry(response="test_response", session_id="test_session", timestamp=None):
     """Create a test history entry."""
     if timestamp is None:
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -358,9 +349,7 @@ class TestSQLiteHistoryManager:
     @pytest.mark.asyncio
     async def test_init_db(self, temp_db_path, mock_audit_client, mock_metrics):
         """Test database initialization."""
-        with patch(
-            "arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics
-        ):
+        with patch("arbiter.explainable_reasoner.history_manager.METRICS", mock_metrics):
             manager = SQLiteHistoryManager(
                 db_path=temp_db_path,
                 max_history_size=5,

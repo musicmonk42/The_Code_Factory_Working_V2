@@ -105,9 +105,7 @@ class TLSConfig:
         context.options |= ssl.OP_NO_TLSv1
         context.options |= ssl.OP_NO_TLSv1_1
 
-        logger.info(
-            f"SSL context created with minimum TLS version: {self.min_tls_version}"
-        )
+        logger.info(f"SSL context created with minimum TLS version: {self.min_tls_version}")
         return context
 
     def validate_certificates(self) -> Tuple[bool, List[str]]:
@@ -371,9 +369,7 @@ class SecurityHardeningConfig:
         errors = []
 
         if len(password) < self.min_password_length:
-            errors.append(
-                f"Password must be at least {self.min_password_length} characters long"
-            )
+            errors.append(f"Password must be at least {self.min_password_length} characters long")
 
         if self.require_uppercase and not any(c.isupper() for c in password):
             errors.append("Password must contain at least one uppercase letter")
@@ -403,9 +399,7 @@ class SecurityConfigManager:
         self.ids_config = IntrusionDetectionConfig()
         self.hardening_config = SecurityHardeningConfig(security_level=security_level)
 
-        logger.info(
-            f"Security configuration initialized for level: {security_level.value}"
-        )
+        logger.info(f"Security configuration initialized for level: {security_level.value}")
 
     def load_from_file(self, config_path: str) -> None:
         """Load security configuration from JSON file"""

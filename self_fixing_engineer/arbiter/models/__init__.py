@@ -207,6 +207,4 @@ __version__ = "1.0.0"
 
 # Log summary of what's available
 if logger.isEnabledFor(logging.DEBUG):
-    logger.debug(
-        f"Models package initialized. Available components: {', '.join(__all__)}"
-    )
+    logger.debug(f"Models package initialized. Available components: {', '.join(__all__)}")

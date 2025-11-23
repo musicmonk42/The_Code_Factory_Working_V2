@@ -113,9 +113,7 @@ _secrets_manager: Optional[Any] = None
 # --- Environment-Driven Configuration & Validation ---
 def _validate_env_var(var_name: str, value: str, pattern: str) -> str:
     if not re.match(pattern, value):
-        raise ValueError(
-            f"Invalid {var_name} value: '{value}'. Must match pattern: {pattern}"
-        )
+        raise ValueError(f"Invalid {var_name} value: '{value}'. Must match pattern: {pattern}")
     return value
 
 
@@ -126,12 +124,8 @@ def _truthy(v: str | None) -> bool:
 ENVIRONMENT = os.getenv("APP_ENV", "test").lower()
 PRODUCTION_MODE = ENVIRONMENT in {"prod", "production"}
 ALLOW_FALLBACKS = _truthy(os.getenv("ALLOW_FALLBACKS", "0" if PRODUCTION_MODE else "1"))
-AUDIT_LOG_ENABLED = _truthy(
-    os.getenv("AUDIT_LOG_ENABLED", "1" if PRODUCTION_MODE else "0")
-)
-AUDIT_SIGNING_ENABLED = _truthy(
-    os.getenv("AUDIT_SIGNING_ENABLED", "1" if PRODUCTION_MODE else "0")
-)
+AUDIT_LOG_ENABLED = _truthy(os.getenv("AUDIT_LOG_ENABLED", "1" if PRODUCTION_MODE else "0"))
+AUDIT_SIGNING_ENABLED = _truthy(os.getenv("AUDIT_SIGNING_ENABLED", "1" if PRODUCTION_MODE else "0"))
 METRICS_ENABLED: bool = os.getenv("METRICS_ENABLED", "true").lower().strip() == "true"
 TRACING_ENABLED: bool = os.getenv("TRACING_ENABLED", "true").lower().strip() == "true"
 _LOG_LEVEL_STR = os.getenv("LOG_LEVEL", "INFO").upper().strip()
@@ -155,9 +149,7 @@ class JSONFormatter(logging.Formatter):
                 f"Log record missing mandatory 'data_classification': {record.getMessage()}"
             )
         log_record: Dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "module": record.name,
             "message": record.getMessage(),
@@ -363,9 +355,7 @@ _global_warning_count = 0
 _warning_window_start = time.monotonic()
 
 
-def _should_log_warning(
-    key: str, interval_seconds: int = 300, max_per_hour: int = 100
-) -> bool:
+def _should_log_warning(key: str, interval_seconds: int = 300, max_per_hour: int = 100) -> bool:
     global _global_warning_count, _warning_window_start
     now = time.monotonic()
     if now - _warning_window_start > 3600:
@@ -418,17 +408,15 @@ def _offload_audit_log_to_s3(filename: str):
     if AUDIT_LOG_ENABLED and bucket and _HAS_BOTO3:
         try:
             if _s3_client is None:
-                _s3_client = boto3_client(
-                    "s3", region_name=os.getenv("AWS_REGION", "us-east-1")
-                )
+                _s3_client = boto3_client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
                 _ensure_s3_lifecycle_policy()
-            key = f"audit-logs/{datetime.now(timezone.utc).isoformat()}/{os.path.basename(filename)}"
+            key = (
+                f"audit-logs/{datetime.now(timezone.utc).isoformat()}/{os.path.basename(filename)}"
+            )
             _s3_client.upload_file(filename, bucket, key)
         except Exception as e:
             _get_metrics()["s3_offload_failures"].inc()
-            logger.error(
-                f"S3 offload failed: {e}", extra={"data_classification": "internal"}
-            )
+            logger.error(f"S3 offload failed: {e}", extra={"data_classification": "internal"})
 
 
 class S3RotatingFileHandler(RotatingFileHandler):
@@ -492,9 +480,7 @@ class _FallbackAuditLogger:
         }
         try:
             payload = (
-                _sign_log_entry(entry)
-                if AUDIT_LOG_ENABLED
-                else json.dumps(entry, sort_keys=True)
+                _sign_log_entry(entry) if AUDIT_LOG_ENABLED else json.dumps(entry, sort_keys=True)
             )
         except Exception:
             payload = json.dumps(entry, sort_keys=True)
@@ -560,10 +546,7 @@ def _check_fallback_usage(component: str) -> None:
         pass
 
     # De-dupe + thresholded escalation
-    if (
-        _fallback_alert_counters[component] > 10
-        and component not in _fallback_alert_escalated
-    ):
+    if _fallback_alert_counters[component] > 10 and component not in _fallback_alert_escalated:
         if _ALERT_REENTRANT:
             return
         _fallback_alert_escalated.add(component)
@@ -606,9 +589,7 @@ class _FallbackSecretsManager:
                 )
             raise KeyError(f"Secret {key!r} not found")
         try:
-            _get_metrics().get("init_duration").observe(
-                max(0.0, time.monotonic() - start)
-            )
+            _get_metrics().get("init_duration").observe(max(0.0, time.monotonic() - start))
         except Exception:
             pass
         return val
@@ -673,9 +654,7 @@ def _initialize_core_modules() -> None:
             try:
                 if _HAS_POSIX_RESOURCE:
                     _posix_resource.setrlimit(_posix_resource.RLIMIT_CPU, (10, 15))
-                    _posix_resource.setrlimit(
-                        _posix_resource.RLIMIT_NOFILE, (1024, 4096)
-                    )
+                    _posix_resource.setrlimit(_posix_resource.RLIMIT_NOFILE, (1024, 4096))
                     _posix_resource.setrlimit(_posix_resource.RLIMIT_NPROC, (50, 100))
 
                 modules = [
@@ -693,13 +672,9 @@ def _initialize_core_modules() -> None:
                             if symbol == "get_audit_logger":
                                 # Prefer factory if present; otherwise accept a direct instance named `audit_logger`
                                 if hasattr(module, "get_audit_logger"):
-                                    globals()[
-                                        "_audit_logger"
-                                    ] = module.get_audit_logger()
+                                    globals()["_audit_logger"] = module.get_audit_logger()
                                 elif hasattr(module, "audit_logger"):
-                                    globals()["_audit_logger"] = getattr(
-                                        module, "audit_logger"
-                                    )
+                                    globals()["_audit_logger"] = getattr(module, "audit_logger")
                                 else:
                                     raise AttributeError(
                                         f"Module {name!r} lacks get_audit_logger() and audit_logger"
@@ -729,17 +704,11 @@ def _initialize_core_modules() -> None:
                             extra={"data_classification": "internal"},
                         )
                     finally:
-                        core_statuses[name].load_time_ms = (
-                            time.monotonic() - start_time
-                        ) * 1000
+                        core_statuses[name].load_time_ms = (time.monotonic() - start_time) * 1000
 
-                if PRODUCTION_MODE and not all(
-                    s.loaded for s in core_statuses.values()
-                ):
+                if PRODUCTION_MODE and not all(s.loaded for s in core_statuses.values()):
                     # One or more core deps missing in prod: fail fast with a clear message.
-                    missing = [
-                        name for name, s in core_statuses.items() if not s.loaded
-                    ]
+                    missing = [name for name, s in core_statuses.items() if not s.loaded]
                     raise RuntimeError(
                         "Required core modules missing in production: "
                         + ", ".join(missing)
@@ -780,13 +749,9 @@ except Exception as e:
         raise
 
 alert_operator = (
-    _alert_operator
-    if core_statuses["analyzer.core_utils"].loaded
-    else _fallback_alert_operator
+    _alert_operator if core_statuses["analyzer.core_utils"].loaded else _fallback_alert_operator
 )
-scrub_secrets = (
-    _scrub_secrets if core_statuses["analyzer.core_utils"].loaded else lambda x: x
-)
+scrub_secrets = _scrub_secrets if core_statuses["analyzer.core_utils"].loaded else lambda x: x
 audit_logger = (
     _audit_logger
     if core_statuses["analyzer.core_audit"].loaded
@@ -869,11 +834,7 @@ except NameError:
             pass
 
 
-if (
-    os.getenv("RUN_AS_SERVICE", "false").lower() == "true"
-    and METRICS_ENABLED
-    and _HAS_PROMETHEUS
-):
+if os.getenv("RUN_AS_SERVICE", "false").lower() == "true" and METRICS_ENABLED and _HAS_PROMETHEUS:
     try:
         start_http_server(int(METRICS_PORT))
         logger.info(

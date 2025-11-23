@@ -213,9 +213,7 @@ async def test_register_dependencies(reset_registry):
     # Register plugin with dependency
     deps = [{"kind": "core_service", "name": "BaseDep", "version": ">=1.0"}]
 
-    @reg.register(
-        kind=kind, name="DepPlugin", version="1.0.0", author="Test", dependencies=deps
-    )
+    @reg.register(kind=kind, name="DepPlugin", version="1.0.0", author="Test", dependencies=deps)
     class DepPlugin(MockPlugin):
         pass
 
@@ -348,9 +346,7 @@ async def test_health_check_all(reset_registry):
 
     # Register healthy plugin
     healthy_instance = MockPlugin()
-    reg.register_instance(
-        kind, "HealthyPlugin", healthy_instance, version="1.0.0", author="Test"
-    )
+    reg.register_instance(kind, "HealthyPlugin", healthy_instance, version="1.0.0", author="Test")
 
     # Register unhealthy plugin
     class UnhealthyPlugin(MockPlugin):
@@ -491,9 +487,7 @@ def test_circular_dependency(reset_registry):
         pass
 
     # Register A with dependency on B
-    @reg.register(
-        kind=kind, name="PluginA", version="1.0.0", author="Test", dependencies=deps_a
-    )
+    @reg.register(kind=kind, name="PluginA", version="1.0.0", author="Test", dependencies=deps_a)
     class PluginA(MockPlugin):
         pass
 
@@ -501,9 +495,7 @@ def test_circular_dependency(reset_registry):
     deps_c = [{"kind": "core_service", "name": "PluginA", "version": ">=1.0"}]
 
     # This should work as there's no cycle yet
-    @reg.register(
-        kind=kind, name="PluginC", version="1.0.0", author="Test", dependencies=deps_c
-    )
+    @reg.register(kind=kind, name="PluginC", version="1.0.0", author="Test", dependencies=deps_c)
     class PluginC(MockPlugin):
         pass
 
@@ -718,9 +710,7 @@ async def test_quarantined_plugin_health_check(reset_registry):
     name = "QuarantinedPlugin"
 
     # Create a quarantined plugin
-    meta = PluginMeta(
-        name=name, kind=kind, version="1.0.0", author="Test", is_quarantined=True
-    )
+    meta = PluginMeta(name=name, kind=kind, version="1.0.0", author="Test", is_quarantined=True)
 
     plugin = MockPlugin()
     reg._plugins[kind] = {name: plugin}

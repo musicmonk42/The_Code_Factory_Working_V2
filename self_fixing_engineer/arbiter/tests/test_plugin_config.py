@@ -23,9 +23,7 @@ def test_get_plugins_returns_copy(expected_plugins):
     assert plugins == expected_plugins
     assert plugins is not PluginRegistry._PLUGINS  # Ensure it's a copy
     plugins["new_plugin"] = "test.path"  # Modify the returned copy
-    assert (
-        PluginRegistry._PLUGINS.get("new_plugin") is None
-    )  # Original remains unchanged
+    assert PluginRegistry._PLUGINS.get("new_plugin") is None  # Original remains unchanged
 
 
 # Test that SANDBOXED_PLUGINS is a copy of the internal dictionary
@@ -33,9 +31,7 @@ def test_sandboxed_plugins_is_copy(expected_plugins):
     assert SANDBOXED_PLUGINS == expected_plugins
     assert SANDBOXED_PLUGINS is not PluginRegistry._PLUGINS
     SANDBOXED_PLUGINS["new_plugin"] = "test.path"  # Modify the constant
-    assert (
-        PluginRegistry._PLUGINS.get("new_plugin") is None
-    )  # Original remains unchanged
+    assert PluginRegistry._PLUGINS.get("new_plugin") is None  # Original remains unchanged
 
 
 # Test validation with valid plugin registry
@@ -51,9 +47,7 @@ def test_validate_valid():
     {1: "arbiter.test.TestPlugin", "valid": "arbiter.test.ValidPlugin"},
 )
 def test_validate_invalid_key_type():
-    with pytest.raises(
-        TypeError, match="Plugin registry keys and values must be strings"
-    ):
+    with pytest.raises(TypeError, match="Plugin registry keys and values must be strings"):
         PluginRegistry.validate()
 
 
@@ -64,9 +58,7 @@ def test_validate_invalid_key_type():
     {"valid_key": 123, "another_key": "arbiter.test.ValidPlugin"},
 )
 def test_validate_invalid_value_type():
-    with pytest.raises(
-        TypeError, match="Plugin registry keys and values must be strings"
-    ):
+    with pytest.raises(TypeError, match="Plugin registry keys and values must be strings"):
         PluginRegistry.validate()
 
 
@@ -83,9 +75,7 @@ def test_plugin_registry_immutability():
         PluginRegistry._PLUGINS = {"new_key": "new.value"}
 
     # Test that we can't modify _PLUGINS items
-    with pytest.raises(
-        TypeError, match="'dict' object does not support item assignment"
-    ):
+    with pytest.raises(TypeError, match="'dict' object does not support item assignment"):
         PluginRegistry._PLUGINS["new_key"] = "new.value"
 
 
@@ -102,9 +92,7 @@ def test_snake_case_keys():
 def test_valid_dotted_paths():
     import re
 
-    dotted_path_pattern = re.compile(
-        r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
-    )
+    dotted_path_pattern = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+$")
     for value in PluginRegistry.get_plugins().values():
         assert dotted_path_pattern.match(
             value

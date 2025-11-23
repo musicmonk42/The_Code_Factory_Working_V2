@@ -27,14 +27,10 @@ class LearningRecord(BaseModel):
     Uses enums for type safety and Pydantic's frozen config for immutability.
     """
 
-    timestamp: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     agent_id: str = Field(..., description="Unique identifier for the agent")
     session_id: str = Field(..., description="Session identifier for tracking")
-    decision_trace: Dict[str, Any] = Field(
-        ..., description="Trace of decision-making process"
-    )
+    decision_trace: Dict[str, Any] = Field(..., description="Trace of decision-making process")
     user_feedback: Optional[str] = Field(None, description="Optional user feedback")
     event_type: EventType = Field(..., description="Type of event recorded")
     lineage_id: Optional[str] = Field(None, description="Lineage tracking identifier")
@@ -55,23 +51,15 @@ class ModelVersion(BaseModel):
     model_id: str = Field(..., description="Unique model identifier")
     version: str = Field(..., description="Model version string")
     training_timestamp: str = Field(..., description="When the model was trained")
-    evaluation_metrics: Dict[str, float] = Field(
-        ..., description="Model evaluation metrics"
-    )
+    evaluation_metrics: Dict[str, float] = Field(..., description="Model evaluation metrics")
     deployment_status: DeploymentStatus = Field(
         default=DeploymentStatus.PENDING, description="Current deployment status"
     )
-    deployment_timestamp: Optional[str] = Field(
-        None, description="When model was deployed"
-    )
+    deployment_timestamp: Optional[str] = Field(None, description="When model was deployed")
     is_active: bool = Field(False, description="Whether model is currently active")
-    retry_count: int = Field(
-        default=0, ge=0, description="Number of deployment retries"
-    )
+    retry_count: int = Field(default=0, ge=0, description="Number of deployment retries")
     lineage_id: Optional[str] = Field(None, description="Data lineage identifier")
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     class Config:
         frozen = True
@@ -88,15 +76,11 @@ class ModelVersion(BaseModel):
         if self.deployment_status == DeploymentStatus.DEPLOYED:
             # Check that deployed models are marked as active
             if not self.is_active:
-                raise ValueError(
-                    "A model with 'deployed' status must also be 'is_active: True'."
-                )
+                raise ValueError("A model with 'deployed' status must also be 'is_active: True'.")
 
             # Check for accuracy metric
             if "accuracy" not in self.evaluation_metrics:
-                raise ValueError(
-                    "Deployed models must have 'accuracy' in evaluation_metrics."
-                )
+                raise ValueError("Deployed models must have 'accuracy' in evaluation_metrics.")
 
             # Check accuracy threshold
             min_threshold = 0.8
@@ -183,9 +167,7 @@ if __name__ == "__main__":
             is_active=True,
             deployment_timestamp=datetime.now(timezone.utc).isoformat(),
         )
-        logging.info(
-            f"ModelVersion deployed: {model_v1_deployed.model_dump_json(indent=2)}"
-        )
+        logging.info(f"ModelVersion deployed: {model_v1_deployed.model_dump_json(indent=2)}")
 
         # Test missing accuracy for deployed model
         try:

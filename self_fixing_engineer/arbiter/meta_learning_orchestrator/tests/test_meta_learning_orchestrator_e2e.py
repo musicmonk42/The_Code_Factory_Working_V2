@@ -193,9 +193,7 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
     # Don't mock _cleanup_local_data_lake for the cleanup test
     mocker.patch(
         "arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._acquire_leader_lock",
-        mocker.AsyncMock(
-            return_value=(True, {"instance_id": str(uuid.uuid4()), "token": 12345})
-        ),
+        mocker.AsyncMock(return_value=(True, {"instance_id": str(uuid.uuid4()), "token": 12345})),
     )
     mocker.patch(
         "arbiter.meta_learning_orchestrator.orchestrator.MetaLearningOrchestrator._verify_leadership_and_fencing",
@@ -221,9 +219,7 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
 
     # Patch the `audit_utils` attribute of the orchestrator instance
     orchestrator.audit_utils = mocker.MagicMock(spec=AuditUtils)
-    orchestrator.audit_utils.add_audit_event = mocker.AsyncMock(
-        return_value="mock_hash"
-    )
+    orchestrator.audit_utils.add_audit_event = mocker.AsyncMock(return_value="mock_hash")
     orchestrator.audit_utils.validate_audit_chain = mocker.AsyncMock(
         return_value={
             "is_valid": True,
@@ -237,17 +233,11 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
     # Ensure clean shutdown
     orchestrator._running = False
     orchestrator._new_records_count = 0  # Reset for next test
-    if (
-        orchestrator._training_check_task
-        and not orchestrator._training_check_task.done()
-    ):
+    if orchestrator._training_check_task and not orchestrator._training_check_task.done():
         orchestrator._training_check_task.cancel()
     if orchestrator._data_cleanup_task and not orchestrator._data_cleanup_task.done():
         orchestrator._data_cleanup_task.cancel()
-    if (
-        orchestrator._leader_election_task
-        and not orchestrator._leader_election_task.done()
-    ):
+    if orchestrator._leader_election_task and not orchestrator._leader_election_task.done():
         orchestrator._leader_election_task.cancel()
 
     # Wait for cancellation
@@ -269,9 +259,7 @@ def get_metric_value(metric, labels=None):
 
 
 @pytest.mark.asyncio
-async def test_e2e_full_lifecycle(
-    orchestrator, mocker: MockerFixture, caplog, tmp_path
-):
+async def test_e2e_full_lifecycle(orchestrator, mocker: MockerFixture, caplog, tmp_path):
     """E2E Test: Simulate full lifecycle - ingestion, training, deployment, cleanup, and auditing."""
     caplog.set_level(logging.INFO)
 
@@ -325,9 +313,7 @@ async def test_e2e_error_handling(orchestrator, mocker: MockerFixture, caplog):
     orchestrator._new_records_count = 0  # Reset counter
 
     # Ingestion error (invalid record) - mock the ingestor to raise error
-    orchestrator.ingestor.ingest_learning_record.side_effect = DataIngestionError(
-        "Invalid record"
-    )
+    orchestrator.ingestor.ingest_learning_record.side_effect = DataIngestionError("Invalid record")
 
     invalid_record = {"invalid_field": "test"}
     with pytest.raises(DataIngestionError):
@@ -337,9 +323,7 @@ async def test_e2e_error_handling(orchestrator, mocker: MockerFixture, caplog):
     orchestrator.ingestor.ingest_learning_record.side_effect = None
 
     # Training failure
-    orchestrator.trainer.trigger_model_training_and_deployment = mocker.AsyncMock(
-        return_value=None
-    )
+    orchestrator.trainer.trigger_model_training_and_deployment = mocker.AsyncMock(return_value=None)
     orchestrator._new_records_count = 3
     await orchestrator._training_check_core()
     assert orchestrator._current_active_model is None
@@ -352,9 +336,7 @@ async def test_e2e_leader_election(orchestrator, mocker: MockerFixture, caplog):
     orchestrator._running = True
 
     # Simulate becoming leader
-    await orchestrator._become_leader(
-        {"instance_id": orchestrator._instance_id, "token": 12345}
-    )
+    await orchestrator._become_leader({"instance_id": orchestrator._instance_id, "token": 12345})
     assert orchestrator._is_leader
     assert get_metric_value(ML_LEADER_STATUS) == 1
 
@@ -390,9 +372,7 @@ async def test_e2e_data_cleanup_local(orchestrator, mocker, tmp_path):
     async def real_cleanup():
         temp_path = str(data_lake_path) + ".tmp_cleanup"
         retained_count = 0
-        cutoff_time = fixed_time - timedelta(
-            days=orchestrator.config.DATA_RETENTION_DAYS
-        )
+        cutoff_time = fixed_time - timedelta(days=orchestrator.config.DATA_RETENTION_DAYS)
 
         with open(data_lake_path, "r") as infile, open(temp_path, "w") as outfile:
             for line in infile:

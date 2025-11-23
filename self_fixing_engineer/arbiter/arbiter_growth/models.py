@@ -21,15 +21,9 @@ class GrowthEvent(BaseModel):
         description="The type of the event (e.g., 'skill_improved'). Must be a non-empty string.",
         min_length=1,
     )
-    timestamp: str = Field(
-        ..., description="ISO 8601 timestamp of when the event occurred."
-    )
-    details: Dict[str, Any] = Field(
-        ..., description="A dictionary containing event-specific data."
-    )
-    event_version: float = Field(
-        1.0, description="The schema version of the event payload."
-    )
+    timestamp: str = Field(..., description="ISO 8601 timestamp of when the event occurred.")
+    details: Dict[str, Any] = Field(..., description="A dictionary containing event-specific data.")
+    event_version: float = Field(1.0, description="The schema version of the event payload.")
 
     @validator("type")
     def type_must_not_be_whitespace(cls, v: str) -> str:
@@ -69,9 +63,7 @@ class ArbiterState(BaseModel):
         default="0",
         description="The offset of the last event processed to build this state.",
     )
-    schema_version: float = Field(
-        1.0, description="The schema version of this state object."
-    )
+    schema_version: float = Field(1.0, description="The schema version of this state object.")
     experience_points: float = Field(
         0.0, description="The total experience points accumulated by the arbiter."
     )
@@ -144,18 +136,14 @@ class GrowthSnapshot(Base):
     """
 
     __tablename__ = "arbiter_growth_snapshots"
-    arbiter_id = Column(
-        String, primary_key=True, comment="The unique ID of the arbiter."
-    )
+    arbiter_id = Column(String, primary_key=True, comment="The unique ID of the arbiter.")
     level = Column(
         Integer,
         server_default="1",
         nullable=False,
         comment="The arbiter's level at the time of the snapshot.",
     )
-    skills_encrypted = Column(
-        Text, comment="Encrypted JSON dictionary of skill scores."
-    )
+    skills_encrypted = Column(Text, comment="Encrypted JSON dictionary of skill scores.")
     user_preferences_encrypted = Column(
         Text, comment="Encrypted JSON dictionary of user preferences."
     )
@@ -177,13 +165,9 @@ class GrowthSnapshot(Base):
         nullable=False,
         comment="The event offset corresponding to this state snapshot.",
     )
-    timestamp = Column(
-        DateTime, nullable=True, comment="Timestamp when the snapshot was created."
-    )
+    timestamp = Column(DateTime, nullable=True, comment="Timestamp when the snapshot was created.")
 
-    __table_args__ = (
-        {"comment": "Snapshots of arbiter state for persistence and recovery."},
-    )
+    __table_args__ = ({"comment": "Snapshots of arbiter state for persistence and recovery."},)
 
 
 class GrowthEventRecord(Base):
@@ -198,12 +182,8 @@ class GrowthEventRecord(Base):
         String, index=True, nullable=False, comment="The arbiter this event belongs to."
     )
     event_type = Column(String, nullable=False, comment="The type of the event.")
-    timestamp = Column(
-        String, nullable=False, comment="The ISO 8601 timestamp of the event."
-    )
-    details_encrypted = Column(
-        Text, comment="Encrypted JSON dictionary of event-specific details."
-    )
+    timestamp = Column(String, nullable=False, comment="The ISO 8601 timestamp of the event.")
+    details_encrypted = Column(Text, comment="Encrypted JSON dictionary of event-specific details.")
     event_version = Column(
         Float,
         server_default="1.0",

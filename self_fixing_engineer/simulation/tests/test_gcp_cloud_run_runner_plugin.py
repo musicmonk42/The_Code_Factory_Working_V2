@@ -124,9 +124,7 @@ def mock_jobs_client():
                 self.limits = limits
 
         class MockTaskTemplate:
-            def __init__(
-                self, containers=None, max_retries=None, timeout=None, **kwargs
-            ):
+            def __init__(self, containers=None, max_retries=None, timeout=None, **kwargs):
                 self.containers = containers
                 self.max_retries = max_retries
                 self.timeout = timeout
@@ -374,24 +372,17 @@ class TestPluginHealth:
             result = await plugin_health()
 
             assert result["status"] == "ok"
-            assert any(
-                "credentials loaded successfully" in d.lower()
-                for d in result["details"]
-            )
+            assert any("credentials loaded successfully" in d.lower() for d in result["details"])
 
     @pytest.mark.asyncio
     @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
     async def test_health_check_no_credentials(self, mock_environment):
         """Test health check with missing credentials."""
-        with patch(
-            "plugins.gcp_cloud_run_runner_plugin._get_credentials", return_value=None
-        ):
+        with patch("plugins.gcp_cloud_run_runner_plugin._get_credentials", return_value=None):
             result = await plugin_health()
 
             assert result["status"] == "error"
-            assert any(
-                "credentials not configured" in d.lower() for d in result["details"]
-            )
+            assert any("credentials not configured" in d.lower() for d in result["details"])
 
     @pytest.mark.asyncio
     @patch("plugins.gcp_cloud_run_runner_plugin.GCP_AVAILABLE", True)
@@ -418,9 +409,7 @@ class TestPluginHealth:
         result = await plugin_health()
 
         assert result["status"] == "error"
-        assert any(
-            "Google Cloud client libraries not found" in d for d in result["details"]
-        )
+        assert any("Google Cloud client libraries not found" in d for d in result["details"])
 
 
 # ==============================================================================
@@ -492,9 +481,7 @@ class TestRunCloudRunJob:
         ):
 
             with tempfile.TemporaryDirectory() as output_dir:
-                result = await run_cloud_run_job(
-                    valid_job_config, temp_project_dir, output_dir
-                )
+                result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
         assert result["success"]
         assert result["finalStatus"] == "SUCCEEDED"
@@ -566,9 +553,7 @@ class TestRunCloudRunJob:
         ):
 
             with tempfile.TemporaryDirectory() as output_dir:
-                result = await run_cloud_run_job(
-                    valid_job_config, temp_project_dir, output_dir
-                )
+                result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
         assert not result["success"]
         assert result["finalStatus"] == "FAILED"
@@ -594,9 +579,7 @@ class TestRunCloudRunJob:
 
         # Setup - quota exception should be caught and handled
         # Use the QuotaExceeded alias that the plugin defines
-        with patch(
-            "plugins.gcp_cloud_run_runner_plugin.QuotaExceeded", ResourceExhausted
-        ):
+        with patch("plugins.gcp_cloud_run_runner_plugin.QuotaExceeded", ResourceExhausted):
 
             # Use a proper async sleep mock
             async def mock_sleep(seconds):
@@ -696,9 +679,7 @@ class TestRunCloudRunJob:
             mock_blob.download_to_file.side_effect = NotFound("Output not found")
 
             with tempfile.TemporaryDirectory() as output_dir:
-                result = await run_cloud_run_job(
-                    valid_job_config, temp_project_dir, output_dir
-                )
+                result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
         # Should succeed but with download failure noted
         assert not result["success"]
@@ -709,9 +690,7 @@ class TestRunCloudRunJob:
     async def test_run_job_no_gcp_libraries(self, valid_job_config, temp_project_dir):
         """Test that run_cloud_run_job fails gracefully when GCP libraries aren't available."""
         with tempfile.TemporaryDirectory() as output_dir:
-            result = await run_cloud_run_job(
-                valid_job_config, temp_project_dir, output_dir
-            )
+            result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
         assert not result["success"]
         assert "Google Cloud client libraries not found" in result["reason"]
@@ -747,9 +726,7 @@ class TestSecurity:
             }
 
             mock_creds = MagicMock()
-            mock_service_account.Credentials.from_service_account_info.return_value = (
-                mock_creds
-            )
+            mock_service_account.Credentials.from_service_account_info.return_value = mock_creds
 
             # Mock response
             mock_response = MagicMock()
@@ -851,9 +828,7 @@ class TestEndToEnd:
         # Only run in CI/CD with proper credentials
 
         with tempfile.TemporaryDirectory() as output_dir:
-            result = await run_cloud_run_job(
-                valid_job_config, temp_project_dir, output_dir
-            )
+            result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
             # Basic assertions - actual behavior depends on GCP setup
             assert "success" in result
@@ -896,9 +871,7 @@ class TestEdgeCases:
         mock_running_state = MagicMock()
         mock_running_state.name = "RUNNING"
 
-        mock_exec_client.get_execution.return_value = MagicMock(
-            state=mock_running_state
-        )
+        mock_exec_client.get_execution.return_value = MagicMock(state=mock_running_state)
 
         # Set a very short timeout for testing
         valid_job_config["timeout_seconds"] = 1
@@ -940,9 +913,7 @@ class TestEdgeCases:
         ):
 
             with tempfile.TemporaryDirectory() as output_dir:
-                result = await run_cloud_run_job(
-                    valid_job_config, temp_project_dir, output_dir
-                )
+                result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
         assert not result["success"]
         assert result.get("finalStatus") == "MONITORING_TIMED_OUT"
@@ -960,9 +931,7 @@ class TestEdgeCases:
         }
 
         with tempfile.TemporaryDirectory() as output_dir:
-            result = await run_cloud_run_job(
-                invalid_config, temp_project_dir, output_dir
-            )
+            result = await run_cloud_run_job(invalid_config, temp_project_dir, output_dir)
 
         assert not result["success"]
         assert "Invalid job config" in result["reason"]
@@ -1011,9 +980,7 @@ class TestEdgeCases:
             ):
 
                 with tempfile.TemporaryDirectory() as output_dir:
-                    result = await run_cloud_run_job(
-                        valid_job_config, temp_project_dir, output_dir
-                    )
+                    result = await run_cloud_run_job(valid_job_config, temp_project_dir, output_dir)
 
             # Should have failed due to conflict
             assert not result["success"]

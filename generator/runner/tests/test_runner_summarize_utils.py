@@ -65,9 +65,7 @@ def mock_dependencies():
     Patches all external dependencies for the module in one place.
     """
     # CRITICAL FIX: Patch functions where they are USED (in summarize_utils), not where they are defined
-    with patch(
-        "runner.summarize_utils.call_llm_api", new_callable=AsyncMock
-    ) as mock_llm, patch(
+    with patch("runner.summarize_utils.call_llm_api", new_callable=AsyncMock) as mock_llm, patch(
         "runner.summarize_utils.log_audit_event", new_callable=AsyncMock
     ) as mock_audit, patch(
         "runner.summarize_utils.send_alert", new_callable=AsyncMock
@@ -339,9 +337,7 @@ def test_refine_from_feedback_low_rating(mock_dependencies, caplog):
     # CRITICAL FIX: Patch create_task where refine_from_feedback uses it
     with patch("runner.summarize_utils.asyncio.create_task") as mock_create_task:
         with caplog.at_level(logging.WARNING, logger=summarize_utils.logger.name):
-            refine_from_feedback(
-                summary, 0.2, "test_source", "test_template", "test_provider"
-            )
+            refine_from_feedback(summary, 0.2, "test_source", "test_template", "test_provider")
 
             # Check for log
             assert "Low rating (0.2) for summary" in caplog.text
@@ -375,9 +371,7 @@ def test_refine_from_feedback_low_rating(mock_dependencies, caplog):
         call_arg = mock_create_task.call_args[0][0]
         import inspect
 
-        assert inspect.iscoroutine(
-            call_arg
-        ), "create_task should be called with a coroutine"
+        assert inspect.iscoroutine(call_arg), "create_task should be called with a coroutine"
 
 
 def test_refine_from_feedback_good_rating(mock_dependencies, caplog):
@@ -385,9 +379,7 @@ def test_refine_from_feedback_good_rating(mock_dependencies, caplog):
     summary = "This is an excellent summary."
 
     with caplog.at_level(logging.INFO, logger=summarize_utils.logger.name):
-        refine_from_feedback(
-            summary, 0.9, "test_source", "test_template", "test_provider"
-        )
+        refine_from_feedback(summary, 0.9, "test_source", "test_template", "test_provider")
         # No WARNING/ERROR logs should be emitted
         assert not any(record.levelno >= logging.WARNING for record in caplog.records)
 

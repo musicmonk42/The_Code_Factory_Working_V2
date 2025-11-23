@@ -163,9 +163,7 @@ def mock_quantum_api():
             "result": {"probability": 0.75, "confidence": 0.95},
         }
     )
-    mock.get_available_backends = MagicMock(
-        return_value=["qasm_simulator", "aer_simulator"]
-    )
+    mock.get_available_backends = MagicMock(return_value=["qasm_simulator", "aer_simulator"])
     with patch("simulation_module.QuantumPluginAPI", return_value=mock):
         yield mock
 
@@ -183,9 +181,7 @@ def mock_agent_runners():
     """Mock the agent runner functions."""
     with patch("simulation_module.run_agent") as mock_run_agent, patch(
         "simulation_module.run_simulation_swarm"
-    ) as mock_swarm, patch(
-        "simulation_module.run_parallel_simulations"
-    ) as mock_parallel:
+    ) as mock_swarm, patch("simulation_module.run_parallel_simulations") as mock_parallel:
 
         mock_run_agent.return_value = {"status": "success", "accuracy": 0.95}
         mock_swarm.return_value = {
@@ -204,9 +200,7 @@ def mock_agent_runners():
 
 
 @pytest.fixture
-async def simulation_module_instance(
-    mock_db, mock_message_bus, mock_reasoner, mock_quantum_api
-):
+async def simulation_module_instance(mock_db, mock_message_bus, mock_reasoner, mock_quantum_api):
     """Create and initialize a UnifiedSimulationModule instance."""
     module = UnifiedSimulationModule(TEST_CONFIG, mock_db, mock_message_bus)
     await module.initialize()
@@ -218,9 +212,7 @@ async def simulation_module_instance(
 
 
 @pytest.mark.asyncio
-async def test_initialization(
-    mock_db, mock_message_bus, mock_reasoner, mock_quantum_api
-):
+async def test_initialization(mock_db, mock_message_bus, mock_reasoner, mock_quantum_api):
     """Test that the simulation module initializes all components correctly."""
     module = UnifiedSimulationModule(TEST_CONFIG, mock_db, mock_message_bus)
     assert not module._is_initialized
@@ -333,16 +325,12 @@ async def test_execute_simulation_agent_type(
     simulation_module_instance, mock_agent_runners, mock_db, mock_metrics
 ):
     """Test executing a single agent simulation."""
-    result = await simulation_module_instance.execute_simulation(
-        SAMPLE_SIMULATION_CONFIG
-    )
+    result = await simulation_module_instance.execute_simulation(SAMPLE_SIMULATION_CONFIG)
 
     assert result == {"status": "success", "accuracy": 0.95}
     mock_agent_runners["agent"].assert_awaited_once()
     mock_db.save_audit_record.assert_awaited_once()
-    mock_metrics["simulation_run_total"].labels.assert_called_with(
-        type="agent", status="success"
-    )
+    mock_metrics["simulation_run_total"].labels.assert_called_with(type="agent", status="success")
     mock_metrics["simulation_run_total"].labels.return_value.inc.assert_called_once()
     mock_metrics["simulation_duration_seconds"].observe.assert_called_once()
 
@@ -359,9 +347,7 @@ async def test_execute_simulation_swarm_type(
         "swarm_results": [{"accuracy": 0.92}, {"accuracy": 0.94}],
     }
     mock_agent_runners["swarm"].assert_awaited_once()
-    mock_metrics["simulation_run_total"].labels.assert_called_with(
-        type="swarm", status="success"
-    )
+    mock_metrics["simulation_run_total"].labels.assert_called_with(type="swarm", status="success")
 
 
 @pytest.mark.asyncio
@@ -380,17 +366,13 @@ async def test_execute_simulation_parallel_type(
 
 
 @pytest.mark.asyncio
-async def test_execute_simulation_unknown_type(
-    simulation_module_instance, mock_metrics
-):
+async def test_execute_simulation_unknown_type(simulation_module_instance, mock_metrics):
     """Test executing a simulation with an unknown type."""
     with pytest.raises(ValueError) as excinfo:
         await simulation_module_instance.execute_simulation({"type": "unknown"})
 
     assert "Unknown simulation type" in str(excinfo.value)
-    mock_metrics["simulation_run_total"].labels.assert_called_with(
-        type="unknown", status="failed"
-    )
+    mock_metrics["simulation_run_total"].labels.assert_called_with(type="unknown", status="failed")
 
 
 @pytest.mark.asyncio
@@ -405,9 +387,7 @@ async def test_execute_simulation_failure(
 
     assert "Simulation crashed" in str(excinfo.value)
     mock_db.save_audit_record.assert_awaited_once()
-    mock_metrics["simulation_run_total"].labels.assert_called_with(
-        type="agent", status="failed"
-    )
+    mock_metrics["simulation_run_total"].labels.assert_called_with(type="agent", status="failed")
 
 
 # --- Quantum Operation Tests ---
@@ -418,9 +398,7 @@ async def test_perform_quantum_op_mutation(
     simulation_module_instance, mock_quantum_api, mock_db, mock_metrics
 ):
     """Test performing a quantum mutation operation."""
-    result = await simulation_module_instance.perform_quantum_op(
-        "mutation", SAMPLE_QUANTUM_PARAMS
-    )
+    result = await simulation_module_instance.perform_quantum_op("mutation", SAMPLE_QUANTUM_PARAMS)
 
     assert result["status"] == "SUCCESS"
     assert "probability" in result["result"]
@@ -428,9 +406,7 @@ async def test_perform_quantum_op_mutation(
         operation_type="run_mutation_circuit", params=SAMPLE_QUANTUM_PARAMS
     )
     mock_db.save_audit_record.assert_awaited_once()
-    mock_metrics["quantum_op_total"].labels.assert_called_with(
-        op_type="mutation", status="success"
-    )
+    mock_metrics["quantum_op_total"].labels.assert_called_with(op_type="mutation", status="success")
 
 
 @pytest.mark.asyncio
@@ -438,31 +414,23 @@ async def test_perform_quantum_op_forecast(
     simulation_module_instance, mock_quantum_api, mock_metrics
 ):
     """Test performing a quantum forecast operation."""
-    result = await simulation_module_instance.perform_quantum_op(
-        "forecast", SAMPLE_QUANTUM_PARAMS
-    )
+    result = await simulation_module_instance.perform_quantum_op("forecast", SAMPLE_QUANTUM_PARAMS)
 
     assert result["status"] == "SUCCESS"
     mock_quantum_api.perform_quantum_operation.assert_awaited_once_with(
         operation_type="forecast_failure_trend", params=SAMPLE_QUANTUM_PARAMS
     )
-    mock_metrics["quantum_op_total"].labels.assert_called_with(
-        op_type="forecast", status="success"
-    )
+    mock_metrics["quantum_op_total"].labels.assert_called_with(op_type="forecast", status="success")
 
 
 @pytest.mark.asyncio
-async def test_perform_quantum_op_unknown_type(
-    simulation_module_instance, mock_metrics
-):
+async def test_perform_quantum_op_unknown_type(simulation_module_instance, mock_metrics):
     """Test performing an unknown quantum operation type."""
     with pytest.raises(ValueError) as excinfo:
         await simulation_module_instance.perform_quantum_op("invalid", {})
 
     assert "Unknown quantum operation type" in str(excinfo.value)
-    mock_metrics["quantum_op_total"].labels.assert_called_with(
-        op_type="invalid", status="failed"
-    )
+    mock_metrics["quantum_op_total"].labels.assert_called_with(op_type="invalid", status="failed")
 
 
 @pytest.mark.asyncio
@@ -480,18 +448,14 @@ async def test_perform_quantum_op_api_error(
         await simulation_module_instance.perform_quantum_op("mutation", {})
 
     assert "Quantum operation failed: Backend failure" in str(excinfo.value)
-    mock_metrics["quantum_op_total"].labels.assert_called_with(
-        op_type="mutation", status="failed"
-    )
+    mock_metrics["quantum_op_total"].labels.assert_called_with(op_type="mutation", status="failed")
 
 
 # --- Result Explanation Tests ---
 
 
 @pytest.mark.asyncio
-async def test_explain_result_success(
-    simulation_module_instance, mock_reasoner, mock_db
-):
+async def test_explain_result_success(simulation_module_instance, mock_reasoner, mock_db):
     """Test successful explanation generation."""
     result = {"id": "sim-123", "status": "success", "data": {"accuracy": 0.95}}
 
@@ -520,9 +484,7 @@ async def test_explain_result_reasoner_error(simulation_module_instance, mock_re
     mock_reasoner.explain_result.side_effect = ReasonerError("Reasoning failed")
 
     with pytest.raises(ReasonerError) as excinfo:
-        await simulation_module_instance.explain_result(
-            {"id": "sim-123", "status": "success"}
-        )
+        await simulation_module_instance.explain_result({"id": "sim-123", "status": "success"})
 
     assert "Reasoning failed" in str(excinfo.value)
 
@@ -543,9 +505,7 @@ async def test_run_in_secure_sandbox(simulation_module_instance, mock_sandbox):
 
 
 @pytest.mark.asyncio
-async def test_run_in_secure_sandbox_with_custom_policy(
-    simulation_module_instance, mock_sandbox
-):
+async def test_run_in_secure_sandbox_with_custom_policy(simulation_module_instance, mock_sandbox):
     """Test sandbox execution with a custom security policy."""
     code = "import math; result = {'value': math.sqrt(a)}"
     inputs = {"a": 16}
@@ -573,10 +533,7 @@ async def test_register_message_handlers(simulation_module_instance, mock_messag
 
     mock_message_bus.subscribe.assert_awaited_once()
     # Verify the pattern and handler function
-    assert (
-        mock_message_bus.subscribe.call_args[1]["topic_pattern"]
-        == "requests.simulation.*"
-    )
+    assert mock_message_bus.subscribe.call_args[1]["topic_pattern"] == "requests.simulation.*"
     assert (
         mock_message_bus.subscribe.call_args[1]["handler"]
         == simulation_module_instance.handle_simulation_request
@@ -591,9 +548,7 @@ async def test_register_message_handlers_not_initialized(mock_db, mock_message_b
     with pytest.raises(RuntimeError) as excinfo:
         await module.register_message_handlers()
 
-    assert "Cannot register message handlers before initialization" in str(
-        excinfo.value
-    )
+    assert "Cannot register message handlers before initialization" in str(excinfo.value)
     mock_message_bus.subscribe.assert_not_awaited()
 
 

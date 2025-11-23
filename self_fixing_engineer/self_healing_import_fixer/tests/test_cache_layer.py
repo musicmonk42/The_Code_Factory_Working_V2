@@ -145,9 +145,7 @@ async def test_get_cache_uses_in_memory_when_no_redis_and_no_project_root(monkey
 
 
 @pytest.mark.asyncio
-async def test_get_cache_uses_file_cache_when_project_root_provided(
-    tmp_path, monkeypatch
-):
+async def test_get_cache_uses_file_cache_when_project_root_provided(tmp_path, monkeypatch):
     with patch(f"{PKG_PATH}._HAS_REDIS", False):
         root = tmp_path / "proj"
         root.mkdir(parents=True)
@@ -168,9 +166,9 @@ async def test_get_cache_uses_file_cache_when_project_root_provided(
 async def test_get_cache_prefers_redis_when_available(monkeypatch):
     fake_redis_mod = FakeRedisModule()
 
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(
-        f"{PKG_PATH}._redis", fake_redis_mod
-    ), patch(f"{PKG_PATH}.json_logger.info"):
+    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(f"{PKG_PATH}._redis", fake_redis_mod), patch(
+        f"{PKG_PATH}.json_logger.info"
+    ):
         cache = await get_cache(project_root=None)
         # The redis path returns the underlying client (FakeRedisClient)
         assert hasattr(cache, "ping")
@@ -200,9 +198,7 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
         def get_secret(self, key: str):
             return "dev-hmac-key"
 
-    cache = _FileCache(
-        tmp_path, secrets_manager=_Secrets()
-    )  # secrets required by implementation
+    cache = _FileCache(tmp_path, secrets_manager=_Secrets())  # secrets required by implementation
     await cache.setex("fk", 1, json.dumps({"a": 1}))
     assert json.loads(await cache.get("fk")) == {"a": 1}
     await asyncio.sleep(1.1)
@@ -218,9 +214,9 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
 async def test__connect_redis_success(monkeypatch):
     """Ensure _connect_redis returns a client and pings it."""
     fake = FakeRedisModule()
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(
-        f"{PKG_PATH}._redis", fake
-    ), patch(f"{PKG_PATH}.json_logger.info"):
+    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(f"{PKG_PATH}._redis", fake), patch(
+        f"{PKG_PATH}.json_logger.info"
+    ):
         client = await _connect_redis()
         assert hasattr(client, "ping")
         assert await client.ping() is True

@@ -71,9 +71,7 @@ async def test_build_graph_with_langgraph_available():
     fake_state_graph.compile = MagicMock(return_value="compiled_graph")
 
     # Fix: Correct the mock target from `LangGraphStateGraph` to `StateGraph`.
-    with patch(
-        "test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph
-    ):
+    with patch("test_generation.gen_agent.graph.StateGraph", return_value=fake_state_graph):
         g = graph.build_graph(llm=MagicMock())
         assert g == "compiled_graph"
         # Fix: The `partial` wrapper is not needed here; the function is passed directly.

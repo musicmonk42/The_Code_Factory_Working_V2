@@ -159,9 +159,7 @@ def validate_plugin_manifest(plugin_path: str) -> bool:
                 return False
         # Example: require version 0.1.0 <= v < 1.0.0
         if not is_version_compatible(manifest["version"], "0.1.0", "1.0.0"):
-            logger.error(
-                f"Incompatible plugin version: {manifest['version']} in {manifest_path}"
-            )
+            logger.error(f"Incompatible plugin version: {manifest['version']} in {manifest_path}")
             return False
         return True
     except Exception as e:
@@ -238,9 +236,7 @@ def display_onboarding_wizard():
     wizard_type = st_dash.selectbox("wizard_type", ["agentic_swarm", "solo"])
     notif_backend = st_dash.selectbox("notification_backend", ["redis", "local"])
     cp_backend = st_dash.selectbox("checkpoint_backend", ["fs", "s3"])
-    languages = getattr(st_dash, "multiselect", lambda *a, **k: ["python"])(
-        "languages", ["python"]
-    )
+    languages = getattr(st_dash, "multiselect", lambda *a, **k: ["python"])("languages", ["python"])
     notif_url = getattr(st_dash, "text_input", lambda *a, **k: "")("notification_url")
     cp_dir = getattr(st_dash, "text_input", lambda *a, **k: "")("checkpoint_dir")
 
@@ -292,9 +288,7 @@ async def _run_health_checks_gui(config: dict):
             if CheckpointManager:
                 cm = CheckpointManager(cp_type)
                 health = await cm.load()
-                st_dash.success(
-                    f"Checkpoint backend {cp_type}: {health.get('status', health)}"
-                )
+                st_dash.success(f"Checkpoint backend {cp_type}: {health.get('status', health)}")
             else:
                 st_dash.error("CheckpointManager class missing.")
     except Exception as e:
@@ -337,9 +331,7 @@ def t(key: str) -> str:
     lang = getattr(st_dash.session_state, "lang", "en")
     if isinstance(st_dash.session_state, dict):
         lang = st_dash.session_state.get("lang", lang)
-    return _translations.get(lang, _translations["en"]).get(
-        key, _translations["en"].get(key, key)
-    )
+    return _translations.get(lang, _translations["en"]).get(key, _translations["en"].get(key, key))
 
 
 def render(*args, **kwargs):

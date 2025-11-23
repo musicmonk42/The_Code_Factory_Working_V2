@@ -209,11 +209,11 @@ async def mock_aiohttp():
             cm.__aexit__ = AsyncMock(return_value=None)
             return cm
 
-        mock_session_inst.post.side_effect = (
-            lambda *args, **kwargs: create_async_context_manager(mock_response_post)
+        mock_session_inst.post.side_effect = lambda *args, **kwargs: create_async_context_manager(
+            mock_response_post
         )
-        mock_session_inst.get.side_effect = (
-            lambda *args, **kwargs: create_async_context_manager(mock_response_get)
+        mock_session_inst.get.side_effect = lambda *args, **kwargs: create_async_context_manager(
+            mock_response_get
         )
 
         yield mock_session_inst, mock_response_post, mock_response_get
@@ -223,9 +223,7 @@ async def mock_aiohttp():
 @pytest_asyncio.fixture
 async def mock_aiokafka():
     """Mock aiokafka.AIOKafkaProducer."""
-    with patch(
-        "aiokafka.AIOKafkaProducer", new_callable=MagicMock
-    ) as mock_producer_cls:
+    with patch("aiokafka.AIOKafkaProducer", new_callable=MagicMock) as mock_producer_cls:
         mock_producer_inst = AsyncMock()
         mock_producer_cls.return_value = mock_producer_inst
         yield mock_producer_inst
@@ -239,9 +237,7 @@ async def mock_opentelemetry():
         new_callable=MagicMock,
     ) as mock_tracer:
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
         yield mock_tracer, mock_span
 
 
@@ -349,9 +345,7 @@ async def inmemory_backend(cleanup_test_environment):
     # --- FIX: Patch all background tasks ---
     with patch.object(
         InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
-    ), patch.object(
-        InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
-    ):
+    ), patch.object(InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock):
 
         backend = InMemoryBackend({"snapshot_file": snapshot_file})
         # --- FIX: Call start() to create tasks ---
@@ -366,9 +360,7 @@ async def inmemory_backend(cleanup_test_environment):
 # --- Utility Function for Tests ---
 
 
-def _prepare_entry_for_storage(
-    backend: LogBackend, entry: Dict[str, Any]
-) -> Dict[str, Any]:
+def _prepare_entry_for_storage(backend: LogBackend, entry: Dict[str, Any]) -> Dict[str, Any]:
     """Manually runs the preparation steps from _perform_atomic_batch_write."""
     data_str = json.dumps(entry, sort_keys=True)
     compressed = backend._compress(data_str)
@@ -445,9 +437,7 @@ class TestHTTPBackend:
         mock_opentelemetry[1].set_status.assert_called_with(_STATUS_OK)
 
     @pytest.mark.asyncio
-    async def test_query_e2e_decryption(
-        self, http_backend: HTTPBackend, mock_opentelemetry
-    ):
+    async def test_query_e2e_decryption(self, http_backend: HTTPBackend, mock_opentelemetry):
         """Test the full query -> decrypt -> tamper-check loop."""
         entry = _create_test_entry(Faker())
         # --- FIX: Manually call append to get metadata, then prep for storage ---
@@ -464,9 +454,7 @@ class TestHTTPBackend:
 
             results = await http_backend.query({"entry_id": entry["entry_id"]}, limit=1)
 
-            mock_query_single.assert_called_once_with(
-                {"entry_id": entry["entry_id"]}, 1
-            )
+            mock_query_single.assert_called_once_with({"entry_id": entry["entry_id"]}, 1)
             assert len(results) == 1
             # Check if decryption and decompression worked
             assert results[0]["action"] == entry["action"]
@@ -474,9 +462,7 @@ class TestHTTPBackend:
             assert results[0]["entry_id"] == entry["entry_id"]
 
     @pytest.mark.asyncio
-    async def test_query_tamper_detection(
-        self, http_backend: HTTPBackend, mock_send_alert
-    ):
+    async def test_query_tamper_detection(self, http_backend: HTTPBackend, mock_send_alert):
         """Test that query() detects tampered data."""
         entry = _create_test_entry(Faker())
         # --- FIX: Manually call append to get metadata, then prep for storage ---
@@ -514,9 +500,7 @@ class TestHTTPBackend:
             # --- END FIX ---
 
     @pytest.mark.asyncio
-    async def test_flush_fail_internal_retry(
-        self, http_backend: HTTPBackend, mock_aiohttp
-    ):
+    async def test_flush_fail_internal_retry(self, http_backend: HTTPBackend, mock_aiohttp):
         """Test that persistent flush failures go to the internal retry queue."""
         mock_session, _, _ = mock_aiohttp
 
@@ -526,9 +510,7 @@ class TestHTTPBackend:
         with patch.object(
             http_backend, "_send_batch_chunks", new_callable=AsyncMock
         ) as mock_send_chunks:
-            mock_send_chunks.side_effect = aiohttp.ClientError(
-                "Persistent network failure"
-            )
+            mock_send_chunks.side_effect = aiohttp.ClientError("Persistent network failure")
 
             entry = _create_test_entry(Faker())
             await http_backend.append(entry)
@@ -563,9 +545,7 @@ class TestHTTPBackend:
         with patch.object(
             http_backend, "_send_batch_chunks", new_callable=AsyncMock
         ) as mock_send_chunks:
-            mock_send_chunks.side_effect = aiohttp.ClientError(
-                "Persistent network failure"
-            )
+            mock_send_chunks.side_effect = aiohttp.ClientError("Persistent network failure")
 
             # --- FIX: Correctly create a full queue ---
             http_backend._internal_retry_queue = asyncio.Queue(maxsize=1)
@@ -603,9 +583,7 @@ class TestKafkaBackend:
         assert kafka_backend._dlq is not None
 
     @pytest.mark.asyncio
-    async def test_flush_batch_success(
-        self, kafka_backend: KafkaBackend, mock_aiokafka
-    ):
+    async def test_flush_batch_success(self, kafka_backend: KafkaBackend, mock_aiokafka):
         """Test successful transactional batch flush."""
         entries = [_create_test_entry(Faker()) for _ in range(3)]
         for entry in entries:
@@ -701,9 +679,7 @@ class TestSplunkBackend:
         assert splunk_backend._dlq is not None
 
     @pytest.mark.asyncio
-    async def test_flush_batch_success(
-        self, splunk_backend: SplunkBackend, mock_aiohttp
-    ):
+    async def test_flush_batch_success(self, splunk_backend: SplunkBackend, mock_aiohttp):
         """Test successful HEC batch flush."""
         mock_session, mock_post_resp, _ = mock_aiohttp
 
@@ -844,9 +820,7 @@ class TestInMemoryBackend:
         assert "encrypted_data" in loaded_logs[0]
 
     @pytest.mark.asyncio
-    async def test_close_snapshot_failure(
-        self, inmemory_backend: InMemoryBackend, mock_send_alert
-    ):
+    async def test_close_snapshot_failure(self, inmemory_backend: InMemoryBackend, mock_send_alert):
         """Test that a snapshot failure on close() is caught and alerted."""
         entry = _create_test_entry(Faker())
         await inmemory_backend.append(entry)
@@ -867,17 +841,13 @@ class TestInMemoryBackend:
             # --- END FIX ---
 
     @pytest.mark.asyncio
-    async def test_memory_eviction_count(
-        self, cleanup_test_environment, mock_send_alert
-    ):
+    async def test_memory_eviction_count(self, cleanup_test_environment, mock_send_alert):
         """Test eviction based on max entry count."""
         # Need to init a new backend for this test with specific params
         # --- FIX: Patch background tasks for this specific instance ---
         with patch.object(
             InMemoryBackend, "_flush_batch_periodically", new_callable=AsyncMock
-        ), patch.object(
-            InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock
-        ):
+        ), patch.object(InMemoryBackend, "_health_check_periodically", new_callable=AsyncMock):
             backend = InMemoryBackend({"max_memory_entries": 2})
             # --- FIX: Call start() to create tasks ---
             await backend.start()

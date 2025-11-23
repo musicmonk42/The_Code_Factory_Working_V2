@@ -189,9 +189,7 @@ class TestIntentParser(unittest.TestCase):
     def test_markdown_strategy(self):
         """Tests parsing of Markdown content."""
         strategy = MarkdownStrategy()
-        content = (
-            "# Title\nHello.\n## Features\n- Feature 1\n```python\nprint('code')\n```"
-        )
+        content = "# Title\nHello.\n## Features\n- Feature 1\n```python\nprint('code')\n```"
         sections = strategy.parse(content)
         self.assertIn("Title", sections)
         self.assertIn("Features", sections)
@@ -328,18 +326,10 @@ class TestIntentParser(unittest.TestCase):
     def test_select_parser_auto_logic(self):
         """Tests the automatic parser selection based on file extension."""
         parser = IntentParser(config_path=str(self.config_path))
-        self.assertIsInstance(
-            parser._select_parser("auto", Path("file.md")), MarkdownStrategy
-        )
-        self.assertIsInstance(
-            parser._select_parser("auto", Path("file.rst")), RSTStrategy
-        )
-        self.assertIsInstance(
-            parser._select_parser("auto", Path("file.yaml")), YAMLStrategy
-        )
-        self.assertIsInstance(
-            parser._select_parser("auto", Path("file.txt")), PlaintextStrategy
-        )
+        self.assertIsInstance(parser._select_parser("auto", Path("file.md")), MarkdownStrategy)
+        self.assertIsInstance(parser._select_parser("auto", Path("file.rst")), RSTStrategy)
+        self.assertIsInstance(parser._select_parser("auto", Path("file.yaml")), YAMLStrategy)
+        self.assertIsInstance(parser._select_parser("auto", Path("file.txt")), PlaintextStrategy)
         self.assertIsInstance(
             parser._select_parser("auto", Path("file.unknown")), PlaintextStrategy
         )
@@ -358,9 +348,7 @@ class TestIntentParser(unittest.TestCase):
         return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)),
     )
     @patch("intent_parser.intent_parser.detect", return_value="en")
-    def test_parse_workflow_simple_markdown(
-        self, mock_detect, mock_summarizer, mock_detector
-    ):
+    def test_parse_workflow_simple_markdown(self, mock_detect, mock_summarizer, mock_detector):
         """Tests the full parse workflow with simple Markdown content."""
         parser = IntentParser(config_path=str(self.config_path))
         content = "# Features\n- F1\nConstraint: C1"
@@ -376,9 +364,7 @@ class TestIntentParser(unittest.TestCase):
         mock_detect.assert_called_with(content)
         mock_detector.return_value.detect.assert_called_once()
         mock_summarizer.return_value.summarize.assert_called_once()
-        mock_runner_logging.log_action.assert_any_call(
-            "Parse Completed", unittest.mock.ANY
-        )
+        mock_runner_logging.log_action.assert_any_call("Parse Completed", unittest.mock.ANY)
 
     @patch(
         "intent_parser.intent_parser.LLMDetector",
@@ -389,9 +375,7 @@ class TestIntentParser(unittest.TestCase):
         return_value=MagicMock(summarize=MagicMock(side_effect=lambda x, **kw: x)),
     )
     @patch("intent_parser.intent_parser.detect", return_value="es")
-    def test_parse_workflow_multilang_file(
-        self, mock_detect, mock_summarizer, mock_detector
-    ):
+    def test_parse_workflow_multilang_file(self, mock_detect, mock_summarizer, mock_detector):
         """Tests the parse workflow reading from a file with multi-language detection."""
         content_es = "- rasgo: Feature ES\nRestricción: C1 ES"
         test_file = self.temp_path / "readme_es.md"

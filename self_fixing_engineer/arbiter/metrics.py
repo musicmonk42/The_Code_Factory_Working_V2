@@ -48,9 +48,7 @@ tracer = get_tracer(__name__)
 _metrics_logger = logging.getLogger("arbiter.metrics")
 if not _metrics_logger.hasHandlers():
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
     handler.setFormatter(formatter)
     handler.addFilter(PIIRedactorFilter())
     _metrics_logger.addHandler(handler)
@@ -146,9 +144,7 @@ def get_or_create_metric(
                     _metrics_logger.info(
                         f"Registering new metric: '{full_name}' as {metric_type.__name__}."
                     )
-                    METRIC_REGISTRATIONS_TOTAL.labels(
-                        metric_type=metric_type.__name__
-                    ).inc()
+                    METRIC_REGISTRATIONS_TOTAL.labels(metric_type=metric_type.__name__).inc()
                     try:
                         new_metric = None
                         if metric_type == Histogram:
@@ -239,9 +235,7 @@ def get_or_create_gauge(
     Raises:
         ValueError: If metric registration fails due to invalid parameters.
     """
-    return get_or_create_metric(
-        Gauge, name, documentation, labelnames, initial_value=initial_value
-    )
+    return get_or_create_metric(Gauge, name, documentation, labelnames, initial_value=initial_value)
 
 
 def get_or_create_histogram(
@@ -322,9 +316,7 @@ def metrics_handler(auth: HTTPAuthorizationCredentials = Depends(security)) -> R
     the `METRICS_AUTH_TOKEN` environment variable.
     """
     expected_token = os.environ.get("METRICS_AUTH_TOKEN")
-    if not expected_token or not secrets.compare_digest(
-        auth.credentials, expected_token
-    ):
+    if not expected_token or not secrets.compare_digest(auth.credentials, expected_token):
         raise HTTPException(status_code=401, detail="Unauthorized access to metrics")
 
     if "PROMETHEUS_MULTIPROC_DIR" in os.environ:
@@ -340,9 +332,7 @@ def metrics_handler(auth: HTTPAuthorizationCredentials = Depends(security)) -> R
                 "prometheus_client.multiprocess not found. Falling back to single process metrics."
             )
         except Exception as e:
-            _metrics_logger.error(
-                f"Failed to collect multiprocess metrics: {e}", exc_info=True
-            )
+            _metrics_logger.error(f"Failed to collect multiprocess metrics: {e}", exc_info=True)
 
     return Response(content=generate_latest(REGISTRY), media_type="text/plain")
 
@@ -397,15 +387,9 @@ def register_dynamic_metric(
 
     except Exception as e:
         error_type = type(e).__name__
-        metric_name = (
-            metric_type.__name__.lower() if "metric_type" in locals() else "unknown"
-        )
-        METRIC_REGISTRATION_ERRORS.labels(
-            metric_type=metric_name, error_type=error_type
-        ).inc()
-        _metrics_logger.error(
-            f"Failed to register dynamic metric '{name}': {e}", exc_info=True
-        )
+        metric_name = metric_type.__name__.lower() if "metric_type" in locals() else "unknown"
+        METRIC_REGISTRATION_ERRORS.labels(metric_type=metric_name, error_type=error_type).inc()
+        _metrics_logger.error(f"Failed to register dynamic metric '{name}': {e}", exc_info=True)
         raise
 
 
@@ -460,9 +444,7 @@ def clear_stale_metrics() -> None:
                     _metrics_logger.info(f"Removed stale metric file: {file_path}")
     except Exception as e:
         _metrics_logger.error(f"Failed to clear stale metrics: {e}", exc_info=True)
-        METRIC_REGISTRATION_ERRORS.labels(
-            metric_type="cleanup", error_type=type(e).__name__
-        ).inc()
+        METRIC_REGISTRATION_ERRORS.labels(metric_type="cleanup", error_type=type(e).__name__).inc()
         raise IOError(f"Metrics cleanup failed: {e}") from e
 
 
@@ -533,9 +515,7 @@ try:
     )
 except ValueError:
     # Metric already registered, get existing one
-    CONFIG_FALLBACK_USED = REGISTRY._names_to_collectors.get(
-        "arbiter_config_fallback_used_total"
-    )
+    CONFIG_FALLBACK_USED = REGISTRY._names_to_collectors.get("arbiter_config_fallback_used_total")
 
 # Export all public metrics and functions
 __all__ = [

@@ -41,9 +41,7 @@ try:
     from .core_utils import alert_operator
     from .core_secrets import SECRETS_MANAGER
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: Missing core dependency for core_report: {e}. Aborting startup."
-    )
+    logger.critical(f"CRITICAL: Missing core dependency for core_report: {e}. Aborting startup.")
     # Cannot use alert_operator here since it failed to import!
     raise RuntimeError("[CRITICAL][REPORT] Missing core dependency") from e
 
@@ -142,9 +140,7 @@ _kms_client = None
 def get_kms_client():
     global _kms_client
     if _kms_client is None:
-        _kms_client = boto3.client(
-            "kms", region_name=os.getenv("AWS_REGION", "us-east-1")
-        )
+        _kms_client = boto3.client("kms", region_name=os.getenv("AWS_REGION", "us-east-1"))
     return _kms_client
 
 
@@ -159,9 +155,7 @@ def encrypt_report_content(content: bytes) -> bytes:
         try:
             kms.describe_key(KeyId=REPORT_KMS_KEY_ALIAS)
         except ClientError as e:
-            raise AnalyzerCriticalError(
-                f"KMS key {REPORT_KMS_KEY_ALIAS} not found: {e}"
-            )
+            raise AnalyzerCriticalError(f"KMS key {REPORT_KMS_KEY_ALIAS} not found: {e}")
 
         response = kms.encrypt(KeyId=REPORT_KMS_KEY_ALIAS, Plaintext=content)
         return response["CiphertextBlob"]
@@ -186,9 +180,7 @@ def decrypt_report_content(encrypted_content: bytes) -> bytes:
         response = kms.decrypt(CiphertextBlob=encrypted_content)
         return response["Plaintext"]
     except ClientError as e:
-        logger.error(
-            f"KMS decryption failed: {e}. Cannot display report.", exc_info=True
-        )
+        logger.error(f"KMS decryption failed: {e}. Cannot display report.", exc_info=True)
         alert_operator(
             f"CRITICAL: Report decryption failed: {e}. Report inaccessible.",
             level="CRITICAL",
@@ -207,9 +199,7 @@ class ReportGenerator:
         approved_report_dirs: Optional[List[str]] = None,
     ):
         self.output_dir = os.path.abspath(output_dir)
-        self.approved_report_dirs = [
-            os.path.abspath(d) for d in (approved_report_dirs or [])
-        ]
+        self.approved_report_dirs = [os.path.abspath(d) for d in (approved_report_dirs or [])]
         self.production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 
         # Check for directory approval before creating/checking writability
@@ -235,9 +225,7 @@ class ReportGenerator:
             test_file = os.path.join(self.output_dir, f".test_write_{uuid.uuid4().hex}")
             _atomic_write_text(test_file, "test")
             os.remove(test_file)
-            logger.info(
-                f"ReportGenerator initialized. Reports will be saved to: {self.output_dir}"
-            )
+            logger.info(f"ReportGenerator initialized. Reports will be saved to: {self.output_dir}")
         except Exception as e:
             raise AnalyzerCriticalError(
                 f"Report output directory '{self.output_dir}' is not writable or accessible: {e}."
@@ -246,18 +234,14 @@ class ReportGenerator:
     def _is_approved_dir(self, directory: str) -> bool:
         """Checks if a directory is within the list of approved paths."""
         abs_dir = os.path.abspath(directory)
-        return any(
-            abs_dir.startswith(approved) for approved in self.approved_report_dirs
-        )
+        return any(abs_dir.startswith(approved) for approved in self.approved_report_dirs)
 
     def _format_text_report(self, results):
         lines = []
         for section, data in results.items():
             lines.append(f"=== {section} ===")
             if isinstance(data, (dict, list)):
-                lines.append(
-                    json.dumps(scrub_secrets(data), indent=2, ensure_ascii=False)
-                )
+                lines.append(json.dumps(scrub_secrets(data), indent=2, ensure_ascii=False))
             else:
                 lines.append(str(scrub_secrets(data)))
             lines.append("")
@@ -269,9 +253,7 @@ class ReportGenerator:
             lines.append(f"## {section}")
             if isinstance(data, (dict, list)):
                 lines.append("```json")
-                lines.append(
-                    json.dumps(scrub_secrets(data), indent=2, ensure_ascii=False)
-                )
+                lines.append(json.dumps(scrub_secrets(data), indent=2, ensure_ascii=False))
                 lines.append("```")
             else:
                 lines.append(str(scrub_secrets(data)))
@@ -323,9 +305,7 @@ class ReportGenerator:
             if report_format == "text":
                 formatted_content = self._format_text_report(results).encode("utf-8")
             elif report_format == "markdown":
-                formatted_content = self._format_markdown_report(results).encode(
-                    "utf-8"
-                )
+                formatted_content = self._format_markdown_report(results).encode("utf-8")
             elif report_format == "html":
                 formatted_content = self._format_html_report(results).encode("utf-8")
             elif report_format == "json":
@@ -336,9 +316,7 @@ class ReportGenerator:
                 raise ValueError(f"Unsupported report format: {report_format}")
         except Exception as e:
             logger.error(f"Failed to format {report_format} report: {e}", exc_info=True)
-            alert_operator(
-                f"ERROR: Failed to format {report_format} report: {e}", level="ERROR"
-            )
+            alert_operator(f"ERROR: Failed to format {report_format} report: {e}", level="ERROR")
             formatted_content = f"Error generating report content: {e}".encode("utf-8")
 
         if self.production_mode:
@@ -391,9 +369,7 @@ class ReportGenerator:
             return file_path
         except IOError as e:
             logger.error(f"Failed to save report to {file_path}: {e}", exc_info=True)
-            alert_operator(
-                f"CRITICAL: Failed to save report to {file_path}: {e}", level="CRITICAL"
-            )
+            alert_operator(f"CRITICAL: Failed to save report to {file_path}: {e}", level="CRITICAL")
             raise RuntimeError(f"Failed to save report: {e}")
         except Exception as e:
             logger.critical(
@@ -429,9 +405,7 @@ if FLASK_AVAILABLE:
         password = request.json.get("password", None)
         admin_password = SECRETS_MANAGER.get_secret("DASHBOARD_ADMIN_PASSWORD")
         if PRODUCTION_MODE and not admin_password:
-            raise RuntimeError(
-                "[CRITICAL][REPORT] Missing DASHBOARD_ADMIN_PASSWORD in production"
-            )
+            raise RuntimeError("[CRITICAL][REPORT] Missing DASHBOARD_ADMIN_PASSWORD in production")
 
         if username == "admin" and password == admin_password:
             access_token = create_access_token(
@@ -450,9 +424,7 @@ if FLASK_AVAILABLE:
         from .core_audit import audit_logger
 
         status = {"status": "healthy", "components": {"mock_db": "ok"}}
-        audit_logger.log_event(
-            "dashboard_access", endpoint="/health", user=get_jwt()["sub"]
-        )
+        audit_logger.log_event("dashboard_access", endpoint="/health", user=get_jwt()["sub"])
         return jsonify(status)
 
     @app.route("/report/<report_name_with_ext>")
@@ -507,9 +479,7 @@ if FLASK_AVAILABLE:
                     download_name=sanitized_report_name,
                 )
             except Exception as e:
-                logger.error(
-                    f"Error serving report {sanitized_report_name}: {e}", exc_info=True
-                )
+                logger.error(f"Error serving report {sanitized_report_name}: {e}", exc_info=True)
                 audit_logger.log_event(
                     "report_access_failure",
                     report_name=sanitized_report_name,
@@ -535,14 +505,10 @@ else:
         raise ImportError("Flask is not available, 'login' endpoint is not usable.")
 
     def health_check_endpoint():
-        raise ImportError(
-            "Flask is not available, 'health_check_endpoint' is not usable."
-        )
+        raise ImportError("Flask is not available, 'health_check_endpoint' is not usable.")
 
     def get_report_endpoint(report_name_with_ext: str):
-        raise ImportError(
-            "Flask is not available, 'get_report_endpoint' is not usable."
-        )
+        raise ImportError("Flask is not available, 'get_report_endpoint' is not usable.")
 
 
 def start_dashboard(host: str = "127.0.0.1", port: int = 5000):
@@ -561,9 +527,7 @@ def generate_report(
     user_id: str = "system",
 ) -> str:
     approved_dirs = [get_reports_dir(), os.path.abspath("/var/log/analyzer_reports")]
-    generator = ReportGenerator(
-        output_dir=get_reports_dir(), approved_report_dirs=approved_dirs
-    )
+    generator = ReportGenerator(output_dir=get_reports_dir(), approved_report_dirs=approved_dirs)
 
     original_generate_report = generator.generate_report
 
@@ -590,9 +554,7 @@ def start_dashboard_server(host: str = "127.0.0.1", port: int = 5000):
     if FLASK_AVAILABLE:
         start_dashboard(host, port)
     else:
-        logger.error(
-            "Dashboard cannot be started: Flask or Flask-JWT-Extended is not installed."
-        )
+        logger.error("Dashboard cannot be started: Flask or Flask-JWT-Extended is not installed.")
 
 
 # Optional: Add to __all__ to explicitly define public API
@@ -611,9 +573,7 @@ if FLASK_AVAILABLE:
 
 # Example usage (for testing this module independently)
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     logger.setLevel(logging.DEBUG)
 
     class DummySecretsManager:
@@ -646,9 +606,7 @@ if __name__ == "__main__":
 
         def describe_key(self, KeyId):
             if not self.key_exists:
-                raise ClientError(
-                    {"Error": {"Code": "NotFoundException"}}, "DescribeKey"
-                )
+                raise ClientError({"Error": {"Code": "NotFoundException"}}, "DescribeKey")
 
         def encrypt(self, KeyId, Plaintext):
             return {"CiphertextBlob": b"encrypted_" + Plaintext}
@@ -766,13 +724,9 @@ if __name__ == "__main__":
         original_production_mode = PRODUCTION_MODE
         os.environ["PRODUCTION_MODE"] = "true"
 
-        ReportGenerator(
-            output_dir=unapproved_dir, approved_report_dirs=test_approved_dirs
-        )
+        ReportGenerator(output_dir=unapproved_dir, approved_report_dirs=test_approved_dirs)
     except AnalyzerCriticalError as e:
-        print(
-            f"Caught expected AnalyzerCriticalError for writing to unapproved directory: {e}"
-        )
+        print(f"Caught expected AnalyzerCriticalError for writing to unapproved directory: {e}")
     except Exception as e:
         print(f"Caught unexpected exception: {e}")
     finally:

@@ -28,9 +28,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
     pkg.mkdir(parents=True)
 
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
-    (pkg / "a.py").write_text(
-        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
-    )
+    (pkg / "a.py").write_text("import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n")
     (pkg / "b.py").write_text(
         "import requests\n"
         "def name():\n"
@@ -204,9 +202,7 @@ def test_e2e_cli(tmp_path, monkeypatch):
         if name.endswith(".core_security"):
             import subprocess as _sp
 
-            def fake_run(
-                cmd, timeout=60, capture_output=True, text=True, check=False, **kw
-            ):
+            def fake_run(cmd, timeout=60, capture_output=True, text=True, check=False, **kw):
                 joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
                 if "bandit" in joined.lower():
                     data = {
@@ -278,9 +274,9 @@ def test_e2e_cli(tmp_path, monkeypatch):
             names = list(subcmds.keys())
             for hint in name_hints:
                 for n in names:
-                    if hint.replace("-", "").replace("_", "") in n.replace(
-                        "-", ""
-                    ).replace("_", ""):
+                    if hint.replace("-", "").replace("_", "") in n.replace("-", "").replace(
+                        "_", ""
+                    ):
                         found_name = n
                         break
                 if found_name:

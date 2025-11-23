@@ -34,9 +34,7 @@ logger = logging.getLogger(__name__)
 
 # --- Critical Configuration ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
-REGULATORY_MODE = (
-    os.getenv("REGULATORY_MODE", "true").lower() == "true"
-)  # Default ON for safety
+REGULATORY_MODE = os.getenv("REGULATORY_MODE", "true").lower() == "true"  # Default ON for safety
 
 # --- Import Core Dependencies ---
 try:
@@ -191,9 +189,7 @@ class RegulatoryAuditLogger:
         }
 
         event_json = json.dumps(initial_event, sort_keys=True, ensure_ascii=False)
-        signature = hmac.new(
-            self.hmac_key, event_json.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self.hmac_key, event_json.encode("utf-8"), hashlib.sha256).hexdigest()
 
         signed_entry = {
             "event": initial_event,
@@ -221,8 +217,7 @@ class RegulatoryAuditLogger:
             "last_verification": datetime.utcnow().isoformat() + "Z",
             "lines_verified": 0,
             "status": "INITIALIZED",
-            "hmac_key_id": SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID")
-            or "UNKNOWN",
+            "hmac_key_id": SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID") or "UNKNOWN",
         }
         try:
             with open(self.integrity_file, "w") as f:
@@ -240,8 +235,7 @@ class RegulatoryAuditLogger:
         if not self._startup_logged:
             await self.log_critical_event(
                 "AUDIT_SYSTEM_INITIALIZED",
-                hmac_key_id=SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID")
-                or "UNKNOWN",
+                hmac_key_id=SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID") or "UNKNOWN",
                 regulatory_mode=REGULATORY_MODE,
                 production_mode=PRODUCTION_MODE,
             )
@@ -281,9 +275,7 @@ class RegulatoryAuditLogger:
 
         # Create HMAC signature
         event_json = json.dumps(event, sort_keys=True, ensure_ascii=False)
-        signature = hmac.new(
-            self.hmac_key, event_json.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        signature = hmac.new(self.hmac_key, event_json.encode("utf-8"), hashlib.sha256).hexdigest()
 
         # Create signed entry
         signed_entry = {
@@ -356,9 +348,7 @@ class RegulatoryAuditLogger:
                             stored_previous_hash = signed_entry.get("previous_hash")
 
                             # Verify signature
-                            event_json = json.dumps(
-                                event, sort_keys=True, ensure_ascii=False
-                            )
+                            event_json = json.dumps(event, sort_keys=True, ensure_ascii=False)
                             expected_signature = hmac.new(
                                 self.hmac_key,
                                 event_json.encode("utf-8"),
@@ -370,17 +360,12 @@ class RegulatoryAuditLogger:
                                     {
                                         "line": line_number,
                                         "type": "SIGNATURE_MISMATCH",
-                                        "event_type": event.get(
-                                            "event_type", "UNKNOWN"
-                                        ),
+                                        "event_type": event.get("event_type", "UNKNOWN"),
                                     }
                                 )
 
                             # Verify hash chain
-                            if (
-                                previous_hash is not None
-                                and stored_previous_hash != previous_hash
-                            ):
+                            if previous_hash is not None and stored_previous_hash != previous_hash:
                                 violations.append(
                                     {
                                         "line": line_number,
@@ -391,12 +376,10 @@ class RegulatoryAuditLogger:
                                 )
 
                             # Calculate hash for next entry
-                            current_entry_bytes = json.dumps(
-                                signed_entry, sort_keys=True
-                            ).encode("utf-8")
-                            previous_hash = hashlib.sha256(
-                                current_entry_bytes
-                            ).hexdigest()
+                            current_entry_bytes = json.dumps(signed_entry, sort_keys=True).encode(
+                                "utf-8"
+                            )
+                            previous_hash = hashlib.sha256(current_entry_bytes).hexdigest()
 
                         except (json.JSONDecodeError, KeyError) as e:
                             violations.append(
@@ -422,9 +405,7 @@ class RegulatoryAuditLogger:
                             stored_previous_hash = signed_entry.get("previous_hash")
 
                             # Verify signature
-                            event_json = json.dumps(
-                                event, sort_keys=True, ensure_ascii=False
-                            )
+                            event_json = json.dumps(event, sort_keys=True, ensure_ascii=False)
                             expected_signature = hmac.new(
                                 self.hmac_key,
                                 event_json.encode("utf-8"),
@@ -436,17 +417,12 @@ class RegulatoryAuditLogger:
                                     {
                                         "line": line_number,
                                         "type": "SIGNATURE_MISMATCH",
-                                        "event_type": event.get(
-                                            "event_type", "UNKNOWN"
-                                        ),
+                                        "event_type": event.get("event_type", "UNKNOWN"),
                                     }
                                 )
 
                             # Verify hash chain
-                            if (
-                                previous_hash is not None
-                                and stored_previous_hash != previous_hash
-                            ):
+                            if previous_hash is not None and stored_previous_hash != previous_hash:
                                 violations.append(
                                     {
                                         "line": line_number,
@@ -457,12 +433,10 @@ class RegulatoryAuditLogger:
                                 )
 
                             # Calculate hash for next entry
-                            current_entry_bytes = json.dumps(
-                                signed_entry, sort_keys=True
-                            ).encode("utf-8")
-                            previous_hash = hashlib.sha256(
-                                current_entry_bytes
-                            ).hexdigest()
+                            current_entry_bytes = json.dumps(signed_entry, sort_keys=True).encode(
+                                "utf-8"
+                            )
+                            previous_hash = hashlib.sha256(current_entry_bytes).hexdigest()
 
                         except (json.JSONDecodeError, KeyError) as e:
                             violations.append(
@@ -593,8 +567,7 @@ class RegulatoryAuditLogger:
             "last_verification": datetime.utcnow().isoformat() + "Z",
             "lines_verified": lines_verified,
             "status": "PASSED",
-            "hmac_key_id": SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID")
-            or "UNKNOWN",
+            "hmac_key_id": SECRETS_MANAGER.get_secret("ANALYZER_AUDIT_HMAC_KEY_ID") or "UNKNOWN",
         }
 
         try:
@@ -656,9 +629,7 @@ def _cleanup_audit_system():
     """Final integrity check on shutdown."""
     try:
         logger = get_audit_logger()
-        asyncio.run(
-            logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True)
-        )
+        asyncio.run(logger.log_critical_event("AUDIT_SYSTEM_SHUTDOWN", clean_shutdown=True))
         asyncio.run(logger.verify_integrity())
     except:
         pass

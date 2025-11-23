@@ -80,9 +80,7 @@ def alert_operator(message: str, level: str = "ERROR"):
 
 
 # Use env overrides when present (critical for hermetic tests)
-AUDIT_LOG_FILE = os.getenv(
-    "AUDIT_LOG_FILE", str(Path(tempfile.gettempdir()) / "sandbox_audit.log")
-)
+AUDIT_LOG_FILE = os.getenv("AUDIT_LOG_FILE", str(Path(tempfile.gettempdir()) / "sandbox_audit.log"))
 AUDIT_LOG_INTEGRITY_FILE = os.getenv(
     "AUDIT_LOG_INTEGRITY_FILE",
     str(Path(tempfile.gettempdir()) / "sandbox_audit_integrity.json"),
@@ -106,15 +104,13 @@ def _get_audit_hmac_key() -> bytes:
 
 def log_audit(event: Dict[str, Any]) -> None:
     event["timestamp"] = datetime.utcnow().isoformat()
-    payload = json.dumps(
-        event, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
+    payload = json.dumps(event, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
     h = hmac.new(_get_audit_hmac_key(), payload, hashlib.sha256)
     signed_event = {"event": event, "signature": h.hexdigest()}
     with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
-        json.dump(
-            signed_event, f, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        )
+        json.dump(signed_event, f, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         f.write("\n")
     try:
         os.chmod(AUDIT_LOG_FILE, 0o600)
@@ -210,20 +206,14 @@ except Exception:
             return None
 
         def read_namespaced_pod_status(self, name, namespace):
-            return types.SimpleNamespace(
-                status=types.SimpleNamespace(phase="Succeeded")
-            )
+            return types.SimpleNamespace(status=types.SimpleNamespace(phase="Succeeded"))
 
         def read_namespaced_pod_log(self, name, namespace):
             return "output"
 
         def list_namespaced_pod(self, namespace, label_selector):
             return types.SimpleNamespace(
-                items=[
-                    types.SimpleNamespace(
-                        metadata=types.SimpleNamespace(name="mock-pod")
-                    )
-                ]
+                items=[types.SimpleNamespace(metadata=types.SimpleNamespace(name="mock-pod"))]
             )
 
     class _BatchV1Api:
@@ -243,9 +233,7 @@ except Exception:
     class _NetworkingV1Api:
         def create_namespaced_network_policy(self, namespace, body):
             return types.SimpleNamespace(
-                metadata=types.SimpleNamespace(
-                    name=body.get("metadata", {}).get("name", "mock-np")
-                )
+                metadata=types.SimpleNamespace(name=body.get("metadata", {}).get("name", "mock-np"))
             )
 
     # expose in stub module
@@ -401,9 +389,7 @@ sandbox_logger = logging.getLogger("simulation.sandbox")
 sandbox_logger.setLevel(logging.INFO)
 if not sandbox_logger.hasHandlers():
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
     sandbox_logger.addHandler(handler)
 
 
@@ -413,12 +399,8 @@ if PYDANTIC_AVAILABLE:
         network_disabled: bool = Field(
             default=False, description="Disable network access for the sandbox"
         )
-        allow_write: bool = Field(
-            default=False, description="Allow write access to the filesystem"
-        )
-        privileged: bool = Field(
-            default=False, description="Allow privileged container execution"
-        )
+        allow_write: bool = Field(default=False, description="Allow write access to the filesystem")
+        privileged: bool = Field(default=False, description="Allow privileged container execution")
         run_as_user: str = Field(
             default=DEFAULT_CONTAINER_USER,
             description="User ID and group ID in 'uid:gid' format",
@@ -457,12 +439,8 @@ else:
             self.allow_write = kwargs.get("allow_write", False)
             self.privileged = kwargs.get("privileged", False)
             self.run_as_user = kwargs.get("run_as_user", DEFAULT_CONTAINER_USER)
-            self.seccomp_profile = kwargs.get(
-                "seccomp_profile", DEFAULT_SECCOMP_PROFILE_PATH
-            )
-            self.apparmor_profile = kwargs.get(
-                "apparmor_profile", DEFAULT_APPARMOR_PROFILE_NAME
-            )
+            self.seccomp_profile = kwargs.get("seccomp_profile", DEFAULT_SECCOMP_PROFILE_PATH)
+            self.apparmor_profile = kwargs.get("apparmor_profile", DEFAULT_APPARMOR_PROFILE_NAME)
 
         def dict(self):
             return self.__dict__
@@ -499,9 +477,7 @@ if PYDANTIC_AVAILABLE:
         @validator("kubernetes_pod_manifest")
         def validate_k8s_manifest_safety(cls, v):
             if v is not None and not _validate_pod_manifest_internal(v):
-                raise ValueError(
-                    "Kubernetes pod manifest fails security compliance checks."
-                )
+                raise ValueError("Kubernetes pod manifest fails security compliance checks.")
             return v
 
 else:
@@ -593,8 +569,7 @@ def verify_audit_log_integrity() -> bool:
     # always include the module defaults, plus any temp subdirs created by tests
     candidate_logs = {Path(AUDIT_LOG_FILE)}
     candidate_logs.update(
-        Path(p)
-        for p in glob.glob(str(temp_root / "**" / "sandbox_audit.log"), recursive=True)
+        Path(p) for p in glob.glob(str(temp_root / "**" / "sandbox_audit.log"), recursive=True)
     )
 
     cutoff = datetime.utcnow() - timedelta(seconds=90)
@@ -700,9 +675,7 @@ def load_plugins_for_sandbox():
             sandbox_logger.info(f"Loaded plugin for sandbox context: {module_name}")
         except Exception as e:
             sandbox_logger.error(f"Error loading plugin {plugin_file} for sandbox: {e}")
-            alert_operator(
-                f"Error loading sandbox plugin {plugin_file}: {e}", level="ERROR"
-            )
+            alert_operator(f"Error loading sandbox plugin {plugin_file}: {e}", level="ERROR")
     if PLUGINS_DIR in sys.path:
         sys.path.remove(PLUGINS_DIR)
 
@@ -712,15 +685,9 @@ DLT_PLUGIN = plugins.get("dlt_backend")
 
 def dlt_operation(op_name: str, *args, **kwargs):
     if not DLT_PLUGIN:
-        sandbox_logger.warning(
-            "DLT backend plugin not found for DLT operation: %s", op_name
-        )
-        alert_operator(
-            f"DLT backend plugin not found for operation: {op_name}", level="WARNING"
-        )
-        raise RuntimeError(
-            "DLT backend not present. Please install 'dlt_backend.py' plugin."
-        )
+        sandbox_logger.warning("DLT backend plugin not found for DLT operation: %s", op_name)
+        alert_operator(f"DLT backend plugin not found for operation: {op_name}", level="WARNING")
+        raise RuntimeError("DLT backend not present. Please install 'dlt_backend.py' plugin.")
     if not hasattr(DLT_PLUGIN, op_name):
         raise RuntimeError(f"DLT backend does not implement '{op_name}'.")
     return getattr(DLT_PLUGIN, op_name)(*args, **kwargs)
@@ -748,9 +715,7 @@ async def check_external_services_async():
         try:
             await asyncio.to_thread(kube_config.load_kube_config)
             v1 = client.CoreV1Api()
-            await asyncio.to_thread(
-                v1.list_namespaced_pod, namespace="default", limit=1
-            )
+            await asyncio.to_thread(v1.list_namespaced_pod, namespace="default", limit=1)
             _backend_health_status["kubernetes"] = True
         except Exception as e:
             errors.append(f"Kubernetes config/cluster unavailable: {e}")
@@ -779,9 +744,7 @@ async def check_external_services_async():
             errors.append(f"Azure credentials/connectivity issue: {e}")
             _backend_health_status["azure"] = False
     if GREMLIN_AVAILABLE:
-        if not (
-            os.environ.get("GREMLIN_TEAM_ID") and os.environ.get("GREMLIN_API_KEY")
-        ):
+        if not (os.environ.get("GREMLIN_TEAM_ID") and os.environ.get("GREMLIN_API_KEY")):
             errors.append("Gremlin credentials not found in environment.")
             _backend_health_status["gremlin"] = False
         else:
@@ -830,9 +793,7 @@ if os.name == "posix":
 
         class MockLibc:
             def prctl(self, *args, **kwargs):
-                sandbox_logger.warning(
-                    "libc.so.6 not found. Kernel-level sandboxing is disabled."
-                )
+                sandbox_logger.warning("libc.so.6 not found. Kernel-level sandboxing is disabled.")
 
         libc = MockLibc()
         sandbox_logger.warning(
@@ -842,9 +803,7 @@ else:
 
     class MockLibc:
         def prctl(self, *args, **kwargs):
-            sandbox_logger.warning(
-                "Attempted to call prctl on non-POSIX system. This is a no-op."
-            )
+            sandbox_logger.warning("Attempted to call prctl on non-POSIX system. This is a no-op.")
 
     libc = MockLibc()
 
@@ -911,9 +870,7 @@ def _validate_and_bind_workdir(workdir: str, allow_write: bool):
     except Exception:
         # Fall back to a throwaway sandbox dir on platforms where /tmp doesn't exist
         host_dir = tempfile.mkdtemp(prefix="sandbox_workdir_")
-        sandbox_logger.warning(
-            f"Workdir {workdir} unavailable; using {host_dir} instead."
-        )
+        sandbox_logger.warning(f"Workdir {workdir} unavailable; using {host_dir} instead.")
 
     container_dir = "/workspace"  # stable working dir inside the container
     mode = "rw" if allow_write else "ro"
@@ -928,9 +885,7 @@ def _apply_kernel_sandboxing_preexec(
         import os
 
         if os.name != "posix":
-            sandbox_logger.warning(
-                "Skipping kernel-level sandboxing on non-POSIX system."
-            )
+            sandbox_logger.warning("Skipping kernel-level sandboxing on non-POSIX system.")
             return
 
         try:
@@ -986,9 +941,7 @@ def _apply_kernel_sandboxing_preexec(
                             for name in syscall_rule["names"]:
                                 filter.add_rule(seccomp.SCMP_ACT_ALLOW, name)
                         filter.load()
-                        sandbox_logger.info(
-                            f"Applied seccomp profile from {filter_file}."
-                        )
+                        sandbox_logger.info(f"Applied seccomp profile from {filter_file}.")
                     except Exception as e:
                         sandbox_logger.critical(
                             f"SECURITY VIOLATION: Failed to apply seccomp via python-seccomp: {e}. Aborting child process."
@@ -1035,9 +988,7 @@ async def _monitor_sandbox_health(sandbox_id: str):
             sandbox = _active_sandboxes[sandbox_id]
             max_run_time = sandbox.get("max_run_time")
             if max_run_time and (time.time() - sandbox["start_time"]) > max_run_time:
-                sandbox_logger.critical(
-                    f"Sandbox {sandbox_id} exceeded max run time. Terminating."
-                )
+                sandbox_logger.critical(f"Sandbox {sandbox_id} exceeded max run time. Terminating.")
                 await cleanup_sandbox(sandbox_id)
                 return
             await asyncio.sleep(1)
@@ -1052,9 +1003,7 @@ async def cleanup_sandbox(sandbox_id: str):
     sandbox_info = _active_sandboxes.pop(sandbox_id, None)
 
     if sandbox_info:
-        sandbox_logger.info(
-            f"Cleaning up sandbox {sandbox_id} (type: {sandbox_info.get('type')})."
-        )
+        sandbox_logger.info(f"Cleaning up sandbox {sandbox_id} (type: {sandbox_info.get('type')}).")
         sandbox_type = sandbox_info.get("type")
         try:
             if sandbox_type == "docker" and DOCKER_AVAILABLE:
@@ -1062,14 +1011,10 @@ async def cleanup_sandbox(sandbox_id: str):
                 if container_id:
                     try:
                         client = docker.from_env()
-                        container = await asyncio.to_thread(
-                            client.containers.get, container_id
-                        )
+                        container = await asyncio.to_thread(client.containers.get, container_id)
                         await asyncio.to_thread(container.stop, timeout=10)
                         await asyncio.to_thread(container.remove, force=True)
-                        sandbox_logger.info(
-                            f"Docker container {container_id} stopped and removed."
-                        )
+                        sandbox_logger.info(f"Docker container {container_id} stopped and removed.")
                     except Exception as e:
                         sandbox_logger.error(
                             f"Error cleaning up Docker container {container_id}: {e}"
@@ -1083,14 +1028,10 @@ async def cleanup_sandbox(sandbox_id: str):
                 if container_id:
                     try:
                         client = podman.Client()
-                        container = await asyncio.to_thread(
-                            client.containers.get, container_id
-                        )
+                        container = await asyncio.to_thread(client.containers.get, container_id)
                         await asyncio.to_thread(container.stop, timeout=10)
                         await asyncio.to_thread(container.remove, force=True)
-                        sandbox_logger.info(
-                            f"Podman container {container_id} stopped and removed."
-                        )
+                        sandbox_logger.info(f"Podman container {container_id} stopped and removed.")
                     except Exception as e:
                         sandbox_logger.error(
                             f"Error cleaning up Podman container {container_id}: {e}"
@@ -1117,9 +1058,7 @@ async def cleanup_sandbox(sandbox_id: str):
                             f"Kubernetes pod {pod_name} in namespace {namespace} deleted."
                         )
                     except Exception as e:
-                        sandbox_logger.error(
-                            f"Error cleaning up Kubernetes pod {pod_name}: {e}"
-                        )
+                        sandbox_logger.error(f"Error cleaning up Kubernetes pod {pod_name}: {e}")
                         alert_operator(
                             f"Error cleaning up Kubernetes pod {pod_name}: {e}",
                             level="ERROR",
@@ -1157,12 +1096,8 @@ async def cleanup_sandbox(sandbox_id: str):
                             await asyncio.to_thread(proc.wait, timeout=3)
                         sandbox_logger.info(f"Local process {pid} terminated.")
                     except Exception as e:
-                        sandbox_logger.error(
-                            f"Error cleaning up local process {pid}: {e}"
-                        )
-                        alert_operator(
-                            f"Error cleaning up local process {pid}: {e}", level="ERROR"
-                        )
+                        sandbox_logger.error(f"Error cleaning up local process {pid}: {e}")
+                        alert_operator(f"Error cleaning up local process {pid}: {e}", level="ERROR")
         except Exception as e:
             sandbox_logger.error(
                 f"Exception during cleanup_sandbox for {sandbox_id}: {e}", exc_info=True
@@ -1172,9 +1107,7 @@ async def cleanup_sandbox(sandbox_id: str):
                 level="CRITICAL",
             )
     else:
-        sandbox_logger.warning(
-            f"Attempted to clean up non-existent sandbox {sandbox_id}."
-        )
+        sandbox_logger.warning(f"Attempted to clean up non-existent sandbox {sandbox_id}.")
 
     log_audit(
         {
@@ -1200,18 +1133,12 @@ def _create_network_policy_for_pod(pod_name: str, namespace: str) -> Optional[st
     try:
         kube_config.load_kube_config()
         networking_v1 = client.NetworkingV1Api()
-        resp = networking_v1.create_namespaced_network_policy(
-            namespace=namespace, body=np_manifest
-        )
-        sandbox_logger.info(
-            f"Created NetworkPolicy {resp.metadata.name} for pod {pod_name}."
-        )
+        resp = networking_v1.create_namespaced_network_policy(namespace=namespace, body=np_manifest)
+        sandbox_logger.info(f"Created NetworkPolicy {resp.metadata.name} for pod {pod_name}.")
         return resp.metadata.name
     except Exception as e:
         sandbox_logger.error(f"Failed to create NetworkPolicy for {pod_name}: {e}")
-        alert_operator(
-            f"Failed to create NetworkPolicy for {pod_name}: {e}", level="ERROR"
-        )
+        alert_operator(f"Failed to create NetworkPolicy for {pod_name}: {e}", level="ERROR")
         return None
 
 
@@ -1241,9 +1168,7 @@ async def run_in_docker_sandbox(
             "status": "NOT_AVAILABLE",
             "reason": "Docker daemon not available or unhealthy.",
         }
-        log_audit(
-            {"event": "rejection", "backend": "docker", "reason": result["reason"]}
-        )
+        log_audit({"event": "rejection", "backend": "docker", "reason": result["reason"]})
         return result
 
     try:
@@ -1265,9 +1190,7 @@ async def run_in_docker_sandbox(
     except (ValidationError, ValueError) as e:
         sandbox_logger.error(f"Docker sandbox input validation failed: {e}")
         result = {"status": "REJECTED", "reason": f"Input validation failed: {e}"}
-        log_audit(
-            {"event": "rejection", "backend": "docker", "reason": result["reason"]}
-        )
+        log_audit({"event": "rejection", "backend": "docker", "reason": result["reason"]})
         return result
 
     container_name = f"sim_sandbox_{secrets.token_hex(4)}"
@@ -1320,9 +1243,7 @@ async def run_in_docker_sandbox(
             container_kwargs["network_mode"] = "none"
             sandbox_logger.info("Network disabled for Docker container as per policy.")
 
-        sandbox_logger.info(
-            f"Running command in Docker sandbox: {command} (Image: {image})"
-        )
+        sandbox_logger.info(f"Running command in Docker sandbox: {command} (Image: {image})")
         container = await asyncio.to_thread(client.containers.run, **container_kwargs)
         _active_sandboxes[container_name]["container_id"] = container.id
         result = await asyncio.to_thread(container.wait)
@@ -1342,12 +1263,8 @@ async def run_in_docker_sandbox(
             "exception": str(e),
             "sandbox_id": container_name,
         }
-        sandbox_logger.error(
-            f"Error running Docker sandbox {container_name}: {e}", exc_info=True
-        )
-        alert_operator(
-            f"Error running Docker sandbox {container_name}: {e}", level="CRITICAL"
-        )
+        sandbox_logger.error(f"Error running Docker sandbox {container_name}: {e}", exc_info=True)
+        alert_operator(f"Error running Docker sandbox {container_name}: {e}", level="CRITICAL")
         log_audit({"event": "error", "backend": "docker", "exception": str(e)})
     finally:
         monitor_task.cancel()
@@ -1369,9 +1286,7 @@ async def run_in_podman_sandbox(
             "status": "NOT_AVAILABLE",
             "reason": "Podman daemon not available or unhealthy.",
         }
-        log_audit(
-            {"event": "rejection", "backend": "podman", "reason": result["reason"]}
-        )
+        log_audit({"event": "rejection", "backend": "podman", "reason": result["reason"]})
         return result
 
     try:
@@ -1393,9 +1308,7 @@ async def run_in_podman_sandbox(
     except (ValidationError, ValueError) as e:
         sandbox_logger.error(f"Podman sandbox input validation failed: {e}")
         result = {"status": "REJECTED", "reason": f"Input validation failed: {e}"}
-        log_audit(
-            {"event": "rejection", "backend": "podman", "reason": result["reason"]}
-        )
+        log_audit({"event": "rejection", "backend": "podman", "reason": result["reason"]})
         return result
 
     container_name = f"sim_sandbox_{secrets.token_hex(4)}"
@@ -1448,9 +1361,7 @@ async def run_in_podman_sandbox(
             container_kwargs["network_mode"] = "none"
             sandbox_logger.info("Network disabled for Podman container as per policy.")
 
-        sandbox_logger.info(
-            f"Running command in Podman sandbox: {command} (Image: {image})"
-        )
+        sandbox_logger.info(f"Running command in Podman sandbox: {command} (Image: {image})")
         container = await asyncio.to_thread(client.containers.run, **container_kwargs)
         _active_sandboxes[container_name]["container_id"] = container.id
         result = await asyncio.to_thread(container.wait)
@@ -1470,12 +1381,8 @@ async def run_in_podman_sandbox(
             "exception": str(e),
             "sandbox_id": container_name,
         }
-        sandbox_logger.error(
-            f"Error running Podman sandbox {container_name}: {e}", exc_info=True
-        )
-        alert_operator(
-            f"Error running Podman sandbox {container_name}: {e}", level="CRITICAL"
-        )
+        sandbox_logger.error(f"Error running Podman sandbox {container_name}: {e}", exc_info=True)
+        alert_operator(f"Error running Podman sandbox {container_name}: {e}", level="CRITICAL")
         log_audit({"event": "error", "backend": "podman", "exception": str(e)})
     finally:
         monitor_task.cancel()
@@ -1546,9 +1453,7 @@ async def deploy_to_kubernetes(
         )
 
     # Apply policy and overrides from manifest
-    pod_spec["containers"][0]["securityContext"].update(
-        containers[0].get("securityContext", {})
-    )
+    pod_spec["containers"][0]["securityContext"].update(containers[0].get("securityContext", {}))
 
     # Best-effort network isolation; never fail the run if API lacks the method.
     try:
@@ -1639,9 +1544,7 @@ async def run_in_local_process_sandbox(
             "sandbox_id": sandbox_id,
         }
     except Exception as e:
-        alert_operator(
-            f"Error running local process sandbox {sandbox_id}: {e}", level="CRITICAL"
-        )
+        alert_operator(f"Error running local process sandbox {sandbox_id}: {e}", level="CRITICAL")
         return {"status": "ERROR", "exception": str(e), "sandbox_id": sandbox_id}
 
 
@@ -1663,9 +1566,7 @@ async def run_chaos_experiment(app: str, experiment_type: str) -> dict:
     # Allow tests to monkeypatch simulation.sandbox.gremlin.GremlinClient even if SDK not installed
     Client = getattr(gremlin, "GremlinClient", None)
     if Client is None:
-        alert_operator(
-            "Gremlin SDK not available. Cannot run chaos experiment.", level="ERROR"
-        )
+        alert_operator("Gremlin SDK not available. Cannot run chaos experiment.", level="ERROR")
         raise RuntimeError("Gremlin SDK not available.")
     client = Client()
     experiment_spec = {"target": app, "attack": experiment_type}
@@ -1768,9 +1669,7 @@ async def run_in_sandbox(
                 "status": "ERROR",
                 "reason": "No sandbox available. Refusing execution (fail closed).",
             }
-            log_audit(
-                {"event": "error", "backend": backend, "reason": result["reason"]}
-            )
+            log_audit({"event": "error", "backend": backend, "reason": result["reason"]})
             alert_operator(
                 "CRITICAL: No supported sandbox technologies available. Refusing execution.",
                 level="CRITICAL",
@@ -1784,9 +1683,7 @@ async def run_in_sandbox(
                 "status": "ERROR",
                 "reason": f"Selected backend '{backend}' is unhealthy. Refusing execution.",
             }
-            log_audit(
-                {"event": "error", "backend": backend, "reason": result["reason"]}
-            )
+            log_audit({"event": "error", "backend": backend, "reason": result["reason"]})
             alert_operator(
                 f"CRITICAL: Selected sandbox backend '{backend}' is unhealthy. Refusing execution.",
                 level="CRITICAL",
@@ -1808,9 +1705,7 @@ async def run_in_sandbox(
             "workdir": workdir,
             "image": image,
             "policy_applied": (
-                validated_policy.model_dump()
-                if PYDANTIC_AVAILABLE
-                else validated_policy.__dict__
+                validated_policy.model_dump() if PYDANTIC_AVAILABLE else validated_policy.__dict__
             ),
             "resource_limits": resource_limits,
             "kubernetes_pod_manifest_present": bool(kubernetes_pod_manifest),
@@ -1881,9 +1776,7 @@ async def _start_background_tasks():
         await _initial_external_service_check()
     except SystemExit:
         pass  # Allow the system to exit gracefully if the initial check fails
-    _external_service_check_task = asyncio.create_task(
-        _periodic_external_service_check()
-    )
+    _external_service_check_task = asyncio.create_task(_periodic_external_service_check())
     _audit_verification_task = asyncio.create_task(_periodic_audit_log_verification())
     _security_scan_task = asyncio.create_task(_periodic_security_scan())
     sandbox_logger.info("Background health, audit, and security tasks started.")
@@ -1898,9 +1791,7 @@ async def _initial_external_service_check():
         sandbox_logger.critical(
             f"CRITICAL: Initial external service check failed: {e}. Aborting startup."
         )
-        alert_operator(
-            f"CRITICAL: Initial external service check failed: {e}", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Initial external service check failed: {e}", level="CRITICAL")
         sys.exit(1)
 
 
@@ -1970,9 +1861,7 @@ async def initialize_sandbox_system():
     sandbox_logger.info("Initializing sandbox system...")
 
     if not verify_audit_log_integrity():
-        sandbox_logger.critical(
-            "CRITICAL: Audit log integrity check failed during initialization."
-        )
+        sandbox_logger.critical("CRITICAL: Audit log integrity check failed during initialization.")
         alert_operator(
             "CRITICAL: Audit log integrity check failed during sandbox initialization.",
             level="CRITICAL",
@@ -1987,9 +1876,7 @@ async def initialize_sandbox_system():
         sandbox_logger.critical(
             f"CRITICAL: Failed to initialize sandbox system: {e}", exc_info=True
         )
-        alert_operator(
-            f"CRITICAL: Failed to initialize sandbox system: {e}", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Failed to initialize sandbox system: {e}", level="CRITICAL")
         return False
 
 
@@ -2032,9 +1919,7 @@ if __name__ == "__main__":
     import argparse
     import sys
 
-    parser = argparse.ArgumentParser(
-        description="Sandbox runner for secure code execution"
-    )
+    parser = argparse.ArgumentParser(description="Sandbox runner for secure code execution")
     parser.add_argument(
         "--backend",
         choices=list(_sandbox_backends.keys()),
@@ -2043,9 +1928,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--command", required=True, nargs="+", help="Command to run")
     parser.add_argument("--workdir", required=True, help="Working directory")
-    parser.add_argument(
-        "--image", help="Container image (for container-based backends)"
-    )
+    parser.add_argument("--image", help="Container image (for container-based backends)")
     parser.add_argument(
         "--disable-network",
         action="store_true",
@@ -2061,9 +1944,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    policy = SandboxPolicy(
-        network_disabled=args.disable_network, allow_write=not args.read_only
-    )
+    policy = SandboxPolicy(network_disabled=args.disable_network, allow_write=not args.read_only)
 
     loop = asyncio.get_event_loop()
     if not loop.run_until_complete(initialize_sandbox_system()):
@@ -2085,8 +1966,4 @@ if __name__ == "__main__":
 
     loop.run_until_complete(shutdown_sandbox_system())
 
-    sys.exit(
-        0
-        if result.get("status") == "COMPLETED" and result.get("returncode", 1) == 0
-        else 1
-    )
+    sys.exit(0 if result.get("status") == "COMPLETED" and result.get("returncode", 1) == 0 else 1)

@@ -57,14 +57,10 @@ class TestLoggingPlugin(PluginHook):
         logging.getLogger("TestLoggingPlugin").info(f"Stopped for {arbiter_name}")
 
     async def on_error(self, arbiter_name: str, error: ArbiterGrowthError) -> None:
-        logging.getLogger("TestLoggingPlugin").error(
-            f"Error in {arbiter_name}: {error}"
-        )
+        logging.getLogger("TestLoggingPlugin").error(f"Error in {arbiter_name}: {error}")
 
     async def on_growth_event(self, event: GrowthEvent, state: ArbiterState) -> None:
-        logging.getLogger("TestLoggingPlugin").info(
-            f"Event {event.type} for {state.arbiter_id}"
-        )
+        logging.getLogger("TestLoggingPlugin").info(f"Event {event.type} for {state.arbiter_id}")
 
 
 class TestAsyncMockPlugin(PluginHook):
@@ -142,10 +138,7 @@ async def test_logging_plugin_on_error(caplog):
     plugin = TestLoggingPlugin()
     error = ArbiterGrowthError("Test error", {"context": "failure"})
     await plugin.on_error("test_arbiter", error)
-    assert (
-        "Error in test_arbiter: Test error (Details: {'context': 'failure'})"
-        in caplog.text
-    )
+    assert "Error in test_arbiter: Test error (Details: {'context': 'failure'})" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -187,9 +180,7 @@ async def test_multiple_plugins_execution(growth_event, arbiter_state):
 
     # This loop simulates how a manager would iterate through and call its hooks
     async def simulate_manager_call():
-        tasks = [
-            plugin.on_growth_event(growth_event, arbiter_state) for plugin in plugins
-        ]
+        tasks = [plugin.on_growth_event(growth_event, arbiter_state) for plugin in plugins]
         await asyncio.gather(*tasks)
 
     await simulate_manager_call()
@@ -216,9 +207,7 @@ async def test_plugin_error_handling():
         async def on_error(self, arbiter_name: str, error: ArbiterGrowthError) -> None:
             pass
 
-        async def on_growth_event(
-            self, event: GrowthEvent, state: ArbiterState
-        ) -> None:
+        async def on_growth_event(self, event: GrowthEvent, state: ArbiterState) -> None:
             raise RuntimeError("This plugin has failed intentionally.")
 
     plugin = FailingPlugin()
@@ -267,17 +256,13 @@ async def test_example_plugin_from_docstring(caplog, growth_event, arbiter_state
         async def on_error(self, arbiter_name: str, error: ArbiterGrowthError) -> None:
             pass
 
-        async def on_growth_event(
-            self, event: GrowthEvent, state: ArbiterState
-        ) -> None:
+        async def on_growth_event(self, event: GrowthEvent, state: ArbiterState) -> None:
             logger.info(f"Arbiter '{state.arbiter_id}' processed event: {event.type}")
             if (
                 event.type == "skill_improved"
                 and event.details.get("skill_name") == "data_analysis"
             ):
-                logger.info(
-                    f"METRIC: data_analysis skill improved for {state.arbiter_id}!"
-                )
+                logger.info(f"METRIC: data_analysis skill improved for {state.arbiter_id}!")
 
     plugin = LoggingAndMetricsPlugin()
     await plugin.on_growth_event(growth_event, arbiter_state)
@@ -295,9 +280,7 @@ async def test_multiple_hooks_execution(growth_event, arbiter_state, caplog):
     plugins = [TestLoggingPlugin() for _ in range(2)]
 
     async def simulate_manager_call():
-        tasks = [
-            plugin.on_growth_event(growth_event, arbiter_state) for plugin in plugins
-        ]
+        tasks = [plugin.on_growth_event(growth_event, arbiter_state) for plugin in plugins]
         await asyncio.gather(*tasks)
 
     with caplog.at_level(logging.INFO):
@@ -321,9 +304,7 @@ async def test_plugin_error_propagation():
         async def on_error(self, arbiter_name: str, error: ArbiterGrowthError) -> None:
             pass
 
-        async def on_growth_event(
-            self, event: GrowthEvent, state: ArbiterState
-        ) -> None:
+        async def on_growth_event(self, event: GrowthEvent, state: ArbiterState) -> None:
             raise ArbiterGrowthError("Plugin error")
 
     plugin = ErrorPlugin()

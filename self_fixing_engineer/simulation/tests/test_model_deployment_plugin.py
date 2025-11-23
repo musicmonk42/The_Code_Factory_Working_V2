@@ -22,9 +22,7 @@ def mock_external_dependencies():
     """
     with patch(
         "simulation.plugins.model_deployment_plugin.os.path.exists", return_value=True
-    ) as mock_exists, patch(
-        "asyncio.sleep", new_callable=AsyncMock
-    ) as mock_sleep, patch(
+    ) as mock_exists, patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep, patch(
         "os.getenv"
     ) as mock_getenv, patch(
         "os.remove"

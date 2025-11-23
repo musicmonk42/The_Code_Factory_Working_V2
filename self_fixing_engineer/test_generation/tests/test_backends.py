@@ -154,9 +154,7 @@ def test_pynguin_backend_init_success(mock_config, temp_project_root):
 def test_pynguin_backend_init_missing_config_key(mock_config, temp_project_root):
     """Test initialization fails if required config key is missing."""
     del mock_config["backend_timeouts"]
-    with pytest.raises(
-        ValueError, match="Missing required config key: backend_timeouts"
-    ):
+    with pytest.raises(ValueError, match="Missing required config key: backend_timeouts"):
         PynguinBackend(mock_config, temp_project_root)
 
 
@@ -165,9 +163,9 @@ async def test_pynguin_backend_generate_success(mock_config, temp_project_root):
     """Test successful test generation with Pynguin."""
     backend = PynguinBackend(mock_config, temp_project_root)
 
-    with patch("asyncio.create_subprocess_exec") as mock_exec, patch(
-        "os.walk"
-    ) as mock_walk, patch("shutil.move") as mock_move:
+    with patch("asyncio.create_subprocess_exec") as mock_exec, patch("os.walk") as mock_walk, patch(
+        "shutil.move"
+    ) as mock_move:
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"", b"")
         mock_process.returncode = 0
@@ -175,9 +173,7 @@ async def test_pynguin_backend_generate_success(mock_config, temp_project_root):
 
         mock_walk.return_value = [("/output", [], ["test_module.py"])]
 
-        success, err, path = await backend.generate_tests(
-            "module", "output", {"retry_count": 0}
-        )
+        success, err, path = await backend.generate_tests("module", "output", {"retry_count": 0})
         assert success
         assert path == "output/module/test_module.py"
         mock_move.assert_called_once()
@@ -193,24 +189,18 @@ async def test_pynguin_backend_generate_timeout(mock_config, temp_project_root):
         mock_process.communicate.side_effect = asyncio.TimeoutError
         mock_exec.return_value = mock_process
 
-        success, err, path = await backend.generate_tests(
-            "module", "output", {"retry_count": 0}
-        )
+        success, err, path = await backend.generate_tests("module", "output", {"retry_count": 0})
         assert not success
         assert "timed out" in err
         assert path is None
 
 
 @pytest.mark.asyncio
-async def test_pynguin_backend_generate_no_file_generated(
-    mock_config, temp_project_root
-):
+async def test_pynguin_backend_generate_no_file_generated(mock_config, temp_project_root):
     """Test Pynguin runs but no file is generated."""
     backend = PynguinBackend(mock_config, temp_project_root)
 
-    with patch("asyncio.create_subprocess_exec") as mock_exec, patch(
-        "os.walk"
-    ) as mock_walk:
+    with patch("asyncio.create_subprocess_exec") as mock_exec, patch("os.walk") as mock_walk:
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"", b"")
         mock_process.returncode = 0
@@ -218,9 +208,7 @@ async def test_pynguin_backend_generate_no_file_generated(
 
         mock_walk.return_value = []  # No files found
 
-        success, err, path = await backend.generate_tests(
-            "module", "output", {"retry_count": 0}
-        )
+        success, err, path = await backend.generate_tests("module", "output", {"retry_count": 0})
         assert not success
         assert "no test file was created" in err
         assert path is None
@@ -240,15 +228,11 @@ def test_jest_llm_backend_init_success(mock_config, temp_project_root, monkeypat
 def test_jest_llm_backend_init_missing_config_key(mock_config, temp_project_root):
     """Test initialization fails if required config key is missing."""
     del mock_config["backend_timeouts"]
-    with pytest.raises(
-        ValueError, match="Missing required config key: backend_timeouts"
-    ):
+    with pytest.raises(ValueError, match="Missing required config key: backend_timeouts"):
         JestLLMBackend(mock_config, temp_project_root)
 
 
-def test_jest_llm_backend_init_no_langchain(
-    monkeypatch, mock_config, temp_project_root
-):
+def test_jest_llm_backend_init_no_langchain(monkeypatch, mock_config, temp_project_root):
     """Test initialization fails if langchain-openai is not available."""
     monkeypatch.setattr("test_generation.backends.LANGCHAIN_OPENAI_AVAILABLE", False)
     with pytest.raises(ImportError, match="langchain-openai must be installed"):
@@ -256,9 +240,7 @@ def test_jest_llm_backend_init_no_langchain(
 
 
 @pytest.mark.asyncio
-async def test_jest_llm_backend_generate_success(
-    mock_config, temp_project_root, monkeypatch
-):
+async def test_jest_llm_backend_generate_success(mock_config, temp_project_root, monkeypatch):
     """Test successful test generation with JestLLMBackend."""
     # Fix: Set environment variable for LLM tests
     monkeypatch.setenv("OPENAI_API_KEY", "fake_key")
@@ -269,9 +251,7 @@ async def test_jest_llm_backend_generate_success(
     ):
         mock_ainvoke.return_value.content = "// Generated test code"
 
-        success, err, path = await backend.generate_tests(
-            "file.js", "output", {"timeout": 90}
-        )
+        success, err, path = await backend.generate_tests("file.js", "output", {"timeout": 90})
         assert success
         assert path == "output/file.js.test.js"
         with open(os.path.join(temp_project_root, path), "r") as f:
@@ -279,27 +259,21 @@ async def test_jest_llm_backend_generate_success(
 
 
 @pytest.mark.asyncio
-async def test_jest_llm_backend_generate_timeout(
-    mock_config, temp_project_root, monkeypatch
-):
+async def test_jest_llm_backend_generate_timeout(mock_config, temp_project_root, monkeypatch):
     """Test JestLLM generation timeout handling."""
     # Fix: Set environment variable for LLM tests
     monkeypatch.setenv("OPENAI_API_KEY", "fake_key")
     backend = JestLLMBackend(mock_config, temp_project_root)
 
     with patch.object(backend.llm, "ainvoke", side_effect=asyncio.TimeoutError):
-        success, err, path = await backend.generate_tests(
-            "file.js", "output", {"timeout": 90}
-        )
+        success, err, path = await backend.generate_tests("file.js", "output", {"timeout": 90})
         assert not success
         assert "timed out" in err
         assert path is None
 
 
 @pytest.mark.asyncio
-async def test_jest_llm_backend_generate_retry(
-    mock_config, temp_project_root, monkeypatch
-):
+async def test_jest_llm_backend_generate_retry(mock_config, temp_project_root, monkeypatch):
     """Test retry logic for LLM failures in JestLLMBackend."""
     # Fix: Set environment variable for LLM tests
     monkeypatch.setenv("OPENAI_API_KEY", "fake_key")
@@ -314,9 +288,7 @@ async def test_jest_llm_backend_generate_retry(
             MagicMock(content="// Success"),
         ],
     ):
-        success, err, path = await backend.generate_tests(
-            "file.js", "output", {"retry_count": 2}
-        )
+        success, err, path = await backend.generate_tests("file.js", "output", {"retry_count": 2})
         assert success
         assert path.endswith(".test.js")
 
@@ -330,9 +302,7 @@ async def test_jest_llm_backend_generate_retry_exceeded(
     monkeypatch.setenv("OPENAI_API_KEY", "fake_key")
     backend = JestLLMBackend(mock_config, temp_project_root)
 
-    with patch.object(
-        backend.llm, "ainvoke", side_effect=Exception("Persistent failure")
-    ):
+    with patch.object(backend.llm, "ainvoke", side_effect=Exception("Persistent failure")):
         with pytest.raises(RetriesExceeded):
             await backend.generate_tests("file.js", "output", {"retry_count": 0})
 
@@ -350,24 +320,18 @@ def test_diffblue_backend_init_success(mock_config, temp_project_root):
 def test_diffblue_backend_init_missing_config_key(mock_config, temp_project_root):
     """Test initialization fails if required config key is missing."""
     del mock_config["backend_timeouts"]
-    with pytest.raises(
-        ValueError, match="Missing required config key: backend_timeouts"
-    ):
+    with pytest.raises(ValueError, match="Missing required config key: backend_timeouts"):
         DiffblueBackend(mock_config, temp_project_root)
 
 
 @pytest.mark.asyncio
-async def test_diffblue_backend_generate_success(
-    mock_config, temp_project_root, monkeypatch
-):
+async def test_diffblue_backend_generate_success(mock_config, temp_project_root, monkeypatch):
     """Test successful test generation with DiffblueBackend (simulated)."""
     backend = DiffblueBackend(mock_config, temp_project_root)
     # Fix: Mock random.random() to ensure a deterministic success path
     monkeypatch.setattr(random, "random", lambda: 0.2)
 
-    success, err, path = await backend.generate_tests(
-        "ClassName", "output", {"retry_count": 0}
-    )
+    success, err, path = await backend.generate_tests("ClassName", "output", {"retry_count": 0})
     assert success
     assert path.endswith("ATCOTest.java")
     full_path = os.path.join(temp_project_root, path)
@@ -385,9 +349,7 @@ async def test_diffblue_backend_generate_simulated_failure(
     backend = DiffblueBackend(mock_config, temp_project_root)
     monkeypatch.setattr(random, "random", lambda: 0.0)  # Trigger failure
 
-    success, err, path = await backend.generate_tests(
-        "ClassName", "output", {"retry_count": 0}
-    )
+    success, err, path = await backend.generate_tests("ClassName", "output", {"retry_count": 0})
     assert not success
     assert "Simulated Diffblue Cover generation error" in err
     assert path is None
@@ -399,9 +361,7 @@ async def test_diffblue_backend_generate_timeout(mock_config, temp_project_root)
     backend = DiffblueBackend(mock_config, temp_project_root)
 
     with patch("asyncio.sleep", side_effect=asyncio.TimeoutError):
-        success, err, path = await backend.generate_tests(
-            "ClassName", "output", {"timeout": 180}
-        )
+        success, err, path = await backend.generate_tests("ClassName", "output", {"timeout": 180})
         assert not success
         assert "timed out" in err
         assert path is None

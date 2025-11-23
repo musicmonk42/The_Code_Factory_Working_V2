@@ -42,9 +42,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -228,6 +226,7 @@ except ImportError:
     def _get_or_create_metric(*args, **kwargs):
         return DummyMetric()
 
+
 try:
     from detect_secrets.core import SecretsCollection
     from detect_secrets.settings import transient_settings
@@ -279,8 +278,10 @@ except ImportError:
             pass
 
     SecretsCollection = FallbackSecretsCollection
+
     def transient_settings():
         return FallbackTransientSettings()
+
 
 try:
     from redis.asyncio import Redis
@@ -329,9 +330,7 @@ if pydantic_available:
         prompt_optimization_temperature: float = Field(
             default=0.7, ge=0.0, le=1.0, description="Temperature setting for LLM"
         )
-        llm_timeout_seconds: int = Field(
-            default=60, ge=1, description="Timeout for LLM API calls"
-        )
+        llm_timeout_seconds: int = Field(default=60, ge=1, description="Timeout for LLM API calls")
         evolution_cycle_interval_seconds: int = Field(
             default=3600, ge=1, description="Interval between evolution cycles"
         )
@@ -350,9 +349,7 @@ if pydantic_available:
         redis_cache_url: Optional[str] = Field(
             default=None, description="Redis URL for caching data"
         )
-        redis_cache_ttl: int = Field(
-            default=3600, ge=1, description="TTL for cached data in Redis"
-        )
+        redis_cache_ttl: int = Field(default=3600, ge=1, description="TTL for cached data in Redis")
         content_safety_check: bool = Field(
             default=True, description="Enable content safety checks for LLM outputs"
         )
@@ -393,10 +390,7 @@ else:
 
         def validate(self) -> bool:
             """Basic validation for configuration when Pydantic is unavailable."""
-            if (
-                self.prompt_optimization_temperature < 0
-                or self.prompt_optimization_temperature > 1
-            ):
+            if self.prompt_optimization_temperature < 0 or self.prompt_optimization_temperature > 1:
                 logger.error("prompt_optimization_temperature must be between 0 and 1")
                 return False
             if self.llm_timeout_seconds < 1:
@@ -429,15 +423,11 @@ def _load_config() -> EvolutionConfig:
                 config_dict = json.load(f)
                 logger.info(f"Loaded config from {config_file_path}")
         except (IOError, json.JSONDecodeError) as e:
-            logger.warning(
-                f"Could not load config file {config_file_path}: {e}. Using defaults."
-            )
+            logger.warning(f"Could not load config file {config_file_path}: {e}. Using defaults.")
 
     # Override with environment variables
     env_prefix = "SFE_EVO_"
-    config_fields = (
-        EvolutionConfig.model_fields if pydantic_available else vars(EvolutionConfig())
-    )
+    config_fields = EvolutionConfig.model_fields if pydantic_available else vars(EvolutionConfig())
 
     for key in config_fields:
         env_var_name = f"{env_prefix}{key.upper()}"
@@ -588,9 +578,7 @@ try:
 
     SFE_CORE_AVAILABLE = True
 except ImportError:
-    logger.warning(
-        "simulation.agent_core not found. Mocking MetaLearning and PolicyEngine."
-    )
+    logger.warning("simulation.agent_core not found. Mocking MetaLearning and PolicyEngine.")
 
     class MetaLearning:
         """Mock implementation of MetaLearning when the actual component is unavailable."""
@@ -661,9 +649,7 @@ except ImportError:
             """
             return {"status": "ok", "message": "Mock PolicyEngine is healthy."}
 
-        async def update_agent_prompt(
-            self, agent_id: str, new_prompt: str
-        ) -> Dict[str, Any]:
+        async def update_agent_prompt(self, agent_id: str, new_prompt: str) -> Dict[str, Any]:
             """Mock updating an agent's prompt.
 
             Args:
@@ -714,9 +700,7 @@ async def _get_meta_learning() -> MetaLearning:
     global _meta_learning_instance
     if _meta_learning_instance is None:
         if not SFE_CORE_AVAILABLE:
-            _meta_learning_instance = MetaLearning(
-                filepath="self_evolution_learnings.jsonl"
-            )
+            _meta_learning_instance = MetaLearning(filepath="self_evolution_learnings.jsonl")
             logger.debug("Initialized mock MetaLearning instance")
         else:
             from simulation.agent_core import get_meta_learning_instance
@@ -793,9 +777,7 @@ async def _get_core_llm() -> BaseChatModel:
                 )
 
             except (ImportError, ValueError) as e:
-                logger.warning(
-                    f"Failed to initialize LangChain LLM: {e}. Using mock LLM."
-                )
+                logger.warning(f"Failed to initialize LangChain LLM: {e}. Using mock LLM.")
 
                 class FallbackMockLLM(BaseChatModel):
                     """Mock LLM implementation for when no real LLM is available."""
@@ -851,9 +833,7 @@ except ImportError:
     class MockAuditLogger:
         """Mock AuditLogger when the actual component is unavailable."""
 
-        async def log(
-            self, event_type: str, details: Dict[str, Any], **kwargs: Any
-        ) -> None:
+        async def log(self, event_type: str, details: Dict[str, Any], **kwargs: Any) -> None:
             """Log a mock audit event.
 
             Args:
@@ -922,9 +902,7 @@ def _scrub_secrets(data: Any) -> Any:
     elif isinstance(data, str):
         scrubbed_str = data
         for pattern, replacement in SECRET_PATTERNS:
-            scrubbed_str = re.sub(
-                pattern, replacement, scrubbed_str, flags=re.IGNORECASE
-            )
+            scrubbed_str = re.sub(pattern, replacement, scrubbed_str, flags=re.IGNORECASE)
         return scrubbed_str
     else:
         return data
@@ -947,9 +925,7 @@ async def _audit_event(event_type: str, details: Dict[str, Any]):
             await _sfe_audit_logger.log(event_type, scrubbed_details)
         else:
             # Fallback to plugin logger
-            logger.info(
-                f"AUDIT_EVENT: {event_type}", extra={"details": scrubbed_details}
-            )
+            logger.info(f"AUDIT_EVENT: {event_type}", extra={"details": scrubbed_details})
 
     except Exception as e:
         logger.error(f"Failed to log audit event {event_type}: {e}")
@@ -1014,9 +990,7 @@ async def cache_performance_data(data: List[Dict[str, Any]]) -> bool:
                 return False
 
             cache_key = f"evolution_feedback:{time.time()}"
-            await redis_client.set(
-                cache_key, json.dumps(data), ex=EVOLUTION_CONFIG.redis_cache_ttl
-            )
+            await redis_client.set(cache_key, json.dumps(data), ex=EVOLUTION_CONFIG.redis_cache_ttl)
             logger.info(f"Cached performance data to Redis with key {cache_key}")
             return True
     except Exception as e:
@@ -1284,7 +1258,9 @@ async def plugin_health() -> Dict[str, Any]:
     except Exception as e:
         status = "error"
         checks_failed += 1
-        error_msg = f"Core LLM inaccessible or test failed: {e}. Check API keys, model name, network."
+        error_msg = (
+            f"Core LLM inaccessible or test failed: {e}. Check API keys, model name, network."
+        )
         details.append(error_msg)
         logger.error(error_msg, exc_info=True)
         if prometheus_available:
@@ -1293,9 +1269,7 @@ async def plugin_health() -> Dict[str, Any]:
     # Check Redis if configured
     if redis_available and EVOLUTION_CONFIG.redis_cache_url:
         try:
-            async with get_redis_client(
-                EVOLUTION_CONFIG.redis_cache_url
-            ) as redis_client:
+            async with get_redis_client(EVOLUTION_CONFIG.redis_cache_url) as redis_client:
                 if redis_client:
                     await redis_client.ping()
                     details.append("Redis cache accessible.")
@@ -1428,9 +1402,7 @@ async def _strategy_prompt_optimization(
     # Filter data for target agents if specified
     if target_agents:
         target_agents_set = set(target_agents)
-        filtered_feedback = [
-            f for f in recent_feedback if f.get("agent_id") in target_agents_set
-        ]
+        filtered_feedback = [f for f in recent_feedback if f.get("agent_id") in target_agents_set]
 
         if not filtered_feedback:
             return {
@@ -1447,9 +1419,7 @@ async def _strategy_prompt_optimization(
     # Limit the size to avoid exceeding context limits
     max_feedback_chars = 4000
     if len(performance_summary_for_llm) > max_feedback_chars:
-        logger.warning(
-            f"Performance data exceeds {max_feedback_chars} chars, truncating"
-        )
+        logger.warning(f"Performance data exceeds {max_feedback_chars} chars, truncating")
         performance_summary_for_llm = (
             performance_summary_for_llm[:max_feedback_chars] + "\n... (truncated)"
         )
@@ -1503,23 +1473,20 @@ async def _strategy_prompt_optimization(
                 messages=[HumanMessage(content=prompt_text)],
                 config={"timeout": EVOLUTION_CONFIG.llm_timeout_seconds},
             ),
-            timeout=EVOLUTION_CONFIG.llm_timeout_seconds
-            + 5,  # Add buffer for networking
+            timeout=EVOLUTION_CONFIG.llm_timeout_seconds + 5,  # Add buffer for networking
         )
 
         llm_duration = time.monotonic() - llm_start_time
         if prometheus_available:
-            LLM_REQUEST_DURATION.labels(
-                model=getattr(core_llm, "model_name", "unknown")
-            ).observe(llm_duration)
+            LLM_REQUEST_DURATION.labels(model=getattr(core_llm, "model_name", "unknown")).observe(
+                llm_duration
+            )
 
         optimized_prompt_content = llm_response.content.strip()
         logger.info(f"LLM optimization completed in {llm_duration:.2f}s")
 
         if not optimized_prompt_content or optimized_prompt_content == "NO_CHANGE":
-            logger.info(
-                f"LLM proposed no change for prompt optimization for {target_agent_id}."
-            )
+            logger.info(f"LLM proposed no change for prompt optimization for {target_agent_id}.")
             return {
                 "status": "no_change_proposed",
                 "reason": "LLM determined no prompt optimization was needed.",
@@ -1555,9 +1522,7 @@ async def _strategy_prompt_optimization(
             "optimization_duration_seconds": llm_duration,
         }
     except asyncio.TimeoutError:
-        logger.error(
-            f"LLM request timed out after {EVOLUTION_CONFIG.llm_timeout_seconds}s"
-        )
+        logger.error(f"LLM request timed out after {EVOLUTION_CONFIG.llm_timeout_seconds}s")
         if prometheus_available:
             EVOLUTION_ERRORS.labels(error_type="llm_timeout").inc()
         return {
@@ -1595,20 +1560,14 @@ def with_enhanced_error_handling(func: AsyncFunc) -> AsyncFunc:
         except RetryError as e:
             # This is thrown by tenacity after max retries
             logger.error(f"Function {function_name} exhausted all retry attempts: {e}")
-            inner_exception = (
-                e.__cause__ if hasattr(e, "__cause__") and e.__cause__ else e
-            )
+            inner_exception = e.__cause__ if hasattr(e, "__cause__") and e.__cause__ else e
             error_type = type(inner_exception).__name__
 
             if prometheus_available:
-                EVOLUTION_ERRORS.labels(
-                    error_type=f"retry_exhausted_{error_type}"
-                ).inc()
+                EVOLUTION_ERRORS.labels(error_type=f"retry_exhausted_{error_type}").inc()
 
             # Re-raise with more context
-            raise type(e)(
-                f"{function_name} failed after max retries: {inner_exception}"
-            ) from e
+            raise type(e)(f"{function_name} failed after max retries: {inner_exception}") from e
         except asyncio.TimeoutError:
             logger.error(f"Function {function_name} timed out")
             if prometheus_available:
@@ -1706,9 +1665,7 @@ async def initiate_evolution_cycle(
         validated_strategy = validate_evolution_strategy(evolution_strategy)
         if validated_strategy != evolution_strategy:
             result["strategy_used"] = validated_strategy
-            logger.info(
-                f"Changed strategy from {evolution_strategy} to {validated_strategy}"
-            )
+            logger.info(f"Changed strategy from {evolution_strategy} to {validated_strategy}")
 
         # Validate strategy params
         validated_params = validate_strategy_params(strategy_params)
@@ -1759,9 +1716,7 @@ async def initiate_evolution_cycle(
                         await policy_engine.update_agent_prompt(
                             adaptation["agent_id"], adaptation["new_value"]
                         )
-                        logger.info(
-                            f"Applied prompt update for {adaptation['agent_id']}."
-                        )
+                        logger.info(f"Applied prompt update for {adaptation['agent_id']}.")
                         applied_adaptations.append(adaptation["agent_id"])
 
                         # Log adaptation details to meta-learning
@@ -1787,9 +1742,7 @@ async def initiate_evolution_cycle(
                         exc_info=True,
                     )
                     if prometheus_available:
-                        EVOLUTION_ERRORS.labels(
-                            error_type="adaptation_application_failure"
-                        ).inc()
+                        EVOLUTION_ERRORS.labels(error_type="adaptation_application_failure").inc()
 
             result["applied_adaptations"] = applied_adaptations
             result["success"] = len(applied_adaptations) > 0
@@ -1810,13 +1763,9 @@ async def initiate_evolution_cycle(
             result["status_reason"] = adaptations_result.get(
                 "reason", "Evolution cycle completed without adaptations."
             )
-            logger.info(
-                f"Evolution cycle {evolution_id} COMPLETED: {result['status_reason']}"
-            )
+            logger.info(f"Evolution cycle {evolution_id} COMPLETED: {result['status_reason']}")
         else:
-            result["error"] = (
-                f"Strategy returned unexpected status: {adaptations_result['status']}"
-            )
+            result["error"] = f"Strategy returned unexpected status: {adaptations_result['status']}"
             logger.warning(
                 f"Evolution cycle {evolution_id}: Strategy returned unexpected status: {adaptations_result['status']}"
             )

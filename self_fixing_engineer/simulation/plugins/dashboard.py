@@ -18,9 +18,7 @@ import asyncio  # Import asyncio for running async functions
 DASHBOARD_CORE_VERSION = "1.2.0"  # Introduce a core version constant
 
 # Ensure logging is always initialized at the very top.
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # Apply nest_asyncio for handling nested event loops in Streamlit
 try:
@@ -28,9 +26,7 @@ try:
 
     nest_asyncio.apply()
 except ImportError:
-    logging.warning(
-        "nest_asyncio not installed. Async operations may fail in some environments."
-    )
+    logging.warning("nest_asyncio not installed. Async operations may fail in some environments.")
 
 # Use python-dotenv to optionally load environment variables from a .env file
 try:
@@ -46,9 +42,7 @@ except ImportError:
 class Config:
     PLUGINS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
     CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
-    RESULTS_DIR = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "simulation_results"
-    )
+    RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "simulation_results")
 
 
 # Import PluginManager
@@ -109,9 +103,7 @@ try:
 
     STREAMLIT_AVAILABLE = True
 except ImportError:
-    logging.warning(
-        "Streamlit is not installed. Dashboard functionality will be unavailable."
-    )
+    logging.warning("Streamlit is not installed. Dashboard functionality will be unavailable.")
 
 # Advanced analytics (Plotly for richer charts)
 PLOTLY_AVAILABLE = False
@@ -188,19 +180,17 @@ def plugin_callback_handler(func: Callable):
             plugin_name = args[0]["plugin"]
         elif "plugin" in kwargs:
             plugin_name = kwargs["plugin"]
-        elif "self" in kwargs and hasattr(
-            kwargs["self"], "plugin_name"
-        ):  # For class methods
+        elif "self" in kwargs and hasattr(kwargs["self"], "plugin_name"):  # For class methods
             plugin_name = kwargs["self"].plugin_name
         elif hasattr(func, "__module__"):
-            plugin_name = func.__module__.split(".")[
-                0
-            ]  # Heuristic for module-based plugins
+            plugin_name = func.__module__.split(".")[0]  # Heuristic for module-based plugins
 
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            error_message = f"Error in plugin '{plugin_name}' (User: {user_context}, Role: {user_role}): {e}"
+            error_message = (
+                f"Error in plugin '{plugin_name}' (User: {user_context}, Role: {user_role}): {e}"
+            )
             logging.error(error_message, exc_info=True)
             if STREAMLIT_AVAILABLE:
                 st_dash.error(
@@ -226,9 +216,7 @@ def register_dashboard_panel(
         {
             "id": panel_id,
             "title": title,
-            "render_function": plugin_callback_handler(
-                render_function
-            ),  # Apply decorator
+            "render_function": plugin_callback_handler(render_function),  # Apply decorator
             "description": description,
             "roles": roles if roles is not None else [],
             "live_data_supported": live_data_supported,
@@ -309,8 +297,7 @@ def load_plugin_dashboard_panels_cached():
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest_data = json.load(f)
                     if manifest_data.get("name") in DANGEROUS_NAMES or any(
-                        dep in DANGEROUS_NAMES
-                        for dep in manifest_data.get("dependencies", [])
+                        dep in DANGEROUS_NAMES for dep in manifest_data.get("dependencies", [])
                     ):
                         logging.warning(
                             f"Manifest for {module_name} contains dangerous names. Skipping."
@@ -320,9 +307,7 @@ def load_plugin_dashboard_panels_cached():
             if hasattr(module, "register_my_dashboard_panels") and callable(
                 module.register_my_dashboard_panels
             ):
-                logging.info(
-                    f"Invoking register_my_dashboard_panels from plugin: {module_name}"
-                )
+                logging.info(f"Invoking register_my_dashboard_panels from plugin: {module_name}")
                 module.register_my_dashboard_panels(register_dashboard_panel)
             else:
                 logging.info(
@@ -339,9 +324,7 @@ def load_plugin_dashboard_panels_cached():
             roles = getattr(module, "ROLES", [])
 
             # Allow plugin to register its own locale keys
-            if hasattr(module, "register_locale_keys") and callable(
-                module.register_locale_keys
-            ):
+            if hasattr(module, "register_locale_keys") and callable(module.register_locale_keys):
                 module.register_locale_keys(LOCALES)
 
             if hasattr(module, "render_sidebar_component") and callable(
@@ -359,9 +342,7 @@ def load_plugin_dashboard_panels_cached():
                     }
                 )
                 logging.info(f"Registered sidebar component for plugin: {module_name}")
-            if hasattr(module, "render_main_component") and callable(
-                module.render_main_component
-            ):
+            if hasattr(module, "render_main_component") and callable(module.render_main_component):
                 _dashboard_main_components.append(
                     {
                         "plugin": module_name,
@@ -395,12 +376,9 @@ def load_plugin_dashboard_panels_cached():
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest_data = json.load(f)
                     if manifest_data.get("name") in DANGEROUS_NAMES or any(
-                        dep in DANGEROUS_NAMES
-                        for dep in manifest_data.get("dependencies", [])
+                        dep in DANGEROUS_NAMES for dep in manifest_data.get("dependencies", [])
                     ):
-                        logging.warning(
-                            f"Manifest for {item} contains dangerous names. Skipping."
-                        )
+                        logging.warning(f"Manifest for {item} contains dangerous names. Skipping.")
                         continue
             except json.JSONDecodeError as e:
                 logging.error(f"Error reading manifest for {item}: {e}")
@@ -409,9 +387,7 @@ def load_plugin_dashboard_panels_cached():
         # Check for API version compatibility based on manifest
         min_core_version = manifest_data.get("min_core_version", "0.0.0")
         max_core_version = manifest_data.get("max_core_version", "999.999.999")
-        if not is_version_compatible(
-            DASHBOARD_CORE_VERSION, min_core_version, max_core_version
-        ):
+        if not is_version_compatible(DASHBOARD_CORE_VERSION, min_core_version, max_core_version):
             logging.warning(
                 f"Plugin {item} (Core API v{min_core_version}-{max_core_version}) incompatible with Dashboard Core v{DASHBOARD_CORE_VERSION}. Skipping UI registration."
             )
@@ -430,9 +406,7 @@ def load_plugin_dashboard_panels_cached():
             if hasattr(module, "register_my_dashboard_panels") and callable(
                 module.register_my_dashboard_panels
             ):
-                logging.info(
-                    f"Invoking register_my_dashboard_panels from web_ui in plugin: {item}"
-                )
+                logging.info(f"Invoking register_my_dashboard_panels from web_ui in plugin: {item}")
                 module.register_my_dashboard_panels(register_dashboard_panel)
             title = (
                 getattr(module, "TITLE", item.capitalize())
@@ -443,9 +417,7 @@ def load_plugin_dashboard_panels_cached():
             roles = getattr(module, "ROLES", [])
 
             # Allow plugin to register its own locale keys
-            if hasattr(module, "register_locale_keys") and callable(
-                module.register_locale_keys
-            ):
+            if hasattr(module, "register_locale_keys") and callable(module.register_locale_keys):
                 module.register_locale_keys(LOCALES)
 
             if hasattr(module, "render_sidebar_component") and callable(
@@ -463,9 +435,7 @@ def load_plugin_dashboard_panels_cached():
                     }
                 )
                 logging.info(f"Registered sidebar component for plugin: {item}")
-            if hasattr(module, "render_main_component") and callable(
-                module.render_main_component
-            ):
+            if hasattr(module, "render_main_component") and callable(module.render_main_component):
                 _dashboard_main_components.append(
                     {
                         "plugin": item,
@@ -479,17 +449,13 @@ def load_plugin_dashboard_panels_cached():
                 )
                 logging.info(f"Registered main component for plugin: {item}")
         except Exception as e:
-            logging.error(
-                f"Error loading web_ui from plugin {item}: {e}", exc_info=True
-            )
+            logging.error(f"Error loading web_ui from plugin {item}: {e}", exc_info=True)
     sys.path = original_sys_path
     logging.info("Finished plugin dashboard panel and UI component loading.")
 
 
 # Helper for version comparison
-def is_version_compatible(
-    current_version: str, min_version: str, max_version: str
-) -> bool:
+def is_version_compatible(current_version: str, min_version: str, max_version: str) -> bool:
     """Checks if current_version is within [min_version, max_version] range. Adds fallback without `packaging`."""
     try:
         from packaging.version import parse as parse_version
@@ -547,9 +513,7 @@ def authenticate_user():
         if authentication_status:
             st_dash.session_state.authenticated = True
             st_dash.session_state.user = username
-            st_dash.session_state.user_role = config["credentials"]["usernames"][
-                username
-            ]["role"]
+            st_dash.session_state.user_role = config["credentials"]["usernames"][username]["role"]
             authenticator.logout("Logout", "sidebar")
         elif authentication_status is False:
             st_dash.error("Username/password is incorrect")
@@ -559,18 +523,13 @@ def authenticate_user():
             st_dash.stop()
     else:
         # DEV-ONLY: fallback to demo login
-        if (
-            "authenticated" not in st_dash.session_state
-            or not st_dash.session_state.authenticated
-        ):
+        if "authenticated" not in st_dash.session_state or not st_dash.session_state.authenticated:
             st_dash.session_state.authenticated = False
 
         if not st_dash.session_state.authenticated:
             st_dash.title("🔐 Please Log In")
             username = st_dash.text_input("Username", key="login_username")
-            password = st_dash.text_input(
-                "Password", type="password", key="login_password"
-            )
+            password = st_dash.text_input("Password", type="password", key="login_password")
             if st_dash.button("Login", key="login_button"):
                 if username == "admin" and password == "admin":
                     st_dash.session_state.authenticated = True
@@ -624,9 +583,7 @@ def get_live_data(job_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def listen_for_live_updates(
-    job_id: str, update_callback: Callable[[Dict[str, Any]], None]
-):
+def listen_for_live_updates(job_id: str, update_callback: Callable[[Dict[str, Any]], None]):
     if not REDIS_AVAILABLE or not redis_client:
         return
     pubsub = redis_client.pubsub()
@@ -674,9 +631,7 @@ def display_core_metrics(selected_result: Dict[str, Any]):
     with col3:
         ethics_compliant = selected_result.get("ethics", {}).get("compliant")
         if ethics_compliant is not None:
-            st_dash.metric(
-                "Ethical Compliance", "✅ Yes" if ethics_compliant else "❌ No"
-            )
+            st_dash.metric("Ethical Compliance", "✅ Yes" if ethics_compliant else "❌ No")
         else:
             st_dash.metric("Ethical Compliance", "N/A")
 
@@ -770,20 +725,14 @@ def display_plugin_gallery(plugin_manager: PluginManager, user_role: str):
                 f"**Description:** {manifest.get('description', 'No description provided.')}"
             )
             st_dash.markdown(f"**Entrypoint:** `{manifest.get('entrypoint', 'N/A')}`")
-            st_dash.markdown(
-                f"**Health Check Method:** `{manifest.get('health_check', 'N/A')}`"
-            )
+            st_dash.markdown(f"**Health Check Method:** `{manifest.get('health_check', 'N/A')}`")
             st_dash.markdown(f"**API Version:** `{manifest.get('api_version', 'N/A')}`")
 
             # Display core version compatibility
             min_core_ver = manifest.get("min_core_version", "N/A")
             max_core_ver = manifest.get("max_core_version", "N/A")
-            st_dash.markdown(
-                f"**Core API Compatibility:** `{min_core_ver}` - `{max_core_ver}`"
-            )
-            if not is_version_compatible(
-                DASHBOARD_CORE_VERSION, min_core_ver, max_core_ver
-            ):
+            st_dash.markdown(f"**Core API Compatibility:** `{min_core_ver}` - `{max_core_ver}`")
+            if not is_version_compatible(DASHBOARD_CORE_VERSION, min_core_ver, max_core_ver):
                 st_dash.warning(
                     f"Plugin might be incompatible with Dashboard Core v{DASHBOARD_CORE_VERSION}."
                 )
@@ -858,9 +807,7 @@ def display_plugin_gallery(plugin_manager: PluginManager, user_role: str):
             ):
                 try:
                     # Async health check needs to be run in a way compatible with Streamlit's event loop
-                    health_status = run_async_streamlit(
-                        plugin_manager.plugin_health(name)
-                    )
+                    health_status = run_async_streamlit(plugin_manager.plugin_health(name))
                     st_dash.json(health_status)
                     if health_status.get("status") != "ok" and user_role == "admin":
                         if st_dash.button(
@@ -986,9 +933,7 @@ def _generate_plugin_manifest_gui(plugin_type: str, plugin_name: str, plugins_di
         st_dash.error(
             f"Generated plugin name '{plugin_name}' is a dangerous name. Please choose another."
         )
-        logging.error(
-            f"Attempted to generate plugin with dangerous name: {plugin_name}"
-        )
+        logging.error(f"Attempted to generate plugin with dangerous name: {plugin_name}")
         return
 
     plugin_dir = os.path.join(plugins_dir, plugin_name)
@@ -1040,9 +985,7 @@ if __name__ == "__main__":
             logging.info(f"Generated demo Python plugin file: {plugin_filepath}")
         except Exception as e:
             st_dash.error(f"Failed to write demo plugin file {plugin_filepath}: {e}")
-            logging.exception(
-                f"Failed to write demo plugin file {plugin_filepath}: {e}"
-            )
+            logging.exception(f"Failed to write demo plugin file {plugin_filepath}: {e}")
     elif plugin_type == "wasm":
         wasm_filepath = os.path.join(plugin_dir, f"{plugin_name}.wasm")
         with open(wasm_filepath, "wb") as f:
@@ -1101,9 +1044,7 @@ def run_async_streamlit(coroutine):
         return loop.run_until_complete(coroutine)
 
 
-async def _run_health_checks_gui(
-    config: Dict[str, Any], test_all_plugins: bool = False
-):
+async def _run_health_checks_gui(config: Dict[str, Any], test_all_plugins: bool = False):
     """Runs health checks for configured backends and optionally all plugins (GUI version)."""
     st_dash.subheader("Backend Health Check Results")
     failed_checks = []
@@ -1120,16 +1061,14 @@ async def _run_health_checks_gui(
                         "gcs_bucket_name"
                     )
                 elif pubsub_backend_url.startswith("azure://"):
-                    mesh_kwargs["azure_connection_string"] = config[
-                        "notification_backend"
-                    ].get("azure_connection_string")
-                    mesh_kwargs["azure_container_name"] = config[
-                        "notification_backend"
-                    ].get("azure_container_name")
-                elif pubsub_backend_url.startswith("etcd://"):
-                    mesh_kwargs["etcd_host"] = config["notification_backend"].get(
-                        "etcd_host"
+                    mesh_kwargs["azure_connection_string"] = config["notification_backend"].get(
+                        "azure_connection_string"
                     )
+                    mesh_kwargs["azure_container_name"] = config["notification_backend"].get(
+                        "azure_container_name"
+                    )
+                elif pubsub_backend_url.startswith("etcd://"):
+                    mesh_kwargs["etcd_host"] = config["notification_backend"].get("etcd_host")
                     mesh_kwargs["etcd_port"] = int(
                         config["notification_backend"].get("etcd_port", 2379)
                     )
@@ -1161,9 +1100,9 @@ async def _run_health_checks_gui(
                 chk_manager_kwargs = {"backend": checkpoint_backend_type}
                 backend_config_key = f"{checkpoint_backend_type}_config"
                 if backend_config_key in config["checkpoint_backend"]:
-                    chk_manager_kwargs[backend_config_key] = config[
-                        "checkpoint_backend"
-                    ][backend_config_key]
+                    chk_manager_kwargs[backend_config_key] = config["checkpoint_backend"][
+                        backend_config_key
+                    ]
 
                 if checkpoint_backend_type == "fs":
                     fs_dir = config["checkpoint_backend"].get("dir", "./checkpoints")
@@ -1194,12 +1133,8 @@ async def _run_health_checks_gui(
                     )
                     failed_checks.append("Checkpoint")
             except Exception as e:
-                st_dash.error(
-                    f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}"
-                )
-                logging.error(
-                    f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}"
-                )
+                st_dash.error(f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}")
+                logging.error(f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}")
                 failed_checks.append("Checkpoint")
         else:
             st_dash.info("No Checkpoint backend configured.")
@@ -1210,9 +1145,7 @@ async def _run_health_checks_gui(
 
     if test_all_plugins and PLUGIN_MANAGER_AVAILABLE:
         st_dash.subheader("Plugin Health Check Results")
-        plugin_manager = (
-            st_dash.session_state.plugin_manager_instance
-        )  # Use the cached instance
+        plugin_manager = st_dash.session_state.plugin_manager_instance  # Use the cached instance
 
         # Reload plugins to ensure latest state after potential onboarding generations
         plugin_manager.load_all()
@@ -1243,9 +1176,7 @@ async def _run_health_checks_gui(
                         "traceback": traceback.format_exc(),
                     }
                     st_dash.error(f"Plugin '{name}' Health Check FAILED: {e}")
-                    logging.error(
-                        f"Plugin '{name}' Health Check FAILED: {e}", exc_info=True
-                    )
+                    logging.error(f"Plugin '{name}' Health Check FAILED: {e}", exc_info=True)
                     failed_checks.append(f"Plugin: {name}")
             else:
                 st_dash.info(
@@ -1257,18 +1188,14 @@ async def _run_health_checks_gui(
                 st_dash.json(plugin_health_results)
 
     if failed_checks:
-        st_dash.error(
-            f"Summary: The following checks failed: {', '.join(failed_checks)}"
-        )
+        st_dash.error(f"Summary: The following checks failed: {', '.join(failed_checks)}")
     else:
         st_dash.success("All configured health checks passed!")
 
 
 def display_onboarding_wizard():
     st_dash.header("🚀 Project Onboarding Wizard")
-    st_dash.markdown(
-        "Configure your project, set up backends, and generate starter files."
-    )
+    st_dash.markdown("Configure your project, set up backends, and generate starter files.")
 
     with st_dash.form("onboarding_form"):
         st_dash.subheader("1. Project Type")
@@ -1290,9 +1217,7 @@ def display_onboarding_wizard():
             help=t("plugin_types_tooltip"),
         )
         if not selected_plugin_types:
-            st_dash.warning(
-                "Please select at least one plugin type to generate a demo plugin."
-            )
+            st_dash.warning("Please select at least one plugin type to generate a demo plugin.")
 
         st_dash.subheader("3. Notification Backend (Pub/Sub)")
         pubsub_backend_options = ["local"]
@@ -1322,9 +1247,7 @@ def display_onboarding_wizard():
             "Choose your preferred notification backend:",
             options=pubsub_backend_options,
             index=(
-                pubsub_backend_options.index("redis")
-                if "redis" in pubsub_backend_options
-                else 0
+                pubsub_backend_options.index("redis") if "redis" in pubsub_backend_options else 0
             ),
             key="onboard_pubsub_backend",
             help=t("pubsub_backend_tooltip"),
@@ -1412,25 +1335,19 @@ def display_onboarding_wizard():
                 checkpoint_backend_options.extend(
                     [b for b in CheckpointManager._BACKENDS.keys() if b != "fs"]
                 )
-                checkpoint_backend_options = sorted(
-                    list(set(checkpoint_backend_options))
-                )
+                checkpoint_backend_options = sorted(list(set(checkpoint_backend_options)))
             except Exception:
                 # Fallback list if _BACKENDS is not directly accessible or fails
                 checkpoint_backend_options.extend(
                     ["s3", "redis", "postgres", "gcs", "azure", "etcd"]
                 )
-                checkpoint_backend_options = sorted(
-                    list(set(checkpoint_backend_options))
-                )
+                checkpoint_backend_options = sorted(list(set(checkpoint_backend_options)))
 
         checkpoint_backend = st_dash.selectbox(
             "Choose your preferred checkpoint backend:",
             options=checkpoint_backend_options,
             index=(
-                checkpoint_backend_options.index("fs")
-                if "fs" in checkpoint_backend_options
-                else 0
+                checkpoint_backend_options.index("fs") if "fs" in checkpoint_backend_options else 0
             ),
             key="onboard_checkpoint_backend",
             help=t("checkpoint_backend_tooltip"),
@@ -1473,9 +1390,7 @@ def display_onboarding_wizard():
                     help=t("pg_dsn_tooltip"),
                 )
             }
-            st_dash.info(
-                "Ensure your Postgres database has the 'checkpoints' table created."
-            )
+            st_dash.info("Ensure your Postgres database has the 'checkpoints' table created.")
         elif checkpoint_backend == "gcs":
             checkpoint_config["gcs_config"] = {
                 "bucket": st_dash.text_input(
@@ -1549,9 +1464,7 @@ def display_onboarding_wizard():
                     p_type, plugin_name, Config.PLUGINS_DIR
                 )  # Use Config.PLUGINS_DIR
 
-            st_dash.success(
-                "Onboarding complete! Configuration and demo plugins generated."
-            )
+            st_dash.success("Onboarding complete! Configuration and demo plugins generated.")
             st_dash.info("You can now run health checks or a demo job.")
             st_dash.session_state.onboarding_completed = True
             st_dash.session_state.generated_config_path = os.path.join(
@@ -1571,9 +1484,7 @@ def display_onboarding_wizard():
             help=t("run_all_health_checks_tooltip"),
         ):
             if "onboarding_config" in st_dash.session_state:
-                with st_dash.spinner(
-                    "Running health checks... This might take a moment."
-                ):
+                with st_dash.spinner("Running health checks... This might take a moment."):
                     run_async_streamlit(
                         _run_health_checks_gui(
                             st_dash.session_state.onboarding_config,
@@ -1659,9 +1570,7 @@ def t(key: str) -> str:
 
 def display_simulation_dashboard():
     # Set page config at the very top, before any st.* calls
-    st_dash.set_page_config(
-        page_title="Omnisapient Simulation Dashboard", layout="wide"
-    )
+    st_dash.set_page_config(page_title="Omnisapient Simulation Dashboard", layout="wide")
 
     if not STREAMLIT_AVAILABLE:
         st_dash.error(
@@ -1686,24 +1595,18 @@ def display_simulation_dashboard():
     user_role = st_dash.session_state.user_role
     user = st_dash.session_state.user
 
-    st_dash.title(
-        f"🔮 Omnisapient AI Simulation Analytics - {t('welcome_message')}, {user}"
-    )
+    st_dash.title(f"🔮 Omnisapient AI Simulation Analytics - {t('welcome_message')}, {user}")
 
     with st_dash.sidebar:
         st_dash.header(t("settings_header"))  # Use translated header
-        st_dash.info(
-            f"{t('current_role')}: **{user_role}**"
-        )  # Example of new translation key
+        st_dash.info(f"{t('current_role')}: **{user_role}**")  # Example of new translation key
         st_dash.info(f"{t('user_label')}: **{user}**")  # Example of new translation key
 
         # Language selector
         st_dash.session_state.lang = st_dash.selectbox(
             t("language_selector_label"),
             options=list(LOCALES.keys()),
-            format_func=lambda x: {"en": "English", "es": "Español"}[
-                x
-            ],  # Display names
+            format_func=lambda x: {"en": "English", "es": "Español"}[x],  # Display names
             key="language_selector",
             help=t("language_selector_tooltip"),
         )
@@ -1771,19 +1674,14 @@ def display_simulation_dashboard():
                     )
 
     # Initialize PluginManager instance and store in session state
-    if (
-        PLUGIN_MANAGER_AVAILABLE
-        and "plugin_manager_instance" not in st_dash.session_state
-    ):
+    if PLUGIN_MANAGER_AVAILABLE and "plugin_manager_instance" not in st_dash.session_state:
         st_dash.session_state.plugin_manager_instance = PluginManager(
             plugins_dir=Config.PLUGINS_DIR
         )
         st_dash.session_state.plugin_manager_instance.load_all()
         logging.info("PluginManager initialized and plugins loaded.")
     elif not PLUGIN_MANAGER_AVAILABLE:
-        st_dash.warning(
-            "PluginManager could not be loaded. Plugin Gallery will be unavailable."
-        )
+        st_dash.warning("PluginManager could not be loaded. Plugin Gallery will be unavailable.")
 
     # Create tabs for navigation, including dynamic plugin main components
     main_components = [
@@ -1814,9 +1712,9 @@ def display_simulation_dashboard():
                 list(
                     set(
                         [
-                            os.path.basename(
-                                r.get("test_file", f"unknown_session_{idx}")
-                            ).split("_tests")[0]
+                            os.path.basename(r.get("test_file", f"unknown_session_{idx}")).split(
+                                "_tests"
+                            )[0]
                             for idx, r in enumerate(results)
                         ]
                         if isinstance(results, list)
@@ -1838,9 +1736,7 @@ def display_simulation_dashboard():
                 filtered_results_by_session = [
                     r
                     for r in results
-                    if os.path.basename(r.get("test_file", "")).startswith(
-                        selected_session
-                    )
+                    if os.path.basename(r.get("test_file", "")).startswith(selected_session)
                 ]
 
             # Apply search filter
@@ -1857,20 +1753,16 @@ def display_simulation_dashboard():
                 filtered_results = filtered_results_by_session
 
             if not filtered_results:
-                if (
-                    not search_query
-                ):  # Only show this warning if no search query was entered
+                if not search_query:  # Only show this warning if no search query was entered
                     st_dash.warning(t("no_results_for_selected_session_warning"))
             else:
                 run_options = []
                 for r in filtered_results:
-                    filename_base = os.path.basename(
-                        r.get("_filepath", "no_file_path.json")
-                    )
+                    filename_base = os.path.basename(r.get("_filepath", "no_file_path.json"))
                     try:
-                        mtime = datetime.fromtimestamp(
-                            os.path.getmtime(r["_filepath"])
-                        ).strftime("%Y-%m-%d %H:%M:%S")
+                        mtime = datetime.fromtimestamp(os.path.getmtime(r["_filepath"])).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
                     except (KeyError, FileNotFoundError):
                         mtime = "N/A"
                     run_options.append(f"{filename_base} (Generated: {mtime})")
@@ -1893,9 +1785,7 @@ def display_simulation_dashboard():
                 )
                 st_dash.session_state.selected_run_index = selected_run_index
 
-                selected_result = (
-                    filtered_results[selected_run_index] if filtered_results else None
-                )
+                selected_result = filtered_results[selected_run_index] if filtered_results else None
 
                 live_job_id = selected_result.get("job_id") if selected_result else None
 
@@ -1924,9 +1814,7 @@ def display_simulation_dashboard():
                     else:
                         st_dash.warning(t("live_updates_paused_warning"))
                 else:
-                    st_dash.info(
-                        t("live_data_not_available_info")
-                    )  # New translation key
+                    st_dash.info(t("live_data_not_available_info"))  # New translation key
 
                 live_data_placeholder = st_dash.empty()
 
@@ -1943,9 +1831,7 @@ def display_simulation_dashboard():
                                 selected_result.update(live_data)
 
                         display_core_metrics(selected_result)
-                        st_dash.header(
-                            t("self_fixing_engineer_visualization_header")
-                        )  # Translated
+                        st_dash.header(t("self_fixing_engineer_visualization_header"))  # Translated
                         if WORKFLOW_VIZ_AVAILABLE:
                             if st_dash.checkbox(
                                 t("show_workflow_flowchart_label"),
@@ -1959,13 +1845,9 @@ def display_simulation_dashboard():
                                     summary_callback=_display_summary_and_details,
                                 )
                             else:
-                                st_dash.info(
-                                    t("enable_workflow_flowchart_info")
-                                )  # Translated
+                                st_dash.info(t("enable_workflow_flowchart_info"))  # Translated
                         else:
-                            st_dash.info(
-                                t("workflow_viz_unavailable_info")
-                            )  # Translated
+                            st_dash.info(t("workflow_viz_unavailable_info"))  # Translated
 
                         st_dash.markdown("---")
                         st_dash.subheader(t("run_details_subheader"))  # Translated
@@ -1983,11 +1865,7 @@ def display_simulation_dashboard():
                             runs = selected_result.get("runs", [])
                             if runs:
                                 df_data = {
-                                    "Run": [
-                                        r.get("run")
-                                        for r in runs
-                                        if isinstance(r, dict)
-                                    ],
+                                    "Run": [r.get("run") for r in runs if isinstance(r, dict)],
                                     "CPU avg (%)": [
                                         r.get("metrics", {}).get("cpu_percent_avg", 0)
                                         for r in runs
@@ -2004,9 +1882,7 @@ def display_simulation_dashboard():
                                         if isinstance(r, dict) and "metrics" in r
                                     ],
                                     "Return Code": [
-                                        r.get("returncode")
-                                        for r in runs
-                                        if isinstance(r, dict)
+                                        r.get("returncode") for r in runs if isinstance(r, dict)
                                     ],
                                 }
                                 # Create basic Plotly graph objects figure
@@ -2034,24 +1910,18 @@ def display_simulation_dashboard():
                                 )
                                 st_dash.plotly_chart(fig, use_container_width=True)
                             else:
-                                st_dash.info(
-                                    t("no_run_data_for_plotly_info")
-                                )  # Translated
+                                st_dash.info(t("no_run_data_for_plotly_info"))  # Translated
                         else:
                             # Fallback to Streamlit's built-in charts
                             runs = selected_result.get("runs", [])
-                            if all(
-                                isinstance(r, dict) and "metrics" in r for r in runs
-                            ):
+                            if all(isinstance(r, dict) and "metrics" in r for r in runs):
                                 st_dash.bar_chart(
                                     {
                                         "CPU Usage (%)": [
-                                            r["metrics"].get("cpu_percent_avg", 0)
-                                            for r in runs
+                                            r["metrics"].get("cpu_percent_avg", 0) for r in runs
                                         ],
                                         "Max Memory (MB)": [
-                                            r["metrics"].get("memory_rss_max_mb", 0)
-                                            for r in runs
+                                            r["metrics"].get("memory_rss_max_mb", 0) for r in runs
                                         ],
                                     }
                                 )
@@ -2064,15 +1934,11 @@ def display_simulation_dashboard():
                         if "flaky_plot" in selected_result and os.path.exists(
                             selected_result["flaky_plot"]
                         ):
-                            st_dash.subheader(
-                                t("test_flakiness_trend_subheader")
-                            )  # Translated
+                            st_dash.subheader(t("test_flakiness_trend_subheader"))  # Translated
                             st_dash.image(selected_result["flaky_plot"])
 
                         if selected_result.get("agentic"):
-                            st_dash.subheader(
-                                t("agentic_swarm_analysis_subheader")
-                            )  # Translated
+                            st_dash.subheader(t("agentic_swarm_analysis_subheader"))  # Translated
                             for agent_key in [
                                 "planner",
                                 "fault",
@@ -2100,14 +1966,10 @@ def display_simulation_dashboard():
                                     f"**{t('ai_healer_suggestion_label')}**\n{selected_result['healer']['llm_suggestion']}"
                                 )  # Translated
 
-                        st_dash.subheader(
-                            t("custom_plugin_panels_subheader")
-                        )  # Translated
+                        st_dash.subheader(t("custom_plugin_panels_subheader"))  # Translated
                         available_panels = get_registered_dashboard_panels()
                         if not available_panels:
-                            st_dash.info(
-                                t("no_custom_plugin_panels_registered_info")
-                            )  # Translated
+                            st_dash.info(t("no_custom_plugin_panels_registered_info"))  # Translated
                         for panel_info in available_panels:
                             if (
                                 panel_info["roles"]
@@ -2122,18 +1984,14 @@ def display_simulation_dashboard():
                                 f"⚙️ {panel_info['title']}",
                                 expanded=False,
                                 help=(
-                                    panel_info["description"]
-                                    if panel_info["description"]
-                                    else None
+                                    panel_info["description"] if panel_info["description"] else None
                                 ),
                             ):
                                 if panel_info["description"]:
                                     st_dash.markdown(f"*{panel_info['description']}*")
                                 try:
                                     # The decorator `plugin_callback_handler` is already applied during registration
-                                    panel_info["render_function"](
-                                        st_dash, selected_result
-                                    )
+                                    panel_info["render_function"](st_dash, selected_result)
                                 except Exception as e:
                                     # This outer catch is for extreme robustness, but the decorator should handle most
                                     st_dash.error(
@@ -2142,14 +2000,10 @@ def display_simulation_dashboard():
                                     st_dash.exception(e)
 
                         st_dash.markdown("---")
-                        st_dash.subheader(
-                            t("raw_simulation_result_data_subheader")
-                        )  # Translated
+                        st_dash.subheader(t("raw_simulation_result_data_subheader"))  # Translated
                         st_dash.json(selected_result, expanded=False)
 
-                        st_dash.subheader(
-                            t("custom_report_generation_subheader")
-                        )  # Translated
+                        st_dash.subheader(t("custom_report_generation_subheader"))  # Translated
                         with st_dash.form("custom_report_form"):
                             report_metrics = st_dash.multiselect(
                                 t("select_metrics_for_report_label"),  # Translated
@@ -2197,14 +2051,14 @@ def display_simulation_dashboard():
                             st_dash.success(
                                 f"{t('generated_report_success_message')} {viz_type} {t('for_metrics')} {', '.join(report_metrics)} {t('over_last')} {time_range} {t('days')}."
                             )  # Translated message components
-                            st_dash.info(
-                                t("actual_report_generation_info")
-                            )  # Translated
+                            st_dash.info(t("actual_report_generation_info"))  # Translated
 
                         st_dash.subheader(t("export_options_subheader"))  # Translated
                         col_export1, col_export2, col_export3 = st_dash.columns(3)
                         json_export_str = json.dumps(selected_result, indent=2)
-                        json_filename = f"simulation_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                        json_filename = (
+                            f"simulation_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                        )
                         col_export1.download_button(
                             label=t("download_raw_json_button"),  # Translated
                             data=json_export_str,
@@ -2249,7 +2103,9 @@ def display_simulation_dashboard():
                             "</body>\n"
                             "</html>"
                         )
-                        html_filename = f"simulation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+                        html_filename = (
+                            f"simulation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+                        )
                         col_export2.download_button(
                             label=t("download_html_report_button"),  # Translated
                             data=html_report_content,
@@ -2258,9 +2114,7 @@ def display_simulation_dashboard():
                             key="download_html_btn",
                             help=t("download_html_tooltip"),
                         )
-                        csv_content = (
-                            "Run,ReturnCode,DurationSeconds,AvgCPUPercent,MaxMemoryMB\n"
-                        )
+                        csv_content = "Run,ReturnCode,DurationSeconds,AvgCPUPercent,MaxMemoryMB\n"
                         for run in selected_result.get("runs", []):
                             metrics = run.get("metrics", {})
                             # Harden CSV formatting to handle non-numeric values
@@ -2268,23 +2122,17 @@ def display_simulation_dashboard():
                             returncode_val = run.get("returncode", "N/A")
                             duration_val = (
                                 f"{metrics.get('duration_seconds', 'N/A'):.2f}"
-                                if isinstance(
-                                    metrics.get("duration_seconds"), (int, float)
-                                )
+                                if isinstance(metrics.get("duration_seconds"), (int, float))
                                 else "N/A"
                             )
                             cpu_val = (
                                 f"{metrics.get('cpu_percent_avg', 'N/A'):.2f}"
-                                if isinstance(
-                                    metrics.get("cpu_percent_avg"), (int, float)
-                                )
+                                if isinstance(metrics.get("cpu_percent_avg"), (int, float))
                                 else "N/A"
                             )
                             mem_val = (
                                 f"{metrics.get('memory_rss_max_mb', 'N/A'):.2f}"
-                                if isinstance(
-                                    metrics.get("memory_rss_max_mb"), (int, float)
-                                )
+                                if isinstance(metrics.get("memory_rss_max_mb"), (int, float))
                                 else "N/A"
                             )
                             csv_content += (
@@ -2294,7 +2142,9 @@ def display_simulation_dashboard():
                                 f"{cpu_val},"
                                 f"{mem_val}\n"
                             )
-                        csv_filename = f"simulation_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        csv_filename = (
+                            f"simulation_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        )
                         col_export3.download_button(
                             label=t("download_run_metrics_csv_button"),  # Translated
                             data=csv_content,
@@ -2307,13 +2157,9 @@ def display_simulation_dashboard():
         if PLUGIN_MANAGER_AVAILABLE:
             # Pass the initialized plugin_manager_instance from session state
             if "plugin_manager_instance" in st_dash.session_state:
-                display_plugin_gallery(
-                    st_dash.session_state.plugin_manager_instance, user_role
-                )
+                display_plugin_gallery(st_dash.session_state.plugin_manager_instance, user_role)
             else:
-                st_dash.warning(
-                    t("plugin_manager_not_initialized_warning")
-                )  # Translated
+                st_dash.warning(t("plugin_manager_not_initialized_warning"))  # Translated
         else:
             st_dash.error(t("plugin_gallery_unavailable_error"))  # Translated
 
@@ -2331,9 +2177,7 @@ def display_simulation_dashboard():
                 comp["func"](st_dash)
             except Exception as e:
                 # This outer catch is for extreme robustness, but the decorator should handle most
-                st_dash.error(
-                    f"Error rendering main component for {comp['plugin']}: {e}"
-                )
+                st_dash.error(f"Error rendering main component for {comp['plugin']}: {e}")
                 st_dash.exception(e)
         base_tab_index += 1
 

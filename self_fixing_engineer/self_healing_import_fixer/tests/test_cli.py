@@ -217,9 +217,7 @@ def test_heal_command_in_prod_requires_interactive(
     with patch(
         "sys.argv",
         ["self_healing_import_fixer.cli", "heal", test_project_setup["project_root"]],
-    ), patch(
-        "self_healing_import_fixer.cli.heal_entrypoint", create=True
-    ) as mock_heal, patch(
+    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True) as mock_heal, patch(
         "self_healing_import_fixer.cli.PRODUCTION_MODE", True
     ), patch(
         "self_healing_import_fixer.cli.load_fixer"
@@ -277,9 +275,7 @@ def test_heal_command_in_prod_forbids_yes_flag(
             "-i",
             "-y",
         ],
-    ), patch(
-        "self_healing_import_fixer.cli.heal_entrypoint", create=True
-    ) as mock_heal, patch(
+    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True) as mock_heal, patch(
         "self_healing_import_fixer.cli.PRODUCTION_MODE", True
     ), patch(
         "self_healing_import_fixer.cli.load_fixer"
@@ -389,9 +385,7 @@ async def test_main_loads_plugins_from_config(mock_plugin_manager, test_project_
         os.getcwd(),
     ]
 
-    with patch(
-        "self_healing_import_fixer.cli.load_config", return_value=config_data
-    ), patch(
+    with patch("self_healing_import_fixer.cli.load_config", return_value=config_data), patch(
         "sys.argv",
         [
             "self_healing_import_fixer.cli",
@@ -454,9 +448,7 @@ def test_selftest_command_runs_diagnostics(mock_plugin_manager, mock_core_depend
         assert "selftest_complete" in selftest_calls
 
 
-def test_cli_execution_failure_logs_and_aborts(
-    mock_plugin_manager, mock_core_dependencies
-):
+def test_cli_execution_failure_logs_and_aborts(mock_plugin_manager, mock_core_dependencies):
     """
     Tests that a generic unhandled exception during command execution is caught, logged,
     and results in an abort.

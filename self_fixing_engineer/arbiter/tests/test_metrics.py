@@ -239,9 +239,7 @@ def test_register_dynamic_metric(metric_type, kwargs):
     name = f"dynamic_{metric_type.__name__.lower()}"
     doc = f"Dynamic {metric_type.__name__}"
     labels = ("dyn_label",)
-    metric = register_dynamic_metric(
-        metric_type, name, doc, labelnames=labels, **kwargs
-    )
+    metric = register_dynamic_metric(metric_type, name, doc, labelnames=labels, **kwargs)
     assert isinstance(metric, metric_type)
     assert metric._name == f"arbiter_{name}"
     assert metric._documentation == doc

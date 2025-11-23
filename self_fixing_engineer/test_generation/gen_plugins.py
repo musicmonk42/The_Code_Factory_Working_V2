@@ -63,9 +63,7 @@ def _sanitize_identifier(name: str) -> str:
     return s or "func"
 
 
-def _limit_tests_per_function(
-    blocks: Dict[str, List[str]], max_per_fn: int
-) -> List[str]:
+def _limit_tests_per_function(blocks: Dict[str, List[str]], max_per_fn: int) -> List[str]:
     """
     Limits the number of generated tests per function by selecting a deterministic subset of blocks.
 
@@ -88,9 +86,7 @@ def _limit_tests_per_function(
             continue
 
         # Use a stable hash to ensure deterministic selection across runs
-        ranked = sorted(
-            cases, key=lambda s: hashlib.sha256(f"{fname}::{s}".encode()).hexdigest()
-        )
+        ranked = sorted(cases, key=lambda s: hashlib.sha256(f"{fname}::{s}".encode()).hexdigest())
         out.extend(ranked[:max_per_fn])
     return out
 
@@ -170,9 +166,7 @@ class PythonTestGenerator(BaseTestGenerator):
             needs_mocking = any(dep in code for dep in dependencies_to_mock)
 
             for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef) and isinstance(
-                    parent.get(node), ast.Module
-                ):
+                if isinstance(node, ast.FunctionDef) and isinstance(parent.get(node), ast.Module):
                     fname = node.name
                     sanitized_fname = _sanitize_identifier(fname)
 
@@ -199,9 +193,7 @@ class PythonTestGenerator(BaseTestGenerator):
                         )
 
                         if node.args.args:
-                            body.append(
-                                f"    def test_{sanitized_fname}_edge_case(self):"
-                            )
+                            body.append(f"    def test_{sanitized_fname}_edge_case(self):")
                             body.append("        with self.assertRaises(TypeError):")
                             body.append(
                                 f"            {fname}({', '.join(['None'] * len(node.args.args))})"
@@ -212,35 +204,23 @@ class PythonTestGenerator(BaseTestGenerator):
                                 f"Generating numeric boundary tests for {fname}",
                                 extra={"code_hash": code_hash},
                             )
-                            body.append(
-                                f"    def test_{sanitized_fname}_boundary_numeric(self):"
-                            )
+                            body.append(f"    def test_{sanitized_fname}_boundary_numeric(self):")
                             body.append(f"        self.assertIsNotNone({fname}(0))")
                             body.append(f"        self.assertIsNotNone({fname}(1))")
                             body.append(f"        self.assertIsNotNone({fname}(-1))")
-                            body.append(
-                                f"        self.assertIsNotNone({fname}(10000000))"
-                            )
+                            body.append(f"        self.assertIsNotNone({fname}(10000000))")
                         if any(a.arg == "text" for a in node.args.args):
                             logger.info(
                                 f"Generating string boundary tests for {fname}",
                                 extra={"code_hash": code_hash},
                             )
-                            body.append(
-                                f"    def test_{sanitized_fname}_boundary_string(self):"
-                            )
+                            body.append(f"    def test_{sanitized_fname}_boundary_string(self):")
                             body.append(f"        self.assertIsNotNone({fname}(''))")
-                            body.append(
-                                f"        self.assertIsNotNone({fname}(' ' * 100))"
-                            )
-                            body.append(
-                                f"        self.assertIsNotNone({fname}('!@#$%^&*()'))"
-                            )
+                            body.append(f"        self.assertIsNotNone({fname}(' ' * 100))")
+                            body.append(f"        self.assertIsNotNone({fname}('!@#$%^&*()'))")
 
                         if needs_mocking:
-                            body.append(
-                                f"    def test_{sanitized_fname}_mocked_api(self):"
-                            )
+                            body.append(f"    def test_{sanitized_fname}_mocked_api(self):")
                             body.append(
                                 "        with patch('requests.get', return_value=MockResponse()):"
                             )
@@ -317,15 +297,16 @@ class PythonTestGenerator(BaseTestGenerator):
 
         pytest_options = config.get("pytest_options", {})
         if pytest_options.get("enable_coverage"):
-            header_template += f"\n# Run with: pytest --cov={config.get('module_path')} --cov-report=xml"
+            header_template += (
+                f"\n# Run with: pytest --cov={config.get('module_path')} --cov-report=xml"
+            )
 
         needs_mocking = any(
             dep in code for dep in config.get("dependencies_to_mock", ["requests.get"])
         )
         if (
             needs_mocking
-            and config.get("test_framework", DEFAULT_PYTHON_TEST_FRAMEWORK)
-            == "unittest"
+            and config.get("test_framework", DEFAULT_PYTHON_TEST_FRAMEWORK) == "unittest"
         ):
             header_template += "\nfrom unittest.mock import patch"
 
@@ -336,9 +317,7 @@ class PythonTestGenerator(BaseTestGenerator):
 
         module_path = config.get("module_path")
         if not module_path:
-            return [
-                "# Test generation requires 'module_path' in config to import functions."
-            ]
+            return ["# Test generation requires 'module_path' in config to import functions."]
 
         header = f"{header_template}\nfrom {module_path} import {', '.join(function_names)}\n"
 
@@ -369,9 +348,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
             try:
                 from esprima import parseScript
             except ImportError:
-                logger.warning(
-                    "esprima library not found. Skipping JavaScript test generation."
-                )
+                logger.warning("esprima library not found. Skipping JavaScript test generation.")
                 return {}
 
             try:
@@ -384,9 +361,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
                     )
                 tree = self._parsed_trees[code]
 
-                dependencies_to_mock = config.get(
-                    "dependencies_to_mock", ["fetch", "axios"]
-                )
+                dependencies_to_mock = config.get("dependencies_to_mock", ["fetch", "axios"])
 
                 for node in getattr(tree, "body", []):
                     if getattr(node, "type", "") == "FunctionDeclaration":
@@ -461,10 +436,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
                                     f"}});"
                                 )
 
-                        if (
-                            len(node.params) > 0
-                            and getattr(node.params[0], "name", "") == "num"
-                        ):
+                        if len(node.params) > 0 and getattr(node.params[0], "name", "") == "num":
                             logger.info(
                                 f"Generating numeric boundary tests for {fname}",
                                 extra={"code_hash": code_hash},
@@ -477,10 +449,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
                                 f"  }});\n"
                                 f"}});"
                             )
-                        if (
-                            len(node.params) > 0
-                            and getattr(node.params[0], "name", "") == "text"
-                        ):
+                        if len(node.params) > 0 and getattr(node.params[0], "name", "") == "text":
                             logger.info(
                                 f"Generating string boundary tests for {fname}",
                                 extra={"code_hash": code_hash},
@@ -496,9 +465,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
                             )
                     elif getattr(node, "type", "") == "VariableDeclaration":
                         for decl in node.declarations:
-                            if getattr(
-                                decl, "type", ""
-                            ) == "VariableDeclarator" and getattr(
+                            if getattr(decl, "type", "") == "VariableDeclarator" and getattr(
                                 getattr(decl, "init", None), "type", ""
                             ) in (
                                 "FunctionExpression",
@@ -547,9 +514,7 @@ class JavaScriptTestGenerator(BaseTestGenerator):
             if module_system == "esm":
                 header += 'import { describe, test, expect } from "@jest/globals";\n'
             else:
-                header += (
-                    'const { describe, test, expect } = require("@jest/globals");\n'
-                )
+                header += 'const { describe, test, expect } = require("@jest/globals");\n'
         else:  # mocha
             if module_system == "esm":
                 header += 'import { strict as assert } from "node:assert";\nimport { describe, it } from "mocha";\n'
@@ -558,18 +523,12 @@ class JavaScriptTestGenerator(BaseTestGenerator):
 
         module_path = config.get("module_path")
         if not module_path:
-            return [
-                "// Test generation requires 'module_path' in config to import functions."
-            ]
+            return ["// Test generation requires 'module_path' in config to import functions."]
 
         if module_system == "esm":
-            header += (
-                f'import {{ {", ".join(function_names)} }} from "{module_path}";\n'
-            )
+            header += f'import {{ {", ".join(function_names)} }} from "{module_path}";\n'
         else:
-            header += (
-                f'const {{ {", ".join(function_names)} }} = require("{module_path}");\n'
-            )
+            header += f'const {{ {", ".join(function_names)} }} = require("{module_path}");\n'
 
         file_body = _assemble_file(header, limited_blocks)
 
@@ -695,11 +654,7 @@ def generate_tests(
 
     framework = config.get(
         "test_framework",
-        (
-            DEFAULT_PYTHON_TEST_FRAMEWORK
-            if language == "python"
-            else DEFAULT_JS_TEST_FRAMEWORK
-        ),
+        (DEFAULT_PYTHON_TEST_FRAMEWORK if language == "python" else DEFAULT_JS_TEST_FRAMEWORK),
     )
     if framework not in SUPPORTED_FRAMEWORKS.get(language, frozenset()):
         return {
@@ -806,13 +761,9 @@ def generate_tests(
             internal_tests = gen.generate(code, config) if gen else []
             tests.extend(internal_tests)
         except ValueError as e:
-            details = (
-                e.args[1] if len(e.args) > 1 and isinstance(e.args[1], dict) else {}
-            )
+            details = e.args[1] if len(e.args) > 1 and isinstance(e.args[1], dict) else {}
             error_reason = f"Internal generator error: {e.args[0]}"
-            logger.error(
-                error_reason, extra={"code_hash": code_hash, "details": details}
-            )
+            logger.error(error_reason, extra={"code_hash": code_hash, "details": details})
             return {
                 "status": "error",
                 "tests": [],
@@ -832,9 +783,7 @@ def generate_tests(
                 "metrics": {"generation_time": time.time() - start},
             }
 
-    valid_tests = [
-        t for t in tests if t.strip() and not t.strip().startswith(("//", "#"))
-    ]
+    valid_tests = [t for t in tests if t.strip() and not t.strip().startswith(("//", "#"))]
     status = "success" if valid_tests else "error"
     if not valid_tests:
         error_reason = error_reason or "No valid tests were generated."

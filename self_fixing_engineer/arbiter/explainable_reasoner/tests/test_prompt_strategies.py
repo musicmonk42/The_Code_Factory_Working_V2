@@ -59,9 +59,7 @@ def mock_dependencies():
         mock_tracer = MagicMock()
         mock_span = MagicMock()
         mock_span.set_attribute = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
         mock_tracer.start_as_current_span.return_value.__exit__.return_value = None
         mock_trace.get_tracer.return_value = mock_tracer
 
@@ -172,14 +170,10 @@ async def test_strategy_prompt_generation(
             data = json.loads(explain_prompt)
             explain_prompt = json.dumps(data)
         except json.JSONDecodeError:
-            pytest.fail(
-                "StructuredPromptStrategy did not produce valid JSON for explanation."
-            )
+            pytest.fail("StructuredPromptStrategy did not produce valid JSON for explanation.")
 
     for expected_text in expected_explain_contains:
-        assert (
-            expected_text in explain_prompt
-        ), f"Expected '{expected_text}' in explanation prompt"
+        assert expected_text in explain_prompt, f"Expected '{expected_text}' in explanation prompt"
     assert "test goal_sanitized" in explain_prompt
 
     # Test reasoning prompt
@@ -192,14 +186,10 @@ async def test_strategy_prompt_generation(
             data = json.loads(reason_prompt)
             reason_prompt = json.dumps(data)
         except json.JSONDecodeError:
-            pytest.fail(
-                "StructuredPromptStrategy did not produce valid JSON for reasoning."
-            )
+            pytest.fail("StructuredPromptStrategy did not produce valid JSON for reasoning.")
 
     for expected_text in expected_reason_contains:
-        assert (
-            expected_text in reason_prompt
-        ), f"Expected '{expected_text}' in reasoning prompt"
+        assert expected_text in reason_prompt, f"Expected '{expected_text}' in reasoning prompt"
     assert "test goal_sanitized" in reason_prompt
 
     # Verify metrics were created (but may not be called in all implementations)
@@ -208,9 +198,7 @@ async def test_strategy_prompt_generation(
 
 
 @pytest.mark.asyncio
-async def test_strategy_multimodal_context(
-    mock_logger, dummy_context, dummy_multimodal
-):
+async def test_strategy_multimodal_context(mock_logger, dummy_context, dummy_multimodal):
     strategy = DefaultPromptStrategy(mock_logger)
     dummy_context["image_data"] = dummy_multimodal
 
@@ -266,9 +254,7 @@ def test_factory_get_with_env_override(clean_factory, monkeypatch, mock_logger):
 
 
 def test_factory_invalid_strategy(clean_factory, mock_logger):
-    with pytest.raises(
-        ValueError, match="No prompt strategy registered with name: 'invalid'"
-    ):
+    with pytest.raises(ValueError, match="No prompt strategy registered with name: 'invalid'"):
         clean_factory.get_strategy("invalid", mock_logger)
 
 
@@ -281,9 +267,7 @@ def test_factory_register_non_subclass(clean_factory):
     class NonStrategy:
         pass
 
-    with pytest.raises(
-        TypeError, match="Class NonStrategy must inherit from PromptStrategy"
-    ):
+    with pytest.raises(TypeError, match="Class NonStrategy must inherit from PromptStrategy"):
         clean_factory.register_strategy("invalid", NonStrategy)
 
 
@@ -328,9 +312,7 @@ async def test_structured_strategy_json_output(mock_logger, dummy_context):
 
 
 @pytest.mark.asyncio
-async def test_structured_strategy_with_multimodal(
-    mock_logger, dummy_context, dummy_multimodal
-):
+async def test_structured_strategy_with_multimodal(mock_logger, dummy_context, dummy_multimodal):
     strategy = StructuredPromptStrategy(mock_logger)
     dummy_context["image"] = dummy_multimodal
 

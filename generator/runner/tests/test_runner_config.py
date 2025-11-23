@@ -66,15 +66,11 @@ api_key: sk-abc123
         self.patch_hvac.start()
 
         self.mock_deepdiff = MagicMock()
-        self.patch_deepdiff = patch(
-            "runner.runner_config.DeepDiff", new=self.mock_deepdiff
-        )
+        self.patch_deepdiff = patch("runner.runner_config.DeepDiff", new=self.mock_deepdiff)
         self.patch_deepdiff.start()
 
         self.mock_watchfiles = MagicMock()
-        self.patch_watchfiles = patch(
-            "runner.runner_config.watchfiles", new=self.mock_watchfiles
-        )
+        self.patch_watchfiles = patch("runner.runner_config.watchfiles", new=self.mock_watchfiles)
         self.patch_watchfiles.start()
 
         # --- Correct aiohttp ClientSession mock with async context managers ---
@@ -267,9 +263,7 @@ instance_id: test-remote-loaded
         await watcher.fetch_remote("http://remote/config")
 
         # FIX: Assert against the correct mock instance
-        self.mock_aiohttp_session_cls.return_value.get.assert_called_with(
-            "http://remote/config"
-        )
+        self.mock_aiohttp_session_cls.return_value.get.assert_called_with("http://remote/config")
         # Check that the config was actually updated
         self.assertEqual(watcher.current_config.backend, "local")
 

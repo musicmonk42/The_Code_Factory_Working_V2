@@ -120,9 +120,7 @@ class TestCacheManager:
         config.host = "localhost"
         config.port = 6379
 
-        with patch(
-            "arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis"
-        ) as mock_redis:
+        with patch("arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis") as mock_redis:
             mock_redis_instance = AsyncMock()
             mock_redis.return_value = mock_redis_instance
             mock_redis_instance.ping.side_effect = Exception("Connection failed")
@@ -256,9 +254,7 @@ class TestMultiModalPlugin:
     @pytest.fixture
     async def plugin(self, base_config):
         """Creates and initializes a MultiModalPlugin instance."""
-        with patch(
-            "arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor"
-        ) as mock_get:
+        with patch("arbiter.plugins.multi_modal_plugin.PluginRegistry.get_processor") as mock_get:
             mock_processor = AsyncMock()
             mock_processor.process.return_value = ProcessingResult(
                 success=True,

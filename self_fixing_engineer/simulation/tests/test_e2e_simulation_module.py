@@ -203,9 +203,7 @@ def create_mock_core_functions():
                     "enabled": True,
                 }
             ],
-            "notifications": {
-                "slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"
-            },
+            "notifications": {"slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"},
         }
 
     if not hasattr(core, "load_rbac_policy"):

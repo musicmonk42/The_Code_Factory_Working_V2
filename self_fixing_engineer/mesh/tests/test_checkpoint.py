@@ -235,9 +235,7 @@ class TestSecurity:
 
         # Rotate keys (add new key, keep old)
         original_keys = os.environ["CHECKPOINT_ENCRYPTION_KEYS"]
-        os.environ["CHECKPOINT_ENCRYPTION_KEYS"] = ",".join(
-            [TEST_KEYS[2]] + TEST_KEYS[:1]
-        )
+        os.environ["CHECKPOINT_ENCRYPTION_KEYS"] = ",".join([TEST_KEYS[2]] + TEST_KEYS[:1])
 
         # Create a new manager instance to pick up the new keys
         from mesh.checkpoint.checkpoint_manager import CheckpointManager
@@ -274,9 +272,7 @@ class TestSecurity:
 
         with patch.object(checkpoint_manager, "_write_to_dlq", side_effect=capture_dlq):
             # Force an error during save to trigger the DLQ write
-            with patch.object(
-                checkpoint_manager, "_local_save", side_effect=Exception("Test")
-            ):
+            with patch.object(checkpoint_manager, "_local_save", side_effect=Exception("Test")):
                 try:
                     await checkpoint_manager.save("scrub_test", sensitive_state)
                 except:
@@ -321,9 +317,7 @@ class TestReliability:
         assert call_count == 1
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(
-        reason="Circuit breaker integration needs to be added to save/load methods"
-    )
+    @pytest.mark.skip(reason="Circuit breaker integration needs to be added to save/load methods")
     async def test_circuit_breaker(self, checkpoint_manager):
         """Test circuit breaker pattern - needs integration with save/load methods."""
         # To implement: Wrap save/load operations with circuit breaker checks

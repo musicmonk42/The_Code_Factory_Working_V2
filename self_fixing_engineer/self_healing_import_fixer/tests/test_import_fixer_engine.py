@@ -87,14 +87,10 @@ def install_core_stubs():
         scrub_secrets=lambda x: x,
     )
     fake_core_audit = types.SimpleNamespace(
-        audit_logger=types.SimpleNamespace(
-            log_event=lambda *a, **k: print(f"[AUDIT_LOG] {a}, {k}")
-        )
+        audit_logger=types.SimpleNamespace(log_event=lambda *a, **k: print(f"[AUDIT_LOG] {a}, {k}"))
     )
     fake_core_secrets = types.SimpleNamespace(
-        SECRETS_MANAGER=types.SimpleNamespace(
-            get_secret=lambda key, required=False: "dummy_secret"
-        )
+        SECRETS_MANAGER=types.SimpleNamespace(get_secret=lambda key, required=False: "dummy_secret")
     )
 
     sys.modules["core_utils"] = fake_core_utils
@@ -105,9 +101,7 @@ def install_core_stubs():
 # -----------------------------
 # Module import helpers
 # -----------------------------
-def _import_by_candidates(
-    name_candidates: List[str], file_candidates: List[Path]
-) -> Any:
+def _import_by_candidates(name_candidates: List[str], file_candidates: List[Path]) -> Any:
     for name in name_candidates:
         try:
             return importlib.import_module(name)
@@ -120,9 +114,7 @@ def _import_by_candidates(
             assert spec and spec.loader
             spec.loader.exec_module(mod)  # type: ignore[attr-defined]
             return mod
-    raise ImportError(
-        f"Could not import any of: {name_candidates} or files: {file_candidates}"
-    )
+    raise ImportError(f"Could not import any of: {name_candidates} or files: {file_candidates}")
 
 
 def load_import_fixer_modules(test_dir: Path) -> Dict[str, Any]:
@@ -180,9 +172,7 @@ def make_tiny_project(base: Path) -> Path:
 
     # a -> b
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
-    (pkg / "a.py").write_text(
-        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
-    )
+    (pkg / "a.py").write_text("import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n")
     # b -> a (cycle) + dynamic import pattern + third-party import
     (pkg / "b.py").write_text(
         "import requests\n"
@@ -246,9 +236,7 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
         return DummyProc(returncode=0, stdout="", stderr="")
 
     if hasattr(validate, "asyncio"):
-        monkeypatch.setattr(
-            validate.asyncio, "create_subprocess_exec", fake_cse, raising=False
-        )
+        monkeypatch.setattr(validate.asyncio, "create_subprocess_exec", fake_cse, raising=False)
 
     # --- Plugin probe (if manager supports hooks)
     probe = PluginProbe()
@@ -286,9 +274,7 @@ def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
         heal_deps = getattr(dep, "heal_dependencies", None)
         if callable(heal_deps):
             res_deps = asyncio.get_event_loop().run_until_complete(
-                heal_deps(
-                    project_roots=[str(proj_root)], dry_run=True, python_version="3.10"
-                )
+                heal_deps(project_roots=[str(proj_root)], dry_run=True, python_version="3.10")
             )
             result["deps"] = res_deps
 

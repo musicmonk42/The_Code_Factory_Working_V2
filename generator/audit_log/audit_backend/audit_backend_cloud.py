@@ -43,9 +43,7 @@ class S3Backend(LogBackend):
         if "bucket" not in self.params:
             raise ValueError("bucket parameter is required")
         if "athena_results_location" not in self.params:
-            raise ValueError(
-                "athena_results_location parameter is required for Athena queries"
-            )
+            raise ValueError("athena_results_location parameter is required for Athena queries")
 
         self.bucket = self.params["bucket"]
         self.key_prefix = self.params.get("key_prefix", "audit_logs/")
@@ -70,9 +68,7 @@ class S3Backend(LogBackend):
         loop = asyncio.get_running_loop()
         self._init_task = loop.create_task(self._init_athena())
         self._async_tasks.add(self._init_task)
-        self_task = (
-            self._init_task
-        )  # Keep a reference to the task created in this method
+        self_task = self._init_task  # Keep a reference to the task created in this method
         self_task.add_done_callback(self._async_tasks.discard)
 
         await self_task  # Wait for Athena to be ready
@@ -100,9 +96,7 @@ class S3Backend(LogBackend):
                 # --- FIX: Remove asyncio.to_thread wrapper ---
                 lambda: self.athena_client.start_query_execution(
                     QueryString=f"CREATE DATABASE IF NOT EXISTS {self.athena_database}",
-                    ResultConfiguration={
-                        "OutputLocation": self.athena_results_location
-                    },
+                    ResultConfiguration={"OutputLocation": self.athena_results_location},
                 ),
                 backend_name=self.__class__.__name__,
                 op_name="athena_create_db",
@@ -128,9 +122,7 @@ class S3Backend(LogBackend):
                 # --- FIX: Remove asyncio.to_thread wrapper ---
                 lambda: self.athena_client.start_query_execution(
                     QueryString=query,
-                    ResultConfiguration={
-                        "OutputLocation": self.athena_results_location
-                    },
+                    ResultConfiguration={"OutputLocation": self.athena_results_location},
                 ),
                 backend_name=self.__class__.__name__,
                 op_name="athena_create_table",
@@ -156,14 +148,10 @@ class S3Backend(LogBackend):
                     f"Athena table initialization failed with state: {state}. Reason: {status['QueryExecution']['Status'].get('StateChangeReason', 'N/A')}"
                 )
 
-            logger.info(
-                f"Athena table '{self.athena_database}.{self.athena_table}' initialized."
-            )
+            logger.info(f"Athena table '{self.athena_database}.{self.athena_table}' initialized.")
         except Exception as e:
             logger.critical(f"Athena initialization failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AthenaInitError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AthenaInitError").inc()
             asyncio.create_task(
                 send_alert(
                     f"Athena initialization failed for S3Backend: {e}",
@@ -179,20 +167,14 @@ class S3Backend(LogBackend):
         """
         return
 
-    async def _query_single(
-        self, filters: Dict[str, Any], limit: int
-    ) -> List[Dict[str, Any]]:
+    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries S3 using Athena with partitioning and column filtering."""
         # FIX: Check for self._init_task status to ensure Athena is ready
         if self._init_task and not self._init_task.done():
             raise RuntimeError("Athena client is not yet initialized.")
 
-        query_columns = (
-            "entry_id, encrypted_data, timestamp, schema_version, _audit_hash"
-        )
-        query = (
-            f"SELECT {query_columns} FROM {self.athena_database}.{self.athena_table}"
-        )
+        query_columns = "entry_id, encrypted_data, timestamp, schema_version, _audit_hash"
+        query = f"SELECT {query_columns} FROM {self.athena_database}.{self.athena_table}"
         where_clauses = []
 
         current_utc_dt = datetime.datetime.now(datetime.timezone.utc)
@@ -256,9 +238,7 @@ class S3Backend(LogBackend):
                 # --- FIX: Remove asyncio.to_thread wrapper ---
                 lambda: self.athena_client.start_query_execution(
                     QueryString=query,
-                    ResultConfiguration={
-                        "OutputLocation": self.athena_results_location
-                    },
+                    ResultConfiguration={"OutputLocation": self.athena_results_location},
                 ),
                 backend_name=self.__class__.__name__,
                 op_name="athena_start_query",
@@ -269,9 +249,7 @@ class S3Backend(LogBackend):
             while True:
                 status = await retry_operation(
                     # --- FIX: Remove asyncio.to_thread wrapper ---
-                    lambda: self.athena_client.get_query_execution(
-                        QueryExecutionId=query_id
-                    ),
+                    lambda: self.athena_client.get_query_execution(QueryExecutionId=query_id),
                     backend_name=self.__class__.__name__,
                     op_name="athena_get_query_status",
                 )
@@ -296,14 +274,10 @@ class S3Backend(LogBackend):
             # 4. Parse Results
             parsed_results = []
             if results["ResultSet"]["Rows"]:
-                header = [
-                    col["VarCharValue"]
-                    for col in results["ResultSet"]["Rows"][0]["Data"]
-                ]
+                header = [col["VarCharValue"] for col in results["ResultSet"]["Rows"][0]["Data"]]
                 for row_data in results["ResultSet"]["Rows"][1:]:
                     row_dict = {
-                        header[i]: col.get("VarCharValue")
-                        for i, col in enumerate(row_data["Data"])
+                        header[i]: col.get("VarCharValue") for i, col in enumerate(row_data["Data"])
                     }
                     parsed_results.append(
                         {
@@ -322,9 +296,7 @@ class S3Backend(LogBackend):
             return parsed_results
         except Exception as e:
             logger.error(f"S3 query (Athena) failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AthenaQueryError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AthenaQueryError").inc()
             raise
 
     async def _migrate_schema(self) -> None:
@@ -359,9 +331,7 @@ class S3Backend(LogBackend):
                         # 1. Download old object
                         response = await retry_operation(
                             # --- FIX: Remove asyncio.to_thread wrapper ---
-                            lambda: self.s3_client.get_object(
-                                Bucket=self.bucket, Key=old_key
-                            ),
+                            lambda: self.s3_client.get_object(Bucket=self.bucket, Key=old_key),
                             backend_name=self.__class__.__name__,
                             op_name=f"s3_get_object:{old_key}",
                         )
@@ -372,9 +342,7 @@ class S3Backend(LogBackend):
 
                         # 2. Decompress if necessary
                         if old_key.endswith(".gz"):
-                            decompressed_data = zlib.decompress(
-                                compressed_encrypted_data_bytes
-                            )
+                            decompressed_data = zlib.decompress(compressed_encrypted_data_bytes)
                         else:
                             decompressed_data = compressed_encrypted_data_bytes
 
@@ -390,20 +358,12 @@ class S3Backend(LogBackend):
 
                             encrypted_b64 = stored_entry.get("encrypted_data")
                             if not encrypted_b64:
-                                raise ValueError(
-                                    "Missing encrypted_data in old S3 object line."
-                                )
+                                raise ValueError("Missing encrypted_data in old S3 object line.")
 
                             # 4. Decrypt, Decompress Audit Entry
-                            decrypted_bytes = ENCRYPTER.decrypt(
-                                base64.b64decode(encrypted_b64)
-                            )
-                            decompressed_audit_entry_str = self._decompress(
-                                decrypted_bytes
-                            )
-                            original_audit_entry = json.loads(
-                                decompressed_audit_entry_str
-                            )
+                            decrypted_bytes = ENCRYPTER.decrypt(base64.b64decode(encrypted_b64))
+                            decompressed_audit_entry_str = self._decompress(decrypted_bytes)
+                            original_audit_entry = json.loads(decompressed_audit_entry_str)
 
                             # 5. Apply Migration Rules
                             if (
@@ -417,9 +377,9 @@ class S3Backend(LogBackend):
                                 or not original_audit_entry["timestamp"]
                             ):
                                 original_audit_entry["timestamp"] = (
-                                    datetime.datetime.now(
-                                        datetime.timezone.utc
-                                    ).isoformat(timespec="milliseconds")
+                                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                                        timespec="milliseconds"
+                                    )
                                     + "Z"
                                 )
 
@@ -427,23 +387,21 @@ class S3Backend(LogBackend):
                                 temp_audit_entry_for_hash = original_audit_entry.copy()
                                 temp_audit_entry_for_hash.pop("_audit_hash", None)
                                 new_hash = compute_hash(
-                                    json.dumps(
-                                        temp_audit_entry_for_hash, sort_keys=True
-                                    ).encode("utf-8")
+                                    json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode(
+                                        "utf-8"
+                                    )
                                 )
                                 original_audit_entry["_audit_hash"] = new_hash
 
                             original_audit_entry["schema_version"] = self.schema_version
 
                             # 6. Re-encrypt and Re-compress
-                            updated_data_str = json.dumps(
-                                original_audit_entry, sort_keys=True
-                            )
+                            updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                             updated_compressed = self._compress(updated_data_str)
                             updated_encrypted = self._encrypt(updated_compressed)
-                            updated_base64_data = base64.b64encode(
-                                updated_encrypted
-                            ).decode("utf-8")
+                            updated_base64_data = base64.b64encode(updated_encrypted).decode(
+                                "utf-8"
+                            )
 
                             new_stored_entry = {
                                 "encrypted_data": updated_base64_data,
@@ -508,16 +466,12 @@ class S3Backend(LogBackend):
                     f"S3 migration completed with {len(failed_migrations)} failures. See logs for details."
                 )
 
-            logger.info(
-                f"S3Backend migration completed. Migrated {migrated_count} objects."
-            )
+            logger.info(f"S3Backend migration completed. Migrated {migrated_count} objects.")
             await self._refresh_athena_partitions()
 
         except Exception as e:
             logger.error(f"S3Backend migration failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="MigrationFailed"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationFailed").inc()
             asyncio.create_task(
                 send_alert(
                     "S3Backend migration failed. Manual intervention required.",
@@ -536,9 +490,7 @@ class S3Backend(LogBackend):
                 # --- FIX: Remove asyncio.to_thread wrapper ---
                 lambda: self.athena_client.start_query_execution(
                     QueryString=f"MSCK REPAIR TABLE {self.athena_database}.{self.athena_table}",
-                    ResultConfiguration={
-                        "OutputLocation": self.athena_results_location
-                    },
+                    ResultConfiguration={"OutputLocation": self.athena_results_location},
                 ),
                 backend_name=self.__class__.__name__,
                 op_name="athena_repair_table",
@@ -589,13 +541,9 @@ class S3Backend(LogBackend):
         except botocore.exceptions.ClientError as e:
             error_code = int(e.response["Error"]["Code"])
             if error_code == 404:
-                logger.warning(
-                    f"S3 bucket '{self.bucket}' not found during health check."
-                )
+                logger.warning(f"S3 bucket '{self.bucket}' not found during health check.")
             elif error_code == 403:
-                logger.warning(
-                    f"Access denied to S3 bucket '{self.bucket}' during health check."
-                )
+                logger.warning(f"Access denied to S3 bucket '{self.bucket}' during health check.")
             else:
                 logger.warning(f"S3 health check failed with ClientError: {e}")
             return False
@@ -627,9 +575,7 @@ class S3Backend(LogBackend):
             return 1
 
     @asynccontextmanager
-    async def _atomic_context(
-        self, prepared_entries: List[Dict[str, Any]]
-    ) -> AsyncIterator[None]:
+    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
         """
         Atomicity for S3 batch writes by collecting entries and uploading as a single gzipped JSON Lines object.
         """
@@ -670,9 +616,7 @@ class S3Backend(LogBackend):
 
         except Exception as e:
             logger.error(f"S3Backend atomic batch write failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AtomicWriteError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
             asyncio.create_task(
                 send_alert(
                     "S3Backend atomic batch write failed. Data might be inconsistent.",
@@ -759,9 +703,7 @@ class GCSBackend(LogBackend):
         loop = asyncio.get_running_loop()
         self._init_task = loop.create_task(self._init_bigquery())
         self._async_tasks.add(self._init_task)
-        self_task = (
-            self._init_task
-        )  # Keep a reference to the task created in this method
+        self_task = self._init_task  # Keep a reference to the task created in this method
         self_task.add_done_callback(self._async_tasks.discard)
 
         await self_task  # Wait for BigQuery to be ready
@@ -787,9 +729,7 @@ class GCSBackend(LogBackend):
 
         client = bigquery.Client(project=self.bigquery_project_id)
 
-        dataset_ref = client.dataset(
-            self.bigquery_dataset, project=self.bigquery_project_id
-        )
+        dataset_ref = client.dataset(self.bigquery_dataset, project=self.bigquery_project_id)
         table_ref = dataset_ref.table(self.bigquery_table)
 
         schema = [
@@ -818,9 +758,7 @@ class GCSBackend(LogBackend):
             )
         except Exception as e:
             logger.critical(f"BigQuery initialization failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="BigQueryInitError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="BigQueryInitError").inc()
             asyncio.create_task(
                 send_alert(
                     f"BigQuery initialization failed for GCSBackend: {e}",
@@ -836,9 +774,7 @@ class GCSBackend(LogBackend):
         """
         return
 
-    async def _query_single(
-        self, filters: Dict[str, Any], limit: int
-    ) -> List[Dict[str, Any]]:
+    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries GCS using BigQuery with filtering."""
         # FIX: Check for self._init_task status to ensure BigQuery is ready
         if self._init_task and not self._init_task.done():
@@ -848,9 +784,7 @@ class GCSBackend(LogBackend):
 
         client = bigquery.Client(project=self.bigquery_project_id)
 
-        query_columns = (
-            "entry_id, encrypted_data, timestamp, schema_version, _audit_hash"
-        )
+        query_columns = "entry_id, encrypted_data, timestamp, schema_version, _audit_hash"
         query = f"SELECT {query_columns} FROM `{self.bigquery_project_id}.{self.bigquery_dataset}.{self.bigquery_table}`"
         where_clauses = []
 
@@ -889,8 +823,7 @@ class GCSBackend(LogBackend):
                     {
                         "encrypted_data": row.encrypted_data,
                         "entry_id": row.entry_id,
-                        "timestamp": row.timestamp.isoformat(timespec="milliseconds")
-                        + "Z",
+                        "timestamp": row.timestamp.isoformat(timespec="milliseconds") + "Z",
                         "schema_version": row.schema_version,
                         "_audit_hash": row._audit_hash,
                     }
@@ -898,9 +831,7 @@ class GCSBackend(LogBackend):
             return parsed_results
         except Exception as e:
             logger.error(f"GCS query (BigQuery) failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="BigQueryError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="BigQueryError").inc()
             asyncio.create_task(
                 send_alert(f"GCSBackend BigQuery query failed: {e}", severity="high")
             )
@@ -950,9 +881,7 @@ class GCSBackend(LogBackend):
 
                     # 3. Decompress and Deserialize stored entry wrapper
                     if old_key.endswith(".gz"):
-                        decompressed_data = zlib.decompress(
-                            compressed_encrypted_data_bytes
-                        )
+                        decompressed_data = zlib.decompress(compressed_encrypted_data_bytes)
                     else:
                         decompressed_data = compressed_encrypted_data_bytes
 
@@ -967,14 +896,10 @@ class GCSBackend(LogBackend):
 
                         encrypted_b64 = stored_entry.get("encrypted_data")
                         if not encrypted_b64:
-                            raise ValueError(
-                                "Missing encrypted_data in old GCS object line."
-                            )
+                            raise ValueError("Missing encrypted_data in old GCS object line.")
 
                         # 4. Decrypt, Decompress Audit Entry
-                        decrypted_bytes = ENCRYPTER.decrypt(
-                            base64.b64decode(encrypted_b64)
-                        )
+                        decrypted_bytes = ENCRYPTER.decrypt(base64.b64decode(encrypted_b64))
                         decompressed_audit_entry_str = self._decompress(decrypted_bytes)
                         original_audit_entry = json.loads(decompressed_audit_entry_str)
 
@@ -1000,23 +925,19 @@ class GCSBackend(LogBackend):
                             temp_audit_entry_for_hash = original_audit_entry.copy()
                             temp_audit_entry_for_hash.pop("_audit_hash", None)
                             new_hash = compute_hash(
-                                json.dumps(
-                                    temp_audit_entry_for_hash, sort_keys=True
-                                ).encode("utf-8")
+                                json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode(
+                                    "utf-8"
+                                )
                             )
                             original_audit_entry["_audit_hash"] = new_hash
 
                         original_audit_entry["schema_version"] = self.schema_version
 
                         # 6. Re-encrypt and Re-compress
-                        updated_data_str = json.dumps(
-                            original_audit_entry, sort_keys=True
-                        )
+                        updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                         updated_compressed = self._compress(updated_data_str)
                         updated_encrypted = self._encrypt(updated_compressed)
-                        updated_base64_data = base64.b64encode(
-                            updated_encrypted
-                        ).decode("utf-8")
+                        updated_base64_data = base64.b64encode(updated_encrypted).decode("utf-8")
 
                         new_stored_entry = {
                             "encrypted_data": updated_base64_data,
@@ -1074,15 +995,11 @@ class GCSBackend(LogBackend):
                     f"GCS migration completed with {len(failed_migrations)} failures. See logs for details."
                 )
 
-            logger.info(
-                f"GCSBackend migration completed. Migrated {migrated_count} objects."
-            )
+            logger.info(f"GCSBackend migration completed. Migrated {migrated_count} objects.")
 
         except Exception as e:
             logger.error(f"GCSBackend migration failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="MigrationFailed"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationFailed").inc()
             asyncio.create_task(
                 send_alert(
                     "GCSBackend migration failed. Manual intervention required.",
@@ -1101,9 +1018,7 @@ class GCSBackend(LogBackend):
                 op_name="gcs_bucket_exists",
             )
             if not exists:
-                logger.warning(
-                    f"GCS bucket '{self.bucket_name}' not found during health check."
-                )
+                logger.warning(f"GCS bucket '{self.bucket_name}' not found during health check.")
                 return False
 
             await retry_operation(
@@ -1150,9 +1065,7 @@ class GCSBackend(LogBackend):
             return 1
 
     @asynccontextmanager
-    async def _atomic_context(
-        self, prepared_entries: List[Dict[str, Any]]
-    ) -> AsyncIterator[None]:
+    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
         """
         Atomicity for GCS batch writes by collecting entries and uploading as a single gzipped JSON Lines object,
         then initiating a BigQuery load job.
@@ -1189,9 +1102,7 @@ class GCSBackend(LogBackend):
             from google.cloud import bigquery
 
             bq_client = bigquery.Client(project=self.bigquery_project_id)
-            table_ref = bq_client.dataset(self.bigquery_dataset).table(
-                self.bigquery_table
-            )
+            table_ref = bq_client.dataset(self.bigquery_dataset).table(self.bigquery_table)
 
             job_config = bigquery.LoadJobConfig(
                 source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
@@ -1205,9 +1116,7 @@ class GCSBackend(LogBackend):
 
             load_job = await retry_operation(
                 # --- FIX: Remove asyncio.to_thread wrapper ---
-                lambda: bq_client.load_table_from_uri(
-                    uri, table_ref, job_config=job_config
-                ),
+                lambda: bq_client.load_table_from_uri(uri, table_ref, job_config=job_config),
                 backend_name=self.__class__.__name__,
                 op_name="bigquery_load_job",
             )
@@ -1224,9 +1133,7 @@ class GCSBackend(LogBackend):
 
         except Exception as e:
             logger.error(f"GCSBackend atomic batch write failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AtomicWriteError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
             asyncio.create_task(
                 send_alert(
                     "GCSBackend atomic batch write failed. Data might be inconsistent.",
@@ -1247,9 +1154,7 @@ class GCSBackend(LogBackend):
         try:
             blobs_iter = await retry_operation(
                 # --- FIX: Remove asyncio.to_thread wrapper ---
-                lambda: self.client.list_blobs(
-                    self.bucket_name, prefix=self.key_prefix
-                ),
+                lambda: self.client.list_blobs(self.bucket_name, prefix=self.key_prefix),
                 backend_name=self.__class__.__name__,
                 op_name="gcs_list_blobs_cleanup",
             )
@@ -1289,12 +1194,8 @@ class GCSBackend(LogBackend):
                 self.key_prefix,
             )
         except Exception as e:
-            logger.error(
-                f"GCSBackend cleanup failed during blob listing: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="GCSCleanupListError"
-            ).inc()
+            logger.error(f"GCSBackend cleanup failed during blob listing: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="GCSCleanupListError").inc()
 
 
 # --- Azure Blob Backend ---
@@ -1329,9 +1230,7 @@ class AzureBlobBackend(LogBackend):
         loop = asyncio.get_running_loop()
         self._init_task = loop.create_task(self._init_client())
         self._async_tasks.add(self._init_task)
-        self_task = (
-            self._init_task
-        )  # Keep a reference to the task created in this method
+        self_task = self._init_task  # Keep a reference to the task created in this method
         self_task.add_done_callback(self._async_tasks.discard)
 
         await self_task  # Wait for client to be ready
@@ -1355,42 +1254,28 @@ class AzureBlobBackend(LogBackend):
                 await self.client.close()
                 logger.info("AzureBlobBackend client closed.")
             except Exception as e:
-                logger.error(
-                    f"Error closing AzureBlobBackend client: {e}", exc_info=True
-                )
+                logger.error(f"Error closing AzureBlobBackend client: {e}", exc_info=True)
         logger.info("AzureBlobBackend shutdown complete.")
 
     async def _init_client(self):
         """Initializes Azure Blob Service Client and ensures container exists."""
         try:
-            self.client = BlobServiceClient.from_connection_string(
-                self.connection_string
-            )
-            self.container_client = self.client.get_container_client(
-                self.container_name
-            )
+            self.client = BlobServiceClient.from_connection_string(self.connection_string)
+            self.container_client = self.client.get_container_client(self.container_name)
 
             try:  # Use try-except for container creation to handle ResourceExistsError
                 await self.container_client.create_container()
                 logger.info(f"Created Azure Blob container: {self.container_name}")
             except ResourceExistsError:
-                logger.info(
-                    f"Azure Blob container '{self.container_name}' already exists."
-                )
-            except (
-                Exception
-            ) as e:  # Catch other potential errors during container creation
+                logger.info(f"Azure Blob container '{self.container_name}' already exists.")
+            except Exception as e:  # Catch other potential errors during container creation
                 raise e  # Re-raise to be caught by the outer block
 
         except (
             Exception
         ) as e:  # Catch any errors during client initialization or overall container setup
-            logger.critical(
-                f"Azure Blob container initialization failed: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AzureBlobInitError"
-            ).inc()
+            logger.critical(f"Azure Blob container initialization failed: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AzureBlobInitError").inc()
             asyncio.create_task(
                 send_alert(
                     f"Azure Blob container initialization failed: {e}",
@@ -1406,9 +1291,7 @@ class AzureBlobBackend(LogBackend):
         """
         return
 
-    async def _query_single(
-        self, filters: Dict[str, Any], limit: int
-    ) -> List[Dict[str, Any]]:
+    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries Azure Blob Storage, filtering by top-level attributes."""
         # FIX: Check for self._init_task status to ensure client is ready
         if self._init_task and not self._init_task.done():
@@ -1420,9 +1303,7 @@ class AzureBlobBackend(LogBackend):
                 "AzureBlobBackend: Querying performs full blob listing and in-memory filtering, which is inefficient for large datasets. Consider external indexing for production."
             )
 
-            blob_iterator = self.container_client.list_blobs(
-                name_starts_with=self.blob_prefix
-            )
+            blob_iterator = self.container_client.list_blobs(name_starts_with=self.blob_prefix)
 
             async for blob in blob_iterator:
                 if len(entries) >= limit:
@@ -1452,14 +1333,12 @@ class AzureBlobBackend(LogBackend):
                             match = False
                         if (
                             "timestamp >=" in filters
-                            and stored_entry.get("timestamp", "")
-                            < filters["timestamp >="]
+                            and stored_entry.get("timestamp", "") < filters["timestamp >="]
                         ):
                             match = False
                         if (
                             "timestamp <=" in filters
-                            and stored_entry.get("timestamp", "")
-                            > filters["timestamp <=="]
+                            and stored_entry.get("timestamp", "") > filters["timestamp <=="]
                         ):
                             match = False
                         if "schema_version" in filters:
@@ -1539,9 +1418,7 @@ class AzureBlobBackend(LogBackend):
                     compressed_encrypted_data_bytes = await stream.readall()
 
                     if old_key.endswith(".gz"):
-                        decompressed_data = zlib.decompress(
-                            compressed_encrypted_data_bytes
-                        )
+                        decompressed_data = zlib.decompress(compressed_encrypted_data_bytes)
                     else:
                         decompressed_data = compressed_encrypted_data_bytes
 
@@ -1556,14 +1433,10 @@ class AzureBlobBackend(LogBackend):
                     for stored_entry in stored_entries_from_blob:
                         encrypted_b64 = stored_entry.get("encrypted_data")
                         if not encrypted_b64:
-                            raise ValueError(
-                                "Missing encrypted_data in old Azure Blob object."
-                            )
+                            raise ValueError("Missing encrypted_data in old Azure Blob object.")
 
                         # Decrypt/Decompress Audit Entry
-                        decrypted_bytes = ENCRYPTER.decrypt(
-                            base64.b64decode(encrypted_b64)
-                        )
+                        decrypted_bytes = ENCRYPTER.decrypt(base64.b64decode(encrypted_b64))
                         decompressed_audit_entry_str = self._decompress(decrypted_bytes)
                         original_audit_entry = json.loads(decompressed_audit_entry_str)
 
@@ -1589,23 +1462,19 @@ class AzureBlobBackend(LogBackend):
                             temp_audit_entry_for_hash = original_audit_entry.copy()
                             temp_audit_entry_for_hash.pop("_audit_hash", None)
                             new_hash = compute_hash(
-                                json.dumps(
-                                    temp_audit_entry_for_hash, sort_keys=True
-                                ).encode("utf-8")
+                                json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode(
+                                    "utf-8"
+                                )
                             )
                             original_audit_entry["_audit_hash"] = new_hash
 
                         original_audit_entry["schema_version"] = self.schema_version
 
                         # Re-encrypt and Re-compress
-                        updated_data_str = json.dumps(
-                            original_audit_entry, sort_keys=True
-                        )
+                        updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                         updated_compressed = self._compress(updated_data_str)
                         updated_encrypted = self._encrypt(updated_compressed)
-                        updated_base64_data = base64.b64encode(
-                            updated_encrypted
-                        ).decode("utf-8")
+                        updated_base64_data = base64.b64encode(updated_encrypted).decode("utf-8")
 
                         new_stored_entry_for_blob = {
                             "encrypted_data": updated_base64_data,
@@ -1618,22 +1487,18 @@ class AzureBlobBackend(LogBackend):
 
                     if migrated_batch_for_new_blob:
                         ts_dt = datetime.datetime.fromisoformat(
-                            migrated_batch_for_new_blob[0]["timestamp"].replace(
-                                "Z", "+00:00"
-                            )
+                            migrated_batch_for_new_blob[0]["timestamp"].replace("Z", "+00:00")
                         )
                         new_key_path = f"{new_prefix}{ts_dt.year}/{ts_dt.month:02d}/{ts_dt.day:02d}/{uuid.uuid4()}.jsonl.gz"
 
                         new_object_body = zlib.compress(
-                            "\n".join(
-                                json.dumps(e) for e in migrated_batch_for_new_blob
-                            ).encode("utf-8"),
+                            "\n".join(json.dumps(e) for e in migrated_batch_for_new_blob).encode(
+                                "utf-8"
+                            ),
                             level=COMPRESSION_LEVEL,
                         )
 
-                        new_blob_client = self.container_client.get_blob_client(
-                            new_key_path
-                        )
+                        new_blob_client = self.container_client.get_blob_client(new_key_path)
                         await new_blob_client.upload_blob(
                             data=new_object_body,
                             overwrite=True,
@@ -1669,15 +1534,11 @@ class AzureBlobBackend(LogBackend):
                     f"Azure Blob migration completed with {len(failed_migrations)} failures. See logs for details."
                 )
 
-            logger.info(
-                f"AzureBlobBackend migration completed. Migrated {migrated_count} objects."
-            )
+            logger.info(f"AzureBlobBackend migration completed. Migrated {migrated_count} objects.")
 
         except Exception as e:
             logger.error(f"AzureBlobBackend migration failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="MigrationFailed"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationFailed").inc()
             asyncio.create_task(
                 send_alert(
                     "AzureBlobBackend migration failed. Manual intervention required.",
@@ -1705,9 +1566,7 @@ class AzureBlobBackend(LogBackend):
             logger.warning(f"AzureBlobBackend health check failed: {e}")
             return False
         except Exception as e:
-            logger.warning(
-                f"AzureBlobBackend health check failed with unexpected error: {e}"
-            )
+            logger.warning(f"AzureBlobBackend health check failed with unexpected error: {e}")
             return False
 
     async def _get_current_schema_version(self) -> int:
@@ -1719,12 +1578,8 @@ class AzureBlobBackend(LogBackend):
             _client_was_none = True
             try:
                 # Attempt a lightweight client init just for schema version check
-                temp_client = BlobServiceClient.from_connection_string(
-                    self.connection_string
-                )
-                temp_container_client = temp_client.get_container_client(
-                    self.container_name
-                )
+                temp_client = BlobServiceClient.from_connection_string(self.connection_string)
+                temp_container_client = temp_client.get_container_client(self.container_name)
                 # Check container existence - this will raise if container/access is problematic
                 await temp_container_client.get_container_properties()
                 target_container_client = temp_container_client
@@ -1760,9 +1615,7 @@ class AzureBlobBackend(LogBackend):
 
             return 1  # Assume v1 if no current/old prefixes found
         except Exception as e:
-            logger.warning(
-                f"Could not determine Azure Blob schema version: {e}. Assuming v1."
-            )
+            logger.warning(f"Could not determine Azure Blob schema version: {e}. Assuming v1.")
             return 1
         finally:
             if _client_was_none and "temp_client" in locals() and temp_client:
@@ -1770,9 +1623,7 @@ class AzureBlobBackend(LogBackend):
                 await temp_client.close()
 
     @asynccontextmanager
-    async def _atomic_context(
-        self, prepared_entries: List[Dict[str, Any]]
-    ) -> AsyncIterator[None]:
+    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
         """
         Atomicity for Azure Blob batch writes by collecting entries and uploading as a single gzipped JSON Lines blob.
         """
@@ -1809,12 +1660,8 @@ class AzureBlobBackend(LogBackend):
             yield
 
         except Exception as e:
-            logger.error(
-                f"AzureBlobBackend atomic batch write failed: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AtomicWriteError"
-            ).inc()
+            logger.error(f"AzureBlobBackend atomic batch write failed: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
             asyncio.create_task(
                 send_alert(
                     "AzureBlobBackend atomic batch write failed. Data might be inconsistent.",
@@ -1836,9 +1683,7 @@ class AzureBlobBackend(LogBackend):
             await self._init_client()
 
         try:
-            blobs_iter = self.container_client.list_blobs(
-                name_starts_with=self.blob_prefix
-            )
+            blobs_iter = self.container_client.list_blobs(name_starts_with=self.blob_prefix)
             blobs_to_delete = []
 
             async for blob in blobs_iter:
@@ -1858,6 +1703,4 @@ class AzureBlobBackend(LogBackend):
             )
         except Exception as e:
             logger.error(f"AzureBlobBackend cleanup failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AzureCleanupError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AzureCleanupError").inc()

@@ -62,9 +62,7 @@ def _add_sensitive_filter():
 
         logger.addFilter(SensitiveDataFilter())
     except ImportError as e:
-        logger.warning(
-            f"Failed to add SensitiveDataFilter (circular dependency fix): {e}"
-        )
+        logger.warning(f"Failed to add SensitiveDataFilter (circular dependency fix): {e}")
 
 
 _add_sensitive_filter()  # Call after logger setup
@@ -158,9 +156,7 @@ def _conditional_log_action(action: str, status: str, **kwargs):
         return
 
     # Prepare synchronous log message
-    sync_log_message = (
-        f"Sync log fallback: action='{action}', status='{status}', details={kwargs}"
-    )
+    sync_log_message = f"Sync log fallback: action='{action}', status='{status}', details={kwargs}"
 
     try:
         # Check if an event loop is running
@@ -198,9 +194,7 @@ class CryptoProvider(ABC):
 
                 self._lazy_settings = default_settings
             except ImportError:
-                self._lazy_settings = SimpleNamespace(
-                    HSM_ENABLED=False
-                )  # Minimal fallback
+                self._lazy_settings = SimpleNamespace(HSM_ENABLED=False)  # Minimal fallback
         else:
             self._lazy_settings = settings
         # --- End Delayed Import ---
@@ -305,12 +299,8 @@ class CryptoProvider(ABC):
             finally:
                 # Ensure task is discarded even if it's a mock
                 self._background_tasks.discard(task)
-        self.logger.info(
-            f"{self.__class__.__name__} closed.", extra={"operation": "close_end"}
-        )
-        await log_action(
-            "provider_close", provider=self.__class__.__name__, status="success"
-        )
+        self.logger.info(f"{self.__class__.__name__} closed.", extra={"operation": "close_end"})
+        await log_action("provider_close", provider=self.__class__.__name__, status="success")
 
     # --- END PATCH 1 ---
 
@@ -351,9 +341,7 @@ class SoftwareCryptoProvider(CryptoProvider):
     ):
 
         # Call super().__init__ which stores the accessors and settings
-        super().__init__(
-            software_key_master_accessor, fallback_hmac_secret_accessor, settings
-        )
+        super().__init__(software_key_master_accessor, fallback_hmac_secret_accessor, settings)
 
         # --- Delayed Import for __init__ ---
         try:
@@ -386,9 +374,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 extra={"operation": "software_init_no_master_key"},
             )
             # FIX 1.2: Use conditional logging to avoid RuntimeError: no running event loop
-            _conditional_log_action(
-                "software_provider_init", "fail", reason="no_master_key"
-            )
+            _conditional_log_action("software_provider_init", "fail", reason="no_master_key")
             # Match test expectation string from patch
             raise CryptoInitializationError("Master encryption key is missing")
         # --- END PATCH 2 ---
@@ -480,14 +466,10 @@ class SoftwareCryptoProvider(CryptoProvider):
                             "algo": key_info["algo"],
                             "creation_time": key_info["creation_time"],
                             "status": key_info["status"],
-                            "retired_at": key_info.get(
-                                "retired_at"
-                            ),  # Add retired_at if present
+                            "retired_at": key_info.get("retired_at"),  # Add retired_at if present
                         }
                         loaded_count += 1
-                        KEY_LOAD_COUNT.labels(
-                            provider_type="software", status="success"
-                        ).inc()
+                        KEY_LOAD_COUNT.labels(provider_type="software", status="success").inc()
                         # log_action is already called in KeyStore.load_key
                     else:
                         self.logger.warning(
@@ -515,9 +497,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                         provider_type="software",
                         operation="load_key_individual",
                     ).inc()
-                    KEY_LOAD_COUNT.labels(
-                        provider_type="software", status="deserialize_fail"
-                    ).inc()
+                    KEY_LOAD_COUNT.labels(provider_type="software", status="deserialize_fail").inc()
                     asyncio.create_task(
                         log_action(
                             "key_load",
@@ -570,9 +550,7 @@ class SoftwareCryptoProvider(CryptoProvider):
 
         # Ensure algorithm is supported by policy
         if algo not in self.settings.SUPPORTED_ALGOS:
-            raise UnsupportedAlgorithmError(
-                f"Unsupported algorithm for deserialization: {algo}"
-            )
+            raise UnsupportedAlgorithmError(f"Unsupported algorithm for deserialization: {algo}")
 
         if algo == "rsa":
             # --- FIX: Original file had generate_private_key here, which is wrong. ---
@@ -591,18 +569,14 @@ class SoftwareCryptoProvider(CryptoProvider):
         elif algo == "hmac":
             return key_data_bytes
         # This line should ideally not be reached if algo is in SUPPORTED_ALGOS and covered above
-        raise UnsupportedAlgorithmError(
-            f"Unsupported algorithm for deserialization: {algo}"
-        )
+        raise UnsupportedAlgorithmError(f"Unsupported algorithm for deserialization: {algo}")
 
     def _serialize_key_to_bytes(self, key_obj: Any, algo: str) -> bytes:
         """
         Serializes a private key object to its raw bytes representation for storage.
         """
         if algo not in self.settings.SUPPORTED_ALGOS:
-            raise UnsupportedAlgorithmError(
-                f"Unsupported algorithm for serialization: {algo}"
-            )
+            raise UnsupportedAlgorithmError(f"Unsupported algorithm for serialization: {algo}")
 
         if algo in ["rsa", "ecdsa"]:
             return key_obj.private_bytes(
@@ -619,9 +593,7 @@ class SoftwareCryptoProvider(CryptoProvider):
         elif algo == "hmac":
             return key_obj
         # This line should ideally not be reached if algo is in SUPPORTED_ALGOS and covered above
-        raise UnsupportedAlgorithmError(
-            f"Unsupported algorithm for serialization: {algo}"
-        )
+        raise UnsupportedAlgorithmError(f"Unsupported algorithm for serialization: {algo}")
 
     async def sign(self, data: bytes, key_id: str) -> bytes:
         """
@@ -776,9 +748,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             # --- FIX: Use hashlib.sha256 with hmac.new ---
             return hmac.new(key_obj, data, hashlib.sha256).digest()
         else:
-            raise UnsupportedAlgorithmError(
-                f"Unsupported algorithm for signing: {algo}"
-            )
+            raise UnsupportedAlgorithmError(f"Unsupported algorithm for signing: {algo}")
 
     # --- END PATCH 3 ---
 
@@ -867,9 +837,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                         span.set_status(trace.StatusCode.OK)
                     else:
                         status_label = "fail"
-                        span.set_status(
-                            trace.StatusCode.ERROR, description="Invalid signature"
-                        )
+                        span.set_status(trace.StatusCode.ERROR, description="Invalid signature")
                     await log_action(
                         "verify",
                         key_id=key_id,
@@ -932,9 +900,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             raise CryptoOperationError(f"Software verification failed: {e}") from e
         finally:
             # Use the algo and status_label determined above
-            VERIFY_OPERATIONS.labels(
-                algo=algo, provider_type="software", status=status_label
-            ).inc()
+            VERIFY_OPERATIONS.labels(algo=algo, provider_type="software", status=status_label).inc()
             VERIFY_LATENCY.labels(algo=algo, provider_type="software").observe(
                 time.perf_counter() - start_time
             )
@@ -967,9 +933,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             if not hmac.compare_digest(signature, expected):
                 raise InvalidSignature("HMAC signature mismatch.")
         else:
-            raise UnsupportedAlgorithmError(
-                f"Unsupported algorithm for verification: {algo}"
-            )
+            raise UnsupportedAlgorithmError(f"Unsupported algorithm for verification: {algo}")
         return True
 
     async def generate_key(self, algo: str) -> str:
@@ -1084,9 +1048,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 public_exponent=65537, key_size=2048, backend=default_backend()
             )
         elif algo == "ecdsa":
-            return ec.generate_private_key(
-                curve=ec.SECP256R1(), backend=default_backend()
-            )
+            return ec.generate_private_key(curve=ec.SECP256R1(), backend=default_backend())
         elif algo == "ed25519":
             return ed25519.Ed25519PrivateKey.generate()
         elif algo == "hmac":
@@ -1132,9 +1094,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 # Update the key status in persistent storage
                 await self.key_store.store_key(
                     old_key_id,
-                    self._serialize_key_to_bytes(
-                        old_key_info["key_obj"], old_key_info["algo"]
-                    ),
+                    self._serialize_key_to_bytes(old_key_info["key_obj"], old_key_info["algo"]),
                     old_key_info["algo"],
                     old_key_info["creation_time"],
                     status="retired",
@@ -1254,8 +1214,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 for key_id, key_info in list(self.keys.items()):
                     if (
                         key_info["status"] == "active"
-                        and (current_time - key_info["creation_time"])
-                        > rotation_interval
+                        and (current_time - key_info["creation_time"]) > rotation_interval
                     ):
                         keys_to_rotate.append((key_id, key_info["algo"]))
 
@@ -1264,8 +1223,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                     if (
                         key_info["status"] == "retired"
                         and key_info.get("retired_at") is not None
-                        and (current_time - key_info["retired_at"])
-                        > rotation_interval * 2
+                        and (current_time - key_info["retired_at"]) > rotation_interval * 2
                     ):
                         keys_to_delete.append(key_id)
 
@@ -1335,9 +1293,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                                 # For true zeroization, one would need to control memory allocation or use a C extension.
 
                             del self.keys[key_id]  # Remove from in-memory cache
-                            await self.key_store.delete_key_file(
-                                key_id
-                            )  # Delete from disk
+                            await self.key_store.delete_key_file(key_id)  # Delete from disk
                             self.logger.info(
                                 f"SoftwareCryptoProvider: Permanently deleted retired key '{key_id}'.",
                                 extra={
@@ -1374,9 +1330,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                                 severity="critical",
                             )
                         )
-                        KEY_CLEANUP_COUNT.labels(
-                            provider_type="software", status="fail"
-                        ).inc()
+                        KEY_CLEANUP_COUNT.labels(provider_type="software", status="fail").inc()
                         await log_action(
                             "key_delete",
                             key_id=key_id,
@@ -1418,13 +1372,9 @@ class SoftwareCryptoProvider(CryptoProvider):
 
     async def close(self):
         """Closes the SoftwareCryptoProvider."""
-        self.logger.info(
-            "Closing SoftwareCryptoProvider...", extra={"operation": "close_start"}
-        )
+        self.logger.info("Closing SoftwareCryptoProvider...", extra={"operation": "close_start"})
         await super().close()
-        self.logger.info(
-            "SoftwareCryptoProvider closed.", extra={"operation": "close_end"}
-        )
+        self.logger.info("SoftwareCryptoProvider closed.", extra={"operation": "close_end"})
 
 
 # --- HSM Crypto Provider ---
@@ -1441,9 +1391,7 @@ class HSMCryptoProvider(CryptoProvider):
     ):
 
         # Call super().__init__ which stores the accessors and settings
-        super().__init__(
-            software_key_master_accessor, fallback_hmac_secret_accessor, settings
-        )
+        super().__init__(software_key_master_accessor, fallback_hmac_secret_accessor, settings)
 
         # --- Delayed Import for __init__ (HSM) ---
         try:
@@ -1472,9 +1420,7 @@ class HSMCryptoProvider(CryptoProvider):
                 extra={"operation": "hsm_init_no_pkcs11"},
             )
             # FIX: Use conditional logging
-            _conditional_log_action(
-                "hsm_provider_init", "fail", reason="pkcs11_not_found"
-            )
+            _conditional_log_action("hsm_provider_init", "fail", reason="pkcs11_not_found")
             raise CryptoInitializationError(
                 "PKCS#11 library not found. Cannot use HSMCryptoProvider."
             )
@@ -1512,9 +1458,7 @@ class HSMCryptoProvider(CryptoProvider):
                 reason="hsm_lib_not_found",
                 path=self.hsm_library_path,
             )
-            raise CryptoInitializationError(
-                f"HSM library not found at {self.hsm_library_path}"
-            )
+            raise CryptoInitializationError(f"HSM library not found at {self.hsm_library_path}")
 
         try:
             self.lib = pkcs11.lib(self.hsm_library_path)
@@ -1592,9 +1536,7 @@ class HSMCryptoProvider(CryptoProvider):
                 extra={"operation": "hsm_session_init_attempt"},
             )
             try:
-                token = await asyncio.to_thread(
-                    self.lib.get_token, slot=self.hsm_slot_id
-                )
+                token = await asyncio.to_thread(self.lib.get_token, slot=self.hsm_slot_id)
                 self.session = await asyncio.to_thread(
                     token.open, rw=True, user_pin=self.hsm_user_pin
                 )
@@ -1607,9 +1549,7 @@ class HSMCryptoProvider(CryptoProvider):
                         "slot_id": self.hsm_slot_id,
                     },
                 )
-                await log_action(
-                    "hsm_session_init", status="success", slot_id=self.hsm_slot_id
-                )
+                await log_action("hsm_session_init", status="success", slot_id=self.hsm_slot_id)
             except pkcs11.exceptions.PKCS11Error as e:
                 self.session = None
                 HSM_SESSION_HEALTH.labels(provider_type="hsm").set(0)
@@ -1629,9 +1569,7 @@ class HSMCryptoProvider(CryptoProvider):
                 )
                 # For PIN lockout, PKCS#11 might raise specific errors (e.g., CKR_PIN_LOCKED)
                 # You might want to parse 'e' to check for specific PKCS#11 error codes here
-                raise HSMConnectionError(
-                    f"Failed to initialize HSM session: {e}"
-                ) from e
+                raise HSMConnectionError(f"Failed to initialize HSM session: {e}") from e
             except Exception as e:
                 self.session = None
                 HSM_SESSION_HEALTH.labels(provider_type="hsm").set(0)
@@ -1651,9 +1589,7 @@ class HSMCryptoProvider(CryptoProvider):
                     slot_id=self.hsm_slot_id,
                     error=str(e),
                 )
-                raise HSMConnectionError(
-                    f"Unexpected error initializing HSM session: {e}"
-                ) from e
+                raise HSMConnectionError(f"Unexpected error initializing HSM session: {e}") from e
             # --- START PATCH 5: Fix HSM init set_result misuse ---
             finally:
                 # Do not manipulate Task/Future results directly; completion is driven by the coroutine return/exception.
@@ -1740,9 +1676,7 @@ class HSMCryptoProvider(CryptoProvider):
             try:
                 await self._hsm_init_task
             except Exception as e:
-                self.logger.warning(
-                    f"Initial HSM session setup failed before monitor started: {e}"
-                )
+                self.logger.warning(f"Initial HSM session setup failed before monitor started: {e}")
 
         while True:
             try:
@@ -1776,9 +1710,7 @@ class HSMCryptoProvider(CryptoProvider):
                                 severity="critical",
                             )
                         )
-                        await log_action(
-                            "hsm_health_monitor", status="reinit_fail", error=str(e)
-                        )
+                        await log_action("hsm_health_monitor", status="reinit_fail", error=str(e))
                 else:
                     HSM_SESSION_HEALTH.labels(provider_type="hsm").set(1)
                     self.logger.debug(
@@ -1805,9 +1737,7 @@ class HSMCryptoProvider(CryptoProvider):
                     operation="health_check",
                 ).inc()
                 asyncio.create_task(
-                    send_alert(
-                        f"HSM health monitor encountered an error: {e}", severity="high"
-                    )
+                    send_alert(f"HSM health monitor encountered an error: {e}", severity="high")
                 )
                 await log_action("hsm_health_monitor", status="fail", error=str(e))
 
@@ -1872,9 +1802,7 @@ class HSMCryptoProvider(CryptoProvider):
                 span.set_attribute("algo", algo)
                 span.set_attribute("key_id_label", key_id_hex)
                 try:
-                    await asyncio.to_thread(
-                        self._generate_key_internal_hsm, algo, key_id_hex
-                    )
+                    await asyncio.to_thread(self._generate_key_internal_hsm, algo, key_id_hex)
                     KEY_ROTATIONS.labels(algo=algo, provider_type="hsm").inc()
                     await log_action(
                         "generate_key",
@@ -1903,9 +1831,7 @@ class HSMCryptoProvider(CryptoProvider):
                     raise HSMKeyError(f"HSM key generation failed: {e}") from e
         else:
             try:
-                await asyncio.to_thread(
-                    self._generate_key_internal_hsm, algo, key_id_hex
-                )
+                await asyncio.to_thread(self._generate_key_internal_hsm, algo, key_id_hex)
                 KEY_ROTATIONS.labels(algo=algo, provider_type="hsm").inc()
                 await log_action(
                     "generate_key",
@@ -1995,9 +1921,7 @@ class HSMCryptoProvider(CryptoProvider):
             )
 
         else:
-            raise UnsupportedAlgorithmError(
-                f"Unsupported algorithm for HSM key generation: {algo}"
-            )
+            raise UnsupportedAlgorithmError(f"Unsupported algorithm for HSM key generation: {algo}")
 
     async def sign(self, data: bytes, key_id: str) -> bytes:
         """
@@ -2061,9 +1985,7 @@ class HSMCryptoProvider(CryptoProvider):
 
                 with tracer.start_as_current_span("hsm_sign") as span:
                     span.set_attribute("key_id", key_id)
-                    signature = await asyncio.to_thread(
-                        self._sign_internal_hsm, data, key_id
-                    )
+                    signature = await asyncio.to_thread(self._sign_internal_hsm, data, key_id)
                     SIGN_OPERATIONS.labels(algo="hsm", provider_type="hsm").inc()
                     span.set_status(trace.StatusCode.OK)
                     await log_action(
@@ -2071,13 +1993,9 @@ class HSMCryptoProvider(CryptoProvider):
                     )
                     return signature
             else:
-                signature = await asyncio.to_thread(
-                    self._sign_internal_hsm, data, key_id
-                )
+                signature = await asyncio.to_thread(self._sign_internal_hsm, data, key_id)
                 SIGN_OPERATIONS.labels(algo="hsm", provider_type="hsm").inc()
-                await log_action(
-                    "sign", key_id=key_id, algo="hsm", provider="hsm", success=True
-                )
+                await log_action("sign", key_id=key_id, algo="hsm", provider="hsm", success=True)
                 return signature
         # --- START PATCH 6: Fix HSM error wrapping ---
         except pkcs11.exceptions.PKCS11Error as e:
@@ -2086,9 +2004,7 @@ class HSMCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "hsm_sign_fail_pkcs11", "key_id": key_id},
             )
-            CRYPTO_ERRORS.labels(
-                type=type(e).__name__, provider_type="hsm", operation="sign"
-            ).inc()
+            CRYPTO_ERRORS.labels(type=type(e).__name__, provider_type="hsm", operation="sign").inc()
             await log_action(
                 "sign",
                 key_id=key_id,
@@ -2104,9 +2020,7 @@ class HSMCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "hsm_sign_fail_key_lookup", "key_id": key_id},
             )
-            CRYPTO_ERRORS.labels(
-                type=type(e).__name__, provider_type="hsm", operation="sign"
-            ).inc()
+            CRYPTO_ERRORS.labels(type=type(e).__name__, provider_type="hsm", operation="sign").inc()
             await log_action(
                 "sign",
                 key_id=key_id,
@@ -2122,9 +2036,7 @@ class HSMCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "hsm_sign_fail_unexpected", "key_id": key_id},
             )
-            CRYPTO_ERRORS.labels(
-                type=type(e).__name__, provider_type="hsm", operation="sign"
-            ).inc()
+            CRYPTO_ERRORS.labels(type=type(e).__name__, provider_type="hsm", operation="sign").inc()
             await log_action(
                 "sign",
                 key_id=key_id,
@@ -2151,9 +2063,7 @@ class HSMCryptoProvider(CryptoProvider):
             }
         ).single()
         if not private_key_obj:
-            raise HSMKeyError(
-                f"Private key with label '{key_id}' not found on HSM for signing."
-            )
+            raise HSMKeyError(f"Private key with label '{key_id}' not found on HSM for signing.")
 
         key_algo_type = private_key_obj.get_attribute(pkcs11.Attribute.KEY_TYPE)
         mechanism = None
@@ -2189,9 +2099,7 @@ class HSMCryptoProvider(CryptoProvider):
             )
             mechanism = pkcs11.Mechanism(CKM_RSA_PKCS_PSS, mech_params)
         elif key_algo_type == pkcs11.KeyType.EC:
-            mechanism = pkcs11.Mechanism(
-                CKM_ECDSA
-            )  # Assume P-256 is default for EC key
+            mechanism = pkcs11.Mechanism(CKM_ECDSA)  # Assume P-256 is default for EC key
         else:
             raise UnsupportedAlgorithmError(
                 f"Unsupported key type {key_algo_type} for HSM signing."
@@ -2256,9 +2164,7 @@ class HSMCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS.labels(
                 type="HSMNotAvailable", provider_type="hsm", operation="verify"
             ).inc()
-            VERIFY_OPERATIONS.labels(
-                algo="hsm", provider_type="hsm", status="no_session"
-            ).inc()
+            VERIFY_OPERATIONS.labels(algo="hsm", provider_type="hsm", status="no_session").inc()
             await log_action(
                 "verify",
                 key_id=key_id,
@@ -2285,9 +2191,7 @@ class HSMCryptoProvider(CryptoProvider):
                         span.set_status(trace.StatusCode.OK)
                     else:
                         status_label = "fail"
-                        span.set_status(
-                            trace.StatusCode.ERROR, description="Invalid signature"
-                        )
+                        span.set_status(trace.StatusCode.ERROR, description="Invalid signature")
                     await log_action(
                         "verify",
                         key_id=key_id,
@@ -2297,9 +2201,7 @@ class HSMCryptoProvider(CryptoProvider):
                     )
                     return result
             else:
-                result = await asyncio.to_thread(
-                    self._verify_internal_hsm, signature, data, key_id
-                )
+                result = await asyncio.to_thread(self._verify_internal_hsm, signature, data, key_id)
                 if result:
                     status_label = "success"
                 await log_action(
@@ -2364,9 +2266,7 @@ class HSMCryptoProvider(CryptoProvider):
             VERIFY_LATENCY.labels(algo="hsm", provider_type="hsm").observe(
                 time.perf_counter() - start_time
             )
-            VERIFY_OPERATIONS.labels(
-                algo="hsm", provider_type="hsm", status=status_label
-            ).inc()
+            VERIFY_OPERATIONS.labels(algo="hsm", provider_type="hsm", status=status_label).inc()
 
     def _verify_internal_hsm(self, signature: bytes, data: bytes, key_id: str) -> bool:
         """Synchronous internal HSM verification logic. Runs in a separate thread."""
@@ -2407,9 +2307,7 @@ class HSMCryptoProvider(CryptoProvider):
             )
             mechanism = pkcs11.Mechanism(CKM_RSA_PKCS_PSS, mech_params)
         elif key_algo_type == pkcs11.KeyType.EC:
-            mechanism = pkcs11.Mechanism(
-                CKM_ECDSA
-            )  # Assume P-256 is default for EC key
+            mechanism = pkcs11.Mechanism(CKM_ECDSA)  # Assume P-256 is default for EC key
         else:
             raise UnsupportedAlgorithmError(
                 f"Unsupported key type {key_algo_type} for HSM verification."
@@ -2452,9 +2350,7 @@ class HSMCryptoProvider(CryptoProvider):
             raise TypeError("Old key ID must be a string or None.")
         if not isinstance(algo, str):
             raise TypeError("Algorithm must be a string.")
-        if (
-            algo not in self.settings.SUPPORTED_ALGOS or algo == "hmac"
-        ):  # Enforce policy
+        if algo not in self.settings.SUPPORTED_ALGOS or algo == "hmac":  # Enforce policy
             raise UnsupportedAlgorithmError(
                 f"Unsupported or invalid algorithm for HSM key rotation: {algo}"
             )
@@ -2630,9 +2526,7 @@ class HSMCryptoProvider(CryptoProvider):
 
         # --- End Delayed Import ---
 
-        self.logger.info(
-            "Closing HSMCryptoProvider...", extra={"operation": "close_start"}
-        )
+        self.logger.info("Closing HSMCryptoProvider...", extra={"operation": "close_start"})
 
         # Cancel the monitor task *before* closing the session
         if (

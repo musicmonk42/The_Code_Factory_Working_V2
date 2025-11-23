@@ -14,9 +14,7 @@ from starlette.status import HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 # Import the plugin from the parent directory
 import sys
 
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
 from web_ui_dashboard_plugin_template import (
     DashboardConfig,
     get_dashboard_router,
@@ -61,14 +59,10 @@ def mock_external_dependencies():
         mock_redis_client.close = AsyncMock()
 
         # Use a fresh Prometheus registry for each test
-        with patch(
-            "web_ui_dashboard_plugin_template.PROMETHEUS_AVAILABLE", True
-        ), patch(
+        with patch("web_ui_dashboard_plugin_template.PROMETHEUS_AVAILABLE", True), patch(
             "web_ui_dashboard_plugin_template.REGISTRY",
             new=CollectorRegistry(auto_describe=True),
-        ), patch(
-            "web_ui_dashboard_plugin_template.FASTAPI_AVAILABLE", True
-        ), patch(
+        ), patch("web_ui_dashboard_plugin_template.FASTAPI_AVAILABLE", True), patch(
             "web_ui_dashboard_plugin_template.PYDANTIC_AVAILABLE", True
         ), patch(
             "web_ui_dashboard_plugin_template.REDIS_AVAILABLE", True
@@ -153,9 +147,7 @@ async def test_state_update_and_get_endpoints(api_client, mock_external_dependen
     """Test the /state and /state/update endpoints."""
     # Test POST /state/update
     update_data = {"user_preferences": {"theme": "dark"}}
-    response = api_client.post(
-        "/plugin/dashboard/state/update", json={"update": update_data}
-    )
+    response = api_client.post("/plugin/dashboard/state/update", json={"update": update_data})
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert DASHBOARD_API_CALLS.labels(endpoint="state_update")._value.get() == 1
@@ -173,17 +165,9 @@ def test_get_component_endpoint_success(api_client):
     response = api_client.get("/plugin/dashboard/component/example_metric_panel")
     assert response.status_code == 200
     assert response.json()["title"] == "Current Example Metric"
+    assert DASHBOARD_API_CALLS.labels(endpoint="component_example_metric_panel")._value.get() == 1
     assert (
-        DASHBOARD_API_CALLS.labels(
-            endpoint="component_example_metric_panel"
-        )._value.get()
-        == 1
-    )
-    assert (
-        DASHBOARD_COMPONENT_RENDERS.labels(
-            component_name="example_metric_panel"
-        )._value.get()
-        == 1
+        DASHBOARD_COMPONENT_RENDERS.labels(component_name="example_metric_panel")._value.get() == 1
     )
 
 
@@ -211,9 +195,7 @@ async def test_websocket_workflow(api_client, mock_external_dependencies):
     # This handles the cumulative nature of Prometheus metrics across tests
     initial_state_updates = DASHBOARD_STATE_UPDATES._value.get()
     initial_connected = WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get()
-    initial_disconnected = WEBSOCKET_CONNECTIONS.labels(
-        status="disconnected"
-    )._value.get()
+    initial_disconnected = WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get()
 
     with api_client.websocket_connect(websocket_uri) as websocket:
         # 1. Test initial connection and state send
@@ -223,8 +205,7 @@ async def test_websocket_workflow(api_client, mock_external_dependencies):
 
         # Verify connection counter incremented by 1
         assert (
-            WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get()
-            == initial_connected + 1
+            WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get() == initial_connected + 1
         )
 
         # 2. Test live update loop
@@ -240,15 +221,12 @@ async def test_websocket_workflow(api_client, mock_external_dependencies):
 
     # Verify disconnection counter incremented by 1
     assert (
-        WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get()
-        == initial_disconnected + 1
+        WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get() == initial_disconnected + 1
     )
 
     # Verify at least one state update occurred during the WebSocket session
     final_state_updates = DASHBOARD_STATE_UPDATES._value.get()
-    assert (
-        final_state_updates > initial_state_updates
-    )  # At least one update should have occurred
+    assert final_state_updates > initial_state_updates  # At least one update should have occurred
 
 
 # ==============================================================================
@@ -263,14 +241,12 @@ async def test_websocket_multiple_connections(api_client, mock_external_dependen
 
     # Record initial metrics
     initial_connected = WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get()
-    initial_disconnected = WEBSOCKET_CONNECTIONS.labels(
-        status="disconnected"
-    )._value.get()
+    initial_disconnected = WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get()
 
     # Connect multiple clients
-    with api_client.websocket_connect(
+    with api_client.websocket_connect(websocket_uri) as ws1, api_client.websocket_connect(
         websocket_uri
-    ) as ws1, api_client.websocket_connect(websocket_uri) as ws2:
+    ) as ws2:
 
         # Both should receive initial state
         initial_state1 = ws1.receive_json()
@@ -281,8 +257,7 @@ async def test_websocket_multiple_connections(api_client, mock_external_dependen
 
         # Verify both connections are counted
         assert (
-            WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get()
-            == initial_connected + 2
+            WEBSOCKET_CONNECTIONS.labels(status="connected")._value.get() == initial_connected + 2
         )
 
         # Both should receive updates
@@ -301,17 +276,14 @@ async def test_websocket_multiple_connections(api_client, mock_external_dependen
 
     # Verify both disconnections are counted
     assert (
-        WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get()
-        == initial_disconnected + 2
+        WEBSOCKET_CONNECTIONS.labels(status="disconnected")._value.get() == initial_disconnected + 2
     )
 
 
 def test_state_update_with_invalid_json(api_client):
     """Test that invalid JSON in state update is handled properly."""
     # This should be caught by Pydantic validation
-    response = api_client.post(
-        "/plugin/dashboard/state/update", json={"invalid_field": "data"}
-    )
+    response = api_client.post("/plugin/dashboard/state/update", json={"invalid_field": "data"})
     assert response.status_code == 422  # Unprocessable Entity
 
 
@@ -345,9 +317,7 @@ async def test_websocket_error_handling(api_client, mock_external_dependencies):
     await asyncio.sleep(0.2)
 
     # Verify no errors occurred during normal operation
-    assert (
-        WEBSOCKET_CONNECTIONS.labels(status="error")._value.get() == initial_error_count
-    )
+    assert WEBSOCKET_CONNECTIONS.labels(status="error")._value.get() == initial_error_count
 
 
 # ==============================================================================
@@ -363,9 +333,7 @@ async def test_rapid_state_updates(api_client, mock_external_dependencies):
     # Perform multiple rapid updates
     for i in range(5):
         update_data = {"rapid_test_counter": i}
-        response = api_client.post(
-            "/plugin/dashboard/state/update", json={"update": update_data}
-        )
+        response = api_client.post("/plugin/dashboard/state/update", json={"update": update_data})
         assert response.status_code == 200
 
     # Verify all updates were counted

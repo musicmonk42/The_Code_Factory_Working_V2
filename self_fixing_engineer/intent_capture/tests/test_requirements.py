@@ -91,13 +91,9 @@ def mock_redis():
     mock_client = AsyncMock()
     mock_client.rpush = AsyncMock(return_value=1)
     mock_client.lrange = AsyncMock(
-        return_value=[
-            json.dumps({"domain": "dom", "coverage_percent": 50}).encode("utf-8")
-        ]
+        return_value=[json.dumps({"domain": "dom", "coverage_percent": 50}).encode("utf-8")]
     )
-    mock_client.get = AsyncMock(
-        return_value=json.dumps({"key": "value"}).encode("utf-8")
-    )
+    mock_client.get = AsyncMock(return_value=json.dumps({"key": "value"}).encode("utf-8"))
     mock_client.set = AsyncMock(return_value=True)
     mock_client.smembers = AsyncMock(return_value=set())
 
@@ -105,9 +101,7 @@ def mock_redis():
     async def async_from_url(*args, **kwargs):
         return mock_client
 
-    with patch(
-        "intent_capture.requirements.redis.Redis.from_url", side_effect=async_from_url
-    ):
+    with patch("intent_capture.requirements.redis.Redis.from_url", side_effect=async_from_url):
         yield mock_client
 
 
@@ -120,9 +114,7 @@ def mock_sentence_transformer():
     mock_model = MagicMock()
     mock_model.encode = MagicMock(return_value=MagicMock())
 
-    with patch(
-        "intent_capture.requirements.SentenceTransformer", return_value=mock_model
-    ):
+    with patch("intent_capture.requirements.SentenceTransformer", return_value=mock_model):
         # Reset the singleton's embedding model
         requirements_module.manager._embedding_model = None
         yield mock_model
@@ -168,13 +160,9 @@ def mock_prometheus():
         labels=MagicMock(return_value=MagicMock(observe=MagicMock())),
     )
 
-    with patch(
-        "intent_capture.requirements.REQ_SUGGESTIONS_TOTAL", mock_counter
-    ), patch(
+    with patch("intent_capture.requirements.REQ_SUGGESTIONS_TOTAL", mock_counter), patch(
         "intent_capture.requirements.REQ_SUGGESTIONS_LATENCY_SECONDS", mock_histogram
-    ), patch(
-        "intent_capture.requirements.DB_OPS_TOTAL", mock_counter
-    ), patch(
+    ), patch("intent_capture.requirements.DB_OPS_TOTAL", mock_counter), patch(
         "intent_capture.requirements.DB_OPS_LATENCY_SECONDS", mock_histogram
     ), patch(
         "intent_capture.requirements.ML_MODEL_LOAD_LATENCY_SECONDS", mock_histogram
@@ -204,12 +192,8 @@ def temp_files(tmp_path, monkeypatch):
         )
     )
 
-    monkeypatch.setattr(
-        "intent_capture.requirements.CUSTOM_CHECKLISTS_FILE", str(custom_file)
-    )
-    monkeypatch.setattr(
-        "intent_capture.requirements.COVERAGE_HISTORY_FILE", str(coverage_file)
-    )
+    monkeypatch.setattr("intent_capture.requirements.CUSTOM_CHECKLISTS_FILE", str(custom_file))
+    monkeypatch.setattr("intent_capture.requirements.COVERAGE_HISTORY_FILE", str(coverage_file))
 
     yield custom_file, coverage_file
 
@@ -251,9 +235,7 @@ def test_get_tracing_context_no_opentelemetry(monkeypatch):
 
 # --- Tests for Embedding Model Loading ---
 @pytest.mark.asyncio
-async def test_get_embedding_model_success(
-    mock_sentence_transformer, mock_tracer, mock_prometheus
-):
+async def test_get_embedding_model_success(mock_sentence_transformer, mock_tracer, mock_prometheus):
     """Test successful embedding model loading."""
     model = await get_embedding_model()
     assert model is not None
@@ -308,9 +290,7 @@ async def test_get_db_conn_pool_missing_vars(monkeypatch):
 
 # --- Tests for DB Get Custom Checklists ---
 @pytest.mark.asyncio
-async def test_db_get_custom_checklists_success(
-    mock_asyncpg, mock_tracer, mock_prometheus
-):
+async def test_db_get_custom_checklists_success(mock_asyncpg, mock_tracer, mock_prometheus):
     """Test successful DB get checklists."""
     checklists = await db_get_custom_checklists("proj")
     assert checklists == {"proj": {"dom": [{"id": "1"}]}}
@@ -353,9 +333,7 @@ async def test_db_get_custom_checklists_retry(monkeypatch):
 
 # --- Tests for DB Save Custom Checklists ---
 @pytest.mark.asyncio
-async def test_db_save_custom_checklists_success(
-    mock_asyncpg, mock_tracer, mock_prometheus
-):
+async def test_db_save_custom_checklists_success(mock_asyncpg, mock_tracer, mock_prometheus):
     """Test successful DB save checklists."""
     customs = {"proj": {"dom": [{"id": "1"}]}}
     await db_save_custom_checklists(customs)
@@ -431,9 +409,7 @@ async def test_update_item_status_custom(mock_asyncpg):
         "intent_capture.requirements.RequirementsManager.get_global_custom_checklists",
         AsyncMock(
             return_value={
-                "default_project": {
-                    "dom": [{"id": test_id, "name": "test", "status": "Uncovered"}]
-                }
+                "default_project": {"dom": [{"id": test_id, "name": "test", "status": "Uncovered"}]}
             }
         ),
     ):
@@ -466,9 +442,7 @@ async def test_update_item_status_invalid():
 
 # --- Tests for Generate Novel Requirements ---
 @pytest.mark.asyncio
-async def test_generate_novel_requirements_success(
-    mock_llm, mock_tracer, mock_prometheus
-):
+async def test_generate_novel_requirements_success(mock_llm, mock_tracer, mock_prometheus):
     """Test successful novel requirements generation."""
     reqs = await _generate_novel_requirements("context", mock_llm)
     assert len(reqs) == 1
@@ -503,9 +477,7 @@ async def test_suggest_requirements_ml(mock_sentence_transformer, mock_llm):
         "intent_capture.requirements.util.pytorch_cos_sim",
         return_value=MagicMock(
             spec=list,
-            __getitem__=MagicMock(
-                return_value=[MagicMock(item=MagicMock(return_value=0.6))]
-            ),
+            __getitem__=MagicMock(return_value=[MagicMock(item=MagicMock(return_value=0.6))]),
         ),
     ):
         suggestions = await suggest_requirements(
@@ -528,9 +500,7 @@ async def test_suggest_requirements_no_ml(mock_llm):
 @pytest.mark.asyncio
 async def test_propose_checklist_updates_success(mock_llm):
     """Test successful checklist updates proposal."""
-    proposals = await propose_checklist_updates(
-        "transcript", REQUIREMENTS_CHECKLIST, mock_llm
-    )
+    proposals = await propose_checklist_updates("transcript", REQUIREMENTS_CHECKLIST, mock_llm)
     assert len(proposals) == 1
 
 
@@ -619,9 +589,7 @@ async def test_compute_coverage_llm_fallback(mock_llm):
     with patch("intent_capture.requirements.PANDAS_AVAILABLE", False):
         markdown = "| ID | Status |\n| REQ1 | Covered |\n| REQ2 | Uncovered |"
         mock_llm.ainvoke = AsyncMock(
-            return_value=MagicMock(
-                content='{"percent": 50.0, "covered": 1, "total": 2}'
-            )
+            return_value=MagicMock(content='{"percent": 50.0, "covered": 1, "total": 2}')
         )
         coverage = await compute_coverage(markdown, mock_llm)
     assert coverage["percent"] == 50.0

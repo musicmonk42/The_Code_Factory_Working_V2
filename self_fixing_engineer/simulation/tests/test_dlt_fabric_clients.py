@@ -20,9 +20,7 @@ def mock_off_chain():
     mock.client_type = "MockOffChain"
     mock.save_blob = AsyncMock(return_value="mock_off_chain_id")
     mock.get_blob = AsyncMock(return_value=b"mock_payload_data")
-    mock.health_check = AsyncMock(
-        return_value={"status": True, "message": "OK", "details": {}}
-    )
+    mock.health_check = AsyncMock(return_value={"status": True, "message": "OK", "details": {}})
     mock.close = AsyncMock()
     return mock
 
@@ -96,9 +94,7 @@ def mock_fabric_sdk(mocker):
     mock_client.set_user = MagicMock()
     mock_client.get_user = MagicMock(return_value=MagicMock())
     mock_client.query_chaincode = MagicMock(return_value=b'{"status": "ok"}')
-    mock_client.invoke_chaincode = MagicMock(
-        return_value=(b'{"version": 1}', "mock_tx_id")
-    )
+    mock_client.invoke_chaincode = MagicMock(return_value=(b'{"version": 1}', "mock_tx_id"))
 
     # Mock the SDK classes
     mock_sdk_class = mocker.patch(
@@ -107,17 +103,13 @@ def mock_fabric_sdk(mocker):
     mock_sdk_class.return_value = mock_client
 
     # Also mock the user class
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.FabricUser", create=True
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_fabric_clients.FabricUser", create=True)
 
     return mock_client
 
 
 @pytest.mark.asyncio
-async def test_fabric_rest_mode_init_success(
-    mock_off_chain, mock_aiohttp_session, mocker
-):
+async def test_fabric_rest_mode_init_success(mock_off_chain, mock_aiohttp_session, mocker):
     """
     Test that the Fabric client initializes successfully in REST mode.
     """
@@ -146,9 +138,7 @@ async def test_fabric_sdk_mode_init_success(mock_off_chain, mock_fabric_sdk, moc
     Test that the Fabric client initializes successfully in SDK mode.
     """
     # Mock PRODUCTION_MODE to False to skip path validation
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False)
 
     mock_config = {
         "fabric": {
@@ -209,15 +199,11 @@ async def test_fabric_init_failure_missing_rest_url(mock_off_chain, mocker):
         FabricClientWrapper(mock_config, mock_off_chain)
 
     # The error message will mention that REST mode requires rest_api_url
-    assert "REST mode requires" in str(excinfo.value) or "rest_api_url" in str(
-        excinfo.value
-    )
+    assert "REST mode requires" in str(excinfo.value) or "rest_api_url" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
-async def test_fabric_init_failure_missing_sdk_fields(
-    mock_off_chain, mock_fabric_sdk, mocker
-):
+async def test_fabric_init_failure_missing_sdk_fields(mock_off_chain, mock_fabric_sdk, mocker):
     """
     Test that SDK mode fails without required fields.
     """
@@ -236,9 +222,7 @@ async def test_fabric_init_failure_missing_sdk_fields(
 
 
 @pytest.mark.asyncio
-async def test_health_check_rest_mode_success(
-    mock_off_chain, mock_aiohttp_session, mocker
-):
+async def test_health_check_rest_mode_success(mock_off_chain, mock_aiohttp_session, mocker):
     """
     Test successful health check in REST mode.
     """
@@ -279,9 +263,7 @@ async def test_health_check_sdk_mode_success(mock_off_chain, mock_fabric_sdk, mo
     Test successful health check in SDK mode.
     """
     # Mock PRODUCTION_MODE to False to skip path validation
-    mocker.patch(
-        "simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False
-    )
+    mocker.patch("simulation.plugins.dlt_clients.dlt_fabric_clients.PRODUCTION_MODE", False)
 
     # Mock file operations for certificates
     mocker.patch("builtins.open", mocker.mock_open(read_data=b"cert_data"))
@@ -304,9 +286,7 @@ async def test_health_check_sdk_mode_success(mock_off_chain, mock_fabric_sdk, mo
 
     try:
         # Configure the SDK mock response
-        mock_fabric_sdk.query_chaincode.return_value = (
-            b'{"version": "1.0", "status": "ok"}'
-        )
+        mock_fabric_sdk.query_chaincode.return_value = b'{"version": "1.0", "status": "ok"}'
 
         result = await client.health_check()
 
@@ -320,9 +300,7 @@ async def test_health_check_sdk_mode_success(mock_off_chain, mock_fabric_sdk, mo
 
 
 @pytest.mark.asyncio
-async def test_write_checkpoint_rest_mode_success(
-    mock_off_chain, mock_aiohttp_session, mocker
-):
+async def test_write_checkpoint_rest_mode_success(mock_off_chain, mock_aiohttp_session, mocker):
     """
     Test successful write operation in REST mode.
     """
@@ -368,9 +346,7 @@ async def test_write_checkpoint_rest_mode_success(
 
 
 @pytest.mark.asyncio
-async def test_read_checkpoint_rest_mode_success(
-    mock_off_chain, mock_aiohttp_session, mocker
-):
+async def test_read_checkpoint_rest_mode_success(mock_off_chain, mock_aiohttp_session, mocker):
     """
     Test successful read operation in REST mode.
     """
@@ -405,9 +381,7 @@ async def test_read_checkpoint_rest_mode_success(
         assert result["metadata"]["hash"] == "0x" + "c" * 64
         assert result["metadata"]["version"] == 789
         assert result["payload_blob"] == b"mock_payload_data"
-        mock_off_chain.get_blob.assert_called_with(
-            "mock_off_chain_id", correlation_id=None
-        )
+        mock_off_chain.get_blob.assert_called_with("mock_off_chain_id", correlation_id=None)
 
         # Verify the session was called with the correct URL
         mock_aiohttp_session.post.assert_called_once()

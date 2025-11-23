@@ -276,9 +276,7 @@ async def test_mutation_tester_success(temp_project_root, mock_config):
 
     # FIX: Patch random.random to ensure a successful outcome (random.random() < 0.9)
     with patch("random.random", return_value=0.0):
-        success, score, log = await tester.run_mutations(
-            "source.py", "test.py", "python"
-        )
+        success, score, log = await tester.run_mutations("source.py", "test.py", "python")
         assert success
         assert score >= 0
         assert "successful" in log
@@ -366,9 +364,7 @@ async def test_create_and_install_venv_success(temp_project_root):
         mock_process.returncode = 0
         mock_exec.return_value = mock_process
 
-        success, path = await create_and_install_venv(
-            "venv_temp", temp_project_root, ["pytest"]
-        )
+        success, path = await create_and_install_venv("venv_temp", temp_project_root, ["pytest"])
         assert success
         assert path.endswith("python" if sys.platform != "win32" else "python.exe")
 
@@ -383,9 +379,7 @@ async def test_create_and_install_venv_timeout(temp_project_root):
         mock_process.communicate.side_effect = asyncio.TimeoutError
         mock_exec.return_value = mock_process
 
-        success, err = await create_and_install_venv(
-            "venv_temp", temp_project_root, ["pytest"]
-        )
+        success, err = await create_and_install_venv("venv_temp", temp_project_root, ["pytest"])
         assert not success
         assert "timed out" in err
 
@@ -629,9 +623,7 @@ async def test_monitor_and_prioritize_uncovered_code_policy_denied(
     with open(file_path, "w") as f:
         f.write(xml_content)
 
-    mock_policy_engine.should_generate_tests = AsyncMock(
-        return_value=(False, "Policy denied")
-    )
+    mock_policy_engine.should_generate_tests = AsyncMock(return_value=(False, "Policy denied"))
     with patch(
         "test_generation.utils.scan_for_uncovered_code_from_xml",
         return_value=["module1"],

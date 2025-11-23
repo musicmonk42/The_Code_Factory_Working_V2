@@ -18,9 +18,7 @@ class ConsistentHashRing:
         for node in nodes:
             # We add nodes one by one to use the internal add_node logic.
             self.add_node(node)
-        logger.info(
-            "ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas
-        )
+        logger.info("ConsistentHashRing initialized.", nodes=self.nodes, replicas=self.replicas)
 
     def add_node(self, node: str) -> None:
         """
@@ -45,9 +43,7 @@ class ConsistentHashRing:
         Removes a node from the hash ring.
         """
         if node not in self.nodes:
-            logger.warning(
-                "Attempted to remove non-existent node from hash ring.", node=node
-            )
+            logger.warning("Attempted to remove non-existent node from hash ring.", node=node)
             return
 
         # Rebuild the ring without the specified node's replicas.
@@ -92,9 +88,7 @@ class ConsistentHashRing:
             logger.warning(f"Node {node} already exists.")
             return
         self.add_node(node)  # Use existing add_node
-        affected_keys = self._get_affected_keys(
-            node
-        )  # New helper to find remapped keys
+        affected_keys = self._get_affected_keys(node)  # New helper to find remapped keys
         rebalance_callback(node, affected_keys)  # Callback to migrate messages
 
     def remove_node_dynamic(

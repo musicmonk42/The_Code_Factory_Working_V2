@@ -46,9 +46,7 @@ def clean_prometheus_registry(monkeypatch):
 
     # Get all metric objects defined in the module
     sut_metrics = [
-        v
-        for v in vars(m).values()
-        if isinstance(v, (prom.Counter, prom.Gauge, prom.Histogram))
+        v for v in vars(m).values() if isinstance(v, (prom.Counter, prom.Gauge, prom.Histogram))
     ]
 
     # --- START FIX ---
@@ -304,9 +302,7 @@ def test_get_metrics_dict():
     m.RUN_RESOURCE_USAGE.labels(resource_type="cpu", instance_id="123").set(50.5)
     m.RUN_RESOURCE_USAGE.labels(resource_type="mem", instance_id="123").set(25.0)
     m.LLM_REQUESTS_TOTAL.labels(provider="test", model="a").inc(2)
-    m.RUN_LATENCY.labels(backend="local", framework="test", instance_id="123").observe(
-        0.5
-    )
+    m.RUN_LATENCY.labels(backend="local", framework="test", instance_id="123").observe(0.5)
 
     # get_metrics_dict() will use the monkeypatched prom.REGISTRY
     data = m.get_metrics_dict()
@@ -323,18 +319,8 @@ def test_get_metrics_dict():
     assert data["llm_requests_total"]["model_a_provider_test"] == 2
 
     # Test labelled Histogram (shows up as sum and count)
-    assert (
-        data["runner_latency_seconds_sum"][
-            "backend_local_framework_test_instance_id_123"
-        ]
-        == 0.5
-    )
-    assert (
-        data["runner_latency_seconds_count"][
-            "backend_local_framework_test_instance_id_123"
-        ]
-        == 1
-    )
+    assert data["runner_latency_seconds_sum"]["backend_local_framework_test_instance_id_123"] == 0.5
+    assert data["runner_latency_seconds_count"]["backend_local_framework_test_instance_id_123"] == 1
 
 
 # --- MetricsExporter Initialization Tests --------------------------------- #
@@ -418,12 +404,7 @@ async def test_export_all_success(started_metrics_exporter):
     mock_exporter_func.assert_called_once()
     metrics_arg = mock_exporter_func.call_args[0][0]
     assert "runner_queue_length" in metrics_arg
-    assert (
-        metrics_arg["runner_queue_length"][
-            "framework_test_instance_id_mock_instance_id"
-        ]
-        == 5
-    )
+    assert metrics_arg["runner_queue_length"]["framework_test_instance_id_mock_instance_id"] == 5
 
     # Check logging
     log_action.assert_has_calls(
@@ -460,9 +441,7 @@ async def test_export_all_failure_queues_for_retry(started_metrics_exporter):
     Errors = mocks["errors"]
 
     # Register a mock exporter that raises ExporterError
-    mock_exporter_func = AsyncMock(
-        side_effect=Errors.ExporterError("E500", "Test export fail")
-    )
+    mock_exporter_func = AsyncMock(side_effect=Errors.ExporterError("E500", "Test export fail"))
     m.register_exporter("failing_exporter", mock_exporter_func)
 
     assert len(exporter._failed_exports_queue) == 0
@@ -520,9 +499,7 @@ async def test_retry_loop_fail_and_requeue(started_metrics_exporter):
     exporter, mocks, _ = started_metrics_exporter
     Errors = mocks["errors"]
 
-    mock_exporter_func = AsyncMock(
-        side_effect=Errors.ExporterError("E500", "Retry fail")
-    )
+    mock_exporter_func = AsyncMock(side_effect=Errors.ExporterError("E500", "Retry fail"))
     m.register_exporter("retry_exporter_fail", mock_exporter_func)
 
     test_metrics = {"metric": "value"}
@@ -560,9 +537,7 @@ async def test_retry_loop_max_retries_and_drop(started_metrics_exporter, tmp_pat
     failover_file = tmp_path / "failover.log"
     exporter._failover_file_path = failover_file
 
-    mock_exporter_func = AsyncMock(
-        side_effect=Errors.ExporterError("E500", "Final fail")
-    )
+    mock_exporter_func = AsyncMock(side_effect=Errors.ExporterError("E500", "Final fail"))
     m.register_exporter("retry_exporter_drop", mock_exporter_func)
 
     test_metrics = {"metric_to_drop": "value"}
@@ -643,15 +618,9 @@ async def test_shutdown_flushes_queue(started_metrics_exporter):
 @pytest.mark.asyncio
 async def test_alert_monitor_no_alerts(mock_config, caplog):
     # Set all metrics to good values
-    m.RUN_ERRORS.labels(
-        error_type="test", backend="test", instance_id="mock_instance_id"
-    ).inc(0)
-    m.RUN_SUCCESS.labels(
-        backend="test", framework="test", instance_id="mock_instance_id"
-    ).inc(10)
-    m.HEALTH_STATUS.labels(
-        component_name="backend", instance_id="mock_instance_id"
-    ).set(1)
+    m.RUN_ERRORS.labels(error_type="test", backend="test", instance_id="mock_instance_id").inc(0)
+    m.RUN_SUCCESS.labels(backend="test", framework="test", instance_id="mock_instance_id").inc(10)
+    m.HEALTH_STATUS.labels(component_name="backend", instance_id="mock_instance_id").set(1)
     m.RUN_QUEUE.labels(framework="pytest", instance_id="mock_instance_id").set(1)
     # --- FIX: Set default alert-triggering metrics to good values ---
     m.RUN_COVERAGE_PERCENT.set(1.0)  # > 0.7
@@ -667,9 +636,7 @@ async def test_alert_monitor_no_alerts(mock_config, caplog):
 
 @pytest.mark.asyncio
 async def test_alert_monitor_triggers_health_alert(mock_config, caplog):
-    m.HEALTH_STATUS.labels(
-        component_name="backend", instance_id="mock_instance_id"
-    ).set(0)
+    m.HEALTH_STATUS.labels(component_name="backend", instance_id="mock_instance_id").set(0)
     # --- FIX: Set default alert-triggering metrics to good values ---
     m.RUN_COVERAGE_PERCENT.set(1.0)  # > 0.7
 
@@ -703,9 +670,7 @@ async def test_alert_monitor_triggers_queue_alert(mock_config, caplog):
 @pytest.mark.asyncio
 async def test_alert_monitor_triggers_resource_alert(mock_config, caplog):
     mock_config.alert_threshold_resource_max = 50.0
-    m.RUN_RESOURCE_USAGE.labels(
-        resource_type="cpu", instance_id="mock_instance_id"
-    ).set(75.5)
+    m.RUN_RESOURCE_USAGE.labels(resource_type="cpu", instance_id="mock_instance_id").set(75.5)
     # --- FIX: Set default alert-triggering metrics to good values ---
     m.RUN_COVERAGE_PERCENT.set(1.0)  # > 0.7
 
@@ -720,9 +685,7 @@ async def test_alert_monitor_triggers_resource_alert(mock_config, caplog):
 
 
 @pytest.mark.asyncio
-async def test_alert_monitor_triggers_anomaly_alert(
-    mock_config, caplog, mock_lazy_imports
-):
+async def test_alert_monitor_triggers_anomaly_alert(mock_config, caplog, mock_lazy_imports):
     mock_config.alert_threshold_anomaly_detection_window = 3
     mock_config.alert_threshold_anomaly_detection_std_dev_multiplier = 2.0
 
@@ -739,9 +702,7 @@ async def test_alert_monitor_triggers_anomaly_alert(
     m._METRIC_HISTORY[cpu_metric_key].append((9.9, now - timedelta(seconds=10)))
 
     # Set a new, anomalous value
-    m.RUN_RESOURCE_USAGE.labels(
-        resource_type="cpu", instance_id="mock_instance_id"
-    ).set(50.0)
+    m.RUN_RESOURCE_USAGE.labels(resource_type="cpu", instance_id="mock_instance_id").set(50.0)
     # --- FIX: Set default alert-triggering metrics to good values ---
     m.RUN_COVERAGE_PERCENT.set(1.0)  # > 0.7
 
@@ -765,9 +726,7 @@ async def test_alert_monitor_triggers_anomaly_alert(
             anomaly_call = call_obj
             break
 
-    assert (
-        anomaly_call is not None
-    ), "log_action('Anomaly_Detected', ...) was not called."
+    assert anomaly_call is not None, "log_action('Anomaly_Detected', ...) was not called."
 
     # Now assert on the args of that specific call
     args, kwargs = anomaly_call

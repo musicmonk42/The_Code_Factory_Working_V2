@@ -74,9 +74,7 @@ def alert_operator(monkeypatch, secrets):
     # Patch logging to avoid file/console IO.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
-    monkeypatch.setattr(
-        logging, "getLogger", lambda name=None: logging.getLogger("dummy_logger")
-    )
+    monkeypatch.setattr(logging, "getLogger", lambda name=None: logging.getLogger("dummy_logger"))
     secrets_mgr = DummySecretsManager(secrets)
     audit_logger = DummyAuditLogger(secrets_mgr)
     op = core_utils.AlertOperator(secrets_mgr, audit_logger)
@@ -318,9 +316,9 @@ def test_post_with_retry_retry_after_header(alert_operator):
     # Simulate 429 with Retry-After header
     resp = MagicMock(status_code=429, headers={"Retry-After": "2"})
     success = MagicMock(status_code=200)
-    with patch.object(
-        dispatcher._session, "post", side_effect=[resp, success]
-    ) as mock_post, patch("time.sleep", return_value=None):
+    with patch.object(dispatcher._session, "post", side_effect=[resp, success]) as mock_post, patch(
+        "time.sleep", return_value=None
+    ):
         dispatcher._post_with_retry("http://dummy", {}, (1, 1), 2)
         assert mock_post.call_count == 2
 

@@ -12,9 +12,7 @@ def setup_logging():
     logger = logging.getLogger()
     logger.handlers = []
     handler = logging.FileHandler("test.log", mode="w")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
@@ -41,9 +39,7 @@ def pytest_configure(config):
                 except Exception as e:
                     logging.error(f"Failed to unregister collector {collector}: {e}")
             else:
-                logging.warning(
-                    f"Skipping invalid collector type: {type(collector)} - {collector}"
-                )
+                logging.warning(f"Skipping invalid collector type: {type(collector)} - {collector}")
 
         # Clear internal mappings
         try:

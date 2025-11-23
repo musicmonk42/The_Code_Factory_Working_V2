@@ -117,19 +117,13 @@ class PiiMaskingFormatter(logging.Formatter):
             "[REDACTED_EMAIL]",
             message,
         )
-        message = re.sub(
-            r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]", message
-        )
-        message = re.sub(
-            r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[REDACTED_CC]", message
-        )
+        message = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]", message)
+        message = re.sub(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[REDACTED_CC]", message)
         message = re.sub(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b", "[REDACTED_NAME]", message)
         message = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]", message)
         message = re.sub(r"\b(1-)?\d{3}-\d{3}-\d{4}\b", "[REDACTED_PHONE]", message)
         message = re.sub(r"\b\d{5}(-\d{4})?\b", "[REDACTED_ZIP]", message)
-        message = re.sub(
-            r"\b\d{1,5} [A-Za-z0-9 .,-]{5,}\b", "[REDACTED_ADDRESS]", message
-        )
+        message = re.sub(r"\b\d{1,5} [A-Za-z0-9 .,-]{5,}\b", "[REDACTED_ADDRESS]", message)
         return message
 
 
@@ -148,9 +142,7 @@ def setup_logging():
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
 
-service_breaker = (
-    CircuitBreaker(fail_max=3, reset_timeout=60) if PYBREAKER_AVAILABLE else None
-)
+service_breaker = CircuitBreaker(fail_max=3, reset_timeout=60) if PYBREAKER_AVAILABLE else None
 
 # Prometheus Metrics
 if PROMETHEUS_AVAILABLE:
@@ -199,9 +191,7 @@ class PluginManager:
                 return False
             with open(sig_path, "rb") as f:
                 signature = f.read()
-            public_key = serialization.load_pem_public_key(
-                os.getenv("PLUGIN_PUBLIC_KEY").encode()
-            )
+            public_key = serialization.load_pem_public_key(os.getenv("PLUGIN_PUBLIC_KEY").encode())
             public_key.verify(
                 signature,
                 data,
@@ -213,9 +203,7 @@ class PluginManager:
             )
             return True
         except Exception as e:
-            config_logger.error(
-                f"Plugin {plugin_name} failed signature verification: {e}"
-            )
+            config_logger.error(f"Plugin {plugin_name} failed signature verification: {e}")
             SAFETY_VIOLATIONS_TOTAL.inc()
             return False
 
@@ -229,9 +217,7 @@ class PluginManager:
             plugin_path = os.path.join(plugins_dir, plugin_name)
             config_file = os.path.join(plugin_path, "plugin_config.json")
             if os.path.isdir(plugin_path) and os.path.exists(config_file):
-                if PROD_MODE and not cls._verify_plugin_signature(
-                    plugin_name, config_file
-                ):
+                if PROD_MODE and not cls._verify_plugin_signature(plugin_name, config_file):
                     continue
                 # Load and apply plugin config (additive, stub)
                 try:
@@ -245,11 +231,7 @@ class PluginManager:
 
 # --- Secure and Resilient Secret/Config Fetching ---
 def fetch_from_vault(path: str) -> Dict[str, Any]:
-    if (
-        os.getenv("USE_VAULT", "false") != "true"
-        or not CRYPTOGRAPHY_AVAILABLE
-        or not hvac
-    ):
+    if os.getenv("USE_VAULT", "false") != "true" or not CRYPTOGRAPHY_AVAILABLE or not hvac:
         return {}
     try:
         client = hvac.Client(url=os.getenv("VAULT_URL"), token=os.getenv("VAULT_TOKEN"))
@@ -276,15 +258,11 @@ def _fetch_config_from_service() -> Optional[Dict[str, Any]]:
                 requests.get, service_url, headers=headers, timeout=10, verify=True
             )
         else:
-            response = requests.get(
-                service_url, headers=headers, timeout=10, verify=True
-            )
+            response = requests.get(service_url, headers=headers, timeout=10, verify=True)
         if response.status_code == 200:
             return response.json()
         else:
-            config_logger.error(
-                f"Config service returned {response.status_code}: {response.text}"
-            )
+            config_logger.error(f"Config service returned {response.status_code}: {response.text}")
             return None
     except (
         requests.Timeout,
@@ -325,15 +303,11 @@ class Config(BaseSettings):
     )
     ENCRYPTION_KEY: SecretStr
     LLM_API_KEY: SecretStr
-    REDIS_URL: str = Field(
-        default="redis://localhost:6379/0", description="Redis URL for caching"
-    )
+    REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis URL for caching")
     VAULT_URL: Optional[str] = Field(default=None, description="HashiCorp Vault URL")
     VAULT_TOKEN: Optional[SecretStr] = Field(default=None)
     PROD_MODE: bool = Field(default=False)
-    LOG_LEVEL: str = Field(
-        default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$"
-    )
+    LOG_LEVEL: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
     CUSTOM_CONFIG_PATH: str = Field(default="config.json")
     CONFIG_SERVICE_URL: Optional[str] = Field(default=None)
     CONFIG_TOKEN: Optional[SecretStr] = Field(default=None)
@@ -389,9 +363,7 @@ class GlobalConfigManager:
         redis_client = None
         if REDIS_AVAILABLE and os.getenv("USE_REDIS_CACHE", "false") == "true":
             try:
-                redis_client = redis.from_url(
-                    os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                )
+                redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
                 cached = redis_client.get(cache_key)
                 if cached:
                     config_data = json.loads(cached)
@@ -454,9 +426,7 @@ class GlobalConfigManager:
                         "Config reload has failed 3+ times. Maintaining stale config."
                     )
                 else:
-                    config_logger.error(
-                        f"Config reload failed. Keeping old config. Error: {e}"
-                    )
+                    config_logger.error(f"Config reload failed. Keeping old config. Error: {e}")
                 log_audit_event(
                     "config_reload",
                     {"success": False, "failure_count": cls._reload_failure_count},
@@ -527,9 +497,7 @@ def prune_audit_logs(retention_days: int = 90):
                 if obj["LastModified"].replace(tzinfo=None) < cutoff
             ]
             if keys:
-                s3.delete_objects(
-                    Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
-                )
+                s3.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]})
                 config_logger.info(f"Pruned {len(keys)} audit logs.")
     except Exception as e:
         config_logger.error(f"Failed to prune audit logs: {e}")

@@ -156,17 +156,13 @@ class ExplainableAI:
             self.logger.warning(
                 "Explainable AI core is not available. Returning dummy explanation."
             )
-            return {
-                "explanation": "Mock explanation: AI explanation feature is disabled."
-            }
+            return {"explanation": "Mock explanation: AI explanation feature is disabled."}
         return await self.reasoner.explain_event(event_data)
 
     async def reason_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate logical reasoning for an event or decision."""
         if not self.reasoner:
-            self.logger.warning(
-                "Explainable AI core is not available. Returning dummy reasoning."
-            )
+            self.logger.warning("Explainable AI core is not available. Returning dummy reasoning.")
             return {"reasoning": "Mock reasoning: AI reasoning feature is disabled."}
         return await self.reasoner.reason_event(event_data)
 
@@ -197,9 +193,7 @@ class OmniCoreEngine:
             system_audit_merkle_tree = MerkleTree()
             self.logger.info("MerkleTree initialized for audit system.")
         except ImportError:
-            self.logger.warning(
-                "MerkleTree not found. Audit integrity features will be limited."
-            )
+            self.logger.warning("MerkleTree not found. Audit integrity features will be limited.")
             system_audit_merkle_tree = None
 
         from omnicore_engine.database import Database
@@ -247,9 +241,7 @@ class OmniCoreEngine:
             async def health_check(self) -> Dict[str, Any]:
                 return {
                     "status": "ok",
-                    "plugins_loaded": sum(
-                        len(k) for k in self.registry.plugins.values()
-                    ),
+                    "plugins_loaded": sum(len(k) for k in self.registry.plugins.values()),
                 }
 
             @property
@@ -330,13 +322,9 @@ class OmniCoreEngine:
                 instance = component_class(*args, **kwargs)
                 await instance.initialize()
                 self.components[name] = instance
-                self.logger.info(
-                    f"Component '{name}' initialized successfully by engine."
-                )
+                self.logger.info(f"Component '{name}' initialized successfully by engine.")
             else:
-                self.logger.debug(
-                    f"Component '{name}' already initialized by engine. Skipping."
-                )
+                self.logger.debug(f"Component '{name}' already initialized by engine. Skipping.")
             return self.components[name]
 
     async def _shutdown_component_instance(self, name: str):
@@ -347,13 +335,9 @@ class OmniCoreEngine:
                 self.logger.info(f"Engine shutting down component: {name}...")
                 component = self.components.pop(name)
                 await component.shutdown()
-                self.logger.info(
-                    f"Component '{name}' shut down successfully by engine."
-                )
+                self.logger.info(f"Component '{name}' shut down successfully by engine.")
             else:
-                self.logger.warning(
-                    f"Component '{name}' not found or already shut down by engine."
-                )
+                self.logger.warning(f"Component '{name}' not found or already shut down by engine.")
 
     async def get_component(self, name: str) -> Optional[Base]:
         return self.components.get(name)
@@ -365,9 +349,7 @@ class OmniCoreEngine:
                 health = await component.health_check()
                 results[name] = health
             except Exception as e:
-                logger.error(
-                    f"Health check failed for component {name}: {e}", exc_info=True
-                )
+                logger.error(f"Health check failed for component {name}: {e}", exc_info=True)
                 results[name] = {"status": "error", "message": str(e)}
         return results
 

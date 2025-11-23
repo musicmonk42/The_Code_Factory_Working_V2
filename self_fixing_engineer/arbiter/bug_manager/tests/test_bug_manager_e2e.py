@@ -168,11 +168,7 @@ async def test_e2e_bug_report_with_failed_fix_and_notifications(tmp_path):
         RemediationStep.register_action("e2e_restart_cache_service", mock_action)
         playbook = RemediationPlaybook(
             name="RestartCacheService",
-            steps=[
-                RemediationStep(
-                    name="RestartCache", action_name="e2e_restart_cache_service"
-                )
-            ],
+            steps=[RemediationStep(name="RestartCache", action_name="e2e_restart_cache_service")],
         )
         BugFixerRegistry.register_playbook(playbook, location="data.cache_service")
 

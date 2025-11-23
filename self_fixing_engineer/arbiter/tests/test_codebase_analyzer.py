@@ -311,9 +311,7 @@ def test_cli_scan():
 
         # Capture output to avoid file closing issues
         with patch("sys.stdout"), patch("sys.stderr"):
-            result = runner.invoke(
-                app, ["scan", "--root-dir", ".", "--output-format", "json"]
-            )
+            result = runner.invoke(app, ["scan", "--root-dir", ".", "--output-format", "json"])
             # Just check it didn't error
             assert result.exit_code == 0
 

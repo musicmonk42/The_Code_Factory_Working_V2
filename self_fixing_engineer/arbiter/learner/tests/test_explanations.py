@@ -60,9 +60,7 @@ def setup_opentelemetry(mocker):
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.sdk.resources import Resource
 
-    test_provider = TracerProvider(
-        resource=Resource.create({"service.name": "test-explanations"})
-    )
+    test_provider = TracerProvider(resource=Resource.create({"service.name": "test-explanations"}))
     test_provider.add_span_processor(BatchSpanProcessor(in_memory_exporter))
     trace.set_tracer_provider(test_provider)
 
@@ -136,18 +134,14 @@ def mock_learner(mocker):
     learner.redis.get = AsyncMock(return_value=None)
     learner.redis.setex = AsyncMock()
     learner.llm_explanation_client = mocker.MagicMock()
-    learner.llm_explanation_client.generate_text = AsyncMock(
-        return_value="Mock explanation"
-    )
+    learner.llm_explanation_client.generate_text = AsyncMock(return_value="Mock explanation")
     learner.audit_logger = mocker.MagicMock()
     learner.audit_logger.log_event = AsyncMock()
     learner.audit_logger.add_entry = AsyncMock()
     learner.explanation_feedback_log = []
     learner.arbiter = mocker.MagicMock()
     learner.arbiter.knowledge_graph = mocker.MagicMock()
-    learner.arbiter.knowledge_graph.find_related_facts = AsyncMock(
-        return_value=["related_fact"]
-    )
+    learner.arbiter.knowledge_graph.find_related_facts = AsyncMock(return_value=["related_fact"])
     learner.arbiter.knowledge_graph.check_consistency = AsyncMock(return_value=None)
     return learner
 
@@ -221,9 +215,7 @@ async def test_generate_text_with_retry_success(mock_learner):
         Exception("Fail1"),
         "Success on retry",
     ]
-    result = await _generate_text_with_retry(
-        mock_learner.llm_explanation_client, "test prompt"
-    )
+    result = await _generate_text_with_retry(mock_learner.llm_explanation_client, "test prompt")
     assert result == "Success on retry"
     assert mock_learner.llm_explanation_client.generate_text.call_count == 2
 
@@ -232,13 +224,9 @@ async def test_generate_text_with_retry_success(mock_learner):
 async def test_generate_text_with_retry_failure(mock_learner):
     """Test LLM text generation failure after retries."""
     # The default tenacity retries 3 times, so 3 calls total
-    mock_learner.llm_explanation_client.generate_text.side_effect = Exception(
-        "Persistent failure"
-    )
+    mock_learner.llm_explanation_client.generate_text.side_effect = Exception("Persistent failure")
     with pytest.raises(Exception, match="Persistent failure"):
-        await _generate_text_with_retry(
-            mock_learner.llm_explanation_client, "test prompt"
-        )
+        await _generate_text_with_retry(mock_learner.llm_explanation_client, "test prompt")
     assert mock_learner.llm_explanation_client.generate_text.call_count == 3
 
 
@@ -247,9 +235,7 @@ async def test_generate_explanation_success(mock_learner):
     """Test successful explanation generation."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
     explanation = await generate_explanation(
         mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
     )
@@ -277,12 +263,8 @@ async def test_generate_explanation_kg_insights(mock_learner):
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
     mock_learner.arbiter.knowledge_graph.find_related_facts.return_value = ["fact1"]
-    mock_learner.arbiter.knowledge_graph.check_consistency.return_value = (
-        "Issue detected"
-    )
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.arbiter.knowledge_graph.check_consistency.return_value = "Issue detected"
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
     explanation = await generate_explanation(
         mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
     )
@@ -294,12 +276,8 @@ async def test_generate_explanation_kg_error(mock_learner, caplog):
     """Test explanation when KG fails."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.arbiter.knowledge_graph.find_related_facts.side_effect = Exception(
-        "KG error"
-    )
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.arbiter.knowledge_graph.find_related_facts.side_effect = Exception("KG error")
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
     with caplog.at_level(logging.WARNING):
         explanation = await generate_explanation(
             mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
@@ -313,9 +291,7 @@ async def test_generate_explanation_retry_exhausted(mock_learner):
     """Test explanation when retries are exhausted."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.side_effect = Exception(
-        "LLM fail"
-    )
+    mock_learner.llm_explanation_client.generate_text.side_effect = Exception("LLM fail")
     explanation = await generate_explanation(
         mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
     )
@@ -328,9 +304,7 @@ async def test_generate_explanation_unexpected_error(mock_learner):
     """Test explanation with unexpected error."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.side_effect = Exception(
-        "Unexpected"
-    )
+    mock_learner.llm_explanation_client.generate_text.side_effect = Exception("Unexpected")
     explanation = await generate_explanation(
         mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
     )
@@ -399,9 +373,7 @@ async def test_concurrent_generate_explanation(mock_learner):
     """Test concurrent explanation generation."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
 
     async def gen_task(i):
         return await generate_explanation(
@@ -419,9 +391,7 @@ async def test_tracing_generate_explanation(mock_learner):
     """Test OpenTelemetry tracing for generate_explanation."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
 
     # Create a fresh tracer for this test
     from opentelemetry import trace as otel_trace
@@ -443,13 +413,9 @@ async def test_metrics_in_generate_explanation(mock_learner):
     """Test metrics in generate_explanation."""
     ensure_templates_loaded()
     mock_learner.redis.get.return_value = None  # No cache
-    mock_learner.llm_explanation_client.generate_text.return_value = (
-        "Generated explanation"
-    )
+    mock_learner.llm_explanation_client.generate_text.return_value = "Generated explanation"
 
-    await generate_explanation(
-        mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None
-    )
+    await generate_explanation(mock_learner, "TestDomain", "test_key", {"new": "value"}, None, None)
     # Metrics are recorded but we can't easily access the internal state
     # The important thing is the function completes without error
 

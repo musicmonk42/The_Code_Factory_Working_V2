@@ -117,14 +117,10 @@ def _load_presidio_engine() -> bool:
             "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
         }
         _nlp_provider = NlpEngineProvider(nlp_configuration=_nlp_provider_config)
-        _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
-            nlp_engine=_nlp_provider.create_engine()
-        )
+        _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(nlp_engine=_nlp_provider.create_engine())
         _PRESIDIO_ANONYMIZER_ENGINE = AnonymizerEngine()
         _PRESIDIO_AVAILABLE = True
-        logger.info(
-            "Presidio AnalyzerEngine (NLP) loaded successfully for advanced redaction."
-        )
+        logger.info("Presidio AnalyzerEngine (NLP) loaded successfully for advanced redaction.")
         return True
     except ImportError:
         _PRESIDIO_AVAILABLE = False
@@ -177,9 +173,7 @@ try:
 except ImportError:
     boto3 = None
     HAS_BOTO3 = False
-    logger.warning(
-        "boto3 not found. AWS Secrets Manager/KMS integration will be unavailable."
-    )
+    logger.warning("boto3 not found. AWS Secrets Manager/KMS integration will be unavailable.")
 
 try:
     import pkcs11  # For HSM (add to reqs: python-pkcs11)
@@ -224,17 +218,11 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None) -
     if not _PRESIDIO_AVAILABLE:
         _load_presidio_engine()
 
-    if (
-        not _PRESIDIO_AVAILABLE
-        or not _PRESIDIO_ANALYZER_ENGINE
-        or not _PRESIDIO_ANONYMIZER_ENGINE
-    ):
+    if not _PRESIDIO_AVAILABLE or not _PRESIDIO_ANALYZER_ENGINE or not _PRESIDIO_ANONYMIZER_ENGINE:
         logger.warning(
             "Presidio/NLP redactor called but not available. Falling back to basic regex."
         )
-        return regex_basic_redactor(
-            data, patterns
-        )  # Fallback to regex if Presidio failed
+        return regex_basic_redactor(data, patterns)  # Fallback to regex if Presidio failed
 
     if isinstance(data, str):
         try:
@@ -274,9 +262,7 @@ register_redactor("nlp_presidio", nlp_presidio_redactor)
 
 
 # --- Encryption Providers ---
-def fernet_encrypt_decrypt(
-    data: Union[str, bytes], key: bytes, mode: str
-) -> Union[bytes, str]:
+def fernet_encrypt_decrypt(data: Union[str, bytes], key: bytes, mode: str) -> Union[bytes, str]:
     """Symmetric encryption/decryption using Fernet."""
     f = Fernet(key)
     if mode == "encrypt":
@@ -290,9 +276,7 @@ def fernet_encrypt_decrypt(
     raise ValueError("Invalid mode for Fernet: must be 'encrypt' or 'decrypt'.")
 
 
-def aes_cbc_encrypt_decrypt(
-    data: Union[str, bytes], key: bytes, mode: str
-) -> Union[bytes, str]:
+def aes_cbc_encrypt_decrypt(data: Union[str, bytes], key: bytes, mode: str) -> Union[bytes, str]:
     """Symmetric encryption/decryption using AES-CBC with PKCS7 padding."""
     if len(key) not in [16, 24, 32]:
         raise ValueError("AES key must be 16, 24, or 32 bytes.")
@@ -308,14 +292,10 @@ def aes_cbc_encrypt_decrypt(
 
         data_bytes = data.encode("utf-8") if isinstance(data, str) else data
         padded_data = padder.update(data_bytes) + padder.finalize()
-        return (
-            iv + encryptor.update(padded_data) + encryptor.finalize()
-        )  # Prepend IV to ciphertext
+        return iv + encryptor.update(padded_data) + encryptor.finalize()  # Prepend IV to ciphertext
     elif mode == "decrypt":
         if not isinstance(data, bytes) or len(data) <= 16:
-            raise TypeError(
-                "AES decryption requires bytes input with IV (must be > 16 bytes)."
-            )
+            raise TypeError("AES decryption requires bytes input with IV (must be > 16 bytes).")
 
         iv = data[:16]
         ciphertext = data[16:]
@@ -367,9 +347,7 @@ def redact_secrets(
         nlp_available = _PRESIDIO_AVAILABLE or _load_presidio_engine()
         effective_method = "nlp_presidio" if nlp_available else "regex_basic"
 
-    redactor = REDACTORS.get(
-        effective_method, regex_basic_redactor
-    )  # Get the redactor function
+    redactor = REDACTORS.get(effective_method, regex_basic_redactor)  # Get the redactor function
 
     logger.debug(f"Redacting secrets using method: {effective_method}")
 
@@ -394,9 +372,7 @@ def redact_secrets(
 
 
 @util_decorator
-async def encrypt_data(
-    data: Union[str, bytes], key: bytes, algorithm: str = "fernet"
-) -> bytes:
+async def encrypt_data(data: Union[str, bytes], key: bytes, algorithm: str = "fernet") -> bytes:
     """
     Encrypts data using the specified symmetric algorithm.
     Returns encrypted bytes.
@@ -475,9 +451,7 @@ def _set_to_cache(key: str, value: Any):
 
 
 @util_decorator
-async def fetch_secret(
-    secret_name: str, source: str = "env", **kwargs
-) -> Optional[str]:
+async def fetch_secret(secret_name: str, source: str = "env", **kwargs) -> Optional[str]:
     """
     Fetches a secret from a configured source (env, vault, aws_sm, hsm_pin).
     Caches secrets in memory with a TTL.
@@ -497,9 +471,7 @@ async def fetch_secret(
         if source == "env":
             secret_value = os.getenv(secret_name)
             if secret_value:
-                logger.info(
-                    f"Fetched secret '{secret_name}' from environment variable."
-                )
+                logger.info(f"Fetched secret '{secret_name}' from environment variable.")
 
         elif source == "vault" and HAS_VAULT:
             vault_url = kwargs.get("vault_url", os.getenv("VAULT_ADDR"))
@@ -526,53 +498,37 @@ async def fetch_secret(
                 logger.info(f"Fetched secret '{secret_name}' from Hashicorp Vault.")
 
         elif source == "aws_sm" and HAS_BOTO3:
-            region_name = kwargs.get(
-                "region_name", os.getenv("AWS_REGION", "us-east-1")
-            )
+            region_name = kwargs.get("region_name", os.getenv("AWS_REGION", "us-east-1"))
 
             session = boto3.session.Session()
-            client = session.client(
-                service_name="secretsmanager", region_name=region_name
-            )
+            client = session.client(service_name="secretsmanager", region_name=region_name)
 
-            response = await asyncio.to_thread(
-                client.get_secret_value, SecretId=secret_name
-            )
+            response = await asyncio.to_thread(client.get_secret_value, SecretId=secret_name)
             if "SecretString" in response:
                 secret_value = response["SecretString"]
             else:
-                secret_value = base64.b64decode(response["SecretBinary"]).decode(
-                    "utf-8"
-                )
+                secret_value = base64.b64decode(response["SecretBinary"]).decode("utf-8")
             if secret_value:
                 logger.info(f"Fetched secret '{secret_name}' from AWS Secrets Manager.")
 
         elif source == "hsm_pin" and HAS_PKCS11:
             # Placeholder for retrieving HSM PIN.
             # This is highly specific and often passed via environment or secure input.
-            secret_value = os.getenv(
-                "HSM_PIN"
-            )  # Default to environment variable for PIN
+            secret_value = os.getenv("HSM_PIN")  # Default to environment variable for PIN
             if secret_value:
                 logger.info("Fetched HSM PIN from environment variable.")
             else:
-                logger.warning(
-                    "HSM PIN requested but 'HSM_PIN' environment variable not set."
-                )
+                logger.warning("HSM PIN requested but 'HSM_PIN' environment variable not set.")
 
         else:
             if not HAS_VAULT and source == "vault":
-                logger.error(
-                    "Cannot fetch secret from Vault: 'hvac' library not installed."
-                )
+                logger.error("Cannot fetch secret from Vault: 'hvac' library not installed.")
             elif not HAS_BOTO3 and source == "aws_sm":
                 logger.error(
                     "Cannot fetch secret from AWS Secrets Manager: 'boto3' library not installed."
                 )
             elif not HAS_PKCS11 and source == "hsm_pin":
-                logger.error(
-                    "Cannot fetch HSM PIN: 'python-pkcs11' library not installed."
-                )
+                logger.error("Cannot fetch HSM PIN: 'python-pkcs11' library not installed.")
             else:
                 logger.error(f"Unknown secret source: {source}")
             # --- FIX: REMOVED METRICS INCREMENT ---
@@ -620,10 +576,7 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
     for pattern in SECRET_SCAN_PATTERNS:
         for match in pattern.finditer(content):
             # Avoid matching very long non-secret strings
-            if (
-                pattern.pattern == r"\b[a-zA-Z0-9/+]{20,}[=]{0,2}\b"
-                and len(match.group(0)) > 100
-            ):
+            if pattern.pattern == r"\b[a-zA-Z0-9/+]{20,}[=]{0,2}\b" and len(match.group(0)) > 100:
                 continue
 
             # FIX: Ensure we only capture the secret part if the pattern uses groups (like the password/key patterns)
@@ -821,9 +774,7 @@ class TestSecurityUtils(unittest.TestCase):
             self.assertIsInstance(encrypted, bytes)
             self.assertNotEqual(data.encode(), encrypted)
 
-            decrypted = await decrypt_data(
-                encrypted, self.fernet_key, algorithm="fernet"
-            )
+            decrypted = await decrypt_data(encrypted, self.fernet_key, algorithm="fernet")
             self.assertEqual(data, decrypted)
 
         asyncio.run(run_test())
@@ -902,13 +853,13 @@ class TestSecurityUtils(unittest.TestCase):
     def test_monitor_for_leaks_hypothesis_sync(self, text_segment):
         # We test the synchronous function `scan_for_secrets` here directly.
 
-        leaky_text = f"This is a test with a secret password='{text_segment}' and email: leak@domain.org"
+        leaky_text = (
+            f"This is a test with a secret password='{text_segment}' and email: leak@domain.org"
+        )
         leaks = scan_for_secrets(leaky_text)  # Test the sync function
 
         # We expect two findings: the password and the email (from the regex_basic patterns)
-        self.assertTrue(
-            len(leaks) >= 1
-        )  # At least the password/secret pattern should match
+        self.assertTrue(len(leaks) >= 1)  # At least the password/secret pattern should match
 
         # Test clean text
         clean_text = "This is a safe sentence."
@@ -921,9 +872,7 @@ class TestSecurityUtils(unittest.TestCase):
         async def run_test():
             dummy_code_path = self.test_dir / "dummy_code.py"
             dummy_code_path.write_text("import os; os.system('rm -rf /')")
-            code_scan_results = await scan_for_vulnerabilities(
-                dummy_code_path, scan_type="code"
-            )
+            code_scan_results = await scan_for_vulnerabilities(dummy_code_path, scan_type="code")
             self.assertEqual(code_scan_results["status"], "completed")
             self.assertGreater(code_scan_results["vulnerabilities_found"], 0)
             self.assertIn(str(dummy_code_path), code_scan_results["scanned_target"])

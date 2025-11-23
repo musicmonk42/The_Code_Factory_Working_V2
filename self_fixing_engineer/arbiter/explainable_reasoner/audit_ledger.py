@@ -61,9 +61,7 @@ except ImportError:
 AUDIT_SEND_LATENCY = get_or_create_metric(
     Histogram, "audit_send_latency_seconds", "Audit event send latency", ("status",)
 )
-AUDIT_ERRORS = get_or_create_metric(
-    Counter, "audit_errors_total", "Audit errors", ("code",)
-)
+AUDIT_ERRORS = get_or_create_metric(Counter, "audit_errors_total", "Audit errors", ("code",))
 AUDIT_BATCH_SIZE = get_or_create_metric(
     Histogram, "audit_batch_size_total", "Number of events in batch", ("status",)
 )
@@ -112,9 +110,7 @@ class AuditLedgerClient:
             if not self.ledger_url.startswith("https"):
                 raise ValueError("Ledger URL must use HTTPS for security.")
         except ValidationError as e:
-            raise ValueError(
-                f"Invalid URL provided for ledger_url: {ledger_url}"
-            ) from e
+            raise ValueError(f"Invalid URL provided for ledger_url: {ledger_url}") from e
 
         self.ledger_url = self.ledger_url.rstrip("/")
         self.api_key = SensitiveValue(api_key) if api_key else None
@@ -150,8 +146,7 @@ class AuditLedgerClient:
         return self._client
 
     @tenacity.retry(
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=10)
-        + tenacity.wait_random(0, 0.5),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=10) + tenacity.wait_random(0, 0.5),
         stop=stop_after_attempt_from_self,
         retry=tenacity.retry_if_exception_type(
             (httpx.HTTPStatusError, httpx.TimeoutException, asyncio.TimeoutError)
@@ -181,9 +176,7 @@ class AuditLedgerClient:
         tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 
         if tracer:
-            with tracer.start_as_current_span(
-                "audit_send_event", kind=SpanKind.CLIENT
-            ) as span:
+            with tracer.start_as_current_span("audit_send_event", kind=SpanKind.CLIENT) as span:
                 span.set_attribute("event_type", audit_record["event_type"])
                 span.set_attribute("record_hash", audit_record["record_hash"])
                 try:
@@ -216,13 +209,9 @@ class AuditLedgerClient:
                     status_code = e.response.status_code
                     if status_code == 429:
                         retry_after = float(
-                            e.response.headers.get(
-                                "Retry-After", self.initial_backoff_delay
-                            )
+                            e.response.headers.get("Retry-After", self.initial_backoff_delay)
                         )
-                        remaining = e.response.headers.get(
-                            "x-ratelimit-remaining", None
-                        )
+                        remaining = e.response.headers.get("x-ratelimit-remaining", None)
                         if remaining and int(remaining) < 5:
                             self._logger.warning(
                                 "low_rate_limit",
@@ -244,9 +233,7 @@ class AuditLedgerClient:
                     if span:
                         span.set_attribute("status_code", status_code)
                         span.record_exception(e)
-                        span.set_status(
-                            trace.StatusCode.ERROR, f"HTTP Error: {status_code}"
-                        )
+                        span.set_status(trace.StatusCode.ERROR, f"HTTP Error: {status_code}")
                     raise
                 except (httpx.TimeoutException, asyncio.TimeoutError) as e:
                     self._logger.warning("audit_send_timeout", error=str(e))
@@ -255,9 +242,7 @@ class AuditLedgerClient:
                     if span:
                         span.record_exception(e)
                         span.set_status(trace.StatusCode.ERROR, "Timeout")
-                    raise ReasonerError(
-                        "Audit log request timed out", ReasonerErrorCode.TIMEOUT, e
-                    )
+                    raise ReasonerError("Audit log request timed out", ReasonerErrorCode.TIMEOUT, e)
                 except Exception as e:
                     self._logger.error("audit_send_failed", error=str(e), exc_info=True)
                     if AUDIT_ERRORS:
@@ -283,9 +268,7 @@ class AuditLedgerClient:
                         self.ledger_url, json=audit_record, headers=headers
                     )
                 response.raise_for_status()
-                self._logger.info(
-                    "audit_event_sent_success", event_type=audit_record["event_type"]
-                )
+                self._logger.info("audit_event_sent_success", event_type=audit_record["event_type"])
                 if AUDIT_SEND_LATENCY:
                     AUDIT_SEND_LATENCY.labels(status="success").observe(
                         time.monotonic() - start_time
@@ -295,9 +278,7 @@ class AuditLedgerClient:
                 status_code = e.response.status_code
                 if status_code == 429:
                     retry_after = float(
-                        e.response.headers.get(
-                            "Retry-After", self.initial_backoff_delay
-                        )
+                        e.response.headers.get("Retry-After", self.initial_backoff_delay)
                     )
                     remaining = e.response.headers.get("x-ratelimit-remaining", None)
                     if remaining and int(remaining) < 5:
@@ -313,9 +294,7 @@ class AuditLedgerClient:
                             ReasonerErrorCode.SERVICE_UNAVAILABLE,
                             e,
                         )
-                self._logger.warning(
-                    "audit_send_http_error", status_code=status_code, error=str(e)
-                )
+                self._logger.warning("audit_send_http_error", status_code=status_code, error=str(e))
                 if AUDIT_ERRORS:
                     AUDIT_ERRORS.labels(code=f"http_{status_code}").inc()
                 raise
@@ -323,9 +302,7 @@ class AuditLedgerClient:
                 self._logger.warning("audit_send_timeout", error=str(e))
                 if AUDIT_ERRORS:
                     AUDIT_ERRORS.labels(code="timeout").inc()
-                raise ReasonerError(
-                    "Audit log request timed out", ReasonerErrorCode.TIMEOUT, e
-                )
+                raise ReasonerError("Audit log request timed out", ReasonerErrorCode.TIMEOUT, e)
             except Exception as e:
                 self._logger.error("audit_send_failed", error=str(e), exc_info=True)
                 if AUDIT_ERRORS:
@@ -366,9 +343,7 @@ class AuditLedgerClient:
             "operator": operator,
             "details": redacted_details,
             "record_hash": hashlib.sha256(
-                json.dumps(redacted_details, sort_keys=True, default=str).encode(
-                    "utf-8"
-                )
+                json.dumps(redacted_details, sort_keys=True, default=str).encode("utf-8")
             ).hexdigest(),
         }
         self._logger.info(
@@ -380,9 +355,7 @@ class AuditLedgerClient:
         try:
             success = await self._send_event_with_retries(audit_record)
             if not success:
-                self._logger.error(
-                    "audit_event_send_failed_after_retries", event_type=event_type
-                )
+                self._logger.error("audit_event_send_failed_after_retries", event_type=event_type)
             return success
         except ReasonerError as e:
             self._logger.error(
@@ -433,9 +406,7 @@ class AuditLedgerClient:
         tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 
         if tracer:
-            with tracer.start_as_current_span(
-                "audit_log_batch", kind=SpanKind.CLIENT
-            ) as span:
+            with tracer.start_as_current_span("audit_log_batch", kind=SpanKind.CLIENT) as span:
                 span.set_attribute("batch_size", len(events))
                 results = await asyncio.gather(
                     *[log_single_event(event) for event in events],
@@ -455,9 +426,7 @@ class AuditLedgerClient:
                     error=str(result) if isinstance(result, Exception) else "failed",
                 )
         if AUDIT_BATCH_SIZE:
-            AUDIT_BATCH_SIZE.labels(status="success" if success else "failure").observe(
-                len(events)
-            )
+            AUDIT_BATCH_SIZE.labels(status="success" if success else "failure").observe(len(events))
         return success
 
     async def health_check(self) -> bool:
@@ -475,9 +444,7 @@ class AuditLedgerClient:
 
         tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
         if tracer:
-            with tracer.start_as_current_span(
-                "audit_health_check", kind=SpanKind.CLIENT
-            ) as span:
+            with tracer.start_as_current_span("audit_health_check", kind=SpanKind.CLIENT) as span:
                 try:
                     client = await self._get_client()
                     if self.health_endpoint:
@@ -508,9 +475,7 @@ class AuditLedgerClient:
                     span.set_status(trace.StatusCode.ERROR)
                     return False
                 except Exception as e:
-                    self._logger.critical(
-                        "health_check_unexpected", exc_info=True, error=str(e)
-                    )
+                    self._logger.critical("health_check_unexpected", exc_info=True, error=str(e))
                     span.record_exception(e)
                     span.set_status(trace.StatusCode.ERROR)
                     raise ReasonerError(
@@ -539,9 +504,7 @@ class AuditLedgerClient:
                     AUDIT_ERRORS.labels(code=type(e).__name__).inc()
                 return False
             except Exception as e:
-                self._logger.critical(
-                    "health_check_unexpected", exc_info=True, error=str(e)
-                )
+                self._logger.critical("health_check_unexpected", exc_info=True, error=str(e))
                 raise ReasonerError(
                     f"Health check failed: {str(e)}",
                     ReasonerErrorCode.SERVICE_UNAVAILABLE,
@@ -598,9 +561,7 @@ if __name__ == "__main__":
         """
         print("Starting standalone test...")
         client = AuditLedgerClient(
-            ledger_url=os.getenv(
-                "AUDIT_LEDGER_URL_TEST", "https://mock-ledger:8080/audit"
-            ),
+            ledger_url=os.getenv("AUDIT_LEDGER_URL_TEST", "https://mock-ledger:8080/audit"),
             api_key=os.getenv("AUDIT_API_KEY_TEST", "dummy_key"),
             health_endpoint=os.getenv("AUDIT_HEALTH_ENDPOINT_TEST", "/health"),
         )

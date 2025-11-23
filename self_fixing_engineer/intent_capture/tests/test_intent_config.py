@@ -257,9 +257,7 @@ def test_plugin_manager_discover_and_apply_plugins(temp_plugin_dir, monkeypatch)
     """Test PluginManager discovers plugins."""
     monkeypatch.setattr("os.path.isdir", lambda x: True if "plugins" in x else False)
     monkeypatch.setattr("os.listdir", lambda x: ["test_plugin"])
-    monkeypatch.setattr(
-        "os.path.exists", lambda x: True if "plugin_config.json" in x else False
-    )
+    monkeypatch.setattr("os.path.exists", lambda x: True if "plugin_config.json" in x else False)
 
     with patch("builtins.open", mock_open(read_data='{"name": "test_plugin"}')):
         PluginManager.discover_and_apply_plugins(None)
@@ -352,9 +350,7 @@ def test_startup_validation_missing_fields(monkeypatch):
     # Reset the singleton
     GlobalConfigManager._instance = None
 
-    with pytest.raises(
-        Exception
-    ):  # Will raise either ValidationError or pydantic error
+    with pytest.raises(Exception):  # Will raise either ValidationError or pydantic error
         startup_validation()
 
 

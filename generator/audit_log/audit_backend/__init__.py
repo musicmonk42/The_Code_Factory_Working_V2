@@ -53,9 +53,7 @@ _BACKEND_REGISTRY: Dict[str, Type[LogBackend]] = {
 }
 
 
-def get_backend(
-    backend_type: str, params: Optional[Dict[str, Any]] = None
-) -> LogBackend:
+def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> LogBackend:
     """Factory for backend instantiation."""
     backend_type_lower = backend_type.lower()
     if backend_type_lower not in _BACKEND_REGISTRY:

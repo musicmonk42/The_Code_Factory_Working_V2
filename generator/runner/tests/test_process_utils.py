@@ -125,9 +125,7 @@ class TestCircuitBreaker(unittest.IsolatedAsyncioTestCase):
             await cb.call(should_not_run)
 
         # Fast-forward past recovery_timeout so we enter HALF-OPEN on next call.
-        with patch(
-            "runner.process_utils.time.time", return_value=cb.last_failure_time + 10
-        ):
+        with patch("runner.process_utils.time.time", return_value=cb.last_failure_time + 10):
 
             async def ok():
                 return "recovered"

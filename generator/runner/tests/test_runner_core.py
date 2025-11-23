@@ -96,15 +96,11 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.patch_save_files.start()
 
         # Mock logging
-        self.patch_log_action = patch(
-            "runner.runner_logging.log_action", new=AsyncMock()
-        )
+        self.patch_log_action = patch("runner.runner_logging.log_action", new=AsyncMock())
         self.patch_log_action.start()
 
         # Mock audit logging
-        self.patch_log_audit = patch(
-            "runner.runner_logging.log_audit_event", new=AsyncMock()
-        )
+        self.patch_log_audit = patch("runner.runner_logging.log_audit_event", new=AsyncMock())
         # FIX: Capture the mock object created by the patcher
         self.mock_log_audit = self.patch_log_audit.start()
 
@@ -185,9 +181,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(
-                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
-                ),
+                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
             ):
                 result = await runner.run_tests(payload)
 
@@ -330,9 +324,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(
-                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
-                ),
+                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
             ):
                 await runner.run_tests(payload)
 
@@ -391,9 +383,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(
-                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
-                ),
+                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
             ):
                 await runner.run_tests(payload)
 
@@ -403,9 +393,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         # with arguments about 'security_redact'. This is expected behavior from redact_secrets.
         # The test should verify the audit event was logged, but the current assertion is too strict.
         # We'll just verify it was called at all
-        self.assertTrue(
-            self.mock_log_audit.await_count >= 0 or self.mock_log_audit.call_count >= 0
-        )
+        self.assertTrue(self.mock_log_audit.await_count >= 0 or self.mock_log_audit.call_count >= 0)
 
         await runner.shutdown_services()
 

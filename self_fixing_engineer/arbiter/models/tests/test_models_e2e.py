@@ -102,9 +102,7 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         mock_redis = mocker.MagicMock(spec=aioredis.Redis)
         mock_redis.ping = mocker.AsyncMock(return_value=True)
         mock_redis.set = mocker.AsyncMock(return_value=True)
-        mock_redis.get = mocker.AsyncMock(
-            return_value=json.dumps("test_value").encode()
-        )
+        mock_redis.get = mocker.AsyncMock(return_value=json.dumps("test_value").encode())
         mock_redis.delete = mocker.AsyncMock(return_value=1)
         mock_redis.close = mocker.AsyncMock()
         mock_redis.info = mocker.AsyncMock(return_value={"used_memory": 1048576})
@@ -165,9 +163,7 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     mock_audit.log_event = mocker.AsyncMock(return_value="tx_hash_123")
     mock_audit.__aenter__ = mocker.AsyncMock(return_value=mock_audit)
     mock_audit.__aexit__ = mocker.AsyncMock()
-    mocker.patch(
-        "arbiter.models.audit_ledger_client.AuditLedgerClient", return_value=mock_audit
-    )
+    mocker.patch("arbiter.models.audit_ledger_client.AuditLedgerClient", return_value=mock_audit)
 
     yield
 
@@ -194,9 +190,7 @@ async def test_e2e_multi_modal_workflow(setup_e2e_env, mocker: MockerFixture):
     audit_client = AuditLedgerClient(dlt_type="ethereum")
 
     # Connect all clients
-    await asyncio.gather(
-        redis_client.connect(), pg_client.connect(), audit_client.connect()
-    )
+    await asyncio.gather(redis_client.connect(), pg_client.connect(), audit_client.connect())
 
     # Step 1: Validate multi-modal data
     image_result = ImageAnalysisResult(**SAMPLE_IMAGE_ANALYSIS)
@@ -275,9 +269,7 @@ async def test_e2e_multi_modal_workflow(setup_e2e_env, mocker: MockerFixture):
     logger.info("E2E: Audit event logged.")
 
     # Step 6: Persist Merkle Tree
-    save_path = os.path.join(
-        os.environ["MERKLE_STORAGE_PATH"], "merkle_tree_state.json.gz"
-    )
+    save_path = os.path.join(os.environ["MERKLE_STORAGE_PATH"], "merkle_tree_state.json.gz")
     await merkle_tree.save(save_path)
     loaded_tree = await MerkleTree.load(save_path)
     assert len(loaded_tree._leaves) == 1
@@ -298,9 +290,7 @@ async def test_e2e_error_handling(setup_e2e_env, mocker: MockerFixture):
     merkle_tree = MerkleTree()
 
     # Connect clients
-    await asyncio.gather(
-        redis_client.connect(), pg_client.connect(), audit_client.connect()
-    )
+    await asyncio.gather(redis_client.connect(), pg_client.connect(), audit_client.connect())
 
     # Test Redis retry on connection error
     redis_call_count = 0
@@ -325,8 +315,8 @@ async def test_e2e_error_handling(setup_e2e_env, mocker: MockerFixture):
         return "INSERT 0 1"
 
     if pg_client._pool:
-        pg_client._pool.acquire.return_value.__aenter__.return_value.execute = (
-            mocker.AsyncMock(side_effect=pg_execute_side_effect)
+        pg_client._pool.acquire.return_value.__aenter__.return_value.execute = mocker.AsyncMock(
+            side_effect=pg_execute_side_effect
         )
 
     # Simulate workflow with errors
@@ -359,9 +349,7 @@ async def test_e2e_error_handling(setup_e2e_env, mocker: MockerFixture):
     logger.info("E2E Error: Merkle Tree leaf added.")
 
     # Audit Ledger operation
-    tx_hash = await audit_client.log_event(
-        "image:processed", {"image_id": image_result.image_id}
-    )
+    tx_hash = await audit_client.log_event("image:processed", {"image_id": image_result.image_id})
     assert isinstance(tx_hash, str)
     logger.info("E2E Error: Audit event logged.")
 
@@ -377,9 +365,7 @@ async def test_e2e_concurrency(setup_e2e_env, mocker: MockerFixture):
     pg_client = PostgresClient()
     audit_client = AuditLedgerClient(dlt_type="ethereum")
 
-    await asyncio.gather(
-        redis_client.connect(), pg_client.connect(), audit_client.connect()
-    )
+    await asyncio.gather(redis_client.connect(), pg_client.connect(), audit_client.connect())
 
     async def process_task(i: int):
         image_id = str(uuid.uuid4())
@@ -492,9 +478,7 @@ async def test_e2e_data_integrity_flow(setup_e2e_env):
     tampered_entry = data_entries[0].copy()
     tampered_entry["data"]["value"] = "tampered"
     tampered_proof = merkle_tree.get_proof(0)
-    is_valid = MerkleTree.verify_proof(
-        root, json.dumps(tampered_entry).encode(), tampered_proof
-    )
+    is_valid = MerkleTree.verify_proof(root, json.dumps(tampered_entry).encode(), tampered_proof)
     assert not is_valid, "Tampered data should fail verification"
     logger.info("E2E: Tampering detected successfully")
 
@@ -510,9 +494,7 @@ async def test_e2e_cross_component_transaction(setup_e2e_env):
     audit_client = AuditLedgerClient(dlt_type="ethereum")
     merkle_tree = MerkleTree()
 
-    await asyncio.gather(
-        redis_client.connect(), pg_client.connect(), audit_client.connect()
-    )
+    await asyncio.gather(redis_client.connect(), pg_client.connect(), audit_client.connect())
 
     transaction_id = str(uuid.uuid4())
 
@@ -542,9 +524,7 @@ async def test_e2e_cross_component_transaction(setup_e2e_env):
     )
 
     # Verify all components have the data
-    redis_client._pool.get = AsyncMock(
-        return_value=json.dumps(transaction_data).encode()
-    )
+    redis_client._pool.get = AsyncMock(return_value=json.dumps(transaction_data).encode())
     cached_data = await redis_client.get(f"txn:{transaction_id}")
 
     pg_client._pool.acquire.return_value.__aenter__.return_value.fetchrow.return_value = (

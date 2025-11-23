@@ -75,9 +75,7 @@ def mock_metrics():
 @pytest.fixture
 def audit_client(mock_structlog):
     """Fixture for AuditLedgerClient instance with specific retry settings."""
-    with patch(
-        "arbiter.explainable_reasoner.audit_ledger.pybreaker"
-    ) as mock_breaker, patch(
+    with patch("arbiter.explainable_reasoner.audit_ledger.pybreaker") as mock_breaker, patch(
         "arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
     ) as mock_client_class:
 
@@ -127,9 +125,7 @@ def test_init_success(mock_structlog):
         assert client.initial_backoff_delay == 1.0
         assert client.timeout == 5.0
         # Check that info was called (might be on the bound logger)
-        assert (
-            mock_structlog.info.called or mock_structlog.bind.return_value.info.called
-        )
+        assert mock_structlog.info.called or mock_structlog.bind.return_value.info.called
 
 
 def test_init_invalid_url():
@@ -231,9 +227,7 @@ async def test_send_event_with_retries_timeout(audit_client, mock_httpx_client):
 
 
 @pytest.mark.asyncio
-async def test_send_event_with_retries_unexpected_error(
-    audit_client, mock_httpx_client
-):
+async def test_send_event_with_retries_unexpected_error(audit_client, mock_httpx_client):
     """Tests that a non-retryable error fails immediately."""
     with patch.object(audit_client, "_get_client", return_value=mock_httpx_client):
         # Disable the circuit breaker for this test
@@ -283,9 +277,7 @@ async def test_log_event_success(audit_client, mock_httpx_client, mock_structlog
 async def test_log_event_failure_returns_false(audit_client, mock_structlog):
     """Tests that log_event returns False and logs an error on failure."""
     with patch.object(audit_client, "_send_event_with_retries") as mock_send:
-        mock_send.side_effect = ReasonerError(
-            "Failed", ReasonerErrorCode.SERVICE_UNAVAILABLE
-        )
+        mock_send.side_effect = ReasonerError("Failed", ReasonerErrorCode.SERVICE_UNAVAILABLE)
 
         success = await audit_client.log_event("test_event", {"key": "value"})
 
@@ -332,9 +324,7 @@ async def test_log_event_invalid_params():
 @pytest.mark.asyncio
 async def test_log_batch_events_success(audit_client):
     """Tests that a batch of events are all logged successfully."""
-    with patch.object(
-        audit_client, "log_event", new_callable=AsyncMock
-    ) as mock_log_event:
+    with patch.object(audit_client, "log_event", new_callable=AsyncMock) as mock_log_event:
         mock_log_event.return_value = True
 
         events = [
@@ -350,9 +340,7 @@ async def test_log_batch_events_success(audit_client):
 @pytest.mark.asyncio
 async def test_log_batch_events_partial_failure(audit_client):
     """Tests that the batch operation returns False if any event fails."""
-    with patch.object(
-        audit_client, "log_event", new_callable=AsyncMock
-    ) as mock_log_event:
+    with patch.object(audit_client, "log_event", new_callable=AsyncMock) as mock_log_event:
         mock_log_event.side_effect = [True, False]
 
         events = [
@@ -398,9 +386,7 @@ async def test_health_check_failure(audit_client, mock_httpx_client):
 @pytest.mark.asyncio
 async def test_health_check_with_endpoint():
     """Tests health check with specific health endpoint."""
-    with patch(
-        "arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient"
-    ) as mock_client_class:
+    with patch("arbiter.explainable_reasoner.audit_ledger.httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.is_closed = False
         mock_client_class.return_value = mock_client

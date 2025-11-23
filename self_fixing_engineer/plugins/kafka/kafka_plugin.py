@@ -181,14 +181,10 @@ class KafkaConfig:
     ssl_cafile: Optional[str] = os.getenv("KAFKA_SSL_CAFILE") or None
     ssl_certfile: Optional[str] = os.getenv("KAFKA_SSL_CERTFILE") or None
     ssl_keyfile: Optional[str] = os.getenv("KAFKA_SSL_KEYFILE") or None
-    allow_plaintext: bool = (
-        os.getenv("KAFKA_ALLOW_PLAINTEXT", "false").lower() == "true"
-    )
+    allow_plaintext: bool = os.getenv("KAFKA_ALLOW_PLAINTEXT", "false").lower() == "true"
 
     acks: str = os.getenv("KAFKA_ACKS", "all")
-    enable_idempotence: bool = (
-        os.getenv("KAFKA_ENABLE_IDEMPOTENCE", "true").lower() == "true"
-    )
+    enable_idempotence: bool = os.getenv("KAFKA_ENABLE_IDEMPOTENCE", "true").lower() == "true"
     linger_ms: int = int(os.getenv("KAFKA_LINGER_MS", "25"))
     batch_size: int = int(os.getenv("KAFKA_BATCH_BYTES", "16384"))
     max_in_flight: int = int(os.getenv("KAFKA_MAX_IN_FLIGHT", "5"))
@@ -205,11 +201,7 @@ class KafkaConfig:
     max_record_bytes: int = int(os.getenv("KAFKA_MAX_RECORD_BYTES", "900000"))
     key_field: Optional[str] = os.getenv("KAFKA_KEY_FIELD") or None
     allowed_topics: Optional[List[str]] = (
-        [
-            t.strip()
-            for t in os.getenv("KAFKA_ALLOWED_TOPICS", "").split(",")
-            if t.strip()
-        ]
+        [t.strip() for t in os.getenv("KAFKA_ALLOWED_TOPICS", "").split(",") if t.strip()]
         if os.getenv("KAFKA_ALLOWED_TOPICS")
         else None
     )
@@ -232,9 +224,7 @@ class KafkaConfig:
             bs = SECRETS_MANAGER.get("KAFKA_BOOTSTRAP_SERVERS", default=bs) or bs
             topic = SECRETS_MANAGER.get("KAFKA_TOPIC", default=topic) or topic
         if not bs or not topic:
-            raise MisconfigurationError(
-                "KAFKA_BOOTSTRAP_SERVERS and KAFKA_TOPIC are required"
-            )
+            raise MisconfigurationError("KAFKA_BOOTSTRAP_SERVERS and KAFKA_TOPIC are required")
 
         cfg = KafkaConfig(bootstrap_servers=bs, topic=topic)
 
@@ -260,9 +250,7 @@ class KafkaConfig:
                         v = str(v).lower() == "true"
                     setattr(cfg, field, v)
 
-            event_key = SECRETS_MANAGER.get(
-                "EVENT_HMAC_KEY", default=os.getenv("EVENT_HMAC_KEY")
-            )
+            event_key = SECRETS_MANAGER.get("EVENT_HMAC_KEY", default=os.getenv("EVENT_HMAC_KEY"))
         else:
             event_key = os.getenv("EVENT_HMAC_KEY")
 
@@ -295,11 +283,7 @@ class KafkaConfig:
         sec = (self.security_protocol or "PLAINTEXT").upper()
         if sec not in {"PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"}:
             raise MisconfigurationError(f"Invalid KAFKA_SECURITY_PROTOCOL: {sec}")
-        if (
-            PRODUCTION_MODE
-            and sec in {"PLAINTEXT", "SASL_PLAINTEXT"}
-            and not self.allow_plaintext
-        ):
+        if PRODUCTION_MODE and sec in {"PLAINTEXT", "SASL_PLAINTEXT"} and not self.allow_plaintext:
             raise MisconfigurationError(
                 "PLAINTEXT disallowed in PRODUCTION_MODE (set KAFKA_ALLOW_PLAINTEXT=true to override)"
             )
@@ -329,22 +313,16 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def _sign_event(
-    hmac_key: Optional[bytes], payload: Dict[str, Any]
-) -> Optional[Dict[str, str]]:
+def _sign_event(hmac_key: Optional[bytes], payload: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """Generates an HMAC signature for the entire payload."""
     if not hmac_key:
         return None
 
     # Bug fix: sign everything except the signature fields themselves
-    canonical = {
-        k: v
-        for k, v in payload.items()
-        if k not in ("signature", "sig_alg", "sig_scope")
-    }
-    body = json.dumps(
-        canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
+    canonical = {k: v for k, v in payload.items() if k not in ("signature", "sig_alg", "sig_scope")}
+    body = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
     digest = hmac.new(hmac_key, body, hashlib.sha256).hexdigest()
     return {"value": digest, "alg": "HMAC-SHA256", "scope": "*"}
 
@@ -396,16 +374,12 @@ class KafkaAuditPlugin:
         """
         if self.config.dev_dry_run:
             self._producer = None
-            logger.info(
-                "KafkaAuditPlugin initialized (DRY-RUN, topic=%s)", self.config.topic
-            )
+            logger.info("KafkaAuditPlugin initialized (DRY-RUN, topic=%s)", self.config.topic)
             return
 
         if not _AIOKAFKA_AVAILABLE:
             if PRODUCTION_MODE:
-                raise StartupDependencyMissing(
-                    "aiokafka not available and dev dry-run disabled"
-                )
+                raise StartupDependencyMissing("aiokafka not available and dev dry-run disabled")
             else:
                 logger.warning("aiokafka not installed; running in dry-run mode.")
                 self.config.dev_dry_run = True
@@ -426,9 +400,7 @@ class KafkaAuditPlugin:
             kwargs["compression_type"] = self.config.compression_type
 
         sec = (
-            self.config.security_protocol.upper()
-            if self.config.security_protocol
-            else "PLAINTEXT"
+            self.config.security_protocol.upper() if self.config.security_protocol else "PLAINTEXT"
         )
         kwargs["security_protocol"] = sec
         if sec in ("SASL_PLAINTEXT", "SASL_SSL"):
@@ -470,9 +442,7 @@ class KafkaAuditPlugin:
         if self._producer is not None:
             await self._producer.start()
         self._stop_evt.clear()
-        self._sender_task = asyncio.create_task(
-            self._sender_loop(), name="kafka_sender_loop"
-        )
+        self._sender_task = asyncio.create_task(self._sender_loop(), name="kafka_sender_loop")
         self._started = True
         logger.info("KafkaAuditPlugin started.")
 
@@ -529,13 +499,8 @@ class KafkaAuditPlugin:
             raise RuntimeError("KafkaAuditPlugin is not started; cannot enqueue.")
 
         dest_topic = (topic or self.config.topic).strip()
-        if (
-            self.config.allowed_topics is not None
-            and dest_topic not in self.config.allowed_topics
-        ):
-            raise MisconfigurationError(
-                f"Topic '{dest_topic}' not in KAFKA_ALLOWED_TOPICS"
-            )
+        if self.config.allowed_topics is not None and dest_topic not in self.config.allowed_topics:
+            raise MisconfigurationError(f"Topic '{dest_topic}' not in KAFKA_ALLOWED_TOPICS")
 
         safe_details = scrub_secrets(details) if details is not None else {}
         uid = uuid.uuid4().hex
@@ -604,9 +569,7 @@ class KafkaAuditPlugin:
         """
         Main loop for batching and sending messages.
         """
-        batch: List[
-            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
-        ] = []
+        batch: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]] = []
         next_flush = self._loop.time() + (self.config.flush_interval_ms / 1000.0)
 
         while True:
@@ -627,23 +590,17 @@ class KafkaAuditPlugin:
                 if batch:
                     await self._flush_batch(batch)
                 batch = []
-                next_flush = self._loop.time() + (
-                    self.config.flush_interval_ms / 1000.0
-                )
+                next_flush = self._loop.time() + (self.config.flush_interval_ms / 1000.0)
 
     async def _flush_batch(
         self,
-        batch: List[
-            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
-        ],
+        batch: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]],
     ) -> None:
         """Sends a batch of messages concurrently."""
         if not batch:
             return
 
-        chunk_size = max(
-            1, math.ceil(len(batch) / max(1, self.config.send_concurrency))
-        )
+        chunk_size = max(1, math.ceil(len(batch) / max(1, self.config.send_concurrency)))
         chunks = [batch[i : i + chunk_size] for i in range(0, len(batch), chunk_size)]
 
         cm = (
@@ -665,18 +622,14 @@ class KafkaAuditPlugin:
 
     async def _send_chunk(
         self,
-        chunk: List[
-            Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]
-        ],
+        chunk: List[Tuple[str, Dict[str, Any], Optional[List[Tuple[str, bytes]]], float]],
         span=None,
     ) -> None:
         """Sends a chunk of messages with individual retry logic."""
         if not chunk:
             return
 
-        if (
-            not _AIOKAFKA_AVAILABLE or self._producer is None
-        ) and self.config.dev_dry_run:
+        if (not _AIOKAFKA_AVAILABLE or self._producer is None) and self.config.dev_dry_run:
             per_topic_count: Dict[str, int] = {}
             for topic, payload, _, enq_ts in chunk:
                 _kafka_latency_seconds.labels(topic).observe(self._loop.time() - enq_ts)
@@ -714,9 +667,7 @@ class KafkaAuditPlugin:
                 k = payload.get(self.config.key_field)
                 if k is None and isinstance(payload.get("details"), dict):
                     k = payload["details"].get(self.config.key_field)
-                key_bytes = (str(k) if k is not None else payload.get("id", "")).encode(
-                    "utf-8"
-                )
+                key_bytes = (str(k) if k is not None else payload.get("id", "")).encode("utf-8")
             else:
                 key_bytes = payload.get("id", "").encode("utf-8")
 
@@ -726,13 +677,9 @@ class KafkaAuditPlugin:
             except PermanentSendError as e:
                 _kafka_dropped.labels(topic, "permanent_error").inc()
                 if self.config.dlq_topic:
-                    await self._send_to_dlq(
-                        self.config.dlq_topic, payload, str(e), headers
-                    )
+                    await self._send_to_dlq(self.config.dlq_topic, payload, str(e), headers)
                 else:
-                    logger.error(
-                        "Permanent send error; dropped message (topic=%s): %s", topic, e
-                    )
+                    logger.error("Permanent send error; dropped message (topic=%s): %s", topic, e)
 
     async def _send_with_retry(
         self,

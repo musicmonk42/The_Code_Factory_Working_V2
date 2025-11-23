@@ -29,9 +29,7 @@ try:
 
     PROMETHEUS_AVAILABLE = True
     # Metrics for spec generation
-    SPEC_GEN_TOTAL = Counter(
-        "spec_gen_total", "Total spec generations", ["format", "status"]
-    )
+    SPEC_GEN_TOTAL = Counter("spec_gen_total", "Total spec generations", ["format", "status"])
     SPEC_GEN_LATENCY_SECONDS = Histogram(
         "spec_gen_latency_seconds", "Spec generation latency in seconds", ["format"]
     )
@@ -40,9 +38,7 @@ try:
         "spec_validation_total", "Total spec validations", ["format", "is_valid"]
     )
     # Metrics for auto-fix
-    SPEC_AUTO_FIX_TOTAL = Counter(
-        "spec_auto_fix_total", "Total spec auto-fix attempts", ["status"]
-    )
+    SPEC_AUTO_FIX_TOTAL = Counter("spec_auto_fix_total", "Total spec auto-fix attempts", ["status"])
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     SPEC_GEN_TOTAL, SPEC_GEN_LATENCY_SECONDS = None, None
@@ -85,11 +81,7 @@ class NullContext:
 
 
 def get_tracing_context(span_name: str):
-    return (
-        tracer.start_as_current_span(span_name)
-        if OPENTELEMETRY_AVAILABLE
-        else NullContext()
-    )
+    return tracer.start_as_current_span(span_name) if OPENTELEMETRY_AVAILABLE else NullContext()
 
 
 from langchain_core.prompts import PromptTemplate
@@ -132,9 +124,7 @@ async def with_retry(func, retries: int = 3, delay: float = 1.0):
             last_exception = e
             if attempt < retries - 1:
                 await asyncio.sleep(delay * (2**attempt))  # Exponential backoff
-                logger.warning(
-                    f"Retry attempt {attempt + 1}/{retries} after error: {e}"
-                )
+                logger.warning(f"Retry attempt {attempt + 1}/{retries} after error: {e}")
             else:
                 logger.error(f"All {retries} retry attempts failed: {e}")
     raise last_exception
@@ -180,9 +170,7 @@ def _load_locales():
                 exc_info=True,
             )
     else:
-        logger.warning(
-            f"Locales file not found at {LOCALES_FILE}. Using default English prompts."
-        )
+        logger.warning(f"Locales file not found at {LOCALES_FILE}. Using default English prompts.")
 
 
 _load_locales()  # Load locales on module import
@@ -287,9 +275,7 @@ def validate_spec(
 
         # Plugin handler for custom formats
         if format_lower in SPEC_HANDLERS:
-            is_valid, validation_message = SPEC_HANDLERS[format_lower]["validator"](
-                spec
-            )
+            is_valid, validation_message = SPEC_HANDLERS[format_lower]["validator"](spec)
         # JSON: parse + (optional) JSON schema validate
         elif format_lower == "json":
             try:
@@ -347,9 +333,7 @@ def validate_spec(
                     is_valid, validation_message = True, "Valid Gherkin"
         # User story strict check
         elif format_lower == "user_story":
-            if re.search(
-                r"As a .* I want .* so that .*", spec, re.IGNORECASE | re.DOTALL
-            ):
+            if re.search(r"As a .* I want .* so that .*", spec, re.IGNORECASE | re.DOTALL):
                 is_valid, validation_message = True, "User story format detected"
             else:
                 is_valid, validation_message = (
@@ -414,9 +398,7 @@ def detect_ambiguity(text: str, language: str = "english") -> List[Dict[str, Any
 
         for i, sentence in enumerate(sentences):
             found_words = {
-                word
-                for word in nltk.word_tokenize(sentence.lower())
-                if word in ambiguous_words
+                word for word in nltk.word_tokenize(sentence.lower()) if word in ambiguous_words
             }
             if found_words:
                 ambiguities.append(
@@ -527,9 +509,7 @@ async def auto_fix_spec(
             return None, "Auto-fix failed or did not yield a valid, robust result."
     finally:
         if PROMETHEUS_AVAILABLE and SPEC_GEN_LATENCY_SECONDS:
-            SPEC_GEN_LATENCY_SECONDS.labels(format=format).observe(
-                time.perf_counter() - start_time
-            )
+            SPEC_GEN_LATENCY_SECONDS.labels(format=format).observe(time.perf_counter() - start_time)
 
 
 # --- UPGRADE: Deep Traceability and Artifact Persistence ---
@@ -580,9 +560,7 @@ class TraceableArtifact:
         P6: Retries on external service calls.
         """
         try:
-            provenance_url = os.environ.get(
-                "PROVENANCE_API", "http://localhost:8080/artifacts"
-            )
+            provenance_url = os.environ.get("PROVENANCE_API", "http://localhost:8080/artifacts")
             payload = self.to_dict()
 
             @retry(
@@ -713,14 +691,10 @@ async def generate_spec_from_memory(
             if not transcript:
                 if OPENTELEMETRY_AVAILABLE:
                     span.set_status(
-                        trace.Status(
-                            trace.StatusCode.ERROR, description="Empty transcript"
-                        )
+                        trace.Status(trace.StatusCode.ERROR, description="Empty transcript")
                     )
                 if PROMETHEUS_AVAILABLE and SPEC_GEN_TOTAL:
-                    SPEC_GEN_TOTAL.labels(
-                        format=format, status="empty_transcript"
-                    ).inc()
+                    SPEC_GEN_TOTAL.labels(format=format, status="empty_transcript").inc()
                 return None
 
             spec_content = None
@@ -762,14 +736,10 @@ async def generate_spec_from_memory(
                         )
                     )
                 if PROMETHEUS_AVAILABLE and SPEC_GEN_TOTAL:
-                    SPEC_GEN_TOTAL.labels(
-                        format=format, status="empty_llm_response"
-                    ).inc()
+                    SPEC_GEN_TOTAL.labels(format=format, status="empty_llm_response").inc()
                 return None
 
-            is_valid, validation_msg = validate_spec(
-                spec_content, format, version, schema=schema
-            )
+            is_valid, validation_msg = validate_spec(spec_content, format, version, schema=schema)
             ambiguities = detect_ambiguity(spec_content, language)
 
             if not is_valid or ambiguities:
@@ -805,9 +775,7 @@ async def generate_spec_from_memory(
                             )
                         )
                     if PROMETHEUS_AVAILABLE and SPEC_GEN_TOTAL:
-                        SPEC_GEN_TOTAL.labels(
-                            format=format, status="auto_fix_failed"
-                        ).inc()
+                        SPEC_GEN_TOTAL.labels(format=format, status="auto_fix_failed").inc()
                     # Even if auto-fix fails, we return the best effort spec.
 
             spec_id = f"SPEC-{uuid.uuid4().hex[:8]}"
@@ -816,9 +784,7 @@ async def generate_spec_from_memory(
                 "timestamp": datetime.utcnow().isoformat(),
                 "format": format,
                 "content": spec_content,
-                "source_transcript_hash": hashlib.sha256(
-                    transcript.encode()
-                ).hexdigest(),
+                "source_transcript_hash": hashlib.sha256(transcript.encode()).hexdigest(),
             }
             if OPENTELEMETRY_AVAILABLE:
                 span.set_attribute("spec.id", spec_id)
@@ -828,9 +794,7 @@ async def generate_spec_from_memory(
             return result
     finally:
         if PROMETHEUS_AVAILABLE and SPEC_GEN_LATENCY_SECONDS:
-            SPEC_GEN_LATENCY_SECONDS.labels(format=format).observe(
-                time.perf_counter() - start_time
-            )
+            SPEC_GEN_LATENCY_SECONDS.labels(format=format).observe(time.perf_counter() - start_time)
 
 
 async def generate_gaps(
@@ -855,9 +819,7 @@ async def generate_gaps(
         if not checklist:
             logger.warning("Checklist for gap analysis is empty or unavailable.")
             if OPENTELEMETRY_AVAILABLE:
-                span.set_status(
-                    trace.Status(trace.StatusCode.ERROR, description="Checklist empty")
-                )
+                span.set_status(trace.Status(trace.StatusCode.ERROR, description="Checklist empty"))
             return None
         checklist_str = "\n".join(
             [
@@ -866,17 +828,13 @@ async def generate_gaps(
             ]
         )
 
-        gaps_prompt_text = get_localized_prompt(
-            "generate_gaps_prompt", language
-        ).format(
+        gaps_prompt_text = get_localized_prompt("generate_gaps_prompt", language).format(
             checklist_str=checklist_str,
             spec_content=spec_content,
             transcript=transcript,
         )
         try:
-            response = await (
-                PromptTemplate.from_template(gaps_prompt_text) | llm
-            ).ainvoke({})
+            response = await (PromptTemplate.from_template(gaps_prompt_text) | llm).ainvoke({})
             gaps_table = response.content
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(trace.Status(trace.StatusCode.OK))
@@ -885,9 +843,7 @@ async def generate_gaps(
             logger.error(f"Gaps analysis error: {e}", exc_info=True)
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, description=f"Gaps analysis failed: {e}"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, description=f"Gaps analysis failed: {e}")
                 )
             return None
 
@@ -906,9 +862,7 @@ async def refine_spec(
             instruction=instruction, last_spec=last_spec
         )
         try:
-            response = await (PromptTemplate.from_template(prompt_text) | llm).ainvoke(
-                {}
-            )
+            response = await (PromptTemplate.from_template(prompt_text) | llm).ainvoke({})
             refined_spec = response.content
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(trace.Status(trace.StatusCode.OK))
@@ -917,16 +871,12 @@ async def refine_spec(
             logger.error(f"Refine spec error: {e}", exc_info=True)
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, description=f"Refine spec failed: {e}"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, description=f"Refine spec failed: {e}")
                 )
             return None
 
 
-async def review_spec(
-    spec_content: str, llm: BaseChatModel, language: str = "en"
-) -> Optional[str]:
+async def review_spec(spec_content: str, llm: BaseChatModel, language: str = "en") -> Optional[str]:
     """
     Reviews a given specification using the LLM and provides feedback.
     P9: Internationalization - Load prompts from locales.yaml.
@@ -938,9 +888,7 @@ async def review_spec(
             spec_content=spec_content
         )
         try:
-            response = await (PromptTemplate.from_template(prompt_text) | llm).ainvoke(
-                {}
-            )
+            response = await (PromptTemplate.from_template(prompt_text) | llm).ainvoke({})
             review_feedback = response.content
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(trace.Status(trace.StatusCode.OK))
@@ -949,9 +897,7 @@ async def review_spec(
             logger.error(f"Error reviewing spec: {e}", exc_info=True)
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, description=f"Review spec failed: {e}"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, description=f"Review spec failed: {e}")
                 )
             return None
 
@@ -974,9 +920,7 @@ def diff_specs(spec1: str, spec2: str) -> str:
         if not isinstance(spec1, str) or not isinstance(spec2, str):
             if OPENTELEMETRY_AVAILABLE:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, description="Inputs must be strings"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, description="Inputs must be strings")
                 )
             raise TypeError("Both spec1 and spec2 must be strings for diffing.")
 

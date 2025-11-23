@@ -101,9 +101,7 @@ def _noop_redact_secrets(
     return value
 
 
-def _noop_add_provenance(
-    data: Dict[str, Any], action: Optional[str] = None
-) -> Dict[str, Any]:
+def _noop_add_provenance(data: Dict[str, Any], action: Optional[str] = None) -> Dict[str, Any]:
     if "provenance" not in data:
         data["provenance"] = {
             "source": "process_utils",
@@ -281,9 +279,7 @@ async def _run_subprocess_once(
     )
 
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            process.communicate(), timeout=timeout
-        )
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
         returncode = process.returncode
     except asyncio.TimeoutError:
         process.kill()
@@ -466,9 +462,7 @@ async def distributed_subprocess(
         - Increments metrics on failure.
     """
     if not _HAS_RUNNER:
-        logger.error(
-            "distributed_subprocess requested but runner infrastructure is not available."
-        )
+        logger.error("distributed_subprocess requested but runner infrastructure is not available.")
         raise RuntimeError("Distributed runner infrastructure is not available")
 
     selected_backend = backend or getattr(config, "backend", None)
@@ -476,9 +470,7 @@ async def distributed_subprocess(
         raise ValueError("No backend specified for distributed_subprocess")
 
     if selected_backend not in BACKENDS:
-        raise ValueError(
-            f"Unknown backend '{selected_backend}' for distributed_subprocess"
-        )
+        raise ValueError(f"Unknown backend '{selected_backend}' for distributed_subprocess")
 
     if not hasattr(runner_backends, "BACKEND_REGISTRY"):
         raise RuntimeError("runner_backends.BACKEND_REGISTRY not available")

@@ -355,9 +355,7 @@ Divide two numbers with zero-division handling.
 @pytest.fixture
 def mock_presidio_full():
     """Mock Presidio across all modules."""
-    with patch(
-        "generator.agents.docgen_agent.docgen_agent.AnalyzerEngine"
-    ) as mock_a1, patch(
+    with patch("generator.agents.docgen_agent.docgen_agent.AnalyzerEngine") as mock_a1, patch(
         "generator.agents.docgen_agent.docgen_agent.AnonymizerEngine"
     ) as mock_an1, patch(
         "generator.agents.docgen_agent.docgen_prompt.AnalyzerEngine"
@@ -430,9 +428,7 @@ class TestEndToEndGeneration:
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
 
-        result = await agent.generate_documentation(
-            target_files=files, doc_format="markdown"
-        )
+        result = await agent.generate_documentation(target_files=files, doc_format="markdown")
 
         assert "docs" in result
         # Should have docs for multiple files
@@ -581,13 +577,9 @@ class TestHumanInTheLoop:
     """Test human approval workflows."""
 
     @pytest.mark.asyncio
-    async def test_approval_workflow(
-        self, comprehensive_repo, mock_all_llm, mock_presidio_full
-    ):
+    async def test_approval_workflow(self, comprehensive_repo, mock_all_llm, mock_presidio_full):
         """Test complete human approval workflow."""
-        agent = DocGenAgent(
-            repo_path=str(comprehensive_repo), slack_webhook="http://test.webhook"
-        )
+        agent = DocGenAgent(repo_path=str(comprehensive_repo), slack_webhook="http://test.webhook")
 
         # Mock approval process
         with patch.object(agent, "_request_approval", return_value=True):
@@ -610,9 +602,7 @@ class TestHumanInTheLoop:
             target_file = str(comprehensive_repo / "src" / "calculator.py")
 
             with pytest.raises(RuntimeError, match="approval rejected"):
-                await agent.generate_documentation(
-                    target_files=[target_file], human_approval=True
-                )
+                await agent.generate_documentation(target_files=[target_file], human_approval=True)
 
 
 # =============================================================================
@@ -668,9 +658,7 @@ class TestErrorRecovery:
             str(comprehensive_repo / "src" / "utils" / "helper.js"),
         ]
 
-        result = await agent.generate_documentation(
-            target_files=files, continue_on_error=True
-        )
+        result = await agent.generate_documentation(target_files=files, continue_on_error=True)
 
         # Should have processed valid files despite errors
         assert "docs" in result or "errors" in result
@@ -685,9 +673,7 @@ class TestPluginEntryPoint:
     """Test the generate() plugin entry point."""
 
     @pytest.mark.asyncio
-    async def test_generate_entry_point(
-        self, comprehensive_repo, mock_all_llm, mock_presidio_full
-    ):
+    async def test_generate_entry_point(self, comprehensive_repo, mock_all_llm, mock_presidio_full):
         """Test using generate() as plugin entry point."""
         request = {
             "repo_path": str(comprehensive_repo),
@@ -734,9 +720,7 @@ def function_{i}():
 
         start = time.time()
 
-        result = await agent.generate_documentation(
-            target_files=files, doc_format="markdown"
-        )
+        result = await agent.generate_documentation(target_files=files, doc_format="markdown")
 
         elapsed = time.time() - start
 

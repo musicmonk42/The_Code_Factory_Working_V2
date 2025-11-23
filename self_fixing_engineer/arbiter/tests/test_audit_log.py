@@ -150,9 +150,7 @@ class TestAuditLoggerConfig:
     def test_invalid_rotation_type(self, temp_log_dir):
         """Test that invalid rotation type raises ValueError."""
         with pytest.raises(ValueError, match="Invalid rotation_type"):
-            AuditLoggerConfig(
-                log_path=temp_log_dir / "test.jsonl", rotation_type="invalid_type"
-            )
+            AuditLoggerConfig(log_path=temp_log_dir / "test.jsonl", rotation_type="invalid_type")
 
     def test_invalid_compression_type(self, temp_log_dir):
         """Test that invalid compression type raises ValueError."""
@@ -170,9 +168,7 @@ class TestAuditLoggerConfig:
     def test_encryption_without_key_generates_key(self, temp_log_dir):
         """Test that enabling encryption without a key generates one."""
         with patch("audit_log.Fernet"):
-            config = AuditLoggerConfig(
-                log_path=temp_log_dir / "test.jsonl", encrypt_logs=True
-            )
+            config = AuditLoggerConfig(log_path=temp_log_dir / "test.jsonl", encrypt_logs=True)
             assert config.encryption_key is not None
             assert len(base64.urlsafe_b64decode(config.encryption_key)) == 32
 
@@ -225,9 +221,7 @@ class TestBasicLogging:
     async def test_log_single_event(self, logger_instance):
         """Test logging a single event."""
         details = {"action": "test_action", "value": 42}
-        hash_val = await logger_instance.log_event(
-            "test_event", details, user_id="user123"
-        )
+        hash_val = await logger_instance.log_event("test_event", details, user_id="user123")
 
         assert hash_val is not None
         assert len(hash_val) == 64  # SHA256 hash length
@@ -250,9 +244,7 @@ class TestBasicLogging:
         """Test that critical events trigger immediate batch flush."""
         logger_instance._log_to_file_async = AsyncMock()
 
-        await logger_instance.log_event(
-            "critical_event", {"data": "important"}, critical=True
-        )
+        await logger_instance.log_event("critical_event", {"data": "important"}, critical=True)
 
         # Critical event should trigger immediate flush
         logger_instance._log_to_file_async.assert_called()
@@ -355,9 +347,7 @@ class TestHashChainIntegrity:
                 f.write(json.dumps(entry) + "\n")
 
         # Verify integrity
-        is_valid, line_num, file_path = await logger_instance.verify_log_integrity(
-            log_file
-        )
+        is_valid, line_num, file_path = await logger_instance.verify_log_integrity(log_file)
         assert is_valid is True
         assert line_num is None
         assert file_path is None
@@ -389,9 +379,7 @@ class TestHashChainIntegrity:
                 f.write(json.dumps(entry) + "\n")
 
         # Verify integrity should fail
-        is_valid, line_num, file_path = await logger_instance.verify_log_integrity(
-            log_file
-        )
+        is_valid, line_num, file_path = await logger_instance.verify_log_integrity(log_file)
         assert is_valid is False
         assert line_num == 2  # Second line is tampered
         assert str(log_file) in str(file_path)
@@ -453,9 +441,7 @@ class TestAuditTrailLoading:
         assert len(loaded) == 3
 
     @pytest.mark.asyncio
-    async def test_load_audit_trail_with_event_filter(
-        self, logger_instance, temp_log_dir
-    ):
+    async def test_load_audit_trail_with_event_filter(self, logger_instance, temp_log_dir):
         """Test loading audit trail with event type filter."""
         log_file = temp_log_dir / "filter_test.jsonl"
         entries = [
@@ -474,9 +460,7 @@ class TestAuditTrailLoading:
         assert all(e["event_type"] == "login" for e in loaded)
 
     @pytest.mark.asyncio
-    async def test_load_audit_trail_with_user_filter(
-        self, logger_instance, temp_log_dir
-    ):
+    async def test_load_audit_trail_with_user_filter(self, logger_instance, temp_log_dir):
         """Test loading audit trail with user ID filter."""
         log_file = temp_log_dir / "user_filter_test.jsonl"
         entries = [
@@ -495,9 +479,7 @@ class TestAuditTrailLoading:
         assert all(e["user_id"] == "user1" for e in loaded)
 
     @pytest.mark.asyncio
-    async def test_load_audit_trail_with_time_filter(
-        self, logger_instance, temp_log_dir
-    ):
+    async def test_load_audit_trail_with_time_filter(self, logger_instance, temp_log_dir):
         """Test loading audit trail with time range filter."""
         log_file = temp_log_dir / "time_filter_test.jsonl"
         base_time = datetime(2024, 1, 1, 10, 0, 0)
@@ -520,9 +502,7 @@ class TestAuditTrailLoading:
         # Load entries within time range
         start = base_time + timedelta(minutes=30)
         end = base_time + timedelta(hours=1, minutes=30)
-        loaded = list(
-            logger_instance.load_audit_trail(log_file, start_time=start, end_time=end)
-        )
+        loaded = list(logger_instance.load_audit_trail(log_file, start_time=start, end_time=end))
         assert len(loaded) == 1
         assert loaded[0]["event_type"] == "event2"
 
@@ -538,9 +518,7 @@ class TestDLTIntegration:
         logger_instance.config.dlt_enabled = True
         logger_instance._dlt_client = mock_dlt_client
 
-        await logger_instance.log_event(
-            "critical", {"data": "important"}, critical=True
-        )
+        await logger_instance.log_event("critical", {"data": "important"}, critical=True)
         await asyncio.sleep(0.1)
 
         mock_dlt_client.log_event_batch.assert_called()
@@ -699,10 +677,7 @@ class TestAsyncOperations:
         await asyncio.gather(*tasks)
 
         # All events should be logged
-        assert (
-            len(logger_instance._batch_queue) > 0
-            or logger_instance._last_hash is not None
-        )
+        assert len(logger_instance._batch_queue) > 0 or logger_instance._last_hash is not None
 
     @pytest.mark.asyncio
     async def test_batch_timeout_processing(self, logger_instance):
@@ -726,9 +701,7 @@ class TestGlobalAPI:
     async def test_global_log_event(self, basic_config):
         """Test global log_event function."""
         TamperEvidentLogger._instance = None
-        with patch.object(
-            TamperEvidentLogger, "log_event", new_callable=AsyncMock
-        ) as mock_log:
+        with patch.object(TamperEvidentLogger, "log_event", new_callable=AsyncMock) as mock_log:
             mock_log.return_value = "hash123"
 
             result = await log_event("test", {"data": "value"})

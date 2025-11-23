@@ -81,9 +81,7 @@ class CircuitBreaker:
         self._failure_count = 0
         self._last_failure_time = 0.0
         self._metrics = metrics
-        self._metrics.CIRCUIT_BREAKER_STATUS.labels = MagicMock(
-            return_value=MagicMock()
-        )
+        self._metrics.CIRCUIT_BREAKER_STATUS.labels = MagicMock(return_value=MagicMock())
         self._metrics.CIRCUIT_BREAKER_STATUS.labels().set(0)
 
     def check(self):
@@ -165,9 +163,7 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -271,9 +267,7 @@ def test_rabbitmq_settings_success(sample_settings_dict, mock_secrets_manager):
     assert settings.url == "amqps://user:pass@host:port/vhost"
 
 
-def test_rabbitmq_settings_insecure_url_prod(
-    set_env, sample_settings_dict, mock_secrets_manager
-):
+def test_rabbitmq_settings_insecure_url_prod(set_env, sample_settings_dict, mock_secrets_manager):
     """Test insecure URL fails in production."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.return_value = "amqp://guest:guest@localhost/"
@@ -297,9 +291,7 @@ def test_rabbitmq_settings_not_in_allowlist_prod(
     """Test URL not in allowlist fails in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["allowed_exchange_names"] = ["allowed_exchange"]
-    with pytest.raises(
-        ValidationError, match="not in the 'allowed_exchange_names' list"
-    ):
+    with pytest.raises(ValidationError, match="not in the 'allowed_exchange_names' list"):
         RabbitMQSettings(**sample_settings_dict)
 
 
@@ -352,9 +344,7 @@ def test_metrics_init_failure(mock_prometheus_registry, mock_alert_operator):
 # --- AuditEvent Tests ---
 def test_audit_event_success(mock_secrets_manager):
     """Test successful AuditEvent creation."""
-    event = AuditEvent(
-        event_name="test", service_name="test-service", details={"key": "value"}
-    )
+    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
     assert event.event_name == "test"
     assert event.service_name == "test-service"
 
@@ -370,9 +360,7 @@ def test_audit_event_pii_scrubbing(mock_scrub_sensitive_data):
     assert event.details == {"scrubbed": True}
 
 
-def test_audit_event_pii_detection_aborts(
-    mock_scrub_sensitive_data, mock_alert_operator
-):
+def test_audit_event_pii_detection_aborts(mock_scrub_sensitive_data, mock_alert_operator):
     """Test PII detection aborts."""
     mock_scrub_sensitive_data.side_effect = lambda x: {"changed": True}
     with pytest.raises(RuntimeError):
@@ -389,9 +377,7 @@ def test_audit_event_pii_detection_aborts(
 def test_audit_event_sign(mock_secrets_manager):
     """Test event signing."""
     mock_secrets_manager.get_secret.return_value = "hmac_key"
-    event = AuditEvent(
-        event_name="test", service_name="test-service", details={"key": "value"}
-    )
+    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
     sig = event._sign_event()
     expected = hmac.new(
         b"hmac_key",
@@ -446,9 +432,7 @@ def test_circuit_breaker_reset(sample_metrics, mock_alert_operator):
 
 # --- RabbitMQGateway Tests ---
 @pytest.mark.asyncio
-async def test_gateway_init_success(
-    sample_settings_dict, sample_metrics, mock_secrets_manager
-):
+async def test_gateway_init_success(sample_settings_dict, sample_metrics, mock_secrets_manager):
     """Test successful gateway initialization."""
     settings = RabbitMQSettings(**sample_settings_dict)
     gateway = RabbitMQGateway(settings, sample_metrics)
@@ -472,9 +456,7 @@ async def test_gateway_init_insecure_url_prod(
 
 
 @pytest.mark.asyncio
-async def test_gateway_startup_success(
-    mock_aiormq, sample_settings_dict, sample_metrics
-):
+async def test_gateway_startup_success(mock_aiormq, sample_settings_dict, sample_metrics):
     """Test successful gateway startup."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
@@ -503,9 +485,7 @@ async def test_gateway_startup_connection_failure(
 
 
 @pytest.mark.asyncio
-async def test_gateway_shutdown_success(
-    mock_aiormq, sample_settings_dict, sample_metrics
-):
+async def test_gateway_shutdown_success(mock_aiormq, sample_settings_dict, sample_metrics):
     """Test successful gateway shutdown."""
     mock_connect, mock_connection = mock_aiormq
     gateway = RabbitMQGateway(RabbitMQSettings(**sample_settings_dict), sample_metrics)
@@ -576,9 +556,7 @@ async def test_publish_queue_full(
 
 
 @pytest.mark.asyncio
-async def test_publish_invalid_routing_key_prod(
-    set_env, sample_settings_dict, mock_alert_operator
-):
+async def test_publish_invalid_routing_key_prod(set_env, sample_settings_dict, mock_alert_operator):
     """Test invalid routing key aborts in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["allowed_routing_keys"] = ["allowed.*"]
@@ -634,9 +612,7 @@ async def test_publish_batch_connection_error(
         )
     ]
     gateway.channel = mock_connection.channel.return_value
-    gateway.channel.basic_publish = AsyncMock(
-        side_effect=AMQPConnectionError("Connection error")
-    )
+    gateway.channel.basic_publish = AsyncMock(side_effect=AMQPConnectionError("Connection error"))
     with pytest.raises(SystemExit):
         await gateway._publish_batch(batch)
     alert_args, _ = mock_alert_operator.call_args

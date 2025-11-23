@@ -13,9 +13,7 @@ from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 # Import the plugin from the correct directory
 # Try multiple possible locations for the plugin
 plugin_paths = [
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
-    ),  # /plugins/
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -51,9 +49,7 @@ def mock_sbt_and_java_in_path():
     """
     with patch("scala_test_runner_plugin._which") as mock_which, patch(
         "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
+    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
         "os.path.exists", return_value=True
     ):  # Assume files exist
 
@@ -191,9 +187,7 @@ async def test_run_scala_tests_success_full_workflow():
     """
     with patch("scala_test_runner_plugin._which") as mock_which, patch(
         "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
+    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
         "os.path.exists"
     ) as mock_exists, patch(
         "os.makedirs"
@@ -254,10 +248,7 @@ async def test_run_scala_tests_success_full_workflow():
         )
 
         assert result["success"] is True
-        assert (
-            "SBT tests passed" in result["reason"]
-            or "SBT tests finished" in result["reason"]
-        )
+        assert "SBT tests passed" in result["reason"] or "SBT tests finished" in result["reason"]
         assert result["coverage_increase_percent"] == 85.50
 
         # Assert core steps were called
@@ -270,9 +261,7 @@ async def test_run_scala_tests_test_failure():
     """Test `run_scala_tests` when the JUnit report indicates a test failure."""
     with patch("scala_test_runner_plugin._which") as mock_which, patch(
         "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
+    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
         "os.path.exists", return_value=True
     ), patch(
         "scala_test_runner_plugin._parse_junit_xml",
@@ -312,10 +301,7 @@ async def test_run_scala_tests_test_failure():
             )
 
             assert result["success"] is False
-            assert (
-                "1 failures" in result["reason"]
-                or "SBT tests finished" in result["reason"]
-            )
+            assert "1 failures" in result["reason"] or "SBT tests finished" in result["reason"]
             assert result["coverage_increase_percent"] == 50.0
 
 
@@ -360,9 +346,7 @@ async def test_run_scala_tests_with_existing_build_sbt():
     """Test `run_scala_tests` when build.sbt already exists (no temp project needed)."""
     with patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"), patch(
         "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
+    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
         "os.path.exists", return_value=True
     ), patch(
         "scala_test_runner_plugin._parse_junit_xml",
@@ -410,9 +394,7 @@ async def test_run_scala_tests_with_existing_build_sbt():
     """Test that `run_scala_tests` handles timeout correctly."""
     with patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"), patch(
         "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
+    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
         "os.path.exists", return_value=True
     ):
 

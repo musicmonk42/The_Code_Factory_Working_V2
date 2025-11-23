@@ -280,12 +280,8 @@ class CheckpointError(Exception):
             raise ValueError(
                 "HMAC secret not provided and EXCEPTION_HMAC_SECRET env var is not set."
             )
-        context_bytes = json.dumps(self.context, sort_keys=True, default=str).encode(
-            "utf-8"
-        )
-        return hmac.new(
-            secret.encode("utf-8"), context_bytes, hashlib.sha256
-        ).hexdigest()
+        context_bytes = json.dumps(self.context, sort_keys=True, default=str).encode("utf-8")
+        return hmac.new(secret.encode("utf-8"), context_bytes, hashlib.sha256).hexdigest()
 
     @classmethod
     async def raise_with_alert(
@@ -416,9 +412,7 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
                     # Create the tenacity-wrapped function
                     @retry(
                         stop=stop_after_attempt(max_attempts),
-                        wait=wait_exponential(
-                            multiplier=1, min=2, max=max_delay_seconds
-                        ),
+                        wait=wait_exponential(multiplier=1, min=2, max=max_delay_seconds),
                         retry_error_cls=CheckpointRetryableError,
                     )
                     async def retryable_func(*inner_args, **inner_kwargs):

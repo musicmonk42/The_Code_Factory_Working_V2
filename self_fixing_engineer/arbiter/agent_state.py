@@ -90,9 +90,7 @@ if "get_or_create_metric" not in globals():
                     self.key = key
 
                 def inc(self, n=1):
-                    self.parent._counts[self.key] = (
-                        self.parent._counts.get(self.key, 0) + n
-                    )
+                    self.parent._counts[self.key] = self.parent._counts.get(self.key, 0) + n
 
             return IncProxy(self, key)
 
@@ -163,11 +161,7 @@ class AgentState(Base):
     def _validate_inventory(self, inventory):
         """Validate inventory field with comprehensive error tracking."""
         parsed = self._parse_json_field(inventory)
-        if (
-            parsed is None
-            and isinstance(inventory, str)
-            and inventory not in ["[]", ""]
-        ):
+        if parsed is None and isinstance(inventory, str) and inventory not in ["[]", ""]:
             SCHEMA_VALIDATION_ERRORS.labels(
                 table="agent_state", error_type="invalid_inventory"
             ).inc()
@@ -210,20 +204,14 @@ class AgentState(Base):
         """Validate memory field with size limits and comprehensive error tracking."""
         parsed = self._parse_json_field(memory)
         if parsed is None and isinstance(memory, str) and memory not in ["[]", ""]:
-            SCHEMA_VALIDATION_ERRORS.labels(
-                table="agent_state", error_type="invalid_memory"
-            ).inc()
+            SCHEMA_VALIDATION_ERRORS.labels(table="agent_state", error_type="invalid_memory").inc()
             raise ValueError("AgentState.memory must be a list")
         if parsed is not None and not isinstance(parsed, list):
-            SCHEMA_VALIDATION_ERRORS.labels(
-                table="agent_state", error_type="invalid_memory"
-            ).inc()
+            SCHEMA_VALIDATION_ERRORS.labels(table="agent_state", error_type="invalid_memory").inc()
             raise ValueError("AgentState.memory must be a list")
         # Handle non-string, non-list values
         if not isinstance(memory, (list, str)):
-            SCHEMA_VALIDATION_ERRORS.labels(
-                table="agent_state", error_type="invalid_memory"
-            ).inc()
+            SCHEMA_VALIDATION_ERRORS.labels(table="agent_state", error_type="invalid_memory").inc()
             raise ValueError("AgentState.memory must be a list")
 
         # Apply size limit if configured for regulatory compliance
@@ -236,11 +224,7 @@ class AgentState(Base):
     def _validate_personality(self, personality):
         """Validate personality field with comprehensive error tracking."""
         parsed = self._parse_json_field(personality)
-        if (
-            parsed is None
-            and isinstance(personality, str)
-            and personality not in ["{}", ""]
-        ):
+        if parsed is None and isinstance(personality, str) and personality not in ["{}", ""]:
             SCHEMA_VALIDATION_ERRORS.labels(
                 table="agent_state", error_type="invalid_personality"
             ).inc()
@@ -299,9 +283,7 @@ class AgentState(Base):
             self._validate_memory(value)
             return value
         else:
-            SCHEMA_VALIDATION_ERRORS.labels(
-                table="agent_state", error_type="invalid_memory"
-            ).inc()
+            SCHEMA_VALIDATION_ERRORS.labels(table="agent_state", error_type="invalid_memory").inc()
             raise ValueError("AgentState.memory must be a list")
 
     @validates("personality")
@@ -323,9 +305,7 @@ class AgentState(Base):
     def validate_energy(self, key, value):
         """Validate energy field within regulatory constraints."""
         if not isinstance(value, (int, float)) or not 0.0 <= value <= 100.0:
-            SCHEMA_VALIDATION_ERRORS.labels(
-                table="agent_state", error_type="invalid_energy"
-            ).inc()
+            SCHEMA_VALIDATION_ERRORS.labels(table="agent_state", error_type="invalid_energy").inc()
             raise ValueError("AgentState.energy must be between 0.0 and 100.0")
         return value
 
@@ -354,9 +334,7 @@ class AgentState(Base):
                 AgentState._validate_fields_sync(target)
             except RuntimeError:
                 # No running loop, safe to use asyncio.run
-                asyncio.run(
-                    AgentState._validate_json_fields(mapper, connection, target)
-                )
+                asyncio.run(AgentState._validate_json_fields(mapper, connection, target))
         except Exception:
             # Fallback to sync validation if async fails
             AgentState._validate_fields_sync(target)
@@ -376,9 +354,7 @@ class AgentState(Base):
             "validate_agent_state", attributes={"table": "agent_state"}
         ):
             try:
-                await asyncio.wait_for(
-                    AgentState._validate_fields(target), timeout=timeout
-                )
+                await asyncio.wait_for(AgentState._validate_fields(target), timeout=timeout)
             except asyncio.TimeoutError:
                 SCHEMA_VALIDATION_ERRORS.labels(
                     table="agent_state", error_type="validation_timeout"
@@ -399,8 +375,7 @@ class AgentState(Base):
             if personality_schema:
                 personality = target._parse_json_field(target.personality)
                 if personality and not all(
-                    k in personality
-                    and isinstance(personality[k], personality_schema[k])
+                    k in personality and isinstance(personality[k], personality_schema[k])
                     for k in personality_schema
                 ):
                     SCHEMA_VALIDATION_ERRORS.labels(
@@ -410,9 +385,7 @@ class AgentState(Base):
                         f"AgentState.personality does not match schema: {personality_schema}"
                     )
         except AttributeError:
-            logger.debug(
-                "AGENT_PERSONALITY_SCHEMA not defined; skipping deep validation"
-            )
+            logger.debug("AGENT_PERSONALITY_SCHEMA not defined; skipping deep validation")
 
     @staticmethod
     async def _validate_fields(target):
@@ -434,9 +407,7 @@ class AgentMetadata(Base):
     key = Column(String, unique=True, nullable=False, index=True)
     value = Column(Text, nullable=False, default="{}")  # Store as JSON string
     created_at = Column(DateTime, default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime, default=func.now(), onupdate=func.now(), nullable=False
-    )
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -491,9 +462,7 @@ class AgentMetadata(Base):
                 asyncio.get_running_loop()
                 AgentMetadata._validate_fields_sync(target)
             except RuntimeError:
-                asyncio.run(
-                    AgentMetadata._validate_json_fields(mapper, connection, target)
-                )
+                asyncio.run(AgentMetadata._validate_json_fields(mapper, connection, target))
         except Exception:
             AgentMetadata._validate_fields_sync(target)
 
@@ -509,9 +478,7 @@ class AgentMetadata(Base):
             "validate_agent_metadata", attributes={"table": "agent_metadata"}
         ):
             try:
-                await asyncio.wait_for(
-                    AgentMetadata._validate_fields(target), timeout=timeout
-                )
+                await asyncio.wait_for(AgentMetadata._validate_fields(target), timeout=timeout)
             except asyncio.TimeoutError:
                 SCHEMA_VALIDATION_ERRORS.labels(
                     table="agent_metadata", error_type="validation_timeout"
@@ -529,8 +496,7 @@ class AgentMetadata(Base):
             if metadata_schema:
                 value = target._parse_json_field(target.value)
                 if value and not all(
-                    k in value and isinstance(value[k], metadata_schema[k])
-                    for k in metadata_schema
+                    k in value and isinstance(value[k], metadata_schema[k]) for k in metadata_schema
                 ):
                     SCHEMA_VALIDATION_ERRORS.labels(
                         table="agent_metadata", error_type="invalid_value_schema"

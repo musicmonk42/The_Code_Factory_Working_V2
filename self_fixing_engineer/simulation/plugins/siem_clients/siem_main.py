@@ -178,9 +178,7 @@ async def run_tests():
                 "https://dummy-api.datadoghq.com/api/v1/logs-queries",
             ),
             "api_key": os.getenv("SIEM_DATADOG_API_KEY", "dummy_dd_api_key"),
-            "application_key": os.getenv(
-                "SIEM_DATADOG_APPLICATION_KEY", "dummy_dd_app_key"
-            ),
+            "application_key": os.getenv("SIEM_DATADOG_APPLICATION_KEY", "dummy_dd_app_key"),
         },
         "azure_sentinel": {
             "workspace_id": os.getenv("SIEM_AZURE_WORKSPACE_ID", "dummy_workspace_id"),
@@ -193,9 +191,7 @@ async def run_tests():
         },
         "aws_cloudwatch": {
             "region_name": os.getenv("AWS_REGION", "us-east-1"),
-            "log_group_name": os.getenv(
-                "AWS_CLOUDWATCH_LOG_GROUP_NAME", "sfe-test-logs"
-            ),
+            "log_group_name": os.getenv("AWS_CLOUDWATCH_LOG_GROUP_NAME", "sfe-test-logs"),
         },
         "gcp_logging": {
             "project_id": os.getenv("GCP_PROJECT_ID", "dummy-gcp-project"),
@@ -257,11 +253,7 @@ async def run_tests():
 
         # Check availability status from list_available_siem_clients for more accurate dependency check
         client_info = next(
-            (
-                info
-                for info in list_available_siem_clients()
-                if info["type"] == siem_type
-            ),
+            (info for info in list_available_siem_clients() if info["type"] == siem_type),
             None,
         )
         if client_info and not client_info["is_available"]:
@@ -275,18 +267,12 @@ async def run_tests():
             async with get_siem_client(
                 siem_type, test_config, metrics_hook=test_metrics_hook
             ) as client:
-                print(
-                    f"Initialized {siem_type} client with correlation ID: {correlation_id}."
-                )
+                print(f"Initialized {siem_type} client with correlation ID: {correlation_id}.")
 
-                is_healthy, health_msg = await client.health_check(
-                    correlation_id=correlation_id
-                )
+                is_healthy, health_msg = await client.health_check(correlation_id=correlation_id)
                 print(f"Health Check: {is_healthy} - {health_msg}")
                 if not is_healthy:
-                    print(
-                        f"Skipping send/query for {siem_type} due to failed health check."
-                    )
+                    print(f"Skipping send/query for {siem_type} due to failed health check.")
                     continue
 
                 # Test send_log (single)
@@ -332,21 +318,19 @@ async def run_tests():
                     if siem_type == "azure_sentinel":
                         query_string_test = 'search "test log"'
                     if siem_type == "aws_cloudwatch":
-                        query_string_test = "fields @timestamp, @message | filter @message like /test log/"
+                        query_string_test = (
+                            "fields @timestamp, @message | filter @message like /test log/"
+                        )
                     if siem_type == "gcp_logging":
                         query_string_test = 'jsonPayload.message:"test log"'
 
                     query_results = await client.query_logs(
                         query_string_test, "1h", 2, correlation_id=correlation_id
                     )
-                    print(
-                        f"Query Results (first 2): {_scrub_and_dump(query_results[:2])}"
-                    )
+                    print(f"Query Results (first 2): {_scrub_and_dump(query_results[:2])}")
                     print(f"Total query results: {len(query_results)}")
                 except NotImplementedError as nie:
-                    print(
-                        f"Querying not supported or implemented for {siem_type}: {nie}."
-                    )
+                    print(f"Querying not supported or implemented for {siem_type}: {nie}.")
                 except SIEMClientQueryError as qe:
                     print(
                         f"Query Error for {siem_type}: {_scrub_and_dump({'error': qe.args[0], 'correlation_id': getattr(qe, 'correlation_id', None)})}"
@@ -357,9 +341,7 @@ async def run_tests():
                     )
 
         except (SIEMClientConfigurationError, ImportError) as e:
-            print(
-                f"Configuration/Import Error for {siem_type}: {_scrub_and_dump(str(e))}"
-            )
+            print(f"Configuration/Import Error for {siem_type}: {_scrub_and_dump(str(e))}")
         except SIEMClientError as e:
             print(
                 f"SIEM Client Error for {siem_type}: {e.client_type} - {_scrub_and_dump(e.args[0])} (Correlation ID: {e.correlation_id})"
@@ -367,9 +349,7 @@ async def run_tests():
             if getattr(e, "details", None):
                 print(f"  Details: {_scrub_and_dump(e.details)}")
         except Exception as e:
-            print(
-                f"An unexpected error occurred for {siem_type}: {_scrub_and_dump(str(e))}"
-            )
+            print(f"An unexpected error occurred for {siem_type}: {_scrub_and_dump(str(e))}")
             import traceback
 
             traceback.print_exc()
@@ -395,9 +375,7 @@ if CLICK_AVAILABLE:
                 level="CRITICAL",
             )
             # Using click's fail-fast
-            raise click.ClickException(
-                "Production CLI commands are restricted to PRODUCTION_MODE."
-            )
+            raise click.ClickException("Production CLI commands are restricted to PRODUCTION_MODE.")
 
     @cli.command("health-check")
     @click.option(
@@ -429,9 +407,7 @@ if CLICK_AVAILABLE:
                 expected_hmac = f.read().strip()
 
             # Use a shared secret to generate the HMAC for validation
-            hmac_secret_val = SECRETS_MANAGER.get_secret(
-                "SIEM_CONFIG_HMAC_SECRET", required=True
-            )
+            hmac_secret_val = SECRETS_MANAGER.get_secret("SIEM_CONFIG_HMAC_SECRET", required=True)
             hmac_secret = await _maybe_await(hmac_secret_val)
             if not isinstance(hmac_secret, (str, bytes)):
                 raise SIEMClientConfigurationError(
@@ -466,18 +442,14 @@ if CLICK_AVAILABLE:
                 siem_type, config, metrics_hook=lambda *args, **kwargs: None
             ) as client:
                 is_healthy, msg = await client.health_check()
-                click.echo(
-                    f"Health Check for '{siem_type}': {is_healthy} - {_scrub_and_dump(msg)}"
-                )
+                click.echo(f"Health Check for '{siem_type}': {is_healthy} - {_scrub_and_dump(msg)}")
                 # Return proper exit code through exception to asyncclick runner if needed
                 if not is_healthy:
                     raise click.ClickException("Health check failed.")
         except click.ClickException:
             raise
         except Exception as e:
-            click.echo(
-                f"Health check failed with error: {_scrub_and_dump(str(e))}", err=True
-            )
+            click.echo(f"Health check failed with error: {_scrub_and_dump(str(e))}", err=True)
             raise click.ClickException("Health check failed.")
 
     @cli.command("send-log")
@@ -521,9 +493,7 @@ if CLICK_AVAILABLE:
         except click.ClickException:
             raise
         except Exception as e:
-            click.echo(
-                f"Log send failed with error: {_scrub_and_dump(str(e))}", err=True
-            )
+            click.echo(f"Log send failed with error: {_scrub_and_dump(str(e))}", err=True)
             raise click.ClickException("Log send failed.")
 
     @cli.command("send-batch")
@@ -565,17 +535,13 @@ if CLICK_AVAILABLE:
                 success, msg, failed = await client.send_logs(log_entries)
                 click.echo(f"Batch Send: {success} - {_scrub_and_dump(msg)}")
                 if failed:
-                    click.echo(
-                        f"Failed logs in batch: {_scrub_and_dump(failed)}", err=True
-                    )
+                    click.echo(f"Failed logs in batch: {_scrub_and_dump(failed)}", err=True)
                 if not success:
                     raise click.ClickException("Batch send failed.")
         except click.ClickException:
             raise
         except Exception as e:
-            click.echo(
-                f"Batch send failed with error: {_scrub_and_dump(str(e))}", err=True
-            )
+            click.echo(f"Batch send failed with error: {_scrub_and_dump(str(e))}", err=True)
             raise click.ClickException("Batch send failed.")
 
     @cli.command("query-logs")
@@ -592,23 +558,15 @@ if CLICK_AVAILABLE:
         help="Path to a JSON configuration file.",
     )
     @click.option("--query-string", required=True, help="The query string to execute.")
-    @click.option(
-        "--time-range", default="24h", help="Relative time range (e.g., '24h', '7d')."
-    )
-    @click.option(
-        "--limit", type=int, default=100, help="Maximum number of results to return."
-    )
-    async def query_logs_command(
-        siem_type, config_file, query_string, time_range, limit
-    ):
+    @click.option("--time-range", default="24h", help="Relative time range (e.g., '24h', '7d').")
+    @click.option("--limit", type=int, default=100, help="Maximum number of results to return.")
+    async def query_logs_command(siem_type, config_file, query_string, time_range, limit):
         """Query a specified SIEM client for logs."""
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except Exception as e:
-            click.echo(
-                f"Error loading config file: {_scrub_and_dump(str(e))}", err=True
-            )
+            click.echo(f"Error loading config file: {_scrub_and_dump(str(e))}", err=True)
             raise click.ClickException("Failed to load config file.")
 
         try:

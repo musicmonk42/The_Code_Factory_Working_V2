@@ -63,9 +63,7 @@ class MockAIOKafkaProducer:
 
 
 # Dummy metric function
-def _get_or_create_metric(
-    metric_type, name, documentation, labelnames=None, buckets=None
-):
+def _get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
     if metric_type == Counter:
         return Counter(name, documentation, labelnames or ())
     elif metric_type == Gauge:
@@ -91,18 +89,12 @@ class MessageQueueService:
             self.kafka_producer = MockAIOKafkaProducer()
         else:
             raise ValueError("Invalid backend type")
-        self.publish_count = Counter(
-            "mq_publish_total", "Total publishes", ["event_type"]
-        )
-        self.publish_errors = Counter(
-            "mq_publish_errors_total", "Publish errors", ["event_type"]
-        )
+        self.publish_count = Counter("mq_publish_total", "Total publishes", ["event_type"])
+        self.publish_errors = Counter("mq_publish_errors_total", "Publish errors", ["event_type"])
         self.critical_events_count = Counter(
             "mq_critical_events_total", "Critical events", ["event_type"]
         )
-        self.message_latency = Histogram(
-            "mq_message_latency_seconds", "Latency", ["event_type"]
-        )
+        self.message_latency = Histogram("mq_message_latency_seconds", "Latency", ["event_type"])
         self.message_retries = Counter("mq_message_retries_total", "Retries")
         self.poison_messages = Counter("mq_poison_messages_total", "Poison messages")
         self._consume_loop_task = None
@@ -174,7 +166,9 @@ class MessageQueueService:
                 # Retry logic placeholder
 
     async def send_to_dlq(self, event_type, message, reason):
-        dlq_topic = f"{self.settings.MQ_TOPIC_PREFIX}_{event_type}_{self.settings.MQ_DLQ_TOPIC_SUFFIX}"
+        dlq_topic = (
+            f"{self.settings.MQ_TOPIC_PREFIX}_{event_type}_{self.settings.MQ_DLQ_TOPIC_SUFFIX}"
+        )
         # Convert bytes keys to strings for JSON serialization
         serializable_message = {}
         for key, value in message.items():
@@ -194,15 +188,15 @@ class MessageQueueService:
             await self.redis_client.xadd(dlq_topic, {"data": encrypted_dlq})
 
     async def replay_dlq(self, event_type):
-        dlq_topic = f"{self.settings.MQ_TOPIC_PREFIX}_{event_type}_{self.settings.MQ_DLQ_TOPIC_SUFFIX}"
+        dlq_topic = (
+            f"{self.settings.MQ_TOPIC_PREFIX}_{event_type}_{self.settings.MQ_DLQ_TOPIC_SUFFIX}"
+        )
         messages = await self.redis_client.xread({dlq_topic: "0"}, count=None, block=0)
         for _, msgs in messages:
             for msg_id, msg in msgs:
                 decrypted = self._decrypt_payload(msg[b"data"])
                 dlq_entry = self._deserialize_message(decrypted)
-                await self.publish(
-                    dlq_entry["original_event_type"], dlq_entry["original_data"]
-                )
+                await self.publish(dlq_entry["original_event_type"], dlq_entry["original_data"])
                 await self.redis_client.xdel(dlq_topic, msg_id)
 
     async def disconnect(self):
@@ -251,9 +245,7 @@ async def test_init_redis():
 @pytest.mark.asyncio
 async def test_publish_redis():
     service = MessageQueueService(backend_type="redis", settings=MockSettings())
-    with patch.object(
-        service.publish_count.labels(event_type="test"), "inc"
-    ) as mock_inc:
+    with patch.object(service.publish_count.labels(event_type="test"), "inc") as mock_inc:
         await service.publish("test", {"key": "value"})
         mock_inc.assert_called_once()
 
@@ -288,9 +280,7 @@ async def test_process_message_success():
             }
         )
     }
-    with patch.object(
-        service.message_latency.labels(event_type="test"), "observe"
-    ) as mock_observe:
+    with patch.object(service.message_latency.labels(event_type="test"), "observe") as mock_observe:
         await service._process_message(message, "test")
         mock_observe.assert_called_once()
 
@@ -353,9 +343,7 @@ async def test_send_to_dlq():
 @pytest.mark.asyncio
 async def test_replay_dlq():
     service = MessageQueueService(backend_type="redis", settings=MockSettings())
-    dlq_entry = json.dumps(
-        {"original_event_type": "test", "original_data": {"key": "value"}}
-    )
+    dlq_entry = json.dumps({"original_event_type": "test", "original_data": {"key": "value"}})
     encrypted = service._encrypt_payload(dlq_entry.encode())
     service.redis_client.xread.return_value = [
         (b"test_events_test_dlq", [(b"id", {b"data": encrypted})])

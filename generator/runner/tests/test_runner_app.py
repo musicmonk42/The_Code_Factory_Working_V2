@@ -56,9 +56,7 @@ class FakeTextualApp:
             root=MagicMock(add=MagicMock(), add_label=MagicMock(), expand=MagicMock()),
         )
         self.doc_markdown_viewer = MagicMock(update=MagicMock())
-        self.set_interval = MagicMock(
-            return_value=MagicMock(cancel=MagicMock(), stop=MagicMock())
-        )
+        self.set_interval = MagicMock(return_value=MagicMock(cancel=MagicMock(), stop=MagicMock()))
         self.add_class = MagicMock()
         self.remove_class = MagicMock()
         self.refresh = MagicMock()
@@ -191,9 +189,7 @@ class MockRunner:
             )
         )
         self.enqueue = AsyncMock(
-            return_value=TaskResult(
-                task_id="mock_id", status="enqueued", started_at=time.time()
-            )
+            return_value=TaskResult(task_id="mock_id", status="enqueued", started_at=time.time())
         )
 
     # Critical sync/mock data methods
@@ -239,9 +235,7 @@ class TestRunnerApp(unittest.IsolatedAsyncioTestCase):
 
         (self.temp_dir / "README.md").write_text("# Test File\nContent")
         (self.temp_dir / "output" / "docs").mkdir(parents=True, exist_ok=True)
-        (self.temp_dir / "output" / "docs" / "project_doc.md").write_text(
-            "# Test Doc\nContent"
-        )
+        (self.temp_dir / "output" / "docs" / "project_doc.md").write_text("# Test Doc\nContent")
         self.config_file = self.temp_dir / "config.yaml"
         self.config_file.write_text(
             """version: 4
@@ -280,9 +274,7 @@ instance_id: tui_test_instance"""
             "runner.runner_config.ConfigWatcher",
             new=MagicMock(return_value=self.mock_config_watcher),
         )
-        self.patch_log_action = patch(
-            "runner.runner_logging.log_action", new=AsyncMock()
-        )
+        self.patch_log_action = patch("runner.runner_logging.log_action", new=AsyncMock())
 
         # --- FIX: Patch asyncio.create_task to be non-blocking ---
         # This is the fix for the StopIteration errors.
@@ -417,10 +409,7 @@ instance_id: tui_test_instance"""
             # --- FIX: Access the mock call arguments correctly ---
             # *** FIX: Use call_args_list instead of await_args_list ***
             self.assertTrue(
-                any(
-                    "completed" in c.args[0]
-                    for c in app.log_widget.write.call_args_list
-                )
+                any("completed" in c.args[0] for c in app.log_widget.write.call_args_list)
             )
             # --- END FIX ---
             # Note: The pass_rate_label.update is sync, so it won't be in the log_widget
@@ -464,9 +453,7 @@ instance_id: tui_test_instance"""
             # --- FIX: Access the mock call arguments correctly ---
             # *** FIX: Use call_args_list instead of await_args_list ***
             self.assertTrue(
-                any(
-                    "enqueued" in c.args[0] for c in app.log_widget.write.call_args_list
-                )
+                any("enqueued" in c.args[0] for c in app.log_widget.write.call_args_list)
             )
             # --- END FIX ---
 
@@ -490,9 +477,7 @@ instance_id: tui_test_instance"""
         )
 
         # Manually trigger the callback with the new config
-        app._app_config_reload_callback(
-            new_config, {"instance_id": "change", "backend": "change"}
-        )
+        app._app_config_reload_callback(new_config, {"instance_id": "change", "backend": "change"})
 
         # Verify app's config reference is updated
         self.assertEqual(app.config.backend, "podman")
@@ -511,15 +496,11 @@ instance_id: tui_test_instance"""
         instance_id = app.config.instance_id
         RUN_QUEUE.labels(framework="pytest", instance_id=instance_id)._value = 2
         RUN_PASS_RATE._value = 0.95
-        RUN_RESOURCE_USAGE.labels(
-            resource_type="cpu", instance_id=instance_id
-        )._value = 75.0
-        RUN_RESOURCE_USAGE.labels(
-            resource_type="mem", instance_id=instance_id
-        )._value = 50.0  # Added mem
-        HEALTH_STATUS.labels(
-            component_name="overall", instance_id=instance_id
-        )._value = 1
+        RUN_RESOURCE_USAGE.labels(resource_type="cpu", instance_id=instance_id)._value = 75.0
+        RUN_RESOURCE_USAGE.labels(resource_type="mem", instance_id=instance_id)._value = (
+            50.0  # Added mem
+        )
+        HEALTH_STATUS.labels(component_name="overall", instance_id=instance_id)._value = 1
 
         # Mock the underlying Prometheus client to expose these values
         with patch(
@@ -527,9 +508,7 @@ instance_id: tui_test_instance"""
             MagicMock(return_value=MagicMock(_value=2)),
         ), patch("runner.runner_app.RUN_PASS_RATE", MagicMock(_value=0.95)), patch(
             "runner.runner_app.RUN_RESOURCE_USAGE.labels",
-            MagicMock(
-                side_effect=[MagicMock(_value=75.0), MagicMock(_value=50.0)]  # CPU, MEM
-            ),
+            MagicMock(side_effect=[MagicMock(_value=75.0), MagicMock(_value=50.0)]),  # CPU, MEM
         ), patch(
             "runner.runner_app.HEALTH_STATUS.labels",
             MagicMock(return_value=MagicMock(_value=1)),
@@ -541,10 +520,7 @@ instance_id: tui_test_instance"""
             app.queue_table.clear.assert_called_once()
             app.queue_table.add_row.assert_called()
             self.assertTrue(
-                any(
-                    "Queue size: 2" in c[0][2]
-                    for c in app.queue_table.add_row.call_args_list
-                )
+                any("Queue size: 2" in c[0][2] for c in app.queue_table.add_row.call_args_list)
             )
 
             # Verify progress bar/label updates (using app.*_progress from FakeTextualApp)
@@ -557,10 +533,7 @@ instance_id: tui_test_instance"""
                 unittest.mock.ANY
             )  # Check content via manual assertion
             self.assertTrue(
-                any(
-                    "95.00%" in c[0][0]
-                    for c in pass_rate_label_mock.update.call_args_list
-                )
+                any("95.00%" in c[0][0] for c in pass_rate_label_mock.update.call_args_list)
             )
 
     async def test_error_handling(self):
@@ -588,10 +561,7 @@ instance_id: tui_test_instance"""
             # --- FIX: Access the mock call arguments correctly ---
             # *** FIX: Check for error.detail, not a partial string ***
             self.assertTrue(
-                any(
-                    error.detail in c.args[0]
-                    for c in app.log_widget.write.call_args_list
-                )
+                any(error.detail in c.args[0] for c in app.log_widget.write.call_args_list)
             )
             # --- END FIX ---
 
@@ -640,10 +610,7 @@ instance_id: tui_test_instance"""
             # --- FIX: Access the mock call arguments correctly ---
             # *** FIX: Check for error.detail, not a partial string ***
             self.assertTrue(
-                any(
-                    error.detail in c.args[0]
-                    for c in app.log_widget.write.call_args_list
-                )
+                any(error.detail in c.args[0] for c in app.log_widget.write.call_args_list)
             )
             # --- END FIX ---
 

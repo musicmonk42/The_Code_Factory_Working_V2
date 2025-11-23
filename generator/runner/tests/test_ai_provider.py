@@ -144,17 +144,13 @@ async def test_count_tokens_empty_string(provider: OpenAIProvider) -> None:
 
 # 4. API call method with SDK error translation
 @pytest.mark.asyncio
-async def test_api_call_non_stream(
-    provider: OpenAIProvider, mock_openai_response
-) -> None:
+async def test_api_call_non_stream(provider: OpenAIProvider, mock_openai_response) -> None:
     with patch.object(
         provider.client.chat.completions, "create", new_callable=AsyncMock
     ) as mock_create:
         mock_create.return_value = mock_openai_response
 
-        result = await provider._api_call(
-            "gpt-4", [{"role": "user", "content": "test"}], False
-        )
+        result = await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
         assert result == mock_openai_response
         mock_create.assert_called_once()
 
@@ -166,9 +162,7 @@ async def test_api_call_stream(provider: OpenAIProvider, mock_openai_stream) -> 
     ) as mock_create:
         mock_create.return_value = mock_openai_stream
 
-        result = await provider._api_call(
-            "gpt-4", [{"role": "user", "content": "test"}], True
-        )
+        result = await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], True)
         # Result should be the stream itself
         chunks = []
         async for chunk in result:
@@ -188,9 +182,7 @@ async def test_api_call_authentication_error(provider: OpenAIProvider) -> None:
         )
 
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call(
-                "gpt-4", [{"role": "user", "content": "test"}], False
-            )
+            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
 
         assert "Authentication failed" in str(exc_info.value)
 
@@ -207,9 +199,7 @@ async def test_api_call_rate_limit_error(provider: OpenAIProvider) -> None:
         )
 
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call(
-                "gpt-4", [{"role": "user", "content": "test"}], False
-            )
+            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
 
         assert "Rate limit" in str(exc_info.value)
 
@@ -227,9 +217,7 @@ async def test_api_call_connection_error(provider: OpenAIProvider) -> None:
         )
 
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call(
-                "gpt-4", [{"role": "user", "content": "test"}], False
-            )
+            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
 
         assert "Connection error" in str(exc_info.value)
 
@@ -244,9 +232,7 @@ async def test_api_call_generic_openai_error(provider: OpenAIProvider) -> None:
         mock_create.side_effect = OpenAIError("Generic error")
 
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call(
-                "gpt-4", [{"role": "user", "content": "test"}], False
-            )
+            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
 
         assert "OpenAI API error" in str(exc_info.value)
 
@@ -259,9 +245,7 @@ async def test_api_call_unexpected_error(provider: OpenAIProvider) -> None:
         mock_create.side_effect = RuntimeError("Unexpected error")
 
         with pytest.raises(LLMError) as exc_info:
-            await provider._api_call(
-                "gpt-4", [{"role": "user", "content": "test"}], False
-            )
+            await provider._api_call("gpt-4", [{"role": "user", "content": "test"}], False)
 
         assert "Unexpected error" in str(exc_info.value)
 
@@ -320,9 +304,7 @@ async def test_call_stream_error(provider: OpenAIProvider) -> None:
 
 
 @pytest.mark.asyncio
-async def test_call_with_custom_headers(
-    provider: OpenAIProvider, mock_openai_response
-) -> None:
+async def test_call_with_custom_headers(provider: OpenAIProvider, mock_openai_response) -> None:
     provider.register_custom_headers({"X-Custom": "test"})
 
     # --- FIX: Mock the client 'create' method, which receives the headers, ---

@@ -79,17 +79,13 @@ class TestSecurityConfig:
     def test_input_validation_rules_invalid_max_size(self):
         """Test invalid max_size in input validation rules."""
         rules = {"max_size": -1}
-        with pytest.raises(
-            ValidationError, match="max_size must be a positive integer"
-        ):
+        with pytest.raises(ValidationError, match="max_size must be a positive integer"):
             SecurityConfig(input_validation_rules=rules)
 
     def test_input_validation_rules_invalid_max_length(self):
         """Test invalid max_length in input validation rules."""
         rules = {"max_length": 0}
-        with pytest.raises(
-            ValidationError, match="max_length must be a positive integer"
-        ):
+        with pytest.raises(ValidationError, match="max_length must be a positive integer"):
             SecurityConfig(input_validation_rules=rules)
 
     def test_output_validation_rules_invalid_confidence(self):

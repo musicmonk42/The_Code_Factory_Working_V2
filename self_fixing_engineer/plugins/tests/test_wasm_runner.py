@@ -113,9 +113,7 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -193,9 +191,7 @@ def mock_wasmtime(monkeypatch):
 def temp_wasm_file(tmp_path):
     """Create a temporary dummy WASM file."""
     wasm_path = tmp_path / "dummy.wasm"
-    wasm_path.write_bytes(
-        b"\x00\x61\x73\x6d\x01\x00\x00\x00"
-    )  # Minimal valid WASM header
+    wasm_path.write_bytes(b"\x00\x61\x73\x6d\x01\x00\x00\x00")  # Minimal valid WASM header
     return wasm_path
 
 
@@ -375,9 +371,7 @@ async def test_wasm_runner_init_success(
         "is_demo_plugin": False,
         "signature": "",
     }
-    runner = WasmRunner(
-        "test_plugin", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)]
-    )
+    runner = WasmRunner("test_plugin", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)])
     assert runner.manifest.name == "test_plugin"
     assert runner.last_loaded_hash is not None
 
@@ -472,9 +466,7 @@ async def test_wasm_runner_plugin_health_success(mock_wasmtime, temp_wasm_file):
         "description": "Desc",
         "whitelisted_paths": [str(temp_wasm_file.parent)],
     }
-    runner = WasmRunner(
-        "test", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)]
-    )
+    runner = WasmRunner("test", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)])
     health = await runner.plugin_health()
     assert health["status"] == "ok"
 
@@ -489,9 +481,7 @@ async def test_wasm_runner_reload_if_changed(mock_wasmtime, temp_wasm_file):
         "type": "wasm",
         "whitelisted_paths": [str(temp_wasm_file.parent)],
     }
-    runner = WasmRunner(
-        "test", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)]
-    )
+    runner = WasmRunner("test", manifest, str(temp_wasm_file), [str(temp_wasm_file.parent)])
     initial_hash = runner.last_loaded_hash
     with open(temp_wasm_file, "ab") as f:
         f.write(b"changed")
@@ -503,9 +493,7 @@ async def test_wasm_runner_reload_if_changed(mock_wasmtime, temp_wasm_file):
 # --- CLI Tooling Tests ---
 def test_list_plugins_valid(temp_plugins_dir, mock_scrub_sensitive_data):
     """Test listing valid plugins."""
-    plugins = list_plugins(
-        str(temp_plugins_dir / "demo_wasm_plugin"), [str(temp_plugins_dir)]
-    )
+    plugins = list_plugins(str(temp_plugins_dir / "demo_wasm_plugin"), [str(temp_plugins_dir)])
     assert "demo_wasm_plugin" in plugins
 
 

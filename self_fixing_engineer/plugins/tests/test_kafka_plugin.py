@@ -141,9 +141,7 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -246,9 +244,7 @@ def test_kafka_settings_plaintext_prod(set_env, sample_settings_dict):
     """Test PLAINTEXT forbidden in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["security_protocol"] = "PLAINTEXT"
-    with pytest.raises(
-        ValidationError, match="security_protocol cannot be 'PLAINTEXT'"
-    ):
+    with pytest.raises(ValidationError, match="security_protocol cannot be 'PLAINTEXT'"):
         KafkaSettings(**sample_settings_dict)
 
 
@@ -315,9 +311,7 @@ def test_audit_event_pii_scrubbing(mock_scrub_sensitive_data):
     assert event.details == {"scrubbed": True}
 
 
-def test_audit_event_pii_detection_aborts(
-    mock_scrub_sensitive_data, mock_alert_operator
-):
+def test_audit_event_pii_detection_aborts(mock_scrub_sensitive_data, mock_alert_operator):
     """Test PII detection aborts."""
     mock_scrub_sensitive_data.side_effect = lambda x: {"changed": True}
     with pytest.raises(RuntimeError):
@@ -436,9 +430,7 @@ async def test_producer_send_success(mock_aiokafka_producer, mock_prometheus_reg
 
 
 @pytest.mark.asyncio
-async def test_producer_send_batch_success(
-    mock_aiokafka_producer, mock_prometheus_registry
-):
+async def test_producer_send_batch_success(mock_aiokafka_producer, mock_prometheus_registry):
     """Test successful batch send."""
     mock_producer, _ = mock_aiokafka_producer
     producer = KafkaAuditProducer(

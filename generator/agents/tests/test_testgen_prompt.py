@@ -42,9 +42,7 @@ def temp_dir():
 @pytest.fixture
 def mock_chromadb():
     """Mock ChromaDB client and collections"""
-    with patch(
-        "agents.testgen_agent.testgen_prompt.chromadb.PersistentClient"
-    ) as mock_client:
+    with patch("agents.testgen_agent.testgen_prompt.chromadb.PersistentClient") as mock_client:
         mock_collection = MagicMock()
         mock_collection.add = MagicMock()
         mock_collection.query = MagicMock(
@@ -56,9 +54,7 @@ def mock_chromadb():
         )
 
         mock_client_instance = MagicMock()
-        mock_client_instance.get_or_create_collection = MagicMock(
-            return_value=mock_collection
-        )
+        mock_client_instance.get_or_create_collection = MagicMock(return_value=mock_collection)
         mock_client.return_value = mock_client_instance
 
         yield mock_client_instance
@@ -291,9 +287,7 @@ class TestPromptBuilders:
         db_file = tracker_dir / "template_performance.json"
 
         # Create a test template
-        template_file = (
-            temp_dir / "testgen_templates" / "test_test_generation_default.j2"
-        )
+        template_file = temp_dir / "testgen_templates" / "test_test_generation_default.j2"
         template_file.parent.mkdir(parents=True, exist_ok=True)
         template_file.write_text("Test template for {{ task }}")
 
@@ -337,9 +331,7 @@ class TestHelperFunctions:
         template_dir = temp_dir / "templates"
         template_dir.mkdir()
 
-        with patch(
-            "agents.testgen_agent.testgen_prompt.TEMPLATE_DIR", str(template_dir)
-        ):
+        with patch("agents.testgen_agent.testgen_prompt.TEMPLATE_DIR", str(template_dir)):
             with pytest.raises(FileNotFoundError):
                 build_agentic_prompt("test_generation", code="def test(): pass")
 

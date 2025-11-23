@@ -49,10 +49,8 @@ try:
         self_healing_compliance_gap_alerts_total = REGISTRY._collector_to_names.get(
             f"{METRIC_PREFIX}compliance_gap_alerts_total"
         )
-        self_healing_compliance_required_controls_not_enforced = (
-            REGISTRY._collector_to_names.get(
-                f"{METRIC_PREFIX}compliance_required_controls_not_enforced"
-            )
+        self_healing_compliance_required_controls_not_enforced = REGISTRY._collector_to_names.get(
+            f"{METRIC_PREFIX}compliance_required_controls_not_enforced"
         )
         self_healing_config_load_failures = REGISTRY._collector_to_names.get(
             f"{METRIC_PREFIX}config_load_failures"
@@ -80,12 +78,8 @@ except ImportError:
 
 def sanitize_log(msg: str) -> str:
     """Strip potential PII/keys from log messages."""
-    msg = re.sub(
-        r"(?i)(api_key|password|secret|token|pass)=[^& ]+", r"\1=REDACTED", msg
-    )
-    msg = re.sub(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "REDACTED_EMAIL", msg
-    )
+    msg = re.sub(r"(?i)(api_key|password|secret|token|pass)=[^& ]+", r"\1=REDACTED", msg)
+    msg = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "REDACTED_EMAIL", msg)
     return msg
 
 
@@ -121,9 +115,7 @@ class ComplianceEnforcementError(Exception):
         """
         Initializes the ComplianceEnforcementError.
         """
-        super().__init__(
-            f"Compliance block on {action_name} (Control: {control_tag}): {message}"
-        )
+        super().__init__(f"Compliance block on {action_name} (Control: {control_tag}): {message}")
         self.action_name = action_name
         self.control_tag = control_tag
         self.message = message
@@ -156,9 +148,7 @@ class ComplianceEnforcementError(Exception):
 # APP_ENV: 'development' or 'production'. Controls fail-closed behavior and error output.
 # CREW_CONFIG_PATH: Path to the crew_config.yaml file.
 #
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 DEFAULT_CREW_CONFIG_PATH = os.path.join(
@@ -222,9 +212,7 @@ def load_compliance_map(config_path: str) -> Dict[str, Dict[str, Any]]:
         with open(config_path, "r", encoding="utf-8") as f:
             crew_config = yaml.safe_load(f)
 
-            if not v.validate(
-                {"compliance_controls": crew_config.get("compliance_controls", {})}
-            ):
+            if not v.validate({"compliance_controls": crew_config.get("compliance_controls", {})}):
                 logger.error(
                     f"Invalid YAML structure: {v.errors}",
                     extra={"validation_errors": v.errors},
@@ -370,9 +358,7 @@ def generate_report(config_path: str) -> Tuple[Dict[str, List[str]], bool]:
     compliance_map = load_compliance_map(config_path)
 
     if not compliance_map:
-        print(
-            "No compliance controls found or loaded. Report cannot be generated meaningfully."
-        )
+        print("No compliance controls found or loaded. Report cannot be generated meaningfully.")
         return {
             "not_enforced": [],
             "partially_enforced": [],
@@ -395,9 +381,7 @@ def generate_report(config_path: str) -> Tuple[Dict[str, List[str]], bool]:
 
         if coverage_gaps["required_but_not_enforced"]:
             print("\n🚨 Required controls NOT fully enforced:")
-            for control_id in sorted(
-                list(set(coverage_gaps["required_but_not_enforced"]))
-            ):
+            for control_id in sorted(list(set(coverage_gaps["required_but_not_enforced"]))):
                 status = compliance_map.get(control_id, {}).get("status", "N/A")
                 print(f"  - {control_id} (Current Status: {status})")
                 _audit_log_gap(
@@ -431,9 +415,7 @@ def generate_report(config_path: str) -> Tuple[Dict[str, List[str]], bool]:
                 )
 
         if coverage_gaps["not_enforced"]:
-            print(
-                "\n🔴 Controls with Unspecified/Non-Enforced Status (check configuration):"
-            )
+            print("\n🔴 Controls with Unspecified/Non-Enforced Status (check configuration):")
             for gap in sorted(list(set(coverage_gaps["not_enforced"]))):
                 print(f"  - {gap}")
                 _audit_log_gap(
@@ -530,9 +512,7 @@ def main_cli():
         logger.critical(f"CLI Critical Error (Compliance Enforcement): {e}")
         exit(2)
     except Exception as e:
-        logger.critical(
-            f"CLI Unexpected Error: {e}", exc_info=(app_env not in ["production"])
-        )
+        logger.critical(f"CLI Unexpected Error: {e}", exc_info=(app_env not in ["production"]))
         exit(3)
 
 
@@ -543,9 +523,7 @@ if __name__ == "__main__":
         logger.info(
             f"Detected APP_ENV='{app_env}'. Creating dummy crew_config.yaml for testing/development."
         )
-        test_config_dir = os.path.join(
-            os.path.dirname(__file__), "../../agent_orchestration"
-        )
+        test_config_dir = os.path.join(os.path.dirname(__file__), "../../agent_orchestration")
         os.makedirs(test_config_dir, exist_ok=True)
         test_config_path = os.path.join(test_config_dir, "crew_config.yaml")
 
@@ -639,22 +617,16 @@ agents:
             os.environ["CREW_CONFIG_PATH"] = test_config_path
             main_cli()
         except Exception as e:
-            logger.critical(
-                f"Failed to create and run dummy config: {e}", exc_info=True
-            )
+            logger.critical(f"Failed to create and run dummy config: {e}", exc_info=True)
             sys.exit(1)
         finally:
             try:
                 os.remove(test_config_path)
                 if os.path.exists(test_config_dir) and not os.listdir(test_config_dir):
                     os.rmdir(test_config_dir)
-                logger.info(
-                    "Cleaned up dummy crew_config.yaml and directory (if empty)."
-                )
+                logger.info("Cleaned up dummy crew_config.yaml and directory (if empty).")
             except Exception as e:
-                logger.warning(
-                    f"Failed to clean up dummy config files: {e}", exc_info=True
-                )
+                logger.warning(f"Failed to clean up dummy config files: {e}", exc_info=True)
 
     else:
         logger.info(

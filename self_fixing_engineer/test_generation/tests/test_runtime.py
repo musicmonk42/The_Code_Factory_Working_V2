@@ -34,9 +34,7 @@ def test_load_config_with_env_override(tmp_path):
     config_path = tmp_path / "config.json"
     # Fix: Use a valid JSON string for the config file.
     config_path.write_text(json.dumps({"TEST_KEY": "file_value"}))
-    with patch(
-        "test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}
-    ):
+    with patch("test_generation.gen_agent.runtime.os.environ", {"ATCO_TEST_KEY": "env_value"}):
         cfg = runtime._load_config(config_file=config_path)
         assert cfg["TEST_KEY"] == "env_value"
 
@@ -80,9 +78,7 @@ def test_load_config_fallback():
 def test_dependency_flags_set_correctly():
     """_load_and_check_deps should set *_AVAILABLE flags."""
     # Fix: The test needs to patch the existence of the modules, not just the mock.
-    with patch.dict(
-        "sys.modules", {"aiofiles": MagicMock(), "flask": MagicMock(), "psutil": None}
-    ):
+    with patch.dict("sys.modules", {"aiofiles": MagicMock(), "flask": MagicMock(), "psutil": None}):
         runtime._load_and_check_deps()
         assert runtime.AIOFILES_AVAILABLE is True
         assert runtime.FLASK_AVAILABLE is True

@@ -40,9 +40,7 @@ try:
     import uvicorn
 except ImportError:
     uvicorn = None
-    logging.getLogger(__name__).warning(
-        "uvicorn not found. API interface will be unavailable."
-    )
+    logging.getLogger(__name__).warning("uvicorn not found. API interface will be unavailable.")
 
 try:
     import aiohttp  # For API health checks
@@ -56,9 +54,7 @@ try:
     from textual.app import App as TextualApp  # Alias to avoid name clash with main_app
 except ImportError:
     TextualApp = object  # Dummy for tests
-    logging.getLogger(__name__).warning(
-        "textual not found. GUI interface will be unavailable."
-    )
+    logging.getLogger(__name__).warning("textual not found. GUI interface will be unavailable.")
 
 
 # Observability imports
@@ -142,9 +138,7 @@ except ImportError:
     jsonschema = None
     Draft7Validator = object
     ValidationError = Exception
-    logging.getLogger(__name__).warning(
-        "jsonschema not found. Config validation will be skipped."
-    )
+    logging.getLogger(__name__).warning("jsonschema not found. Config validation will be skipped.")
 
     def json_validate(instance, schema, cls=None):  # Added cls=None for compatibility
         pass  # No-op
@@ -278,9 +272,7 @@ __version__ = "1.0.0"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # Use the logger imported from the runner foundation if available, else basic logger
 logger = (
-    runner_logger_instance
-    if "runner_logger_instance" in globals()
-    else logging.getLogger(__name__)
+    runner_logger_instance if "runner_logger_instance" in globals() else logging.getLogger(__name__)
 )
 
 
@@ -337,9 +329,7 @@ def setup_observability(log_level: str):
 
     # --- OpenTelemetry Tracing Configuration ---
     if _HAS_OTEL:
-        resource = Resource.create(
-            {"service.name": "ai-generator", "service.version": __version__}
-        )
+        resource = Resource.create({"service.name": "ai-generator", "service.version": __version__})
         tracer_provider = TracerProvider(resource=resource)
         OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
@@ -347,9 +337,7 @@ def setup_observability(log_level: str):
             try:
                 tracer_provider.add_span_processor(
                     BatchSpanProcessor(
-                        OTLPSpanExporter(
-                            endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True
-                        )
+                        OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)
                     )
                 )
                 logger.info(
@@ -358,9 +346,7 @@ def setup_observability(log_level: str):
             except Exception as e:
                 logger.error(f"Failed to configure OTLP exporter: {e}", exc_info=True)
         else:
-            tracer_provider.add_span_processor(
-                BatchSpanProcessor(ConsoleSpanExporter())
-            )
+            tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
             logger.info(
                 "OpenTelemetry traces configured for Console export (no OTEL_EXPORTER_OTLP_ENDPOINT specified)."
             )
@@ -433,9 +419,7 @@ async def shutdown(
             "app.interface": os.getenv("APP_INTERFACE", "unknown"),
         },
     ) as span:
-        logger.info(
-            f"Received exit signal {signal_name}... Initiating graceful shutdown."
-        )
+        logger.info(f"Received exit signal {signal_name}... Initiating graceful shutdown.")
 
         APP_RUNNING_GAUGE.labels(
             component=os.getenv("APP_INTERFACE", "unknown"),
@@ -444,9 +428,7 @@ async def shutdown(
             hostname=os.getenv("HOSTNAME", "unknown"),
         ).set(0)
 
-        logger.info(
-            "Triggering pre-shutdown events (flushing logs, committing data)..."
-        )
+        logger.info("Triggering pre-shutdown events (flushing logs, committing data)...")
 
         try:
             if (
@@ -470,9 +452,7 @@ async def shutdown(
         ]  # Check for our custom flag
 
         if tasks:
-            logger.info(
-                f"Cancelling {len(tasks)} outstanding 'owned' background tasks..."
-            )
+            logger.info(f"Cancelling {len(tasks)} outstanding 'owned' background tasks...")
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -498,9 +478,7 @@ async def shutdown(
 
         # FIX: Remove loop.stop(). The loop's runner (e.g., uvicorn, textual)
         # is responsible for stopping the loop after shutdown completes.
-        span.set_status(
-            StatusCode.OK, f"Application gracefully shut down by signal {signal_name}"
-        )
+        span.set_status(StatusCode.OK, f"Application gracefully shut down by signal {signal_name}")
         logger.info("Application shutdown complete.")
 
 
@@ -549,9 +527,7 @@ def generate_launch_provenance(
                 config_model.model_dump_json(sort_keys=True).encode("utf-8")
             ).hexdigest()
         except Exception as e:
-            logger.warning(
-                f"Failed to hash config model, falling back to dict hash: {e}"
-            )
+            logger.warning(f"Failed to hash config model, falling back to dict hash: {e}")
             config_hash = hashlib.sha256(
                 json.dumps(config, sort_keys=True).encode("utf-8")
             ).hexdigest()
@@ -579,9 +555,7 @@ def generate_launch_provenance(
             if "log_action" in globals() and callable(log_action):
                 log_action("Launch Provenance", category="startup", **provenance)
             else:
-                logger.info(
-                    f"Launch Provenance (log_action not available): {provenance}"
-                )
+                logger.info(f"Launch Provenance (log_action not available): {provenance}")
         except Exception as e:
             logger.warning(f"Failed to log provenance: {e}", exc_info=True)
 
@@ -633,12 +607,8 @@ def validate_config(config: Dict[str, Any]):
                 "jsonschema library not found for config validation. Skipping schema validation."
             )
         except ValidationError as e:
-            span.set_status(
-                StatusCode.ERROR, f"Config schema validation failed: {e.message}"
-            )
-            logger.critical(
-                f"Configuration validation failed: {e.message}", exc_info=True
-            )
+            span.set_status(StatusCode.ERROR, f"Config schema validation failed: {e.message}")
+            logger.critical(f"Configuration validation failed: {e.message}", exc_info=True)
             raise ValueError(f"Config schema validation failed: {e.message}") from e
 
         if config.get("security", {}).get("jwt_secret_key_env_var"):
@@ -651,9 +621,7 @@ def validate_config(config: Dict[str, Any]):
                 logger.critical(
                     f"Configuration validation failed: JWT secret key environment variable '{jwt_env_var}' not set. This is critical for API security."
                 )
-                raise ValueError(
-                    f"JWT secret key environment variable '{jwt_env_var}' is not set."
-                )
+                raise ValueError(f"JWT secret key environment variable '{jwt_env_var}' is not set.")
 
             known_insecure_defaults = [
                 "your-super-secret-key-that-should-be-in-env",
@@ -681,8 +649,7 @@ async def perform_health_check(
     api_health_url = (
         api_url
         if api_url
-        else os.getenv("GENERATOR_API_BASE_URL", "http://127.0.0.1:8000/api/v1")
-        + "/health"
+        else os.getenv("GENERATOR_API_BASE_URL", "http://127.0.0.1:8000/api/v1") + "/health"
     )
     timeout = 2 if is_canary else 5
 
@@ -723,9 +690,7 @@ async def perform_health_check(
                     "Runner self-test failed during health check.", severity="critical"
                 )
         except Exception as e:
-            logger.error(
-                f"Runner self-test encountered an exception: {e}", exc_info=True
-            )
+            logger.error(f"Runner self-test encountered an exception: {e}", exc_info=True)
             overall_health = False
             APP_RUNNING_GAUGE.labels(
                 component="runner",
@@ -797,9 +762,7 @@ async def perform_health_check(
                         f"API health check connection failed: {e}", severity="critical"
                     )
                     span.record_exception(e)
-                    span.set_status(
-                        StatusCode.ERROR, "API health check connection failed"
-                    )
+                    span.set_status(StatusCode.ERROR, "API health check connection failed")
                 except Exception as e:
                     logger.error(
                         f"API health check ({api_health_url}): Unexpected error: {e}",
@@ -812,9 +775,7 @@ async def perform_health_check(
                         interface="health_check",
                         hostname=os.getenv("HOSTNAME", "unknown"),
                     ).set(0)
-                    await send_alert(
-                        f"API health check unexpected error: {e}", severity="critical"
-                    )
+                    await send_alert(f"API health check unexpected error: {e}", severity="critical")
                     span.record_exception(e)
                     span.set_status(
                         StatusCode.ERROR,
@@ -882,9 +843,7 @@ def main(
         validate_config(config_dict)
     except ValueError as e:
         logger.critical(f"Application startup failed due to invalid configuration: {e}")
-        asyncio.run(
-            send_alert(f"Config validation failed at startup: {e}", severity="critical")
-        )
+        asyncio.run(send_alert(f"Config validation failed at startup: {e}", severity="critical"))
         sys.exit(1)
 
     provenance = generate_launch_provenance(interface, config_dict, config_path)
@@ -954,9 +913,9 @@ def main(
         setup_signals(loop, runner_instance=None, api_process=None)
         app = MainApp()
         try:
-            APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
-            ).observe(time.monotonic() - startup_start_time)
+            APP_STARTUP_DURATION.labels(interface=interface, version=__version__).observe(
+                time.monotonic() - startup_start_time
+            )
             app.run()
         except Exception as e:
             logger.critical(f"GUI application crashed: {e}", exc_info=True)
@@ -991,9 +950,9 @@ def main(
 
         setup_signals(loop, runner_instance=None, api_process=None)
         try:
-            APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
-            ).observe(time.monotonic() - startup_start_time)
+            APP_STARTUP_DURATION.labels(interface=interface, version=__version__).observe(
+                time.monotonic() - startup_start_time
+            )
             loop.run_until_complete(server.serve())
         except Exception as e:
             logger.critical(f"API server crashed: {e}", exc_info=True)
@@ -1010,9 +969,7 @@ def main(
 
     elif interface == "all":
         if not uvicorn or not aiohttp:
-            logger.critical(
-                "uvicorn or aiohttp not found. Cannot start 'all' interface."
-            )
+            logger.critical("uvicorn or aiohttp not found. Cannot start 'all' interface.")
             sys.exit(1)
 
         logger.info("Launching ALL interfaces (API + GUI)...")
@@ -1046,9 +1003,7 @@ def main(
 
                 async def check_api_readiness():
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            api_ready_url, timeout=poll_interval
-                        ) as response:
+                        async with session.get(api_ready_url, timeout=poll_interval) as response:
                             response.raise_for_status()
                             status_json = await response.json()
                             return status_json.get("status") == "healthy"
@@ -1079,20 +1034,16 @@ def main(
         setup_signals(loop, runner_instance=None, api_process=api_process_handle)
         app = MainApp()
         try:
-            APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
-            ).observe(time.monotonic() - startup_start_time)
+            APP_STARTUP_DURATION.labels(interface=interface, version=__version__).observe(
+                time.monotonic() - startup_start_time
+            )
             app.run()
         except Exception as e:
             logger.critical(f"GUI application crashed: {e}", exc_info=True)
-            asyncio.run(
-                send_alert(f"GUI crashed in 'all' mode: {e}", severity="critical")
-            )
+            asyncio.run(send_alert(f"GUI crashed in 'all' mode: {e}", severity="critical"))
             sys.exit(1)
         finally:
-            logger.info(
-                "GUI application exited in 'all' mode. Terminating API process..."
-            )
+            logger.info("GUI application exited in 'all' mode. Terminating API process...")
             if api_process_handle and api_process_handle.is_alive():
                 api_process_handle.terminate()
                 api_process_handle.join(timeout=5)
@@ -1107,9 +1058,9 @@ def main(
         logger.info("Launching CLI interface...")
         setup_signals(loop, runner_instance=None, api_process=None)
         try:
-            APP_STARTUP_DURATION.labels(
-                interface=interface, version=__version__
-            ).observe(time.monotonic() - startup_start_time)
+            APP_STARTUP_DURATION.labels(interface=interface, version=__version__).observe(
+                time.monotonic() - startup_start_time
+            )
             main_cli(obj={})
         except Exception as e:
             logger.critical(f"CLI execution failed: {e}", exc_info=True)
@@ -1125,9 +1076,7 @@ def main(
             ).set(0)
 
 
-def on_config_reload(
-    config_path: Path, new_config: Dict[str, Any], diff: Dict[str, Any]
-):
+def on_config_reload(config_path: Path, new_config: Dict[str, Any], diff: Dict[str, Any]):
     """Callback for configuration reloads from ConfigWatcher."""
     with tracer.start_as_current_span(
         "config_reload_callback", attributes={"config.path": str(config_path)}
@@ -1176,9 +1125,7 @@ if __name__ == "__main__":
             loop.run_until_complete(main.callback(**ctx.params))
 
     except Exception as e:
-        logger.critical(
-            f"Unhandled exception at application top level: {e}", exc_info=True
-        )
+        logger.critical(f"Unhandled exception at application top level: {e}", exc_info=True)
         asyncio.run(
             send_alert(
                 f"Unhandled critical application error at startup: {e}",

@@ -226,8 +226,7 @@ async def test_save_sim_result_and_provenance_chain(utils_module, tmp_path):
     related = [e for e in lines if e.get("payload", {}).get("file") == str(p)]
     assert any(e.get("event_type") == "save_sim_result_attempt" for e in related)
     assert any(
-        e.get("event_type") == "save_sim_result"
-        and e.get("payload", {}).get("status") == "success"
+        e.get("event_type") == "save_sim_result" and e.get("payload", {}).get("status") == "success"
         for e in related
     )
 
@@ -271,9 +270,7 @@ def test_plugin_api_report_and_error_log_to_provenance(utils_module):
 
     prov_lines = [
         json.loads(line)
-        for line in utils.provenance_logger.provenance_file.read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in utils.provenance_logger.provenance_file.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert any(e.get("event_type") == "plugin_result" for e in prov_lines)
