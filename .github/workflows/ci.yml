@@ -132,12 +132,10 @@ jobs:
           python -m pip install --upgrade pip
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
-            pydantic==1.10.12 \
             pytest==7.4.0 \
-            pytest-asyncio==0.22.0 \
+            pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
             tomli_w \
-            aiohttp==3.8.5 \
             typing-extensions
           if [ -f generator/requirements.txt ]; then
             pip install --no-cache-dir -r generator/requirements.txt
@@ -211,12 +209,10 @@ jobs:
           python -m pip install --upgrade pip
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
-            pydantic==1.10.12 \
             pytest==7.4.0 \
-            pytest-asyncio==0.22.0 \
+            pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
             tomli_w \
-            aiohttp==3.8.5 \
             typing-extensions
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
@@ -288,12 +284,10 @@ jobs:
           python -m pip install --upgrade pip
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
-            pydantic==1.10.12 \
             pytest==7.4.0 \
-            pytest-asyncio==0.22.0 \
+            pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
             tomli_w \
-            aiohttp==3.8.5 \
             typing-extensions
           if [ -f self_fixing_engineer/requirements.txt ]; then
             pip install --no-cache-dir -r self_fixing_engineer/requirements.txt
@@ -369,12 +363,10 @@ jobs:
           python -m pip install --upgrade pip
           # Pin critical dependencies to ensure compatibility
           pip install --no-cache-dir \
-            pydantic==1.10.12 \
             pytest==7.4.0 \
-            pytest-asyncio==0.22.0 \
+            pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
             tomli_w \
-            aiohttp==3.8.5 \
             typing-extensions
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt
