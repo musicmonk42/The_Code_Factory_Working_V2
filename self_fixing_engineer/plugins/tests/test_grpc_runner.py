@@ -451,7 +451,6 @@ async def test_connect_retry_failure(
 @pytest.mark.asyncio
 async def test_run_method_success(mock_grpc_channel):
     """Test successful run_method execution."""
-    mock_channel = MagicMock()
     mock_method = AsyncMock(return_value="response")
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -463,7 +462,6 @@ async def test_run_method_success(mock_grpc_channel):
 @pytest.mark.asyncio
 async def test_run_method_timeout(mock_grpc_channel):
     """Test run_method timeout."""
-    mock_channel = MagicMock()
     mock_method = AsyncMock(side_effect=asyncio.TimeoutError)
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -474,7 +472,6 @@ async def test_run_method_timeout(mock_grpc_channel):
 @pytest.mark.asyncio
 async def test_run_method_grpc_error(mock_grpc_channel, mock_alert_operator):
     """Test run_method with gRPC error."""
-    mock_channel = MagicMock()
     mock_method = AsyncMock(
         side_effect=grpc.aio.AioRpcError(
             grpc.StatusCode.UNAVAILABLE, "details", "trailers"
@@ -493,7 +490,6 @@ async def test_run_method_grpc_error(mock_grpc_channel, mock_alert_operator):
 @pytest.mark.asyncio
 async def test_run_method_unhandled_error(mock_grpc_channel, mock_alert_operator):
     """Test run_method with unhandled exception."""
-    mock_channel = MagicMock()
     mock_method = AsyncMock(side_effect=Exception("Unexpected error"))
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)

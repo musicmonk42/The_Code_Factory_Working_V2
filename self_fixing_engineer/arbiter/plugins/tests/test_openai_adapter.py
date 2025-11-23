@@ -353,7 +353,7 @@ class TestOpenAIAdapter:
             mock_instance.aclose_session = AsyncMock()
 
             with pytest.raises(ValueError):
-                async with OpenAIAdapter(valid_settings) as adapter:
+                async with OpenAIAdapter(valid_settings):
                     raise ValueError("Test error")
 
             # Should still close session even with exception

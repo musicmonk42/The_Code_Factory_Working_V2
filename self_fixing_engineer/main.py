@@ -435,8 +435,6 @@ async def _test_generation_health_check() -> dict:
         initialized_count = sum(
             1 for v in components_status.values() if v == "initialized"
         )
-        missing_count = sum(1 for v in components_status.values() if v == "missing")
-        error_count = sum(1 for v in components_status.values() if "error" in str(v))
 
         if initialized_count == 3:
             status = "ok"

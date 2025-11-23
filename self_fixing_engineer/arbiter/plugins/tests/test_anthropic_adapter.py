@@ -315,7 +315,7 @@ class TestAnthropicAdapter:
                 side_effect=Exception("Close error")
             )
 
-            async with AnthropicAdapter(valid_settings) as adapter:
+            async with AnthropicAdapter(valid_settings):
                 pass  # Should not raise even if close fails
 
     # --- Metrics Tests ---

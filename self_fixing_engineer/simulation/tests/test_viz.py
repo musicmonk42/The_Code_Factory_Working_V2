@@ -288,7 +288,7 @@ def test_pre_plot_hooks():
     result = viz.pre_plot_hook("matplotlib", test_data)
 
     assert result["original"] == "data"
-    assert result["modified"] == True
+    assert result["modified"]
 
 
 def test_post_plot_hooks():
@@ -310,7 +310,7 @@ def test_post_plot_hooks():
 
     assert result_plot == mock_plot
     assert result_metadata["original"] == "metadata"
-    assert result_metadata["processed"] == True
+    assert result_metadata["processed"]
 
 
 # ==============================================================================
@@ -383,7 +383,7 @@ def test_dashboard_interface_check():
         def plotly_chart(self, fig, **kwargs):
             pass
 
-    assert viz.check_dashboard_interface(ValidDashboard()) == True
+    assert viz.check_dashboard_interface(ValidDashboard())
 
     # Invalid dashboard
     class InvalidDashboard:
@@ -391,7 +391,7 @@ def test_dashboard_interface_check():
             pass
 
     with patch.object(viz, "logger") as mock_logger:
-        assert viz.check_dashboard_interface(InvalidDashboard()) == False
+        assert not viz.check_dashboard_interface(InvalidDashboard())
         mock_logger.error.assert_called()
 
 

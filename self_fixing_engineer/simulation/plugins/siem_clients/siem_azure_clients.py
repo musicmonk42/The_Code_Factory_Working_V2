@@ -1351,7 +1351,6 @@ class AzureServiceBusClient(BaseSIEMClient):
                 f"CRITICAL: Azure Service Bus batch log send failed: {e}",
                 level="CRITICAL",
             )
-            failed_logs_batch = [{"log": log, "error": str(e)} for log in log_entries]
             raise SIEMClientPublishError(
                 f"Failed to send Azure Service Bus batch: {e}",
                 self.client_type,

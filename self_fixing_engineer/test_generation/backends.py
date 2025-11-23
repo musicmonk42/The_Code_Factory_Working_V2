@@ -890,7 +890,6 @@ class JestLLMBackend:
             f"Output only the test code.\n\n```{'ts' if is_ts else 'js'}\n{source_code}\n```"
         )
 
-        last_err = None
         for i in range(1, max_attempts + 1):
             try:
                 response = await self._invoke_llm(prompt, timeout)
@@ -949,7 +948,6 @@ class JestLLMBackend:
                 return False, msg, None
 
             except Exception as e:
-                last_err = e
                 logger.warning(
                     f"Attempt {i}/{max_attempts} failed with {type(e).__name__}: {e}",
                     extra={"correlation_id": correlation_id},
@@ -1235,7 +1233,6 @@ class GoBackend:
         success = False
         error_msg = ""
         generated_file_path = None
-        start_time = time.time()
 
         source_code_path = os.path.join(self.project_root, target_file_path)
         source_code = ""

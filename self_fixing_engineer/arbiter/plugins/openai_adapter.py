@@ -28,31 +28,6 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# Custom exceptions for adapter's public interface
-class AuthError(Exception):
-    """Custom exception for authentication errors specific to OpenAIAdapter."""
-
-    pass
-
-
-class TimeoutError(Exception):
-    """Custom exception for timeout errors specific to OpenAIAdapter."""
-
-    pass
-
-
-class RateLimitError(Exception):
-    """Custom exception for rate limit errors specific to OpenAIAdapter."""
-
-    pass
-
-
-class APIError(Exception):
-    """Custom exception for general API errors specific to OpenAIAdapter."""
-
-    pass
-
-
 class OpenAIAdapter:
     """
     Adapter for OpenAI LLM integration.

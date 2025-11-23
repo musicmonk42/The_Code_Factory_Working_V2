@@ -43,7 +43,7 @@ def test_initialization_defaults():
     assert monitor.format == LogFormat.JSONL
     assert monitor.global_metadata == {}
     assert monitor.observers == []
-    assert monitor.tamper_evident == False
+    assert not monitor.tamper_evident
     assert monitor.action_logs == []
 
 
@@ -67,7 +67,7 @@ def test_initialization_with_params(tmp_log_file, mock_logger):
     assert monitor.format == LogFormat.JSON
     assert monitor.global_metadata == global_meta
     assert monitor.observers == observers
-    assert monitor.tamper_evident == True
+    assert monitor.tamper_evident
 
 
 def test_log_action_basic(monitor):
