@@ -1,12 +1,12 @@
 import asyncio
 import logging  # Import logging for the fixture fix
 from types import SimpleNamespace
-from unittest.mock import MagicMock, AsyncMock, patch, call, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 import pytest_asyncio
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric import rsa, ec, ed25519
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
 
 # --- Mocks for modules imported by the provider ---
 
@@ -350,9 +350,7 @@ def software_provider(
     The async method tests (`test_sign_*`, `test_verify_*`) will use this
     "clean" instance.
     """
-    from generator.audit_log.audit_crypto.audit_crypto_provider import (
-        SoftwareCryptoProvider,
-    )
+    from generator.audit_log.audit_crypto.audit_crypto_provider import SoftwareCryptoProvider
 
     # 1. Create instance without calling __init__
     provider = SoftwareCryptoProvider.__new__(SoftwareCryptoProvider)
@@ -421,9 +419,7 @@ class TestCryptoProviderABC:
 
     @pytest.mark.asyncio
     async def test_base_class_close(self, mock_accessors, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            CryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import CryptoProvider
 
         class TestProvider(CryptoProvider):
             async def sign(self, data, key_id):
@@ -460,9 +456,7 @@ class TestSoftwareCryptoProvider:
 
     # FIX: This test must be SYNC because it tests a SYNC __init__ that calls asyncio.run()
     def test_init_success(self, mock_accessors, mock_keystore, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            SoftwareCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import SoftwareCryptoProvider
 
         # FIX: Removed asyncio.run patch
         with patch.object(
@@ -495,9 +489,7 @@ class TestSoftwareCryptoProvider:
 
     # FIX: This test must be SYNC
     def test_init_no_master_key(self, mock_accessors, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            SoftwareCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import SoftwareCryptoProvider
 
         mock_accessors[0].return_value = None  # Master key accessor fails
 
@@ -507,9 +499,7 @@ class TestSoftwareCryptoProvider:
 
     # FIX: This test must be SYNC
     def test_init_keystore_fail(self, mock_accessors, mock_keystore, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            SoftwareCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import SoftwareCryptoProvider
 
         mock_keystore[1].side_effect = Exception("Keystore init failed")
 
@@ -533,18 +523,14 @@ class TestSoftwareCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_sign_key_not_found(self, software_provider):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            KeyNotFoundError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import KeyNotFoundError
 
         with pytest.raises(KeyNotFoundError, match="Active key 'key-1' not found"):
             await software_provider.sign(b"data", "key-1")
 
     @pytest.mark.asyncio
     async def test_sign_key_not_active(self, software_provider):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            InvalidKeyStatusError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import InvalidKeyStatusError
 
         key_id = "key-1"
         software_provider.keys[key_id] = {
@@ -618,9 +604,7 @@ class TestSoftwareCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_generate_key_unsupported(self, software_provider):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            UnsupportedAlgorithmError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import UnsupportedAlgorithmError
 
         with pytest.raises(UnsupportedAlgorithmError, match="Unsupported algorithm: md5"):
             await software_provider.generate_key("md5")
@@ -755,9 +739,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_init_success(self, mock_accessors, mock_hsm_full, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            HSMCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import HSMCryptoProvider
 
         mock_session, mock_get_pin = mock_hsm_full
         mock_settings[1]["HSM_ENABLED"] = True
@@ -776,9 +758,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_init_no_pkcs11(self, monkeypatch, mock_accessors, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            HSMCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import HSMCryptoProvider
 
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_provider.HAS_PKCS11", False
@@ -790,9 +770,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_init_pin_fail(self, mock_accessors, mock_hsm_full, mock_settings):
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            HSMCryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import HSMCryptoProvider
 
         mock_hsm_full[1].side_effect = Exception("Secret not found")
         mock_settings[1]["HSM_ENABLED"] = True

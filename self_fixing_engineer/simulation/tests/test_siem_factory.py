@@ -4,11 +4,12 @@ Test suite for SIEM factory module.
 Tests client instantiation, registry management, and availability checking.
 """
 
-import pytest
 import asyncio
 import sys
+from typing import Any, Dict, Type
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any, Type
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()

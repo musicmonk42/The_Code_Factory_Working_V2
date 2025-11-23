@@ -4,25 +4,25 @@ Unit tests for llm_client.py with >=90% coverage.
 Tests all public APIs, classes, methods, branches, and edge cases.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import os
 import hashlib
+import os
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from runner.runner_errors import LLMError, ConfigurationError
-from runner.runner_config import RunnerConfig
+import pytest
 
 # FIX: Import the module itself to fix the namespace conflict
 import runner.llm_client as llm_client
-from runner.llm_client import (
-    LLMClient,
-    SecretsManager,
+from runner.llm_client import (  # <-- Removed _async_client from this import
     CacheManager,
     DistributedRateLimiter,
+    LLMClient,
+    SecretsManager,
     call_llm_api,
     shutdown_llm_client,
-)  # <-- Removed _async_client from this import
+)
+from runner.runner_config import RunnerConfig
+from runner.runner_errors import ConfigurationError, LLMError
 
 # Note: Global client cleanup is handled by conftest.py session fixture
 

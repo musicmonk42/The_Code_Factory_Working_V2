@@ -1,10 +1,11 @@
-import sys
-import logging
 import asyncio
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+import logging
+import sys
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import aiohttp
+import pytest
 
 # Mock the core modules before any imports
 # First, mock core_secrets
@@ -51,10 +52,10 @@ sys.modules["plugins.core_utils"] = mock_core_utils
 
 # Now we can safely import from the plugin
 from plugins.azure_eventgrid_plugin.azure_eventgrid_plugin import (
-    logger,
     PLUGIN_MANIFEST,
-    AzureEventGridAuditHook,
     AnalyzerCriticalError,
+    AzureEventGridAuditHook,
+    logger,
 )
 
 

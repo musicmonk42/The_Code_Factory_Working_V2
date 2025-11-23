@@ -2,28 +2,25 @@
 # Comprehensive production-grade tests for history_manager.py
 # Run with: pytest test_history_manager.py -v
 
-import os
-import json
-import uuid
 import asyncio
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, AsyncMock, MagicMock
-from cryptography.fernet import Fernet
+import json
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
-
-# Import the actual module and its dependencies from the correct package path
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
 from arbiter.explainable_reasoner.history_manager import (
     BaseHistoryManager,
-    SQLiteHistoryManager,
     PostgresHistoryManager,
     RedisHistoryManager,
+    SQLiteHistoryManager,
 )
+
+# Import the actual module and its dependencies from the correct package path
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from cryptography.fernet import Fernet
 
 # --- Test Fixtures ---
 

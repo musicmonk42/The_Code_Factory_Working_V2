@@ -98,32 +98,27 @@
 
 __version__ = "2.1.0"
 
-import os
-import json
 import asyncio
-import time
+import hashlib
+import hmac
+import json
+import logging
+import os
+import random
 import sys
 import threading
-import random
-import hmac
-import hashlib
-import logging
-from typing import Dict, Any, Callable, Awaitable, List, Optional, Type
+import time
 from dataclasses import dataclass
 from datetime import datetime
-from queue import Queue, Empty
+from queue import Empty, Queue
 from threading import Thread
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Type
 
 # Conditional imports for production requirements
 try:
     import redis.asyncio as redis
-    from redis.asyncio.connection import ConnectionPool, ClusterConnectionPool
-    from redis.exceptions import (
-        ConnectionError,
-        RedisError,
-        TimeoutError,
-        ResponseError,
-    )
+    from redis.asyncio.connection import ClusterConnectionPool, ConnectionPool
+    from redis.exceptions import ConnectionError, RedisError, ResponseError, TimeoutError
 
     REDIS_AVAILABLE = True
 except ImportError:
@@ -151,11 +146,9 @@ except ImportError:
     AIOLIMITER_AVAILABLE = False
 
 try:
-    from prometheus_async.aio import (
-        Counter as AsyncCounter,
-        Gauge as AsyncGauge,
-        Histogram as AsyncHistogram,
-    )
+    from prometheus_async.aio import Counter as AsyncCounter
+    from prometheus_async.aio import Gauge as AsyncGauge
+    from prometheus_async.aio import Histogram as AsyncHistogram
 
     PROMETHEUS_ASYNC_AVAILABLE = True
 except ImportError:
@@ -165,12 +158,12 @@ except ImportError:
 
 try:
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
     from opentelemetry.instrumentation.redis import RedisInstrumentor
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:

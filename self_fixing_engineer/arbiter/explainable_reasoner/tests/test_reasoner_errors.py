@@ -3,17 +3,14 @@
 # Requires: pytest, unittest.mock, structlog, sentry-sdk (optional for real; mock otherwise)
 # Run with: pytest test_reasoner_errors.py -v --cov=reasoner_errors --cov-report=html
 
-import os
 import json
-from unittest.mock import patch, MagicMock
+import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerErrorCode,
-    ReasonerError,
-)
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 
 
 # --- Fixtures ---

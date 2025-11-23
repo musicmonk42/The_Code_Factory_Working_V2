@@ -3,11 +3,12 @@ Test suite for queue_consumer_worker.py
 Focuses on critical functionality: message processing, poison detection, and health checks.
 """
 
-import pytest
 import json
 import sys
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
 from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 
 # Setup mock modules BEFORE any imports

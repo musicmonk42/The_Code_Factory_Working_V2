@@ -45,32 +45,30 @@ Configuration Options (via Environment Variables):
 """
 
 import asyncio
+import datetime
 import functools
+import json
 import logging
 import os
 import smtplib
 import ssl
 import time
-import datetime
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from email.mime.text import MIMEText
-from typing import Any, Callable, Dict, List, Optional, Tuple, Deque, Union
-import json
-import yaml
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
+import yaml
 from prometheus_client import (
+    REGISTRY,
+    CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
     push_to_gateway,
-    REGISTRY,
-    CollectorRegistry,
 )
-from prometheus_client.core import (
-    HistogramMetricFamily,
-)
+from prometheus_client.core import HistogramMetricFamily
 
 logger = logging.getLogger(__name__)
 

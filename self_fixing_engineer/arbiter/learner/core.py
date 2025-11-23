@@ -1,17 +1,18 @@
 # arbiter/learner/core.py
 
-import json
 import asyncio
-import structlog
+import hashlib
+import json
+import os
 import re
 import time
-import os
-import hashlib
-from typing import Any, Dict, Optional, List, Callable
 from datetime import datetime, timezone
-from redis.asyncio import Redis
+from typing import Any, Callable, Dict, List, Optional
+
+import structlog
 from cryptography.fernet import Fernet, InvalidToken
-from opentelemetry import trace, metrics
+from opentelemetry import metrics, trace
+from redis.asyncio import Redis
 
 # Add this import (install with: pip install asyncpg)
 # or mock it for testing:
@@ -20,38 +21,35 @@ try:
 except ImportError:
     asyncpg = None
 
-# Corrected relative imports to be absolute imports from the project root
-from arbiter.plugins.llm_client import LLMClient
-from arbiter.models.postgres_client import PostgresClient
-from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
 from arbiter.bug_manager import BugManager
-from arbiter.policy.core import should_auto_learn
+from arbiter.models.knowledge_graph_db import Neo4jKnowledgeGraph
 from arbiter.models.meta_learning_data_store import (
     MetaLearningDataStoreConfig,
     get_meta_learning_data_store,
 )
-from .encryption import ArbiterConfig, encrypt_value, decrypt_value
-from .audit import (
-    CircuitBreaker,
-    MerkleTree,
-    persist_knowledge,
-    persist_knowledge_batch,
-)
-from .validation import validate_data
-from .explanations import generate_explanation, record_explanation_quality
-from .fuzzy import FuzzyParser
+from arbiter.models.postgres_client import PostgresClient
+
+# Corrected relative imports to be absolute imports from the project root
+from arbiter.plugins.llm_client import LLMClient
+from arbiter.policy.core import should_auto_learn
 from pydantic import BaseModel
 
+from .audit import CircuitBreaker, MerkleTree, persist_knowledge, persist_knowledge_batch
+from .encryption import ArbiterConfig, decrypt_value, encrypt_value
+from .explanations import generate_explanation, record_explanation_quality
+from .fuzzy import FuzzyParser
+
 # Import the metrics and helper function from the new metrics.py file to resolve the circular dependency.
+from .metrics import get_labels  # Import the helper function
 from .metrics import (
-    learn_counter,
-    learn_error_counter,
     forget_counter,
-    retrieve_hit_miss,
-    learn_duration_seconds,
     forget_duration_seconds,
-    get_labels,  # Import the helper function
+    learn_counter,
+    learn_duration_seconds,
+    learn_error_counter,
+    retrieve_hit_miss,
 )
+from .validation import validate_data
 
 # Use structlog for structured logging
 logger = structlog.get_logger(__name__)

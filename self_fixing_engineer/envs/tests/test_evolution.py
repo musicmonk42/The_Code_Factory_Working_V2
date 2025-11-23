@@ -4,15 +4,16 @@ Tests all features including genetic optimization, caching, sandboxing,
 parallel evaluation, and checkpoint persistence.
 """
 
-import pytest
 import json
-import tempfile
 import os
-import sys
-import threading
 import subprocess
-from unittest.mock import Mock, patch
+import sys
+import tempfile
+import threading
 from typing import List
+from unittest.mock import Mock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

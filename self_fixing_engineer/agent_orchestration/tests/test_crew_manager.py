@@ -3,21 +3,22 @@ import asyncio
 import json
 import logging
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock
+
+import pytest
 from agent_orchestration.crew_manager import (
-    CrewManager,
-    CrewAgentBase,
-    ResourceError,
-    PermissionError,
-    structured_log,
-    sanitize_dict,
     MAX_CONFIG_SIZE,
+    CrewAgentBase,
+    CrewManager,
+    PermissionError,
+    ResourceError,
+    sanitize_dict,
+    structured_log,
 )
 
 # Import availability flags
 try:
-    from agent_orchestration.crew_manager import _PSUTIL_AVAILABLE, _AIOREDIS_AVAILABLE
+    from agent_orchestration.crew_manager import _AIOREDIS_AVAILABLE, _PSUTIL_AVAILABLE
 except ImportError:
     try:
         import psutil

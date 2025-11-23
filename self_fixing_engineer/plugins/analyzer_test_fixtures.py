@@ -1,10 +1,11 @@
 # Add these fixtures to conftest.py or at the top of test_analyzer.py
 
-import pytest
-import os
-import yaml
 import json
+import os
 from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
 
 
 @pytest.fixture

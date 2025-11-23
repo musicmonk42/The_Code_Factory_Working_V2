@@ -1,18 +1,18 @@
 # audit_utils.py
 import base64
+import copy  # FIX: Added import for deepcopy in redaction logic
 import datetime
 import hashlib
 import json
 import logging
 import os
 import re
-import time
 import threading
-from typing import Any, Callable, Dict, List, Optional, Union, NamedTuple
-import copy  # FIX: Added import for deepcopy in redaction logic
+import time
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 from dotenv import load_dotenv
 
 # Optional Imports used globally for mocking purposes in tests (FIX)
@@ -624,8 +624,8 @@ def default_provenance_chain_impl(
             try:
                 # Use imported rfc3161ng
                 from rfc3161ng.errors import (
-                    TSARequestError,
                     TSADataError,
+                    TSARequestError,
                     TSATimeout,
                     TSAVerificationError,
                 )

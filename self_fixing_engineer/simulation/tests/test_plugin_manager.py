@@ -1,23 +1,24 @@
 # tests/test_plugin_manager.py
 
-import pytest
 import os
 import shutil
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from prometheus_client import CollectorRegistry
 
 # Import the plugin from the parent directory
 import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
 
 # Corrected path logic
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
 from plugin_manager import (
-    PluginManager,
-    PLUGIN_LOADS_TOTAL,
     PLUGIN_ERRORS_TOTAL,
     PLUGIN_HEALTH_STATUS,
+    PLUGIN_LOADS_TOTAL,
+    PluginManager,
 )
 
 # ==============================================================================
@@ -95,10 +96,7 @@ def add_health_method_to_plugin_manager():
 
                 # Update Prometheus health metric if available
                 try:
-                    from plugin_manager import (
-                        prometheus_available,
-                        PLUGIN_HEALTH_STATUS,
-                    )
+                    from plugin_manager import PLUGIN_HEALTH_STATUS, prometheus_available
 
                     if prometheus_available:
                         health_value = (

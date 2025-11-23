@@ -1,9 +1,10 @@
 # message_bus/message_types.py
 
-import uuid
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
 
 

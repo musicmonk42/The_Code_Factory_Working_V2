@@ -17,24 +17,15 @@ Dependencies:
 - Optional: cryptography for field-level encryption
 """
 
-import json
 import asyncio
+import json
 import logging
 import sys
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Float,
-    DateTime,
-    Index,
-    CheckConstraint,
-    event,
-    Text,
-)
+
+from arbiter.otel_config import get_tracer
+from sqlalchemy import CheckConstraint, Column, DateTime, Float, Index, Integer, String, Text, event
 from sqlalchemy.orm import declarative_base, validates
 from sqlalchemy.sql import func
-from arbiter.otel_config import get_tracer
 
 # Setup logging without RotatingFileHandler for test compatibility
 logger = logging.getLogger(__name__)

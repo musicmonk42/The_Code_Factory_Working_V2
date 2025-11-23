@@ -1,18 +1,20 @@
-import pytest
 import asyncio
 from unittest.mock import MagicMock, mock_open
+
+import pytest
+
 from self_fixing_engineer.simulation.agentic import (
-    check_and_import,
     AuditLogger,
-    ObjectStorageClient,
-    MeshNotifier,
     EventBus,
-    PolicyManager,
-    rbac_enforce,
-    SwarmConfig,
     GAOptimizer,
-    run_simulation_swarm,
+    MeshNotifier,
+    ObjectStorageClient,
+    PolicyManager,
+    SwarmConfig,
+    check_and_import,
     main_async,
+    rbac_enforce,
+    run_simulation_swarm,
 )
 from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import SecretsManager
 

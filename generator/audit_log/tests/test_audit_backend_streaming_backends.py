@@ -14,37 +14,38 @@ Features:
 """
 
 import asyncio
+import base64
 import json
 import os
 import uuid
 import zlib
-import base64
-
-# --- FIX: Import datetime ---
 
 # --- END FIX ---
 from pathlib import Path
+from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
-import pytest_asyncio
-from faker import Faker
+
 import aiohttp
 import aiokafka
-from prometheus_client import REGISTRY
+import pytest
+import pytest_asyncio
 from cryptography.fernet import Fernet
-from typing import Any, Dict
+from faker import Faker
+from prometheus_client import REGISTRY
 
 # --- Source Imports ---
 # Import all necessary components from the central audit_backend package
 from generator.audit_log.audit_backend import (
-    HTTPBackend,
-    KafkaBackend,
-    SplunkBackend,
-    InMemoryBackend,
-    LogBackend,
     _STATUS_OK,
     FileBackedRetryQueue,
+    HTTPBackend,
+    InMemoryBackend,
+    KafkaBackend,
+    LogBackend,
+    SplunkBackend,
 )
+
+# --- FIX: Import datetime ---
 
 
 # Test constants

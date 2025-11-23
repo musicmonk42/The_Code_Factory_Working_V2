@@ -1,12 +1,13 @@
 # tests/test_example_plugin.py
 
-import os
-import sys
-import pytest
 import json
+import os
 import shutil
+import sys
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Fix the import path - add the plugins directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
@@ -19,11 +20,11 @@ sys.modules["cachetools"].TTLCache = MagicMock(return_value={})
 import example_plugin
 from example_plugin import (
     PLUGIN_MANIFEST,
+    _scrub_secrets,
+    check_compatibility,
+    perform_custom_security_audit,
     plugin_health,
     run_custom_chaos_experiment,
-    perform_custom_security_audit,
-    check_compatibility,
-    _scrub_secrets,
 )
 
 # ==============================================================================

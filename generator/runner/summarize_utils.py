@@ -1,12 +1,12 @@
 # runner/summarize_utils.py
 import asyncio
 import hashlib  # For hashing summaries for feedback
-import time  # For timestamping feedback
-from typing import Dict, Any, List, Callable, Optional
-from concurrent.futures import ThreadPoolExecutor
-import sys  # For checking module status for conditional imports
-from functools import wraps  # [NEW] Added for no-op decorator
 import os
+import sys  # For checking module status for conditional imports
+import time  # For timestamping feedback
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps  # [NEW] Added for no-op decorator
+from typing import Any, Callable, Dict, List, Optional
 
 # --- [FIX] Added TESTING flag to prevent ML libs from loading during pytest ---
 TESTING: bool = (
@@ -17,21 +17,20 @@ TESTING: bool = (
 )
 # --- END FIX ---
 
+from runner.feedback_handlers import collect_feedback
+
 # --- REFACTOR FIX: Imports changed from V1 'utils' to V2 'runner' foundation ---
 # This file no longer imports from llm_utils. It imports the *real* LLM client.
 from runner.llm_client import call_llm_api
 
 # [FIX] Corrected imports
-from runner.runner_logging import logger, send_alert, log_audit_event
+from runner.runner_logging import log_audit_event, logger, send_alert
 from runner.runner_metrics import UTIL_ERRORS
-from runner.feedback_handlers import collect_feedback
 from runner.runner_security_utils import redact_secrets
 
 # Import SUMMARIZERS registry from the runner's __init__.py
 try:
-    from runner import (
-        SUMMARIZERS,
-    )  # Registry for plug-in summarizers is defined in __init__.py
+    from runner import SUMMARIZERS  # Registry for plug-in summarizers is defined in __init__.py
 except ImportError:
     logger.warning("Could not import SUMMARIZERS registry from 'runner'. Defining local registry.")
 
@@ -396,8 +395,8 @@ else:
     try:
         # This block attempts to import heavy ML libraries.
         # It's wrapped in try/except so the module can load without them.
-        from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
         import torch
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
         # Use a specific, well-regarded model
         _local_model_name = "facebook/bart-large-cnn"
@@ -468,7 +467,7 @@ else:
 
 # --- Test Suite (for __main__ execution) ---
 import unittest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestSummarizeUtils(unittest.TestCase):

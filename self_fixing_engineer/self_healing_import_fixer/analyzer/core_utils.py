@@ -5,25 +5,25 @@ Enterprise-grade utility module for production analyzer system.
 Provides robust alerting, monitoring, security, and operational utilities.
 """
 
-import os
-import json
-import time
-import logging
-import hashlib
-import secrets
-import threading
 import asyncio
 import functools
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Union, Callable, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
+import hashlib
+import json
+import logging
+import os
+import re
+import secrets
+import socket
+import threading
+import time
+import traceback
+import uuid
 from collections import deque
 from contextlib import contextmanager
-import traceback
-import re
-import uuid
-import socket
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # Third-party imports with graceful fallbacks
 try:
@@ -43,7 +43,7 @@ except ImportError:
     ClientError = Exception
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Summary
+    from prometheus_client import Counter, Gauge, Histogram, Summary
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -556,8 +556,8 @@ def _send_slack_alert(alert_data: Dict[str, Any]):
         payload["attachments"][0]["text"] = f"```{alert_data['stack_trace'][:1000]}```"
 
     # Synchronous HTTP request (use aiohttp in async context)
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     req = urllib.request.Request(
         _alert_config.slack_webhook_url,
@@ -599,8 +599,8 @@ def _send_pagerduty_alert(alert_data: Dict[str, Any]):
 def _send_email_alert(alert_data: Dict[str, Any]):
     """Send alert via email."""
     import smtplib
-    from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
 
     msg = MIMEMultipart()
     msg["From"] = _alert_config.email_from

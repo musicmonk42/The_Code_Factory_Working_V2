@@ -14,40 +14,42 @@ used across the ATCO pipeline. Its production-ready posture is built upon:
   tracebacks, and escalated to abort the pipeline, preventing silent failures.
 """
 
+import asyncio
+import functools
+import hashlib
+import inspect
+import json
+import logging
 import os
-import subprocess
+import random
 import shutil
+import subprocess
+import sys
+import tempfile
+import traceback
+import types
+import venv
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+
+import aiofiles
+import aiofiles.os
 
 # Security fix: Use defusedxml to prevent XXE attacks
 import defusedxml.ElementTree as ET
-import json
-import venv
-import sys
-import asyncio
-import tempfile
-import hashlib
-import logging
-import traceback
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from typing import List, Dict, Tuple, Any, Optional, Callable, TYPE_CHECKING
-import random
-import functools
-from contextlib import asynccontextmanager
-import aiofiles
-import aiofiles.os
-import types
-from types import SimpleNamespace
 from dotenv import load_dotenv
-from pathlib import Path
-import inspect
 
 # FIX: Break circular import by moving sanitize_path import inside TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
 # --- Pkg_resources migration imports
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
+
 from packaging.version import Version
 
 # --- Optional Rich Library for Enhanced Console Output ---

@@ -1,10 +1,11 @@
 # conftest.py
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from prometheus_client import CollectorRegistry
 
 # Import the function that initializes your metrics
 from arbiter.explainable_reasoner.metrics import initialize_metrics
+from prometheus_client import CollectorRegistry
 
 
 @pytest.fixture(autouse=True)

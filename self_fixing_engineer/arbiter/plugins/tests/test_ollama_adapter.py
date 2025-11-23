@@ -1,13 +1,14 @@
 # test_ollama_adapter.py
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
 import aiohttp
+import pytest
+from arbiter.plugins.llm_client import APIError, LLMClientError, TimeoutError
 
 # Import the adapter and related exceptions
-from arbiter.plugins.ollama_adapter import OllamaAdapter, AuthError, RateLimitError
-from arbiter.plugins.llm_client import LLMClientError, TimeoutError, APIError
+from arbiter.plugins.ollama_adapter import AuthError, OllamaAdapter, RateLimitError
 
 
 class TestOllamaAdapter:

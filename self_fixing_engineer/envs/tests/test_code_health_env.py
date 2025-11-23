@@ -4,25 +4,26 @@ Tests all features including async handling, thread safety, memory management,
 automatic rollback, cooldowns, and rendering.
 """
 
-import pytest
 import asyncio
-import numpy as np
+import os
+import sys
 import threading
 import time
 from unittest.mock import Mock
-import sys
-import os
+
+import numpy as np
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from code_health_env import (
-    CodeHealthEnv,
-    EnvironmentConfig,
-    SystemMetrics,
     ActionType,
     AsyncActionExecutor,
     AuditLogger,
+    CodeHealthEnv,
+    EnvironmentConfig,
+    SystemMetrics,
 )
 
 

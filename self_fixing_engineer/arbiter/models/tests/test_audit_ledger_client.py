@@ -10,6 +10,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
@@ -479,7 +480,7 @@ class TestAuditLedgerClientBatchOperations:
     @pytest.mark.asyncio
     async def test_batch_log_events_not_supported(self, audit_client, mock_web3_dependencies):
         """Test batch logging when not supported by contract"""
-        from arbiter.models.audit_ledger_client import DLTUnsupportedError, AuditEvent
+        from arbiter.models.audit_ledger_client import AuditEvent, DLTUnsupportedError
 
         await audit_client.connect()
 
@@ -556,10 +557,7 @@ class TestAuditLedgerClientUnsupportedDLT:
 
         mocker.patch("tenacity.retry", no_retry)
 
-        from arbiter.models.audit_ledger_client import (
-            AuditLedgerClient,
-            DLTConnectionError,
-        )
+        from arbiter.models.audit_ledger_client import AuditLedgerClient, DLTConnectionError
 
         mocker.patch.dict(os.environ, {"AUDIT_LEDGER_URL": "ws://test", "APP_ENV": "development"})
 

@@ -21,29 +21,24 @@
 
 from __future__ import annotations
 
-import os
-import ssl
 import asyncio
 import json
 import logging
+import os
+import random
+import re
+import ssl
 import time
 import uuid
-import re
-import random
-from typing import Dict, Any, Optional, List, Union, Callable, Literal
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 
 import aiohttp
 
 # Tenacity (optional) for retries
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except Exception:
@@ -67,7 +62,13 @@ except Exception:
 
 # Pydantic v2 with v1 compatibility
 try:
-    from pydantic import BaseModel, Field, ValidationError, model_validator, root_validator  # type: ignore
+    from pydantic import (  # type: ignore
+        BaseModel,
+        Field,
+        ValidationError,
+        model_validator,
+        root_validator,
+    )
 
     PYDANTIC_V2 = True
 except Exception:
@@ -93,7 +94,7 @@ if not TENACITY_AVAILABLE:
 # Prometheus (optional) safe creators
 PROMETHEUS_AVAILABLE = False
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except Exception as _e:

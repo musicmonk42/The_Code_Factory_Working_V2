@@ -1,12 +1,13 @@
-import os
-import sys
+import hashlib
 import json
 import logging
-import hashlib
-import pytest
-from unittest.mock import MagicMock, patch
-from typing import Dict
+import os
+import sys
 from pathlib import Path
+from typing import Dict
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Assuming these are available in a file named wasm_runner.py
 # and we are mocking them for the purpose of testing this file in isolation.

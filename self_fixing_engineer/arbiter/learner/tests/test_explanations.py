@@ -1,23 +1,21 @@
 # arbiter/learner/tests/test_explanations.py
 
-import pytest
 import asyncio
 import json
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock
-from prometheus_client import REGISTRY
+
+import pytest
 from cryptography.fernet import Fernet
-import logging
+from prometheus_client import REGISTRY
 
 
 # Helper function to ensure templates are properly loaded
 def ensure_templates_loaded():
     """Ensure templates are properly loaded from the test file."""
-    from arbiter.learner.explanations import (
-        _load_prompt_templates,
-        EXPLANATION_PROMPT_TEMPLATES,
-    )
     import arbiter.learner.explanations as exp_module
+    from arbiter.learner.explanations import EXPLANATION_PROMPT_TEMPLATES, _load_prompt_templates
 
     # Force reload of templates from the test file
     _load_prompt_templates()
@@ -33,16 +31,16 @@ def ensure_templates_loaded():
 
 # Import after defining helper
 from arbiter.learner.explanations import (
-    _load_prompt_templates,
-    _generate_text_with_retry,
-    generate_explanation,
-    record_explanation_quality,
-    get_explanation_quality_report,
     EXPLANATION_PROMPT_TEMPLATES,
+    _generate_text_with_retry,
+    _load_prompt_templates,
+    generate_explanation,
+    get_explanation_quality_report,
+    record_explanation_quality,
 )
+from arbiter.otel_config import get_tracer
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from arbiter.otel_config import get_tracer
 
 # For testing, we need to keep the in-memory exporter
 in_memory_exporter = InMemorySpanExporter()
@@ -56,9 +54,9 @@ def setup_opentelemetry(mocker):
     global in_memory_exporter
     in_memory_exporter.clear()
     # Mock the tracer provider to use our in-memory exporter for testing
+    from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.resources import Resource
 
     test_provider = TracerProvider(resource=Resource.create({"service.name": "test-explanations"}))
     test_provider.add_span_processor(BatchSpanProcessor(in_memory_exporter))

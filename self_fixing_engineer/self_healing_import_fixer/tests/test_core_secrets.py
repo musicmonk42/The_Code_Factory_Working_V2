@@ -2,14 +2,14 @@
 
 import os
 import shutil
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
 import self_healing_import_fixer.analyzer.core_secrets as core_secrets
 from self_healing_import_fixer.analyzer.core_secrets import (
-    SecretsManager,
     SecretConfig,
     SecretProvider,
+    SecretsManager,
 )
 
 

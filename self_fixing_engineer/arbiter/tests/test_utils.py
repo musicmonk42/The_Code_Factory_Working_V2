@@ -1,13 +1,14 @@
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import aiohttp
-from tenacity import RetryError
+import pytest
 from arbiter.utils import (
-    random_chance,
+    check_service_health,
     get_system_metrics,
     get_system_metrics_async,
-    check_service_health,
+    random_chance,
 )
+from tenacity import RetryError
 
 
 @pytest.mark.parametrize(

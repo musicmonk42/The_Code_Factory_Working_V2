@@ -18,26 +18,27 @@ Production‑readiness extras:
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import inspect
+import json
 import logging
+import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Import paths that tests patch; keep module paths stable.
-from .venvs import sanitize_path as venv_sanitize_path
-from .orchestrator import GenerationOrchestrator
-from test_generation.backends import BackendRegistry
-from test_generation.orchestrator.reporting import HTMLReporter
-from test_generation.orchestrator.audit import AuditLogger
-from test_generation import utils
 import test_generation.compliance_mapper as compliance_mapper
+from test_generation import utils
+from test_generation.backends import BackendRegistry
 from test_generation.orchestrator import orchestrator as orch_mod
 from test_generation.orchestrator import venvs as venvs_mod
+from test_generation.orchestrator.audit import AuditLogger
+from test_generation.orchestrator.reporting import HTMLReporter
 
+from .orchestrator import GenerationOrchestrator
+
+# Import paths that tests patch; keep module paths stable.
+from .venvs import sanitize_path as venv_sanitize_path
 
 # --------------------------- Utilities ---------------------------
 # Suppress noisy AsyncMock warnings only when running under pytest

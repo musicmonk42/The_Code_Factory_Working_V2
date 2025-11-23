@@ -15,20 +15,21 @@ Design:
 - Pluggable via `get_provider()` in each *_provider module.
 """
 
-import importlib.util
 import asyncio
-import logging
+import contextlib
 import hashlib
+import importlib.util
 import json
-from pathlib import Path
-from dynaconf import Dynaconf, Validator
-from typing import Dict, Any, Optional, List
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import logging
 import os
 import sys
 import tempfile
-import contextlib
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from dynaconf import Dynaconf, Validator
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # ============================================================================
 # Logging

@@ -12,32 +12,30 @@ Security & Limitations:
 """
 
 import asyncio
-import time
 import sys
-from typing import Dict, Any, List, Callable
+import time
 import unittest
+from typing import Any, Callable, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from omnicore_engine.plugin_registry import PlugInKind, plugin
+
+# Import shared metrics from clarifier.py
 # Import shared utilities and the core Clarifier class from clarifier.py
 from .clarifier import (
+    CLARIFIER_CYCLES,
+    CLARIFIER_ERRORS,
+    CLARIFIER_LATENCY,
     Clarifier,
+    get_circuit_breaker,
     get_config,
     get_fernet,
     get_logger,
     get_tracer,
-    get_circuit_breaker,
-)
-
-# Import shared metrics from clarifier.py
-from .clarifier import (
-    CLARIFIER_CYCLES,
-    CLARIFIER_LATENCY,
-    CLARIFIER_ERRORS,
 )
 
 # Import user interaction channel from its dedicated module
 from .clarifier_user_prompt import get_channel
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 
 # Import log_action and send_alert, with fallbacks
 try:

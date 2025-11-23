@@ -1,24 +1,25 @@
 # tests/test_jest_runner_plugin.py
 
-import pytest
 import asyncio
+import json
 import os
 import sys
 import tempfile
-import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # Add parent directory to path to import the plugin
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import the plugin - now using the correct module path
 from simulation.plugins.jest_runner_plugin import (
-    plugin_health,
-    run_jest_tests,
-    _which,
     _detect_package_manager,
     _get_package_version,
+    _which,
+    plugin_health,
+    run_jest_tests,
 )
 
 # ==============================================================================

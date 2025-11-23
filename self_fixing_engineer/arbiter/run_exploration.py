@@ -1,36 +1,32 @@
 import asyncio
-import os
-import sys
-import signal
+import importlib
 import json
 import logging
-from typing import Dict, List, Any, Optional
+import os
+import pkgutil
+import signal
+import sys
 from logging.handlers import RotatingFileHandler
-from aiohttp import web
-from prometheus_client import Counter
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+from typing import Any, Dict, List, Optional
+
 import aiofiles
 import yaml
-import importlib
-import pkgutil
+from aiohttp import web
+from prometheus_client import Counter
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter.config import ArbiterConfig as Settings
-    from arbiter.arena import ArbiterArena
     from arbiter.arbiter import Arbiter
-    from arbiter_plugin_registry import registry, PlugInKind
+    from arbiter.arena import ArbiterArena
+    from arbiter.config import ArbiterConfig as Settings
     from arbiter.logging_utils import PIIRedactorFilter
-    from sqlalchemy.ext.asyncio import create_async_engine
+    from arbiter_plugin_registry import PlugInKind, registry
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from sqlalchemy.ext.asyncio import create_async_engine
 except ImportError:
 
     class Settings:

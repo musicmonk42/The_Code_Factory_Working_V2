@@ -1,15 +1,16 @@
-import os
-import logging
-import sys
 import asyncio
+import hashlib
+import logging
+import os
+import re
+import sys
 import time
+from typing import Any, Dict, List, Optional, Tuple
+
 import httpx
 import tiktoken
-from typing import Dict, List, Any, Optional, Tuple
-import hashlib
-import re
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
-from openai import AsyncOpenAI, APIError, RateLimitError
+from openai import APIError, AsyncOpenAI, RateLimitError
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -41,13 +42,13 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from self_healing_import_fixer.import_fixer.compat_core import (
-        alert_operator,
-        scrub_secrets,
-        audit_logger,
-        SECRETS_MANAGER,
-    )
     from self_healing_import_fixer.import_fixer.cache_layer import get_cache
+    from self_healing_import_fixer.import_fixer.compat_core import (
+        SECRETS_MANAGER,
+        alert_operator,
+        audit_logger,
+        scrub_secrets,
+    )
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for fixer_ai: {e}.")
     # Cannot call alert_operator here as it wasn't successfully imported

@@ -18,16 +18,15 @@ Usage: included in full suite; no external deps; runs on Windows.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import time
-import hmac
-import hashlib
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import pytest
-
 
 # -----------------------------
 # Minimal mock "DLT client"

@@ -25,8 +25,8 @@ except ImportError:
 
 try:
     from fastapi import FastAPI, Form, Request  # Web form (fastapi req)
-    from starlette.responses import HTMLResponse
     from starlette.exceptions import HTTPException
+    from starlette.responses import HTMLResponse
 
     HAS_FASTAPI = True
 except ImportError:
@@ -49,7 +49,7 @@ from pydantic import BaseModel  # Config (pydantic req)
 
 # --- FIX: Import from the module that defines the utilities (clarifier) to break circular dependency ---
 # OLD: from . import get_logger, get_fernet, get_config
-from .clarifier import get_logger, get_fernet, get_config
+from .clarifier import get_config, get_fernet, get_logger
 
 # --- RUNNER FOUNDATION IMPORTS ---
 try:
@@ -70,9 +70,7 @@ except ImportError:
 
 
 try:
-    from runner.security_utils import (
-        redact_secrets as redact_sensitive,
-    )  # MINIMAL FIX APPLIED HERE
+    from runner.security_utils import redact_secrets as redact_sensitive  # MINIMAL FIX APPLIED HERE
 except ImportError:
 
     def redact_sensitive(text):

@@ -1,35 +1,31 @@
 import json
-from unittest.mock import (
-    patch,
-    MagicMock,
-    AsyncMock,
-)
-import pytest
-import requests
-import nltk
-from langchain_core.language_models import BaseChatModel
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the module under test
 import intent_capture.spec_utils as spec_utils_module
+import nltk
+import pytest
+import requests
 from intent_capture.spec_utils import (
-    load_ambiguous_words,
-    register_spec_handler,
-    validate_spec,
-    migrate_spec,
-    detect_ambiguity,
-    auto_fix_spec,
+    SPEC_HANDLERS,
     TraceableArtifact,
+    auto_fix_spec,
+    detect_ambiguity,
+    diff_specs,
     generate_code_stub,
-    generate_test_stub,
+    generate_gaps,
     generate_security_review,
     generate_spec_from_memory,
-    generate_gaps,
-    refine_spec,
-    review_spec,
-    diff_specs,
+    generate_test_stub,
     get_localized_prompt,
-    SPEC_HANDLERS,
+    load_ambiguous_words,
+    migrate_spec,
+    refine_spec,
+    register_spec_handler,
+    review_spec,
+    validate_spec,
 )
+from langchain_core.language_models import BaseChatModel
 
 
 # --- Test Fixtures ---

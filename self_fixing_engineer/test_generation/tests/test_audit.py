@@ -1,11 +1,9 @@
-import pytest
 import logging
-from unittest.mock import Mock, AsyncMock, ANY
-from test_generation.orchestrator.audit import (
-    audit_event,
-    RUN_ID,
-)
 from pathlib import Path
+from unittest.mock import ANY, AsyncMock, Mock
+
+import pytest
+from test_generation.orchestrator.audit import RUN_ID, audit_event
 
 # Fix: Added missing import.
 

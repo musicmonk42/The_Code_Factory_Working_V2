@@ -1,10 +1,11 @@
 # D:\SFE\self_fixing_engineer\arbiter\learner\encryption.py
-import os
 import json
-import structlog
+import os
+from typing import Any, Dict, Optional
+
 import boto3
-from botocore.exceptions import NoCredentialsError, ClientError
-from typing import Any, Optional, Dict
+import structlog
+from botocore.exceptions import ClientError, NoCredentialsError
 from cryptography.fernet import Fernet, InvalidToken
 from prometheus_client import Counter
 

@@ -4,19 +4,21 @@
 # Run with: pytest test_prompt_strategies.py -v --cov=prompt_strategies --cov-report=html
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import the module under test
 from arbiter.explainable_reasoner.prompt_strategies import (
-    PromptStrategy,
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
-    VerbosePromptStrategy,
-    StructuredPromptStrategy,
-    PromptStrategyFactory,
     _truncate_context,  # Import the module-level helper
+)
+from arbiter.explainable_reasoner.prompt_strategies import (
+    ConcisePromptStrategy,
+    DefaultPromptStrategy,
+    PromptStrategy,
+    PromptStrategyFactory,
+    StructuredPromptStrategy,
+    VerbosePromptStrategy,
 )
 
 

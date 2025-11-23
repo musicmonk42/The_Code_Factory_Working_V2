@@ -1,16 +1,14 @@
-import pytest
-from unittest.mock import MagicMock, patch
-import logging
-import threading
-import os
 import json
+import logging
+import os
+import threading
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Import from the arbiter package where monitoring.py is located
-from arbiter.monitoring import (
-    Monitor,
-    LogFormat,
-)
+from arbiter.monitoring import LogFormat, Monitor
 
 
 @pytest.fixture

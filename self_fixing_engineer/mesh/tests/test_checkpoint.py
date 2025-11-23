@@ -10,14 +10,14 @@ Tests cover:
 """
 
 import asyncio
+import importlib
 import json
 import os
 import tempfile
 import time
-from pathlib import Path
-from unittest.mock import patch, AsyncMock
 from datetime import datetime, timezone
-import importlib
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -56,8 +56,8 @@ async def checkpoint_manager():
     """Create a CheckpointManager instance for testing."""
     # Import after environment setup
     # Use importlib.reload to ensure modules pick up the test environment variables
-    from mesh.checkpoint import checkpoint_manager as manager_module
     from mesh.checkpoint import checkpoint_exceptions
+    from mesh.checkpoint import checkpoint_manager as manager_module
     from mesh.checkpoint import checkpoint_utils
 
     importlib.reload(checkpoint_utils)

@@ -3,36 +3,24 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
+
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
-from datetime import datetime, timezone, timedelta
 import redis.asyncio as aioredis
-
-# Use centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
+from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+from arbiter.meta_learning_orchestrator.clients import AgentConfigurationService, MLPlatformClient
+from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
+from arbiter.meta_learning_orchestrator.logging_utils import LogCorrelationFilter, PIIRedactorFilter
+from arbiter.meta_learning_orchestrator.metrics import ML_DATA_QUEUE_SIZE, ML_LEADER_STATUS
+from arbiter.meta_learning_orchestrator.models import DataIngestionError, ModelVersion
 
 # Import all components
 from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator
-from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
-from arbiter.meta_learning_orchestrator.clients import (
-    MLPlatformClient,
-    AgentConfigurationService,
-)
-from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
-from arbiter.meta_learning_orchestrator.models import (
-    ModelVersion,
-    DataIngestionError,
-)
-from arbiter.meta_learning_orchestrator.logging_utils import (
-    LogCorrelationFilter,
-    PIIRedactorFilter,
-)
-from arbiter.meta_learning_orchestrator.metrics import (
-    ML_DATA_QUEUE_SIZE,
-    ML_LEADER_STATUS,
-)
 
+# Use centralized OpenTelemetry configuration
+from arbiter.otel_config import get_tracer
+from pytest_mock import MockerFixture
 
 # Configure logging with filters
 logging.basicConfig(

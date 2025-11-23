@@ -1,19 +1,19 @@
 # test_clarifier_updater.py
 
-import unittest
 import asyncio
+import base64
+import json
 import os
 import sys
-import json
-import base64
 import tempfile
+import unittest
 from pathlib import Path
-
-# FIX: Removed Callable from this line
-from unittest.mock import patch, AsyncMock, MagicMock
 
 # FIX: Added Callable to this line
 from typing import Any, Callable
+
+# FIX: Removed Callable from this line
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
 TEST_DIR = Path(__file__).parent
@@ -185,10 +185,10 @@ MockRecursiveTransform = patcher_recursive_transform.start()
 
 # NOW we can safely import after all patches are in place
 from generator.clarifier.clarifier_updater import (
-    RequirementsUpdater,
-    HistoryStore,
-    update_requirements_with_answers,
     UPDATE_ERRORS,
+    HistoryStore,
+    RequirementsUpdater,
+    update_requirements_with_answers,
 )
 
 

@@ -14,6 +14,9 @@ Run with:
 from __future__ import annotations
 
 import asyncio
+import copy
+import hashlib
+import importlib.util  # CRITICAL FIX: Added for dynamic loading
 import json
 import logging
 import os
@@ -21,19 +24,16 @@ import sys
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import importlib.util  # CRITICAL FIX: Added for dynamic loading
 
 import pytest
 from _pytest.logging import LogCaptureFixture
-from faker import Faker
-from freezegun import freeze_time
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 
 # CRITICAL FIX 1: Ensure all cryptography imports are available at test collection time
 from cryptography.hazmat.backends import default_backend
-import hashlib
-import copy
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from faker import Faker
+from freezegun import freeze_time
 
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
@@ -62,24 +62,24 @@ spec.loader.exec_module(audit_utils_module)
 
 # Now safely import all necessary symbols from the loaded module
 from generator.audit_log.audit_utils import (  # type: ignore
-    compute_hash,
-    redact_sensitive_data,
-    rotate_key,
-    register_hash_algo,
-    register_provenance_logic,
-    secure_log,
-    generate_provenance_chain,
-    lock_registries,
-    default_hash_impl,
-    default_provenance_chain_impl,
+    DEFAULT_HASH_ALGO,
     PRESIDIO_AVAILABLE,
     HashingModes,
-    self_test_hash_performance,
-    self_test_redaction,
-    self_test_provenance,
-    run_self_tests,
-    DEFAULT_HASH_ALGO,
     _set_sign_entry_func,
+    compute_hash,
+    default_hash_impl,
+    default_provenance_chain_impl,
+    generate_provenance_chain,
+    lock_registries,
+    redact_sensitive_data,
+    register_hash_algo,
+    register_provenance_logic,
+    rotate_key,
+    run_self_tests,
+    secure_log,
+    self_test_hash_performance,
+    self_test_provenance,
+    self_test_redaction,
 )
 
 # --------------------------------------------------------------------------- #

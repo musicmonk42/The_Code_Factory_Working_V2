@@ -10,9 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    from self_fixing_engineer.guardrails.audit_log import (
-        AuditLogger as _BaseAuditLogger,
-    )
+    from self_fixing_engineer.guardrails.audit_log import AuditLogger as _BaseAuditLogger
 
     # Re-export the AuditLogger for backward compatibility
     AuditLogger = _BaseAuditLogger

@@ -1,37 +1,38 @@
+import asyncio
+import logging
 import os
 import sys
 import tempfile
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-import logging
 
 # Add the simulation directory to the path for imports
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 
 from registry import (
-    AuditLogger,
-    FallbackAuditLogger,
-    DltAuditLogger,
-    get_audit_logger,
-    MetricsProvider,
-    DummyMetricsProvider,
-    PrometheusMetricsProvider,
-    get_metrics_provider,
-    NoOpOutputRefiner,
-    LangChainOutputRefiner,
-    generate_file_hash,
-    sanitize_path,
-    redact_sensitive,
-    validate_manifest,
-    check_plugin_dependencies,
     SIM_REGISTRY,
-    get_registry,
+    AuditLogger,
+    DltAuditLogger,
+    DummyMetricsProvider,
+    FallbackAuditLogger,
+    LangChainOutputRefiner,
+    MetricsProvider,
+    NoOpOutputRefiner,
+    PrometheusMetricsProvider,
     _is_allowed,
-    register_plugin,
+    check_plugin_dependencies,
     discover_and_register_all,
+    generate_file_hash,
+    get_audit_logger,
+    get_metrics_provider,
+    get_registry,
+    redact_sensitive,
     refine_plugin_output,
+    register_plugin,
     run_plugin,
+    sanitize_path,
+    validate_manifest,
 )
 
 

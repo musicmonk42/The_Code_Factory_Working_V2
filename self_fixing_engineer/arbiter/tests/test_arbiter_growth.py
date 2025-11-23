@@ -174,10 +174,10 @@ create_module_stub("sqlalchemy.orm", {"declarative_base": lambda: type("Base", (
 
 create_module_stub("aiofiles", {"open": MagicMock})
 
-import pytest
-
 # Import using direct file loading to avoid package/module conflicts
 import importlib.util
+
+import pytest
 
 current_dir = Path(__file__).resolve().parent  # tests/
 arbiter_dir = current_dir.parent  # arbiter/

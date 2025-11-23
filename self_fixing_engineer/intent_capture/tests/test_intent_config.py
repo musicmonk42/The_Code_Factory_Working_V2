@@ -1,27 +1,27 @@
 import json
 import logging
-from unittest.mock import patch, MagicMock, mock_open
-import pytest
-from pydantic import ValidationError
+from unittest.mock import MagicMock, mock_open, patch
 
 # Import the module under test
 import intent_capture.config as config_module  # Import the module itself to patch its internals
+import pytest
 
 # Import what's actually available from the config module
+from intent_capture.config import PiiMaskingFormatter  # This exists
 from intent_capture.config import (
-    PiiMaskingFormatter,  # This exists
-    setup_logging,
-    fetch_from_vault,
-    _fetch_config_from_service,
-    ConfigEncryptor,
     Config,
-    PluginManager,
     ConfigChangeHandler,
+    ConfigEncryptor,
     GlobalConfigManager,
+    PluginManager,
+    _fetch_config_from_service,
+    fetch_from_vault,
     log_audit_event,
     prune_audit_logs,
+    setup_logging,
     startup_validation,
 )
+from pydantic import ValidationError
 
 
 # --- Test Fixtures ---

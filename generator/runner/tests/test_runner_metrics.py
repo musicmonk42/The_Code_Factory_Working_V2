@@ -13,11 +13,11 @@ Industry-grade test suite for runner_metrics.py.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch, AsyncMock, call
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
-import pytest
 import prometheus_client as prom
+import pytest
 
 # Import the module to test
 import runner.runner_metrics as m

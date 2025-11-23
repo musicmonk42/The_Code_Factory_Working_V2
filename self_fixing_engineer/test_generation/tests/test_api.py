@@ -1,8 +1,9 @@
-import pytest
-import os
 import asyncio
+import os
 from functools import wraps
-from unittest.mock import MagicMock, patch, AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from werkzeug.exceptions import TooManyRequests
 
 # Fix: Import all necessary components for mocking from api.py
@@ -15,9 +16,7 @@ with patch.dict(
         "CORS_ORIGINS": "",
     },
 ):
-    from test_generation.gen_agent.api import (
-        create_app,
-    )
+    from test_generation.gen_agent.api import create_app
 
 
 async def _mock_invoke_graph(graph, state, config=None, progress_callback=None):

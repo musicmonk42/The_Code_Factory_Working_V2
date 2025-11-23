@@ -20,19 +20,19 @@ features such as asynchronous operations, connection pooling, caching, retries, 
 
 __version__ = "1.2.0"
 
-import json
-import os
 import asyncio  # For async DB ops and ML model loading
-from typing import List, Dict, Any, Optional
-import logging
-import datetime
-import threading
-import uuid
-import io
-import re  # For input sanitization
-import time
-import sys
 import atexit  # For resource cleanup on shutdown
+import datetime
+import io
+import json
+import logging
+import os
+import re  # For input sanitization
+import sys
+import threading
+import time
+import uuid
+from typing import Any, Dict, List, Optional
 
 # Install with 'pip install aiofiles==24.1.0'
 try:
@@ -43,11 +43,11 @@ except ImportError:
 # P6: Tenacity for retries
 # Install with 'pip install tenacity==9.1.2'
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
-    retry_if_exception_type,
 )
 
 # P4: Caching for embeddings and DB queries
@@ -67,7 +67,7 @@ except ImportError:
 # P5: Observability: Prometheus Metrics
 # Install with 'pip install prometheus-client==0.22.1'
 try:
-    from prometheus_client import Counter, Histogram, Gauge, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
     PROMETHEUS_AVAILABLE = True
     # Metrics for requirements suggestions

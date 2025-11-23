@@ -1,14 +1,14 @@
 # test_generation/orchestrator/console.py
-import sys
-import os
+import io
 import logging
 import logging.config
+import os
+import sys
 import threading
 import traceback
-import io
 from contextlib import contextmanager
-from importlib.metadata import version, PackageNotFoundError
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from importlib.metadata import PackageNotFoundError, version
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from unittest.mock import Mock
 
 # ---------------- Rich availability (warn, but don't hard-disable) ----------------
@@ -35,17 +35,17 @@ else:
 # This makes them valid, importable names from this module.
 if RICH_AVAILABLE:
     try:
+        from rich.columns import Columns
+        from rich.panel import Panel
         from rich.progress import (
-            Progress,
             BarColumn,
+            Progress,
+            TextColumn,
             TimeElapsedColumn,
             TimeRemainingColumn,
-            TextColumn,
         )
         from rich.table import Table
-        from rich.panel import Panel
         from rich.text import Text
-        from rich.columns import Columns
     except ImportError:
         # Downgrade availability if import fails
         RICH_AVAILABLE = False

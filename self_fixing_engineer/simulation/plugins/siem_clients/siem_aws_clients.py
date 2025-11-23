@@ -1,39 +1,34 @@
 # plugins/siem_aws_clients.py
 
-import os
-import json
-import time
-import datetime
 import asyncio
-import sys  # For sys.exit to fail fast
-import re
-import aiohttp
 import base64
+import datetime
+import json
+import os
+import re
+import sys  # For sys.exit to fail fast
+import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Tuple, Optional, Callable, Literal, Final
+from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
+
+import aiohttp
+from pydantic import BaseModel, Field, ValidationError, validator  # Re-import for local schemas
 
 # Import base classes and utilities from siem_base
 from .siem_base import (
-    BaseSIEMClient,
-    SIEMClientConfigurationError,
-    SIEMClientError,
-    SIEMClientAuthError,
-    SIEMClientConnectivityError,
-    SIEMClientQueryError,
-    SIEMClientPublishError,
-    SIEMClientResponseError,
-    alert_operator,
-    SECRETS_MANAGER,
     PRODUCTION_MODE,
+    SECRETS_MANAGER,
+    BaseSIEMClient,
+    SIEMClientAuthError,
+    SIEMClientConfigurationError,
+    SIEMClientConnectivityError,
+    SIEMClientError,
+    SIEMClientPublishError,
+    SIEMClientQueryError,
+    SIEMClientResponseError,
     _base_logger,
+    alert_operator,
 )
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    validator,
-)  # Re-import for local schemas
-
 
 # --- Strict Dependency Check for boto3 ---
 AWS_AVAILABLE = False

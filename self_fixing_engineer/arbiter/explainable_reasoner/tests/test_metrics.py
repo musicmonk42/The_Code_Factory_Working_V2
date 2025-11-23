@@ -3,30 +3,24 @@
 # Requires: pytest, unittest.mock, prometheus-client
 # Run with: pytest test_metrics.py -v --cov=metrics --cov-report=html
 
-import os
 import logging
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+import os
 import tempfile
 import threading
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    CollectorRegistry,
-)
 
 # Import the module under test
 from arbiter.explainable_reasoner.metrics import (
+    METRICS,
     METRICS_NAMESPACE,
+    get_metrics_content,
     get_or_create_metric,
     initialize_metrics,
-    METRICS,
-    get_metrics_content,
 )
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Summary
 
 # Setup logging for tests
 test_logger = logging.getLogger(__name__)

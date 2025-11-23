@@ -16,9 +16,10 @@ Tests all functionality including:
 import asyncio
 import os
 import tempfile
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 
 # Mock all external dependencies before importing testgen_validator
@@ -105,17 +106,17 @@ sys.modules["watchdog.observers"].Observer = MockObserver
 
 # Now import the module under test
 from agents.testgen_agent.testgen_validator import (
-    TestValidator,
+    MAX_SANDBOX_RUNS,
     CoverageValidator,
     MutationValidator,
     PropertyBasedValidator,
     StressPerformanceValidator,
+    TestValidator,
     ValidatorRegistry,
+    _save_files_async,
     healthz,
     start_health_server,
     validate_test_quality,
-    _save_files_async,
-    MAX_SANDBOX_RUNS,
 )
 
 

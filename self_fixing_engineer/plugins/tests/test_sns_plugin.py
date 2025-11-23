@@ -1,9 +1,10 @@
-import os
-import sys
 import json
 import logging
+import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 # Mock fcntl for Windows
 try:

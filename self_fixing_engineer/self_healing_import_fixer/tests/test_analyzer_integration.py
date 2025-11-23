@@ -1,12 +1,12 @@
 # tests/test_analyzer_integration.py
-import json
-import time
 import asyncio
-import subprocess
-from pathlib import Path
-from typing import Any, Dict, List
 import importlib
 import importlib.util
+import json
+import subprocess
+import time
+from pathlib import Path
+from typing import Any, Dict, List
 
 import pytest
 

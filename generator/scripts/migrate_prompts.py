@@ -28,27 +28,24 @@ user permissions in a controlled environment (e.g., CI/CD pipeline, local develo
 Avoid running as root or with elevated privileges unless strictly necessary.
 """
 
-import re
 import argparse
 import ast
-import json
 import difflib
-import shutil
+import json
 import logging
+import re
+import shutil
 import sys
+import unittest
 import uuid
+from io import StringIO
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Any
-from jinja2 import (
-    Environment,
-    TemplateSyntaxError,
-    select_autoescape,
-)  # meta for template parsing
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from typing import Any, Dict, List, Optional, Tuple
+
+from jinja2 import Environment, TemplateSyntaxError, select_autoescape  # meta for template parsing
 from rich.console import Console
 from rich.logging import RichHandler
-import unittest
-from io import StringIO
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 # Setup rich logging
 FORMAT = "%(message)s"
@@ -692,7 +689,8 @@ PROMPT_TEMPLATES = {
                 self.assertEqual(report["prompts_migrated"], 0)  # No prompts migrated due to error
 
             if HAS_HYPOTHESIS_TESTS:
-                from hypothesis import given, strategies as st
+                from hypothesis import given
+                from hypothesis import strategies as st
 
                 @given(
                     st.dictionaries(

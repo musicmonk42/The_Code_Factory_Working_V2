@@ -9,21 +9,23 @@ Fixes:
 """
 
 import asyncio
-import pytest
-import tempfile
+import gc
 import json
 import os
-import time
 import sys
-from typing import Optional, Tuple
-from unittest.mock import AsyncMock, patch, MagicMock, Mock
-from datetime import datetime, timedelta, timezone
-import gc
+import tempfile
+import time
 import weakref
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Optional: Property-based testing
 try:
-    from hypothesis import given, strategies as st, settings
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
 
     HYPOTHESIS_AVAILABLE = True
 except ImportError:
@@ -125,11 +127,11 @@ except ImportError:
 
 # Now import the module under test
 from arbiter.policy.core import (
-    PolicyEngine,
     BasicDecisionOptimizer,
+    PolicyEngine,
     SQLiteClient,
-    initialize_policy_engine,
     get_policy_engine_instance,
+    initialize_policy_engine,
     reset_policy_engine,
 )
 

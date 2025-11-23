@@ -43,11 +43,11 @@ Metrics
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import os
 import re
-import errno
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,8 +55,8 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 # OpenTelemetry: only acquire tracer; assume provider is set elsewhere
 try:
@@ -140,8 +140,8 @@ except Exception:  # pragma: no cover - fallback to local Base
     _ProjectBase = None
 
 try:
-    from sqlalchemy.orm import declarative_base, Mapped, mapped_column
     from sqlalchemy import String
+    from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
     try:
         from sqlalchemy import JSON as _JSONType  # cross-dialect JSON

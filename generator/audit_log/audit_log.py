@@ -44,15 +44,15 @@ import logging
 import os
 import threading
 import uuid
-import yaml
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional
 
 import grpc
 import typer
+import yaml
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import FastAPI, Depends, HTTPException, Security, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from prometheus_client import Counter, Histogram, start_http_server
 from pydantic import BaseModel
 
@@ -65,10 +65,10 @@ from .audit_backend import get_backend
 # OpenTelemetry imports
 try:
     from opentelemetry import trace
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentor
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentor
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
     provider = TracerProvider()
     processor = SimpleSpanProcessor(ConsoleSpanExporter())
@@ -87,8 +87,7 @@ try:
 
     # These typically rely on generated files from grpcio-tools, which may not be in the path.
     # The user's test_audit_log.py handles the potential ImportError gracefully by skipping the gRPC test.
-    from . import audit_log_pb2
-    from . import audit_log_pb2_grpc
+    from . import audit_log_pb2, audit_log_pb2_grpc
 
     HAS_GRPC_PROTOS = True
 except ImportError as e:

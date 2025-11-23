@@ -1,7 +1,7 @@
 # message_bus/context.py
 
 import threading
-from typing import Any, Dict, Callable, TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from .message_types import Message

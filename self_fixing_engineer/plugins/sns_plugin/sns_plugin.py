@@ -1,30 +1,21 @@
-import os
-import sys
 import asyncio
-import time
+import hashlib
+import hmac
+import importlib.metadata
 import json
 import logging
-import socket
+import os
 import random
-import hmac
-import hashlib
-import importlib.metadata
 import re
+import socket
 import ssl
+import sys
+import time
 import uuid
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Callable,
-    Awaitable,
-    Protocol,
-    Literal,
-)
-from contextlib import asynccontextmanager
 from collections import deque
+from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Protocol
 
 try:
     import fcntl
@@ -55,14 +46,14 @@ except ImportError:
             pass
 
 
-import aiohttp
 import aiofiles
-from pydantic import BaseModel, ValidationError, Field, field_validator
+import aiohttp
+import psutil
+from cryptography.fernet import Fernet
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger import jsonlogger
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
-from cryptography.fernet import Fernet
-import psutil
 
 # Import centralized exceptions
 from self_fixing_engineer.exceptions import AnalyzerCriticalError
@@ -72,9 +63,9 @@ PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
 # --- Core integrations for multi-plugin production readiness ---
 try:
-    from core_utils import alert_operator
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import alert_operator
 except ImportError:
     import logging
 
@@ -177,17 +168,15 @@ TraceContextTextMapPropagator = None
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.context import get_current
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
     from opentelemetry.propagate import set_global_textmap
-    from opentelemetry.trace.propagation.tracecontext import (
-        TraceContextTextMapPropagator,
-    )
-    from opentelemetry.context import get_current
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.sdk.trace.sampling import ProbabilitySampler
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
     resource = Resource(
         attributes={SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "sns-gateway-service")}

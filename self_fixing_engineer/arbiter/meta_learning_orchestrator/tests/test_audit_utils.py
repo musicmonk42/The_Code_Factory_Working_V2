@@ -1,20 +1,21 @@
 import asyncio
 import json
-import os
-import uuid
 import logging
+import os
 import sys
+import uuid
+
+import aiofiles
 import pytest
 import pytest_asyncio
-import aiofiles
-from pytest_mock import MockerFixture
-from opentelemetry import trace
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from opentelemetry import trace
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

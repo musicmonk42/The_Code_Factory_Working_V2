@@ -8,41 +8,41 @@ import hashlib
 import json
 import logging
 import os
-import sys
-import shutil
-import time
 import re
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Tuple, Type, Set
+import shutil
+import sys
+import time
 from contextlib import asynccontextmanager
-
-# Prometheus metrics
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    CollectorRegistry,
-    REGISTRY,
-    PROCESS_COLLECTOR,
-    PLATFORM_COLLECTOR,
-)
-from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union
 
 # OpenTelemetry tracing
 from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.trace import Status, StatusCode
+
+# Prometheus metrics
+from prometheus_client import (
+    PLATFORM_COLLECTOR,
+    PROCESS_COLLECTOR,
+    REGISTRY,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+)
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 # Import tenacity for retries with exponential backoff
 from tenacity import (
     retry,
-    stop_after_attempt,
-    wait_random_exponential,
     retry_if_exception_type,
+    stop_after_attempt,
     wait_fixed,
+    wait_random_exponential,
 )
 
 # Boto3 for AWS Secrets Manager
@@ -60,14 +60,14 @@ except ImportError:
 # Neo4j imports with proper fallback
 try:
     from neo4j import AsyncGraphDatabase as RealAsyncGraphDatabase
+    from neo4j import AsyncManagedTransaction, AsyncSession, ManagedTransaction
     from neo4j.exceptions import (
-        ServiceUnavailable,
-        SessionExpired,
-        Neo4jError,
         ClientError,
         DatabaseError,
+        Neo4jError,
+        ServiceUnavailable,
+        SessionExpired,
     )
-    from neo4j import AsyncManagedTransaction, AsyncSession, ManagedTransaction
 
     NEO4J_AVAILABLE = True
     AsyncGraphDatabase = RealAsyncGraphDatabase

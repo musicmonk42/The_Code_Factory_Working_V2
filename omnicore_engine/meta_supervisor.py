@@ -1,13 +1,14 @@
 import asyncio
-import logging
-import uuid
 import json
-import time
+import logging
 import random
+import time
 import traceback
-import torch
+import uuid
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+
 import numpy as np
-from typing import Dict, Any, List, Optional, Callable, Union, Set
+import torch
 
 try:
     from aiolimiter import AsyncLimiter
@@ -31,17 +32,13 @@ except Exception:
         # If other aiolimiter methods are expected in tests, add them here.
 
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-from omnicore_engine.metrics import (
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+from omnicore_engine.metrics import (  # Import new metrics
+    API_REQUESTS,
     get_plugin_metrics,
     get_test_metrics,
-    API_REQUESTS,
-)  # Import new metrics
+)
 
 try:
     from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
@@ -67,12 +64,10 @@ try:
 except ImportError:
     KnowledgeGraph = None
 try:
-    from omnicore_engine.plugins.explainable_reasoner_plugin import (
-        ExplainableReasonerPlugin,
-    )
+    from omnicore_engine.plugins.explainable_reasoner_plugin import ExplainableReasonerPlugin
 except ImportError:
     ExplainableReasonerPlugin = None
-from redis.asyncio import redis, RedisError
+from redis.asyncio import RedisError, redis
 
 logger = logging.getLogger("MetaSupervisor")
 # Ensure logger is configured
@@ -1860,23 +1855,15 @@ if __name__ == "__main__":
             except ImportError:
                 pass
             try:
-                from omnicore_engine.plugin_registry import (
-                    PLUGIN_REGISTRY as DummyPluginRegistry,
-                )
-                from omnicore_engine.plugin_registry import PluginMeta, PlugInKind
+                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as DummyPluginRegistry
+                from omnicore_engine.plugin_registry import PlugInKind, PluginMeta
             except ImportError:
                 pass
             try:
-                from omnicore_engine.array_backend import (
-                    ArrayBackend as DummyArrayBackend,
-                )
+                from omnicore_engine.array_backend import ArrayBackend as DummyArrayBackend
             except ImportError:
                 pass
-            from sqlalchemy.ext.asyncio import (
-                create_async_engine,
-                AsyncSession,
-                async_sessionmaker,
-            )
+            from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
             from sqlalchemy.ext.declarative import declarative_base
 
             Base = declarative_base()  # Define Base for mock DB

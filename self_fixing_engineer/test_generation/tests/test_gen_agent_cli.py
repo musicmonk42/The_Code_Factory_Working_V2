@@ -1,10 +1,10 @@
 # tests/test_gen_agent_cli.py
 import asyncio
+import logging
 import os
 import signal
 import tempfile
 import uuid
-import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 

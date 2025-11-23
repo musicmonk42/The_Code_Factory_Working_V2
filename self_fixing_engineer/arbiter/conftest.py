@@ -13,15 +13,17 @@ Note: pytest_plugins has been moved to the root conftest.py to avoid deprecation
 """
 
 from __future__ import annotations
-import sys
-import types
+
+import asyncio
 import logging
 import os
-import tempfile
 import shutil
-import pytest
-import asyncio
+import sys
+import tempfile
+import types
 from pathlib import Path
+
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +166,6 @@ def isolate_plugin_registry():
 
     # Ensure the registry uses our test file instead of the production one
     # We need to handle both the case where the singleton exists and where it doesn't
-
     # Monkey-patch the default persist path before singleton creation
     if hasattr(registry_module, "PluginRegistry"):
         # Store original for potential restoration
@@ -266,8 +267,9 @@ def mock_plugin_registry(monkeypatch):
 def reset_prometheus_registry():
     """Reset Prometheus registry before each test to avoid conflicts."""
     try:
-        from prometheus_client import REGISTRY
         import gc
+
+        from prometheus_client import REGISTRY
 
         # Clear all collectors
         collectors = list(REGISTRY._collector_to_names.keys())

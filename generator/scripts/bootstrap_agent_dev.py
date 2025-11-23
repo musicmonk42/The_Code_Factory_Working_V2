@@ -18,9 +18,9 @@ CAUTION:
 - The real implementations must exist in production deployments.
 """
 
+import logging
 import os
 import sys
-import logging
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - [bootstrap] %(message)s"

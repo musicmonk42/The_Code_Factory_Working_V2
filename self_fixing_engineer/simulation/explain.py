@@ -1,32 +1,33 @@
 # (full file with the applied fixes)
-import os
-from pathlib import Path
-import sqlite3
-import logging
-import random
-import json
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from dataclasses import dataclass
-import re
-from typing import Any, Dict, Optional, List, Callable
-from datetime import datetime, date, time
-import collections.abc
 import asyncio
-import uuid
-from logging import Formatter
+import collections.abc
+import json
+import logging
+import os
+import random
+import re
+import sqlite3
 import sys
 import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from dataclasses import dataclass
+from datetime import date, datetime, time
 from functools import partial
+from logging import Formatter
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 # Prometheus client for metrics
 try:
     from prometheus_client import (
-        Counter,
-        Histogram,
-        Gauge,
         REGISTRY,
-        generate_latest,
         CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        generate_latest,
     )
 
     PROMETHEUS_AVAILABLE = True
@@ -49,9 +50,9 @@ except ImportError:
 
 # LLM Integration
 try:
-    from langchain_openai import ChatOpenAI
-    from langchain_core.prompts import PromptTemplate
     from langchain_core.language_models import BaseChatModel
+    from langchain_core.prompts import PromptTemplate
+    from langchain_openai import ChatOpenAI
 
     LANGCHAIN_OPENAI_AVAILABLE = True
 except ImportError:
@@ -65,8 +66,8 @@ except ImportError:
 
 # DLT Integration
 try:
-    from test_generation.audit_log import AuditLogger as DLTLogger
     from test_generation.agentic import SecretsManager as GlobalSecretsManager
+    from test_generation.audit_log import AuditLogger as DLTLogger
 
     DLT_LOGGER_AVAILABLE = True
 except ImportError:
@@ -131,13 +132,8 @@ class ArbiterConfig:
 
 TRANSFORMERS_AVAILABLE = False
 try:
-    from transformers import (
-        pipeline,
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        BitsAndBytesConfig,
-    )
     import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
 
     TRANSFORMERS_AVAILABLE = True
 except ImportError:

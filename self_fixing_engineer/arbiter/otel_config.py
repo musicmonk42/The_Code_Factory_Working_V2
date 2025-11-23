@@ -19,21 +19,21 @@ Author: Arbiter Platform Team
 Version: 2.0.0
 """
 
-import os
-import sys  # Added missing import
-import socket
-import logging
-import threading
-import json
-import hashlib
 import asyncio  # Added for async detection in trace_operation decorator
-from enum import Enum
-from typing import Optional, Dict, Any, List, Callable
-from dataclasses import dataclass, field
-from functools import wraps
-from contextlib import contextmanager
+import hashlib
+import json
+import logging
+import os
+import socket
+import sys  # Added missing import
+import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional
 
 # Third-party imports
 try:
@@ -54,24 +54,22 @@ from circuitbreaker import circuit
 
 # OpenTelemetry imports with comprehensive fallback
 try:
-    from opentelemetry import trace, metrics, baggage, context
+    from opentelemetry import baggage, context, metrics, trace
+    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
+    from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.propagators.b3 import B3MultiFormat
+    from opentelemetry.propagators.composite import CompositePropagator
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
     from opentelemetry.sdk.trace import TracerProvider, sampling
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
         ConsoleSpanExporter,
         SimpleSpanProcessor,
     )
-    from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
-    from opentelemetry.propagate import set_global_textmap
-    from opentelemetry.propagators.b3 import B3MultiFormat
-    from opentelemetry.propagators.composite import CompositePropagator
-    from opentelemetry.trace.propagation.tracecontext import (
-        TraceContextTextMapPropagator,
-    )
-    from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
-    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
     # Exporter imports with fallback
     try:

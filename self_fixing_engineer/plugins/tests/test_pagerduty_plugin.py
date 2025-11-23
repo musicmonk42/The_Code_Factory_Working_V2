@@ -1,11 +1,12 @@
+import asyncio
+import logging
 import os
 import sys
-import logging
-import asyncio
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import aiohttp
+import pytest
 
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
 if sys.platform.startswith("win"):
@@ -41,9 +42,10 @@ sys.modules["redis.asyncio"] = MagicMock()
 os.environ["PAGERDUTY_ROUTING_KEY_SECRET_ID"] = "PAGERDUTY_ROUTING_KEY"
 os.environ["PRODUCTION_MODE"] = "false"
 
+from prometheus_client import CollectorRegistry
+
 # Now import pydantic and prometheus_client (these should be real)
 from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
 
 # Fix the import path - the file is at plugins/pagerduty_plugin/pagerduty_plugin.py
 test_dir = os.path.dirname(os.path.abspath(__file__))

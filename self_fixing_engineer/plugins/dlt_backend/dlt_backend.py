@@ -9,24 +9,25 @@ DLT (Blockchain) Backend Plugin for CheckpointManager
 - Resilient: designed for production distributed ledgers (Fabric, Besu, Corda, etc).
 """
 
+import asyncio
+import datetime
+import getpass
+import gzip
+import hashlib  # For hash chain integrity
+import hmac  # For hash chain integrity
+import io
+import json
+import logging
 import os
+import re
 import sys  # For sys.exit
 import time
-import logging
-import json
-import asyncio
-import hmac  # For hash chain integrity
-import hashlib  # For hash chain integrity
-import re
-import getpass
 import traceback
-import io
-import gzip
-import datetime
-import redis.asyncio as redis
-from typing import Dict, Any, Optional, Tuple
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from typing import Any, Dict, Optional, Tuple
+
+import redis.asyncio as redis
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -34,9 +35,10 @@ except ImportError:
     pass
 
 try:
-    from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
     from plugins.core_audit import audit_logger
     from plugins.core_secrets import SECRETS_MANAGER
+    from plugins.core_utils import alert_operator
+    from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 except ImportError:
     # Handle missing plugins gracefully
     alert_operator = None
@@ -45,9 +47,9 @@ except ImportError:
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.resources import Resource
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
     OPENTELEMETRY_AVAILABLE = True

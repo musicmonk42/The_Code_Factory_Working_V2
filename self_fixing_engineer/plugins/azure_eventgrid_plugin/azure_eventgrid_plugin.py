@@ -13,20 +13,21 @@ World-Class Async Azure Event Grid Audit/Event Plugin for CheckpointManager and 
 - SIEM and ops ready: ideal for audit, infosec, event streaming, and compliance.
 """
 
-import os  # FIX: used by PRODUCTION_MODE
-import aiohttp
 import asyncio
-import json
-import time
-import socket
-import logging
-import uuid
-import sys  # For sys.exit
-import hmac
-import hashlib
-from typing import Optional, Dict, Any, List, Union, Callable, Awaitable
 import datetime
+import hashlib
+import hmac
+import json
+import logging
+import os  # FIX: used by PRODUCTION_MODE
+import socket
+import sys  # For sys.exit
+import time
+import uuid
 from contextlib import nullcontext  # FIX: clean tracing fallback
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+
+import aiohttp
 import redis.asyncio as redis
 
 # --- Global Production Mode Flag (from main orchestrator) ---
@@ -61,19 +62,19 @@ class NonCriticalError(Exception):
     pass
 
 
-# --- Centralized Utilities (replacing placeholders) ---
-from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
 from plugins.core_audit import audit_logger
 from plugins.core_secrets import SECRETS_MANAGER
+
+# --- Centralized Utilities (replacing placeholders) ---
+from plugins.core_utils import alert_operator
+from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 
 # --- OpenTelemetry/Tracing (REQUIRED in prod) ---
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider  # noqa: F401 (used by main app)
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # noqa: F401
     from opentelemetry.sdk.resources import Resource  # noqa: F401
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-        OTLPSpanExporter,
-    )  # noqa: F401
+    from opentelemetry.sdk.trace import TracerProvider  # noqa: F401 (used by main app)
     from opentelemetry.sdk.trace.export import BatchSpanProcessor  # noqa: F401
 
     tracer = trace.get_tracer(__name__)

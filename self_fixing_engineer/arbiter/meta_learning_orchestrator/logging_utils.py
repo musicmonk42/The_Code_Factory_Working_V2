@@ -1,11 +1,11 @@
 import logging
-import ujson as json  # Faster JSON
 import os
 import re
-import time
 import threading
-from typing import Dict, Any, List, Set
+import time
+from typing import Any, Dict, List, Set
 
+import ujson as json  # Faster JSON
 from opentelemetry import trace
 
 # --- Global Kill-Switch for PII Redaction ---

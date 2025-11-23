@@ -1,10 +1,10 @@
 # test_generation/tests/conftest.py
 from __future__ import annotations
 
+import importlib
+import logging
 import sys
 import types
-import logging
-import importlib
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

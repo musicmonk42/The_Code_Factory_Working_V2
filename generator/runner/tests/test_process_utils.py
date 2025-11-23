@@ -1,17 +1,16 @@
-import unittest
 import asyncio
+import unittest
 from types import SimpleNamespace
-from typing import List, Dict, Any
-
-from unittest.mock import patch, MagicMock, AsyncMock
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Public API under test
 from runner.process_utils import (
     CircuitBreaker,
-    get_circuit_breaker,
-    subprocess_wrapper,
-    parallel_subprocess,
     distributed_subprocess,
+    get_circuit_breaker,
+    parallel_subprocess,
+    subprocess_wrapper,
 )
 
 

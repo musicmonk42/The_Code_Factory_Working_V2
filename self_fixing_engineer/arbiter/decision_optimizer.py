@@ -1,56 +1,53 @@
 # decision_optimizer.py
-from __future__ import (
+from __future__ import (  # Enable postponed evaluation of annotations for forward references
     annotations,
-)  # Enable postponed evaluation of annotations for forward references
+)
 
 import asyncio
-import logging
-import time
-import json
-import uuid
 import hashlib
+import json
+import logging
+import os
+import sys
+import time
 import traceback
-from typing import List, Dict, Any, Optional, Callable, Set, Tuple
-from dataclasses import dataclass, field
+import uuid
 
 # from threading import Lock # REMOVED: Replaced with asyncio.Lock
 from collections import Counter
-import networkx as nx
-from cryptography.fernet import Fernet, InvalidToken
-import redis.asyncio as redis
-from circuitbreaker import circuit
-from fastapi import WebSocket, WebSocketDisconnect
-from functools import wraps
-from datetime import datetime, timezone
-import numpy as np  # Using numpy for array-based prioritization
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+import networkx as nx
+import numpy as np  # Using numpy for array-based prioritization
+import redis.asyncio as redis
 
 # SFE Core AI System Imports
 from arbiter.arbiter import Arbiter
-from arbiter.arena import ArbiterArena
-from arbiter.feedback import FeedbackManager
-
-# from arbiter.knowledge_graph import KnowledgeGraph
-from arbiter.explainable_reasoner import ExplainableReasoner
-from arbiter.policy import PolicyEngine
-from arbiter.bug_manager import BugManager
-from arbiter.monitoring import Monitor
-from arbiter.human_loop import HumanInLoop
-from arbiter.config import ArbiterConfig
-from arbiter.utils import get_system_metrics_async
 
 # SFE Engine Shared Components
 from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
-import sys
-import os
+from arbiter.arena import ArbiterArena
+from arbiter.bug_manager import BugManager
+from arbiter.config import ArbiterConfig
+
+# from arbiter.knowledge_graph import KnowledgeGraph
+from arbiter.explainable_reasoner import ExplainableReasoner
+from arbiter.feedback import FeedbackManager
+from arbiter.human_loop import HumanInLoop
+from arbiter.monitoring import Monitor
+from arbiter.policy import PolicyEngine
+from arbiter.utils import get_system_metrics_async
+from circuitbreaker import circuit
+from cryptography.fernet import Fernet, InvalidToken
+from fastapi import WebSocket, WebSocketDisconnect
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from arbiter.arbiter_array_backend import ConcreteArrayBackend as ArrayBackend
-from arbiter.metrics import (
-    get_or_create_counter,
-    get_or_create_histogram,
-    get_or_create_gauge,
-)
+from arbiter.metrics import get_or_create_counter, get_or_create_gauge, get_or_create_histogram
 from simulation.simulation_module import Database
 
 

@@ -1,27 +1,28 @@
 # test_generation/orchestrator/cli.py
-import os
-import sys
-import asyncio
-from datetime import datetime, timezone
-import traceback
 import argparse
-import signal
-import shutil
-from pathlib import Path
-import uuid
+import asyncio
 import inspect
+import os
+import shutil
+import signal
+import sys
+import traceback
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
-
-# --- Internal Module Imports ---
-from .config import CONFIG, LOGGING_CONFIG, load_config
-from .console import log, configure_logging, init_console_and_styles
 
 # New module import for monkeypatching
 from test_generation import utils as atco_utils
-from .orchestrator import GenerationOrchestrator
-from . import audit as audit_mod
-from .reporting import HTMLReporter
 from test_generation.policy_and_audit import EventBus
+
+from . import audit as audit_mod
+
+# --- Internal Module Imports ---
+from .config import CONFIG, LOGGING_CONFIG, load_config
+from .console import configure_logging, init_console_and_styles, log
+from .orchestrator import GenerationOrchestrator
+from .reporting import HTMLReporter
 from .venvs import sanitize_path
 
 # --- CLI Exit Codes ---

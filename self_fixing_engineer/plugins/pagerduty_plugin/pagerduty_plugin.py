@@ -1,17 +1,16 @@
-import os
 import asyncio
-import time
-import logging
-import sys
-import re
-import hmac
-import hashlib
-import json
-import datetime
 import contextlib
+import datetime
+import hashlib
+import hmac
+import json
+import logging
+import os
 import random
-
-from typing import Dict, Any, Optional, Literal, List
+import re
+import sys
+import time
+from typing import Any, Dict, List, Literal, Optional
 
 
 # --- Custom Exceptions (defined early for immediate use) ---
@@ -33,9 +32,10 @@ class PagerDutyEventError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
     from plugins.core_audit import audit_logger
     from plugins.core_secrets import SECRETS_MANAGER
+    from plugins.core_utils import alert_operator
+    from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 except ImportError as e:
     # A cleaner alternative to sys.exit at the top level, let's keep it here for now
     # as it's a critical dependency.
@@ -134,22 +134,9 @@ async def get_redis_client() -> Optional["redis.Redis"]:
 # --- Dependency Gating ---
 try:
     import aiohttp
-    from pydantic import (
-        BaseModel,
-        Field,
-        ValidationError,
-        field_validator,
-        model_validator,
-    )
+    from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram, Info
+    from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
     from pydantic_settings import BaseSettings, SettingsConfigDict
-    from prometheus_client import (
-        Counter,
-        Gauge,
-        Histogram,
-        CollectorRegistry,
-        REGISTRY,
-        Info,
-    )
 except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for PagerDuty plugin: {e}. Aborting startup."

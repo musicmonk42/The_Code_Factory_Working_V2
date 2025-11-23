@@ -1,16 +1,16 @@
 # test_context.py
 
-import unittest
 import asyncio
 import concurrent.futures
-from unittest.mock import Mock, AsyncMock
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.context import ExecutionContext, ContextPropagationMiddleware
+from message_bus.context import ContextPropagationMiddleware, ExecutionContext
 from message_bus.message_types import Message
 
 

@@ -5,24 +5,24 @@ Integration tests for the entire deploy_agent module.
 These tests verify that all components work together correctly in realistic scenarios.
 """
 
-import pytest
 import asyncio
 import json
 import tempfile
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import all modules under test
 # FIX: Use correct import paths from generator.agents.deploy_agent
 from generator.agents.deploy_agent.deploy_agent import DeployAgent
 from generator.agents.deploy_agent.deploy_prompt import DeployPromptAgent
 from generator.agents.deploy_agent.deploy_response_handler import (
-    handle_deploy_response,
     HandlerRegistry,
+    handle_deploy_response,
 )
 from generator.agents.deploy_agent.deploy_validator import ValidatorRegistry
-
 
 # ============================================================================
 # FIXTURES

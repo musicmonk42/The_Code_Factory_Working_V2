@@ -1,31 +1,32 @@
-import json
-import yaml
-import difflib
-import re
-import nltk
-import jsonschema
-import os
-import requests
-import uuid
-import hashlib
-import time  # For performance metrics
-import logging
 import asyncio
+import difflib
+import hashlib
+import json
+import logging
+import os
+import re
+import time  # For performance metrics
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import jsonschema
+import nltk
+import requests
+import yaml
 
 # P6: Tenacity for retries
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
 # P5: Observability: Prometheus Metrics
 try:
-    from prometheus_client import Counter, Histogram, Gauge, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
     PROMETHEUS_AVAILABLE = True
     # Metrics for spec generation
@@ -84,8 +85,8 @@ def get_tracing_context(span_name: str):
     return tracer.start_as_current_span(span_name) if OPENTELEMETRY_AVAILABLE else NullContext()
 
 
-from langchain_core.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import PromptTemplate
 
 from .requirements import get_checklist
 

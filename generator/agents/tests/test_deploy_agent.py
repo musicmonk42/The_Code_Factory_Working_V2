@@ -3,23 +3,23 @@ test_deploy_agent.py
 Comprehensive tests for deploy_agent module (orchestration layer).
 """
 
-import pytest
 import asyncio
 import json
 import tempfile
-import aiosqlite  # FIX: Import aiosqlite
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import aiosqlite  # FIX: Import aiosqlite
+import pytest
 
 # Import the module under test
 from generator.agents.deploy_agent.deploy_agent import (
     DeployAgent,
-    TargetPlugin,
     PluginRegistry,
+    TargetPlugin,
     scrub_text,
 )
-
 
 # ============================================================================
 # FIXTURES

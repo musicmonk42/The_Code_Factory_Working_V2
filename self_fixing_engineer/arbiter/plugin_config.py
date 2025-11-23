@@ -1,17 +1,17 @@
-import logging
 import asyncio
-from typing import Dict, Any
-from prometheus_client import Counter
+import logging
+from typing import Any, Dict
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import Counter
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
+    from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:

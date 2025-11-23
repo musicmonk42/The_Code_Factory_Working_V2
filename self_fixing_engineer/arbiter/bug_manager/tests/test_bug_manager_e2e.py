@@ -2,27 +2,22 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
 import aioresponses
-from prometheus_client import REGISTRY
+import pytest
 
 # Import all necessary components from the application modules
 from arbiter.bug_manager.bug_manager import (
+    BUG_AUTO_FIX_ATTEMPT,
+    BUG_AUTO_FIX_SUCCESS,
     BugManager,
+    RateLimitExceededError,
     Settings,
     Severity,
-    RateLimitExceededError,
-    BUG_AUTO_FIX_SUCCESS,
-    BUG_AUTO_FIX_ATTEMPT,
 )
-from arbiter.bug_manager.remediations import (
-    BugFixerRegistry,
-    RemediationPlaybook,
-    RemediationStep,
-)
-from arbiter.bug_manager.utils import SecretStr
 from arbiter.bug_manager.notifications import NotificationService
-
+from arbiter.bug_manager.remediations import BugFixerRegistry, RemediationPlaybook, RemediationStep
+from arbiter.bug_manager.utils import SecretStr
+from prometheus_client import REGISTRY
 
 # --- Fixtures ---
 

@@ -16,43 +16,45 @@ Features:
 """
 
 from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
 import os
 import time
-from typing import Dict, Any, AsyncGenerator, Optional, Literal, List
 from collections import Counter
 
 # FIX: Import Path
 from pathlib import Path
+from typing import Any, AsyncGenerator, Dict, List, Literal, Optional
 
 import redis.asyncio as aioredis
-from dotenv import load_dotenv
-
-# Runner Foundation
-from runner.runner_config import RunnerConfig
-
-# [FIX] Import log_audit_event instead of add_provenance
-from runner.runner_logging import logger, log_audit_event
 
 # FIX: Import metrics module, not individual components to avoid import cycle issues
 import runner.runner_metrics as metrics
+from dotenv import load_dotenv
+from runner.llm_plugin_manager import LLMPluginManager
+
+# Runner Foundation
+from runner.runner_config import RunnerConfig
+from runner.runner_errors import ConfigurationError, LLMError
+
+# [FIX] Import log_audit_event instead of add_provenance
+from runner.runner_logging import log_audit_event, logger
 
 # FIX: Import only redact_secrets
 from runner.runner_security_utils import redact_secrets
-from runner.runner_errors import LLMError, ConfigurationError
-from runner.llm_plugin_manager import LLMPluginManager
 
 # Conditional SDKs
 try:
-    from openai import AsyncOpenAI, APIError as OpenAIError
+    from openai import APIError as OpenAIError
+    from openai import AsyncOpenAI
 
     HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
 try:
-    from anthropic import AsyncAnthropic, AnthropicError
+    from anthropic import AnthropicError, AsyncAnthropic
 
     HAS_ANTHROPIC = True
 except ImportError:

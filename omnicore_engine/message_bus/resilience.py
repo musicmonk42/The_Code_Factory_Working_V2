@@ -1,9 +1,8 @@
 # message_bus/resilience.py
 
+import logging
 import threading
 import time
-import logging
-
 
 logger = logging.getLogger(__name__)
 

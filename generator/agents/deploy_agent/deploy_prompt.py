@@ -3,29 +3,23 @@ deploy_prompt.py
 Context-rich, self-evolving prompt templates for deployment config generation.
 """
 
-import os
-import uuid
-import time
-import re
-import asyncio
-import json
-import hashlib  # For prompt hashing
 import ast  # For parsing Python AST for imports
-import tiktoken  # For token counting
-from datetime import datetime  # Added for provenance timestamp in ab_test_prompts
-from pathlib import (
-    Path,
-)  # ADDED: Required for file path manipulation (e.g., Path(repo_path) / file_name)
-import aiofiles  # needed for async file IO used below
-
-from typing import (
-    List,
-    Dict,
-    Any,
-    Optional,
-    Tuple,
-)
+import asyncio
 import glob
+import hashlib  # For prompt hashing
+import json
+import os
+import re
+import time
+import uuid
+from datetime import datetime  # Added for provenance timestamp in ab_test_prompts
+from pathlib import (  # ADDED: Required for file path manipulation (e.g., Path(repo_path) / file_name)
+    Path,
+)
+from typing import Any, Dict, List, Optional, Tuple
+
+import aiofiles  # needed for async file IO used below
+import tiktoken  # For token counting
 from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 
 # Make sentence_transformers optional
@@ -35,16 +29,15 @@ except ImportError:  # pragma: no cover
     SentenceTransformer = None
     util = None
 
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-)  # Retaining local definitions for non-LLM metrics
-
 # --- FIX: Added missing imports for Status/StatusCode and removed stray 'opent' ---
 from opentelemetry.trace import Status, StatusCode
+from prometheus_client import (  # Retaining local definitions for non-LLM metrics
+    Counter,
+    Gauge,
+    Histogram,
+)
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # -----------------------------------
 
@@ -70,8 +63,8 @@ except (ImportError, AttributeError):
 
 # Optional: light-weight stubs for aiohttp so imports don't blow up in tests
 try:
-    from aiohttp.web import RouteTableDef, Request, Response, Application
     from aiohttp import web
+    from aiohttp.web import Application, Request, Response, RouteTableDef
 except Exception:  # pragma: no cover
     # Define minimal fallbacks for type hinting and basic app structure
     class Request: ...
@@ -107,14 +100,11 @@ except Exception:  # pragma: no cover
 
 # --- CENTRAL RUNNER FOUNDATION ---
 # from runner import tracer # This is now handled by the safe import above
-from runner.llm_client import call_llm_api, call_ensemble_api
+from runner.llm_client import call_ensemble_api, call_llm_api
 from runner.runner_errors import LLMError
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import (
-    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,
-    LLM_ERRORS_TOTAL,
-    LLM_LATENCY_SECONDS,
-)
+from runner.runner_logging import add_provenance, logger
+from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
+from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL
 
 # -----------------------------------
 

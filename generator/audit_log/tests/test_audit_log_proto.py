@@ -24,8 +24,8 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace  # Added for mock_crypto_provider_factory
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Test constants - Set BEFORE imports
 TEST_LOG_DIR = "/tmp/test_audit_log_proto"
@@ -97,11 +97,11 @@ os.environ["AUDIT_LOG_BACKEND_TYPE"] = "inmemory"  # Use 'inmemory' to match reg
 os.environ["AUDIT_LOG_BACKEND_PARAMS"] = json.dumps({})  # Clear file-specific params
 os.environ["AUDIT_LOG_GRPC_PORT"] = str(GRPC_PORT)
 
+import grpc
 import pytest
 import pytest_asyncio
 from faker import Faker
 from freezegun import freeze_time
-import grpc
 from grpc.aio import insecure_channel
 
 # --------------------------------------------------------------------------- #
@@ -116,11 +116,7 @@ if str(REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------------- #
 try:
     from generator.audit_log import audit_log_pb2, audit_log_pb2_grpc
-    from generator.audit_log.audit_log import (
-        AuditLog,
-        log_action,
-        initialize_audit_log_instance,
-    )
+    from generator.audit_log.audit_log import AuditLog, initialize_audit_log_instance, log_action
 except ImportError as e:
     pytest.skip(f"Cannot import audit_log modules: {e}", allow_module_level=True)
 
@@ -251,9 +247,7 @@ def mock_crypto_provider_factory(mock_software_key_master):
         ):
             # Re-initialize the global AUDIT_LOG instance after patching the factory
             # to ensure AuditLog.__init__ uses the mock.
-            from generator.audit_log.audit_log import (
-                initialize_audit_log_instance,
-            )
+            from generator.audit_log.audit_log import initialize_audit_log_instance
 
             # The global AUDIT_LOG needs to be re-initialized after the factory is mocked
             new_audit_log = initialize_audit_log_instance()

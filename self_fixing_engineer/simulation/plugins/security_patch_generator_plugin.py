@@ -1,16 +1,16 @@
 # plugins/security_patch_generator_plugin.py
 
-import os
 import asyncio
+import hashlib
 import json
 import logging
-import time
-import uuid
+import os
 import re
 import sys
-import hashlib
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union
+import time
+import uuid
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Manifest aligned with PluginManager schema (AST-extracted by the manager) ---
 PLUGIN_MANIFEST = {
@@ -46,9 +46,9 @@ if not logger.handlers:
 # --- Conditional Imports for LangChain, Tenacity, Pydantic, etc. ---
 try:
     from langchain_core.language_models import BaseChatModel as _LCBaseChatModel
-    from langchain_core.prompts import PromptTemplate
-    from langchain_core.outputs import ChatResult
     from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+    from langchain_core.outputs import ChatResult
+    from langchain_core.prompts import PromptTemplate
 
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
@@ -65,12 +65,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
 
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -90,8 +85,9 @@ except ImportError:
 
 
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
     import threading
+
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     PROMETHEUS_AVAILABLE = True
 

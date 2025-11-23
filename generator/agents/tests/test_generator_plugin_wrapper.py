@@ -24,18 +24,18 @@ import os
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiofiles
 import pytest
 import pytest_asyncio
-from faker import Faker
-import aiofiles
-from freezegun import freeze_time
-
 from agents.generator_plugin_wrapper import (
-    run_generator_workflow,
-    WorkflowOutput,
     GeneratorPluginError,
     WorkflowError,
+    WorkflowOutput,
+    run_generator_workflow,
 )
+from faker import Faker
+from freezegun import freeze_time
 
 # Initialize faker for test data generation
 fake = Faker()

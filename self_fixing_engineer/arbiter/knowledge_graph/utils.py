@@ -1,20 +1,23 @@
-import datetime
-import logging
-import json
-import sys
-import re
-import collections
-import contextvars
 import asyncio
 import base64
+import collections
+import contextvars
+import datetime
+import json
+import logging
+import re
+import sys
 from enum import Enum
-from typing import Dict, Any, Tuple, List, Optional, Callable, Awaitable
-from prometheus_client import Counter, Histogram, Gauge, REGISTRY
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+
 from opentelemetry import trace
-from .config import Config, SensitiveValue, MultiModalData
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+
+from .config import Config, MultiModalData, SensitiveValue
 
 try:
-    from pydantic import ValidationError, BaseModel as PydanticBaseModel
+    from pydantic import BaseModel as PydanticBaseModel
+    from pydantic import ValidationError
 except ImportError:
     ValidationError = None
     PydanticBaseModel = None

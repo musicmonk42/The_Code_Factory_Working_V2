@@ -9,35 +9,31 @@
 Static type checking with `mypy --strict` is recommended for maximum safety.
 """
 
-import logging
-import importlib
-import pkgutil
-import threading
 import asyncio
+import importlib
 import json
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from copy import deepcopy
-from typing import Any, Callable, Dict, List, Optional, Set, Type, Final
-from enum import Enum
-from contextlib import contextmanager
-import re
-from packaging.specifiers import SpecifierSet
-from packaging.version import parse as version_parse, InvalidVersion
-from prometheus_client import Counter, Histogram, REGISTRY
-from prometheus_client import CollectorRegistry
-from unittest.mock import MagicMock
-import time
+import logging
 import multiprocessing
-import traceback
 import os
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+import pkgutil
+import re
+import threading
+import time
+import traceback
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from copy import deepcopy
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable, Dict, Final, List, Optional, Set, Type
+from unittest.mock import MagicMock
+
 from networkx import DiGraph, has_path
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion
+from packaging.version import parse as version_parse
+from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +46,10 @@ except ImportError:
 
 # Mock imports for a self-contained fix
 try:
-    from .logging_utils import PIIRedactorFilter
-    from .config import ArbiterConfig
     from arbiter import PermissionManager
+
+    from .config import ArbiterConfig
+    from .logging_utils import PIIRedactorFilter
 except ImportError:
 
     class PIIRedactorFilter(logging.Filter):
@@ -174,7 +171,7 @@ class PluginBase(ABC):
 
 # Metrics setup
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY, CollectorRegistry
+    from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
 
     # Clear existing metrics to avoid duplicates
     for metric in list(REGISTRY._names_to_collectors.keys()):

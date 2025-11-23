@@ -1,45 +1,44 @@
 # D:\SFE\self_fixing_engineer\arbiter\plugins\llm_client.py
 import asyncio
-import logging
-import time
-import itertools  # For round-robin iteration
 import atexit  # For cleanup of shared resources
-import threading  # For thread-safe metric creation
+import hashlib  # For prompt hashing
+import itertools  # For round-robin iteration
+import json
+import logging
+import os
 import re  # For PII masking
+import threading  # For thread-safe metric creation
+import time
 from typing import (
-    Optional,
-    Dict,
     Any,
     AsyncGenerator,
-    List,
-    Tuple,
-    Union,
     Awaitable,
     Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
     Type,
+    Union,
 )
-import os
-import hashlib  # For prompt hashing
 
-from opentelemetry import trace
-from prometheus_client import Histogram, REGISTRY, Counter, Gauge, Summary
-import openai
-from openai import AsyncOpenAI
+import aiohttp
 import anthropic
-from anthropic import AsyncAnthropic
 import google.api_core.exceptions as google_exceptions
 import google.generativeai as genai
-import aiohttp
-import json
-from prometheus_client import start_http_server
+import openai
+from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
+from opentelemetry import trace
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary, start_http_server
 
 # Tenacity for retries
 from tenacity import (
     retry,
+    retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    retry_if_exception,
 )
 
 # Logger setup

@@ -4,20 +4,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from redis.asyncio import Redis
-from redis.exceptions import RedisError
+
+# Assuming all modules are in a discoverable path
+from arbiter.arbiter_growth.idempotency import (
+    IDEMPOTENCY_HITS_TOTAL,
+    IdempotencyStore,
+    IdempotencyStoreError,
+)
 from opentelemetry import trace  # Added for the tracer fixture
 
 # FIX: Added imports to set up a real OpenTelemetry context for tests
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter
-
-# Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.idempotency import (
-    IdempotencyStore,
-    IdempotencyStoreError,
-    IDEMPOTENCY_HITS_TOTAL,
-)
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 # --- Fixtures ---
 

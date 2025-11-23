@@ -31,30 +31,24 @@ Initialization:
 - Ensure tracer is initialized (automatically handled at module import via centralized config).
 """
 
-import threading
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Union, Optional
-import logging
-import re
 import asyncio
 import atexit
+import logging
 import os
+import re
+import threading
 import time
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional, Union
 
 import redis.asyncio as redis
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-
-# Import all prometheus_client types at once at the top
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
-
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
+
+# Import all prometheus_client types at once at the top
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Assuming ArbiterConfig is correctly imported or mocked globally
 from .config import get_config

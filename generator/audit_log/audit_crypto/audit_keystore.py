@@ -7,22 +7,22 @@ import base64
 import json
 import logging
 import os
+import stat  # For file permissions
 
 # import fcntl # For POSIX advisory file locking - REMOVED: Replaced with portalocker
 import tempfile  # For atomic writes
-import stat  # For file permissions
-from typing import Any, Dict, List, Optional, Protocol
 
 # --- FIX: Missing import time ---
 import time
+from typing import Any, Dict, List, Optional, Protocol
 
 import aiofiles  # For async file operations
 import portalocker  # For cross-platform file locking
+from cryptography.exceptions import InvalidTag  # For AES GCM decryption validation
+from cryptography.hazmat.backends import default_backend
 
 # Core cryptography primitives
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidTag  # For AES GCM decryption validation
 
 # Imported from factory for metrics and alerts - REMOVED TO BREAK CIRCULAR DEPENDENCY
 # from audit_crypto_factory import CRYPTO_ERRORS, KEY_STORE_COUNT, KEY_LOAD_COUNT, send_alert, SensitiveDataFilter, log_action
@@ -134,9 +134,7 @@ class FileSystemKeyStorageBackend:
 
         # We need CryptoOperationError for the file system backend to raise exceptions
         try:
-            from .audit_crypto_provider import (
-                CryptoOperationError as RealCryptoOperationError,
-            )
+            from .audit_crypto_provider import CryptoOperationError as RealCryptoOperationError
 
             self._CryptoOperationError = RealCryptoOperationError
         except ImportError:
@@ -406,9 +404,7 @@ class FileSystemKeyStorageBackend:
     async def list_key_metadata(self) -> List[Dict[str, Any]]:
         # Need CryptoOperationError here for the exception signature
         try:
-            from .audit_crypto_provider import (
-                CryptoOperationError as RealCryptoOperationError,
-            )
+            from .audit_crypto_provider import CryptoOperationError as RealCryptoOperationError
 
             _CryptoOperationError = RealCryptoOperationError
         except ImportError:
@@ -669,12 +665,7 @@ class KeyStore:
             CryptoOperationError: For storage backend errors, JSON parsing errors, or decryption failures.
         """
         # --- Start of Delayed Import for load_key ---
-        from .audit_crypto_factory import (
-            CRYPTO_ERRORS,
-            KEY_LOAD_COUNT,
-            send_alert,
-            log_action,
-        )
+        from .audit_crypto_factory import CRYPTO_ERRORS, KEY_LOAD_COUNT, log_action, send_alert
         from .audit_crypto_provider import CryptoOperationError
 
         # --- End of Delayed Import ---

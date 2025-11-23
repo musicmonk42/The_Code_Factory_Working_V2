@@ -1,51 +1,51 @@
 # agents/deploy_agent.py
 import asyncio
-import uuid
-import logging
-import json
-import os
-import glob
-import time
-import aiosqlite  # <-- FIX: Add aiosqlite import
 import difflib
-import re
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable, Awaitable
-from abc import ABC, abstractmethod
-from pathlib import Path
+import glob
 import importlib.util
+import json
+import logging
+import os
+import re
 import sys
+import time
+import uuid
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-import aiohttp
 import aiofiles
+import aiohttp
+import aiosqlite  # <-- FIX: Add aiosqlite import
+import networkx as nx
 import prometheus_client
 import tiktoken
-import networkx as nx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from opentelemetry.trace import Status, StatusCode
+from pydantic import BaseModel
+from runner.llm_client import call_ensemble_api, call_llm_api
+from runner.runner_errors import LLMError, RunnerError
+from runner.runner_file_utils import get_commits
+
+# --- FIX: Import log_audit_event and alias it to log_action ---
+from runner.runner_logging import add_provenance
+from runner.runner_logging import log_audit_event as log_action
+from runner.runner_logging import logger
+from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
+from runner.runner_metrics import (
+    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
+)
+from runner.runner_security_utils import redact_secrets
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # --- FIX 1: Import the class, not the method ---
 from .deploy_prompt import DeployPromptAgent
 
 # --- FIX: Import HandlerRegistry to instantiate it ---
-from .deploy_response_handler import handle_deploy_response, HandlerRegistry
+from .deploy_response_handler import HandlerRegistry, handle_deploy_response
 from .deploy_validator import ValidatorRegistry
-
-from runner.llm_client import call_llm_api, call_ensemble_api
-from runner.runner_file_utils import get_commits
-
-# --- FIX: Import log_audit_event and alias it to log_action ---
-from runner.runner_logging import logger, add_provenance, log_audit_event as log_action
-from runner.runner_metrics import (
-    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
-    LLM_ERRORS_TOTAL,
-    LLM_LATENCY_SECONDS,
-)
-from runner.runner_errors import RunnerError, LLMError
-from runner.runner_security_utils import redact_secrets
 
 # Safe tracer import: works even if runner.tracer is not available
 try:

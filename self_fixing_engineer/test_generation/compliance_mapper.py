@@ -19,24 +19,25 @@ Key Features:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import importlib.metadata
 import json
 import logging
 import os
 import re
-import hashlib
 import sys
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
-from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable
-import importlib.metadata
 from datetime import datetime, timezone
+from enum import Enum
 from functools import wraps
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Callable, Dict, List, Optional
+
 import yaml
-from collections import defaultdict
 from test_generation.orchestrator.reporting import HTMLReporter
 from test_generation.utils import maybe_await
 
@@ -96,7 +97,7 @@ except ImportError:
 
 # Third-party imports with fallbacks
 try:
-    from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
+    from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:

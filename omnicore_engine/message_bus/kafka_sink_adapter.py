@@ -28,10 +28,10 @@ try:
     from self_fixing_engineer.plugins.kafka.kafka_plugin import (
         KafkaAuditPlugin,
         KafkaConfig,
-        StartupDependencyMissing,
+        MisconfigurationError,
         PermanentSendError,
         QueueDrainTimeout,
-        MisconfigurationError,
+        StartupDependencyMissing,
         build_plugin_from_env,
     )
 except Exception as exc:  # pragma: no cover

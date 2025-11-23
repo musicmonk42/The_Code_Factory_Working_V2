@@ -1,31 +1,23 @@
-import os
 import asyncio
-import shutil
+import hashlib
+import importlib
+import logging
+import os
+import platform
 import random
+import re
+import shutil
+import subprocess
+import threading
 import time
 import traceback
-import importlib
-import hashlib
-import threading
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    Protocol,
-    Type,
-    Tuple,
-    TYPE_CHECKING,
-    List,
-)
-from datetime import datetime
-import logging
-import re
 import types
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Type
+
 from packaging.version import Version
-import platform
-import subprocess
 
 # Set up logging before any other imports to catch early errors.
 logger = logging.getLogger(__name__)
@@ -53,12 +45,7 @@ except ImportError:
 TENACITY_AVAILABLE = False
 try:
     import tenacity
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     try:
         from tenacity import RetriesExceeded as _RetriesExceeded
@@ -220,11 +207,11 @@ class BackendRegistry:
         """Register only the canonical 4 built-ins expected by tests."""
         try:
             from test_generation.backends import (
-                PynguinBackend,
-                JestLLMBackend,
-                DiffblueBackend,
                 CargoBackend,
+                DiffblueBackend,
                 GoBackend,
+                JestLLMBackend,
+                PynguinBackend,
             )
         except Exception:
             return
@@ -265,11 +252,11 @@ class BackendRegistry:
             try:
                 # We need to import these locally to avoid circular dependencies
                 from test_generation.backends import (
-                    PynguinBackend,
-                    JestLLMBackend,
-                    DiffblueBackend,
                     CargoBackend,
+                    DiffblueBackend,
                     GoBackend,
+                    JestLLMBackend,
+                    PynguinBackend,
                 )
             except ImportError:
                 return None

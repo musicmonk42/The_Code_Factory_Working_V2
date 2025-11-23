@@ -1,13 +1,14 @@
 # tests/test_main_sim_runner.py
 
+import argparse
+import io
 import os
 import sys
-import pytest
-import io
-import argparse
-import warnings
-from unittest.mock import patch, MagicMock, mock_open
 import tempfile
+import warnings
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="simulation.registry")
@@ -82,24 +83,24 @@ sys.modules["simulation.agentic"] = MagicMock()
 # Now we can safely import the module under test
 try:
     from simulation.plugins.main_sim_runner import (
-        discover_and_register_plugin_entrypoints,
-        validate_deployment_or_exit,
         _execute_remotely,
-        run_plugin_in_sandbox,
+        _plugin_register_adapter,
         _registered_plugin_entrypoints,
         _registered_plugin_info,
-        verify_plugin_signature,
-        register_entrypoint,
-        aggregate_simulation_results,
-        parse_plugin_kv_args,
-        check_rbac_permission,
-        send_notification,
         _synthesize_kwargs_for_runner,
-        _plugin_register_adapter,
+        aggregate_simulation_results,
+        check_rbac_permission,
+        discover_and_register_plugin_entrypoints,
         enforce_kernel_sandboxing,
-        opa_cache,
-        plugin_load_errors,
         main,
+        opa_cache,
+        parse_plugin_kv_args,
+        plugin_load_errors,
+        register_entrypoint,
+        run_plugin_in_sandbox,
+        send_notification,
+        validate_deployment_or_exit,
+        verify_plugin_signature,
     )
 except ImportError as e:
     # If import still fails, create mock functions for testing

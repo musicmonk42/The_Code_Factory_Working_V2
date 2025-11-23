@@ -1,12 +1,12 @@
 # test_clarifier.py
 
-import unittest
+import base64
+import json
 import os
 import sys
-import json
-import base64
 import tempfile
-from unittest.mock import patch, AsyncMock, MagicMock
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -122,18 +122,18 @@ MockUpdateReqs.return_value = {
 # Import after mocking
 try:
     from generator.clarifier.clarifier import (
-        Clarifier,
         CircuitBreaker,
+        Clarifier,
         SQLiteContextManager,
-        get_logger,
+        get_circuit_breaker,
         get_config,
         get_fernet,
-        get_circuit_breaker,
+        get_logger,
     )
 
     # Try to import optional functions
     try:
-        from generator.clarifier.clarifier import setup_logging, load_config
+        from generator.clarifier.clarifier import load_config, setup_logging
     except ImportError:
         setup_logging = None
         load_config = None

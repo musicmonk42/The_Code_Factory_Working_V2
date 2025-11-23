@@ -3,28 +3,28 @@ Test suite for logging_utils.py
 Tests PII redaction, structured logging, audit trails, and security features.
 """
 
-import unittest
-import logging
 import json
-import tempfile
+import logging
 import os
+import re
 import sys
+import tempfile
 import threading
 import time
+import unittest
 from unittest.mock import Mock
-import re
 
 # Import the module to test
 from arbiter.logging_utils import (
-    PIIRedactorFilter,
-    StructuredFormatter,
     AuditLogger,
     LogLevel,
-    get_logger,
+    PIIRedactorFilter,
+    StructuredFormatter,
     configure_logging,
+    get_logger,
+    get_redaction_patterns,
     logging_context,
     redact_text,
-    get_redaction_patterns,
 )
 
 

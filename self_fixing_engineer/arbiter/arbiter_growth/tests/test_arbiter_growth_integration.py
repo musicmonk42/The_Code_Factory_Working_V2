@@ -7,27 +7,24 @@ These tests verify the interaction between multiple components working together.
 import asyncio
 import logging
 from datetime import datetime, timezone
+
+# Add HealthStatus enum if not in manager
+from enum import Enum
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
-
+from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
+from arbiter.arbiter_growth.config_store import TokenBucketRateLimiter
 from arbiter.arbiter_growth.exceptions import (
     AuditChainTamperedError,
     CircuitBreakerOpenError,
     RateLimitError,
 )
 from arbiter.arbiter_growth.idempotency import IdempotencyStore
-from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
-from arbiter.arbiter_growth.metrics import (
-    GROWTH_ANOMALY_SCORE,
-    GROWTH_EVENTS,
-)
+from arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_EVENTS
 from arbiter.arbiter_growth.models import GrowthEvent
 from pybreaker import CircuitBreakerListener
-from arbiter.arbiter_growth.config_store import TokenBucketRateLimiter
-
-# Add HealthStatus enum if not in manager
-from enum import Enum
 
 
 class HealthStatus(Enum):

@@ -28,18 +28,18 @@ method. Then, register it with the `PluginRegistry` at application startup:
 `PluginRegistry.register_processor("image", "my_custom_processor", MyCustomImageProcessor)`
 """
 
-import logging
-import random
 import asyncio
 import base64
-import uuid
+import logging
 import os
-from typing import Any, Dict, List, Optional, Union, Type
+import random
+import uuid
+from typing import Any, Dict, List, Optional, Type, Union
 
 # Pydantic for robust configuration validation
 try:
-    from pydantic import BaseModel, Field, ValidationError
     from prometheus_client import Counter, Histogram
+    from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     raise ImportError(
         "Required libraries missing. Please install 'pydantic' and 'prometheus_client'."
@@ -47,15 +47,15 @@ except ImportError:
 
 # Import the abstract interfaces that these concrete processors implement
 from arbiter.plugins.multimodal.interface import (
-    ImageProcessor,
     AudioProcessor,
-    VideoProcessor,
-    TextProcessor,
-    ProcessingResult,
-    MultiModalException,
-    InvalidInputError,
     ConfigurationError,
+    ImageProcessor,
+    InvalidInputError,
+    MultiModalException,
+    ProcessingResult,
     ProviderNotAvailableError,
+    TextProcessor,
+    VideoProcessor,
 )
 
 logger = logging.getLogger(__name__)

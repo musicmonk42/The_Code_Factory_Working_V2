@@ -12,11 +12,11 @@ an event after a state change.
 """
 
 import os
-import time
-import tempfile
 import shutil
+import tempfile
+import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -48,7 +48,7 @@ for key, value in TEST_ENV.items():
 # --- Fixtures ---
 
 # Import modules after setting the environment
-from mesh import event_bus, mesh_policy, checkpoint_manager
+from mesh import checkpoint_manager, event_bus, mesh_policy
 
 
 @pytest_asyncio.fixture(scope="module")

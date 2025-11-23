@@ -1,22 +1,23 @@
-import os
-import json
-import logging
-import asyncio
-import sys
-import time
-import platform
-from typing import Dict, Any, Optional, List
-import ast
-import subprocess
-import shutil
-import requests
-import webbrowser
-from logging.handlers import RotatingFileHandler
 import argparse
-from pathlib import Path
-import getpass
+import ast
+import asyncio
 import contextlib
 import functools
+import getpass
+import json
+import logging
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import time
+import webbrowser
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import requests
 
 # Required library (fail fast)
 try:
@@ -55,12 +56,7 @@ except ImportError:
 
 # Tenacity is optional; provide no-op fallbacks if missing
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     tenacity_available = True
 except ImportError:
@@ -100,7 +96,7 @@ except ImportError:
 
 # Prometheus client (optional)
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     prometheus_available = True
 except ImportError:

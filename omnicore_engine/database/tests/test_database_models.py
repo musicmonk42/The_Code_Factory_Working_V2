@@ -2,25 +2,19 @@
 Comprehensive test suite for omnicore_engine/database/models.py
 """
 
-import pytest
-from datetime import datetime
 import hashlib
-
-import sys
 import os
+import sys
+from datetime import datetime
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import (
-    Base,
-    AgentState,
-    ExplainAuditRecord,
-    GeneratorAgentState,
-    SFEAgentState,
-)
+from models import AgentState, Base, ExplainAuditRecord, GeneratorAgentState, SFEAgentState
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture

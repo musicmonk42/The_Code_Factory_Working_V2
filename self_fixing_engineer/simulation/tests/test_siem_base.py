@@ -5,17 +5,18 @@ Tests core functionality including initialization, error handling, rate limiting
 secret scrubbing, and abstract method implementations.
 """
 
-import pytest
 import asyncio
+import logging
 import os
 import sys
 import time
-import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
-from unittest.mock import AsyncMock, MagicMock
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Mock the siem_base module before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()

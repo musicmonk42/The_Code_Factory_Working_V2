@@ -45,8 +45,8 @@ except Exception:  # pragma: no cover - optional dep
 # Cryptography (required by some functions, but we guard its use)
 try:
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
     _CRYPTO_AVAILABLE = True
 except Exception:  # pragma: no cover - if not available, we still allow module import

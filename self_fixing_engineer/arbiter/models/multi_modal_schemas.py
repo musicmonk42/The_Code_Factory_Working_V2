@@ -8,26 +8,28 @@ These schemas define the data models for outputs from the MultiModalProcessor,
 ensuring data consistency, validation, and ease of use with LLMs or Knowledge Graphs.
 """
 
-import re
 import logging
-from pydantic import (
-    BaseModel,
-    Field,
-    HttpUrl,
-    field_validator,
-    model_validator,
-    ValidationError,
-    constr,
-    conlist,
-    AnyUrl,
-    ConfigDict,
-    ValidationInfo,
-)
-from typing import Optional, Dict, Any, Union
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from html import escape
-from typing_extensions import Literal, Annotated
+from typing import Any, Dict, Optional, Union
+
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    ValidationError,
+    ValidationInfo,
+    conlist,
+    constr,
+    field_validator,
+    model_validator,
+)
+from typing_extensions import Annotated, Literal
+
 from .common import Severity
 
 # Pinning pydantic<2 for explicit V1 API usage.

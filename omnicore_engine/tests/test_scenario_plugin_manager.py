@@ -3,24 +3,25 @@ Test suite for omnicore_engine/scenario_plugin_manager.py
 Tests the OmniCoreEngine, Base class, and utility functions.
 """
 
-import pytest
 import asyncio
-from datetime import datetime
-from unittest.mock import Mock, patch, AsyncMock
-import sys
 import os
+import sys
+from datetime import datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.scenario_plugin_manager import (
-    safe_serialize,
     Base,
-    get_plugin_metrics,
-    get_test_metrics,
     ExplainableAI,
     OmniCoreEngine,
+    get_plugin_metrics,
+    get_test_metrics,
     omnicore_engine,
+    safe_serialize,
 )
 
 

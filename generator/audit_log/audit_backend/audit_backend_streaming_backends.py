@@ -1,22 +1,20 @@
 # audit_backends/audit_backend_streaming_backends.py
 import asyncio
 import datetime
-import json
-import uuid
-import os
-import zlib
-import time
-import ssl  # Import ssl for http backend
 import inspect  # <-- ADDED
-
-from typing import Any, Dict, List, Optional, Set, AsyncIterator
+import json
+import os
+import ssl  # Import ssl for http backend
+import time
+import uuid
+import zlib
 from contextlib import asynccontextmanager
-
-import aiohttp
-import aiokafka
+from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 # --- FIX: Import aiofiles ---
 import aiofiles
+import aiohttp
+import aiokafka
 
 # --- END FIX ---
 
@@ -31,33 +29,30 @@ except ImportError:
     TransportError = None
     # No warning here, as it's optional for the Kafka backend
 
-# Import utilities from the new utils file
-from .audit_backend_streaming_utils import (
-    SensitiveDataFilter,
-    SimpleCircuitBreaker,
-    FileBackedRetryQueue,
-)
+from prometheus_client import Counter, Gauge, Histogram  # Added missing prometheus imports
 
 # Import core backend components
+from .audit_backend_core import tracer  # <-- ADDED
 from .audit_backend_core import (
-    LogBackend,
-    BACKEND_ERRORS,
-    logger,
-    send_alert,
-    retry_operation,
-    COMPRESSION_LEVEL,
-    BACKEND_RETRY_ATTEMPTS,
-    BACKEND_NETWORK_ERRORS,
-    _STATUS_OK,
     _STATUS_ERROR,
+    _STATUS_OK,
+    BACKEND_ERRORS,
+    BACKEND_NETWORK_ERRORS,
+    BACKEND_RETRY_ATTEMPTS,
+    COMPRESSION_LEVEL,
+    LogBackend,
+    logger,
     register_backend,
-    tracer,  # <-- ADDED
+    retry_operation,
+    send_alert,
 )
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-)  # Added missing prometheus imports
+
+# Import utilities from the new utils file
+from .audit_backend_streaming_utils import (
+    FileBackedRetryQueue,
+    SensitiveDataFilter,
+    SimpleCircuitBreaker,
+)
 
 
 # --- START: aiohttp Adapter Fix ---

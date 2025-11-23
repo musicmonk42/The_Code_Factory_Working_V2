@@ -1,16 +1,16 @@
 # arbiter/learner/explanations.py
 
+import asyncio
 import json
 import os
 import time
-import asyncio
-import structlog
-from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
-from prometheus_client import Counter, Histogram
-from opentelemetry import trace
+from typing import Any, Dict, List, Optional
 
+import structlog
+from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 # Structured logging setup
 structlog.configure(

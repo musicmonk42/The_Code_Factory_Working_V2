@@ -1,20 +1,21 @@
 # test_gemini_adapter.py
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
+import google.api_core.exceptions as google_exceptions
+import pytest
 
 # Import the adapter and related exceptions
 from arbiter.plugins.gemini_adapter import GeminiAdapter
 from arbiter.plugins.llm_client import (
-    LLMClientError,
+    APIError,
     AuthError,
+    CircuitBreakerOpenError,
+    LLMClientError,
     RateLimitError,
     TimeoutError,
-    APIError,
-    CircuitBreakerOpenError,
 )
-import google.api_core.exceptions as google_exceptions
 from tenacity import RetryError
 
 

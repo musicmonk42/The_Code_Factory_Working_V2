@@ -4,15 +4,16 @@ Test suite for generic SIEM clients (Splunk, Elasticsearch, Datadog).
 Tests configuration validation, health checks, log sending, and querying.
 """
 
-import pytest
 import asyncio
-import sys
-import time
 import datetime
 import json
 import re
-from unittest.mock import AsyncMock, MagicMock
+import sys
+import time
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()

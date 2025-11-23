@@ -8,8 +8,8 @@
 
 from __future__ import annotations  # Enable forward references for type hints
 
-import sys
 import os
+import sys
 
 # Add the project's root directory to the Python path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -17,23 +17,24 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import asyncio
-import click
-import sys
-import os
-import json
-import signal
-import logging
-import hashlib
 import datetime
-import uuid  # For provenance launch_id
+import hashlib
+import json
+import logging
 import multiprocessing  # For launching API in separate process for 'all' interface
+import os
+import signal
+import sys
 import time  # For polling readiness
-from pathlib import Path
+import uuid  # For provenance launch_id
 from functools import partial
-from typing import Dict, Any, Optional
 
 # Logging handlers for file rotation
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import click
 
 # --- FIX: Guard optional/heavy imports ---
 try:
@@ -99,12 +100,12 @@ MagicMock = _DummyMagicMock()
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.logging import LoggingInstrumentor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.semconv.trace import SpanAttributes
     from opentelemetry.trace import StatusCode
 
@@ -133,7 +134,8 @@ except ImportError:
 tracer = trace.get_tracer(__name__)
 
 try:
-    from jsonschema import validate as json_validate, ValidationError, Draft7Validator
+    from jsonschema import Draft7Validator, ValidationError
+    from jsonschema import validate as json_validate
 except ImportError:
     jsonschema = None
     Draft7Validator = object
@@ -150,26 +152,27 @@ except ImportError:
 # --- Runner Foundation & Project Imports ---
 try:
     # Import central runner components directly
-    from runner.runner_config import RunnerConfig, load_config, ConfigWatcher
-    from runner.runner_core import Runner
-    from runner.runner_logging import logger as runner_logger_instance, log_action
-    from runner.runner_metrics import (
-        get_metrics_dict,
-        bootstrap_metrics,
-    )  # FIX: Import bootstrap_metrics
     from runner.alerting import send_alert
+    from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
+    from runner.runner_core import Runner
+    from runner.runner_logging import log_action
+    from runner.runner_logging import logger as runner_logger_instance
+    from runner.runner_metrics import (  # FIX: Import bootstrap_metrics
+        bootstrap_metrics,
+        get_metrics_dict,
+    )
+
+    from .api import api as fastapi_app
+    from .api import create_db_tables as api_create_db_tables
 
     # --- FIX: Import from the package __init__ to avoid circular dependency ---
     # from . import main_cli, MainApp, fastapi_app, api_create_db_tables
-
     # --- START FIX 1: Break circular dependency ---
     # Import directly from sibling modules instead of __init__.py
     from .cli import cli as main_cli
     from .gui import MainApp
-    from .api import api as fastapi_app, create_db_tables as api_create_db_tables
 
     # --- END FIX 1 ---
-
     # --- START FIX 1: Add IntentParser for test patching ---
     try:
         from intent_parser.intent_parser import IntentParser

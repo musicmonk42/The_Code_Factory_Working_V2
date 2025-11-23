@@ -1,11 +1,12 @@
 # arbiter/policy/tests/test_circuit_breaker.py
 
-import pytest
 import asyncio
+import gc
 import os
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch, Mock
-import gc
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Set test environment variable before ANY imports
 os.environ["PYTEST_CURRENT_TEST"] = "test"
@@ -32,18 +33,18 @@ asyncio.create_task = mock_create_task
 try:
     # Now safe to import
     from arbiter.policy.circuit_breaker import (
-        InMemoryBreakerStateManager,
         CircuitBreakerState,
-        sanitize_log_message,
-        _sanitize_provider,
-        get_breaker_state,
-        is_llm_policy_circuit_breaker_open,
-        record_llm_policy_api_success,
-        record_llm_policy_api_failure,
-        validate_config,
+        InMemoryBreakerStateManager,
         _breaker_states,
         _breaker_states_lock,
         _connection_pool_lock,
+        _sanitize_provider,
+        get_breaker_state,
+        is_llm_policy_circuit_breaker_open,
+        record_llm_policy_api_failure,
+        record_llm_policy_api_success,
+        sanitize_log_message,
+        validate_config,
     )
 finally:
     # Restore original create_task after import

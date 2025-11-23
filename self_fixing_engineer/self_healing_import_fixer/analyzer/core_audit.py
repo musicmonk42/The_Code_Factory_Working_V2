@@ -6,19 +6,19 @@ CRITICAL: This module handles audit logging for regulated industry compliance.
 Tampering with this module is a federal crime under 18 U.S.C. § 1030.
 """
 
+import asyncio
+import atexit
+import hashlib
+import hmac
+import json
+import logging
 import os
 import sys
-import json
-import hmac
-import hashlib
 import threading
-import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
 from queue import Queue
-import atexit
-import logging
+from typing import Any, Dict, Optional
 
 # Make aiofiles optional
 try:
@@ -150,8 +150,8 @@ class RegulatoryAuditLogger:
             # Set proper ownership (assuming running as service account)
             if PRODUCTION_MODE and hasattr(os, "chown"):  # Check if chown exists
                 try:
-                    import pwd
                     import grp
+                    import pwd
 
                     uid = pwd.getpwnam("audit_service").pw_uid
                     gid = grp.getgrnam("audit_group").gr_gid

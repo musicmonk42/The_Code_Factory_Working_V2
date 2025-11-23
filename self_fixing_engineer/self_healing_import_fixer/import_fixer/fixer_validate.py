@@ -5,31 +5,26 @@ Provides a comprehensive validation pipeline for Python code changes,
 including compilation, linting, type-checking, static analysis, and testing.
 """
 
-import os
-import subprocess
+import ast
+import asyncio
+import difflib
+import hashlib
 import json
 import logging
-import difflib
-import shutil
-import sys
-import asyncio
-import hashlib
-import tempfile
-import ast
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Tuple, TYPE_CHECKING
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from .compat_core import (
-        alert_operator,
-        scrub_secrets,
-        audit_logger,
-        SECRETS_MANAGER,
-    )
+    from .compat_core import SECRETS_MANAGER, alert_operator, audit_logger, scrub_secrets
 
     # Lazy import of get_cache to avoid import-time side effects
     if TYPE_CHECKING:
@@ -345,8 +340,8 @@ class CodeValidator:
 
                 kwargs = {}
                 if os.name != "nt":
-                    import signal
                     import os as _os
+                    import signal
 
                     kwargs["preexec_fn"] = _os.setsid
                 else:

@@ -19,18 +19,20 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, List, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from hypothesis import given, strategies as st
 
 # --- FIX: Import Fernet for key generation ---
 from cryptography.fernet import Fernet
+from hypothesis import given
+from hypothesis import strategies as st
 
 # --------------------------------------------------------------------------- #
 # Import module under test – only symbols that exist
 # --------------------------------------------------------------------------- #
 # FIX: Import the local registries/functions from the module
+from runner.runner_security_utils import _secret_cache  # Import for cleaning up
 from runner.runner_security_utils import (
     DECRYPTORS,
     ENCRYPTORS,
@@ -45,7 +47,6 @@ from runner.runner_security_utils import (
     register_redactor,
     scan_for_secrets,
     scan_for_vulnerabilities,
-    _secret_cache,  # Import for cleaning up
 )
 
 # Setup logging for tests
@@ -72,10 +73,11 @@ def clean_registries_and_cache():
     _secret_cache.clear()
 
     # Re-register defaults from the module
-    from runner.runner_security_utils import regex_basic_redactor, nlp_presidio_redactor
     from runner.runner_security_utils import (
-        fernet_encrypt_decrypt,
         aes_cbc_encrypt_decrypt,
+        fernet_encrypt_decrypt,
+        nlp_presidio_redactor,
+        regex_basic_redactor,
     )
 
     register_redactor("regex_basic", regex_basic_redactor)

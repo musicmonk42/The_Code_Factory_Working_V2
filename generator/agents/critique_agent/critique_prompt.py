@@ -1,18 +1,18 @@
+import asyncio
 import hashlib
 import json
 import logging
 import os
 import re
-import uuid
 import tempfile
 import time
-import asyncio
+import uuid
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-import aiohttp
 import aiofiles
-from jinja2 import Environment, FileSystemLoader, select_autoescape, Template
+import aiohttp
+from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 from langchain.tools import tool
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -68,13 +68,13 @@ except (ImportError, OSError, RuntimeError, Exception) as e:
 # --- RUNNER UTILITY IMPORTS (ENFORCED) ---
 # Replace old imports and local stubs with centralized runner utilities.
 try:
+    from runner.llm_client import count_tokens
+    from runner.runner_backends import rag_retrieve as _rag_retrieve_context
     from runner.runner_logging import log_action, log_audit_event
     from runner.runner_metrics import CRITIQUE_PROMPT_BUILDS, CRITIQUE_PROMPT_LATENCY
-    from runner.runner_security_utils import redact_secrets, scrub_pii_and_secrets
-    from runner.llm_client import count_tokens
-    from runner.summarize_utils import summarize as summarize_text
     from runner.runner_parsers import detect_language, translate_text
-    from runner.runner_backends import rag_retrieve as _rag_retrieve_context
+    from runner.runner_security_utils import redact_secrets, scrub_pii_and_secrets
+    from runner.summarize_utils import summarize as summarize_text
 
     # Use real runner metrics
     PROMPT_BUILDS = CRITIQUE_PROMPT_BUILDS

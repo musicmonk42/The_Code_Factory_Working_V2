@@ -3,24 +3,27 @@ test_deploy_response_handler.py
 Comprehensive tests for deploy_response_handler module.
 """
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 # FIX: Use absolute imports from the project root. Remove sys.path hack.
 from generator.agents.deploy_agent.deploy_response_handler import (
-    parse_llm_response,
-    handle_deploy_response,
-    HandlerRegistry,
+    enrich_config_output,  # FIX: Renamed from enrich_config_with_badges
+)
+from generator.agents.deploy_agent.deploy_response_handler import (
+    ERROR_FILENAME,
     DockerfileHandler,
-    YAMLHandler,
+    HandlerRegistry,
     JSONHandler,
+    YAMLHandler,
+    handle_deploy_response,
+    parse_llm_response,
     repair_sections,
     scan_config_for_findings,
-    enrich_config_output,  # FIX: Renamed from enrich_config_with_badges
-    ERROR_FILENAME,
 )
 
 # FIX: Removed imports for non-existent functions: summarize_section, enrich_config_with_badges

@@ -4,13 +4,14 @@ Comprehensive unit tests for cli.py
 Tests CLI commands, argument parsing, and workflow execution.
 """
 
-import pytest
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from click.testing import CliRunner
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 import yaml
+from click.testing import CliRunner
 
 # FIX: REMOVED the autouse fixture. It's causing the freeze on exit.
 # @pytest.fixture(autouse=True)
@@ -651,7 +652,7 @@ class TestDynamicCommandRegistry:
 
     def test_registered_command_execution(self, cli_runner):
         """Test executing a dynamically registered command."""
-        from main.cli import register_cli_command, cli
+        from main.cli import cli, register_cli_command
 
         @register_cli_command(name="test-exec", help_text="Test execution")
         def test_exec_command():

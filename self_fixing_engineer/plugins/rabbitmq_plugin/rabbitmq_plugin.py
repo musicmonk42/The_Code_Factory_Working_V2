@@ -1,15 +1,16 @@
-import os
 import asyncio
-import time
+import datetime
+import hashlib
+import hmac
 import json
 import logging
-import sys
+import os
 import re
-import hmac
-import hashlib
-import datetime
+import sys
+import time
+from typing import Any, Dict, List, Literal, Optional, Tuple
+
 import redis.asyncio as redis
-from typing import Dict, Any, Optional, List, Literal, Tuple
 
 # --- OpenTelemetry Tracing ---
 try:
@@ -109,9 +110,10 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
     from plugins.core_audit import audit_logger
     from plugins.core_secrets import SECRETS_MANAGER
+    from plugins.core_utils import alert_operator
+    from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for RabbitMQ plugin: {e}. Aborting startup."
@@ -130,7 +132,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from pydantic import BaseModel, ValidationError, Field, validator
+    from pydantic import BaseModel, Field, ValidationError, validator
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -140,13 +142,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from prometheus_client import (
-        Counter,
-        Gauge,
-        Histogram,
-        generate_latest,
-        CollectorRegistry,
-    )
+    from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 except ImportError as e:
     logger.critical(
         f"CRITICAL: prometheus_client not found. Metrics are mandatory. Aborting startup: {e}."

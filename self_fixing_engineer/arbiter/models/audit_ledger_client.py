@@ -1,14 +1,23 @@
 import asyncio
-import logging
+import hashlib
 import json
+import logging
 import os
+import re
 import time
 import uuid
-import re
-import hashlib
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Type, Final, Set
 from collections import OrderedDict
+from datetime import datetime, timezone
+from typing import Any, Dict, Final, List, Optional, Set, Type, Union
+
+# Import tenacity for retries with exponential backoff
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 # requirements.txt (create separately):
 # web3==7.13.0
@@ -25,29 +34,21 @@ from collections import OrderedDict
 # postgres_client.py # Assumed to be available from SFE codebase
 # fabric_sdk_py==0.9.0 # Optional for Hyperledger Fabric
 
-# Import tenacity for retries with exponential backoff
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential_jitter,
-    retry_if_exception_type,
-    before_sleep_log,
-)
 
 # Web3.py for Ethereum/EVM integration
 try:
     # Use AsyncWebsocketProvider for real-time updates and more efficient polling
+    from eth_account import Account
+    from eth_utils import to_checksum_address
     from web3 import AsyncWeb3
-    from web3.providers.async_websocket import AsyncWebsocketProvider
-    from web3.middleware import geth_poa_middleware
     from web3.exceptions import (
-        TransactionNotFound,
         ContractCustomError,
         ContractLogicError,
         TimeExhausted,
+        TransactionNotFound,
     )
-    from eth_account import Account
-    from eth_utils import to_checksum_address
+    from web3.middleware import geth_poa_middleware
+    from web3.providers.async_websocket import AsyncWebsocketProvider
 
     ETHEREUM_AVAILABLE: Final[bool] = True
     Account.enable_unaudited_hdwallet_features()
@@ -137,22 +138,22 @@ if not HYPERLEDGER_FABRIC_AVAILABLE:
         "Hyperledger Fabric SDK is not supported in this version. Operations will raise NotImplementedError."
     )
 
-# Prometheus Metrics
-from prometheus_client import Counter, Gauge, Histogram
-
-# OpenTelemetry Tracing - Use centralized configuration
-from opentelemetry.trace import Status, StatusCode
-from arbiter.otel_config import get_tracer
-
-# Pydantic for input validation
-from pydantic import BaseModel, Field, constr, field_validator, model_validator
-
 # AWS SDK for Secrets Manager
 import boto3
-from botocore.exceptions import ClientError
 
 # Sentry for Error Reporting
 import sentry_sdk
+from arbiter.otel_config import get_tracer
+from botocore.exceptions import ClientError
+
+# OpenTelemetry Tracing - Use centralized configuration
+from opentelemetry.trace import Status, StatusCode
+
+# Prometheus Metrics
+from prometheus_client import Counter, Gauge, Histogram
+
+# Pydantic for input validation
+from pydantic import BaseModel, Field, constr, field_validator, model_validator
 
 # Logger initialization
 logger = logging.getLogger(__name__)

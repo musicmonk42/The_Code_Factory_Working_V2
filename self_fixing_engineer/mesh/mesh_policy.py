@@ -2,20 +2,21 @@
 Fixed mesh_policy.py with proper circuit breaker implementation
 """
 
-import os
-import sys
-import json
 import asyncio
-import re
-import random
-import time
-import hmac
 import hashlib
-import structlog
-from typing import Dict, Any, Optional, List, Type
+import hmac
+import json
+import os
+import random
+import re
+import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Type
+
+import structlog
 
 # Platform-specific imports
 try:
@@ -59,7 +60,7 @@ except ImportError:
     etcd3 = None
 
 try:
-    from google.cloud import storage, pubsub_v1
+    from google.cloud import pubsub_v1, storage
 except ImportError:
     storage, pubsub_v1 = None, None
 
@@ -69,7 +70,7 @@ except ImportError:
     BlobServiceClient = None
 
 try:
-    from pydantic import BaseModel, ValidationError, Field
+    from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     BaseModel = object
     ValidationError = Exception
@@ -79,7 +80,7 @@ except ImportError:
 
 
 try:
-    from cryptography.fernet import MultiFernet, Fernet, InvalidToken
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 except ImportError:
     MultiFernet, Fernet, InvalidToken = None, None, None
 
@@ -90,7 +91,7 @@ except ImportError:
 
 try:
     from prometheus_async.aio import time as time_metric
-    from prometheus_client import Histogram, Counter
+    from prometheus_client import Counter, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:

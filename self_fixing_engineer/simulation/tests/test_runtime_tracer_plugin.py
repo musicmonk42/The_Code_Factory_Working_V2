@@ -1,13 +1,14 @@
 # tests/test_runtime_tracer_plugin.py
 
-import pytest
 import asyncio
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path  # Added missing import
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 from prometheus_client import CollectorRegistry
 
 # Import the plugin from the parent directory
@@ -23,17 +24,16 @@ for path in plugin_paths:
         sys.path.insert(0, path)
 
 try:
-    from runtime_tracer_plugin import (
-        plugin_health,
-        analyze_runtime_behavior,
-        TRACER_CONFIG,
-        _run_target_code_in_subprocess,
-        TRACE_ANALYSIS_ATTEMPTS,
+    from runtime_tracer_plugin import (  # Added missing import
         DYNAMIC_CALLS_DETECTED,
         RUNTIME_EXCEPTIONS_CAPTURED,
+        TRACE_ANALYSIS_ATTEMPTS,
         TRACE_ANALYSIS_ERRORS,
-        # Added missing import
+        TRACER_CONFIG,
         _get_or_create_metric,
+        _run_target_code_in_subprocess,
+        analyze_runtime_behavior,
+        plugin_health,
     )
 except ImportError as e:
     print(f"Failed to import runtime_tracer_plugin. Searched in: {plugin_paths}")

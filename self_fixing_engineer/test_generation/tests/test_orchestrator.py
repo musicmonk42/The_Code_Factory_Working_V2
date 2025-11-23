@@ -1,17 +1,15 @@
 # test_generation/orchestrator/tests/test_orchestrator.py
-import pytest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
-from test_generation.orchestrator.orchestrator import (
-    GenerationOrchestrator,
-    InitializationError,
-)
-from test_generation.orchestrator.config import CONFIG
-from test_generation.orchestrator import sanitize_path
+
+import pytest
 from test_generation.backends import BackendRegistry
-from test_generation.policy_and_audit import PolicyEngine, EventBus
-from test_generation.utils import SecurityScanner, PRCreator, MutationTester
-from contextlib import asynccontextmanager
+from test_generation.orchestrator import sanitize_path
+from test_generation.orchestrator.config import CONFIG
+from test_generation.orchestrator.orchestrator import GenerationOrchestrator, InitializationError
+from test_generation.policy_and_audit import EventBus, PolicyEngine
+from test_generation.utils import MutationTester, PRCreator, SecurityScanner
 
 
 @pytest.fixture

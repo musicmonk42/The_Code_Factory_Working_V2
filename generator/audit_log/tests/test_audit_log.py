@@ -23,12 +23,12 @@ import base64
 import json
 import os
 import sys
-from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
 # --- FIX: Import uuid ---
 import uuid
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -177,9 +177,7 @@ sys.modules[utils_name] = utils_module
 # 3. Import module under test (now using stubbed backend_core)
 # --------------------------------------------------------------------------- #
 
-from generator.audit_log.audit_log import (
-    api_app,
-)
+from generator.audit_log.audit_log import api_app
 
 # gRPC protos are optional; if missing, we won't fail tests.
 try:
@@ -308,9 +306,7 @@ def mock_crypto_provider_factory(mock_software_key_master):
         ):
             # Re-initialize the global AUDIT_LOG instance after patching the factory
             # to ensure AuditLog.__init__ uses the mock.
-            from generator.audit_log.audit_log import (
-                initialize_audit_log_instance,
-            )
+            from generator.audit_log.audit_log import initialize_audit_log_instance
 
             # The global AUDIT_LOG needs to be re-initialized after the factory is mocked
             new_audit_log = initialize_audit_log_instance()

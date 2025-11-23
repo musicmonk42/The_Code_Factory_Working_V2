@@ -1,16 +1,15 @@
 # D:\SFE\self_fixing_engineer\arbiter\plugins\multi_modal_plugin.py
-import logging
 import asyncio
 import hashlib
 import json
+import logging
 import os
-import time
-import sys
 import re
-
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional, Callable, List
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 # Assuming these are available from the arbiter package root
 from arbiter.plugins.multi_modal_config import MultiModalConfig
@@ -35,24 +34,22 @@ except ImportError:
 
 # It's better to explicitly define the import paths for the sub-packages
 from .multimodal.interface import (
-    ImageProcessor,
     AudioProcessor,
-    VideoProcessor,
-    TextProcessor,
-    ProcessingResult,
-    MultiModalException,
-    InvalidInputError,
     ConfigurationError,
-    ProviderNotAvailableError,
+    ImageProcessor,
+    InvalidInputError,
+    MultiModalException,
     ProcessingError,
+    ProcessingResult,
+    ProviderNotAvailableError,
+    TextProcessor,
+    VideoProcessor,
 )
-from .multimodal.providers.default_multimodal_providers import (
-    PluginRegistry,
-)
+from .multimodal.providers.default_multimodal_providers import PluginRegistry
 
 try:
-    from prometheus_client import Counter, Histogram
     import redis.asyncio as redis
+    from prometheus_client import Counter, Histogram
 except ImportError:
     # Prometheus and Redis are optional dependencies
     Counter, Histogram, redis = None, None, None

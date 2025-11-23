@@ -1,10 +1,12 @@
-import pytest
 import asyncio
-from fastapi.testclient import TestClient
-from omnicore_engine.fastapi_app import app
-from omnicore_engine.cli import parse_args, command_handlers
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from omnicore_engine.cli import command_handlers, parse_args
+from omnicore_engine.fastapi_app import app
+from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 
 @pytest.mark.asyncio

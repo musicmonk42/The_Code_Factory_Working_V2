@@ -37,23 +37,24 @@ Key Generation:
 
 """
 
-import sys
-import os
+import argparse
 import hashlib
 import json
-import argparse
+import os
+import sys
 from datetime import datetime, timezone
 
 GENERATOR_VERSION = "2025.08.24-enterprise.1"
 
 # Optional signing
 try:
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PrivateKey,
         Ed25519PublicKey,
     )
-    from cryptography.hazmat.primitives import serialization
-    import base64
 
     HAS_CRYPTO = True
 except ImportError:

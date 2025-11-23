@@ -6,16 +6,17 @@ specifically targeting circular dependencies and dynamic imports.
 """
 
 import ast
-import os
-import logging
-import networkx as nx  # For graph operations in CycleHealer
-import sys  # For sys.exit
 import asyncio  # For running async methods in a sync context
 import hashlib
-from typing import List, Set, Optional, Tuple, Any
-from ast import NodeTransformer
+import logging
+import os
+import sys  # For sys.exit
 import threading
+from ast import NodeTransformer
 from pathlib import Path
+from typing import Any, List, Optional, Set, Tuple
+
+import networkx as nx  # For graph operations in CycleHealer
 
 # --- Guard POSIX-only imports ---
 try:
@@ -30,13 +31,13 @@ logger = logging.getLogger(__name__)
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from self_healing_import_fixer.import_fixer.compat_core import (
-        alert_operator,
-        scrub_secrets,
-        audit_logger,
-        SECRETS_MANAGER,
-    )
     from self_healing_import_fixer.import_fixer.cache_layer import get_cache
+    from self_healing_import_fixer.import_fixer.compat_core import (
+        SECRETS_MANAGER,
+        alert_operator,
+        audit_logger,
+        scrub_secrets,
+    )
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup.")
     try:
@@ -81,11 +82,9 @@ class NonCriticalError(Exception):
 # that performs signature verification and whitelisting.
 # For now, we'll assume `get_ai_refactoring_suggestion_real` is the trusted source.
 try:
+    from self_healing_import_fixer.import_fixer.fixer_ai import get_ai_patch as get_ai_patch_real
     from self_healing_import_fixer.import_fixer.fixer_ai import (
         get_ai_suggestions as get_ai_suggestions_real,
-    )
-    from self_healing_import_fixer.import_fixer.fixer_ai import (
-        get_ai_patch as get_ai_patch_real,
     )
 except ImportError as e:
     logger.critical(
@@ -807,10 +806,10 @@ if __name__ == "__main__":
     # Overwrite imports with dummy implementations
     try:
         from self_healing_import_fixer.import_fixer.compat_core import (
-            alert_operator,
-            scrub_secrets,
-            audit_logger,
             SECRETS_MANAGER,
+            alert_operator,
+            audit_logger,
+            scrub_secrets,
         )
     except ImportError:
         pass  # The outer try-except block has handled this

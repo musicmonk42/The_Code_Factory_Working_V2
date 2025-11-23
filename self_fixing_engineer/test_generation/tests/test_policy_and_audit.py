@@ -1,17 +1,12 @@
-import pytest
-import os
 import json
+import os
 import tempfile
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import objects that are safe to load at the module level
-from test_generation.policy_and_audit import (
-    redact_sensitive,
-    PolicyEngine,
-    AuditLogger,
-    EventBus,
-)
-
+from test_generation.policy_and_audit import AuditLogger, EventBus, PolicyEngine, redact_sensitive
 
 # Mark all tests as unit tests for selective running
 pytestmark = pytest.mark.unit

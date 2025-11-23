@@ -1,12 +1,12 @@
 # --- env must be set before any package import that touches Dynaconf ---
-import os
-import base64
-import zlib
 import asyncio
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+import base64
 import importlib.util
+import os
 import types  # Added for robust stub creation
+import zlib
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio

@@ -1,8 +1,8 @@
 # message_bus/cache.py
 
+import logging
 import threading
 import time
-import logging
 
 logger = logging.getLogger(__name__)
 

@@ -5,21 +5,22 @@
 
 import json
 import time
-from datetime import datetime, date, time as dt_time
+from datetime import date, datetime
+from datetime import time as dt_time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 # Import the module under test
 from arbiter.explainable_reasoner.utils import (
+    _format_multimodal_for_prompt,
+    _rule_based_fallback,
     _sanitize_context,
     _simple_text_sanitize,
-    _rule_based_fallback,
-    _format_multimodal_for_prompt,
     rate_limited,
 )
-from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 
 # --- Fixtures ---

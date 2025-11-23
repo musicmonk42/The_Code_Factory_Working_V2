@@ -1,25 +1,27 @@
-import pytest
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+# Import all necessary components for testing
+from simulation.quantum import (
+    ForecastFailureTrendParams,
+    QuantumPluginAPI,
+    QuantumRLAgent,
+    RunMutationCircuitParams,
+    alert_operator,
+    backend_client_pool,
+    check_any_backend_available,
+    check_backend_health,
+    load_quantum_credentials,
+    quantum_forecast_failure,
+    run_quantum_mutation,
+)
 
 # Assuming prometheus_client is installed for tests, or you can mock it.
 # To handle optional dependencies in tests, you can set the module-level
 # variables before each test.
 
-# Import all necessary components for testing
-from simulation.quantum import (
-    check_any_backend_available,
-    alert_operator,
-    load_quantum_credentials,
-    check_backend_health,
-    RunMutationCircuitParams,
-    ForecastFailureTrendParams,
-    run_quantum_mutation,
-    quantum_forecast_failure,
-    QuantumRLAgent,
-    QuantumPluginAPI,
-    backend_client_pool,
-)
 
 # Mark all tests as unit tests for selective running
 pytestmark = pytest.mark.unit
@@ -40,6 +42,7 @@ async def test_get_or_create_metric_success(monkeypatch):
 
     # Reload the module to apply the monkeypatch for global variables
     import importlib
+
     import simulation.quantum
 
     importlib.reload(simulation.quantum)

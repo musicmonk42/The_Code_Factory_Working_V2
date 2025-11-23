@@ -1,22 +1,23 @@
 import asyncio
 import collections
-import logging
+import hashlib
 import json
+import logging
 import os
+import random
+import statistics
 import sys
 import threading
-from datetime import datetime, timezone, timedelta
-import random
-import hashlib
-import statistics
 import traceback
-from typing import Dict, Any, Optional, List, Union, Tuple, Type
-from sqlalchemy import Column, String, JSON, DateTime
-from sqlalchemy.orm import declarative_base
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
+
 import aiofiles
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
-from tenacity import retry, stop_after_attempt, wait_exponential
 from arbiter.otel_config import get_tracer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
+from sqlalchemy import JSON, Column, DateTime, String
+from sqlalchemy.orm import declarative_base
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 try:
     import psycopg2
@@ -27,23 +28,18 @@ except ImportError:
     PSYCOPG2_AVAILABLE = False
     logging.warning("psycopg2 not available. PostgreSQL features will be disabled.")
 import aiosqlite
-from arbiter.arbiter_plugin_registry import (
-    register,
-    PlugInKind,
-    registry as arbiter_registry,
-)
+from arbiter.arbiter_plugin_registry import PlugInKind, register
+from arbiter.arbiter_plugin_registry import registry as arbiter_registry
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter.postgres_client import PostgresClient
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
-    from arbiter_plugin_registry import (
-        registry as mock_registry,
-        PlugInKind as MockPlugInKind,
-    )
-    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.agent_state import Base
+    from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter.postgres_client import PostgresClient
+    from arbiter_plugin_registry import PlugInKind as MockPlugInKind
+    from arbiter_plugin_registry import registry as mock_registry
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:

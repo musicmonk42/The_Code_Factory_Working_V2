@@ -17,35 +17,33 @@ Features:
 
 import abc
 import asyncio
-import os
-import re
-import time
 import hashlib
-import uuid
 import json
+import os
 import random
-import tempfile
-from typing import Any, Dict, Optional, List, Callable, Union, Awaitable
+import re
 import subprocess
+import tempfile
+import time
+import uuid
 from datetime import datetime, timezone
-from aiohttp import web
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # Gold Standard Imports
 import chromadb
+import tiktoken  # Imported for token counting
+from aiohttp import web
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-import tiktoken  # Imported for token counting
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import (
-    LLM_ERRORS_TOTAL,
-)
 from runner.runner_errors import LLMError
+from runner.runner_logging import add_provenance, logger
+from runner.runner_metrics import LLM_ERRORS_TOTAL
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # -----------------------------------
 

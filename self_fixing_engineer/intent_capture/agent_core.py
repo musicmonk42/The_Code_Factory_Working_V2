@@ -70,8 +70,8 @@ import os
 import re
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 from contextlib import contextmanager  # <--- ADDED contextlib IMPORT
+from typing import Any, Dict, List, Optional
 
 # --- Production-Grade Library Imports ---
 import jwt
@@ -94,12 +94,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from pydantic import BaseModel, Field
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
 
 # --- LLM Provider Imports ---
 try:
@@ -500,8 +495,8 @@ class CollaborativeAgent:
         # UPGRADE: Switched to Pinecone for scalable RAG
         if os.getenv("USE_VECTOR_MEMORY", "false").lower() == "true":
             try:
-                from pinecone import Pinecone
                 from langchain_pinecone import PineconeVectorStore
+                from pinecone import Pinecone
 
                 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
                 index_name = f"agent-sessions-{os.getenv('ENVIRONMENT', 'dev')}"

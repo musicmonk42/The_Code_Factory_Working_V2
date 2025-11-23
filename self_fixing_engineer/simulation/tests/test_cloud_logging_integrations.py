@@ -1,8 +1,9 @@
+import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
 
 # --- Third-party imports for simulating SDK errors ---
 
@@ -12,13 +13,13 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # --- Import the module under test ---
 from simulation.plugins.cloud_logging_integrations import (
-    CloudWatchLogger,
-    GCPLogger,
     AzureMonitorLogger,
     CloudLoggingAuthError,
     CloudLoggingConfigurationError,
-    get_cloud_logger,
     CloudLoggingResponseError,
+    CloudWatchLogger,
+    GCPLogger,
+    get_cloud_logger,
 )
 
 

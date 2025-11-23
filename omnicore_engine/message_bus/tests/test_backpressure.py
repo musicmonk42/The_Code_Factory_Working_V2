@@ -1,10 +1,10 @@
 # test_backpressure.py
 
 import asyncio
-import unittest
-from unittest.mock import Mock, AsyncMock, patch
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

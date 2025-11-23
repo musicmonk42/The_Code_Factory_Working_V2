@@ -1,7 +1,7 @@
 # simulation/tests/test_viz.py
 
-import sys
 import os
+import sys
 
 # Add the simulation/plugins directory to the path
 current_file = os.path.abspath(__file__)
@@ -13,23 +13,23 @@ plugins_dir = os.path.join(simulation_dir, "plugins")
 if plugins_dir not in sys.path:
     sys.path.insert(0, plugins_dir)
 
-# Now import viz directly since we added plugins dir to path
-import viz
-
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+# Now import viz directly since we added plugins dir to path
+import viz
 from viz import (
     _load_config,
     _scrub_metadata,
-    validate_panel_id,
-    plot_flakiness_trend,
-    plot_coverage_history,
-    plot_metric_trend,
     batch_export_panels,
     get_registered_viz_panels,
+    plot_coverage_history,
+    plot_flakiness_trend,
+    plot_metric_trend,
+    validate_panel_id,
 )
 
 # ==============================================================================

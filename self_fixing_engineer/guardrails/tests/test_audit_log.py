@@ -1,14 +1,15 @@
 # tests/test_audit_log.py
-import os
-import json
-import hashlib
 import asyncio
 import base64
-import sys
+import hashlib
+import json
 import logging
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
+import os
 import shutil
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Fix import path for audit_log module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

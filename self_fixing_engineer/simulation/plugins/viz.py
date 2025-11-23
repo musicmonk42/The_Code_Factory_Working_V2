@@ -1,16 +1,16 @@
 # simulation/viz.py
+import asyncio
+import functools
+import hashlib
+import json
+import logging
 import os
 import re
-import json
-import hashlib
-import asyncio
-import logging
 import sys
-from typing import Dict, Any, List, Optional, Callable, Tuple, Union
-import functools
-import uuid
 import time
+import uuid
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Conditional Imports for Enhancements ---
 try:
@@ -41,12 +41,7 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -66,7 +61,7 @@ except ImportError:
 
 
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     PROMETHEUS_AVAILABLE = True
 

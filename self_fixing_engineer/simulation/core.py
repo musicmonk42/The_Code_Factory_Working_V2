@@ -1,26 +1,27 @@
 # simulation/core.py
-import os
-import sys
-import json
 import argparse
-import logging
 import asyncio
-import yaml
-import getpass
-import re
-from datetime import datetime
-from typing import Dict, Any, Optional, List, Callable
 import functools
-import traceback
-from logging.handlers import RotatingFileHandler
-import time
-import requests
+import getpass
+import json
+import logging
+import os
+import re
+import sys
 import threading
+import time
+import traceback
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from typing import Any, Callable, Dict, List, Optional
+
+import requests
+import yaml
 
 # --- Dependency Availability Checks ---
 try:
-    from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
 
     WATCHDOG_AVAILABLE = True
 except ImportError:
@@ -75,7 +76,7 @@ except ImportError:
 
 # --- Tenacity for Retries ---
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, reraise
+    from tenacity import reraise, retry, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -94,14 +95,11 @@ except ImportError:
         return None
 
 
+from .agentic import run_simulation_swarm
+
 # Import components from the simulation package (use relative imports)
 from .runners import run_agent
-from .agentic import run_simulation_swarm
-from .utils import (
-    find_files_by_pattern,
-    summarize_result,
-    save_sim_result,
-)
+from .utils import find_files_by_pattern, save_sim_result, summarize_result
 
 # Fix for DLT_LOGGER_AVAILABLE not being defined
 # Note: audit_log.py doesn't exist in simulation, use fallback

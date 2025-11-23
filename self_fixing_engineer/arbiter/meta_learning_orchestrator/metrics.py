@@ -1,9 +1,8 @@
 import logging
 import os
-from typing import Optional, Tuple, Dict, Any
+from typing import Any, Dict, Optional, Tuple
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
-from prometheus_client import multiprocess
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, multiprocess
 
 logger = logging.getLogger(__name__)
 

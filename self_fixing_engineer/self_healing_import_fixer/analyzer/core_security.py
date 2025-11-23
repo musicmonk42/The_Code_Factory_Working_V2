@@ -1,14 +1,14 @@
-import os
-import subprocess
+import asyncio
+import hashlib
 import json
 import logging
-import sys
+import os
 import shutil
-from typing import Dict, List, Any, Optional, Tuple
+import subprocess
+import sys
 from datetime import datetime
 from shlex import quote
-import hashlib
-import asyncio
+from typing import Any, Dict, List, Optional, Tuple
 
 # Make Redis optional
 try:
@@ -55,8 +55,8 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from .core_utils import alert_operator, scrub_secrets
     from .core_secrets import SECRETS_MANAGER
+    from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for core_security: {e}. Aborting startup.")
     try:

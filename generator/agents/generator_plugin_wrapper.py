@@ -22,35 +22,26 @@ Author: Code Factory Team
 """
 
 import logging
-import time
-import threading
 import os
-import uuid
-from typing import Dict, Any, List  # <-- FIX: Moved 'List' here
-from datetime import datetime, timezone
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError as PydanticValidationError,
-    field_validator,
-    ConfigDict,
-)
-from prometheus_client import Counter, Histogram
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
 import re
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List  # <-- FIX: Moved 'List' here
 
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ValidationError as PydanticValidationError
+from pydantic import field_validator
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from omnicore_engine.plugin_registry import plugin, PlugInKind, PLUGIN_REGISTRY
+from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, plugin
 
 # Removed direct agent imports to rely on the PLUGIN_REGISTRY for decoupling
 # from .codegen_agent.codegen_agent import generate_code

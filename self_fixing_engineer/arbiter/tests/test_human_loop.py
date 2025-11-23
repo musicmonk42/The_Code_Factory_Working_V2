@@ -1,19 +1,20 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
 import hashlib
 from datetime import datetime, timezone
-from pydantic import ValidationError
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the actual classes from human_loop.py
 from arbiter.human_loop import (
+    SECRET_SALT,
+    DummyDBClient,
+    FeedbackManager,
     HumanInLoop,
     HumanInLoopConfig,
-    FeedbackManager,
-    DummyDBClient,
     WebSocketManager,
-    SECRET_SALT,
 )
+from pydantic import ValidationError
 
 
 # Fixture for HumanInLoopConfig

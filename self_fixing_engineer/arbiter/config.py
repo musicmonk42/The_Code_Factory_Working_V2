@@ -3,20 +3,21 @@
 # File: arbiter/config.py
 
 
-import os
-import logging
 import json
-import yaml
+import logging
+import os
 import threading
-from typing import Dict, Any, Optional, List, Tuple, ClassVar
-from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
-from pydantic import Field, HttpUrl, SecretStr, field_validator
 from enum import Enum
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
+
 import aiofiles
-from tenacity import retry, stop_after_attempt, wait_exponential
 import pydantic
+import yaml
+from cryptography.fernet import Fernet, InvalidToken
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from pydantic import Field, HttpUrl, SecretStr, field_validator
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Add compatibility layer
 if hasattr(pydantic, "VERSION"):
@@ -41,8 +42,8 @@ tracer = get_tracer(__name__)
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
     from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:

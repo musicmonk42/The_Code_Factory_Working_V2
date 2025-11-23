@@ -13,14 +13,15 @@ Tests cover:
 - Error handling and retries
 """
 
-import sys
-import pytest
 import asyncio
-import tempfile
 import re  # Added for smart BeautifulSoup mock
+import sys
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from typing import Dict, Any, Tuple, Optional
+from typing import Any, Dict, Optional, Tuple
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # === CRITICAL FIX: Create proper mock classes for inheritance ===
 
@@ -228,14 +229,16 @@ builtins.abstractabstractmethod = abstractmethod  # Typo in source file on line 
 with patch("generator.agents.docgen_agent.docgen_response_validator.tracer", mock_tracer):
     # Import modules under test
     from generator.agents.docgen_agent.docgen_response_validator import (
-        ResponseValidator,
-        scrub_text,
-        PluginRegistry,
-        MarkdownPlugin,
         RSTPlugin,  # FIXED: Changed from ReStructuredTextPlugin to RSTPlugin
-        HTMLPlugin,
-        parse_llm_response,
+    )
+    from generator.agents.docgen_agent.docgen_response_validator import (
         DEFAULT_SCHEMA,
+        HTMLPlugin,
+        MarkdownPlugin,
+        PluginRegistry,
+        ResponseValidator,
+        parse_llm_response,
+        scrub_text,
     )
 
 
@@ -964,9 +967,7 @@ async def test_process_and_validate_response_malformed_response(temp_repo):
 async def test_validation_increments_metrics(mock_llm_response, temp_repo):
     """Test that validation increments Prometheus metrics."""
     # Just check that the metrics object exists and is accessible
-    from generator.agents.docgen_agent.docgen_response_validator import (
-        process_calls_total,
-    )
+    from generator.agents.docgen_agent.docgen_response_validator import process_calls_total
 
     validator = ResponseValidator(schema=DEFAULT_SCHEMA)
 

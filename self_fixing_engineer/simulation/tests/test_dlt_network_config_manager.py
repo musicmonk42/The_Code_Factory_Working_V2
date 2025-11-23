@@ -3,11 +3,12 @@
 Test suite for the DLT Network Config Manager module.
 """
 
+import json
 import os
 import sys
-import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))

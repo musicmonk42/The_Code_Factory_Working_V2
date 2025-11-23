@@ -1,25 +1,27 @@
 from __future__ import annotations
-import os
-import sys
+
+import asyncio
+import contextlib
+import functools
+import importlib
+import importlib.metadata
+import importlib.util
 import json
 import logging
-import importlib
-import importlib.util
-import subprocess
-import tempfile
-import re
-import asyncio
-import functools
-import time
-from datetime import datetime
-from typing import Dict, Any, Optional, TypedDict
-from functools import lru_cache
 import logging.handlers
-from pathlib import Path
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
 import types
-import contextlib
+from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, Optional, TypedDict
+
 import tenacity
-import importlib.metadata
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,7 @@ _config_source: str = "SimpleNamespace"
 # FIX: Prefer Pydantic due to Dynaconf Pylance issues, and it's a more modern approach.
 # Pydantic preferred due to Dynaconf Pylance issues.
 with contextlib.suppress(ImportError):
-    from pydantic_settings import BaseSettings, SettingsConfigDict, Field
+    from pydantic_settings import BaseSettings, Field, SettingsConfigDict
 
     class TestAgentConfig(BaseSettings):
         model_config = SettingsConfigDict(
@@ -225,7 +227,7 @@ audit_logger: Optional[Any] = None
 # Prometheus metrics for health checks and dependency checks
 try:
     import prometheus_client
-    from prometheus_client import Gauge, Counter, registry
+    from prometheus_client import Counter, Gauge, registry
 
     try:
         dependency_status = Gauge(

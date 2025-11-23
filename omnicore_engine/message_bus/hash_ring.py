@@ -3,7 +3,7 @@
 import bisect
 import hashlib
 import logging
-from typing import List, Callable
+from typing import Callable, List
 
 logger = logging.getLogger(__name__)
 

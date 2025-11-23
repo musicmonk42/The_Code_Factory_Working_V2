@@ -16,18 +16,18 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
-from cryptography.fernet import Fernet
-from pydantic import ValidationError
 
+import pytest
+from arbiter.policy.config import ArbiterConfig
 from arbiter.policy.policy_manager import (
-    PolicyManager,
-    PolicyConfig,
     DomainRule,
     LLMRules,
+    PolicyConfig,
+    PolicyManager,
     TrustRules,
 )
-from arbiter.policy.config import ArbiterConfig
+from cryptography.fernet import Fernet
+from pydantic import ValidationError
 
 
 @pytest.fixture

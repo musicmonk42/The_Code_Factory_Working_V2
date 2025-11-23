@@ -15,37 +15,36 @@ Industry-standard test suite for runner_file_utils.py (current version).
 
 import logging
 import os
+import platform  # <-- FIX: Import platform
 import shutil
 import tempfile
-import platform  # <-- FIX: Import platform
+
+# --- FIX: Import unittest ---
+import unittest
 from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest  # <-- FIX: Import pytest
 
-# --- FIX: Import unittest ---
-import unittest
-
-# --- END FIX ---
-
 # --------------------------------------------------------------------------- #
 # Import ONLY the symbols that exist in the current file
 # --------------------------------------------------------------------------- #
-from runner.runner_file_utils import (
-    FILE_INTEGRITY_STORE,
-    compute_file_hash,
-    load_file_content,
-    save_file_content,
-    # --- FIX: Import modules needed for tests ---
-    HAS_PDF,
-    HAS_OCR,
+from runner.runner_file_utils import (  # --- FIX: Import modules needed for tests ---; --- END FIX ---
     FILE_HANDLERS,
+    FILE_INTEGRITY_STORE,
+    HAS_OCR,
+    HAS_PDF,
     Fernet,
-    rollback_to_version,
+    compute_file_hash,
     delete_compliant_data,
-    # --- END FIX ---
+    load_file_content,
+    rollback_to_version,
+    save_file_content,
 )
+
+# --- END FIX ---
+
 
 # --------------------------------------------------------------------------- #
 # Logging

@@ -1,21 +1,21 @@
 # generator/runner/tests/test_runner_integration.py
 
-import unittest
-from unittest.mock import patch, AsyncMock
-from pathlib import Path
 import tempfile
 import time
-
-# --- Import Components Under Test ---
-# Import the main orchestrator
-from runner.runner_core import Runner
+import unittest
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 # Import the configuration and contracts
 from runner.runner_config import RunnerConfig
 from runner.runner_contracts import TaskPayload, TaskResult
 
+# --- Import Components Under Test ---
+# Import the main orchestrator
+from runner.runner_core import Runner
+
 # Import the schemas for mocking parser returns
-from runner.runner_parsers import TestReportSchema, CoverageReportSchema, ParserInfo
+from runner.runner_parsers import CoverageReportSchema, ParserInfo, TestReportSchema
 
 # Import the specific backend we will tell the Runner to use
 

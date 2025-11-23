@@ -1,8 +1,9 @@
 # tests/test_model_deployment_plugin.py
 
-import pytest
 import json
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # Import the plugin using the correct module path
 from simulation.plugins.model_deployment_plugin import (

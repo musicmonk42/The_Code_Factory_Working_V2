@@ -1,11 +1,12 @@
 # tests/test_cross_repo_refactor_plugin.py
 
-import pytest
 import os
-import tempfile
-from unittest.mock import patch, MagicMock, AsyncMock
-from pathlib import Path
 import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the plugin from the project's root directory.
 # This logic is adjusted to work even if the test file is located in a nested
@@ -16,14 +17,14 @@ try:
     sys.modules["arbiter.audit_log"] = MagicMock()
     from simulation.plugins import cross_repo_refactor_plugin
     from simulation.plugins.cross_repo_refactor_plugin import (
-        plugin_health,
-        perform_cross_repo_refactor,
-        GitRepoManager,
-        _validate_refactor_plan,
-        _mask_token_in_url,
-        _is_safe_path,
-        TENACITY_AVAILABLE,
         GITPYTHON_AVAILABLE,
+        TENACITY_AVAILABLE,
+        GitRepoManager,
+        _is_safe_path,
+        _mask_token_in_url,
+        _validate_refactor_plan,
+        perform_cross_repo_refactor,
+        plugin_health,
     )
 except ImportError as e:
     # If imports fail, provide a clear message. This can happen if the

@@ -3,18 +3,19 @@
 Complete test suite for event_bus module with proper cleanup.
 """
 
+import asyncio
+import atexit
+import hashlib
+import hmac
+import importlib
+import json
 import os
 import sys
-import json
-import asyncio
-import pytest
 import time
-import hmac
-import hashlib
-import importlib
-import atexit
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Set environment BEFORE any imports
 os.environ["PYTEST_CURRENT_TEST"] = "test"

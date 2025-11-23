@@ -29,35 +29,36 @@ Commands:
 """
 
 import argparse
-import json
 import asyncio
-import sys
-import os
-import time
-import yaml
-import uvicorn
-from typing import Dict, List, Any, Optional, Coroutine, Callable, Tuple
-from pathlib import Path
 import hashlib
-import redis.asyncio as redis
-from datetime import datetime
-from circuitbreaker import circuit
-from omnicore_engine.retry_compat import retry
-import uuid
+import json
+import os
 import re
 import shlex
+import sys
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+
+import redis.asyncio as redis
+import uvicorn
+import yaml
+from circuitbreaker import circuit
 
 # OmniCore imports
-from omnicore_engine.core import (
+from omnicore_engine.core import (  # Import logger, safe_serialize, and settings from core
     logger,
     safe_serialize,
     settings,
-)  # Import logger, safe_serialize, and settings from core
+)
+from omnicore_engine.retry_compat import retry
 
 try:
     from omnicore_engine.core import (
-        omnicore_engine as OmniCoreOmega_instance,
-    )  # Import the singleton instance
+        omnicore_engine as OmniCoreOmega_instance,  # Import the singleton instance
+    )
 except ImportError:
     OmniCoreOmega_instance = None
 
@@ -73,7 +74,7 @@ from omnicore_engine.message_bus.message_types import Message
 
 # Import the message_bus_cli from message_bus.py
 try:
-    from omnicore_engine.message_bus import message_bus_cli, RICH_CLI_AVAILABLE
+    from omnicore_engine.message_bus import RICH_CLI_AVAILABLE, message_bus_cli
 
     if not RICH_CLI_AVAILABLE:
         logger.warning("Rich CLI tools not available. Message bus CLI commands will be disabled.")
@@ -1106,10 +1107,7 @@ def main():
     async def _run_plugin_install_cmd(current_args: argparse.Namespace):
         engine_instance = await _initialize_omnicore_engine()
         try:
-            from omnicore_engine.plugin_registry import (
-                PluginMarketplace,
-                PluginVersionManager,
-            )
+            from omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
         except ImportError:
             logger.error("PluginMarketplace and PluginVersionManager not available")
             return {"error": "Plugin marketplace not available"}
@@ -1133,10 +1131,7 @@ def main():
     async def _run_plugin_rate_cmd(current_args: argparse.Namespace):
         engine_instance = await _initialize_omnicore_engine()
         try:
-            from omnicore_engine.plugin_registry import (
-                PluginMarketplace,
-                PluginVersionManager,
-            )
+            from omnicore_engine.plugin_registry import PluginMarketplace, PluginVersionManager
         except ImportError:
             logger.error("PluginMarketplace and PluginVersionManager not available")
             return {"error": "Plugin marketplace not available"}

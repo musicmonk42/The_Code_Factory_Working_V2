@@ -1,23 +1,21 @@
 # test_e2e_multimodal.py
-import pytest
 import asyncio
-import tempfile
 import os
+import tempfile
 from unittest.mock import Mock, patch
+
+import pytest
+from arbiter.plugins.multi_modal_config import MultiModalConfig
 
 # Import all the components we need to test
 from arbiter.plugins.multi_modal_plugin import MultiModalPlugin
-from arbiter.plugins.multi_modal_config import MultiModalConfig
-from arbiter.plugins.multimodal.interface import (
-    ProcessingResult,
-    DummyMultiModalPlugin,
-)
+from arbiter.plugins.multimodal.interface import DummyMultiModalPlugin, ProcessingResult
 from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
-    PluginRegistry,
-    DefaultImageProcessor,
     DefaultAudioProcessor,
-    DefaultVideoProcessor,
+    DefaultImageProcessor,
     DefaultTextProcessor,
+    DefaultVideoProcessor,
+    PluginRegistry,
 )
 
 # Ensure providers are registered
@@ -28,11 +26,11 @@ if not PluginRegistry._processors.get("image", {}).get("default"):
     PluginRegistry.register_processor("text", "default", DefaultTextProcessor)
 
 from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
-    PluginRegistry,
-    DefaultImageProcessor,
     DefaultAudioProcessor,
-    DefaultVideoProcessor,
+    DefaultImageProcessor,
     DefaultTextProcessor,
+    DefaultVideoProcessor,
+    PluginRegistry,
 )
 
 

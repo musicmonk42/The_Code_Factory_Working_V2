@@ -1,38 +1,38 @@
 # agents/codegen_agent.py
 import asyncio
+import json
 import logging
 import logging.handlers
 import os
-import json
 import re
 import shutil
 import sqlite3
 import sys
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Tuple
-import uuid
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Third-party libraries (MINIMAL SET RETAINED)
 import aiohttp
-import yaml
-from jinja2 import TemplateNotFound
 import redis.asyncio as aioredis
+import yaml
 from fastapi import FastAPI, HTTPException
-from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    generate_latest,
-    start_http_server,
-    REGISTRY,
-)
+from jinja2 import TemplateNotFound
 
 # Observability libraries
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from prometheus_client import (
+    REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    start_http_server,
+)
 
 try:
     from opentelemetry.exporter.jaeger.thrift import JaegerExporter
@@ -41,23 +41,18 @@ except ImportError:
 
 # Internal imports
 from .codegen_prompt import build_code_generation_prompt
-from .codegen_response_handler import parse_llm_response, add_traceability_comments
+from .codegen_response_handler import add_traceability_comments, parse_llm_response
 
 # --- REMOVED OBSOLETE IMPORT: from .codegen_llm_call import CacheManager ---
 
 # --- RUNNER UTILITY IMPORTS (ENFORCED) ---
 try:
     # --- FIX: Changed imports to be ABSOLUTE from the 'generator' root ---
-    from generator.runner.runner_logging import log_audit_event
-    from generator.runner.runner_security_utils import scan_for_vulnerabilities
-    from generator.runner.llm_client import call_llm_api, call_ensemble_api
-
     # CircuitBreaker is in llm_client, but if you need the class itself:
-    from generator.runner.llm_client import CircuitBreaker
-    from generator.runner.runner_metrics import (
-        LLM_RATE_LIMIT_EXCEEDED,
-        LLM_CIRCUIT_STATE,
-    )
+    from generator.runner.llm_client import CircuitBreaker, call_ensemble_api, call_llm_api
+    from generator.runner.runner_logging import log_audit_event
+    from generator.runner.runner_metrics import LLM_CIRCUIT_STATE, LLM_RATE_LIMIT_EXCEEDED
+    from generator.runner.runner_security_utils import scan_for_vulnerabilities
 except ImportError as e:
     # Hard fail: this agent is not allowed to run without the runner stack.
     raise ImportError(
@@ -67,7 +62,7 @@ except ImportError as e:
 
 # Internal component dummy/migration note
 try:
-    from omnicore_engine.plugin_registry import plugin, PlugInKind
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
 
     PLUGIN_AVAILABLE = True
 except ImportError:

@@ -11,13 +11,14 @@ Tests cover end-to-end workflows:
 - Error recovery and retries
 """
 
-import sys
-import pytest
 import json
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from typing import Tuple, Optional, Any
+from typing import Any, Optional, Tuple
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
 sys.modules["runner"] = MagicMock()
@@ -44,7 +45,6 @@ builtins.abstractabstractmethod = abstractmethod  # Typo in source file on line 
 from generator.agents.docgen_agent.docgen_agent import DocGenAgent, generate
 from generator.agents.docgen_agent.docgen_prompt import DocGenPromptAgent
 from generator.agents.docgen_agent.docgen_response_validator import ResponseValidator
-
 
 # =============================================================================
 # FIXTURES

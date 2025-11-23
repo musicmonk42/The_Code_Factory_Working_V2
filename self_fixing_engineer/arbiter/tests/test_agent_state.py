@@ -5,18 +5,17 @@ Uses import hooks to properly isolate the module from its dependencies
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import random
-import importlib.util
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
+from sqlalchemy.orm import sessionmaker
 
 # ===========================
 # SECTION 1: Import agent_state with mocked dependencies

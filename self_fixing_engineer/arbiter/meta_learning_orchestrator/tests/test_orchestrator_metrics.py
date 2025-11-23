@@ -1,15 +1,11 @@
 import logging
 import os
-import pytest
-from pytest_mock import MockerFixture
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
-from typing import Dict
 import sys
+from typing import Dict
+
+import pytest
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(
@@ -68,9 +64,7 @@ def parse_metrics_output(metrics_text: str) -> Dict[str, float]:
 )
 def test_get_or_create_metric_internal(metric_class, name, doc, labelnames, buckets, caplog):
     """Test _get_or_create_metric_internal creates metrics correctly."""
-    from arbiter.meta_learning_orchestrator.metrics import (
-        _get_or_create_metric_internal,
-    )
+    from arbiter.meta_learning_orchestrator.metrics import _get_or_create_metric_internal
 
     caplog.set_level(logging.WARNING)
     wrapped_metric = _get_or_create_metric_internal(metric_class, name, doc, labelnames, buckets)
@@ -92,9 +86,7 @@ def test_get_or_create_metric_internal(metric_class, name, doc, labelnames, buck
 )
 def test_get_or_create_metric_type_mismatch(metric_class, name, doc, caplog):
     """Test _get_or_create_metric_internal handles type mismatches."""
-    from arbiter.meta_learning_orchestrator.metrics import (
-        _get_or_create_metric_internal,
-    )
+    from arbiter.meta_learning_orchestrator.metrics import _get_or_create_metric_internal
 
     caplog.set_level(logging.WARNING)
     # Create a Counter first
@@ -134,22 +126,22 @@ def test_metric_registry_global_labels(metric_registry):
 def get_metrics_for_test():
     """Helper function to import metrics when needed."""
     from arbiter.meta_learning_orchestrator.metrics import (
-        ML_INGESTION_COUNT,
-        ML_TRAINING_TRIGGER_COUNT,
-        ML_TRAINING_SUCCESS_COUNT,
-        ML_TRAINING_FAILURE_COUNT,
-        ML_EVALUATION_COUNT,
-        ML_DEPLOYMENT_TRIGGER_COUNT,
-        ML_DEPLOYMENT_SUCCESS_COUNT,
-        ML_DEPLOYMENT_FAILURE_COUNT,
-        ML_ORCHESTRATOR_ERRORS,
-        ML_CURRENT_MODEL_VERSION,
-        ML_DATA_QUEUE_SIZE,
-        ML_DEPLOYMENT_RETRIES_EXHAUSTED,
-        ML_LEADER_STATUS,
         ML_AUDIT_EVENTS_TOTAL,
         ML_AUDIT_HASH_MISMATCH,
         ML_AUDIT_SIGNATURE_MISMATCH,
+        ML_CURRENT_MODEL_VERSION,
+        ML_DATA_QUEUE_SIZE,
+        ML_DEPLOYMENT_FAILURE_COUNT,
+        ML_DEPLOYMENT_RETRIES_EXHAUSTED,
+        ML_DEPLOYMENT_SUCCESS_COUNT,
+        ML_DEPLOYMENT_TRIGGER_COUNT,
+        ML_EVALUATION_COUNT,
+        ML_INGESTION_COUNT,
+        ML_LEADER_STATUS,
+        ML_ORCHESTRATOR_ERRORS,
+        ML_TRAINING_FAILURE_COUNT,
+        ML_TRAINING_SUCCESS_COUNT,
+        ML_TRAINING_TRIGGER_COUNT,
     )
 
     return [
@@ -320,10 +312,10 @@ def test_invalid_label_names(metric_registry, caplog):
 def test_metrics_exposition_format():
     """Test metrics are correctly formatted in Prometheus exposition format."""
     from arbiter.meta_learning_orchestrator.metrics import (
-        ML_INGESTION_COUNT,
         ML_AUDIT_EVENTS_TOTAL,
         ML_CURRENT_MODEL_VERSION,
         ML_EVALUATION_LATENCY,
+        ML_INGESTION_COUNT,
     )
 
     # Get current values to calculate increments

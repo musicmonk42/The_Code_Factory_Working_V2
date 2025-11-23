@@ -1,15 +1,16 @@
+import asyncio
+import inspect
+import logging
 import os
+import sys
+import uuid
 from pathlib import Path
+
+from arbiter.config import ArbiterConfig
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-import logging
-import asyncio
-import sys
-import inspect
-import uuid
 
 from .plugin_registry import PluginRegistry
-from arbiter.config import ArbiterConfig
 
 # Initialize the configuration object
 settings = ArbiterConfig()

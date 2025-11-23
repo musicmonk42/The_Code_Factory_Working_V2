@@ -10,34 +10,33 @@ A unified, lazy, resilient cache abstraction.
 No import-time Redis dependency; all cache clients are acquired at runtime via get_cache(...).
 """
 
-import os
-import json
-import time
-import hashlib
-import contextlib
-import re
-from pathlib import Path
-from typing import Optional, Dict, Any, Sequence
 import asyncio
-import uuid
+import contextlib
+import hashlib
+import json
+import os
+import re
 import sys
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Dict, Optional, Sequence
 
 from .compat_core import (
-    alert_operator,
+    PRODUCTION_MODE,
     SECRETS_MANAGER,
+    _validate_env_var,
+    alert_operator,
     get_audit_logger,
     get_json_logger,
-    PRODUCTION_MODE,
-    get_telemetry_tracer,
     get_prometheus_metrics,
-    _validate_env_var,
+    get_telemetry_tracer,
 )
-
 
 # redis (optional)
 try:
     import redis.asyncio as _redis
-    from redis.exceptions import RedisError, ConnectionError
+    from redis.exceptions import ConnectionError, RedisError
 
     _HAS_REDIS = True
 except Exception:
@@ -52,12 +51,12 @@ except Exception:
 # tenacity (optional)
 try:
     from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
         RetryError,
         after_log,
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
     )
 
     _HAS_TENACITY = True

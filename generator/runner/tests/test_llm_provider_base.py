@@ -9,14 +9,10 @@ Covers:
 """
 
 import unittest
-from unittest.mock import patch, AsyncMock
-from typing import (
-    Dict,
-    Any,
-    AsyncGenerator,
-    Union,
-)  # FIX: Added Union and List
-from runner.llm_provider_base import LLMProvider, LLMResult, LLMStream, LLMResponse
+from typing import Any, AsyncGenerator, Dict, Union  # FIX: Added Union and List
+from unittest.mock import AsyncMock, patch
+
+from runner.llm_provider_base import LLMProvider, LLMResponse, LLMResult, LLMStream
 
 
 # --- 1. CONFORMING MOCK CLASS ---

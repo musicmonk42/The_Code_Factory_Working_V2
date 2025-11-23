@@ -1,13 +1,10 @@
-from self_healing_import_fixer.analyzer.core_report import (
-    ReportGenerator,
-    AnalyzerCriticalError,
-    app,  # for Flask test client
-)
-
-import pytest
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+from self_healing_import_fixer.analyzer.core_report import app  # for Flask test client
+from self_healing_import_fixer.analyzer.core_report import AnalyzerCriticalError, ReportGenerator
 
 
 # --- ReportGenerator Initialization Tests ---

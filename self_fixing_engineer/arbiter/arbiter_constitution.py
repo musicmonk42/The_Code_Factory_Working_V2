@@ -1,7 +1,7 @@
 # arbiter_constitution.py
 
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 # --- Arbiter Constitution Text (Static, Read-Only) ---
 ARB_CONSTITUTION = """

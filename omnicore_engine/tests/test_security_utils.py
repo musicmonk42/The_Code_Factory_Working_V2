@@ -3,31 +3,32 @@ Test suite for omnicore_engine/security_utils.py
 Tests enterprise security utilities including crypto, auth, and validation.
 """
 
-import pytest
-import os
-import time
-import json
 import base64
-from unittest.mock import Mock, patch
+import json
+import os
 
 # Add the parent directory to path for imports
 import sys
+import time
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.security_utils import (
-    SecurityException,
     AuthenticationError,
     AuthorizationError,
-    EncryptionError,
-    ValidationError,
-    RateLimitError,
-    HashAlgorithm,
     EncryptionAlgorithm,
+    EncryptionError,
     EnterpriseSecurityUtils,
+    HashAlgorithm,
     RateLimiter,
+    RateLimitError,
     SecureSessionManager,
     SecurityAuditLogger,
+    SecurityException,
+    ValidationError,
     get_security_utils,
     require_authentication,
     require_authorization,
@@ -494,11 +495,11 @@ class TestUtilityFunctions:
     def test_convenience_functions(self):
         """Test convenience function exports"""
         from omnicore_engine.security_utils import (
+            decrypt,
+            encrypt,
+            generate_token,
             hash_password,
             verify_password,
-            generate_token,
-            encrypt,
-            decrypt,
         )
 
         # These should be callable

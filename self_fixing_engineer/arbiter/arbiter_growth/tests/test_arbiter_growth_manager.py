@@ -7,26 +7,23 @@ Tests the core growth tracking and management functionality.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
-import pytest
-import pytest_asyncio
-
-from arbiter.arbiter_growth.exceptions import (
-    OperationQueueFullError,
-    RateLimitError,
-    CircuitBreakerOpenError,
-    AuditChainTamperedError,
-)
-from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
-from arbiter.arbiter_growth.models import GrowthEvent
-from arbiter.arbiter_growth.metrics import (
-    GROWTH_SAVE_ERRORS,
-    GROWTH_ANOMALY_SCORE,
-)
-from pybreaker import CircuitBreakerListener
 
 # Add HealthStatus enum if not in manager
 from enum import Enum
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+import pytest_asyncio
+from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
+from arbiter.arbiter_growth.exceptions import (
+    AuditChainTamperedError,
+    CircuitBreakerOpenError,
+    OperationQueueFullError,
+    RateLimitError,
+)
+from arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_SAVE_ERRORS
+from arbiter.arbiter_growth.models import GrowthEvent
+from pybreaker import CircuitBreakerListener
 
 
 class HealthStatus(Enum):

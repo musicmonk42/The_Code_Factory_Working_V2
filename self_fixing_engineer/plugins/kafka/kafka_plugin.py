@@ -4,26 +4,26 @@ Kafka Plugin (production-ready)
 
 from __future__ import annotations
 
-import os
-import sys
-import json
-import hmac
-import math
-import uuid
 import asyncio
-import random
-import logging
-import hashlib
 import contextlib
+import hashlib
+import hmac
+import json
+import logging
+import math
+import os
+import random
+import sys
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---- Optional core utilities (graceful fallbacks for dev/tests)
 try:
-    from core_utils import alert_operator, scrub_secrets
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import alert_operator, scrub_secrets
 except ImportError:
 
     def alert_operator(msg: str, level: str = "WARNING") -> None:
@@ -45,7 +45,7 @@ except ImportError:
 
 # ---- Optional plugin registry (no-op if unavailable)
 try:
-    from omnicore_engine.plugin_registry import plugin, PlugInKind
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
 
     def plugin(**_kwargs):

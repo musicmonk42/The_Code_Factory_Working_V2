@@ -5,18 +5,18 @@ Enterprise-grade secrets management module.
 Provides secure storage, retrieval, and rotation of sensitive credentials.
 """
 
-import os
 import base64
-import time
 import logging
-from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime
-from dataclasses import dataclass, field
-from enum import Enum
-import threading
-from pathlib import Path
-import secrets
+import os
 import re
+import secrets
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 # Third-party imports with graceful fallbacks
 try:
@@ -36,8 +36,8 @@ except ImportError:
     VAULT_AVAILABLE = False
 
 try:
-    from azure.keyvault.secrets import SecretClient
     from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
 
     AZURE_AVAILABLE = True
 except ImportError:

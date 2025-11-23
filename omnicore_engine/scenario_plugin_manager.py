@@ -1,10 +1,11 @@
-import logging
 import asyncio
-from typing import Any, Dict, Optional, Type
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from pydantic_settings import BaseSettings
+from typing import Any, Dict, Optional, Type
+
 from arbiter.config import ArbiterConfig
+from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +87,7 @@ def get_plugin_metrics() -> dict:
     This is a placeholder that would interact with Prometheus or other metrics systems.
     """
     try:
-        from omnicore_engine.metrics import (
-            get_plugin_metrics as actual_get_plugin_metrics,
-        )
+        from omnicore_engine.metrics import get_plugin_metrics as actual_get_plugin_metrics
 
         return actual_get_plugin_metrics()
     except ImportError:
@@ -212,10 +211,7 @@ class OmniCoreEngine:
             "audit", ExplainAudit, system_audit_merkle_tree=system_audit_merkle_tree
         )
 
-        from omnicore_engine.plugin_registry import (
-            PLUGIN_REGISTRY,
-            start_plugin_observer,
-        )
+        from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, start_plugin_observer
 
         PLUGIN_REGISTRY.db = database_instance
 
@@ -358,7 +354,6 @@ class OmniCoreEngine:
 
         # The original code had get_plugin_for_task, which is not a standard method.
         # Assuming a more general way to find a plugin.
-
         # This is a placeholder for the actual logic to find and execute a plugin.
         plugin_instance = (
             PLUGIN_REGISTRY.get_plugin_for_task(task_name)

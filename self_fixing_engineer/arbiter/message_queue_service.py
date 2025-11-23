@@ -3,20 +3,16 @@ import json
 import logging
 import os
 import sys
-import time
 import threading
+import time
 from datetime import datetime
-from typing import Dict, Any, Optional, Callable, List, Coroutine, Union, Tuple, Type
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-from cryptography.fernet import Fernet, InvalidToken
-from aiolimiter import AsyncLimiter
-from prometheus_client import Counter, Histogram, Gauge, REGISTRY
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
+
 import aiohttp
+from aiolimiter import AsyncLimiter
+from cryptography.fernet import Fernet, InvalidToken
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # --- Conditional Imports for Backends ---
 try:
@@ -28,7 +24,7 @@ except ImportError:
     REDIS_STREAMS_AVAILABLE = False
 
 try:
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     from aiokafka.errors import KafkaError
 
     KAFKA_AVAILABLE = True
@@ -154,10 +150,10 @@ MQ_CONNECTION_STATUS = _get_or_create_metric(
 
 # --- Logger Setup ---
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
+    from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:

@@ -1,25 +1,27 @@
 # tests/test_pip_audit_plugin.py
 
-import pytest
 import asyncio
-import os
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
+import os
 import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
+from pydantic import ValidationError
 
 # Import the plugin from the correct path
 from simulation.plugins.pip_audit_plugin import (
-    plugin_health,
-    scan_dependencies,
+    TransientScanError,  # Import the custom exception for testing
+)
+from simulation.plugins.pip_audit_plugin import (
     PipAuditConfig,
     _load_config,
     _validate_safe_args,
-    TransientScanError,  # Import the custom exception for testing
+    plugin_health,
+    scan_dependencies,
 )
-
 
 # ==============================================================================
 # Pytest Fixtures for mocking external dependencies and environment

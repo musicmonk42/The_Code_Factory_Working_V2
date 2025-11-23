@@ -1,20 +1,21 @@
 # tests/test_guardrails_integration.py
+import asyncio
 import os
 import sys
-import pytest
-import asyncio
-import yaml
 from unittest.mock import patch
+
+import pytest
+import yaml
 
 # Fix import paths for both modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import audit_log
 from compliance_mapper import (
-    generate_report,
     ComplianceEnforcementError,
     _log_to_central_audit,
-    main_cli,
+    generate_report,
     health_check,
+    main_cli,
 )
 
 

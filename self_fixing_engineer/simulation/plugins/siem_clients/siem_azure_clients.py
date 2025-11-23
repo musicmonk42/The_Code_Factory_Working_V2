@@ -1,39 +1,40 @@
-import os
-import json
-import datetime
 import asyncio
 import base64
-import hmac
+import datetime
 import hashlib
-import uuid
+import hmac
+import json
+import os
 import re
-import aiohttp
-from typing import Dict, Any, List, Tuple, Optional, Callable, Literal, Final
+import uuid
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
+
+import aiohttp
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
 
 # Import base classes and utilities from siem_base
 from .siem_base import (
-    BaseSIEMClient,
-    AiohttpClientMixin,
-    SIEMClientConfigurationError,
-    SIEMClientAuthError,
-    SIEMClientConnectivityError,
-    SIEMClientQueryError,
-    SIEMClientPublishError,
-    SIEMClientResponseError,
-    alert_operator,
-    SECRETS_MANAGER,
     PRODUCTION_MODE,
+    SECRETS_MANAGER,
+    AiohttpClientMixin,
+    BaseSIEMClient,
+    SIEMClientAuthError,
+    SIEMClientConfigurationError,
+    SIEMClientConnectivityError,
+    SIEMClientPublishError,
+    SIEMClientQueryError,
+    SIEMClientResponseError,
     _base_logger,
+    alert_operator,
 )
-from pydantic import BaseModel, Field, ValidationError, HttpUrl, validator
 
 # --- Strict Dependency Checks for Azure SDKs ---
 AZURE_EVENTGRID_AVAILABLE = False
 try:
-    from azure.eventgrid.models import CloudEvent
-    from azure.eventgrid import EventGridPublisherClient
     from azure.core.credentials import AzureKeyCredential
+    from azure.eventgrid import EventGridPublisherClient
+    from azure.eventgrid.models import CloudEvent
 
     AZURE_EVENTGRID_AVAILABLE = True
 except ImportError as e:
@@ -42,9 +43,9 @@ except ImportError as e:
 
 AZURE_SERVICEBUS_AVAILABLE = False
 try:
-    from azure.servicebus.aio import ServiceBusClient
-    from azure.servicebus import ServiceBusMessage
     from azure.identity.aio import DefaultAzureCredential as AioDefaultAzureCredential
+    from azure.servicebus import ServiceBusMessage
+    from azure.servicebus.aio import ServiceBusClient
 
     AZURE_SERVICEBUS_AVAILABLE = True
 except ImportError as e:
@@ -55,9 +56,9 @@ except ImportError as e:
 
 AZURE_MONITOR_QUERY_AVAILABLE = False
 try:
+    from azure.identity.aio import DefaultAzureCredential as AzureMonitorCredential
     from azure.monitor.query.aio import LogsQueryClient  # Async client
     from azure.monitor.query.models import QueryWorkspaceOptions
-    from azure.identity.aio import DefaultAzureCredential as AzureMonitorCredential
 
     AZURE_MONITOR_QUERY_AVAILABLE = True
 except ImportError as e:
@@ -68,8 +69,8 @@ except ImportError as e:
 
 # Import for Azure Key Vault (optional, used when secrets_providers include 'azure')
 try:
-    from azure.keyvault.secrets.aio import SecretClient as AsyncSecretClient
     from azure.identity.aio import DefaultAzureCredential as KeyVaultCredential
+    from azure.keyvault.secrets.aio import SecretClient as AsyncSecretClient
 
     AZURE_KEYVAULT_AVAILABLE = True
 except ImportError:

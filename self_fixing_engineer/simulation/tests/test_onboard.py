@@ -1,25 +1,26 @@
 # tests/test_onboard.py
 
-import pytest
-import os
-import json
-import tempfile
 import argparse
+import json
+import os
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from cryptography.fernet import Fernet
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the onboard module from the correct path
 import simulation.plugins.onboard as onboard_module
+from cryptography.fernet import Fernet
 from simulation.plugins.onboard import (
-    onboard,
-    _get_user_input,
     _generate_secure_config,
+    _get_user_input,
     _load_secure_config,
-    _run_health_checks,
-    _run_basic_onboarding_tests,
-    _safe_mode_profile,
     _reset_to_safe_mode,
+    _run_basic_onboarding_tests,
+    _run_health_checks,
+    _safe_mode_profile,
+    onboard,
 )
 
 # ==============================================================================

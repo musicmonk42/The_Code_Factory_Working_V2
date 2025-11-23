@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import hashlib
 import json
@@ -9,8 +10,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional, Tuple
-import ast
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # NOTE: esprima will only be available if installed. If not, the fix logic will raise a controlled exception.
 try:
@@ -19,10 +19,10 @@ except ImportError:
     esprima = None
 
 import git
-from git import Actor
 from filelock import FileLock, Timeout
-from prometheus_client import Counter, Histogram
+from git import Actor
 from opentelemetry import trace
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -32,18 +32,15 @@ TESTING = os.getenv("TESTING") == "1"
 
 try:
     # Renaming log_audit_event to log_action for consistency with other modules
-    from runner.runner_logging import log_audit_event as log_action
     from runner.llm_client import call_llm_api
-    from runner.runner_security_utils import (
-        scan_for_vulnerabilities,
-        scrub_pii_and_secrets,
-    )
-    from runner.summarize_utils import (
-        check_owasp_compliance,
-    )  # Assuming this is a shared utility location
 
     # Assuming this is the canonical path provided by the user for the test runner sandbox
     from runner.runner_core import run_tests as run_tests_in_sandbox
+    from runner.runner_logging import log_audit_event as log_action
+    from runner.runner_security_utils import scan_for_vulnerabilities, scrub_pii_and_secrets
+    from runner.summarize_utils import (  # Assuming this is a shared utility location
+        check_owasp_compliance,
+    )
 
     # Placeholder for configuration and mock external tools (these should ideally be passed in or removed)
     # NOTE: The CritiqueConfig and get_plugin are remnants of a V0 system. Removing local defs.

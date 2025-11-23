@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 import json
 import sys
 import threading
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -16,13 +17,7 @@ from arbiter.otel_config import get_tracer
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
 
-from codebase_analyzer import (
-    CodebaseAnalyzer,
-    logger,
-    app,
-    RADON_AVAILABLE,
-    MYPY_AVAILABLE,
-)
+from codebase_analyzer import MYPY_AVAILABLE, RADON_AVAILABLE, CodebaseAnalyzer, app, logger
 
 
 # Fixture for temp directory

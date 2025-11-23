@@ -1,24 +1,24 @@
 # test_sharded_message_bus.py
 
-import unittest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from message_bus.message_types import Message
 from message_bus.sharded_message_bus import (
-    ShardedMessageBus,
+    MAX_MESSAGE_SIZE,
     RateLimiter,
     RateLimitError,
-    validate_message_size,
+    ShardedMessageBus,
     sign_message,
+    validate_message_size,
     verify_message,
-    MAX_MESSAGE_SIZE,
 )
-from message_bus.message_types import Message
 
 
 class TestRateLimiter(unittest.TestCase):

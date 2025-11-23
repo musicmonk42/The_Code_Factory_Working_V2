@@ -1,32 +1,24 @@
-import os
-import json
 import asyncio
 import collections
-import uuid
-import time
-import logging
-import tracemalloc
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Union,
-    Callable,
-    AsyncGenerator,
-    Coroutine,
-    Tuple,
-)
-from typing_extensions import Self
-import structlog
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from logging.handlers import RotatingFileHandler
-from PIL import Image
-import io
 import hashlib
+import io
+import json
+import logging
+import os
+import time
+import tracemalloc
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, AsyncGenerator, Callable, Coroutine, Dict, List, Optional, Tuple, Union
+
+import structlog
+from PIL import Image
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from typing_extensions import Self
 
 # Attempt to set UVloop policy if available
 try:
@@ -39,33 +31,27 @@ except ImportError:
 # Add to requirements.txt: pybreaker>=1.0.0, sentry-sdk, PyJWT>=2.10.2, transformers>=4.49.1, pydantic>=2.11.7, pytest, pytest-asyncio, pytest-cov, hypothesis, locust, huggingface_hub, Pillow, cryptography, prometheus-client
 __version__ = "1.2.0"
 
-from prometheus_client import Gauge, Counter, Histogram
-
-# --- Corrected Internal Imports ---
-from arbiter.explainable_reasoner.metrics import (
-    get_or_create_metric,
-    get_metrics_content,
-)
-from arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
+from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
+from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
 from arbiter.explainable_reasoner.history_manager import (
     BaseHistoryManager,
-    SQLiteHistoryManager,
     PostgresHistoryManager,
     RedisHistoryManager,
+    SQLiteHistoryManager,
 )
-from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
-from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
+
+# --- Corrected Internal Imports ---
+from arbiter.explainable_reasoner.metrics import get_metrics_content, get_or_create_metric
+from arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 from arbiter.explainable_reasoner.utils import (
+    _format_multimodal_for_prompt,
+    _rule_based_fallback,
     _sanitize_context,
     _simple_text_sanitize,
-    _rule_based_fallback,
-    _format_multimodal_for_prompt,
     rate_limited,
 )
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
+from prometheus_client import Counter, Gauge, Histogram
 
 # Availability Checks & Conditional Imports
 try:
@@ -153,14 +139,9 @@ else:
 
 TRANSFORMERS_AVAILABLE = False
 try:
-    from transformers import (
-        pipeline,
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        BitsAndBytesConfig,
-    )
     import torch
     from huggingface_hub import HfApi
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
 
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -334,11 +315,11 @@ class ReasonerConfig(BaseModel):
 # Conditional Import for MultiModalData
 try:
     from arbiter.models.multi_modal_schemas import (
-        MultiModalData,
-        ImageAnalysisResult,
         AudioAnalysisResult,
-        VideoAnalysisResult,
+        ImageAnalysisResult,
         MultiModalAnalysisResult,
+        MultiModalData,
+        VideoAnalysisResult,
     )
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True

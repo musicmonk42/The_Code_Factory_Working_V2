@@ -73,16 +73,16 @@ if str(REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------------- #
 # 2. Import the module under test (now safe with AWS env vars set)
 # --------------------------------------------------------------------------- #
+from generator.audit_log.audit_metrics import VULN_COUNT  # Import VULN_COUNT to reset its state
 from generator.audit_log.audit_metrics import (
-    audit_metrics,
-    LOG_WRITES,
-    ERROR_TYPES,
-    PLUGIN_INVOCATIONS,
     CRYPTO_FAILURES,
+    ERROR_TYPES,
+    LOG_WRITES,
     PERF_SCORE,
-    update_vulnerability_count,
+    PLUGIN_INVOCATIONS,
+    audit_metrics,
     update_performance_score,
-    VULN_COUNT,  # Import VULN_COUNT to reset its state
+    update_vulnerability_count,
 )
 
 # Initialize faker for test data generation

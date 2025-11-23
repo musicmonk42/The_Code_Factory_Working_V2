@@ -1,19 +1,20 @@
-import os
-import sys
-import logging
-import tomli_w  # For writing pyproject.toml
 import ast  # For parsing imports
-import difflib  # For diffs in audit log
-import shutil  # For path validation
-import tempfile
-from collections import defaultdict
-from typing import List, Dict, Set, Any, DefaultDict, Tuple, Optional
 import asyncio  # For running async methods
-import json
-import hashlib
+import difflib  # For diffs in audit log
 import functools
-from pathlib import Path
+import hashlib
+import json
+import logging
+import os
+import shutil  # For path validation
+import sys
+import tempfile
 import time
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
+
+import tomli_w  # For writing pyproject.toml
 
 # Prefer stdlib tomllib when available
 try:
@@ -54,8 +55,8 @@ logger = logging.getLogger(__name__)
 # --- Centralized Utilities (replacing placeholders) ---
 _core_utils_loaded = False
 try:
-    from core_utils import alert_operator, scrub_secrets
     from core_audit import audit_logger
+    from core_utils import alert_operator, scrub_secrets
 
     _core_utils_loaded = True
 except ImportError as e:

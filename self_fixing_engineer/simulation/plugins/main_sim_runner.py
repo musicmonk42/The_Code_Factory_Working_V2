@@ -1,38 +1,38 @@
-import sys
-import os
 import argparse
-import logging
-import subprocess
-import json
-import glob
-import traceback
-import asyncio
-import tempfile
-import uuid
-import time
-from typing import Dict, Any, Callable, List, Optional
-import hashlib
 import ast
-import shutil
-import tarfile  # portable packaging
+import asyncio
+import glob
+import hashlib
 import inspect  # for plugin runner signature introspection
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import tarfile  # portable packaging
+import tempfile
+import time
+import traceback
+import uuid
+from typing import Any, Callable, Dict, List, Optional
 
 if sys.version_info < (3, 10):
     sys.stderr.write("Python 3.10+ required.\n")
     sys.exit(98)
 
 try:
-    from prometheus_client import Gauge, Counter, Histogram, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
     prometheus_available = True
 except ImportError:
     prometheus_available = False
 
 try:
+    from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.exceptions import InvalidSignature
 
     crypto_available = True
 except ImportError:
@@ -40,7 +40,7 @@ except ImportError:
 
 # Centralized OpenTelemetry Imports
 # This will provide a no-op tracer if the library is unavailable.
-from ..otel_config import get_tracer, trace, extract, StatusCode
+from ..otel_config import StatusCode, extract, get_tracer, trace
 
 # Initialize tracer from the centralized configuration
 tracer = get_tracer(__name__)
@@ -49,10 +49,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from .. import core
-from .. import utils
-from ..dashboard import STREAMLIT_AVAILABLE, display_simulation_dashboard
+from .. import core, utils
 from ..audit_log import append_distributed_log
+from ..dashboard import STREAMLIT_AVAILABLE, display_simulation_dashboard
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 main_runner_logger = logging.getLogger("main_sim_runner")
@@ -512,9 +511,10 @@ def send_notification(event_type: str, message: str, dry_run: bool = False):
         main_runner_logger.info(f"Dry-run notification: [{event_type}] {message}")
         return
 
-    import requests
     import smtplib
     from email.mime.text import MIMEText
+
+    import requests
 
     slack_webhook = os.environ.get("NOTIFY_SLACK_WEBHOOK")
     smtp_server = os.environ.get("SMTP_SERVER")
@@ -688,8 +688,9 @@ def _execute_remotely(
 ) -> Dict[str, Any]:
     tar_path = None
     try:
-        from kubernetes import client, config as k8s_config
         import boto3
+        from kubernetes import client
+        from kubernetes import config as k8s_config
 
         k8s_config.load_kube_config()
         batch_v1 = client.BatchV1Api()

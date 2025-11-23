@@ -3,25 +3,21 @@ Test suite for omnicore_engine/cli.py
 Tests CLI commands, argument parsing, and command execution.
 """
 
-import pytest
 import json
-import yaml
-import sys
 import os
+import sys
 import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
 from argparse import Namespace
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+import yaml
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.cli import (
-    main,
-    sanitize_env_vars,
-    safe_command,
-    validate_file_path,
-)
+from omnicore_engine.cli import main, safe_command, sanitize_env_vars, validate_file_path
 
 
 class TestUtilityFunctions:
@@ -262,8 +258,8 @@ class TestOutputFormatting:
 
     def test_json_output_format(self):
         """Test JSON output formatting"""
-        from io import StringIO
         import sys
+        from io import StringIO
 
         data = {"key": "value", "number": 42}
 

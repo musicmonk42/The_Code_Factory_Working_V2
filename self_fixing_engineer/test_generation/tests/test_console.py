@@ -11,6 +11,7 @@ Covers:
 """
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import logging
@@ -23,7 +24,6 @@ import time
 import types
 from unittest.mock import Mock, patch
 
-import importlib
 import pytest
 
 # FIX: Import LOGGING_CONFIG to resolve NameError

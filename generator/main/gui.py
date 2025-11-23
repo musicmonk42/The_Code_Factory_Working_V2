@@ -1,15 +1,16 @@
 # main/gui.py
-import sys
+import asyncio  # For async operations and Queue
 import gettext
 import json
-import os  # For environment variables
-import uuid  # For generating run IDs
 import logging  # Import logging directly
-import asyncio  # For async operations and Queue
-import aiofiles  # For async file I/O operations
+import os  # For environment variables
+import sys
 import threading  # FIX: Import threading for thread identification
+import uuid  # For generating run IDs
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Optional
+
+import aiofiles  # For async file I/O operations
 
 # Import HTTPException and status for consistent error handling with backend API
 # Guard FastAPI imports
@@ -35,25 +36,25 @@ try:
     import aiohttp  # For making async HTTP requests to the backend API
     from textual.app import App, on
     from textual.binding import Binding
-    from textual.containers import Container, Horizontal, Vertical, Grid
-    from textual.widgets import (
-        Header,
-        Footer,
-        RichLog,
-        DataTable,
+    from textual.containers import Container, Grid, Horizontal, Vertical
+    from textual.css.query import NoMatches
+    from textual.events import Mount
+    from textual.widgets import (  # Keep Select for interval
         Button,
+        DataTable,
+        Footer,
+        Header,
         Input,
-        TextArea,
         Label,
+        Markdown,
         ProgressBar,
+        RichLog,
+        Select,
+        Static,
         TabbedContent,
         TabPane,
-        Static,
-        Markdown,
-        Select,
-    )  # Keep Select for interval
-    from textual.events import Mount
-    from textual.css.query import NoMatches
+        TextArea,
+    )
 
     _TEXTUAL_AVAILABLE = True
 except ImportError:
@@ -336,17 +337,17 @@ except ImportError:
 
 # --- Custom Module Imports (Guarded for Test Safety) ---
 try:
+    from intent_parser.intent_parser import IntentParser
+    from runner.runner_config import ConfigWatcher, load_config
     from runner.runner_core import Runner
-    from runner.runner_config import load_config, ConfigWatcher
     from runner.runner_logging import logger as runner_logger_instance  # Use alias
     from runner.runner_metrics import (
-        get_metrics_dict,
-        RUN_QUEUE,
-        RUN_PASS_RATE,
-        RUN_RESOURCE_USAGE,
         HEALTH_STATUS,
+        RUN_PASS_RATE,
+        RUN_QUEUE,
+        RUN_RESOURCE_USAGE,
+        get_metrics_dict,
     )
-    from intent_parser.intent_parser import IntentParser
 
     _RUNNER_AVAILABLE = True
 except ImportError:

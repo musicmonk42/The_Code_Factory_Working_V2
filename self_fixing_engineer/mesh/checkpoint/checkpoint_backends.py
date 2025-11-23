@@ -36,35 +36,27 @@ __version__ = "3.0.0"
 __author__ = "Platform Engineering Team"
 __classification__ = "CONFIDENTIAL"
 
+import asyncio
+import base64
+import hashlib
+import hmac
+import json
+import logging
+
 # ---- Standard Library Imports ----
 import os
-import json
 import time
-import asyncio
-import logging
-import hashlib
 import uuid
-import hmac
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, Callable
-from functools import wraps
-from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
-import base64
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
 
 # ---- Local Imports ----
-from .checkpoint_exceptions import (
-    CheckpointError,
-    CheckpointAuditError,
-    CheckpointBackendError,
-)
-from .checkpoint_utils import (
-    hash_dict,
-    compress_json,
-    decompress_json,
-    scrub_data,
-)
+from .checkpoint_exceptions import CheckpointAuditError, CheckpointBackendError, CheckpointError
+from .checkpoint_utils import compress_json, decompress_json, hash_dict, scrub_data
 
 # ---- Conditional Third-Party Imports ----
 
@@ -89,10 +81,10 @@ except ImportError:
 
 # Encryption
 try:
-    from cryptography.fernet import Fernet, MultiFernet, InvalidToken
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.backends import default_backend
 
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
@@ -103,7 +95,7 @@ except ImportError:
 try:
     import aioboto3
     import boto3
-    from botocore.exceptions import ClientError, BotoCoreError
+    from botocore.exceptions import BotoCoreError, ClientError
 
     S3_AVAILABLE = True
 except ImportError:
@@ -114,7 +106,8 @@ except ImportError:
 # Redis
 try:
     import redis.asyncio as aioredis
-    from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
+    from redis.exceptions import ConnectionError as RedisConnectionError
+    from redis.exceptions import RedisError
 
     REDIS_AVAILABLE = True
 except ImportError:
@@ -135,9 +128,9 @@ except ImportError:
 
 # Google Cloud Storage
 try:
+    from google.api_core import retry as gcs_retry
     from google.cloud import storage as gcs_storage
     from google.cloud.exceptions import NotFound as GCSNotFound
-    from google.api_core import retry as gcs_retry
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -147,8 +140,8 @@ except ImportError:
 
 # Azure Blob Storage
 try:
-    from azure.storage.blob.aio import BlobServiceClient, ContainerClient
     from azure.core.exceptions import ResourceNotFoundError as AzureNotFound
+    from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
     AZURE_AVAILABLE = True
 except ImportError:
@@ -180,7 +173,7 @@ except ImportError:
 
 # Observability
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -198,11 +191,11 @@ except ImportError:
 # Reliability patterns
 try:
     from tenacity import (
+        before_sleep_log,
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
-        before_sleep_log,
     )
 
     TENACITY_AVAILABLE = True

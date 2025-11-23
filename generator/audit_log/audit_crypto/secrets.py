@@ -6,14 +6,14 @@ DO NOT fetch secrets from environment variables, files, or code anywhere else in
 All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER.
 """
 
-import os
+import asyncio
 import base64
 import logging
+import os
 import time
-import asyncio
-from typing import Dict, List, Optional
 from abc import ABC, abstractmethod  # For SecretManager ABC
 from collections import defaultdict  # For rate limiting in MockSecretManager
+from typing import Dict, List, Optional
 
 # Conditional import for AWS Secrets Manager
 try:
@@ -27,8 +27,8 @@ except ImportError:
 
 # Conditional imports for GCP Secret Manager
 try:
+    from google.api_core.exceptions import GoogleAPIError, NotFound
     from google.cloud import secretmanager
-    from google.api_core.exceptions import NotFound, GoogleAPIError
 
     HAS_GCP_SECRET_MANAGER = True
 except ImportError:
@@ -40,7 +40,7 @@ except ImportError:
 # Conditional imports for HashiCorp Vault
 try:
     import hvac
-    from hvac.exceptions import InvalidRequest, Forbidden
+    from hvac.exceptions import Forbidden, InvalidRequest
 
     HAS_HVAC = True
 except ImportError:

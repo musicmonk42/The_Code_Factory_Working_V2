@@ -2,8 +2,8 @@
 
 import logging
 import sys
-from queue import Queue
 from logging.handlers import QueueHandler, QueueListener
+from queue import Queue
 
 try:
     from pythonjsonlogger import jsonlogger

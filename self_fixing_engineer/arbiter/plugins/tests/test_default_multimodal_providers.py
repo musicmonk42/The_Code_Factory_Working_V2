@@ -1,23 +1,23 @@
 # test_default_multimodal_providers.py
-import pytest
 import base64
 from unittest.mock import Mock, patch
 
-from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
-    PluginRegistry,
-    DefaultImageProcessor,
-    DefaultAudioProcessor,
-    DefaultVideoProcessor,
-    DefaultTextProcessor,
-    DefaultImageProcessorConfig,
-    DefaultAudioProcessorConfig,
-    DefaultVideoProcessorConfig,
-    DefaultTextProcessorConfig,
-)
+import pytest
 from arbiter.plugins.multimodal.interface import (
-    MultiModalException,
     ConfigurationError,
+    MultiModalException,
     ProviderNotAvailableError,
+)
+from arbiter.plugins.multimodal.providers.default_multimodal_providers import (
+    DefaultAudioProcessor,
+    DefaultAudioProcessorConfig,
+    DefaultImageProcessor,
+    DefaultImageProcessorConfig,
+    DefaultTextProcessor,
+    DefaultTextProcessorConfig,
+    DefaultVideoProcessor,
+    DefaultVideoProcessorConfig,
+    PluginRegistry,
 )
 from pydantic import ValidationError
 

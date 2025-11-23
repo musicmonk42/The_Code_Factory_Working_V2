@@ -1,15 +1,16 @@
 # arbiter/learner/fuzzy.py
 
-import os
-import json
-import time
-import structlog
-import hashlib
 import asyncio
-from typing import List, Dict, Any, Optional, Protocol, TYPE_CHECKING
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Counter, Histogram
+import hashlib
+import json
+import os
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
+
+import structlog
 from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .metrics import learn_error_counter
 

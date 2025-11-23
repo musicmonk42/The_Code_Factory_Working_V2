@@ -5,14 +5,15 @@ Tests GCP Cloud Logging client functionality including health checks,
 log sending, querying, and batch operations.
 """
 
-import pytest
 import asyncio
+import datetime
 import os
 import sys
-import datetime
 import uuid
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()

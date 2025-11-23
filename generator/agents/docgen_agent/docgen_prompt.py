@@ -15,68 +15,57 @@ Features:
 - Strict failure enforcement: No fallbacks for Presidio, templates, or LLM calls.
 """
 
-import os
-import uuid
-import time
-import re
-import asyncio
-import json
-import subprocess
-import hashlib  # For prompt hashing
 import ast  # For parsing Python AST for imports
-import tiktoken  # For token counting
-from datetime import (
+import asyncio
+import glob
+import hashlib  # For prompt hashing
+import json
+import os
+import re
+import subprocess
+import time
+import uuid
+from datetime import (  # *** FIX: Added timezone for Python 3.12+ compatibility ***
     datetime,
     timezone,
-)  # *** FIX: Added timezone for Python 3.12+ compatibility ***
-import aiofiles  # <--- ADDED FIX
+)
 from pathlib import Path  # <--- ADDED FIX
+from typing import Any, Dict, List, Optional, Tuple
 
-from typing import List, Dict, Any, Optional, Tuple
-import glob
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)  # For retries on external calls
-
-from jinja2 import (
+import aiofiles  # <--- ADDED FIX
+import tiktoken  # For token counting
+from aiohttp import web  # For web server routes
+from aiohttp.web_request import Request  # For web server routes
+from aiohttp.web_response import Response  # For web server routes
+from aiohttp.web_routedef import RouteTableDef  # For web server routes
+from jinja2 import (  # Jinja2 for templating
     Environment,
     FileSystemLoader,
     Template,
     select_autoescape,
-)  # Jinja2 for templating
-from sentence_transformers import (
-    SentenceTransformer,
-    util,
-)  # For embedding and semantic search
-from watchdog.observers import Observer  # For file system monitoring (hot-reload)
-from watchdog.events import (
-    FileSystemEventHandler,
-)  # For file system events (hot-reload)
-from aiohttp import web  # For web server routes
-from aiohttp.web_routedef import RouteTableDef  # For web server routes
-from aiohttp.web_request import Request  # For web server routes
-from aiohttp.web_response import Response  # For web server routes
+)
+from opentelemetry.trace.status import Status, StatusCode  # *** FIX: Added missing import ***
+
+# Presidio: REQUIRED for scrubbing.
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine  # FIX: Corrected typo 'presonymizer'
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
-from runner.llm_client import call_llm_api, call_ensemble_api
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import (
-    LLM_CALLS_TOTAL,
-    LLM_ERRORS_TOTAL,
-    LLM_LATENCY_SECONDS,
-)
+from runner.llm_client import call_ensemble_api, call_llm_api
 from runner.runner_errors import LLMError
-from runner.runner_file_utils import (
-    get_commits as runner_get_commits,
-)  # Alias to avoid name clash
-from opentelemetry.trace.status import (
-    Status,
-    StatusCode,
-)  # *** FIX: Added missing import ***
+from runner.runner_file_utils import get_commits as runner_get_commits  # Alias to avoid name clash
+from runner.runner_logging import add_provenance, logger
+from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
+from sentence_transformers import SentenceTransformer, util  # For embedding and semantic search
+from tenacity import (  # For retries on external calls
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+from watchdog.events import FileSystemEventHandler  # For file system events (hot-reload)
+from watchdog.observers import Observer  # For file system monitoring (hot-reload)
 
 # -----------------------------------
 
@@ -84,9 +73,6 @@ from opentelemetry.trace.status import (
 # These imports are expected to be available and functional.
 # If any of these fail to import, the program will terminate, enforcing strictness.
 
-# Presidio: REQUIRED for scrubbing.
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine  # FIX: Corrected typo 'presonymizer'
 
 # Utility for text summarization: REMOVED.
 # from utils import summarize_text

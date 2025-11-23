@@ -1,20 +1,18 @@
 # arbiter/learner/audit.py
 
 import hashlib
-import structlog
 import os
-from typing import List, Tuple, Dict, Any, Optional
 from datetime import datetime, timezone
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Gauge
+from typing import Any, Dict, List, Optional, Tuple
+
+import structlog
 
 # Assuming `audit_log` and `metrics` modules are available in the project root.
-from arbiter.audit_log import (
-    log_event as audit_log,
-)
-from .metrics import (
-    learn_error_counter,
-)
+from arbiter.audit_log import log_event as audit_log
+from prometheus_client import Gauge
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from .metrics import learn_error_counter
 
 logger = structlog.get_logger(__name__)
 

@@ -1,11 +1,11 @@
 # test_audit_crypto_factory.py
 
 import asyncio
-import logging
 import base64
-import aiohttp
-from unittest.mock import MagicMock, AsyncMock, patch
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 # --- Fixtures ---
@@ -300,9 +300,7 @@ class TestHelpers:
     )
     def test_is_test_or_dev_mode(self, monkeypatch, env_var, value, expected):
         """Tests the _is_test_or_dev_mode helper with various env vars."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            _is_test_or_dev_mode,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import _is_test_or_dev_mode
 
         # Clean the environment to isolate the test case correctly.
         monkeypatch.delenv("AUDIT_LOG_DEV_MODE", raising=False)
@@ -320,9 +318,7 @@ class TestHelpers:
 
     def test_sensitive_data_filter(self, caplog):
         """Tests that the SensitiveDataFilter redacts logs."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            SensitiveDataFilter,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import SensitiveDataFilter
 
         logger = logging.getLogger("test_filter")
         logger.setLevel(logging.INFO)
@@ -357,9 +353,7 @@ class TestConfiguration:
 
     def test_prod_config_valid_software(self, monkeypatch, mock_settings):
         """Tests a valid production config for 'software' provider."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            ConfigurationError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import ConfigurationError
 
         # FIX 8: Remove invalid monkeypatch.undo and use patch for flow control
         # The target function is already mocked by the fixture, so we use patch.object to wrap it with the original function's logic.
@@ -388,9 +382,7 @@ class TestConfiguration:
 
     def test_prod_config_valid_hsm(self, monkeypatch, mock_settings):
         """Tests a valid production config for 'hsm' provider."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            ConfigurationError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import ConfigurationError
 
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
@@ -421,8 +413,8 @@ class TestConfiguration:
         """Tests that 'software' provider fails in prod without KMS_KEY_ID."""
         # FIX 2: Change expected exception to ValidationError as post_validation_checks is called directly
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            post_validation_checks,
             ValidationError,
+            post_validation_checks,
         )
 
         monkeypatch.setattr(
@@ -442,8 +434,8 @@ class TestConfiguration:
         """Tests that 'hsm' provider fails in prod without HSM_LIBRARY_PATH."""
         # FIX 3: Change expected exception to ValidationError as post_validation_checks is called directly
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            post_validation_checks,
             ValidationError,
+            post_validation_checks,
         )
 
         monkeypatch.setattr(
@@ -464,9 +456,7 @@ class TestConfiguration:
 
     def test_dev_mode_bypasses_prod_checks(self, monkeypatch, mock_settings):
         """Tests that dev mode allows missing production settings."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            ConfigurationError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import ConfigurationError
 
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
@@ -548,8 +538,8 @@ class TestGlobalSecrets:
     async def test_ensure_software_key_master_prod_no_secret(self, monkeypatch, mock_secrets):
         """Tests failure when the secret is not found in the secret manager."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            _ensure_software_key_master,
             CryptoInitializationError,
+            _ensure_software_key_master,
         )
 
         monkeypatch.setattr(
@@ -564,8 +554,8 @@ class TestGlobalSecrets:
     async def test_ensure_software_key_master_prod_no_boto(self, monkeypatch, mock_secrets):
         """Tests failure when boto3 is not installed."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            _ensure_software_key_master,
             CryptoInitializationError,
+            _ensure_software_key_master,
         )
 
         monkeypatch.setattr(
@@ -584,8 +574,8 @@ class TestGlobalSecrets:
     ):
         """Tests failure when the KMS decrypt call fails."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            _ensure_software_key_master,
             CryptoInitializationError,
+            _ensure_software_key_master,
         )
 
         monkeypatch.setattr(
@@ -637,8 +627,8 @@ class TestGlobalSecrets:
     async def test_ensure_fallback_secret_prod_fail(self, monkeypatch, mock_secrets):
         """Tests failure when the HMAC secret is not found."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            _ensure_fallback_hmac_secret,
             CryptoInitializationError,
+            _ensure_fallback_hmac_secret,
         )
 
         monkeypatch.setattr(
@@ -699,9 +689,7 @@ class TestAsyncUtils:
 
     async def test_retry_operation_success_first_try(self, mock_log_action):
         """Tests retry_operation succeeding on the first attempt."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            retry_operation,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
 
         mock_func = AsyncMock(return_value="success")
 
@@ -720,9 +708,7 @@ class TestAsyncUtils:
 
     async def test_retry_operation_success_after_retries(self, monkeypatch, mock_log_action):
         """Tests retry_operation succeeding after 2 failures."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            retry_operation,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
 
         mock_func = AsyncMock(
             side_effect=[ConnectionError("fail1"), ConnectionError("fail2"), "success"]
@@ -759,9 +745,7 @@ class TestAsyncUtils:
 
     async def test_retry_operation_final_failure(self, monkeypatch, mock_log_action):
         """Tests retry_operation failing after all attempts."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            retry_operation,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
 
         mock_func = AsyncMock(side_effect=ConnectionError("final fail"))
         mock_sleep = AsyncMock()
@@ -787,9 +771,7 @@ class TestAsyncUtils:
 
     async def test_retry_operation_cancelled(self, monkeypatch, mock_log_action):
         """Tests that CancelledError propagates immediately."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            retry_operation,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import retry_operation
 
         mock_func = AsyncMock(side_effect=asyncio.CancelledError)
         mock_sleep = AsyncMock()
@@ -821,8 +803,8 @@ class TestCryptoProviderFactory:
         """Tests that the factory registers default providers on init."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             CryptoProviderFactory,
-            SoftwareCryptoProvider,
             DummyCryptoProvider,
+            SoftwareCryptoProvider,
         )
 
         mock_dynaconf, config_dict = mock_settings
@@ -838,9 +820,7 @@ class TestCryptoProviderFactory:
 
     def test_factory_registers_hsm_when_enabled(self, mock_settings, mock_providers):
         """Tests that HSM provider is registered when enabled."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            CryptoProviderFactory,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import CryptoProviderFactory
 
         mock_dynaconf, config_dict = mock_settings
         # Set it on the mock object itself, not just the config dict
@@ -856,8 +836,8 @@ class TestCryptoProviderFactory:
     async def test_get_provider_dev_mode_returns_dummy(self, monkeypatch):
         """Tests that get_provider *always* returns DummyProvider in dev/test mode."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            crypto_provider_factory,
             DummyCryptoProvider,
+            crypto_provider_factory,
         )
 
         monkeypatch.setattr(
@@ -883,9 +863,9 @@ class TestCryptoProviderFactory:
     ):
         """Tests getting a 'software' provider in production mode."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            crypto_provider_factory,
-            _ensure_software_key_master,
             _ensure_fallback_hmac_secret,
+            _ensure_software_key_master,
+            crypto_provider_factory,
         )
 
         monkeypatch.setattr(
@@ -930,9 +910,7 @@ class TestCryptoProviderFactory:
         setattr(mock_dynaconf, "HSM_ENABLED", True)  # Must be enabled for registration
 
         # We need to re-create the factory to register the HSM provider
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            crypto_provider_factory,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory
 
         factory = crypto_provider_factory.__class__()  # FIX 8: Re-initialize the factory
 
@@ -959,9 +937,7 @@ class TestCryptoProviderFactory:
         setattr(mock_dynaconf, "HSM_ENABLED", True)
 
         # Re-create factory to register HSM
-        from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            crypto_provider_factory,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_factory import crypto_provider_factory
 
         factory = crypto_provider_factory.__class__()  # FIX 9: Re-initialize the factory
 
@@ -984,12 +960,10 @@ class TestCryptoProviderFactory:
     ):
         """Tests that if 'software' (as primary or fallback) fails, it's a critical error."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            crypto_provider_factory,
             CryptoInitializationError,
+            crypto_provider_factory,
         )
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            CryptoProvider,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_provider import CryptoProvider
 
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
@@ -1037,8 +1011,8 @@ class TestCryptoProviderFactory:
     def test_get_crypto_provider_helper(self, monkeypatch):
         """Tests the global get_crypto_provider() helper."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
-            get_crypto_provider,
             DummyCryptoProvider,
+            get_crypto_provider,
         )
 
         monkeypatch.setattr(

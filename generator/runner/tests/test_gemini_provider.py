@@ -30,8 +30,8 @@ except ImportError:
     HAS_GEMINI = False
 
 from runner.providers.gemini_provider import GeminiProvider, get_provider  # type: ignore
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 @pytest.fixture

@@ -1,23 +1,23 @@
 # test_validation.py
 
-import pytest
 import asyncio
 import json
 import os
 import tempfile
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from jsonschema.exceptions import SchemaError
-from tenacity import RetryError
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pytest
 from arbiter.learner.validation import (
+    SCHEMA_CACHE_TTL_SECONDS,
     DomainNotFoundError,
-    validate_data,
     register_validation_hook,
     reload_schemas,
-    validation_failure_total,
     schema_reload_total,
-    SCHEMA_CACHE_TTL_SECONDS,
+    validate_data,
+    validation_failure_total,
 )
+from jsonschema.exceptions import SchemaError
+from tenacity import RetryError
 
 
 class TestValidateData:

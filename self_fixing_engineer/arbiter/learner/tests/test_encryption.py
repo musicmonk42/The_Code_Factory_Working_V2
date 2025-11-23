@@ -1,19 +1,19 @@
 # test_encryption.py
 
-import pytest
-import os
 import json
-from unittest.mock import Mock, patch, MagicMock
-from cryptography.fernet import Fernet, InvalidToken
-from botocore.exceptions import NoCredentialsError
+import os
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 from arbiter.learner.encryption import (
     ArbiterConfig,
-    encrypt_value,
     decrypt_value,
+    encrypt_value,
     key_rotation_counter,
     learn_error_counter,
 )
+from botocore.exceptions import NoCredentialsError
+from cryptography.fernet import Fernet, InvalidToken
 
 
 class TestArbiterConfig:

@@ -1,22 +1,23 @@
 # tests/test_siem_integration_plugin.py
 
-import pytest
 import os
-from unittest.mock import patch, MagicMock, AsyncMock
-from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
 import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
+from pydantic import ValidationError
 
 # Use absolute import path assuming tests are run from the project root
 from simulation.plugins.siem_integration_plugin import (
-    GenericSIEMIntegrationPlugin,
-    PolicyEnforcer,
-    PluginGlobalConfig,
-    PolicyConfig,
-    PolicyRule,
-    PolicyCondition,
-    SIEM_SEND_ERRORS_TOTAL,
     SIEM_EVENTS_SENT_TOTAL,
+    SIEM_SEND_ERRORS_TOTAL,
+    GenericSIEMIntegrationPlugin,
+    PluginGlobalConfig,
+    PolicyCondition,
+    PolicyConfig,
+    PolicyEnforcer,
+    PolicyRule,
 )
 
 # A minimal Pydantic model for the config since the real one is now correctly mocked

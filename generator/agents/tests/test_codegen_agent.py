@@ -2,19 +2,18 @@ import json
 import sqlite3
 import uuid
 from pathlib import Path
-
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from agents.codegen_agent.codegen_agent import (
     CodeGenConfig,
-    SQLiteFeedbackStore,
     RedisFeedbackStore,
+    SQLiteFeedbackStore,
+    app,
     generate_code,
     perform_security_scans,
-    app,
 )
+from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
 # Fixtures

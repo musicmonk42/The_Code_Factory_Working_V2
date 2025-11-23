@@ -1,16 +1,14 @@
 # conftest.py (root)
 
 import os
+
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 
 # FIXED: Replaced InMemorySpanExporter with ConsoleSpanExporter
 # This is a stable import path and will fix the 'NoOpSpan' errors.
-from opentelemetry.sdk.trace.export import (
-    SimpleSpanProcessor,
-    ConsoleSpanExporter,
-)
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 
 # Allow duplicate metric registration during tests to prevent collection failures
 os.environ.setdefault("PROMETHEUS_DISABLE_CREATED_SERIES", "true")
@@ -26,8 +24,8 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")  # keep OTEL quiet
 
 # ---- Prometheus duplicate-metric hardening (runs before any package imports)
 try:
-    from prometheus_client.registry import CollectorRegistry
     from prometheus_client import REGISTRY
+    from prometheus_client.registry import CollectorRegistry
 
     _ORIG_REGISTER = CollectorRegistry.register
 

@@ -3,24 +3,25 @@ Test suite for omnicore_engine/security_config.py
 Tests enterprise security configuration and compliance validation.
 """
 
-import pytest
 import os
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
 
 # Add the parent directory to path for imports
 import sys
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.security_config import (
-    SecurityLevel,
     ComplianceFramework,
     EnterpriseSecurityConfig,
-    get_security_config,
-    validate_compliance,
+    SecurityLevel,
     get_encryption_key_age,
+    get_security_config,
     is_ip_allowed,
+    validate_compliance,
 )
 
 

@@ -25,33 +25,30 @@ Security & Limitations:
 """
 
 import asyncio
+import base64
+import datetime  # For history timestamp and backup
+import json
 import logging
 import os
-import json
-import time
-import datetime  # For history timestamp and backup
 import signal  # For graceful shutdown
 import sqlite3  # For SQLiteContextManager
-import sys  # For SystemExit
 import stat  # For file permissions
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Callable, Tuple
-import uuid  # For history temp file
-import base64
+import sys  # For SystemExit
+import time
 import unittest
+import uuid  # For history temp file
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, patch
 
-
-from dynaconf import Dynaconf, Validator  # Configuration management (reqs: dynaconf)
-from cryptography.fernet import (
-    Fernet,
-)  # Encryption for data at rest (reqs: cryptography)
-import boto3  # For KMS integration (reqs: boto3)
 import aiofiles  # Async file I/O (reqs: aiofiles)
+import boto3  # For KMS integration (reqs: boto3)
 import zstandard as zstd  # Compression (reqs: zstandard)
+from cryptography.fernet import Fernet  # Encryption for data at rest (reqs: cryptography)
+from dynaconf import Dynaconf, Validator  # Configuration management (reqs: dynaconf)
 
 # Prometheus metrics need to be defined at the top level to be accessible globally
-from prometheus_client import Histogram, Counter
+from prometheus_client import Counter, Histogram
 
 # --- FIX: Make imports resilient against missing sub-modules or circular dependencies ---
 
@@ -95,10 +92,11 @@ except ImportError as e:
 
 # Import internal package components that might create a circular dependency loop.
 try:
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
+
+    from .clarifier_updater import update_requirements_with_answers
     from .clarifier_user_prompt import UserPromptChannel as InteractionMode
     from .clarifier_user_prompt import get_channel
-    from .clarifier_updater import update_requirements_with_answers
-    from omnicore_engine.plugin_registry import plugin, PlugInKind
 except ImportError as e:
     logging.warning(
         f"Failed to load package dependencies (Prompt/Updater/Plugin) due to potential circular import: {e}"
@@ -248,12 +246,10 @@ def setup_tracing() -> Tuple[Optional[Any], Optional[Any], Optional[Any], bool]:
     """Initializes OpenTelemetry tracing."""
     try:
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
-        )
         from opentelemetry.trace import Status, StatusCode
 
         resource = Resource.create({"service.name": "clarifier-service"})

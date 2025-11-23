@@ -1,8 +1,9 @@
 # test_explanation_prompt_config.py
 
-import pytest
 import json
 from pathlib import Path
+
+import pytest
 
 
 class TestExplanationPromptConfig:

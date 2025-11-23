@@ -1,17 +1,19 @@
-import time
-import collections
-import logging
 import asyncio
-import aiohttp
+import collections
 import functools
-import random
-import tenacity
 import json
-from typing import Callable, Coroutine, Any, Dict, List, Optional
+import logging
+import random
+import time
+from typing import Any, Callable, Coroutine, Dict, List, Optional
+
+import aiohttp
+import tenacity
 
 try:
-    import aiosmtplib
     from email.mime.text import MIMEText
+
+    import aiosmtplib
 except ImportError:
     aiosmtplib = None
     MIMEText = None
@@ -21,11 +23,11 @@ try:
 except ImportError:
     redis = None
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from .utils import (  # or appropriate relative/absolute path
-    NotificationError,
     CircuitBreakerOpenError,
+    NotificationError,
     RateLimitExceededError,
     redact_pii,
     validate_input_details,

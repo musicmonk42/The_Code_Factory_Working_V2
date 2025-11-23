@@ -5,37 +5,29 @@ Tests SQLite, Redis, and Kafka storage backends.
 """
 
 import asyncio
+import base64
 import json
 import logging
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
-import os
-import base64
 
 # Set the encryption key environment variable for tests
 os.environ["ARBITER_ENCRYPTION_KEY"] = base64.urlsafe_b64encode(os.urandom(32)).decode("utf-8")
 
-from sqlalchemy.exc import SQLAlchemyError
-from cryptography.fernet import InvalidToken
-
-from arbiter.arbiter_growth.exceptions import (
-    ArbiterGrowthError,
-    AuditChainTamperedError,
-)
-from arbiter.arbiter_growth.models import (
-    ArbiterState,
-    GrowthEvent,
-    Base,
-)
+from arbiter.arbiter_growth.exceptions import ArbiterGrowthError, AuditChainTamperedError
+from arbiter.arbiter_growth.models import ArbiterState, Base, GrowthEvent
 from arbiter.arbiter_growth.storage_backends import (
-    SQLiteStorageBackend,
-    RedisStreamsStorageBackend,
-    KafkaStorageBackend,
-    storage_backend_factory,
     REDIS_BREAKER,
+    KafkaStorageBackend,
+    RedisStreamsStorageBackend,
+    SQLiteStorageBackend,
+    storage_backend_factory,
 )
-
+from cryptography.fernet import InvalidToken
+from sqlalchemy.exc import SQLAlchemyError
 
 # --- Fixtures ---
 

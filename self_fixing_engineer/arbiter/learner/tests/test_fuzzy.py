@@ -1,18 +1,19 @@
 # test_fuzzy.py
 
-import pytest
 import asyncio
 import json
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Fix the import path - should import from the learner module, not tests
 from arbiter.learner.fuzzy import (
+    _learn_batch_with_retry,
+    fuzzy_parser_failure_total,
+    load_parser_priorities,
     process_unstructured_data,
     register_fuzzy_parser_hook,
-    _learn_batch_with_retry,
-    load_parser_priorities,
-    fuzzy_parser_failure_total,
 )
 
 

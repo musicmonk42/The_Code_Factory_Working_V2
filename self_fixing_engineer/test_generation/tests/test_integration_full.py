@@ -1,7 +1,7 @@
 # test_generation/tests/test_integration_full.py
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner

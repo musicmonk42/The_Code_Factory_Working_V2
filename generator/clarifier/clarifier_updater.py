@@ -4,6 +4,7 @@
 # Created: July 30, 2025.
 # REFACTORED: Now uses central runner for logging, alerting, and security utils.
 
+import asyncio
 import copy
 import datetime
 import hashlib
@@ -11,28 +12,23 @@ import json
 import logging
 import os
 import re
-import asyncio
 import sqlite3
-import uuid
 import time
-from typing import Dict, Any, List, Optional, Callable, Awaitable
+import uuid
 from abc import ABC, abstractmethod
-from unittest.mock import patch, AsyncMock
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+from unittest.mock import AsyncMock, patch
 
 import aiohttp  # For alerting and async LLM calls (reqs: aiohttp)
 import requests  # Retained for potential synchronous LLM calls fallback or other sync needs
-from jsonschema import (
-    validate,
+import zstandard as zstd  # Compression (reqs: zstandard)
+from cryptography.fernet import Fernet  # Encryption (reqs: cryptography)
+from jsonschema import (  # Schema validation (reqs: jsonschema)
     Draft7Validator,
     ValidationError,
-)  # Schema validation (reqs: jsonschema)
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-)  # Metrics (reqs: prometheus-client)
-from cryptography.fernet import Fernet  # Encryption (reqs: cryptography)
-import zstandard as zstd  # Compression (reqs: zstandard)
+    validate,
+)
+from prometheus_client import Counter, Gauge, Histogram  # Metrics (reqs: prometheus-client)
 
 # Use centralized utilities from clarifier.py
 from .clarifier import get_config, get_fernet, get_logger
@@ -56,7 +52,7 @@ except ImportError:
 
 
 try:
-    from runner.security_utils import redact_sensitive, detect_pii, _recursive_transform
+    from runner.security_utils import _recursive_transform, detect_pii, redact_sensitive
 except ImportError:
     logging.warning("Dummy security utils used: Runner security utils not available.")
 
@@ -128,11 +124,11 @@ def _load_redaction_patterns() -> List[re.Pattern]:
 # OpenTelemetry tracing
 try:
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.propagate import get_global_textmap, set_global_textmap
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.propagate import set_global_textmap, get_global_textmap
     from opentelemetry.sdk.trace.sampling import ALWAYS_ON
     from opentelemetry.trace import Status, StatusCode
 

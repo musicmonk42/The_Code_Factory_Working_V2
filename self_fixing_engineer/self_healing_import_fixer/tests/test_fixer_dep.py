@@ -1,11 +1,12 @@
+import asyncio
 import os
 import sys
-import pytest
-import asyncio
-import tomli
-from unittest.mock import patch, MagicMock
-from contextlib import contextmanager
 import types
+from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
+
+import pytest
+import tomli
 
 # ---------------------------------------------------------------------------
 # Bootstrap: provide dummy infra modules BEFORE importing the module under test
@@ -59,12 +60,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # ---------------------------------------------------------------------------
 # Import the module under test (correct package path)
 # ---------------------------------------------------------------------------
+from import_fixer.fixer_dep import AnalyzerCriticalError  # alias exported by fixer_dep
 from import_fixer.fixer_dep import (
+    _get_all_imports_async,
+    _get_py_files,
     heal_dependencies,
     init_dependency_healing_module,
-    _get_py_files,
-    _get_all_imports_async,
-    AnalyzerCriticalError,  # alias exported by fixer_dep
 )
 
 # ---------------------------------------------------------------------------

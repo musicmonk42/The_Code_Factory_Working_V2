@@ -1,23 +1,24 @@
+import logging
+from unittest.mock import MagicMock
+
 import pytest
 import yaml
-from unittest.mock import MagicMock
-import logging
 from simulation.core import (
-    load_config,
-    load_rbac_policy,
-    get_user_roles,
-    get_role_permissions,
-    check_permission,
+    KUBERNETES_AVAILABLE,
     CircuitBreaker,
     NotificationManager,
-    generate_correlation_id,
+    check_permission,
     correlated,
     execute_remotely,
-    run_job,
-    watch_mode,
+    generate_correlation_id,
+    get_role_permissions,
+    get_user_roles,
+    load_config,
+    load_rbac_policy,
     main,
+    run_job,
     validate_file,
-    KUBERNETES_AVAILABLE,
+    watch_mode,
 )
 
 # Mark all tests as unit tests for selective running

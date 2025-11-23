@@ -1,10 +1,10 @@
-import logging
-import os
 import asyncio
 import cProfile
-from typing import Dict, Any, Callable, Optional, TypedDict, Awaitable
-from functools import partial
 import inspect
+import logging
+import os
+from functools import partial
+from typing import Any, Awaitable, Callable, Dict, Optional, TypedDict
 
 # -----------------------------------------------------------------------------
 # Optional Tenacity (retries are no-op if not installed)
@@ -35,9 +35,9 @@ except ImportError:
 # -----------------------------------------------------------------------------
 try:
     import langgraph
-    from langgraph.graph import StateGraph, END
     from langgraph.checkpoint.memory import MemorySaver
     from langgraph.checkpoint.redis import RedisSaver
+    from langgraph.graph import END, StateGraph
 
     LANGGRAPH_AVAILABLE = True
 except ImportError:
@@ -88,13 +88,13 @@ except ImportError:
 
 
 from test_generation.gen_agent.agents import (
-    planner_agent,
+    adaptive_test_executor_agent,
     generator_agent,
     judge_agent,
-    refiner_agent,
-    adaptive_test_executor_agent,
-    security_agent,
     performance_agent,
+    planner_agent,
+    refiner_agent,
+    security_agent,
 )
 
 logger = logging.getLogger(__name__)
@@ -345,7 +345,7 @@ def build_graph(llm: Any, checkpointer: Optional[Any] = None) -> Any:
 
     # Fallback Path
     try:
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         if isinstance(llm, MagicMock) and not isinstance(llm, AsyncMock):
             # If a synchronous mock is provided for an async interface,

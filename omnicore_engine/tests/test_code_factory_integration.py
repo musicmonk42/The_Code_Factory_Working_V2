@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+
 from omnicore_engine.engines import OmniCoreOmega
 from omnicore_engine.plugin_registry import PluginRegistry
-from unittest.mock import AsyncMock, MagicMock
 
 
 @pytest.mark.asyncio

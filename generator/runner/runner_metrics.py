@@ -10,21 +10,22 @@
 # - Graceful degradation with failover file support
 # - Enhanced error tracking and observability
 
-import prometheus_client as prom
 import asyncio
-import logging
+import contextlib
 import json
+import logging
 import os
-from pathlib import Path
 
 # FIX: Added 'Awaitable' and 'contextlib'
 import typing  # FIX: Added for TYPE_CHECKING
-from typing import Dict, Any, Optional, List, Callable, Tuple, Deque, Awaitable
+import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-import uuid
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple
+
 import aiofiles
-import contextlib
+import prometheus_client as prom
 
 # OpenTelemetry is used for tracing in other modules, but good to acknowledge
 try:
@@ -61,9 +62,7 @@ if typing.TYPE_CHECKING:
     from .runner_config import RunnerConfig, SecretStr
 
     # FIX: Move error imports here to break circular dependency
-    from .runner_errors import (
-        ERROR_CODE_REGISTRY as _error_codes,
-    )  # Import the error code registry
+    from .runner_errors import ERROR_CODE_REGISTRY as _error_codes  # Import the error code registry
 else:
     # Break circular import at runtime
     _error_codes = {}
@@ -990,11 +989,11 @@ class MetricsExporter:
                 # Lazy import error types
                 if typing.TYPE_CHECKING:
                     # --- FIX: Use relative import ---
-                    from .runner_errors import RunnerError, ExporterError
+                    from .runner_errors import ExporterError, RunnerError
                 else:
                     try:
                         # --- FIX: Use relative import ---
-                        from .runner_errors import RunnerError, ExporterError
+                        from .runner_errors import ExporterError, RunnerError
                     except ImportError:
                         RunnerError = Exception
                         ExporterError = Exception

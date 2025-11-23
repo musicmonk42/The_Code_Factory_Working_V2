@@ -4,18 +4,18 @@
 # robust execution, and comprehensive observability with elite-tier safeguards.
 
 import asyncio
-import subprocess
-import json
-import re
-import inspect
-import sys
+import contextlib
 import importlib
-import random
+import inspect
+import json
 import logging
+import random
+import re
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any, Callable, Optional, Union, Awaitable
-import contextlib
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # FIX: Import partial for run_in_executor
 
@@ -49,19 +49,14 @@ except ImportError:
 # Assume RunnerConfig and metrics are available
 # FIX: Correct imports to use the canonical runner.runner_* names
 from runner.runner_config import RunnerConfig
-from runner.runner_metrics import prom
-from runner.runner_logging import logger
-
-# Gold Standard: Import contracts and structured errors
 
 # FIX: Removed TestExecutionError as it's not in the user's runner_errors.py
-from runner.runner_errors import (
-    RunnerError,
-    TimeoutError,
-)  # Import specific errors
-from runner.runner_errors import (
-    ERROR_CODE_REGISTRY as error_codes,
-)  # Import error codes
+from runner.runner_errors import ERROR_CODE_REGISTRY as error_codes  # Import error codes
+from runner.runner_errors import RunnerError, TimeoutError  # Import specific errors
+from runner.runner_logging import logger
+from runner.runner_metrics import prom
+
+# Gold Standard: Import contracts and structured errors
 
 
 # OpenTelemetry Tracing Setup (Gold Standard: Safe Fallback)
@@ -110,16 +105,17 @@ except ImportError:
 # FIX: Correctly import metrics from runner.runner_metrics if available
 # Assuming the metrics module itself is safe to import, and 'prom' is the prometheus_client
 from runner.runner_metrics import (
-    MUTATION_TOTAL,
+    COVERAGE_GAPS,
+    MUTATION_ERROR,
     MUTATION_KILLED,
     MUTATION_SURVIVED,
     MUTATION_TIMEOUT,
-    MUTATION_ERROR,
-    RUN_MUTATION_SURVIVAL as MUTATION_SURVIVAL_RATE,  # Use 'as' to alias
-    RUN_FUZZ_DISCOVERIES as FUZZ_DISCOVERIES,  # Use 'as' to alias
-    COVERAGE_GAPS,
+    MUTATION_TOTAL,
 )
-
+from runner.runner_metrics import RUN_FUZZ_DISCOVERIES as FUZZ_DISCOVERIES  # Use 'as' to alias
+from runner.runner_metrics import (
+    RUN_MUTATION_SURVIVAL as MUTATION_SURVIVAL_RATE,  # Use 'as' to alias
+)
 
 # --- Plug-in Registration ---
 _MUTATOR_REGISTRY: Dict[str, Dict[str, Any]] = defaultdict(dict)
@@ -1248,14 +1244,14 @@ if __name__ == "__main__":
     def reset_mutation_metrics():
         # FIX: Access the global metric objects directly
         from runner.runner_metrics import (
-            MUTATION_TOTAL,
+            COVERAGE_GAPS,
+            FUZZ_DISCOVERIES,
+            MUTATION_ERROR,
             MUTATION_KILLED,
+            MUTATION_SURVIVAL_RATE,
             MUTATION_SURVIVED,
             MUTATION_TIMEOUT,
-            MUTATION_ERROR,
-            MUTATION_SURVIVAL_RATE,
-            FUZZ_DISCOVERIES,
-            COVERAGE_GAPS,
+            MUTATION_TOTAL,
         )
 
         for metric in [
@@ -1347,7 +1343,7 @@ if __name__ == "__main__":
                 return {"stdout": "", "stderr": "", "returncode": 0}
 
             # FIX: Patch the necessary functions and access the updated metrics
-            from runner.runner_metrics import MUTATION_TOTAL, MUTATION_SURVIVAL_RATE
+            from runner.runner_metrics import MUTATION_SURVIVAL_RATE, MUTATION_TOTAL
 
             # FIX: Correct patch path
             with patch(
@@ -1424,7 +1420,7 @@ if __name__ == "__main__":
                 return {"stdout": "", "stderr": "", "returncode": 0}
 
             # FIX: Patch the necessary functions and access the updated metrics
-            from runner.runner_metrics import MUTATION_TOTAL, MUTATION_SURVIVAL_RATE
+            from runner.runner_metrics import MUTATION_SURVIVAL_RATE, MUTATION_TOTAL
 
             # FIX: Correct patch path
             with patch(
@@ -1499,7 +1495,6 @@ if __name__ == "__main__":
 
                 # NOTE: The original test block's patching strategy is flawed for Hypothesis internals.
                 # Reverting to the simpler mock that checks the final discovery count.
-
                 # Mock running the function to simulate 3 failures out of 10 examples
 
                 class MockFalsifyingException(Exception):
@@ -1597,7 +1592,7 @@ if __name__ == "__main__":
         await run_test_case_async("Property-Based Testing", test_property_based_testing)
         await run_test_case_async("General Fuzzing", test_general_fuzzing)
 
-    from unittest.mock import patch, MagicMock, AsyncMock
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Ensure Prometheus HTTP server is mocked to avoid conflicts
     # FIX: Patch the correct prometheus server start function

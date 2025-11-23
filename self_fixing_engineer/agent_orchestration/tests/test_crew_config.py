@@ -1,8 +1,9 @@
 # tests/test_crew_config.py
+from unittest.mock import AsyncMock
+
 import pytest
 import yaml
 from cerberus import Validator
-from unittest.mock import AsyncMock
 
 
 @pytest.fixture
@@ -80,7 +81,7 @@ def test_yaml_invalid_structure(temp_yaml):
 @pytest.mark.asyncio
 async def test_integration_crew_manager_with_config(temp_yaml, monkeypatch):
     """Integration test: Load config into CrewManager."""
-    from agent_orchestration.crew_manager import CrewManager, CrewAgentBase
+    from agent_orchestration.crew_manager import CrewAgentBase, CrewManager
 
     # Register the base class for testing
     CrewManager.register_agent_class(CrewAgentBase)

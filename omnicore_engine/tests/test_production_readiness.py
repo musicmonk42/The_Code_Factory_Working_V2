@@ -5,21 +5,22 @@ This test suite validates that the OmniCore Engine is fully functional
 and production-ready by testing critical integration points and workflows.
 """
 
-import pytest
-from unittest.mock import Mock
-import sys
 import os
+import sys
+from unittest.mock import Mock
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.core import (
-    OmniCoreEngine,
-    safe_serialize,
     ExplainableAI,
     MerkleTree,
+    OmniCoreEngine,
     get_plugin_metrics,
     get_test_metrics,
+    safe_serialize,
 )
 
 
@@ -188,13 +189,15 @@ class TestProductionReadiness:
     def test_import_core_modules(self):
         """Test that all core modules can be imported"""
         try:
-            from omnicore_engine import core
-            from omnicore_engine import audit
-            from omnicore_engine import metrics
-            from omnicore_engine import security_utils
-            from omnicore_engine import security_config
-            from omnicore_engine import plugin_registry
-            from omnicore_engine import cli
+            from omnicore_engine import (
+                audit,
+                cli,
+                core,
+                metrics,
+                plugin_registry,
+                security_config,
+                security_utils,
+            )
 
             assert True
         except ImportError as e:
@@ -202,12 +205,7 @@ class TestProductionReadiness:
 
     def test_cli_functions_available(self):
         """Test that CLI functions are available"""
-        from omnicore_engine.cli import (
-            main,
-            sanitize_env_vars,
-            safe_command,
-            validate_file_path,
-        )
+        from omnicore_engine.cli import main, safe_command, sanitize_env_vars, validate_file_path
 
         assert callable(main)
         assert callable(sanitize_env_vars)
@@ -216,7 +214,7 @@ class TestProductionReadiness:
 
     def test_audit_classes_available(self):
         """Test that audit classes are available"""
-        from omnicore_engine.audit import ExplainAudit, ExplainRecord, AuditRecordSchema
+        from omnicore_engine.audit import AuditRecordSchema, ExplainAudit, ExplainRecord
 
         assert ExplainAudit is not None
         assert ExplainRecord is not None
@@ -225,10 +223,10 @@ class TestProductionReadiness:
     def test_security_utils_available(self):
         """Test that security utilities are available"""
         from omnicore_engine.security_utils import (
-            SecurityError,
-            ValidationError,
             AuthenticationError,
             AuthorizationError,
+            SecurityError,
+            ValidationError,
             get_security_utils,
         )
 

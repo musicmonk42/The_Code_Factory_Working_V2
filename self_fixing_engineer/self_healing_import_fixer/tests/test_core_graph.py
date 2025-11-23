@@ -3,11 +3,12 @@ test_core_graph.py - Test suite for ImportGraphAnalyzer
 Fixed version with import patching before module load
 """
 
-import pytest
+import importlib.util
 import os
 import sys
-import importlib.util
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Setup paths
 current_dir = os.path.dirname(os.path.abspath(__file__))

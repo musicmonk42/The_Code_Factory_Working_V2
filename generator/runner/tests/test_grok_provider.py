@@ -22,8 +22,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from runner.providers.grok_provider import GrokProvider, get_provider  # type: ignore
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 @pytest.fixture

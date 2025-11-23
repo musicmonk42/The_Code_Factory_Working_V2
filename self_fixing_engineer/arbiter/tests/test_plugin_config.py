@@ -1,6 +1,7 @@
-import pytest
 from unittest.mock import patch
-from arbiter.plugin_config import PluginRegistry, SANDBOXED_PLUGINS
+
+import pytest
+from arbiter.plugin_config import SANDBOXED_PLUGINS, PluginRegistry
 
 
 # Fixture to provide the expected plugin dictionary

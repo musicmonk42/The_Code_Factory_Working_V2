@@ -4,29 +4,29 @@ Unit tests for feedback_handlers.py with >=90% coverage.
 Tests all public APIs, internal worker, sinks, metrics, and edge cases.
 """
 
-import pytest
 import json
-import queue
-from unittest.mock import patch, mock_open
 import logging
+import queue
+from unittest.mock import mock_open, patch
+
+import pytest
 
 # FIX: Import the module itself to fix namespace issue
 import runner.feedback_handlers as feedback_handlers
-
+from runner.feedback_handlers import _registry  # <-- REMOVED _worker_thread
 from runner.feedback_handlers import (
+    _SENTINEL,
     FeedbackEvent,
-    Severity,
     FeedbackSink,
     FileSink,
-    collect_feedback,
-    register_sink,
-    get_feedback_metrics,
-    shutdown,
+    LoggingSink,
+    Severity,
     _worker_queue,
     _worker_stop,
-    _SENTINEL,
-    _registry,  # <-- REMOVED _worker_thread
-    LoggingSink,
+    collect_feedback,
+    get_feedback_metrics,
+    register_sink,
+    shutdown,
 )
 
 # --- Setup for logging to avoid duplicate handlers in tests ---

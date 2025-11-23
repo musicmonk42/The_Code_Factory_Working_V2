@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import os
 import asyncio
+import datetime
 import json
 import logging
-import time
-import tempfile
-import uuid
+import os
 import shutil
-from typing import Dict, Any, Optional, Tuple, Callable, List
-from urllib.parse import urlparse
-import datetime
+import tempfile
+import time
+import uuid
 from contextlib import contextmanager
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 # --- Logger Setup (initialize before anything that might log) ---
 logger = logging.getLogger(__name__)
@@ -27,8 +27,8 @@ if not logger.handlers:
 # --- Conditional Imports for GitPython ---
 try:
     import git  # GitPython library
-    from git.repo import Repo
     from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
+    from git.repo import Repo
 
     GITPYTHON_AVAILABLE = True
 except ImportError:
@@ -44,12 +44,7 @@ except ImportError:
 
 # --- Conditional Imports for Tenacity (separate from GitPython) ---
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -83,7 +78,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 # --- Prometheus Metrics (Idempotent Definition) ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
     from simulation.utils import get_or_create_metric
 
     # Use the safe metric creation function from simulation.utils

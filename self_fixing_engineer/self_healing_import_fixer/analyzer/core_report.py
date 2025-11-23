@@ -1,16 +1,17 @@
 # self_healing_import_fixer/analyzer/core_report.py
 
-import os
+import datetime
+import io
 import json
 import logging
-import sys
-import datetime
-from typing import Dict, List, Any, Optional, Literal
-import uuid
+import os
 import shutil
-from pathlib import Path
-import io
+import sys
 import tempfile
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -38,8 +39,8 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from .core_utils import alert_operator
     from .core_secrets import SECRETS_MANAGER
+    from .core_utils import alert_operator
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for core_report: {e}. Aborting startup.")
     # Cannot use alert_operator here since it failed to import!
@@ -76,20 +77,8 @@ def _atomic_write_text(path: str, data: str) -> None:
 
 # --- Flask Imports and App Initialization (at module scope) ---
 try:
-    from flask import (
-        Flask,
-        jsonify,
-        render_template_string,
-        request,
-        send_file,
-        current_app,
-    )
-    from flask_jwt_extended import (
-        JWTManager,
-        jwt_required,
-        create_access_token,
-        get_jwt,
-    )
+    from flask import Flask, current_app, jsonify, render_template_string, request, send_file
+    from flask_jwt_extended import JWTManager, create_access_token, get_jwt, jwt_required
 
     FLASK_AVAILABLE = True
     app = Flask(__name__)

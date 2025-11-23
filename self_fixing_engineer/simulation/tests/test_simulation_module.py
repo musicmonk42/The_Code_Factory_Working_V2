@@ -26,12 +26,13 @@ Date: 2025-08-16
 Version: 1.0.0
 """
 
-import json
-import time
 import asyncio
+import json
 import logging
+import time
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
 
 # Configure logging for tests
 logging.basicConfig(
@@ -40,11 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger("simulation-module-tests")
 
 # Import the module under test
-from simulation_module import (
-    UnifiedSimulationModule,
-    SIM_MODULE_METRICS,
-)
-
+from simulation_module import SIM_MODULE_METRICS, UnifiedSimulationModule
 
 # --- Test Constants and Helpers ---
 

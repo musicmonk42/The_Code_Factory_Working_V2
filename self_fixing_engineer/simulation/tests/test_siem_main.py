@@ -4,16 +4,17 @@ Test suite for siem_main.py module.
 Tests the main SIEM functionality including test runner and CLI commands.
 """
 
-import pytest
 import asyncio
-import os
-import sys
-import json
-import uuid
 import datetime
 import hashlib
 import hmac
+import json
+import os
+import sys
+import uuid
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Mock all SIEM modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()

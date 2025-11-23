@@ -1,24 +1,22 @@
 import asyncio
 import logging
 import os
+from typing import Any, Dict
+
+import aiohttp
 import pytest
 import pytest_asyncio
-import aiohttp
-from pytest_mock import MockerFixture
-from typing import Dict, Any
-from prometheus_client import CollectorRegistry, Counter, Histogram
-from aiohttp import ClientResponse, ClientError
+from aiohttp import ClientError, ClientResponse
 from aiohttp.client_exceptions import ClientResponseError
-from tenacity import RetryError  # Import RetryError here
+
+# Import the clients and related components
+from arbiter.meta_learning_orchestrator.clients import AgentConfigurationService, MLPlatformClient
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
-
-# Import the clients and related components
-from arbiter.meta_learning_orchestrator.clients import (
-    MLPlatformClient,
-    AgentConfigurationService,
-)
+from prometheus_client import CollectorRegistry, Counter, Histogram
+from pytest_mock import MockerFixture
+from tenacity import RetryError  # Import RetryError here
 
 # Import or mock PIIRedactorFilter if logging_utils is available
 try:

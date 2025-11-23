@@ -1,11 +1,12 @@
-import pytest
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock
 import asyncio
-import os
-import sys
 import json
 import logging
+import os
+import sys
 from logging.handlers import RotatingFileHandler
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # We need to patch imports before importing the module under test
 sys.modules["arbiter.config"] = MagicMock()
@@ -78,13 +79,13 @@ if "arbiter.run_exploration" in sys.modules:
     del sys.modules["arbiter.run_exploration"]
 
 from arbiter.run_exploration import (
-    setup_logging,
     load_config,
-    notify_critical_error,
     load_plugins,
+    main,
+    notify_critical_error,
     run_agent_task,
     run_agentic_workflow,
-    main,
+    setup_logging,
 )
 
 

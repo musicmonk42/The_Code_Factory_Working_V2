@@ -1,8 +1,7 @@
 import logging
 from typing import Optional, Type, Union
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, CollectorRegistry
-
+from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 

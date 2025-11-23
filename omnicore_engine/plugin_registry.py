@@ -1,18 +1,19 @@
-import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Pattern
-from collections import defaultdict
-from pydantic import BaseModel, Field
 import asyncio
-import threading
+import importlib.util
 import inspect
+import logging
+import os
+import sys
+import threading
 import traceback
+from collections import defaultdict
+from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+
+from pydantic import BaseModel, Field
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from enum import Enum
-import importlib.util
-import sys
-import os
 
 # --- BEGIN SOLUTION (Corrected Path) ---
 # Force Python to find the local 'self_fixing_engineer' package
@@ -23,32 +24,30 @@ if _arbiter_path.exists() and str(_arbiter_path) not in sys.path:
     sys.path.insert(0, str(_arbiter_path))
 # --- END SOLUTION ---
 
+import ast
+import importlib
 import multiprocessing as mp
+import pickle
+import pkgutil
+import time
 import uuid
 from datetime import datetime
-import pkgutil
-import importlib
-import time
-import pickle
-import ast
 
 try:
     import resource
 except ImportError:
     resource = None
-import signal
-import platform
-import hmac
 import hashlib
+import hmac
+import platform
+import signal
 
 # Corrected imports to use centralized config and new package structure
 try:
-    from arbiter.config import ArbiterConfig
     from arbiter import __path__ as assistant_pkg_path
-    from arbiter_plugin_registry import (
-        PlugInKind as ArbiterPlugInKind,
-        PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY,
-    )
+    from arbiter.config import ArbiterConfig
+    from arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
+    from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
 except ImportError:
 
     class ArbiterConfig:
@@ -88,10 +87,10 @@ except ImportError:
 
 try:
     from omnicore_engine.message_bus import (
-        ShardedMessageBus,
-        PluginMessageBusAdapter,
-        MessageFilter,
         Message,
+        MessageFilter,
+        PluginMessageBusAdapter,
+        ShardedMessageBus,
     )
 except ImportError:
     ShardedMessageBus = None
@@ -101,7 +100,7 @@ except ImportError:
     print("omnicore_engine.message_bus not found. Message bus functionality disabled.")
 
 try:
-    from intent_capture.agent_core import CollaborativeAgent, AgentTeam
+    from intent_capture.agent_core import AgentTeam, CollaborativeAgent
 except ImportError:
     CollaborativeAgent = None
     AgentTeam = None
@@ -110,8 +109,8 @@ except ImportError:
 try:
     from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
     from self_healing_import_fixer.import_fixer.import_fixer_engine import (
-        create_import_fixer_engine,
         ImportFixerEngine,
+        create_import_fixer_engine,
     )
 except ImportError:
     AIManager = None
@@ -127,7 +126,7 @@ except Exception as e:
     print(f"test_generation.backends not available ({e}); skipping.")
 
 try:
-    from self_fixing_engineer.simulation.runners import MyCustomRunner, MyBetterRunner
+    from self_fixing_engineer.simulation.runners import MyBetterRunner, MyCustomRunner
 except Exception as e:
     MyCustomRunner = None
     MyBetterRunner = None
@@ -800,9 +799,9 @@ class PluginRegistry:
         # -- Make SFE Test Generation available via the registry (no new files) -------
         try:
             if os.getenv("SFE_ENABLED", "true").lower() == "true":
-                from test_generation.orchestrator.orchestrator import (
+                from test_generation.orchestrator.orchestrator import (  # local import to avoid cost when unused
                     GenerationOrchestrator,
-                )  # local import to avoid cost when unused
+                )
 
                 async def _sfe_generate_tests(
                     *,

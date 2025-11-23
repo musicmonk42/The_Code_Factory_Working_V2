@@ -1,19 +1,14 @@
 # test_generation/orchestrator/tests/test_pipeline.py
-import pytest
+from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
-from test_generation.orchestrator.orchestrator import (
-    GenerationOrchestrator,
-)
-from test_generation.orchestrator.config import CONFIG
+
+import pytest
 from test_generation.orchestrator import sanitize_path
-from test_generation.utils import (
-    SecurityScanner,
-    MutationTester,
-    PRCreator,
-)
+from test_generation.orchestrator.config import CONFIG
+from test_generation.orchestrator.orchestrator import GenerationOrchestrator
 from test_generation.policy_and_audit import PolicyEngine
-from contextlib import asynccontextmanager
+from test_generation.utils import MutationTester, PRCreator, SecurityScanner
 
 
 @pytest.fixture

@@ -1,25 +1,21 @@
 # tests/test_gcp_cloud_run_runner_plugin.py
 
+import asyncio
 import os
 import sys
-import pytest
-import asyncio
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import the plugin - we'll handle missing dependencies gracefully
 try:
-    from google.api_core.exceptions import (
-        GoogleAPIError,
-        NotFound,
-        Conflict,
-        ResourceExhausted,
-    )
+    from google.api_core.exceptions import Conflict, GoogleAPIError, NotFound, ResourceExhausted
 
     # Note: QuotaExceeded doesn't exist in google.api_core.exceptions
     # ResourceExhausted is the correct exception for quota issues
@@ -49,13 +45,13 @@ try:
 
     # Import the needed components
     from plugins.gcp_cloud_run_runner_plugin import (
+        GCP_AVAILABLE,
+        PLUGIN_MANIFEST,
+        JobConfig,
+        _bucket_valid,
+        _tar_directory_to_temp,
         plugin_health,
         run_cloud_run_job,
-        JobConfig,
-        GCP_AVAILABLE,
-        _tar_directory_to_temp,
-        _bucket_valid,
-        PLUGIN_MANIFEST,
     )
 except ImportError as e:
     pytest.skip(f"Cannot import plugin: {e}", allow_module_level=True)
@@ -753,9 +749,7 @@ class TestSecurity:
                 os.environ,
                 {"VAULT_URL": "https://vault.example.com", "VAULT_TOKEN": "mock-token"},
             ):
-                from plugins.gcp_cloud_run_runner_plugin import (
-                    _load_credentials_from_vault,
-                )
+                from plugins.gcp_cloud_run_runner_plugin import _load_credentials_from_vault
 
                 creds = await _load_credentials_from_vault()
 

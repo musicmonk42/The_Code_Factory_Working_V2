@@ -1,8 +1,8 @@
 # File: omnicore_engine/fastapi_app.py
-import sys
-import os
-from pathlib import Path
 import ast
+import os
+import sys
+from pathlib import Path
 
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root_dir not in sys.path:
@@ -12,42 +12,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import json
 import asyncio
-from typing import Dict, Any, Optional, List
-from fastapi import (
-    FastAPI,
-    Request,
-    HTTPException,
-    Depends,
-    status,
-    APIRouter,
-    Query,
-    UploadFile,
-)
-from fastapi.responses import JSONResponse
+import json
+import time
+from typing import Any, Dict, List, Optional
+
+import jwt
+from cryptography.fernet import Fernet
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
-from prometheus_client import make_asgi_app
-from pydantic import BaseModel
-from cryptography.fernet import Fernet
-import time
-import jwt
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
+from prometheus_client import make_asgi_app
+from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Corrected imports to use the centralized OmniCore Engine singletons
-from omnicore_engine.core import logger, safe_serialize, omnicore_engine, settings
+from omnicore_engine.core import logger, omnicore_engine, safe_serialize, settings
 from omnicore_engine.database.database import Database
-from omnicore_engine.plugin_registry import (
-    PLUGIN_REGISTRY,
-    PlugInKind,
-    PluginMarketplace,
-)
 from omnicore_engine.meta_supervisor import MetaSupervisor
+from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, PluginMarketplace
 
 try:
     from simulations.simulation_module import UnifiedSimulationModule
@@ -58,7 +46,7 @@ try:
 except ImportError:
     AIManager = None
 from omnicore_engine.message_bus.message_types import Message
-from omnicore_engine.metrics import API_REQUESTS, API_ERRORS
+from omnicore_engine.metrics import API_ERRORS, API_REQUESTS
 
 # Using functools.partial to create a callable that mimics the plugin's interface
 # This is a good practice for dynamic plugin execution.
@@ -69,14 +57,15 @@ from omnicore_engine.metrics import API_REQUESTS, API_ERRORS
 
 try:
     # Updated imports to reflect the new arbiter package structure
-    from arbiter.explainable_reasoner import ExplainableReasonerPlugin
-    from arbiter.policy.core import PolicyEngine
-    from omnicore_engine.feedback_manager import FeedbackManager, FeedbackType
-    from arbiter.arbiter import Arbiter
-    from arbiter.knowledge_loader import KnowledgeLoader
-    from arbiter.arena import ArbiterArena
-    from omnicore_engine.merkle_tree import MerkleTree
     import sqlalchemy
+    from arbiter.arbiter import Arbiter
+    from arbiter.arena import ArbiterArena
+    from arbiter.explainable_reasoner import ExplainableReasonerPlugin
+    from arbiter.knowledge_loader import KnowledgeLoader
+    from arbiter.policy.core import PolicyEngine
+
+    from omnicore_engine.feedback_manager import FeedbackManager, FeedbackType
+    from omnicore_engine.merkle_tree import MerkleTree
 
     ARBITER_AVAILABLE = True
     ARENA_AVAILABLE = True
@@ -214,7 +203,8 @@ class SizeLimitMiddleware(BaseHTTPMiddleware):
 
 # In fastapi_app.py, add security middleware
 from security_config import get_security_config
-from omnicore_engine.security_utils import get_security_utils, RateLimiter
+
+from omnicore_engine.security_utils import RateLimiter, get_security_utils
 
 security_config = get_security_config()
 security_utils = get_security_utils()

@@ -1,14 +1,15 @@
-import os
-import sys
-import streamlit as st
-import networkx as nx
-import logging
 import json
+import logging
+import os
 import re
+import sys
 import time
-from typing import Dict, List, Any, Optional, Callable, Union, Tuple
 from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import networkx as nx
+import streamlit as st
 
 # --- Conditional Imports for Plotting Libraries ---
 try:
@@ -67,7 +68,7 @@ except ImportError:
 
 
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     PROMETHEUS_AVAILABLE = True
 

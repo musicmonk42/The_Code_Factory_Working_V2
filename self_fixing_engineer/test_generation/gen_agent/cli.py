@@ -1,18 +1,19 @@
 # cli.py
 from __future__ import annotations
 
-import sys
 import asyncio
-import os
+import contextlib
 import json
 import logging
-from datetime import datetime, timezone
-import contextlib
-from typing import Awaitable, Any, Optional
-from importlib.metadata import version as _pkg_version, PackageNotFoundError
-from pathlib import Path
-import uuid
+import os
+import sys
 import threading
+import uuid
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+from pathlib import Path
+from typing import Any, Awaitable, Optional
 
 # --- Optional Dependency Guards and Fallbacks ---
 try:
@@ -35,8 +36,8 @@ except ImportError:
 try:
     from rich.console import Console
     from rich.panel import Panel
-    from rich.table import Table  # Ensure this is also available if Rich is.
     from rich.progress import Progress  # Same here
+    from rich.table import Table  # Ensure this is also available if Rich is.
 
     RICH_AVAILABLE = True
 except Exception:
@@ -116,20 +117,20 @@ else:
     err_console = Console(stderr=True)
 
 
-# -------------------------------------------------
-from .runtime import (
-    is_ci_environment,
-    setup_logging,
-    run_dependency_check,
-    ensure_session_file,
-    init_llm,
-)
-from .atco_signal import install_default_handlers
-from test_generation.orchestrator.audit import FEEDBACK_LOG_FILE
-
 # Corrected import for the graph module
 from test_generation.gen_agent.graph import build_graph, invoke_graph
+from test_generation.orchestrator.audit import FEEDBACK_LOG_FILE
 
+from .atco_signal import install_default_handlers
+
+# -------------------------------------------------
+from .runtime import (
+    ensure_session_file,
+    init_llm,
+    is_ci_environment,
+    run_dependency_check,
+    setup_logging,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +346,7 @@ def cli(ctx: click.Context, config_file: Optional[str], project_root: str, debug
                 )
 
             # Export selected scalars into env with namespacing
-            for k, v in (cfg.items() if isinstance(cfg, dict) else []):
+            for k, v in cfg.items() if isinstance(cfg, dict) else []:
                 envk = str(k).upper()
                 if envk not in os.environ and not isinstance(v, (dict, list)):
                     os.environ[f"ATCO_{envk}"] = str(v)

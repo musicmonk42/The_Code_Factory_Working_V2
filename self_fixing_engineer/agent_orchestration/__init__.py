@@ -11,15 +11,15 @@ Key Components:
 
 try:
     from .crew_manager import (
-        CrewManager,
-        CrewAgentBase,
-        ResourceError,
-        CrewPermissionError,
-        AgentError,
-        structured_log,
-        sanitize_dict,
-        NAME_REGEX,
         MAX_CONFIG_SIZE,
+        NAME_REGEX,
+        AgentError,
+        CrewAgentBase,
+        CrewManager,
+        CrewPermissionError,
+        ResourceError,
+        sanitize_dict,
+        structured_log,
     )
 
     __all__ = [

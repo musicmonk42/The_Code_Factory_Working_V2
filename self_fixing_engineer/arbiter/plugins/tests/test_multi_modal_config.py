@@ -1,21 +1,21 @@
 # test_multi_modal_config.py
-import pytest
 import os
 import tempfile
-import yaml
 from unittest.mock import patch
-from pydantic import ValidationError
 
+import pytest
+import yaml
 from arbiter.plugins.multi_modal_config import (
+    AuditLogConfig,
+    CacheConfig,
     CircuitBreakerConfig,
+    ComplianceConfig,
+    MetricsConfig,
+    MultiModalConfig,
     ProcessorConfig,
     SecurityConfig,
-    AuditLogConfig,
-    MetricsConfig,
-    CacheConfig,
-    ComplianceConfig,
-    MultiModalConfig,
 )
+from pydantic import ValidationError
 
 
 class TestCircuitBreakerConfig:

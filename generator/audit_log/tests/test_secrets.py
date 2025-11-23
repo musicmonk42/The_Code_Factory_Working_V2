@@ -6,13 +6,13 @@ secret manager implementations, retry logic, rate limiting, and
 production guardrails.
 """
 
-import os
 import asyncio
 import base64
 import importlib
+import os
 import sys  # <-- ADDED for sys.modules pop
 from collections import defaultdict  # <-- ADDED
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -32,23 +32,23 @@ patch("prometheus_client.Histogram", MagicMock()).start()
 # We can now safely import the modules to be tested and mocked
 from generator.audit_log.audit_crypto import secrets
 from generator.audit_log.audit_crypto.secrets import (
-    SecretManager,
     AWSSecretsManager,
-    GCPSecretManager,
-    VaultSecretManager,
     DummySecretManager,
-    SecretError,
-    SecretNotFoundError,
-    SecretDecodingError,
-    SecretManagerConfigurationError,
+    GCPSecretManager,
     SecretAccessRateLimitExceeded,
-    aget_hsm_pin,
-    aget_fallback_hmac_secret,
-    aget_kms_master_key_ciphertext_blob,
-    get_hsm_pin,
-    get_fallback_hmac_secret,
-    get_kms_master_key_ciphertext_blob,
+    SecretDecodingError,
+    SecretError,
+    SecretManager,
+    SecretManagerConfigurationError,
+    SecretNotFoundError,
+    VaultSecretManager,
     _get_secret_with_retries_and_rate_limit,
+    aget_fallback_hmac_secret,
+    aget_hsm_pin,
+    aget_kms_master_key_ciphertext_blob,
+    get_fallback_hmac_secret,
+    get_hsm_pin,
+    get_kms_master_key_ciphertext_blob,
 )
 
 # --- Pytest Fixtures ---

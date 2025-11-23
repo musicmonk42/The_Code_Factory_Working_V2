@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 import types
 from pathlib import Path
 
@@ -176,14 +176,15 @@ print("TESTING=1 → watchers disabled")
 # *** THIS IS THE FIX ***
 #
 
+import shutil
+import tempfile
+from unittest.mock import AsyncMock, patch
+
 # --------------------------------------------------------------
 # 6. ENTERPRISE FIXTURES
 # --------------------------------------------------------------
 import pytest
-import tempfile
-import shutil
 import yaml
-from unittest.mock import AsyncMock, patch
 
 
 @pytest.fixture

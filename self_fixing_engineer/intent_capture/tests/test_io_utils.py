@@ -1,17 +1,18 @@
 # tests/test_io_utils.py
-import time
 import asyncio
+import time
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
 import pytest
 
 # Import the module under test
 from intent_capture.io_utils import (
     FileManager,
     ScalableProvenanceLogger,
+    download_file_to_temp,
     get_redis_client,
     hash_file_distributed_cache,
-    download_file_to_temp,
     log_audit_event,
     prune_audit_logs,
     startup_validation,

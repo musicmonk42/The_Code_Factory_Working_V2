@@ -3,16 +3,17 @@ Test suite for omnicore_engine/fastapi_app.py
 Tests FastAPI endpoints, middleware, and startup/shutdown events.
 """
 
-import pytest
 import asyncio
-import jwt
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, AsyncMock
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
-import tempfile
-import sys
 import os
+import sys
+import tempfile
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, Mock, patch
+
+import jwt
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

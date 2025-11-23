@@ -14,36 +14,30 @@ Features:
 - Strict failure enforcement: no fallbacks for Presidio, missing handlers, or failed prompt optimization/summarization.
 """
 
-import os
-import uuid
-import time
 import asyncio
-import json
-from typing import (
-    Dict,
-    Any,
-    List,
-    Type,
-)
 import glob
 import importlib.util  # Added for ValidatorRegistry plugin loading
+import json
+import os
+import re  # Added for pattern matching
+import sys  # Added for ValidatorRegistry
+import tempfile  # For temporary files and directories
+import time
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from prometheus_client import Counter, Histogram, Gauge
-from opentelemetry.trace import Status, StatusCode
+from typing import Any, Dict, List, Type
+
+import aiofiles  # For asynchronous file operations
 from aiohttp import web
-from aiohttp.web_routedef import RouteTableDef
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
-from ruamel.yaml import (
-    YAML as RuYAML,
-)  # For advanced YAML operations (preserving comments)
-import tempfile  # For temporary files and directories
-import aiofiles  # For asynchronous file operations
-import sys  # Added for ValidatorRegistry
-import re  # Added for pattern matching
+from aiohttp.web_routedef import RouteTableDef
+from opentelemetry.trace import Status, StatusCode
+from prometheus_client import Counter, Gauge, Histogram
+from ruamel.yaml import YAML as RuYAML  # For advanced YAML operations (preserving comments)
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # --- FIX: Import scan_config_for_findings from the correct module ---
 # REMOVED: from .deploy_response_handler import scan_config_for_findings
@@ -69,19 +63,14 @@ except (ImportError, AttributeError):
                 return nullcontext()
 
         tracer = _NoopTracer()
-from runner.llm_client import (
-    call_ensemble_api,
-)  # Central LLM Client for auto-correction
+# --- Presidio Imports (Strictly Required) ---
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
+from runner.llm_client import call_ensemble_api  # Central LLM Client for auto-correction
 from runner.runner_errors import LLMError
-from runner.runner_logging import (
-    logger,
-    add_provenance,
-)  # Use central logging and provenance
-from runner.runner_metrics import (
-    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,
-    LLM_ERRORS_TOTAL,
-    LLM_LATENCY_SECONDS,
-)  # Use central metrics
+from runner.runner_logging import add_provenance, logger  # Use central logging and provenance
+from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
+from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL  # Use central metrics
 
 # -----------------------------------
 
@@ -90,9 +79,6 @@ from runner.runner_metrics import (
 # NOTE: Removed dependency on retry/stop_after_attempt/wait_exponential which are not built-in
 # from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential # Assuming these were present for @retry
 
-# --- Presidio Imports (Strictly Required) ---
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
 
 # NOTE: Using central logger imported above, local logger definition deleted.
 

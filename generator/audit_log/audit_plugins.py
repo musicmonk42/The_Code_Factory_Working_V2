@@ -32,7 +32,7 @@ except ImportError:
 
 # Integrate with audit_metrics if it exists, otherwise provide dummy classes
 try:
-    from prometheus_client import Counter, Gauge, REGISTRY  # <-- ADDED REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge  # <-- ADDED REGISTRY
 except ImportError:
     logger = logging.getLogger(__name__)  # Need logger defined early
 

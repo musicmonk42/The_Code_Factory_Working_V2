@@ -3,32 +3,27 @@
 # Provides robust, extensible, and explainable parsing of various formats,
 # enforcing clear output schemas with versioning.
 
-import xml.etree.ElementTree as ET  # For XML parsing
+import asyncio  # For __main__ block
 import json  # For JSON parsing
+import logging
 import re  # For regex parsing (e.g., unittest, simple text outputs)
+import xml.etree.ElementTree as ET  # For XML parsing
 
 # FIX: Import datetime directly from datetime
 from datetime import datetime, timezone  # Explicitly import datetime for timestamps
 from pathlib import Path  # For file paths
-from typing import (
-    Dict,
+from typing import (  # Union for Path/str, Callable for register_parser
     Any,
+    Awaitable,
+    Callable,
+    Dict,
     List,
     Optional,
-    Callable,
     Union,
-    Awaitable,
-)  # Union for Path/str, Callable for register_parser
-import logging
+)
 
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    model_validator,
-)  # Import model_validator
 import aiofiles  # For asynchronous file operations
-import asyncio  # For __main__ block
+from pydantic import BaseModel, Field, ValidationError, model_validator  # Import model_validator
 
 # Assume logger from runner.logging is configured
 # If not, a basic logger fallback is standard practice

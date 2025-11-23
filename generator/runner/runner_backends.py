@@ -12,31 +12,27 @@
 # - Language-specific execution wrappers
 # All backends now share the same robust subprocess execution foundation.
 
-from abc import ABC, abstractmethod
 import asyncio
-import subprocess
-import json
-import re
 import base64
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    Type,
-    Callable,
-)  # Awaitable for async methods
-from pathlib import Path
+import hashlib  # For run_python_script, run_javascript
+import json
 import os
-import time
-import uuid
+import re
+import shutil  # For shutil.which to check executable presence
+import subprocess
 
 # --- REFACTOR MERGE: Imports added from process_utils.py ---
 import sys  # Added for platform check
-import shutil  # For shutil.which to check executable presence
-import hashlib  # For run_python_script, run_javascript
+import time
+import uuid
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional, Type  # Awaitable for async methods
+
 import aiofiles
 
-# --- END REFACTOR MERGE ---
+# --- REFACTOR: Import subprocess_wrapper from process_utils ---
+from runner.process_utils import subprocess_wrapper
 
 # Assume runner.config and runner.logging are correctly imported and configured
 from runner.runner_config import RunnerConfig
@@ -44,32 +40,30 @@ from runner.runner_config import RunnerConfig
 # --- ADDED IMPORT ---
 from runner.runner_contracts import TaskPayload, TaskResult
 
-# --- REFACTOR FIX: Corrected imports to point to runner foundation ---
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import (
-    HEALTH_STATUS,
-    # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,
-    # and get_circuit_breaker are no longer used here.
-    # This logic is encapsulated in the imported subprocess_wrapper.
+# Import structured errors for consistent error handling across backends
+# FIX: Corrected module typo from 'runner.errors' to 'runner.runner_errors'
+# --- FIX: Changed 'TestExecutionError' to 'ExecutionError' ---
+from runner.runner_errors import (  # Explicitly import used error types
+    BackendError,
+    ConfigurationError,
+    ExecutionError,
+    RunnerError,
+    SetupError,
+    TimeoutError,
 )
 
-# --- REFACTOR: Import subprocess_wrapper from process_utils ---
-from runner.process_utils import subprocess_wrapper
+# --- REFACTOR FIX: Corrected imports to point to runner foundation ---
+from runner.runner_logging import add_provenance, logger
+from runner.runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,; and get_circuit_breaker are no longer used here.; This logic is encapsulated in the imported subprocess_wrapper.
+    HEALTH_STATUS,
+)
+
+# --- END REFACTOR MERGE ---
+
 
 # --- END REFACTOR ---
 # --- END REFACTOR FIX ---
 
-# Import structured errors for consistent error handling across backends
-# FIX: Corrected module typo from 'runner.errors' to 'runner.runner_errors'
-# --- FIX: Changed 'TestExecutionError' to 'ExecutionError' ---
-from runner.runner_errors import (
-    RunnerError,
-    BackendError,
-    ExecutionError,
-    SetupError,
-    TimeoutError,
-    ConfigurationError,
-)  # Explicitly import used error types
 
 # OpenTelemetry Tracing (assuming it's set up globally)
 try:
@@ -83,9 +77,10 @@ except ImportError:
 
 # --- External Library Imports (with graceful degradation) ---
 try:
-    from docker import DockerClient
-    from docker.errors import DockerException, ImageNotFound, APIError as DockerAPIError
     import docker.types
+    from docker import DockerClient
+    from docker.errors import APIError as DockerAPIError
+    from docker.errors import DockerException, ImageNotFound
 
     HAS_DOCKER = True
 except ImportError:

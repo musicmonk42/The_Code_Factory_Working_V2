@@ -12,24 +12,24 @@
 # - Robust Error Handling: All failures, from input validation to file system errors,
 #   are audited and escalated to ensure no silent failures occur.
 
-import os
+import asyncio
+import html  # For sanitization
 import json
 import logging
-import traceback
-import tempfile
-from datetime import datetime, timezone
-from typing import Dict, Any
-import textwrap
-import html  # For sanitization
+import os
 import random
-import asyncio
 import re
-from importlib.metadata import version
+import tempfile
+import textwrap
 import time
+import traceback
+from datetime import datetime, timezone
+from importlib.metadata import version
+from pathlib import Path
+from typing import Any, Dict
+
 from packaging.version import Version
 from test_generation.utils import atomic_write, maybe_await
-from pathlib import Path
-
 
 # Initialize module exports - DummyMetric will be added after its definition
 __all__ = ["DummyMetric"]
@@ -114,7 +114,7 @@ else:
             )
             raise Exception("Prometheus metrics disabled due to known bug.")
 
-        from prometheus_client import Counter, Histogram, CollectorRegistry
+        from prometheus_client import CollectorRegistry, Counter, Histogram
 
         _registry = CollectorRegistry(auto_describe=True)
         report_generation_duration = Histogram(

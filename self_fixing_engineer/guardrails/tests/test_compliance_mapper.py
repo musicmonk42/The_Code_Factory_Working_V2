@@ -1,26 +1,27 @@
 # tests/test_compliance_mapper.py
+import argparse
+import logging
 import os
+import shutil
 import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
 import yaml
-import logging
-import argparse
-from unittest.mock import patch, MagicMock
-import shutil
 
 # Fix import path for compliance_mapper module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from compliance_mapper import (
-    load_compliance_map,
+    PROMETHEUS_AVAILABLE,
+    ComplianceEnforcementError,
+    _audit_log_gap,
     check_coverage,
     generate_report,
     health_check,
-    ComplianceEnforcementError,
-    _audit_log_gap,
+    load_compliance_map,
     main_cli,
     sanitize_log,
     write_dummy_config,
-    PROMETHEUS_AVAILABLE,
 )
 
 

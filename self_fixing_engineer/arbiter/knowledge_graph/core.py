@@ -1,15 +1,15 @@
 # Restored on August 20, 2025
-import logging
-import json
-import uuid
-import time
-import re
 import asyncio
 import hashlib
+import json
+import logging
+import re
 import sys
+import time
+import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, List, Optional
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional, Tuple
 
 # Python version compatibility for asyncio.timeout
 if sys.version_info >= (3, 11):
@@ -28,15 +28,12 @@ else:
         yield  # pragma: no cover (unreachable)
 
 
+from langchain.chains import ConversationChain
+
 # Langchain imports
 from langchain.memory import ConversationBufferWindowMemory
-from langchain.chains import ConversationChain
+from langchain_core.messages import HumanMessage, messages_from_dict, messages_to_dict
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import (
-    messages_from_dict,
-    messages_to_dict,
-    HumanMessage,
-)
 
 # LLM Provider Imports
 try:
@@ -47,8 +44,8 @@ except ImportError:
     )
     ChatXAI = None
 
-from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -60,11 +57,12 @@ except ImportError:
 
 # For MetaLearning model persistence
 import pickle
+
 from ratelimit import limits, sleep_and_retry
+from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.exceptions import NotFittedError
 
 # For JWT Validation
 try:
@@ -120,32 +118,32 @@ except ImportError:
     PostgresClient = None
 
 # Local imports
-from .config import Config, load_persona_dict, SensitiveValue, MultiModalData
-from .utils import (
-    async_with_retry,
-    _sanitize_user_input,
-    _sanitize_context,
-    AgentErrorCode,
-    AgentCoreException,
-    AGENT_METRICS,
-    trace_id_var,
-    logger,
-)
+from .config import Config, MultiModalData, SensitiveValue, load_persona_dict
+from .multimodal import DefaultMultiModalProcessor, MultiModalProcessor
 from .prompt_strategies import (
-    PromptStrategy,
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
     BASE_AGENT_PROMPT_TEMPLATE,
-    REFLECTION_PROMPT_TEMPLATE,
     CRITIQUE_PROMPT_TEMPLATE,
+    REFLECTION_PROMPT_TEMPLATE,
     SELF_CORRECT_PROMPT_TEMPLATE,
+    ConcisePromptStrategy,
+    DefaultPromptStrategy,
+    PromptStrategy,
 )
-from .multimodal import MultiModalProcessor, DefaultMultiModalProcessor
+from .utils import (
+    AGENT_METRICS,
+    AgentCoreException,
+    AgentErrorCode,
+    _sanitize_context,
+    _sanitize_user_input,
+    async_with_retry,
+    logger,
+    trace_id_var,
+)
 
 # Imports for StateBackends and AuditLedgerClient
 try:
-    from arbiter.models.redis_client import RedisClient
     from arbiter.models.audit_ledger_client import AuditLedgerClient
+    from arbiter.models.redis_client import RedisClient
 except ImportError:
     logger.warning(
         "Warning: Could not import one or more client classes for state and audit logging. Falling back to mocks."

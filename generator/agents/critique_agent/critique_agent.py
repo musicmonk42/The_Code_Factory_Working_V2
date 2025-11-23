@@ -1,46 +1,45 @@
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import os
+import random
+import re
 import shlex
+import shutil
 import tempfile
 import time
 import uuid
-import re
-import inspect
-import shutil
-import random
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from dotenv import load_dotenv
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from prometheus_client import Counter, Histogram, Gauge
-from pydantic import BaseModel, ValidationError, Field, root_validator
+from prometheus_client import Counter, Gauge, Histogram
+from pydantic import BaseModel, Field, ValidationError, root_validator
 
 # --- CORE RUNNER & SHARED UTILITY IMPORTS (ENFORCED) ---
 try:
     # Central Utilities from Runner
-    from runner.runner_logging import log_audit_event
-    from runner.runner_security_utils import (
-        scan_for_vulnerabilities,
-    )  # Central security scan utility
-    from runner.llm_client import call_llm_api, call_ensemble_api  # Unified LLM Clients
+    from runner.llm_client import call_ensemble_api, call_llm_api  # Unified LLM Clients
     from runner.runner_core import (
-        run_tests as runner_run_tests,
-    )  # Central test runner for safety checks
-    from runner.runner_file_utils import (
-        save_files_to_output,
-    )  # Use canonical file saver
+        run_tests as runner_run_tests,  # Central test runner for safety checks
+    )
+    from runner.runner_file_utils import save_files_to_output  # Use canonical file saver
+    from runner.runner_logging import log_audit_event
+    from runner.runner_security_utils import (  # Central security scan utility
+        scan_for_vulnerabilities,
+    )
+
+    from .critique_fixer import apply_auto_fixes
+    from .critique_linter import run_all_lints_and_checks
 
     # Imports from Sibling Critique Modules
     from .critique_prompt import build_semantic_critique_prompt
-    from .critique_linter import run_all_lints_and_checks
-    from .critique_fixer import apply_auto_fixes
 
 except ImportError as e:
     # Fallback stubs for degraded / test environments.
@@ -85,7 +84,7 @@ except ImportError as e:
 
 # Import omnicore plugin decorator
 try:
-    from omnicore_engine.plugin_registry import plugin, PlugInKind
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
 
     def plugin(**kwargs):

@@ -1,21 +1,13 @@
-import os
 import datetime
-import logging
 import hashlib
-import re
 import json
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Union,
-    List,
-    get_origin,
-    get_args,
-)
+import logging
+import os
+import re
 from collections import deque
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
-from prometheus_client import Counter, REGISTRY
+from prometheus_client import REGISTRY, Counter
 
 # Configure logging for metric debugging
 logging.basicConfig(

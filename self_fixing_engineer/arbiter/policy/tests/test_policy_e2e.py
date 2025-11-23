@@ -1,14 +1,14 @@
-import tempfile
 import json
 import os
-from unittest.mock import patch, AsyncMock, MagicMock
-import pytest
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from arbiter.policy.core import (
-    initialize_policy_engine,
-    should_auto_learn,
-    reset_policy_engine,
     get_policy_engine_instance,
+    initialize_policy_engine,
+    reset_policy_engine,
+    should_auto_learn,
 )
 
 

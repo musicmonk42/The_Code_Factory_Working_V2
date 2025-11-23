@@ -1,18 +1,18 @@
 # main/api.py
 import asyncio
-import jwt
-import uvicorn
+import logging
 import os
 import uuid
-import logging
-import backoff  # ADDED as per Step 2
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Annotated, List, Optional, Union, Callable
-from jwt.exceptions import InvalidTokenError
 from pathlib import Path
+from typing import Annotated, Callable, Dict, List, Optional, Union
 
 # New import for file upload handling (was missing in the original file block)
 import aiofiles
+import backoff  # ADDED as per Step 2
+import jwt
+import uvicorn
+from jwt.exceptions import InvalidTokenError
 
 # Pydantic for data validation
 from pydantic import BaseModel, Field
@@ -21,60 +21,43 @@ from pydantic import BaseModel, Field
 _FASTAPI_AVAILABLE = False
 try:
     # FastAPI imports
-    from fastapi import (
-        FastAPI,
-        Depends,
-        HTTPException,
-        status,
-        Body,
-        WebSocket,
-        WebSocketDisconnect,
-        Security,
-        Request,
-        UploadFile,
-        File,
-        Form,
-        Query,
-        Path as FastAPIPath,
-    )
-    from fastapi.security import (
-        OAuth2PasswordBearer,
-        OAuth2PasswordRequestForm,
-        APIKeyHeader,
-    )
-    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi import Body, Depends, FastAPI, File, Form, HTTPException
+    from fastapi import Path as FastAPIPath
+    from fastapi import Query, Request, Security, UploadFile, WebSocket, WebSocketDisconnect, status
     from fastapi.exception_handlers import http_exception_handler
-
-    # Rate limiting
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.util import get_remote_address
-    from slowapi.errors import RateLimitExceeded
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.security import APIKeyHeader, OAuth2PasswordBearer, OAuth2PasswordRequestForm
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.trace import Status, StatusCode  # Import Status and StatusCode
 
     # Password hashing
     from passlib.context import CryptContext
 
-    # SQLAlchemy for database integration
-    from sqlalchemy import (
-        create_engine,
-        Column,
-        String,
-        Text,
-        DateTime,
-        Boolean,
-        Integer,
-        text,
-    )  # ADDED 'text' as per Step 1
-    from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.orm import sessionmaker, Session
-    from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
-
     # Prometheus metrics and OpenTelemetry tracing
     from prometheus_fastapi_instrumentator import Instrumentator
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-    from opentelemetry.trace import Status, StatusCode  # Import Status and StatusCode
+
+    # Rate limiting
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+
+    # SQLAlchemy for database integration
+    from sqlalchemy import (  # ADDED 'text' as per Step 1
+        Boolean,
+        Column,
+        DateTime,
+        Integer,
+        String,
+        Text,
+        create_engine,
+        text,
+    )
+    from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import Session, sessionmaker
 
     _FASTAPI_AVAILABLE = True
     logging.getLogger(__name__).info(
@@ -397,15 +380,13 @@ except ImportError as e:
 # --- Custom Module Imports (assuming these are available) ---
 # In a real project, these would be separate files/packages
 try:
+    from intent_parser.intent_parser import IntentParser
+    from runner.runner_config import ConfigWatcher, load_config
     from runner.runner_core import Runner
-    from runner.runner_config import load_config, ConfigWatcher
-    from runner.runner_logging import (
-        logger as runner_logger,
-        search_logs,
-    )  # Use alias to avoid name clash
+    from runner.runner_logging import logger as runner_logger  # Use alias to avoid name clash
+    from runner.runner_logging import search_logs
     from runner.runner_metrics import get_metrics_dict
     from runner.runner_utils import encrypt_log
-    from intent_parser.intent_parser import IntentParser
 except ImportError:
     # Dummy implementations for testing if custom modules are not present
     class DummyRunner:

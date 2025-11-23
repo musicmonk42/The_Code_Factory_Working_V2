@@ -1,8 +1,8 @@
 # test_explainable_reasoner.py
 import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -11,15 +11,12 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from arbiter.explainable_reasoner.explainable_reasoner import (
-    ReasonerConfig,
     ExplainableReasoner,
     ExplainableReasonerPlugin,
+    ReasonerConfig,
     SensitiveValue,
 )
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 
 # --- Fixtures ---
 

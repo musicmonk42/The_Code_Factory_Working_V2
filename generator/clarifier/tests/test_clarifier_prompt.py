@@ -1,10 +1,10 @@
 # test_clarifier_prompt.py
 
-import unittest
-import sys
-import os
 import base64
-from unittest.mock import patch, AsyncMock, MagicMock
+import os
+import sys
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -127,11 +127,7 @@ mock_channel.ask_compliance_questions = AsyncMock()
 MockGetChannel.return_value = mock_channel
 
 # Import after mocking
-from generator.clarifier.clarifier_prompt import (
-    PromptClarifier,
-    CLARIFIER_CYCLES,
-    CLARIFIER_ERRORS,
-)
+from generator.clarifier.clarifier_prompt import CLARIFIER_CYCLES, CLARIFIER_ERRORS, PromptClarifier
 
 
 class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):

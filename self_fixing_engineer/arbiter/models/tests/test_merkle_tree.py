@@ -1,29 +1,30 @@
 import asyncio
+import gzip
+import hashlib
 import json
 import logging
 import os
-import gzip
-import hashlib
 from typing import List
+
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
 
 # Import centralized OpenTelemetry configuration for testing
 from arbiter.otel_config import get_tracer
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import the MerkleTree client and its exceptions from the correct module
 from merkle_tree import (
+    MERKLE_OPS_TOTAL,
+    MERKLE_TREE_DEPTH,
+    MERKLE_TREE_SIZE,
+    MerkleProofError,
     MerkleTree,
     MerkleTreeEmptyError,
-    MerkleProofError,
-    MERKLE_OPS_TOTAL,
-    MERKLE_TREE_SIZE,
-    MERKLE_TREE_DEPTH,
-    _write_compressed_json,
     _read_compressed_json,
+    _write_compressed_json,
 )
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

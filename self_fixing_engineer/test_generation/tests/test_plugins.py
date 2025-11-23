@@ -1,9 +1,10 @@
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
 from test_generation.gen_agent.gen_plugins import (
+    LANGUAGE_GENERATORS,
     PythonTestGenerator,
     generate_tests,
-    LANGUAGE_GENERATORS,
 )
 
 # Sample code with multiple functions for testing

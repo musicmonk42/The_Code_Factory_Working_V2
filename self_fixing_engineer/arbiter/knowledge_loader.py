@@ -1,14 +1,15 @@
 # knowledge_loader.py
 
-import os
-import json
 import asyncio
-import tempfile
+import json
 import logging
+import os
+import tempfile
 import threading
-from typing import Dict, Any, Optional, Union
 from copy import deepcopy
-from arbiter.arbiter_plugin_registry import register, PlugInKind
+from typing import Any, Dict, Optional, Union
+
+from arbiter.arbiter_plugin_registry import PlugInKind, register
 
 logger = logging.getLogger(__name__)
 

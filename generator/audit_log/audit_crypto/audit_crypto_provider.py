@@ -3,38 +3,38 @@
 # Contains the core cryptographic business logic for signing, verification, key generation, and rotation.
 
 import asyncio
+import hashlib
+
+# Standard Python cryptographic primitives
+import hmac
 import logging
 import os
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Set, Awaitable, Callable
+from types import SimpleNamespace  # Used for fallbacks
+from typing import Any, Awaitable, Callable, Dict, Optional, Set
 
 # Core cryptography primitives
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.backends import default_backend
-
-# Standard Python cryptographic primitives
-import hmac
-import hashlib
-from types import SimpleNamespace  # Used for fallbacks
 
 # Conditional imports for HSM
 try:
     import pkcs11
     from pkcs11.constants import (
-        CKM_EDDSA,
-        CKM_RSA_PKCS_PSS,
-        CKM_ECDSA,
-        CKM_SHA256,
         CKG_MGF1_SHA256,
-        CKS_RW_USER_FUNCTIONS,
         CKM_EC_EDWARDS_KEY_PAIR_GEN,
-        CKM_RSA_PKCS_KEY_PAIR_GEN,
         CKM_EC_KEY_PAIR_GEN,
+        CKM_ECDSA,
+        CKM_EDDSA,
+        CKM_RSA_PKCS_KEY_PAIR_GEN,
+        CKM_RSA_PKCS_PSS,
+        CKM_SHA256,
+        CKS_RW_USER_FUNCTIONS,
     )
     from pkcs11.types import SessionInfo
 
@@ -47,10 +47,11 @@ except ImportError:
 # Internal module imports (will be provided by the factory or ops layer)
 from .audit_keystore import KeyStore
 
-# --- Start of Patch for Circular Dependency (Kept from previous fix) ---
-
 # --- FIX: Import local secrets module, not standard library secrets ---
 from .secrets import get_hsm_pin  # Securely get HSM PIN
+
+# --- Start of Patch for Circular Dependency (Kept from previous fix) ---
+
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +346,7 @@ class SoftwareCryptoProvider(CryptoProvider):
 
         # --- Delayed Import for __init__ ---
         try:
-            from .audit_crypto_factory import log_action, CryptoInitializationError
+            from .audit_crypto_factory import CryptoInitializationError, log_action
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             async def log_action(*args, **kwargs):
@@ -429,7 +430,7 @@ class SoftwareCryptoProvider(CryptoProvider):
         """
         # --- Delayed Import for _load_existing_keys ---
         try:
-            from .audit_crypto_factory import KEY_LOAD_COUNT, CRYPTO_ERRORS, log_action
+            from .audit_crypto_factory import CRYPTO_ERRORS, KEY_LOAD_COUNT, log_action
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             KEY_LOAD_COUNT = SimpleNamespace(
@@ -603,10 +604,10 @@ class SoftwareCryptoProvider(CryptoProvider):
         try:
             from .audit_crypto_factory import (
                 CRYPTO_ERRORS,
-                SIGN_OPERATIONS,
-                SIGN_LATENCY,
-                log_action,
                 HAS_OPENTELEMETRY,
+                SIGN_LATENCY,
+                SIGN_OPERATIONS,
+                log_action,
                 tracer,
             )
         except ImportError:
@@ -761,10 +762,10 @@ class SoftwareCryptoProvider(CryptoProvider):
         try:
             from .audit_crypto_factory import (
                 CRYPTO_ERRORS,
-                VERIFY_OPERATIONS,
-                VERIFY_LATENCY,
-                log_action,
                 HAS_OPENTELEMETRY,
+                VERIFY_LATENCY,
+                VERIFY_OPERATIONS,
+                log_action,
                 tracer,
             )
         except ImportError:
@@ -942,12 +943,7 @@ class SoftwareCryptoProvider(CryptoProvider):
         """
         # --- Delayed Import for generate_key ---
         try:
-            from .audit_crypto_factory import (
-                CRYPTO_ERRORS,
-                log_action,
-                HAS_OPENTELEMETRY,
-                tracer,
-            )
+            from .audit_crypto_factory import CRYPTO_ERRORS, HAS_OPENTELEMETRY, log_action, tracer
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             CRYPTO_ERRORS = SimpleNamespace(
@@ -1173,10 +1169,10 @@ class SoftwareCryptoProvider(CryptoProvider):
         # --- Delayed Import for _rotate_keys_periodically ---
         try:
             from .audit_crypto_factory import (
-                KEY_CLEANUP_COUNT,
                 CRYPTO_ERRORS,
-                send_alert,
+                KEY_CLEANUP_COUNT,
                 log_action,
+                send_alert,
             )
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
@@ -1396,10 +1392,10 @@ class HSMCryptoProvider(CryptoProvider):
         # --- Delayed Import for __init__ (HSM) ---
         try:
             from .audit_crypto_factory import (
-                HSM_SESSION_HEALTH,
                 CRYPTO_ERRORS,
-                log_action,
+                HSM_SESSION_HEALTH,
                 CryptoInitializationError,
+                log_action,
             )
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
@@ -1502,11 +1498,7 @@ class HSMCryptoProvider(CryptoProvider):
         """Initializes the HSM session, including login, with retry logic for initial connection."""
         # --- Delayed Import for _initialize_hsm_session ---
         try:
-            from .audit_crypto_factory import (
-                HSM_SESSION_HEALTH,
-                CRYPTO_ERRORS,
-                log_action,
-            )
+            from .audit_crypto_factory import CRYPTO_ERRORS, HSM_SESSION_HEALTH, log_action
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(
@@ -1645,11 +1637,11 @@ class HSMCryptoProvider(CryptoProvider):
         # --- Delayed Import for _monitor_hsm_health ---
         try:
             from .audit_crypto_factory import (
-                HSM_SESSION_HEALTH,
                 CRYPTO_ERRORS,
-                send_alert,
+                HSM_SESSION_HEALTH,
                 log_action,
                 retry_operation,
+                send_alert,
             )
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
@@ -1748,10 +1740,10 @@ class HSMCryptoProvider(CryptoProvider):
         # --- Delayed Import for generate_key (HSM) ---
         try:
             from .audit_crypto_factory import (
-                KEY_ROTATIONS,
                 CRYPTO_ERRORS,
-                log_action,
                 HAS_OPENTELEMETRY,
+                KEY_ROTATIONS,
+                log_action,
                 tracer,
             )
         except ImportError:
@@ -1930,11 +1922,11 @@ class HSMCryptoProvider(CryptoProvider):
         # --- Delayed Import for sign (HSM) ---
         try:
             from .audit_crypto_factory import (
-                SIGN_OPERATIONS,
-                SIGN_LATENCY,
                 CRYPTO_ERRORS,
-                log_action,
                 HAS_OPENTELEMETRY,
+                SIGN_LATENCY,
+                SIGN_OPERATIONS,
+                log_action,
                 tracer,
             )
         except ImportError:
@@ -2118,11 +2110,11 @@ class HSMCryptoProvider(CryptoProvider):
         # --- Delayed Import for verify (HSM) ---
         try:
             from .audit_crypto_factory import (
-                VERIFY_OPERATIONS,
-                VERIFY_LATENCY,
                 CRYPTO_ERRORS,
-                log_action,
                 HAS_OPENTELEMETRY,
+                VERIFY_LATENCY,
+                VERIFY_OPERATIONS,
+                log_action,
                 tracer,
             )
         except ImportError:
@@ -2323,12 +2315,7 @@ class HSMCryptoProvider(CryptoProvider):
         """
         # --- Delayed Import for rotate_key (HSM) ---
         try:
-            from .audit_crypto_factory import (
-                KEY_ROTATIONS,
-                CRYPTO_ERRORS,
-                send_alert,
-                log_action,
-            )
+            from .audit_crypto_factory import CRYPTO_ERRORS, KEY_ROTATIONS, log_action, send_alert
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             KEY_ROTATIONS = SimpleNamespace(
@@ -2507,11 +2494,7 @@ class HSMCryptoProvider(CryptoProvider):
         """Closes HSM session cleanly."""
         # --- Delayed Import for close (HSM) ---
         try:
-            from .audit_crypto_factory import (
-                HSM_SESSION_HEALTH,
-                CRYPTO_ERRORS,
-                log_action,
-            )
+            from .audit_crypto_factory import CRYPTO_ERRORS, HSM_SESSION_HEALTH, log_action
         except ImportError:
             # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(

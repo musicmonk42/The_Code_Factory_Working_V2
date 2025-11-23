@@ -1,15 +1,16 @@
 # test_runner_config.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 
-import unittest
 import os
+import shutil
 import sys
 import tempfile
-import shutil
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from pydantic import ValidationError
+from unittest.mock import MagicMock, patch
+
 from cryptography.fernet import Fernet
+from pydantic import ValidationError
 
 # Mock external dependencies
 sys.modules["hvac"] = MagicMock()
@@ -18,11 +19,7 @@ sys.modules["watchfiles"] = MagicMock()
 sys.modules["aiohttp"] = MagicMock()
 
 # Import runner modules
-from runner.runner_config import (
-    RunnerConfig,
-    load_config,
-    ConfigWatcher,
-)
+from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
 from runner.runner_errors import ConfigurationError
 
 

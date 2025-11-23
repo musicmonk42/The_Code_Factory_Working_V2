@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 # Conditional imports
 try:
@@ -13,13 +13,14 @@ except ImportError:
     KafkaProducer = None
     KAFKA_AVAILABLE = False
 
-# Relative imports from the new modular structure
-from .message_types import Message
+from arbiter.config import ArbiterConfig
 
 # External project imports
 from omnicore_engine.core import safe_serialize
 from omnicore_engine.database.database import Database
-from arbiter.config import ArbiterConfig
+
+# Relative imports from the new modular structure
+from .message_types import Message
 
 settings = ArbiterConfig()
 

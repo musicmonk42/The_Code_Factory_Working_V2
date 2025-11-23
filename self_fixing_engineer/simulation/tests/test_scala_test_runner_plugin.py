@@ -1,12 +1,13 @@
 # tests/test_scala_test_runner_plugin.py
 
-import pytest
 import asyncio
 import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # Security fix: Use defusedxml to prevent XXE attacks
 
@@ -24,12 +25,12 @@ for path in plugin_paths:
 
 try:
     from scala_test_runner_plugin import (
-        plugin_health,
-        run_scala_tests,
+        _get_sbt_version,
         _parse_junit_xml,
         _parse_scoverage_xml,
         _which,
-        _get_sbt_version,
+        plugin_health,
+        run_scala_tests,
     )
 except ImportError as e:
     print(f"Failed to import scala_test_runner_plugin. Searched in: {plugin_paths}")

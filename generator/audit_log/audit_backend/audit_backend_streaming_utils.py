@@ -1,41 +1,39 @@
 # audit_backends/audit_backend_streaming_utils.py
-import logging
-import re
-import time
 import asyncio
 import json
-import uuid
+import logging
 import os
-import aiofiles
+import re
+import time
+import uuid
+from collections import deque
 
 # --- START: Change B Import ---
 from contextlib import asynccontextmanager
 
-# --- END: Change B Import ---
-
-from collections import deque
-
 # --- START: Change D Import ---
-from typing import (
-    Any,
-    Deque,
-    Callable,
-    Awaitable,
-)
+from typing import Any, Awaitable, Callable, Deque
 
-# --- END: Change D Import ---
+import aiofiles
 
 # --- START: Change C Import ---
-from prometheus_client import Counter, Gauge, CollectorRegistry
+from prometheus_client import CollectorRegistry, Counter, Gauge
 from prometheus_client.registry import REGISTRY as DEFAULT_REGISTRY
-
-# --- END: Change C Import ---
 
 # --- FIX: Import send_alert from audit_backend_core ---
 # Assuming audit_backend_core.py is in the same directory (audit_backends/)
 # If it's one level up, it would be 'from ..audit_backend_core import send_alert'
 # Based on the file path, it's likely in the same package.
 from .audit_backend_core import send_alert
+
+# --- END: Change B Import ---
+
+
+# --- END: Change D Import ---
+
+
+# --- END: Change C Import ---
+
 
 # --- END FIX ---
 

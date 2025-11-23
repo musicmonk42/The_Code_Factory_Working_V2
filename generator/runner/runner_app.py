@@ -2,22 +2,23 @@
 # TUI application for the runner system.
 # Integrates with a robust backend using structured contracts and error handling.
 
-import sys
-import gettext
-import aiohttp
-import json
-import re  # Added for TuiLogHandler redact
 import asyncio
-from pathlib import Path
-from typing import Any, Optional, Dict, Callable
-import logging
+import builtins
+import gettext
 import importlib
-import uuid  # For generating task_id where needed
 import inspect  # --- FIX 1.1 / 1.3 ---
+import json
+import logging
+import re  # Added for TuiLogHandler redact
+import sys
 
 # --- FIX 1.6: Expose time as a builtin for tests ---
 import time
-import builtins
+import uuid  # For generating task_id where needed
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+import aiohttp
 
 # Ensure `time` is available as a builtin for tests that forget to import it
 if not hasattr(builtins, "time"):
@@ -26,36 +27,35 @@ if not hasattr(builtins, "time"):
 
 
 # --- Textual / TUI imports with a safe fallback for the test environment. ---
-from unittest.mock import MagicMock, AsyncMock  # --- FIX 1.1 ---
+from unittest.mock import AsyncMock, MagicMock  # --- FIX 1.1 ---
 
 try:
     # In the real app (or under the test harness' textual mocks)
-    from textual.app import App, ComposeResult
-    from textual.app import on
-    from textual.widgets import (
-        Header,
-        Footer,
-        RichLog,
-        DataTable,
-        Button,
-        Input,
-        TextArea,
-        Label,
-        ProgressBar,
-        TabbedContent,
-        TabPane,
-        Tree,
-        TreeNode,
-        Static,
-        Markdown,
-        Switch,
-        Select,
-        Screen,
-    )
-    from textual.containers import Container, Horizontal, Vertical, Grid, VerticalScroll
+    from textual.app import App, ComposeResult, on
     from textual.binding import Binding
+    from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
     from textual.reactive import reactive
     from textual.timer import Timer  # Import Timer for type hint
+    from textual.widgets import (
+        Button,
+        DataTable,
+        Footer,
+        Header,
+        Input,
+        Label,
+        Markdown,
+        ProgressBar,
+        RichLog,
+        Screen,
+        Select,
+        Static,
+        Switch,
+        TabbedContent,
+        TabPane,
+        TextArea,
+        Tree,
+        TreeNode,
+    )
 
     _TextualAppBase = App
 except Exception:
@@ -104,20 +104,12 @@ except Exception:
 
 
 # Import necessary components using the corrected module names
-from runner.runner_config import RunnerConfig, load_config, ConfigWatcher
-from runner.runner_core import Runner  # FIX
-from runner.runner_metrics import (
-    RUN_QUEUE,
-    RUN_PASS_RATE,
-    RUN_RESOURCE_USAGE,
-    HEALTH_STATUS,
-)
-from runner.runner_logging import (
-    logger,
-    LOG_HISTORY,
-)  # FIX (added LOG_HISTORY)
+from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
 from runner.runner_contracts import TaskPayload
+from runner.runner_core import Runner  # FIX
+from runner.runner_logging import LOG_HISTORY, logger  # FIX (added LOG_HISTORY)
 from runner.runner_metrics import MetricsExporter  # Import MetricsExporter
+from runner.runner_metrics import HEALTH_STATUS, RUN_PASS_RATE, RUN_QUEUE, RUN_RESOURCE_USAGE
 
 # i18n setup (assuming translations in locale dir)
 gettext.bindtextdomain("runner", "locale")

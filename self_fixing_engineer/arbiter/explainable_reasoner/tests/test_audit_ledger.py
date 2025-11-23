@@ -6,19 +6,14 @@
 import logging
 import os
 from datetime import datetime, timezone
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import httpx
+import pytest
 
 # Import the module under test
-from arbiter.explainable_reasoner.audit_ledger import (
-    AuditLedgerClient,
-)
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
+from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)

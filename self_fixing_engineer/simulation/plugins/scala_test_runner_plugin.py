@@ -1,16 +1,16 @@
 # plugins/scala_test_runner_plugin.py
 
+import asyncio
+import glob
+import logging
 import os
 import re
-import asyncio
 import shutil
-import logging
 import tempfile
-import glob
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Security fix: Use defusedxml to prevent XXE attacks
 import defusedxml.ElementTree as ET
-from typing import Dict, Any, Optional, Callable, List, Tuple
 
 # -----------------------------------------------------------------------------------
 # Manifest aligned with PluginManager schema (AST-extracted by the manager)

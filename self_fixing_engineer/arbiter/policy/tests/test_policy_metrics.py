@@ -17,17 +17,11 @@ Requirements:
 - prometheus_client
 """
 
-import pytest
-import threading
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    generate_latest,
-)
-
 import sys
+import threading
+
+import pytest
+from prometheus_client import Counter, Gauge, Histogram, Summary, generate_latest
 
 sys.modules["..guardrails.compliance_mapper"] = __import__("types").SimpleNamespace(
     load_compliance_map=lambda: {
@@ -37,15 +31,15 @@ sys.modules["..guardrails.compliance_mapper"] = __import__("types").SimpleNamesp
 )
 
 from arbiter.policy.metrics import (
+    COMPLIANCE_CONTROL_ACTIONS_TOTAL,
+    COMPLIANCE_CONTROL_STATUS,
+    COMPLIANCE_VIOLATIONS_TOTAL,
+    LLM_CALL_LATENCY,
+    feedback_processing_time,
     get_or_create_metric,
     policy_decision_total,
     policy_file_reload_count,
     policy_last_reload_timestamp,
-    feedback_processing_time,
-    LLM_CALL_LATENCY,
-    COMPLIANCE_CONTROL_ACTIONS_TOTAL,
-    COMPLIANCE_CONTROL_STATUS,
-    COMPLIANCE_VIOLATIONS_TOTAL,
 )
 
 
@@ -256,9 +250,7 @@ def test_bad_buckets_graceful():
 
 def test_public_symbols_present(mock_config):
     # Import using the actual names from metrics.py
-    from arbiter.policy.metrics import (
-        get_or_create_metric,
-    )
+    from arbiter.policy.metrics import get_or_create_metric
 
     assert callable(get_or_create_metric)
     assert isinstance(policy_decision_total, Counter)
@@ -308,10 +300,10 @@ def test_metric_name_overlap_does_not_break():
 def test_metrics_module_all_public_symbols_present(mock_config):
     # Import with correct names from metrics.py
     from arbiter.policy.metrics import (
-        get_or_create_metric,
         COMPLIANCE_CONTROL_ACTIONS_TOTAL,
         COMPLIANCE_CONTROL_STATUS,
         COMPLIANCE_VIOLATIONS_TOTAL,
+        get_or_create_metric,
     )
 
     assert callable(get_or_create_metric)

@@ -1,8 +1,9 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import time
 import os
 import sys
+import time
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add the parent directory to path if needed
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,12 +15,12 @@ self_healing_path = os.path.abspath(
 sys.path.insert(0, self_healing_path)
 
 from arbiter_plugin_registry import (
+    PLUGIN_REGISTRY,
     PluginBase,
+    PluginDependencyError,
+    PlugInKind,
     PluginMeta,
     PluginRegistry,
-    PlugInKind,
-    PluginDependencyError,
-    PLUGIN_REGISTRY,
     logger,
 )
 

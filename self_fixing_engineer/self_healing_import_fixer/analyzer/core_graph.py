@@ -3,18 +3,19 @@ core_graph.py - Codebase Import and Call Graph Analyzer
 CRITICAL: This module analyzes codebase structure. It must operate securely.
 """
 
-import os
-import sys
 import ast
-import graphviz
-import logging
-from collections import defaultdict
-from typing import Dict, List, Set, Any, Optional
-import shutil
-import json
-import hashlib
 import asyncio
+import hashlib
+import json
+import logging
+import os
+import shutil
+import sys
+from collections import defaultdict
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
+
+import graphviz
 
 # --- Guard POSIX-only imports ---
 try:
@@ -48,8 +49,8 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Centralized Utilities ---
 try:
-    from .core_utils import alert_operator, scrub_secrets
     from .core_secrets import SECRETS_MANAGER
+    from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for core_graph: {e}. Aborting startup.")
     # Since alert_operator might not be imported, we need a fallback here

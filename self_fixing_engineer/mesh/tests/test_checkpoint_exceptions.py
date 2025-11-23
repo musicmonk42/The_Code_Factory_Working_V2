@@ -13,7 +13,7 @@ Tests cover:
 import json
 import os
 import time
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -120,10 +120,7 @@ class TestCheckpointError:
 
     def test_initialization(self, mock_tracing, mock_metrics):
         """Test basic exception initialization."""
-        from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointError,
-            CheckpointErrorCode,
-        )
+        from mesh.checkpoint.checkpoint_exceptions import CheckpointError, CheckpointErrorCode
 
         mock_trace, span = mock_tracing
 
@@ -277,10 +274,7 @@ class TestExceptionSubclasses:
 
     def test_audit_error(self):
         """Test CheckpointAuditError for security incidents."""
-        from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointAuditError,
-            CheckpointErrorCode,
-        )
+        from mesh.checkpoint.checkpoint_exceptions import CheckpointAuditError, CheckpointErrorCode
 
         with patch("mesh.checkpoint.checkpoint_exceptions.audit_logger") as mock_audit:
             error = CheckpointAuditError(
@@ -313,9 +307,9 @@ class TestExceptionSubclasses:
     def test_retryable_error(self):
         """Test CheckpointRetryableError for transient failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointRetryableError,
             CheckpointBackendError,
             CheckpointErrorCode,
+            CheckpointRetryableError,
         )
 
         error = CheckpointRetryableError("Temporary network issue", {"retry_count": 3})
@@ -327,8 +321,8 @@ class TestExceptionSubclasses:
     def test_validation_error(self):
         """Test CheckpointValidationError for schema failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointValidationError,
             CheckpointErrorCode,
+            CheckpointValidationError,
         )
 
         error = CheckpointValidationError(
@@ -350,8 +344,8 @@ class TestRetryDecorator:
     async def test_successful_retry(self):
         """Test successful retry after failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            retry_on_exception,
             CheckpointRetryableError,
+            retry_on_exception,
         )
 
         call_count = 0
@@ -372,9 +366,9 @@ class TestRetryDecorator:
     async def test_circuit_breaker_integration(self, mock_circuit_breaker):
         """Test circuit breaker with retry decorator."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            retry_on_exception,
             CheckpointBackendError,
             CheckpointErrorCode,
+            retry_on_exception,
         )
 
         @retry_on_exception(max_attempts=3)
@@ -490,10 +484,7 @@ class TestEdgeCases:
 
     def test_custom_error_code(self):
         """Test custom error code handling."""
-        from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointError,
-            CheckpointErrorCode,
-        )
+        from mesh.checkpoint.checkpoint_exceptions import CheckpointError, CheckpointErrorCode
 
         # Test with enum
         error1 = CheckpointError(

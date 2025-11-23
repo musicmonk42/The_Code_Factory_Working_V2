@@ -1,32 +1,29 @@
-import os
 import asyncio
-import json
-import logging
-import datetime
-import uuid
-import sys  # For sys.exit to fail fast
-import socket  # For hostname in test_log_entry
 import base64  # For base64.b64encode used in dummy shared_key
+import datetime
 import hashlib
 import hmac
+import json
+import logging
+import os
 import re
-from typing import Dict, Any
+import socket  # For hostname in test_log_entry
+import sys  # For sys.exit to fail fast
+import uuid
+from typing import Any, Dict
 
-# Import the factory and base logger from the new structure
-from .siem_factory import (
-    get_siem_client,
-    list_available_siem_clients,
-    SIEM_CLIENT_REGISTRY,
-)
 from .siem_base import (
+    PRODUCTION_MODE,
+    SECRETS_MANAGER,
     SIEMClientConfigurationError,
     SIEMClientError,
     SIEMClientQueryError,
     _base_logger,
-    PRODUCTION_MODE,
     alert_operator,
-    SECRETS_MANAGER,
 )
+
+# Import the factory and base logger from the new structure
+from .siem_factory import SIEM_CLIENT_REGISTRY, get_siem_client, list_available_siem_clients
 
 # --- Async Click Integration ---
 try:

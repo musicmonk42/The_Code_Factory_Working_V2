@@ -1,21 +1,21 @@
 import os
 from pathlib import Path
-from typing import Dict, Any, Type, Tuple, Optional
-
-# The import statement has been corrected to properly group all imported components.
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    CollectorRegistry,
-    multiprocess,
-    ProcessCollector,
-    generate_latest,
-)
+from typing import Any, Dict, Optional, Tuple, Type
 
 # --- Structured Logging Setup ---
 import structlog
+
+# The import statement has been corrected to properly group all imported components.
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    ProcessCollector,
+    Summary,
+    generate_latest,
+    multiprocess,
+)
 
 structlog.configure(
     processors=[

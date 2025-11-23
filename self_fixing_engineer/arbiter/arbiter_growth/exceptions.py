@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 # Configure a logger for this module.
 logger = logging.getLogger(__name__)

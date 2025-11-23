@@ -4,13 +4,13 @@ Integration tests for the Clarifier system.
 Tests the complete workflow from ambiguity detection through clarification to requirements update.
 """
 
-import unittest
 import asyncio
+import base64
 import os
 import sys
-import base64
 import tempfile
-from unittest.mock import patch, AsyncMock, MagicMock
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
@@ -233,10 +233,10 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
         mock_config_instance.CONTEXT_DB_PATH = self.temp_db.name
 
         # Import after patching
-        from generator.clarifier.clarifier_user_prompt import get_channel
         from generator.clarifier.clarifier import Clarifier
         from generator.clarifier.clarifier_prompt import PromptClarifier
         from generator.clarifier.clarifier_updater import RequirementsUpdater
+        from generator.clarifier.clarifier_user_prompt import get_channel
 
         self.get_channel = get_channel
         self.Clarifier = Clarifier
@@ -690,9 +690,8 @@ class TestComponentInteractions(unittest.IsolatedAsyncioTestCase):
 
     async def test_clarifier_to_updater_flow(self):
         """Test data flow from clarifier to updater."""
-        from generator.clarifier.clarifier import Clarifier
+        from generator.clarifier.clarifier import Clarifier, SQLiteContextManager
         from generator.clarifier.clarifier_updater import RequirementsUpdater
-        from generator.clarifier.clarifier import SQLiteContextManager
 
         with patch("generator.clarifier.clarifier.GrokLLM"), patch(
             "generator.clarifier.clarifier.DefaultPrioritizer"

@@ -58,14 +58,14 @@ HTTP/WS API Example (FastAPI):
 """
 
 import asyncio
-import logging
-import time
 import json
-import re
+import logging
 import os
+import re
 import threading
+import time
 from logging.handlers import RotatingFileHandler
-from typing import Dict, Any, Optional, Callable, List, Awaitable, Type, Union, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Type, Union
 
 try:
     import psutil
@@ -84,7 +84,7 @@ except ImportError:
     print("Warning: aioredis not installed. Redis state backend will be disabled.")
 
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
+    from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
     _TENACITY_AVAILABLE = True
 except ImportError:

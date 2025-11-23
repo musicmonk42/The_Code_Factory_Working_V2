@@ -8,32 +8,37 @@ Version: 1.0.0
 Classification: CONFIDENTIAL
 """
 
-import json
-import time
 import hashlib
+import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any, List, Set
-from functools import wraps
 from enum import Enum
+from functools import wraps
+from typing import Any, Dict, List, Optional, Set
 
 # FastAPI imports
 from fastapi import (
+    BackgroundTasks,
     Depends,
+    File,
     HTTPException,
-    Security,
     Request,
     Response,
-    BackgroundTasks,
-    File,
+    Security,
     UploadFile,
 )
-from fastapi.security import (
-    HTTPBearer,
-    HTTPAuthorizationCredentials,
-    OAuth2PasswordBearer,
-)
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
+
+# Pydantic imports
+from pydantic import BaseModel, Field
+
+# Security imports
+from security_config import EnterpriseSecurityConfig, SecurityLevel, get_security_config
+
+# SQLAlchemy imports
+from sqlalchemy.sql import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.status import (
     HTTP_401_UNAUTHORIZED,
@@ -42,26 +47,18 @@ from starlette.status import (
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 
-# SQLAlchemy imports
-from sqlalchemy.sql import text
-
-# Pydantic imports
-from pydantic import BaseModel, Field
-
-# Security imports
-from security_config import get_security_config, EnterpriseSecurityConfig, SecurityLevel
-from omnicore_engine.security_utils import (
-    get_security_utils,
-    EnterpriseSecurityUtils,
-    AuthenticationError,
-    AuthorizationError,
-    ValidationError as SecurityValidationError,
-)
+from omnicore_engine.audit import ExplainAudit
 
 # OmniCore imports
 from omnicore_engine.database import Database
-from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.message_bus.sharded_message_bus import ShardedMessageBus
+from omnicore_engine.security_utils import (
+    AuthenticationError,
+    AuthorizationError,
+    EnterpriseSecurityUtils,
+)
+from omnicore_engine.security_utils import ValidationError as SecurityValidationError
+from omnicore_engine.security_utils import get_security_utils
 
 logger = logging.getLogger(__name__)
 

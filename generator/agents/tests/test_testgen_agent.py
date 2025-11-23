@@ -2,9 +2,10 @@
 
 import os
 import tempfile
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Force TESTING mode before any other imports
 os.environ["TESTING"] = "1"
@@ -427,9 +428,7 @@ class TestResponseHandler:
         mocks = setup_comprehensive_mocking()
 
         with patch.dict("sys.modules", mocks):
-            from agents.testgen_agent.testgen_response_handler import (
-                _local_regex_sanitize,
-            )
+            from agents.testgen_agent.testgen_response_handler import _local_regex_sanitize
 
             text = "api_key=secret123 email@example.com 555-1234"
             result = _local_regex_sanitize(text)
@@ -450,9 +449,9 @@ class TestValidationSystem:
 
         with patch.dict("sys.modules", mocks):
             from agents.testgen_agent.testgen_validator import (
+                VALIDATORS,
                 CoverageValidator,
                 validate_test_quality,
-                VALIDATORS,
             )
 
             # Populate the VALIDATORS dictionary

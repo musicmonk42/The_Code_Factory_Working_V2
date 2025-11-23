@@ -2,24 +2,25 @@ import asyncio
 import logging
 import os
 import uuid
-import pytest
-import pytest_asyncio
-from pytest_mock import MockerFixture
 from datetime import datetime, timezone
 from typing import Dict
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+import pytest
+import pytest_asyncio
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import from the correct module
 from postgres_client import (
+    DB_CALLS_ERRORS,
+    DB_CALLS_TOTAL,
+    DB_CONNECTIONS_CURRENT,
     PostgresClient,
     PostgresClientConnectionError,
-    DB_CALLS_TOTAL,
-    DB_CALLS_ERRORS,
-    DB_CONNECTIONS_CURRENT,
 )
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

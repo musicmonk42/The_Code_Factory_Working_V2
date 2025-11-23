@@ -1,18 +1,19 @@
-import os
+import asyncio
+import datetime
+import gzip
 import json
 import logging
-import gzip
-import tenacity
-from functools import lru_cache
-from typing import Dict, Any, Optional, DefaultDict, Set
+import os
 import shutil
-import asyncio
-from collections import defaultdict
-from pathlib import Path
 import tempfile
+from collections import defaultdict
 from contextlib import contextmanager
-import datetime
 from datetime import timezone
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, DefaultDict, Dict, Optional, Set
+
+import tenacity
 
 # --- Logging must be available before any module-level side effects ---
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 # --- Prometheus metrics (safe registration) ---
 _warned_metrics: Set[str] = set()
 try:
-    from prometheus_client import Histogram, Counter, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     _PROM_OK = True
 except Exception as e:  # missing lib or other import issues
@@ -98,16 +99,17 @@ except ImportError:
     pd = None
 
 
+from test_generation.orchestrator.audit import _json_serializable_default, audit_event
+from test_generation.orchestrator.config import CONFIG, PROJECT_ROOT
+from test_generation.orchestrator.venvs import sanitize_path as _sanitize_path
+
 from .runtime import (
     AIOFILES_AVAILABLE,
-    FILELOCK_AVAILABLE,
     AUDIT_LOGGER_AVAILABLE,
+    FILELOCK_AVAILABLE,
     audit_logger,
     redact_sensitive,
 )
-from test_generation.orchestrator.config import PROJECT_ROOT, CONFIG
-from test_generation.orchestrator.audit import audit_event, _json_serializable_default
-from test_generation.orchestrator.venvs import sanitize_path as _sanitize_path
 
 # lazy imports; only import if runtime flags say it’s available (tolerate mismatches)
 try:

@@ -32,24 +32,19 @@ Notes:
 - All metric labels are sanitized to alphanumeric, underscore, or hyphen characters to prevent corruption.
 """
 
-from typing import Union, Tuple, Optional, Type, Dict, Any
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-import os
-import logging
-import threading
 import asyncio
-import re
 import atexit
+import logging
+import os
+import re
+import threading
 import time
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Initialize tracer
 tracer = get_tracer(__name__)

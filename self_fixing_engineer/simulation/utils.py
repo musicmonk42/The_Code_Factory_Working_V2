@@ -12,26 +12,27 @@ provenance, and plug-in support.
 """
 from __future__ import annotations
 
+import asyncio
+import configparser
+import difflib
 import hashlib
 import json
-import difflib
 import logging
-import configparser
 import os
+import re
+import shutil
 import stat
 import tempfile
-import shutil
-import traceback
-import asyncio
 import threading
-import re
-from pathlib import Path
-from typing import Any, Dict, List, Union, Callable, Optional, Tuple
-from functools import lru_cache
-from prometheus_client import Counter, Histogram, Gauge, REGISTRY
-from datetime import datetime
-from packaging.version import parse as parse_version
+import traceback
 from contextlib import contextmanager
+from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+from packaging.version import parse as parse_version
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # --- Logging ---
 logger = logging.getLogger("simulation.utils")
@@ -50,12 +51,7 @@ except ImportError:
     pydantic_available = False
 
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     tenacity_available = True
     logger.info("Tenacity library is available, retries are enabled.")

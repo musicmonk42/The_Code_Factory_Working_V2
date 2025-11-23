@@ -1,22 +1,19 @@
-import pytest
+import argparse
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
-# Updated for renamed GenerationOrchestrator to avoid pytest collection
-from test_generation.orchestrator.orchestrator import GenerationOrchestrator
+import pytest
+from test_generation.orchestrator import (  # sanitize_path from orchestrator init re-export.
+    sanitize_path,
+)
 from test_generation.orchestrator.cli import main as cli_main
 from test_generation.orchestrator.config import CONFIG
-from test_generation.orchestrator import (
-    sanitize_path,
-)  # sanitize_path from orchestrator init re-export.
-from test_generation.utils import (
-    SecurityScanner,
-    PRCreator,
-    MutationTester,
-)
+
+# Updated for renamed GenerationOrchestrator to avoid pytest collection
+from test_generation.orchestrator.orchestrator import GenerationOrchestrator
 from test_generation.policy_and_audit import PolicyEngine
-import json
-import argparse
+from test_generation.utils import MutationTester, PRCreator, SecurityScanner
 
 
 @pytest.fixture

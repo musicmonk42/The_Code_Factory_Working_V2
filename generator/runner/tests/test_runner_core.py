@@ -1,15 +1,16 @@
 # test_runner_core.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 
-import unittest
 import os
+import shutil
 import sys
 import tempfile
-import shutil
-import uuid
 import time
+import unittest
+import uuid
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from prometheus_client import REGISTRY
 
 # Add parent directory to sys.path
@@ -29,18 +30,15 @@ sys.modules["cryptography.hazmat.primitives.asymmetric"] = MagicMock()
 sys.modules["cryptography.hazmat.primitives.serialization"] = MagicMock()
 sys.modules["aiofiles"] = MagicMock()  # Mock aiofiles used in runner_core
 
-# Import runner modules
-from runner.runner_core import Runner, ALL_BACKENDS
 from runner.runner_config import RunnerConfig
 from runner.runner_contracts import TaskPayload, TaskResult
 
+# Import runner modules
+from runner.runner_core import ALL_BACKENDS, Runner
+
 # FIX: Import ExecutionError directly (no alias)
-from runner.runner_errors import (
-    ExecutionError,
-    TimeoutError,
-    ParsingError,
-)
-from runner.runner_metrics import RUN_QUEUE, RUN_PASS_RATE
+from runner.runner_errors import ExecutionError, ParsingError, TimeoutError
+from runner.runner_metrics import RUN_PASS_RATE, RUN_QUEUE
 
 # We mock save_file_content, so this import is for context
 # from runner.runner_file_utils import save_file_content

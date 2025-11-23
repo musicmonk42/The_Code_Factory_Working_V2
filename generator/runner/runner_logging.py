@@ -3,42 +3,33 @@
 # Provides structured, redaction, encrypted, and cryptographically signed logs,
 # with pluggable handlers and real-time streaming capabilities.
 
+import asyncio
+import base64
+import contextlib  # [NEW] Added for stop_logging_services
+import getpass
+import hashlib
+import json
 import logging
 import logging.handlers
-import json
-import uuid
-import re
-import time
-import asyncio
-import sys
-import aiohttp
-import psutil
-import contextlib  # [NEW] Added for stop_logging_services
-from opentelemetry import trace
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    Union,
-    List,
-    Callable,
-    Deque,
-    TYPE_CHECKING,
-)
-from collections import deque
-import traceback
-from functools import wraps
-import backoff
-import getpass
-import queue
 
 # [FIX] Patch: Safer crypto import block
 import os
-import hashlib
-import base64
-import logging
+import queue
+import re
+import sys
+import time
+import traceback
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Deque, Dict, List, Optional, Union
+
+import aiohttp
+import backoff
+import psutil
+from opentelemetry import trace
 
 # --- Global OpenTelemetry tracer for external callers (e.g., agents, testgen) ---
 # This provides a stable symbol that other modules can import as:
@@ -53,13 +44,8 @@ SIGNING_ENABLED = (
 try:
     if SIGNING_ENABLED:
         # NOTE: Assuming generator.audit_log is installed and available in the environment
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            safe_sign,
-            compute_hash,
-        )
-        from generator.audit_log.audit_crypto.audit_crypto_provider import (
-            CryptoOperationError,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import compute_hash, safe_sign
+        from generator.audit_log.audit_crypto.audit_crypto_provider import CryptoOperationError
 
         logging.getLogger(__name__).info("Secure audit log signing ENABLED.")
     else:
@@ -157,9 +143,7 @@ except Exception:
 from runner.runner_config import SecretStr  # Import SecretStr for runtime checks
 
 if TYPE_CHECKING:
-    from runner.runner_config import (
-        RunnerConfig,
-    )  # Import RunnerConfig for type hinting only
+    from runner.runner_config import RunnerConfig  # Import RunnerConfig for type hinting only
 
     # FIX: Moved error imports here to break circular dependency
 # --- END FIX ---
@@ -170,11 +154,11 @@ if TYPE_CHECKING:
 
 # --- FIX: Import utility metrics from runner_metrics.py ---
 from runner.runner_metrics import (
-    UTIL_LATENCY,
-    UTIL_ERRORS,
-    UTIL_SELF_HEAL,
-    DASHBOARD_QUEUE_SIZE,
     ANOMALY_DETECTED_TOTAL,
+    DASHBOARD_QUEUE_SIZE,
+    UTIL_ERRORS,
+    UTIL_LATENCY,
+    UTIL_SELF_HEAL,
 )
 
 # --- END FIX ---
@@ -391,10 +375,10 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
     # --- FIX: Lazy import metrics and security functions to break circular dependencies ---
     try:
-        from runner.runner_metrics import (
-            PROVENANCE_LOG_ENTRIES,
+        from runner.runner_metrics import (  # Use only specific metrics
             ANOMALY_DETECTED_TOTAL,
-        )  # Use only specific metrics
+            PROVENANCE_LOG_ENTRIES,
+        )
     except ImportError:
 
         class DummyMetric:
@@ -1341,8 +1325,8 @@ def get_handler(
                 handler = logging.NullHandler()
         elif sink_type == "gcloud":
             try:
-                from google.cloud.logging.handlers import CloudLoggingHandler
                 import google.cloud.logging
+                from google.cloud.logging.handlers import CloudLoggingHandler
 
                 client = google.cloud.logging.Client(project=config.get("gcp_project_id"))
                 handler = CloudLoggingHandler(client, name=config.get("name", "runner"))
@@ -1410,10 +1394,8 @@ def get_handler(
 
         elif sink_type == "datadog":
             try:
+                from datadog_api_client.configuration import Configuration as DatadogConfiguration
                 from datadog_api_client.v2.api import logs_api
-                from datadog_api_client.configuration import (
-                    Configuration as DatadogConfiguration,
-                )
 
                 class DatadogLogHandler(_HttpHandlerBase):
                     def __init__(self, api_key: str, site: str = "datadoghq.com", **kwargs):
@@ -1545,8 +1527,9 @@ def get_handler(
 
         elif sink_type == "newrelic":
             try:
-                from newrelic.agent import NewRelicContextFormatter
                 import logging.handlers as stdlib_handlers
+
+                from newrelic.agent import NewRelicContextFormatter
 
                 nr_license_key = config.get("license_key", os.getenv("NEW_RELIC_LICENSE_KEY"))
                 if isinstance(nr_license_key, SecretStr):
@@ -1828,13 +1811,13 @@ logging.getLogger("runner.audit").propagate = False
 
 # --- Test/Example usage ---
 if __name__ == "__main__":
-    from unittest.mock import patch, AsyncMock, MagicMock
-
-    # FIX: Import RunnerConfig from the correct location for the __main__ block
-    from runner.runner_config import RunnerConfig
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # from runner.runner_errors import RunnerError as ActualRunnerError # Cannot import this due to circle
     from pydantic import SecretStr
+
+    # FIX: Import RunnerConfig from the correct location for the __main__ block
+    from runner.runner_config import RunnerConfig
 
     # Mock the necessary parts for the test block
     class MockRunnerConfig(RunnerConfig):

@@ -11,43 +11,39 @@ from unittest.mock import MagicMock
 sys.modules["gnosis"] = MagicMock()
 sys.modules["gnosis.safe"] = MagicMock()
 
-import pytest
+import hashlib
 import json
 import os
 import sys
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
-import hashlib
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
-# Import knowledge_graph components
-from arbiter.knowledge_graph.core import (
-    CollaborativeAgent,
-    AgentTeam,
-    get_or_create_agent,
-    InMemoryStateBackend,
-    RedisStateBackend,
-    MetaLearning,
-)
-from arbiter.knowledge_graph.multimodal import (
-    DefaultMultiModalProcessor,
-)
-from arbiter.knowledge_graph.prompt_strategies import (
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
-)
+import pytest
 from arbiter.knowledge_graph.config import (
     MetaLearningConfig,
     MultiModalData,
-    load_persona_dict,
     SensitiveValue,
+    load_persona_dict,
 )
+
+# Import knowledge_graph components
+from arbiter.knowledge_graph.core import (
+    AgentTeam,
+    CollaborativeAgent,
+    InMemoryStateBackend,
+    MetaLearning,
+    RedisStateBackend,
+    get_or_create_agent,
+)
+from arbiter.knowledge_graph.multimodal import DefaultMultiModalProcessor
+from arbiter.knowledge_graph.prompt_strategies import ConcisePromptStrategy, DefaultPromptStrategy
 from arbiter.knowledge_graph.utils import (
-    AuditLedgerClient,
-    trace_id_var,
-    AgentErrorCode,
     AgentCoreException,
+    AgentErrorCode,
+    AuditLedgerClient,
     _sanitize_context,
     _sanitize_user_input,
     async_with_retry,
+    trace_id_var,
 )
 
 

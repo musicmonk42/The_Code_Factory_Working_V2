@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Union, Optional
+from typing import Any, Dict, Optional, Union
 
 # Always read config at runtime so monkeypatches (AUDIT_LOG_FILE) take effect.
 from . import config as _cfg

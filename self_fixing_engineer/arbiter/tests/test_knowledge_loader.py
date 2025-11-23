@@ -1,16 +1,11 @@
-import pytest
-from unittest.mock import patch, mock_open, ANY
-import os
 import json
 import logging
+import os
 import threading
-from knowledge_loader import (
-    merge_dict,
-    save_knowledge_atomic,
-    load_knowledge,
-    KnowledgeLoader,
-)
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock, mock_open, patch
+
+import pytest
+from knowledge_loader import KnowledgeLoader, load_knowledge, merge_dict, save_knowledge_atomic
 
 
 # Fixture for mock logger

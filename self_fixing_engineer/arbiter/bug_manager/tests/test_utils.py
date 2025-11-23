@@ -3,22 +3,22 @@
 # Requires: pytest, unittest.mock
 # Run with: pytest test_utils.py -v --cov=utils
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Fixed imports to use absolute paths from the project root
 from arbiter.bug_manager.utils import (
-    parse_bool_env,
-    redact_pii,
-    apply_settings_validation,
-    validate_input_details,
     BugManagerError,
     NotificationError,
     RemediationError,
+    SecretStr,
     Severity,
+    apply_settings_validation,
+    parse_bool_env,
+    redact_pii,
+    validate_input_details,
 )
-from arbiter.bug_manager.utils import SecretStr
 
 # --- Fixtures ---
 

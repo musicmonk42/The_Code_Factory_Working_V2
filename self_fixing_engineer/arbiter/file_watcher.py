@@ -1,39 +1,34 @@
-import os
-import time
-import logging
 import asyncio
 import difflib
 import json
+import logging
+import os
+import sys
 import threading
-from typing import List, Dict, Optional, Any
-from pathlib import Path
+import time
 from datetime import datetime, timedelta
-import yaml
-import aiohttp
-from aiolimiter import AsyncLimiter
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from tenacity import retry, stop_after_attempt, wait_exponential
+from email.mime.text import MIMEText
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import aiofiles
+import aiohttp
+import aiosmtplib
+import boto3
 import redis.asyncio as redis
-from pydantic import BaseModel, Field, validator
 import typer
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-    REGISTRY,
-)
+import yaml
+from aiohttp import web
+from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from aiohttp import web
-import boto3
-import aiosmtplib
-from email.mime.text import MIMEText
+from arbiter.arbiter_plugin_registry import PlugInKind, register
 from dotenv import load_dotenv
-import sys
-from arbiter.arbiter_plugin_registry import register, PlugInKind
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, Field, validator
+from tenacity import retry, stop_after_attempt, wait_exponential
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # Try to import LLMClient
 try:
@@ -791,9 +786,7 @@ async def summarize_code_changes(diff: str, prompt_template: str) -> str:
     """
     # Defensive: minimal dependencies at import time
     try:
-        from plugins.llm_client import (
-            LLMClient,
-        )  # local import to avoid hard dep at import time
+        from plugins.llm_client import LLMClient  # local import to avoid hard dep at import time
     except Exception as e:
         logger.warning("LLMClient unavailable in summarize_code_changes: %s", e)
         return ""

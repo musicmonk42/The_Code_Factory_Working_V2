@@ -4,14 +4,15 @@ Comprehensive integration tests for the AI README-to-App Generator.
 Tests end-to-end workflows, inter-module communication, and system behavior.
 """
 
-import pytest
 import asyncio
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 import yaml
 
 # Set testing environment variables
@@ -391,8 +392,8 @@ class TestErrorPropagation:
     @pytest.mark.asyncio
     async def test_api_error_to_gui(self):
         """Test API errors are properly handled by GUI."""
-        from main.gui import MainApp
         from fastapi import HTTPException
+        from main.gui import MainApp
 
         app = MainApp()
 
@@ -441,7 +442,7 @@ class TestDatabaseIntegration:
 
     def test_database_transactions(self):
         """Test database transactions across operations."""
-        from main.api import User, SessionLocal
+        from main.api import SessionLocal, User
 
         db = SessionLocal()
         try:

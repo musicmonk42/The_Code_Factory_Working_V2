@@ -24,35 +24,40 @@ STRICT FAILURE ENFORCEMENT:
 - All key external dependencies are checked
 """
 
-import os
-import logging
-import uuid
-import time
-import re
 import asyncio
-import json
-import aiohttp
+import hashlib  # For audit logging
 import importlib
 import importlib.util
 import inspect
-from typing import List, Dict, Callable, Any, Optional, AsyncGenerator, Union, Tuple
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-import tiktoken  # Used for token counting
-from pathlib import Path  # For file system operations
-import aiofiles  # For async file operations
-from datetime import datetime  # For precise timestamps in provenance
+import json
+import logging
+import os
+import re
+import time
+import uuid
 from abc import ABC, abstractmethod
-import hashlib  # For audit logging
+from datetime import datetime  # For precise timestamps in provenance
+from pathlib import Path  # For file system operations
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple, Union
+
+import aiofiles  # For async file operations
+import aiohttp
+import tiktoken  # Used for token counting
+
+# from aiohttp import ClientError  # For retry logic - causes tenacity issues
+# Use Exception instead for broader catch
+from aiohttp import ClientError  # *** FIX: ADDED MISSING IMPORT ***
+from opentelemetry.trace.status import Status, StatusCode  # *** FIX: Added missing import ***
+
+# --- External Dependencies (Strictly Required) ---
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
 from runner.llm_client import call_llm_api
-from runner.runner_logging import logger, add_provenance, send_alert
+from runner.runner_errors import LLMError
+from runner.runner_logging import add_provenance, logger, send_alert
 from runner.runner_metrics import (
     LLM_CALLS_TOTAL,
     LLM_LATENCY_SECONDS,
@@ -60,13 +65,6 @@ from runner.runner_metrics import (
     LLM_TOKEN_OUTPUT_TOTAL,
     UTIL_ERRORS,
 )
-from runner.runner_errors import LLMError
-from opentelemetry.trace.status import (
-    Status,
-    StatusCode,
-)  # *** FIX: Added missing import ***
-
-# -----------------------------------
 
 # --- SUMMARIZATION IMPORTS (from user request) ---
 from runner.summarize_utils import (
@@ -75,6 +73,16 @@ from runner.summarize_utils import (
     ensemble_summarizers,
     refine_from_feedback,
 )
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+from omnicore_engine.plugin_registry import PlugInKind, plugin
+
+# --- DocGen Agent Dependencies (Refactored) ---
+from .docgen_prompt import DocGenPromptAgent
+from .docgen_response_validator import ResponseValidator  # The merged handler/validator
+
+# -----------------------------------
+
 
 # -----------------------------------
 
@@ -82,19 +90,6 @@ from runner.summarize_utils import (
 # from opentelemetry.trace.status import Status, StatusCode # *** FIX: Moved to runner block ***
 # -------------------------------------------
 
-
-# --- External Dependencies (Strictly Required) ---
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
-
-# from aiohttp import ClientError  # For retry logic - causes tenacity issues
-# Use Exception instead for broader catch
-from aiohttp import ClientError  # *** FIX: ADDED MISSING IMPORT ***
-
-# --- DocGen Agent Dependencies (Refactored) ---
-from .docgen_prompt import DocGenPromptAgent
-from .docgen_response_validator import ResponseValidator  # The merged handler/validator
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 
 # PlantUML (Optional)
 try:

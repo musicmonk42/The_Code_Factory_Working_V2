@@ -1,15 +1,16 @@
 # test_runner_backends.py
 # Updated for current runner_backends.py (2025 refactor)
 
-import unittest
 import asyncio
 import os
+import shutil
 import sys
 import tempfile
-import shutil
+import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from prometheus_client import REGISTRY
 
 # Add parent directory to sys.path
@@ -25,19 +26,12 @@ sys.modules["boto3"] = MagicMock()
 sys.modules["botocore.exceptions"] = MagicMock()
 
 # Import current runner modules
-from runner.runner_backends import (
-    LocalBackend,
-    DockerBackend,
-    check_all_backends,
-)
+from runner.runner_backends import DockerBackend, LocalBackend, check_all_backends
 from runner.runner_config import RunnerConfig
 from runner.runner_contracts import TaskPayload
 
 # --- FIX: Import ExecutionError ---
-from runner.runner_errors import (
-    ExecutionError,
-    TimeoutError,
-)
+from runner.runner_errors import ExecutionError, TimeoutError
 
 # --- END FIX ---
 from runner.runner_logging import LOG_HISTORY

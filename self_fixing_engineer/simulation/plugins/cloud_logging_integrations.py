@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import os
 import asyncio
+import datetime
 import json
 import logging
-import time
-import datetime
+import os
 import random
+import time
 from collections import deque
-from typing import Dict, Any, Optional, List, Tuple, Callable, Type, Deque
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple, Type
 from unittest.mock import MagicMock
 
 # Conditional imports for cloud SDKs
@@ -27,8 +27,8 @@ except ImportError:
     logging.warning("boto3 not found. AWS CloudWatch Logs integration will be disabled.")
 
 try:
-    from google.cloud import logging as gcp_logging_sdk
     from google.api_core.exceptions import GoogleAPIError
+    from google.cloud import logging as gcp_logging_sdk
 
     GCP_AVAILABLE = True
 except ImportError:

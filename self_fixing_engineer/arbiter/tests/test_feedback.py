@@ -1,18 +1,14 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import threading
 import random
+import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from prometheus_client import Counter, REGISTRY
+import pytest
 
 # Fixed imports - using the actual metric names from feedback.py
-from arbiter.feedback import (
-    FeedbackManager,
-    logger,
-    _get_or_create_metric,
-    SQLiteClient,  # Import SQLiteClient for testing
-)
+from arbiter.feedback import SQLiteClient  # Import SQLiteClient for testing
+from arbiter.feedback import FeedbackManager, _get_or_create_metric, logger
+from prometheus_client import REGISTRY, Counter
 
 
 # Fixture to mock logger

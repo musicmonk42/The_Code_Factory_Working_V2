@@ -15,7 +15,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Callable, List
+from typing import Any, Callable, Dict, List, Optional
 
 
 # --------------------------- Settings (patchable) ----------------------------
@@ -37,7 +37,7 @@ if not logger.handlers:
 
 # ------------------------------ Metrics (safe) -------------------------------
 try:  # pragma: no cover
-    from prometheus_client import Counter, Histogram, Gauge  # type: ignore
+    from prometheus_client import Counter, Gauge, Histogram  # type: ignore
 except Exception:  # pragma: no cover
     Counter = Histogram = Gauge = None  # type: ignore
 

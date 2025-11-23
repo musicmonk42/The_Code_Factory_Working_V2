@@ -1,8 +1,8 @@
 # tests/test_runtime.py
+import json
 import logging
 import sys
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

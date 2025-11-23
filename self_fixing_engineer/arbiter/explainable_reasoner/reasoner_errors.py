@@ -1,9 +1,10 @@
 import json
-import structlog
-from typing import Dict, Any, Optional
+import os
 import sys
 import traceback
-import os
+from typing import Any, Dict, Optional
+
+import structlog
 
 # Make sentry_sdk available for mocking in tests
 try:

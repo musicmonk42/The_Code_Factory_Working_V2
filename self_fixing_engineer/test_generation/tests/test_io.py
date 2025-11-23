@@ -1,8 +1,8 @@
 # test_generation/gen_agent/tests/test_io.py
 import gzip
 import json
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -129,10 +129,7 @@ async def test_no_prometheus_duplicates(temp_dir):
             await io_utils_mod.append_to_feedback_log(str(log_path), {})
 
             # The metric proxy should be a real metric now, not a dummy
-            from test_generation.gen_agent.io_utils import (
-                io_write_duration,
-                _NoopMetric,
-            )
+            from test_generation.gen_agent.io_utils import _NoopMetric, io_write_duration
 
             assert not isinstance(io_write_duration, _NoopMetric)
     finally:

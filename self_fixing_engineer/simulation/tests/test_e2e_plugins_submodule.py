@@ -4,14 +4,15 @@ End-to-end test suite for the plugins submodule.
 Tests plugin discovery, loading, execution, and integration.
 """
 
-import os
-import sys
 import asyncio
 import json
+import os
+import sys
 import tempfile
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # --- CRITICAL: Mock the problematic module BEFORE pytest loads conftest.py ---
 # Create a mock module for custom_llm_provider_plugin
@@ -65,8 +66,8 @@ sys.path.insert(0, str(SIMULATION_DIR.parent))
 
 # Import after all mocking and environment setup is complete
 try:
-    from simulation.plugins import plugin_manager, main_sim_runner
-    from simulation.plugins.dlt_clients import dlt_factory, dlt_base
+    from simulation.plugins import main_sim_runner, plugin_manager
+    from simulation.plugins.dlt_clients import dlt_base, dlt_factory
 
     IMPORTS_SUCCESSFUL = True
 except Exception as e:

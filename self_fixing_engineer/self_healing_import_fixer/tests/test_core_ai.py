@@ -1,7 +1,8 @@
-import pytest
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Get the absolute path to self_healing_import_fixer directory
 test_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,11 +13,9 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Now import from analyzer.core_ai
-from analyzer.core_ai import (
-    AIManager,
-    get_ai_suggestions,  # These are async functions that exist
-    get_ai_patch,  # Not _get_ai_manager_instance
-)
+from analyzer.core_ai import get_ai_patch  # Not _get_ai_manager_instance
+from analyzer.core_ai import get_ai_suggestions  # These are async functions that exist
+from analyzer.core_ai import AIManager
 
 # Mark all tests in this module to be run with the pytest-asyncio fixture
 pytestmark = pytest.mark.asyncio

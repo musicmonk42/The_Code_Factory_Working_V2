@@ -1,15 +1,16 @@
-import logging
 import asyncio
-from typing import Any, Dict, Optional, List, Type, Set, Union
-from abc import ABC, abstractmethod
 import hashlib
-from datetime import datetime, date
-from pydantic_settings import BaseSettings
-import structlog
+import logging
+from abc import ABC, abstractmethod
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any, Dict, List, Optional, Set, Type, Union
 from uuid import UUID
+
 import numpy as np
+import structlog
 from arbiter.config import ArbiterConfig
+from pydantic_settings import BaseSettings
 
 # Initialize the configuration object
 settings = ArbiterConfig()
@@ -114,9 +115,7 @@ class Base(ABC):
 # --- Metrics Functions ---
 def get_plugin_metrics() -> dict:
     try:
-        from omnicore_engine.metrics import (
-            get_plugin_metrics as actual_get_plugin_metrics,
-        )
+        from omnicore_engine.metrics import get_plugin_metrics as actual_get_plugin_metrics
 
         return actual_get_plugin_metrics()
     except ImportError:
@@ -160,9 +159,7 @@ class ExplainableAI:
     async def initialize(self):
         if not self.is_initialized:
             try:
-                from omnicore_engine.explainable_reasoner import (
-                    ExplainableReasonerPlugin,
-                )
+                from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
 
                 self.reasoner = ExplainableReasonerPlugin(settings=settings)
                 await self.reasoner.initialize()
@@ -354,31 +351,32 @@ class OmniCoreEngine:
         self.logger.info("OmniCore Engine: Starting application components...")
 
         try:
-            from omnicore_engine.knowledge_graph import KnowledgeGraph
-            from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
-            from omnicore_engine.database import Database
+            from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+            from sqlalchemy.orm import sessionmaker
+
+            from omnicore_engine.arbiter_growth import ArbiterGrowthManager
+            from omnicore_engine.array_backend import ArrayBackend
             from omnicore_engine.audit import ExplainAudit
+            from omnicore_engine.database import Database
+            from omnicore_engine.database.backends.sqlite import (  # Added import
+                SQLiteStorageBackend,
+            )
+            from omnicore_engine.decision_optimizer import DecisionOptimizer
+            from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
             from omnicore_engine.feedback_manager import FeedbackManager
+            from omnicore_engine.knowledge_graph import KnowledgeGraph
+            from omnicore_engine.message_bus import (
+                MessageFilter,
+                PluginMessageBusAdapter,
+                ShardedMessageBus,
+            )
             from omnicore_engine.plugin_registry import (
                 PLUGIN_REGISTRY,
-                PlugInKind,
-                start_plugin_observer,
                 Plugin,
+                PlugInKind,
                 PluginMeta,
+                start_plugin_observer,
             )
-            from omnicore_engine.message_bus import (
-                ShardedMessageBus,
-                PluginMessageBusAdapter,
-                MessageFilter,
-            )
-            from omnicore_engine.array_backend import ArrayBackend
-            from omnicore_engine.decision_optimizer import DecisionOptimizer
-            from omnicore_engine.arbiter_growth import ArbiterGrowthManager
-            from omnicore_engine.database.backends.sqlite import (
-                SQLiteStorageBackend,
-            )  # Added import
-            from sqlalchemy.orm import sessionmaker
-            from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
         except ImportError as e:
             self.logger.error(f"Failed to import required modules: {e}", exc_info=True)
             raise RuntimeError(f"Module import failed: {e}")

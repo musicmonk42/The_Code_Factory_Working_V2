@@ -2,10 +2,11 @@
 Test critical bug fixes for the consolidated changes.
 """
 
-import pytest
-import threading
-import sys
 import os
+import sys
+import threading
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))

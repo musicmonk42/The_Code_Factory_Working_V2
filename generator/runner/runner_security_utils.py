@@ -1,19 +1,20 @@
 # runner/security_utils.py
-import re
-import base64
-from cryptography.fernet import Fernet
-from cryptography.hazmat.backends import default_backend
-
-# FIX: Added Tuple to the typing import list
-from typing import Any, Dict, List, Callable, Optional, Union, Pattern, Tuple
-import os
 import asyncio
-import time
+import base64
 import logging
-from pathlib import Path  # Added for Path objects
+import os
+import re
 import shutil  # Added for the teardown in the TestSecurity class
 import sys  # For checking module status for conditional imports
+import time
 from functools import wraps  # [NEW] Added for no-op decorator
+from pathlib import Path  # Added for Path objects
+
+# FIX: Added Tuple to the typing import list
+from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
 
 # Conditional import for xattr based on OS
 # FIX: Use try/except Exception as requested for maximum import robustness.
@@ -35,15 +36,15 @@ logger = logging.getLogger(__name__)
 # For this file, we will define them locally if they can't be imported, to ensure startup.
 try:
     # FIX: Using the requested import structure, assuming success or defined fallback
-    from runner import (
-        REDACTORS,
-        ENCRYPTORS,
-        DECRYPTORS,
-        register_redactor,
-        register_encryptor,
-        register_decryptor,
-    )
     from runner import TESTING  # Assuming TESTING is a global flag from runner.__init__
+    from runner import (
+        DECRYPTORS,
+        ENCRYPTORS,
+        REDACTORS,
+        register_decryptor,
+        register_encryptor,
+        register_redactor,
+    )
 except ImportError:
     logger.warning(
         "Could not import registries or global flags from 'runner'. Defining local registries and flags."
@@ -108,8 +109,8 @@ def _load_presidio_engine() -> bool:
 
     try:
         from presidio_analyzer import AnalyzerEngine
-        from presidio_anonymizer import AnonymizerEngine
         from presidio_analyzer.nlp_engine import NlpEngineProvider
+        from presidio_anonymizer import AnonymizerEngine
 
         # NOTE: This still requires torch/spacy libraries to be loadable.
         _nlp_provider_config = {
@@ -177,7 +178,7 @@ except ImportError:
 
 try:
     import pkcs11  # For HSM (add to reqs: python-pkcs11)
-    from pkcs11.constants import ObjectClass, KeyType, Mechanism
+    from pkcs11.constants import KeyType, Mechanism, ObjectClass
     from pkcs11.exceptions import PKCS11Error
 
     HAS_PKCS11 = True
@@ -281,8 +282,8 @@ def aes_cbc_encrypt_decrypt(data: Union[str, bytes], key: bytes, mode: str) -> U
     if len(key) not in [16, 24, 32]:
         raise ValueError("AES key must be 16, 24, or 32 bytes.")
 
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     from cryptography.hazmat.primitives import padding as sym_padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
     if mode == "encrypt":
         iv = os.urandom(16)
@@ -718,10 +719,12 @@ async def scan_for_vulnerabilities(
 
 # --- Test Suite ---
 import unittest
-from hypothesis import given, strategies as st
 
 # --- FIX: ADDED MOCK ---
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+from hypothesis import given
+from hypothesis import strategies as st
 
 
 # Ensure we're in an async context for tests

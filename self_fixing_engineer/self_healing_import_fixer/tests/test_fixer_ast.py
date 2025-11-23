@@ -2,15 +2,16 @@
 Test suite for fixer_ast.py - AST-based import resolution and cycle healing module.
 """
 
+import ast
+import asyncio
+import hashlib
 import os
 import sys
-import pytest
-import asyncio
-import ast
-import networkx as nx
-import hashlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
+
+import networkx as nx
+import pytest
 
 # Fix the import path - add the import_fixer directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,12 +34,12 @@ sys.modules["fixer_ai"] = MagicMock()
 
 # Import the module to be tested
 from fixer_ast import (
-    ImportResolver,
+    AnalyzerCriticalError,
     CycleHealer,
     DynamicImportHealer,
-    AnalyzerCriticalError,
-    get_ai_refactoring_suggestion,
+    ImportResolver,
     _run_async_in_sync,
+    get_ai_refactoring_suggestion,
 )
 
 # --- Fixtures ---

@@ -14,8 +14,9 @@ import json
 import os
 import subprocess
 import tempfile
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
 
 # Mock all external dependencies before importing testgen_response_handler
 with patch.dict(
@@ -34,12 +35,12 @@ with patch.dict(
     },
 ):
     from agents.testgen_agent.testgen_response_handler import (
-        DefaultResponseParser,
-        ResponseParser,
-        parse_llm_response,
-        _local_regex_sanitize,
         LANGUAGE_CONFIG,
         PARSERS,
+        DefaultResponseParser,
+        ResponseParser,
+        _local_regex_sanitize,
+        parse_llm_response,
     )
 
 

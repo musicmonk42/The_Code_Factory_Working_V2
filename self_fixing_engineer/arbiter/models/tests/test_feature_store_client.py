@@ -1,28 +1,28 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict
+
+# Import pandas for test dataframes
+import pandas as pd
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
+
+# Import metrics directly from the module
+# Import the FeatureStoreClient - fix the import path
+from arbiter.models.feature_store_client import (
+    FS_CALLS_ERRORS,
+    FS_CALLS_TOTAL,
+    FS_REDACTIONS_TOTAL,
+    ConnectionError,
+    FeatureStoreClient,
+)
 
 # Import centralized OpenTelemetry configuration for testing
 from arbiter.otel_config import get_tracer
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-# Import pandas for test dataframes
-import pandas as pd
-
-# Import the FeatureStoreClient - fix the import path
-from arbiter.models.feature_store_client import FeatureStoreClient, ConnectionError
-
-# Import metrics directly from the module
-from arbiter.models.feature_store_client import (
-    FS_CALLS_TOTAL,
-    FS_CALLS_ERRORS,
-    FS_REDACTIONS_TOTAL,
-)
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(
@@ -62,13 +62,9 @@ async def setup_env(mocker: MockerFixture):
 async def feature_client(mocker: MockerFixture):
     """Fixture for FeatureStoreClient with mocked Feast dependencies."""
     try:
-        from feast import (
-            FeatureStore,
-            Entity,
-            FeatureView,
-            ValueType,
-            Field as FeastField,
-        )
+        from feast import Entity, FeatureStore, FeatureView
+        from feast import Field as FeastField
+        from feast import ValueType
         from feast.data_source import DataSource
         from feast.errors import (
             FeastObjectNotFoundException,

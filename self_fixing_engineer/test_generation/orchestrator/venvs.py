@@ -13,31 +13,31 @@ Upgrades:
 """
 from __future__ import annotations
 
-import os
 import asyncio
-import time
-from typing import List, Optional, AsyncIterator, Sequence, NamedTuple
-from contextlib import asynccontextmanager, suppress
 import json
-import shutil
-from pathlib import Path
-import tempfile
-import venv
-import filelock
-import uuid
+import os
 import random
-import traceback
-import subprocess  # ensure attribute exists as venvs.subprocess
 import secrets
+import shutil
+import subprocess  # ensure attribute exists as venvs.subprocess
+import tempfile
+import time
+import traceback
+import uuid
+import venv
+from contextlib import asynccontextmanager, suppress
+from pathlib import Path
+from typing import AsyncIterator, List, NamedTuple, Optional, Sequence
 
+import filelock
+from test_generation import utils
 
 # Absolute imports for reliability
-from test_generation.orchestrator.config import VENV_TEMP_DIR, CONFIG
+from test_generation.orchestrator.config import CONFIG, VENV_TEMP_DIR
 from test_generation.orchestrator.console import log
 
 # FIX: Corrected import to use the renamed function directly
 from .audit import audit_event
-from test_generation import utils
 
 
 def sanitize_path(path: str, project_root: str) -> str:

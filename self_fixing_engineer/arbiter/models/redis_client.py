@@ -1,40 +1,29 @@
 import asyncio
-import logging
+
+# Other imports
+import hashlib
 import json
-import time
+import logging
 import os
+import time
 import urllib.parse
 from datetime import datetime
-from typing import Any, Optional, Union, Tuple, Type, Dict, List
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import redis.asyncio as aioredis
-from redis.asyncio import Redis
-from redis.asyncio.lock import Lock as RedisLock
-from redis.exceptions import (
-    ConnectionError,
-    TimeoutError,
-    DataError,
-    RedisError,
-    LockError,
-)
-
-# Import tenacity for retries with exponential backoff
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-
-# Prometheus Metrics
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
 from opentelemetry import trace
 
-# Other imports
-import hashlib
+# Prometheus Metrics
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
+from redis.asyncio import Redis
+from redis.asyncio.lock import Lock as RedisLock
+from redis.exceptions import ConnectionError, DataError, LockError, RedisError, TimeoutError
+
+# Import tenacity for retries with exponential backoff
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Logger initialization
 logger = logging.getLogger(__name__)

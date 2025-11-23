@@ -2,15 +2,16 @@
 test_core_policy.py - Test suite for PolicyManager
 """
 
-import pytest
+import asyncio
+import hashlib
+import hmac
+import importlib.util
+import json
 import os
 import sys
-import json
-import hmac
-import hashlib
-import asyncio
-import importlib.util
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # --- Windows event loop compatibility for asyncio.run in pytest ---
 if sys.platform == "win32":

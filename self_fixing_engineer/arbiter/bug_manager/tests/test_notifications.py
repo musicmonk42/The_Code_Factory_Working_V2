@@ -4,7 +4,7 @@
 # Run with: pytest test_notifications.py -v --cov=notifications
 
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import ClientError
@@ -12,11 +12,11 @@ from aiohttp import ClientError
 # Import the module to be tested
 from arbiter.bug_manager import notifications
 from arbiter.bug_manager.notifications import (
-    NotificationService,
     CircuitBreaker,
-    RateLimiter,
-    NotificationError,
     CircuitBreakerOpenError,
+    NotificationError,
+    NotificationService,
+    RateLimiter,
     RateLimitExceededError,
 )
 

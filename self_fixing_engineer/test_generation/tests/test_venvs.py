@@ -13,15 +13,15 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import pathlib
+import shutil
+import subprocess
 import sys
 from typing import Any, List
-from unittest.mock import Mock, AsyncMock
-import subprocess
-import shutil
+from unittest.mock import AsyncMock, Mock
 
-import importlib
 import pytest
 
 

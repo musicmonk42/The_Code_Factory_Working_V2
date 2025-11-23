@@ -1,12 +1,13 @@
-import os
-import pytest
-from pytest_mock import MockerFixture
 import logging
-from pydantic import ValidationError
-from cryptography.fernet import Fernet
+import os
+
+import pytest
 
 # Import the MetaLearningConfig class
 from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
+from cryptography.fernet import Fernet
+from pydantic import ValidationError
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

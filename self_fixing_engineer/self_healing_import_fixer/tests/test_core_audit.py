@@ -3,11 +3,12 @@ test_core_audit.py - Test Suite to Find Issues in core_audit.py
 This test suite is designed to expose what's actually broken in the module
 """
 
-import pytest
+import importlib.util
 import os
 import sys
 from unittest.mock import Mock, patch
-import importlib.util
+
+import pytest
 
 # Setup paths
 current_dir = os.path.dirname(os.path.abspath(__file__))

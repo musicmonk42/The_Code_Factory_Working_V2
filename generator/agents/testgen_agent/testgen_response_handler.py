@@ -30,29 +30,29 @@ Dependencies:
 - Environment variables: TESTGEN_PARSER_MAX_HEAL_ATTEMPTS, COMPLIANCE_MODE
 """
 
-import json
-import re
 import ast
+import asyncio
+import hashlib
+import json
+import os
+import re
 import subprocess
 import tempfile
-import os
+import time  # For LLM latency
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 # Security fix: Use defusedxml to prevent XXE attacks
 import defusedxml.ElementTree as ET
-from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any, List
-import asyncio
 from aiohttp import web
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-from datetime import datetime, timezone
-import hashlib
-import time  # For LLM latency
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
-from runner.runner_logging import logger, add_provenance
+from runner.runner_logging import add_provenance, logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # -----------------------------------
 

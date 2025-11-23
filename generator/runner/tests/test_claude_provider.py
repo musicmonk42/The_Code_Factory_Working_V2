@@ -37,9 +37,9 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
-from runner.providers.claude_provider import ClaudeProvider, get_provider, PRICING  # type: ignore
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
+from runner.providers.claude_provider import PRICING, ClaudeProvider, get_provider  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 # Fixtures

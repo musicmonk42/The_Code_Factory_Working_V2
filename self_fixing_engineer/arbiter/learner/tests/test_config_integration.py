@@ -1,9 +1,10 @@
 # test_config_integration.py
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 
 class TestConfigIntegration:
@@ -68,8 +69,8 @@ class TestConfigIntegration:
                 },
             ):
                 from arbiter.learner.explanations import (
-                    _load_prompt_templates,
                     EXPLANATION_PROMPT_TEMPLATES,
+                    _load_prompt_templates,
                     generate_explanation,
                 )
 

@@ -3,21 +3,19 @@ Test suite for omnicore_engine/plugin_event_handler.py
 Tests file system event handling for plugin hot-reloading.
 """
 
-import pytest
 import asyncio
 import os
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
-import sys
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.plugin_event_handler import (
-    PluginEventHandler,
-    start_plugin_observer,
-)
+from omnicore_engine.plugin_event_handler import PluginEventHandler, start_plugin_observer
 
 
 class TestPluginEventHandler:

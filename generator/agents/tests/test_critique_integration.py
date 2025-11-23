@@ -1,14 +1,12 @@
-import os
 import inspect
+import os
+
 import pytest
 
 os.environ.setdefault("TESTING", "1")
 
-from agents.critique_agent import (  # type: ignore
-    orchestrate_critique_pipeline,
-    CritiqueConfig,
-)
 import agents.critique_agent.critique_agent as core  # for monkeypatch targets
+from agents.critique_agent import CritiqueConfig, orchestrate_critique_pipeline  # type: ignore
 
 
 @pytest.mark.asyncio

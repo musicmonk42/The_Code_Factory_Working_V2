@@ -1,17 +1,17 @@
 # plugins/siem_integration_plugin.py
 
-import os
 import asyncio
-import json
-import logging
-import time
-import socket
-import uuid
 import datetime
 import hashlib
+import json
+import logging
+import os
 import re
+import socket
+import time
+import uuid
 from collections import deque
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union, Deque
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple, Union
 
 # --- Logger Setup ---
 logger = logging.getLogger(__name__)
@@ -27,23 +27,23 @@ if not logger.handlers:
 # --- External Plugin Imports ---
 try:
     from simulation.plugins.siem_clients import (
-        BaseSIEMClient,
-        SplunkClient,
-        ElasticClient,
-        DatadogClient,
-        AzureSentinelClient,
+        SIEM_CLIENT_REGISTRY,
         AwsCloudWatchClient,
-        GcpLoggingClient,
         AzureEventGridClient,
+        AzureSentinelClient,
         AzureServiceBusClient,
-        SIEMClientError,
+        BaseSIEMClient,
+        DatadogClient,
+        ElasticClient,
+        GcpLoggingClient,
+        SIEMClientAuthError,
         SIEMClientConfigurationError,
         SIEMClientConnectivityError,
-        SIEMClientAuthError,
-        SIEMClientResponseError,
-        SIEMClientQueryError,
+        SIEMClientError,
         SIEMClientPublishError,
-        SIEM_CLIENT_REGISTRY,
+        SIEMClientQueryError,
+        SIEMClientResponseError,
+        SplunkClient,
         get_siem_client,
     )
 
@@ -101,8 +101,8 @@ except ImportError as e:
 
 try:
     from simulation.plugins.siem_query_language_parser import (
-        SiemQueryLanguageParser,
         QueryParsingError,
+        SiemQueryLanguageParser,
     )
 
     QUERY_PARSER_AVAILABLE = True
@@ -136,12 +136,7 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -251,7 +246,7 @@ except ImportError:
 
 # --- Prometheus Metrics (Idempotent Definition) ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY, Info
+    from prometheus_client import REGISTRY, Counter, Histogram, Info
 
     prometheus_available = True
 
@@ -2031,10 +2026,10 @@ def shutdown_plugin():
 
 if __name__ == "__main__":
     try:
-        from fastapi import FastAPI, APIRouter, Request, HTTPException, status
+        import uvicorn
+        from fastapi import APIRouter, FastAPI, HTTPException, Request, status
         from fastapi.responses import JSONResponse
         from pydantic import BaseModel, Field
-        import uvicorn
 
         try:
             import typer

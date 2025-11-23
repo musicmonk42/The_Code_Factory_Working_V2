@@ -3,16 +3,16 @@
 # Provides comprehensive unit and integration tests for the RunnerApp TUI with strict
 # traceability, reproducibility, security, and observability for audit compliance.
 
-import unittest
 import asyncio
+import logging
 import os
 import sys
 import tempfile
+import time  # Import time for TaskResult timestamps
+import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
-import logging
-import time  # Import time for TaskResult timestamps
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to sys.path to import runner modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -144,13 +144,8 @@ from runner.runner_contracts import TaskResult
 from runner.runner_errors import ExecutionError, TimeoutError
 
 # --- END FIX ---
-from runner.runner_logging import logger, LOG_HISTORY
-from runner.runner_metrics import (
-    RUN_QUEUE,
-    RUN_PASS_RATE,
-    RUN_RESOURCE_USAGE,
-    HEALTH_STATUS,
-)
+from runner.runner_logging import LOG_HISTORY, logger
+from runner.runner_metrics import HEALTH_STATUS, RUN_PASS_RATE, RUN_QUEUE, RUN_RESOURCE_USAGE
 
 
 # Mock coverage classes used in runner_app.py (since they are imported implicitly via runner.runner_parsers)

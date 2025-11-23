@@ -4,10 +4,10 @@ SFE Platform Launcher
 Runs the Self-Fixing Engineer platform components without import conflicts
 """
 
-import os
-import sys
-import subprocess
 import argparse
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 

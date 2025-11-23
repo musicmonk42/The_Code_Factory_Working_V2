@@ -8,21 +8,20 @@ observability, error handling, security, and cost estimation.
 
 import asyncio
 import os  # <-- ADDED
-from typing import Dict, Any, Union, AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Union
 
 import aiohttp
-from openai import (
-    AsyncOpenAI,
-    OpenAIError,
+from openai import (  # <-- ADDED SDK ERRORS
     APIConnectionError,
-    RateLimitError,
+    AsyncOpenAI,
     AuthenticationError,
-)  # <-- ADDED SDK ERRORS
-from tiktoken import get_encoding, Encoding
-
+    OpenAIError,
+    RateLimitError,
+)
 from runner.llm_provider_base import LLMProvider
 from runner.runner_config import load_config  # <-- ADDED
-from runner.runner_errors import LLMError, ConfigurationError  # <-- ADDED
+from runner.runner_errors import ConfigurationError, LLMError  # <-- ADDED
+from tiktoken import Encoding, get_encoding
 
 
 class OpenAIProvider(LLMProvider):

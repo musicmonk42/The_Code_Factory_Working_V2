@@ -1,19 +1,17 @@
 # tests/test_dlt_evm_clients.py
 
-import pytest
 import json
 import os
 from unittest.mock import AsyncMock, MagicMock
 
-from simulation.plugins.dlt_clients.dlt_evm_clients import (
-    EthereumClientWrapper,
-)
+import pytest
 from simulation.plugins.dlt_clients.dlt_base import (
+    SECRETS_MANAGER,
     DLTClientConfigurationError,
     DLTClientValidationError,
     _base_logger,
-    SECRETS_MANAGER,
 )
+from simulation.plugins.dlt_clients.dlt_evm_clients import EthereumClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client

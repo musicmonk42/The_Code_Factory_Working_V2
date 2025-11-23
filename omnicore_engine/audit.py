@@ -1,26 +1,27 @@
-import logging
-import uuid
-import json
-import hashlib
-import threading
 import asyncio
+import hashlib
+import json
+import logging
+import threading
 import time
-from typing import Dict, Any, List, Optional, Coroutine, Union
-from circuitbreaker import circuit
-from omnicore_engine.retry_compat import retry
-from cryptography.fernet import Fernet, InvalidToken
+import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field, ValidationError, SecretStr
+from typing import Any, Coroutine, Dict, List, Optional, Union
 
 from arbiter.config import ArbiterConfig
+from circuitbreaker import circuit
+from cryptography.fernet import Fernet, InvalidToken
+from pydantic import BaseModel, Field, SecretStr, ValidationError
+
+from omnicore_engine.retry_compat import retry
 
 settings = ArbiterConfig()
 try:
     from omnicore_engine.plugin_registry import (
         PLUGIN_REGISTRY,
         PluginPerformanceTracker,
-        ShadowDeployManager,
         PluginVersionManager,
+        ShadowDeployManager,
     )
 except ImportError:
     PLUGIN_REGISTRY = None
@@ -32,10 +33,10 @@ try:
 except ImportError:
     Database = None
 from omnicore_engine.metrics import (
-    AUDIT_RECORDS,
-    AUDIT_ERRORS,
-    AUDIT_RECORDS_PROCESSED_TOTAL,
     AUDIT_BUFFER_SIZE_CURRENT,
+    AUDIT_ERRORS,
+    AUDIT_RECORDS,
+    AUDIT_RECORDS_PROCESSED_TOTAL,
 )
 
 try:

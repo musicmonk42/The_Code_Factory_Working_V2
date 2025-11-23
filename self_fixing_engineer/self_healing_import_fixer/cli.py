@@ -28,21 +28,22 @@ Example usage:
 """
 
 import argparse
-import sys
-import logging
-import importlib
 import asyncio
-from collections import defaultdict
-from typing import Dict, Any, Optional, Callable, List
-from pathlib import Path
-import yaml
-import os
-import json
-import traceback
-import tempfile  # For selftest dummy file creation
-import shutil  # For path validation and cleanup
-import hmac  # For signature verification
 import hashlib  # For signature verification
+import hmac  # For signature verification
+import importlib
+import json
+import logging
+import os
+import shutil  # For path validation and cleanup
+import sys
+import tempfile  # For selftest dummy file creation
+import traceback
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+import yaml
 
 # --- Python Version Enforcement ---
 REQUIRED_PYTHON = (3, 10)
@@ -83,37 +84,37 @@ _bootstrap_import_paths()
 # Now import compat/core modules with fallbacks for both contexts
 try:
     # Preferred absolute (installed package)
+    from self_healing_import_fixer.analyzer.graph import ImportGraphAnalyzer
     from self_healing_import_fixer.import_fixer.compat_core import (
         PRODUCTION_MODE,
-        cli_audit_logger,
         alert_operator,
-        scrub_secrets,
+        cli_audit_logger,
         get_core_dependencies,
         load_analyzer,
+        scrub_secrets,
     )
-    from self_healing_import_fixer.analyzer.graph import ImportGraphAnalyzer
 except ModuleNotFoundError:
     # Bare package (when executed inside package dir)
     try:
+        from analyzer.graph import ImportGraphAnalyzer
         from import_fixer.compat_core import (
             PRODUCTION_MODE,
-            cli_audit_logger,
             alert_operator,
-            scrub_secrets,
+            cli_audit_logger,
             get_core_dependencies,
             load_analyzer,
+            scrub_secrets,
         )
-        from analyzer.graph import ImportGraphAnalyzer
     except ModuleNotFoundError:
         # Last chance: after sys.path bootstrapping, try again
+        from analyzer.graph import ImportGraphAnalyzer
         from import_fixer.compat_core import (
             PRODUCTION_MODE,
-            cli_audit_logger,
             alert_operator,
-            scrub_secrets,
+            cli_audit_logger,
             load_analyzer,
+            scrub_secrets,
         )
-        from analyzer.graph import ImportGraphAnalyzer
 
 __version__ = "4.0.0"
 
@@ -148,12 +149,11 @@ class NonCriticalError(Exception):
 
 
 # --- Centralized Utilities and Audit Logging (prod-safe via compat layer) ---
+from import_fixer.compat_core import alert_operator  # real core in prod, safe fallback elsewhere
 from import_fixer.compat_core import (
-    alert_operator,  # real core in prod, safe fallback elsewhere
-    scrub_secrets,
-    SECRETS_MANAGER,
     audit_logger,  # unified logger (exposes .info/.error/.log_event)
 )
+from import_fixer.compat_core import SECRETS_MANAGER, scrub_secrets
 
 
 def is_ci_environment() -> bool:
@@ -502,9 +502,7 @@ def load_analyzer():
     global ImportGraphAnalyzer
     if ImportGraphAnalyzer is None:
         try:
-            from import_fixer.analyzer import (
-                ImportGraphAnalyzer as ActualImportGraphAnalyzer,
-            )
+            from import_fixer.analyzer import ImportGraphAnalyzer as ActualImportGraphAnalyzer
 
             ImportGraphAnalyzer = ActualImportGraphAnalyzer
             logger.debug("Analyzer module loaded.")

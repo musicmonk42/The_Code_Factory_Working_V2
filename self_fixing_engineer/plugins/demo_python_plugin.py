@@ -1,11 +1,12 @@
-import os
-import sys
-import json
-import logging
 import datetime
 import importlib.util  # For dynamic dependency checks
+import json
+import logging
+import os
+import sys
 from typing import Any
-from omnicore_engine.plugin_registry import plugin, PlugInKind
+
+from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -31,8 +32,8 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from core_utils import alert_operator, scrub_secrets
     from core_audit import audit_logger
+    from core_utils import alert_operator, scrub_secrets
 except ImportError:
     logger.warning("core_utils or core_audit not found. Plugin functionality will be limited.")
 

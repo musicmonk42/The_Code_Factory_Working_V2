@@ -4,11 +4,12 @@ Comprehensive unit tests for main.py
 Tests application initialization, interface launching, configuration, and error handling.
 """
 
-import pytest
 import asyncio
 import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 import yaml
 
 # The environment variables and sys.modules mocks have been moved to conftest.py

@@ -1,13 +1,13 @@
-import pytest
+import logging
 
 # Fix: Added missing imports
 from unittest.mock import Mock, patch
-import logging
 
+import pytest
 from test_generation.orchestrator.metrics import (
+    _DummyTimerCtx,
     generation_duration,
     integration_success,
-    _DummyTimerCtx,
 )
 
 

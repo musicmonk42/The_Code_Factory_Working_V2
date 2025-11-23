@@ -44,17 +44,17 @@ Security notes:
 
 from __future__ import annotations
 
-import os
-import json
-import re
-import logging
-import hashlib
 import asyncio
 import contextlib  # used by _start_span fallback
+import hashlib
+import json
+import logging
+import os
+import re
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Union, Type, Callable
-from urllib.parse import urlparse
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+from urllib.parse import urlparse
 
 # Optional OpenTelemetry (gracefully degraded if unavailable)
 try:
@@ -1007,8 +1007,8 @@ def register_plugin_entrypoints(
             return asyncio.run(_runner_async(**kwargs))
         else:
             # Running loop detected: execute in a background thread
-            from threading import Thread
             from queue import Queue
+            from threading import Thread
 
             q: Queue = Queue(maxsize=1)
 

@@ -1,24 +1,25 @@
 from __future__ import annotations
-import logging
-import json
-import os
+
 import asyncio
-import shutil
-import re
-import sys
-import tempfile
-import traceback
-import time
+import functools
 import hashlib
 import html
-from typing import Dict, Any, TypedDict, Optional, Callable, Awaitable
-from datetime import datetime, timezone
-from pathlib import Path
-import functools
 import importlib.util
-import warnings
 import inspect
+import json
+import logging
+import os
+import re
+import shutil
+import sys
+import tempfile
+import time
+import traceback
+import warnings
+from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, Optional, TypedDict
 
 # --- Optional Dependency Guards and Fallbacks ---
 # Consolidate imports and provide robust fallbacks
@@ -49,9 +50,9 @@ except ImportError:
 try:
     import tenacity
 except ImportError:
-    import types
-    import functools
     import asyncio
+    import functools
+    import types
 
     def _retry_noop(**_kwargs):
         # behaves like @retry(...): returns a decorator
@@ -89,7 +90,7 @@ except ImportError:
 
 # --- BEGIN: metrics fallbacks ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY  # type: ignore
+    from prometheus_client import REGISTRY, Counter, Histogram  # type: ignore
 
     _PROM_AVAILABLE = True
 except Exception:
@@ -163,15 +164,15 @@ if _al is None or not hasattr(_al, "log_event"):
 
 # --- Cross-Module Imports ---
 from .runtime import (
-    redact_sensitive,
     AIOFILES_AVAILABLE,
-    PYTEST_AVAILABLE,
-    COVERAGE_AVAILABLE,
-    BANDIT_AVAILABLE,
-    LOCUST_AVAILABLE,
     AUDIT_LOGGER_AVAILABLE,
-    audit_logger as real_audit_logger_from_runtime,
+    BANDIT_AVAILABLE,
+    COVERAGE_AVAILABLE,
+    LOCUST_AVAILABLE,
+    PYTEST_AVAILABLE,
 )
+from .runtime import audit_logger as real_audit_logger_from_runtime
+from .runtime import redact_sensitive
 
 _AIOFILES_OK = AIOFILES_AVAILABLE
 

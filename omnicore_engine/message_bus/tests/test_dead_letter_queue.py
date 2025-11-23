@@ -1,11 +1,11 @@
 # test_dead_letter_queue.py
 
-import unittest
 import asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch
 import sys
+import time
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

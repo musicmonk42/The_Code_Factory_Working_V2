@@ -52,33 +52,27 @@ Configuration via Environment Variables (through SecretsManager):
 - AUDIT_INCLUDE_TRACES: Set to 'true' to include full stack traces in exception logs. (Default: False)
 - AUDIT_STRICT_WRITES: If 'true', I/O errors will be raised after being logged to stderr. (Default: False)
 """
-import logging
+import atexit
+import hashlib
+import hmac
 import json
-import threading
+import logging
 import os
+import queue
 import socket
 import stat
-import hmac
-import hashlib
-import traceback
-import atexit
-import uuid
 import sys
-import queue
+import threading
 import time
-from typing import Any, Dict, Optional, Literal, List
+import traceback
+import uuid
 from collections import deque
 from datetime import datetime
+from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler, WatchedFileHandler
 from pathlib import Path
-from logging.handlers import (
-    RotatingFileHandler,
-    WatchedFileHandler,
-    QueueHandler,
-    QueueListener,
-)
-from core_secrets import (
-    SecretsManager,
-)  # Assumes core_secrets.py is in the same directory
+from typing import Any, Dict, List, Literal, Optional
+
+from core_secrets import SecretsManager  # Assumes core_secrets.py is in the same directory
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 SCHEMA_VERSION = 1

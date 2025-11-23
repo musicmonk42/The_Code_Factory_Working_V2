@@ -4,28 +4,27 @@ import logging
 import os
 import shutil
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
-from datetime import datetime, timezone
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from pydantic import ValidationError
-
-# Import the centralized tracer configuration
-from arbiter.otel_config import get_tracer
-
-# Import modules to be tested
-from arbiter.models.multi_modal_schemas import (
-    ImageAnalysisResult,
-)
-from arbiter.models.redis_client import RedisClient
-from arbiter.models.postgres_client import PostgresClient
 from arbiter.models.audit_ledger_client import AuditLedgerClient
 from arbiter.models.merkle_tree import MerkleTree
 
+# Import modules to be tested
+from arbiter.models.multi_modal_schemas import ImageAnalysisResult
+from arbiter.models.postgres_client import PostgresClient
+from arbiter.models.redis_client import RedisClient
+
+# Import the centralized tracer configuration
+from arbiter.otel_config import get_tracer
+from asyncpg.exceptions import PostgresError
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from pydantic import ValidationError
+from pytest_mock import MockerFixture
+
 # Import exceptions
 from redis.exceptions import ConnectionError as RedisConnectionError
-from asyncpg.exceptions import PostgresError
 
 # Configure logging for E2E tests
 logging.basicConfig(

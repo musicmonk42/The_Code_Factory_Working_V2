@@ -3,21 +3,18 @@ test_deploy_prompt.py
 Comprehensive tests for deploy_prompt module (prompt building and templating).
 """
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # FIX: Add missing Jinja2 imports
 from jinja2 import Environment, FileSystemLoader
 
 # Import the module under test
-from generator.agents.deploy_agent.deploy_prompt import (
-    DeployPromptAgent,
-    scrub_text,
-)
-
+from generator.agents.deploy_agent.deploy_prompt import DeployPromptAgent, scrub_text
 
 # ============================================================================
 # FIXTURES

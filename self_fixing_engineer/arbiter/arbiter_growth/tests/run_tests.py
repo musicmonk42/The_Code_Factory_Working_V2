@@ -1,7 +1,8 @@
-import pytest
+import base64
 import os
 import sys
-import base64
+
+import pytest
 
 
 def main():

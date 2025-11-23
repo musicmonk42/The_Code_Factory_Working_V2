@@ -1,16 +1,17 @@
 # test_e2e_learner.py
 
-import pytest
 import asyncio
-import os
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from cryptography.fernet import Fernet
 import importlib
+import os
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
+from arbiter.learner.audit import CircuitBreaker
 
 # Import all the modules we're testing
 from arbiter.learner.core import Arbiter, Learner
 from arbiter.learner.encryption import ArbiterConfig
-from arbiter.learner.audit import CircuitBreaker
+from cryptography.fernet import Fernet
 
 
 class TestEndToEndLearner:

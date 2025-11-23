@@ -1,16 +1,17 @@
-import os
 import asyncio
-import logging
 import json
+import logging
+import os
 from typing import Optional
-from pydantic import Field, field_validator, ValidationInfo
+
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Note: The following are optional dependencies for full functionality.
 # Install with: pip install watchdog etcd3-py boto3 aioredis
 try:
-    from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
 
     WATCHDOG_INSTALLED = True
 except ImportError:

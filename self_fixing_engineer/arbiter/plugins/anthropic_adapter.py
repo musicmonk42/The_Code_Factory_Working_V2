@@ -1,25 +1,26 @@
 # D:\SFE\self_fixing_engineer\arbiter\plugins\anthropic_adapter.py
-import logging
 import asyncio
-import re
 import hashlib
+import logging
+import re
 import time
 from typing import Any, Dict, Optional
 
+import anthropic  # Import the underlying SDK for specific exception types
+from prometheus_client import Counter, Histogram
+from tenacity import RetryError  # Import RetryError to catch it specifically
+
 # Import custom exceptions and LLMClient from the shared client module
 from .llm_client import (
-    LLMClient,
-    LLMClientError,
-    TimeoutError,
     APIError,
     AuthError,
-    RateLimitError,
-    get_or_create_metric,
     CircuitBreakerOpenError,
+    LLMClient,
+    LLMClientError,
+    RateLimitError,
+    TimeoutError,
+    get_or_create_metric,
 )
-import anthropic  # Import the underlying SDK for specific exception types
-from tenacity import RetryError  # Import RetryError to catch it specifically
-from prometheus_client import Histogram, Counter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

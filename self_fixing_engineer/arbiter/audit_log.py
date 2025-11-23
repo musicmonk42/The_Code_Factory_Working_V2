@@ -1,20 +1,21 @@
-import os
-import time
-import json
-import hashlib
-import logging
-import socket
 import asyncio
-import gzip
 import base64
+import gzip
+import hashlib
+import json
+import logging
+import os
 import secrets
-from typing import Dict, Any, Optional, Iterator, Tuple, List, Callable
-from dataclasses import dataclass, field
-from logging.handlers import TimedRotatingFileHandler
-from datetime import datetime
-from pathlib import Path
-from enum import Enum
+import socket
+import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+
 import aiohttp
 
 # Third-party module imports
@@ -26,7 +27,7 @@ except ImportError:
     Fernet = None
 
 try:
-    from opentelemetry import trace, metrics
+    from opentelemetry import metrics, trace
 except ImportError:
     trace = None
     metrics = None

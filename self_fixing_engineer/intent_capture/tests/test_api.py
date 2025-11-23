@@ -1,25 +1,24 @@
-import os
-import uuid
 import asyncio
 import importlib
-from unittest.mock import patch, MagicMock, AsyncMock
+import os
+import uuid
 from datetime import datetime, timedelta
-
-import pytest
-from httpx import AsyncClient, ASGITransport
-from fastapi import status
-
-# Use the robust 'jose' library for creating test tokens to avoid library conflicts.
-from jose import jwt
-
-# Import the module under test and its components
-import intent_capture.api as api_module
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import agent_core module separately for reloading
 import intent_capture.agent_core as agent_core_module
 
+# Import the module under test and its components
+import intent_capture.api as api_module
+import pytest
+
 # FIX: Import from agent_core directly to match how api.py imports
-from agent_core import ConfigurationError, AgentError
+from agent_core import AgentError, ConfigurationError
+from fastapi import status
+from httpx import ASGITransport, AsyncClient
+
+# Use the robust 'jose' library for creating test tokens to avoid library conflicts.
+from jose import jwt
 
 # --- Test Fixtures ---
 

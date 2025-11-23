@@ -3,21 +3,18 @@ Test suite for omnicore_engine/scenario_constants.py
 Tests scenario models and tracked dictionary functionality.
 """
 
-import pytest
-from unittest.mock import Mock, patch
-import threading
+import os
 
 # Add the parent directory to path for imports
 import sys
-import os
+import threading
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from omnicore_engine.scenario_constants import (
-    ScenarioMetric,
-    ScenarioTemplate,
-    TrackedDict,
-)
+from omnicore_engine.scenario_constants import ScenarioMetric, ScenarioTemplate, TrackedDict
 
 
 class TestScenarioMetric:

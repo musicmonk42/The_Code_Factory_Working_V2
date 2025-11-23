@@ -1,20 +1,19 @@
-import logging
 import asyncio
-import aiohttp
-import tenacity
 import json
+import logging
 from datetime import datetime, timezone
 from importlib import import_module
-from typing import Any, Dict, List, Optional, Callable, Coroutine, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
-from prometheus_client import Counter, Histogram
-from prometheus_client import REGISTRY
+import aiohttp
+import tenacity
+from prometheus_client import REGISTRY, Counter, Histogram
 
 from .utils import (  # or from arbiter.bug_manager.utils import (
-    RemediationError,
     MLRemediationError,
-    validate_input_details,
+    RemediationError,
     redact_pii,
+    validate_input_details,
 )
 
 logger = logging.getLogger(__name__)

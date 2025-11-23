@@ -1,20 +1,21 @@
 # tests/test_dlt_main_unit.py
 
-import pytest
 import json
 import logging
-import click
 from unittest.mock import AsyncMock, patch
+
+import click
+import pytest
 from click.testing import CliRunner
+from simulation.plugins.dlt_clients.dlt_base import (
+    DLTClientConfigurationError,
+    DLTClientError,
+    _base_logger,
+)
+from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 
 # Import the CLI and core components
 from simulation.plugins.dlt_clients.dlt_main import cli
-from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
-from simulation.plugins.dlt_clients.dlt_base import (
-    DLTClientError,
-    DLTClientConfigurationError,
-    _base_logger,
-)
 
 
 @pytest.fixture(autouse=True)

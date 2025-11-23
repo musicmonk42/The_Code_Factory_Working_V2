@@ -1,34 +1,33 @@
 # test_metrics.py
 
-import pytest
 import os
 from unittest.mock import Mock, patch
 
-from prometheus_client import Counter, Gauge, Histogram, Summary, Info, REGISTRY
-
+import pytest
 from arbiter.learner.metrics import (
     _get_or_create_metric,
-    get_labels,
-    learn_counter,
-    learn_error_counter,
-    learn_duration_seconds,
-    learn_duration_summary,
+    audit_events_total,
+    audit_failure_total,
+    circuit_breaker_state,
+    explanation_llm_failure_total,
+    explanation_llm_latency_seconds,
     forget_counter,
     forget_duration_seconds,
     forget_duration_summary,
-    retrieve_hit_miss,
-    audit_events_total,
-    circuit_breaker_state,
-    audit_failure_total,
-    explanation_llm_latency_seconds,
-    explanation_llm_failure_total,
-    fuzzy_parser_success_total,
     fuzzy_parser_failure_total,
     fuzzy_parser_latency_seconds,
+    fuzzy_parser_success_total,
+    get_labels,
+    learn_counter,
+    learn_duration_seconds,
+    learn_duration_summary,
+    learn_error_counter,
+    learner_info,
+    retrieve_hit_miss,
     self_audit_duration_seconds,
     self_audit_failure_total,
-    learner_info,
 )
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Info, Summary
 
 
 class TestGlobalLabels:
@@ -38,6 +37,7 @@ class TestGlobalLabels:
         """Test default global labels when environment variables not set."""
         with patch.dict(os.environ, {}, clear=True):
             from importlib import reload
+
             import arbiter.learner.metrics as metrics_module
 
             reload(metrics_module)
@@ -49,6 +49,7 @@ class TestGlobalLabels:
         """Test global labels with custom environment variables."""
         with patch.dict(os.environ, {"ENVIRONMENT": "staging", "INSTANCE_NAME": "learner-test-2"}):
             from importlib import reload
+
             import arbiter.learner.metrics as metrics_module
 
             reload(metrics_module)

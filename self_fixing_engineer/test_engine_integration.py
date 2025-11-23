@@ -4,8 +4,9 @@ Integration tests for self_fixing_engineer engines.
 Tests basic integration and communication between key engines.
 """
 
-import pytest
 import asyncio
+
+import pytest
 
 
 class TestEngineIntegration:

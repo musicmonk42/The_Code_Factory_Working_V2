@@ -1,59 +1,49 @@
 # File: omnicore_engine/database.py
 from __future__ import annotations
 
+import base64
+import collections.abc
+import hashlib
 import json
+import logging
+import logging.handlers
+import re
+import shutil
+import sqlite3
+import sys
+import time
+import uuid
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+
+import aiosqlite
+import numpy as np
 import sqlalchemy
+from circuitbreaker import circuit
+from cryptography.fernet import Fernet, InvalidToken
+from pydantic import SecretStr
+from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
-from sqlalchemy import (
-    text,
-    select,
-    insert,
-    delete,
-)
-from typing import Dict, Optional, Any, List, Set, Callable, Union
-from pydantic import SecretStr
-from circuitbreaker import circuit
+
 from omnicore_engine.retry_compat import retry
-import hashlib
-import uuid
-from cryptography.fernet import Fernet, InvalidToken
-import logging
-from datetime import datetime, date
-import time
-import re
-from pathlib import Path
-import sqlite3
-import base64
-import collections.abc
-import numpy as np
-import aiosqlite
-import logging.handlers
-import sys
-import shutil
 
 logger = logging.getLogger(__name__)
 
-# Local imports from the refactored structure
-from .models import (
-    Base,
-    AgentState,
-    ExplainAuditRecord,
-    GeneratorAgentState,
-    SFEAgentState,
-)
-from .metrics_helpers import (
-    get_or_create_counter_local,
-    get_or_create_histogram_local,
-)
-from omnicore_engine.message_bus.encryption import FernetEncryption
-
 # Corrected imports using the new arbiter package and centralized settings
 from arbiter.config import ArbiterConfig
+
+from omnicore_engine.message_bus.encryption import FernetEncryption
+
+from .metrics_helpers import get_or_create_counter_local, get_or_create_histogram_local
+
+# Local imports from the refactored structure
+from .models import AgentState, Base, ExplainAuditRecord, GeneratorAgentState, SFEAgentState
 
 # --- optional feedback manager dependency -----------------------------------
 try:
@@ -106,12 +96,7 @@ except ImportError:
             logger.warning("Mock KnowledgeGraph: add_fact called.")
 
 
-from omnicore_engine.metrics import (
-    DB_OPERATIONS,
-    DB_ERRORS,
-    AUDIT_DB_OPERATIONS,
-    AUDIT_DB_ERRORS,
-)
+from omnicore_engine.metrics import AUDIT_DB_ERRORS, AUDIT_DB_OPERATIONS, DB_ERRORS, DB_OPERATIONS
 
 # Local metrics for merged functionalities
 DB_OPERATIONS_LOCAL = get_or_create_counter_local(
@@ -138,9 +123,10 @@ except ImportError:
     )
     plugin_registry = None
 
+from omnicore_engine.security_config import get_security_config
+
 # New imports for EnterpriseSecurityUtils
 from omnicore_engine.security_utils import EnterpriseSecurityUtils
-from omnicore_engine.security_config import get_security_config
 
 
 # This function should be moved to a separate utils.py file to avoid circular imports.
@@ -386,7 +372,7 @@ class Database:
                 await conn.run_sync(Base.metadata.create_all)
 
                 try:
-                    from alembic import config, command
+                    from alembic import command, config
 
                     alembic_cfg = config.Config()
                     Path(__file__).parent
@@ -432,7 +418,7 @@ class Database:
                 await conn.run_sync(Base.metadata.create_all)
 
                 try:
-                    from alembic import config, command
+                    from alembic import command, config
 
                     alembic_cfg = config.Config()
                     Path(__file__).parent

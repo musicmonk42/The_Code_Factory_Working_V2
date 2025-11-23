@@ -1,11 +1,12 @@
 import asyncio
-import unittest
-import tempfile
 import logging
 import sys
-import yaml  # <-- FIX 1: Added missing import
+import tempfile
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import yaml  # <-- FIX 1: Added missing import
 
 # ---
 # Mock all external runner dependencies *before* importing the module under test.
@@ -49,11 +50,11 @@ from intent_parser.intent_parser import (
     IntentParser,
     IntentParserConfig,
     MarkdownStrategy,
-    RSTStrategy,
-    PlaintextStrategy,
-    YAMLStrategy,
     PDFStrategy,
+    PlaintextStrategy,
     RegexExtractor,
+    RSTStrategy,
+    YAMLStrategy,
     generate_provenance,
     get_spacy,
     get_torch,

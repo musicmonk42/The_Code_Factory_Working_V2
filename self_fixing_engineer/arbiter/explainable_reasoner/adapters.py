@@ -1,38 +1,26 @@
 import asyncio
-import time
 import base64
-import mimetypes
 import json
+import mimetypes
 import os
 import random
+import time
 from abc import ABC, abstractmethod
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Type,
-    Callable,
-    Tuple,
-    AsyncGenerator,
-)
 from functools import lru_cache, wraps
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple, Type
 
 import httpx
-from pydantic import BaseModel, Field, HttpUrl, ValidationError
-
-# Real internal imports (enforce)
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
-from arbiter.explainable_reasoner.metrics import METRICS
-from prometheus_client import Counter, Histogram, REGISTRY
-from arbiter.explainable_reasoner.utils import redact_pii
 
 # Structured logging
 import structlog
+from arbiter.explainable_reasoner.metrics import METRICS
+from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
+
+# Real internal imports (enforce)
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from arbiter.explainable_reasoner.utils import redact_pii
+from prometheus_client import REGISTRY, Counter, Histogram
+from pydantic import BaseModel, Field, HttpUrl, ValidationError
 
 structlog.configure(
     processors=[

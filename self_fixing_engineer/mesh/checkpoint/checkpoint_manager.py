@@ -37,22 +37,23 @@ __version__ = "3.0.0"
 __author__ = "Platform Engineering Team"
 __classification__ = "CONFIDENTIAL"
 
+import asyncio
+import base64
+import hashlib
+import json
+import logging
+
 # ---- Standard Library Imports ----
 import os
-import sys
-import json
-import time
-import asyncio
-import logging
-import hashlib
-import uuid
-import base64
 import re
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable, Awaitable, Type, Union
+import sys
+import time
+import uuid
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, Union
 
 # ---- Local Application Imports ----
 from .checkpoint_exceptions import (
@@ -60,13 +61,7 @@ from .checkpoint_exceptions import (
     CheckpointBackendError,
     CheckpointValidationError,
 )
-from .checkpoint_utils import (
-    hash_dict,
-    compress_json,
-    decompress_json,
-    scrub_data,
-    deep_diff,
-)
+from .checkpoint_utils import compress_json, decompress_json, deep_diff, hash_dict, scrub_data
 
 # ---- Third-Party Imports with Availability Checks ----
 try:
@@ -87,11 +82,11 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from cryptography.fernet import Fernet, MultiFernet, InvalidToken
+    import cryptography
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.backends import default_backend
-    import cryptography
 
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
@@ -102,11 +97,11 @@ except ImportError:
 
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import Status, StatusCode
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.trace import Status, StatusCode
 
     TRACING_AVAILABLE = True
 except ImportError:
@@ -114,14 +109,14 @@ except ImportError:
     trace = None
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Info
+    from prometheus_client import Counter, Gauge, Histogram, Info
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
 try:
-    from cachetools import TTLCache, LRUCache
+    from cachetools import LRUCache, TTLCache
 
     CACHETOOLS_AVAILABLE = True
 except ImportError:
@@ -136,11 +131,11 @@ except ImportError:
 
 try:
     from tenacity import (
+        before_sleep_log,
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
-        before_sleep_log,
     )
 
     TENACITY_AVAILABLE = True

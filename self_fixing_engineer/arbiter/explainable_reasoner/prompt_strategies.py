@@ -1,28 +1,24 @@
-import os
-import logging
 import json
+import logging
+import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Union, Type
-
-from pydantic import BaseModel
-from opentelemetry import trace
+from typing import Any, Dict, List, Optional, Type, Union
 
 # Internal imports for metrics and utils
 from arbiter.explainable_reasoner.metrics import METRICS
-from arbiter.explainable_reasoner.utils import (
-    _simple_text_sanitize,
-    _format_multimodal_for_prompt,
-)
+from arbiter.explainable_reasoner.utils import _format_multimodal_for_prompt, _simple_text_sanitize
+from opentelemetry import trace
+from pydantic import BaseModel
 
 # Conditional import for MultiModalData and schemas
 try:
     from arbiter.models.multi_modal_schemas import (
-        MultiModalData,
-        ImageAnalysisResult,
         AudioAnalysisResult,
-        VideoAnalysisResult,
+        ImageAnalysisResult,
         MultiModalAnalysisResult,
+        MultiModalData,
+        VideoAnalysisResult,
     )
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True

@@ -1,9 +1,10 @@
 import os
 import sys
-from pathlib import Path
 import types
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 # -----------------------------------------------------------------------------
 # Bootstrap minimal core modules BEFORE importing the system under test (SUT)
@@ -52,8 +53,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # Import the validator under test (package path)
 # -----------------------------------------------------------------------------
 from import_fixer.fixer_validate import (  # noqa: E402
-    CodeValidator,
     AnalyzerCriticalError,
+    CodeValidator,
     StageResult,
 )
 

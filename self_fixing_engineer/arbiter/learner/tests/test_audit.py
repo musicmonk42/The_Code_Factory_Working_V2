@@ -1,11 +1,11 @@
 # test_audit.py
 
-import pytest
 import asyncio
 import hashlib
 from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch
-from tenacity import RetryError
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Import the classes and functions to test
 from arbiter.learner.audit import (
@@ -14,6 +14,7 @@ from arbiter.learner.audit import (
     persist_knowledge,
     persist_knowledge_batch,
 )
+from tenacity import RetryError
 
 
 class TestCircuitBreaker:

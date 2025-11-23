@@ -15,13 +15,13 @@ Tests cover:
 import asyncio
 import json
 import os
-import tempfile
-import time
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
 import subprocess
 import sys
+import tempfile
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio

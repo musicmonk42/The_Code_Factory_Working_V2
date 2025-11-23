@@ -1,19 +1,20 @@
-import pytest
 import json
 import logging
-from unittest.mock import Mock, patch, mock_open
 from typing import List
+from unittest.mock import Mock, mock_open, patch
+
+import pytest
 
 # Import the module components to test
 from arbiter.knowledge_graph.prompt_strategies import (
-    PromptStrategy,
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
-    _load_templates,
     BASE_AGENT_PROMPT_TEMPLATE,
-    REFLECTION_PROMPT_TEMPLATE,
     CRITIQUE_PROMPT_TEMPLATE,
+    REFLECTION_PROMPT_TEMPLATE,
     SELF_CORRECT_PROMPT_TEMPLATE,
+    ConcisePromptStrategy,
+    DefaultPromptStrategy,
+    PromptStrategy,
+    _load_templates,
 )
 
 
@@ -87,9 +88,7 @@ class TestPromptTemplateLoading:
             ) as mock_file:
                 with patch("arbiter.knowledge_graph.prompt_strategies.logger"):
                     # Import and call the function to reload templates
-                    from arbiter.knowledge_graph.prompt_strategies import (
-                        _load_templates,
-                    )
+                    from arbiter.knowledge_graph.prompt_strategies import _load_templates
 
                     _load_templates()
 

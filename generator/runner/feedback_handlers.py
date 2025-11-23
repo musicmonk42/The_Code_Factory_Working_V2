@@ -16,19 +16,19 @@ from __future__ import annotations
 
 import json
 import logging
+
+# --- STDLIBS FOR FIXES ---
+import os
 import queue
 import threading
 import time
+import uuid
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional, TextIO
-
-# --- STDLIBS FOR FIXES ---
-import os
-import uuid
-import warnings
 from urllib import request
 
 # Import canonical Severity from arbiter

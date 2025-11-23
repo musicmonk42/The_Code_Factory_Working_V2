@@ -1,18 +1,19 @@
 # arbiter/queue_consumer_worker.py
 
 import asyncio
+import hashlib
+import json
 import logging
+import os
 import signal
 import sys
-import os
-import json
 import time
 import uuid
-import hashlib
 from functools import partial
-from typing import Any, Dict, Callable, Optional
+from typing import Any, Callable, Dict, Optional
+
 from aiohttp import web
-from prometheus_client import start_http_server, Counter, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Histogram, start_http_server
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # --- Initialize logger early before any usage ---
@@ -21,22 +22,22 @@ logger = logging.getLogger("queue_consumer_worker")
 # --- SFE Core Imports and Mock Fallback ---
 SFE_CORE_AVAILABLE = False
 try:
+    from arbiter.bug_manager import AuditLogManager
+    from arbiter.config import ArbiterConfig as Settings
+    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.message_queue_service import (
+        DecryptionError,
         MessageQueueService,
         MessageQueueServiceError,
         SerializationError,
-        DecryptionError,
     )
-    from arbiter.config import ArbiterConfig as Settings
-    from arbiter.bug_manager import AuditLogManager
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import registry, PlugInKind
-    from opentelemetry import trace, metrics
+    from arbiter_plugin_registry import PlugInKind, registry
+    from opentelemetry import metrics, trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.propagate import get_global_textmap
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.propagate import get_global_textmap
 
     SFE_CORE_AVAILABLE = True
 except ImportError as e:

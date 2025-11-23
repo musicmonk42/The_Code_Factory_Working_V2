@@ -4,30 +4,26 @@ Tests complete workflows, real-world scenarios, and integration patterns
 including RL training, monitoring pipelines, and production use cases.
 """
 
-import pytest
-import numpy as np
 import asyncio
-import time
 import json
-import tempfile
 import os
 import sys
+import tempfile
 import threading
-from typing import List, Dict, Any
+import time
 from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
 import matplotlib
+import numpy as np
+import pytest
 
 matplotlib.use("Agg")  # Use non-interactive backend for testing
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from code_health_env import (
-    CodeHealthEnv,
-    EnvironmentConfig,
-    SystemMetrics,
-    ActionType,
-)
+from code_health_env import ActionType, CodeHealthEnv, EnvironmentConfig, SystemMetrics
 
 
 def convert_numpy_types(obj):

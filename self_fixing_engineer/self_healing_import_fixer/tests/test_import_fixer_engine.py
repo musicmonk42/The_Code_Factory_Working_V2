@@ -1,13 +1,13 @@
 # tests/test_import_fixer_integration.py
-import re
-import json
 import asyncio
 import importlib
 import importlib.util
+import json
+import re
+import sys
+import types
 from pathlib import Path
 from typing import Any, Dict, List
-import types
-import sys
 
 import pytest
 

@@ -1,7 +1,8 @@
 # File: metrics_helpers.py
 import logging
-from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 from typing import Optional
+
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 

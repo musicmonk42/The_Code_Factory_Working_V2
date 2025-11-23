@@ -4,17 +4,17 @@ End-to-End tests for the message bus system.
 These tests verify the complete flow with minimal mocking.
 """
 
-import unittest
 import asyncio
-import time
-import uuid
-import random
-from typing import List, Any
-from dataclasses import dataclass
-from unittest.mock import Mock, AsyncMock, patch
-import sys
-from pathlib import Path
 import logging
+import random
+import sys
+import time
+import unittest
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, List
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

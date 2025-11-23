@@ -2,13 +2,14 @@
 Test suite for fixer_ai.py - AI/LLM integration module for code refactoring suggestions.
 """
 
-import os
-import sys
-import pytest
 import asyncio
 import hashlib
+import os
+import sys
 import time
-from unittest.mock import AsyncMock, patch, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Fix the import path - add the import_fixer directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -88,13 +89,13 @@ sys.modules["tiktoken"].get_encoding = mock_tiktoken.get_encoding
 # Now import the module to be tested
 from fixer_ai import (
     AIManager,
-    get_ai_suggestions,
-    get_ai_patch,
     AnalyzerCriticalError,
-    _sanitize_prompt,
-    _sanitize_response,
     _redis_alert_on_failure,
     _reset_redis_failure_counter,
+    _sanitize_prompt,
+    _sanitize_response,
+    get_ai_patch,
+    get_ai_suggestions,
 )
 
 # --- Fixtures ---

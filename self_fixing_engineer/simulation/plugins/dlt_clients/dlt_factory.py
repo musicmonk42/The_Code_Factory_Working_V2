@@ -11,26 +11,27 @@ Key improvements:
 """
 
 import asyncio
-import json
-import time
-from typing import Any, Dict, Optional, Type, List, Literal, Final
 import atexit
+import json
 import os
-from pydantic import BaseModel, Field, validator, ValidationError
+import time
 from datetime import datetime
+from typing import Any, Dict, Final, List, Literal, Optional, Type
+
+from pydantic import BaseModel, Field, ValidationError, validator
 
 from .dlt_base import (
+    AUDIT,
+    PRODUCTION_MODE,
     BaseDLTClient,
     BaseOffChainClient,
     DLTClientConfigurationError,
     DLTClientError,
     DLTClientLoggerAdapter,
-    scrub_secrets,
+    _base_logger,
     alert_operator,
-    AUDIT,
-    PRODUCTION_MODE,
+    scrub_secrets,
 )
-from .dlt_base import _base_logger
 
 # Import specific DLT client implementations conditionally
 from .dlt_simple_clients import SimpleDLTClient

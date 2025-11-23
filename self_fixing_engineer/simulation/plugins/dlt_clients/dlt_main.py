@@ -4,18 +4,19 @@ import json
 import logging
 import sys
 import uuid
+
 import click
 
-from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
+    PRODUCTION_MODE,
     DLTClientConfigurationError,
     DLTClientError,
-    PRODUCTION_MODE,
-    _base_logger,
     DLTClientLoggerAdapter,
+    _base_logger,
     alert_operator,
     scrub_secrets,
 )
+from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 
 # Use a logger adapter so formatter's client_type is always present
 CLI_LOGGER = DLTClientLoggerAdapter(_base_logger, {"client_type": "CLI"})

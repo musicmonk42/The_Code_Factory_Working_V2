@@ -1,24 +1,25 @@
 # SFE_Code_Guardian/arena.py
 
 import asyncio
-import random
-import logging
 import json
-import aiohttp
-import jwt
+import logging
 import os
+import random
+import secrets
 import signal
 import threading
-from typing import List, Dict, Any, Optional, Callable, Tuple
-from fastapi import FastAPI, Request, HTTPException, APIRouter, Depends
+from datetime import datetime, timedelta
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+import aiohttp
+import jwt
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 # REMOVED: Direct import from prometheus_client (PromCounter, PromGauge, REGISTRY)
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from datetime import datetime, timedelta
-from urllib.parse import urlparse
-import secrets
-from functools import wraps
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 __all__ = ["ArbiterArena"]
 
@@ -58,24 +59,21 @@ except ImportError as e:
 
     SIMULATION_AVAILABLE = False
 
-# Import core components with ABSOLUTE PATHS
-from arbiter.config import ArbiterConfig
-from arbiter.codebase_analyzer import CodebaseAnalyzer
 from arbiter.agent_state import Base
-from arbiter.feedback import FeedbackManager
-from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
-from arbiter.monitoring import Monitor
 from arbiter.arbiter import Arbiter  # Correct import
 from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY, PlugInKind
+from arbiter.codebase_analyzer import CodebaseAnalyzer
+
+# Import core components with ABSOLUTE PATHS
+from arbiter.config import ArbiterConfig
+from arbiter.feedback import FeedbackManager
+from arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 from arbiter.logging_utils import PIIRedactorFilter
-from arbiter.otel_config import get_tracer
 
 # NEW: Import metric creation helpers from arbiter.metrics
-from arbiter.metrics import (
-    get_or_create_counter,
-    get_or_create_gauge,
-)
-
+from arbiter.metrics import get_or_create_counter, get_or_create_gauge
+from arbiter.monitoring import Monitor
+from arbiter.otel_config import get_tracer
 
 tracer = get_tracer(__name__)
 
@@ -872,8 +870,9 @@ def _handle_shutdown(loop: asyncio.AbstractEventLoop, arena: ArbiterArena):
 
 
 def run_arena():
-    from arbiter.config import ArbiterConfig as Settings
     import sys
+
+    from arbiter.config import ArbiterConfig as Settings
 
     try:
         settings = Settings.initialize()

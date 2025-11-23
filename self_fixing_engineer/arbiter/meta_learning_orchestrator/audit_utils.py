@@ -1,25 +1,23 @@
-import aiofiles
+import asyncio
+import datetime
 import hashlib
 import json
 import logging
 import os
-import uuid
-import asyncio
-import datetime
 import time
+import uuid
+from typing import Any, Dict, Tuple
+
+import aiofiles
 import cryptography.exceptions
-from typing import Dict, Any, Tuple
-from prometheus_client import Counter, Histogram
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
-from cryptography.hazmat.primitives.serialization import (
-    load_pem_private_key,
-    load_pem_public_key,
-)
-from tenacity import retry, stop_after_attempt, wait_exponential
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+from prometheus_client import Counter, Histogram
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Configuration from environment variables
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "./audit_log.jsonl")

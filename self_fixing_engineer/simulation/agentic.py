@@ -1,20 +1,19 @@
-import os
-import sys
-import asyncio
-import logging
-import uuid
-import json
-import functools
-import io
 import argparse
-import hmac
-import hashlib
-import random
+import asyncio
 import atexit
+import functools
+import hashlib
+import hmac
+import io
+import json
+import logging
+import os
+import random
+import sys
+import uuid
 from contextlib import suppress
-
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Callable, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -82,8 +81,8 @@ aiokafka = check_and_import("aiokafka")
 opentelemetry = check_and_import("opentelemetry")
 
 try:
-    from test_generation.audit_log import AuditLogger as DLTLogger
     from test_generation.agentic import SecretsManager as GlobalSecretsManager
+    from test_generation.audit_log import AuditLogger as DLTLogger
 
     DLT_LOGGER_AVAILABLE = True
 except ImportError:
@@ -846,7 +845,7 @@ class EventBus:
                 elif self.backend == "nats":
                     self.client = await nats.connect(self.nats_url)
                 elif self.backend == "kafka":
-                    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+                    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
                     self.producer = AIOKafkaProducer(bootstrap_servers=self.kafka_servers)
                     self.consumer = AIOKafkaConsumer(

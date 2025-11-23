@@ -1,24 +1,25 @@
-import pytest
 import asyncio
 import json
-import yaml
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
 from simulation.parallel import (
-    get_or_create_metric,
     ParallelConfig,
-    RayRLlibConcurrencyTuner,
-    get_available_resources,
-    auto_tune_concurrency_heuristic,
     ProgressReporter,
-    execute_local_asyncio,
-    execute_kubernetes,
+    RayRLlibConcurrencyTuner,
+    auto_tune_concurrency_heuristic,
     execute_aws_batch,
+    execute_kubernetes,
+    execute_local_asyncio,
+    get_available_resources,
+    get_or_create_metric,
     run_parallel_simulations,
 )
 
 try:
-    from prometheus_client import Histogram, Counter, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 except ImportError:
     Histogram = None
     Counter = None
@@ -32,11 +33,7 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from simulation.parallel import (
-        PROMETHEUS_AVAILABLE,
-        RLLIB_AVAILABLE,
-        KUBERNETES_AVAILABLE,
-    )
+    from simulation.parallel import KUBERNETES_AVAILABLE, PROMETHEUS_AVAILABLE, RLLIB_AVAILABLE
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     RLLIB_AVAILABLE = False

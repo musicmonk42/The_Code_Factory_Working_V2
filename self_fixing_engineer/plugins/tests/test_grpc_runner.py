@@ -1,13 +1,14 @@
-import os
-import sys
+import asyncio
+import importlib
 import json
 import logging
-import asyncio
-import pytest
-import importlib
-import grpc
-from unittest.mock import MagicMock, patch, AsyncMock
+import os
+import sys
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import grpc
+import pytest
 from grpc_health.v1 import health_pb2
 
 
@@ -76,7 +77,7 @@ async def plugin_health(channel, plugin_name: str) -> str:
     """
     try:
         # Create a HealthStub and call Check (tests patch this)
-        from grpc_health.v1 import health_pb2_grpc, health_pb2
+        from grpc_health.v1 import health_pb2, health_pb2_grpc
 
         stub = health_pb2_grpc.HealthStub(channel)
         resp = await stub.Check(health_pb2.HealthCheckRequest())

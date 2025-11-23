@@ -1,16 +1,11 @@
 # tests/test_dlt_fabric_clients.py
 
-import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from simulation.plugins.dlt_clients.dlt_fabric_clients import (
-    FabricClientWrapper,
-)
-from simulation.plugins.dlt_clients.dlt_base import (
-    DLTClientValidationError,
-    SECRETS_MANAGER,
-)
+import pytest
+from simulation.plugins.dlt_clients.dlt_base import SECRETS_MANAGER, DLTClientValidationError
+from simulation.plugins.dlt_clients.dlt_fabric_clients import FabricClientWrapper
 
 
 # A mock off-chain client that can be passed to the DLT client

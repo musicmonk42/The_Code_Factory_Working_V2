@@ -14,43 +14,44 @@ Key improvements over prior version:
 - Explicit, safe rate limiting and structured logging.
 """
 
-import os
 import asyncio
-import json
-import time
-import re
 import inspect
+import json
+import os
+import re
 import sys
-from typing import Any, Dict, Optional, Tuple, Callable, Union, Final
-from urllib.parse import urlparse
+import time
 from datetime import datetime
+from typing import Any, Callable, Dict, Final, Optional, Tuple, Union
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, HttpUrl, Field, validator, ValidationError
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+
+# web3 sync API (we will run calls in executor)
+from web3 import HTTPProvider, Web3
 
 from .dlt_base import (
+    AUDIT,
+    PRODUCTION_MODE,
+    TRACER,
     BaseDLTClient,
     BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientValidationError,
-    DLTClientConnectivityError,
     DLTClientAuthError,
-    DLTClientTransactionError,
+    DLTClientCircuitBreakerError,
+    DLTClientConfigurationError,
+    DLTClientConnectivityError,
+    DLTClientError,
     DLTClientQueryError,
     DLTClientResourceError,
     DLTClientTimeoutError,
-    DLTClientCircuitBreakerError,
-    DLTClientError,
-    async_retry,
-    TRACER,
+    DLTClientTransactionError,
+    DLTClientValidationError,
     Status,
     StatusCode,
-    AUDIT,
-    PRODUCTION_MODE,
+    _base_logger,
+    async_retry,
+    scrub_secrets,
 )
-from .dlt_base import _base_logger, scrub_secrets
-
-# web3 sync API (we will run calls in executor)
-from web3 import Web3, HTTPProvider
 
 # Handle web3 version differences for middleware
 try:
@@ -71,7 +72,7 @@ except ImportError:
 # Handle exception imports for different web3 versions
 try:
     # web3 v7+ - exceptions are in web3.exceptions
-    from web3.exceptions import TransactionNotFound, ContractLogicError
+    from web3.exceptions import ContractLogicError, TransactionNotFound
 
     # ContractCustomError might not exist in v7, use ContractLogicError as fallback
     try:
@@ -81,11 +82,7 @@ try:
 except ImportError:
     # Fallback for older versions or if structure changes
     try:
-        from web3.exceptions import (
-            TransactionNotFound,
-            ContractCustomError,
-            ContractLogicError,
-        )
+        from web3.exceptions import ContractCustomError, ContractLogicError, TransactionNotFound
     except ImportError:
 
         class TransactionNotFound(Exception):

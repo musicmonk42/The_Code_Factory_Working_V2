@@ -1,13 +1,13 @@
 # D:\Code_Factory\self_fixing_engineer\arbiter\knowledge_graph\multimodal.py
-import hashlib
 import asyncio
-import tempfile
-import os
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-import logging
-import json
+import hashlib
 import io
+import json
+import logging
+import os
+import tempfile
+from abc import ABC, abstractmethod
+from typing import Any, Dict
 
 # Conditional imports for external libraries
 try:
@@ -57,16 +57,17 @@ except ImportError:
     PDF_PROCESSING_AVAILABLE = False
     PdfReader = None
 
+from .config import Config, MultiModalData
+
 # Local imports
 from .utils import (
+    AGENT_METRICS,
     AgentCoreException,
     AgentErrorCode,
-    trace_id_var,
-    AGENT_METRICS,
-    audit_ledger_client,
     async_with_retry,
+    audit_ledger_client,
+    trace_id_var,
 )
-from .config import MultiModalData, Config
 
 
 # A base class for multimodal processing.

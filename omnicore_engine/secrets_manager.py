@@ -18,12 +18,12 @@ Usage:
     db_password = get_secret("DATABASE_PASSWORD", provider=SecretProvider.AWS)
 """
 
-import os
 import json
+import logging
+import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -466,8 +466,8 @@ class AzureKeyVaultManager(SecretManagerBase):
         """Lazy load Azure client"""
         if self._client is None:
             try:
-                from azure.keyvault.secrets import SecretClient
                 from azure.identity import DefaultAzureCredential
+                from azure.keyvault.secrets import SecretClient
 
                 credential = DefaultAzureCredential()
                 self._client = SecretClient(vault_url=self.vault_url, credential=credential)

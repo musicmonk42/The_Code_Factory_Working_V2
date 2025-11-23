@@ -1,4 +1,6 @@
+import ast
 import asyncio
+import collections
 import fnmatch
 import importlib
 import importlib.util
@@ -8,30 +10,22 @@ import os
 import sys
 import threading
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 from xml.sax.saxutils import escape
+
 import aiofiles
 import toml
 import typer
 import yaml
-from datetime import datetime
-import ast
-import collections
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
 from prometheus_client import Counter
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 try:
-    from arbiter.arbiter_plugin_registry import (
-        register as arbiter_register,
-        PlugInKind as ArbiterPlugInKind,
-        registry as arbiter_registry,
-    )
+    from arbiter.arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
+    from arbiter.arbiter_plugin_registry import register as arbiter_register
+    from arbiter.arbiter_plugin_registry import registry as arbiter_registry
 except ImportError:
     # Create mock versions
     def arbiter_register(kind, name, version, author):
@@ -51,12 +45,12 @@ except ImportError:
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.postgres_client import PostgresClient
     from arbiter import PermissionManager
     from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.otel_config import get_tracer
+    from arbiter.postgres_client import PostgresClient
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:
@@ -130,8 +124,8 @@ except ImportError as e:
     logging.warning(f"Optional dependency missing: {e} (mypy)")
 
 try:
-    from bandit.core import manager as bandit_manager
     from bandit.core import config as bandit_config_mod
+    from bandit.core import manager as bandit_manager
 
     BANDIT_AVAILABLE = True
 except ImportError as e:

@@ -1,17 +1,18 @@
 from __future__ import annotations
-import os
-import sys
-import json
+
+import asyncio  # Import asyncio for running async functions
 import glob
-import logging
 import importlib.util
-import traceback  # Import traceback at the top-level
+import json
+import logging
+import os
 import platform  # For platform.python_version() in generated manifests
 import re  # For sanitizing plugin names
-from typing import Dict, Any, List, Optional, Callable
-from datetime import datetime
+import sys
 import time
-import asyncio  # Import asyncio for running async functions
+import traceback  # Import traceback at the top-level
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
 
 # --- Configuration & Setup ---
 
@@ -81,8 +82,8 @@ if parent_dir_path not in sys.path:
     parent_dir_added = True
 
 try:
-    from mesh_adapter import MeshPubSub
     from checkpoint import CheckpointManager
+    from mesh_adapter import MeshPubSub
 
     ONBOARDING_BACKENDS_AVAILABLE = True
 except ImportError as e:

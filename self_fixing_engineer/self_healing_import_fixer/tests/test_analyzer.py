@@ -1,24 +1,21 @@
 # self_healing_import_fixer/tests/test_analyzer.py
 
-import pytest
-import os
-import sys
-import tempfile
-import yaml
 import json
-from unittest.mock import patch, MagicMock
+import os
 
 # Add parent directory to path
 import pathlib
+import sys
+import tempfile
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 # Import from the correct location - analyzer.analyzer
-from self_healing_import_fixer.analyzer.analyzer import (
-    main,
-    load_config,
-    AnalyzerCriticalError,
-)
+from self_healing_import_fixer.analyzer.analyzer import AnalyzerCriticalError, load_config, main
 
 
 # Add test fixtures that are missing

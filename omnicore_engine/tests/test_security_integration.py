@@ -3,33 +3,34 @@ Test suite for omnicore_engine/security_integration.py
 Tests enterprise security integration with FastAPI and OmniCore components.
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch, AsyncMock
+import os
 
 # Add the parent directory to path for imports
 import sys
-import os
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
 from omnicore_engine.security_integration import (
-    UserRole,
-    Permission,
     AuthenticationRequest,
-    SessionContext,
+    EncryptionAdapter,
+    Permission,
     SecurityEvent,
     SecurityIntegrationManager,
     SecurityMiddleware,
-    EncryptionAdapter,
+    SessionContext,
+    UserRole,
+    configure_app_security,
+    get_security_integration_manager,
     secure_endpoint,
     validate_input,
-    get_security_integration_manager,
-    configure_app_security,
 )
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
 
 class TestEnums:

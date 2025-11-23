@@ -3,16 +3,12 @@ Test suite for the Arbiter module.
 This uses extensive mocking to avoid external dependencies.
 """
 
-import pytest
-from unittest.mock import (
-    patch,
-    AsyncMock,
-    MagicMock,
-    Mock,
-)
 import json
 import os
 import sys
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from cryptography.fernet import Fernet
 
 # Add parent directory to path to import arbiter

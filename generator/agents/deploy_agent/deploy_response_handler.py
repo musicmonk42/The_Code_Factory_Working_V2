@@ -20,34 +20,35 @@ STRICT FAILURES ENFORCED:
 - Prompt optimization (summarize_text) is REQUIRED. No fallback to original text if it fails.
 """
 
-import os
-import uuid
-import time
-import re
-import asyncio
-import json
 import ast  # ADDED: For Python syntax validation in parse_llm_response
-from typing import Dict, Any, Callable, Optional, List, Type
+import asyncio
 import glob
+import importlib.util  # Needed for loading handler plugins
+import json
+import os
+import re
+import sys  # Added for HandlerRegistry
+import tempfile  # For temporary directories/files
+import time
+import uuid
 from abc import ABC, abstractmethod
+from datetime import datetime  # Needed for provenance timestamp
 from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from prometheus_client import Counter, Histogram, Gauge
-from opentelemetry.trace import Status, StatusCode
+from typing import Any, Callable, Dict, List, Optional, Type
+
+import aiofiles  # Explicitly imported for async file operations
+import hcl2  # For HCL (Terraform) parsing
 from aiohttp import web
-from aiohttp.web_routedef import RouteTableDef
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
-import hcl2  # For HCL (Terraform) parsing
-from ruamel.yaml import (
+from aiohttp.web_routedef import RouteTableDef
+from opentelemetry.trace import Status, StatusCode
+from prometheus_client import Counter, Gauge, Histogram
+from ruamel.yaml import (  # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)
     YAML,
-)  # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)
-import aiofiles  # Explicitly imported for async file operations
-from datetime import datetime  # Needed for provenance timestamp
-import tempfile  # For temporary directories/files
-import importlib.util  # Needed for loading handler plugins
-import sys  # Added for HandlerRegistry
+)
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # --- CENTRAL RUNNER FOUNDATION ---
 
@@ -70,11 +71,8 @@ except (ImportError, AttributeError):
                 return nullcontext()
 
         tracer = _NoopTracer()
-from runner.llm_client import call_llm_api, call_ensemble_api  # Use central LLM clients
-from runner.runner_logging import (
-    logger,
-    add_provenance,
-)  # Use central logging and provenance
+from runner.llm_client import call_ensemble_api, call_llm_api  # Use central LLM clients
+from runner.runner_logging import add_provenance, logger  # Use central logging and provenance
 
 # --- Central LLM Metrics Integration -----------------------------------------
 # We want to:
@@ -126,10 +124,10 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
 # -----------------------------------------------------------------------------
 from runner.runner_errors import LLMError
 from runner.runner_file_utils import get_commits  # Needed for enrichment
+from runner.runner_logging import log_audit_event
 
 # ADDED: Centralized security and audit utilities as requested
 from runner.runner_security_utils import redact_secrets, scan_for_secrets
-from runner.runner_logging import log_audit_event
 
 # -----------------------------------
 

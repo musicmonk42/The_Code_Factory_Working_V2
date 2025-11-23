@@ -1,28 +1,28 @@
-import pytest
-import json
-import datetime
-import logging
 import base64
+import datetime
+import json
+import logging
 import re
 from unittest.mock import patch
 
+import pytest
+
 # Import the module components to test - use the correct path
 from arbiter.knowledge_graph.utils import (
-    ContextVarFormatter,
-    get_or_create_metric,
     AGENT_METRICS,
-    AgentErrorCode,
     AgentCoreException,
-    datetime_now,
-    async_with_retry,
+    AgentErrorCode,
+    AuditLedgerClient,
+    ContextVarFormatter,
     _redact_sensitive_pii,
     _sanitize_context,
     _sanitize_user_input,
-    AuditLedgerClient,
+    async_with_retry,
+    datetime_now,
+    get_or_create_metric,
     trace_id_var,
 )
-
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 
 
 class TestContextVarFormatter:

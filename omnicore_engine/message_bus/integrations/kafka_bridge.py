@@ -49,17 +49,7 @@ import logging
 import random
 import signal
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 # --------------------------------------------------------------------------- #
 #  Lazy imports – raise a clear error only when the bridge is used

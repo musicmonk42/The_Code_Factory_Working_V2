@@ -2,21 +2,19 @@ import asyncio
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict, AsyncIterator
+from typing import Any, AsyncIterator, Dict
 from unittest.mock import patch
 
 import pytest
-
 from runner import runner_mutation
 from runner.runner_mutation import (
     _MUTATOR_REGISTRY,
-    register_mutator,
-    parse_mutmut_output,
-    mutation_test,
     fuzz_test,
+    mutation_test,
+    parse_mutmut_output,
     property_based_test,
+    register_mutator,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test Helpers

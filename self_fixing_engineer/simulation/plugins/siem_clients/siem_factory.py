@@ -1,13 +1,13 @@
-from typing import Dict, Any, List, Callable, Type, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 
 # Import base/tooling
 from .siem_base import (
+    PRODUCTION_MODE,
     BaseSIEMClient,
     SIEMClientConfigurationError,
     SIEMClientError,
-    alert_operator,
-    PRODUCTION_MODE,
     _base_logger,
+    alert_operator,
 )
 
 # Attempt to import individual client classes; do not abort on failure.
@@ -18,7 +18,7 @@ GcpLoggingClient = None
 AzureSentinelClient = AzureEventGridClient = AzureServiceBusClient = None
 
 try:
-    from .siem_generic_clients import SplunkClient, ElasticClient, DatadogClient
+    from .siem_generic_clients import DatadogClient, ElasticClient, SplunkClient
 except ImportError as e:
     _base_logger.error(
         f"Generic SIEM clients unavailable: {e}",
@@ -45,11 +45,7 @@ except ImportError as e:
     alert_operator(f"GCP SIEM clients unavailable: {e}", level="ERROR")
 
 try:
-    from .siem_azure_clients import (
-        AzureSentinelClient,
-        AzureEventGridClient,
-        AzureServiceBusClient,
-    )
+    from .siem_azure_clients import AzureEventGridClient, AzureSentinelClient, AzureServiceBusClient
 except ImportError as e:
     _base_logger.error(
         f"Azure SIEM clients unavailable: {e}",

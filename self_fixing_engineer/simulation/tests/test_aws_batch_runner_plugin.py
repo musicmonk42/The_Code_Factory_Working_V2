@@ -1,13 +1,14 @@
 # tests/test_aws_batch_runner_plugin.py
 
 import os
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-from botocore.exceptions import ClientError
-from pydantic import ValidationError
 
 # Import the plugin from the correct location
 import sys
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
+from botocore.exceptions import ClientError
+from pydantic import ValidationError
 
 # Add the parent directory to the Python path to find the plugin
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -17,29 +18,19 @@ sys.path.insert(0, parent_dir)
 # If aws_batch_runner_plugin.py is in simulation/plugins/
 try:
     from simulation.plugins.aws_batch_runner_plugin import (
+        AWS_AVAILABLE,
+        JobConfig,
         plugin_health,
         run_batch_job,
-        JobConfig,
-        AWS_AVAILABLE,
     )
 except ImportError:
     # If it's in a different location, try alternative import
     try:
-        from aws_batch_runner_plugin import (
-            plugin_health,
-            run_batch_job,
-            JobConfig,
-            AWS_AVAILABLE,
-        )
+        from aws_batch_runner_plugin import AWS_AVAILABLE, JobConfig, plugin_health, run_batch_job
     except ImportError:
         # If the plugin is in the parent directory
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-        from aws_batch_runner_plugin import (
-            plugin_health,
-            run_batch_job,
-            JobConfig,
-            AWS_AVAILABLE,
-        )
+        from aws_batch_runner_plugin import AWS_AVAILABLE, JobConfig, plugin_health, run_batch_job
 
 # ==============================================================================
 # Pytest Fixtures for mocking external dependencies and environment

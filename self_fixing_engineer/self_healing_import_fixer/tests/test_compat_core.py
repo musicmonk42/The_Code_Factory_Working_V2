@@ -5,26 +5,27 @@ Unit tests for compat_core.py, ensuring enterprise-grade reliability, security, 
 Covers initialization, fallbacks, audit logging, metrics, tracing, and health checks.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
 from unittest.mock import MagicMock, patch
+
 import pytest
-import hmac
-import hashlib
 
 # Import using the full package path
 from self_healing_import_fixer.import_fixer.compat_core import (
+    ENVIRONMENT,
+    PRODUCTION_MODE,
+    SECRETS_MANAGER,
+    _NoOpMetric,
     alert_operator,
     audit_logger,
+    core_statuses,
     get_core_health,
     logger,
     verify_audit_log,
-    SECRETS_MANAGER,
-    ENVIRONMENT,
-    PRODUCTION_MODE,
-    core_statuses,
-    _NoOpMetric,
 )
 
 PKG_PATH = "self_healing_import_fixer.import_fixer.compat_core"

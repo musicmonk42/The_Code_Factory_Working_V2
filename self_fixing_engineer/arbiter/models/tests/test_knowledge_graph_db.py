@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
@@ -17,21 +18,21 @@ from pytest_mock import MockerFixture
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Import OpenTelemetry directly
-from opentelemetry import trace
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
 # Now import the knowledge_graph_db module directly
 import knowledge_graph_db
 from knowledge_graph_db import (
-    Neo4jKnowledgeGraph,
-    ConnectionError,
-    SchemaValidationError,
-    KG_OPS_TOTAL,
     KG_CONNECTIONS,
     KG_ERRORS,
+    KG_OPS_TOTAL,
+    ConnectionError,
     ImmutableAuditLogger,
+    Neo4jKnowledgeGraph,
+    SchemaValidationError,
 )
+
+# Import OpenTelemetry directly
+from opentelemetry import trace
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Configure logging for tests
 logging.basicConfig(
@@ -71,13 +72,10 @@ async def setup_env(mocker: MockerFixture):
 async def kg_client(mocker: MockerFixture):
     """Fixture for Neo4jKnowledgeGraph with mocked Neo4j dependencies."""
     try:
+        from neo4j import AsyncManagedTransaction, AsyncSession
+        from neo4j import exceptions as neo4j_exceptions
         from neo4j.async_driver import AsyncGraphDatabase
         from neo4j.exceptions import ServiceUnavailable, SessionExpired
-        from neo4j import (
-            AsyncManagedTransaction,
-            AsyncSession,
-            exceptions as neo4j_exceptions,
-        )
 
         # Mock Neo4j driver for controlled testing
         mock_driver = mocker.MagicMock()

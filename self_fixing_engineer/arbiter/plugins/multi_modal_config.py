@@ -1,10 +1,11 @@
 # D:\SFE\self_fixing_engineer\arbiter\plugins\multi_modal_config.py
-from pydantic import BaseModel, Field, ValidationError, validator
-from typing import Any, Dict, List
 import logging
 import os
-import yaml
 import re
+from typing import Any, Dict, List
+
+import yaml
+from pydantic import BaseModel, Field, ValidationError, validator
 
 # --- New Configuration Models ---
 

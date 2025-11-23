@@ -17,13 +17,13 @@ import json
 import logging
 import os
 import sys
-import yaml  # FIX: Added missing import
 from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import aiohttp
 import pytest
+import yaml  # FIX: Added missing import
 from _pytest.logging import LogCaptureFixture
 from tenacity import RetryError
 
@@ -34,15 +34,15 @@ if str(REPO_ROOT) not in sys.path:
 
 # Imports corrected to use providers/ instead of llm_client_providers/
 from runner.providers.local_provider import (  # type: ignore
+    PRICING,
     LocalProvider,
     get_provider,
     logger,
-    stream_chunks_total,
     stream_chunk_latency,
-    PRICING,
+    stream_chunks_total,
 )
-from runner.runner_errors import LLMError  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import LLMError  # type: ignore
 
 
 # Fixtures

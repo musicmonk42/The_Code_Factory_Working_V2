@@ -1,17 +1,18 @@
+import asyncio
+import atexit
+import datetime
+import json
+import logging
 import os
 import sys
-import logging
-import json
-import yaml  # For loading YAML configs
-import datetime
-from typing import Dict, Any, Optional, Callable
-from pydantic import BaseModel, Field, ValidationError
-import asyncio
-import click  # For robust CLI
-import boto3  # For centralized configuration management
-from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
 from functools import wraps
-import atexit
+from typing import Any, Callable, Dict, Optional
+
+import boto3  # For centralized configuration management
+import click  # For robust CLI
+import yaml  # For loading YAML configs
+from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
+from pydantic import BaseModel, Field, ValidationError
 
 # --- Global Constants ---
 SERVICE_NAME = "Analyzer"
@@ -81,11 +82,11 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Import classes and functions from core files ---
 try:
+    from .core_ai import get_ai_patch, get_ai_suggestions
     from .core_graph import ImportGraphAnalyzer
     from .core_policy import PolicyManager, PolicyViolation
-    from .core_security import SecurityAnalyzer
-    from .core_ai import get_ai_suggestions, get_ai_patch
     from .core_report import ReportGenerator
+    from .core_security import SecurityAnalyzer
     from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency: {e}. Aborting startup.")

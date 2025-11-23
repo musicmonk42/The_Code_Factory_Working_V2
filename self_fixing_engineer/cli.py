@@ -3,8 +3,8 @@ CLI module for the Self-Fixing Engineer platform
 """
 
 import asyncio
-import sys
 import subprocess
+import sys
 
 
 class SFEPlatform:

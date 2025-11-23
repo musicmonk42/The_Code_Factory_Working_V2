@@ -1,9 +1,10 @@
-import pytest
-import os
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
-import tempfile
+import os
 import shutil
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 # Mock Streamlit to prevent it from running the app during tests

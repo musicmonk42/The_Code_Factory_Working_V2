@@ -3,29 +3,30 @@ Test suite for omnicore_engine/core.py
 Tests the core orchestration engine, component initialization, and utility functions.
 """
 
-import pytest
 import asyncio
-from datetime import datetime, date
-from decimal import Decimal
-from uuid import UUID
-import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
-import sys
 import os
+import sys
+from datetime import date, datetime
+from decimal import Decimal
+from unittest.mock import AsyncMock, Mock, patch
+from uuid import UUID
+
+import numpy as np
+import pytest
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.core import (
-    safe_serialize,
     Base,
-    get_plugin_metrics,
-    get_test_metrics,
     ExplainableAI,
     MerkleTree,
     OmniCoreEngine,
-    omnicore_engine,
     configure_logging,
+    get_plugin_metrics,
+    get_test_metrics,
+    omnicore_engine,
+    safe_serialize,
 )
 
 

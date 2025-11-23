@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 # Use forward references for type hints to avoid circular imports.
 # The ArbiterGrowthManager will have access to the actual types.
 if TYPE_CHECKING:
-    from .models import GrowthEvent, ArbiterState
     from .exceptions import ArbiterGrowthError
+    from .models import ArbiterState, GrowthEvent
 
 
 class PluginHook(ABC):

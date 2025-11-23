@@ -1,34 +1,33 @@
 # tests/test_web_ui_dashboard_plugin_template.py
 
-import pytest
 import asyncio
 import os
-from urllib.parse import quote
-from unittest.mock import patch, AsyncMock
-from pydantic import ValidationError
-from prometheus_client import CollectorRegistry
-from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_400_BAD_REQUEST
 
 # Import the plugin from the parent directory
 import sys
+from unittest.mock import AsyncMock, patch
+from urllib.parse import quote
+
+import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from prometheus_client import CollectorRegistry
+from pydantic import ValidationError
+from starlette.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
 from web_ui_dashboard_plugin_template import (
+    CONFIG,
+    DASHBOARD_API_CALLS,
+    DASHBOARD_COMPONENT_RENDERS,
+    DASHBOARD_STATE_UPDATES,
+    UI_COMPONENTS,
+    WEBSOCKET_CONNECTIONS,
     DashboardConfig,
     get_dashboard_router,
     get_dashboard_state,
     update_dashboard_state,
     validate_component_name,
-    DASHBOARD_API_CALLS,
-    WEBSOCKET_CONNECTIONS,
-    DASHBOARD_STATE_UPDATES,
-    DASHBOARD_COMPONENT_RENDERS,
-)
-from web_ui_dashboard_plugin_template import (
-    CONFIG,
-    UI_COMPONENTS,
 )
 
 # ==============================================================================

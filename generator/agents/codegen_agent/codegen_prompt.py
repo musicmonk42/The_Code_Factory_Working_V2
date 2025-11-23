@@ -1,23 +1,24 @@
 # agents/codegen_prompt.py
+import asyncio
 import json
 import logging
 import os
-from typing import Dict, Any, Optional, List, Tuple
-import asyncio
-import aiohttp
-from dotenv import load_dotenv
-from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
-import redis.asyncio as aioredis
 import re
+from typing import Any, Dict, List, Optional, Tuple
 
-# Prometheus
-from prometheus_client import Counter, Histogram, REGISTRY  # <-- IMPORTED REGISTRY
+import aiohttp
+import redis.asyncio as aioredis
+from dotenv import load_dotenv
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
 # OpenTelemetry
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
+# Prometheus
+from prometheus_client import REGISTRY, Counter, Histogram  # <-- IMPORTED REGISTRY
 
 try:
     from opentelemetry.exporter.jaeger.thrift import JaegerExporter
@@ -62,10 +63,10 @@ except ImportError:
 # Assuming 'runner' is an importable package structure
 try:
     # --- FIX: Changed imports to be relative ---
+    from ...runner.llm_client import SecretsManager  # <-- ADDED REAL IMPORT
+    from ...runner.llm_client import count_tokens
     from ...runner.runner_logging import log_audit_event
     from ...runner.runner_security_utils import redact_secrets
-    from ...runner.llm_client import count_tokens
-    from ...runner.llm_client import SecretsManager  # <-- ADDED REAL IMPORT
 
     # We will need a placeholder or a default AuditLogger/security_utils for the function signature if we cannot remove the dependency fully.
     # For now, we will update the usage. The dummy AuditLogger in build_code_generation_prompt will be replaced.

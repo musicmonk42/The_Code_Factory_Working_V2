@@ -261,9 +261,9 @@ def _init_simulation_module():
     """Initialize the UnifiedSimulationModule for the SFE platform."""
     try:
         from simulation.simulation_module import (
-            UnifiedSimulationModule,
             Database,
             ShardedMessageBus,
+            UnifiedSimulationModule,
         )
 
         # Create stub dependencies (simulation module provides its own stubs)
@@ -739,12 +739,7 @@ def start_metrics_server(metrics_port: Optional[int] = None):
 # -------------------------
 # Retry decorator (Tenacity)
 # -------------------------
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
 def _retry_decorator():
@@ -792,8 +787,8 @@ async def run_api(
     STARTUP_ATTEMPTS.labels(mode="api").inc()
     try:
         import uvicorn  # type: ignore
-        from fastapi import FastAPI, APIRouter  # type: ignore
         from api import create_app as create_fastapi_app  # type: ignore
+        from fastapi import APIRouter, FastAPI  # type: ignore
     except Exception as e:
         logger.error("API deps unavailable: %s", e, exc_info=True)
         raise
@@ -891,8 +886,8 @@ async def run_api(
     # Optional in-app metrics exposure
     if _env_bool("EXPOSE_METRICS_IN_API", False):
         try:
-            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST  # type: ignore
             from fastapi.responses import Response  # type: ignore
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest  # type: ignore
 
             @router.get("/__sfe/metrics")
             async def _metrics():

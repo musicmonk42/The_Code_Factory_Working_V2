@@ -1,14 +1,15 @@
 # tests/test_workflow_viz.py
 
-import pytest
 import os
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-from prometheus_client import CollectorRegistry
 
 # Import the module - workflow_viz.py is in simulation/plugins directory
 import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
 
 # Get the absolute path to the simulation directory
 test_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,15 +31,15 @@ if project_root not in sys.path:
 try:
     import workflow_viz  # noqa: F401 - needed for patching in tests
     from workflow_viz import (
+        VIZ_RENDER_ERRORS,
+        VIZ_RENDER_TOTAL,
+        DashboardAPI,
+        WorkflowPhase,
         WorkflowVizConfig,
         _scrub_secrets,
+        render_workflow_viz,
         validate_custom_phases,
         validate_export_path,
-        render_workflow_viz,
-        DashboardAPI,
-        VIZ_RENDER_TOTAL,
-        VIZ_RENDER_ERRORS,
-        WorkflowPhase,
     )
 except ImportError as e:
     print(f"Error importing workflow_viz: {e}")

@@ -1,16 +1,18 @@
 # arbiter/learner/validation.py
 
-import os
-import json
-import structlog
 import asyncio
+import json
+import os
 import time
-from typing import Any, Dict, Optional, Callable, Union, Coroutine
+from typing import Any, Callable, Coroutine, Dict, Optional, Union
+
 import jsonschema
-from jsonschema.exceptions import SchemaError, ValidationError as JsonValidationError
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Counter, Histogram
+import structlog
+from jsonschema.exceptions import SchemaError
+from jsonschema.exceptions import ValidationError as JsonValidationError
 from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .encryption import ArbiterConfig
 

@@ -3,23 +3,24 @@ Test suite for omnicore_engine/meta_supervisor.py
 Tests the MetaSupervisor orchestration and optimization system.
 """
 
-import pytest
-import time
-import numpy as np
-import torch
-from unittest.mock import Mock, patch, AsyncMock
+import os
 
 # Add the parent directory to path for imports
 import sys
-import os
+import time
+from unittest.mock import AsyncMock, Mock, patch
+
+import numpy as np
+import pytest
+import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.meta_supervisor import (
     MetaSupervisor,
+    _is_anomalous,
     validate_model_input,
     validate_training_data,
-    _is_anomalous,
 )
 
 

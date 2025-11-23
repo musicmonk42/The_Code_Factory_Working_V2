@@ -1,8 +1,9 @@
-import pytest
 import logging
-from prometheus_client import CollectorRegistry, REGISTRY
-from prometheus_client.metrics import MetricWrapperBase
 from unittest.mock import patch
+
+import pytest
+from prometheus_client import REGISTRY, CollectorRegistry
+from prometheus_client.metrics import MetricWrapperBase
 
 
 def setup_logging():

@@ -1,9 +1,10 @@
 # tests/test_integration.py
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, Mock
+
 import pytest
 import yaml
-import asyncio
-from agent_orchestration.crew_manager import CrewManager, CrewAgentBase
-from unittest.mock import AsyncMock, MagicMock, Mock
+from agent_orchestration.crew_manager import CrewAgentBase, CrewManager
 
 # Register the base class for testing
 CrewManager.register_agent_class(CrewAgentBase)

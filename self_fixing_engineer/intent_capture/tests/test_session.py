@@ -1,7 +1,8 @@
-import json
 import asyncio
+import json
 import uuid
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 # Import asyncpg types for mocking
@@ -22,31 +23,31 @@ except ImportError:
 # Import the module under test
 import intent_capture.requirements as requirements_module
 from intent_capture.requirements import (
-    get_embedding_model,
-    get_db_conn_pool,
-    db_get_custom_checklists,
-    db_save_custom_checklists,
-    get_global_custom_checklists,
-    set_global_custom_checklists,
-    get_checklist,
-    add_item,
-    update_item_status,
-    _generate_novel_requirements,
-    suggest_requirements,
-    propose_checklist_updates,
-    log_coverage_snapshot,
-    get_coverage_history,
-    generate_coverage_report,
-    compute_coverage,
-    register_plugin_requirements,
-    REQUIREMENTS_CHECKLIST,
-    DOMAIN_SPECIFIC,
-    CUSTOM_CHECKLISTS_FILE,
     COVERAGE_HISTORY_FILE,
+    CUSTOM_CHECKLISTS_FILE,
     DB_AVAILABLE,
-    REDIS_AVAILABLE,
+    DOMAIN_SPECIFIC,
     ML_ENABLED,
     PANDAS_AVAILABLE,
+    REDIS_AVAILABLE,
+    REQUIREMENTS_CHECKLIST,
+    _generate_novel_requirements,
+    add_item,
+    compute_coverage,
+    db_get_custom_checklists,
+    db_save_custom_checklists,
+    generate_coverage_report,
+    get_checklist,
+    get_coverage_history,
+    get_db_conn_pool,
+    get_embedding_model,
+    get_global_custom_checklists,
+    log_coverage_snapshot,
+    propose_checklist_updates,
+    register_plugin_requirements,
+    set_global_custom_checklists,
+    suggest_requirements,
+    update_item_status,
 )
 
 

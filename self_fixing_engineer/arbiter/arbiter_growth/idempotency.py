@@ -1,12 +1,12 @@
-import os
 import logging
+import os
 from typing import Optional, Union
 
 import redis.asyncio as redis
-from redis.asyncio.cluster import RedisCluster
-from redis.exceptions import RedisError
 from opentelemetry import trace
 from prometheus_client import Counter
+from redis.asyncio.cluster import RedisCluster
+from redis.exceptions import RedisError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Configure logging

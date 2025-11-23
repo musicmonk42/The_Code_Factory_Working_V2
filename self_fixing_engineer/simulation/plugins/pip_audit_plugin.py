@@ -1,16 +1,16 @@
 # plugins/pip_audit_plugin.py
 
-import os
-import sys
 import asyncio
+import hashlib
 import json
 import logging
+import os
+import subprocess
+import sys
 import time
 import uuid
-import hashlib
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union
 from pathlib import Path
-import subprocess
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Logger Setup (First!) ---
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ except ImportError:
 
 try:
     # Prometheus client (with access to REGISTRY for metric reuse)
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     prometheus_available = True
 except ImportError:
@@ -39,12 +39,7 @@ except ImportError:
     logger.warning("Prometheus client not found. Metrics for pip-audit plugin will be disabled.")
 
 try:
-    from tenacity import (
-        retry,
-        stop_after_attempt,
-        wait_exponential,
-        retry_if_exception_type,
-    )
+    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
     tenacity_available = True
 except ImportError:
@@ -981,9 +976,9 @@ if __name__ == "__main__":
     import argparse
 
     try:
+        import uvicorn
         from fastapi import FastAPI, HTTPException, status
         from pydantic import BaseModel as _ApiBaseModel
-        import uvicorn
 
         FASTAPI_AVAILABLE_FOR_MAIN = True
     except ImportError:

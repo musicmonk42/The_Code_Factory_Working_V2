@@ -16,17 +16,16 @@ Manifest integrity (prod):
 """
 
 import asyncio
-import logging
+import hashlib
+import hmac
 import json
+import logging
 import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-import hmac
-import hashlib
-
-from omnicore_engine.plugin_registry import plugin, PlugInKind
+from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 # --- Global Production Mode Flag ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -44,9 +43,10 @@ logger.setLevel(logging.INFO)
 MISSING_DEPS = False
 try:
     # Align with alerting core: use send_alert and scrub
-    from core_utils import send_alert as alert_operator, scrub as scrub_sensitive_data
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import scrub as scrub_sensitive_data
+    from core_utils import send_alert as alert_operator
 except ImportError as e:
     logger.critical("CRITICAL: Missing core dependency for gRPC runner: %s. Aborting startup.", e)
     # Provide fallbacks so importing this module doesn't kill pytest, but fail when actually used
@@ -110,8 +110,8 @@ class NonCriticalError(Exception):
 try:
     import grpc
     import prometheus_client
-    from pydantic import BaseModel, Extra, ValidationError, Field, validator
     from grpc_health.v1 import health_pb2, health_pb2_grpc
+    from pydantic import BaseModel, Extra, Field, ValidationError, validator
 except ImportError as e:
     logger.critical(f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup.")
     MISSING_DEPS = True

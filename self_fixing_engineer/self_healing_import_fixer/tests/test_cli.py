@@ -1,21 +1,17 @@
 import os
 import sys
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from pathlib import Path
-from collections import defaultdict
 import tempfile
+from collections import defaultdict
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add the parent directory to the path to allow imports from the 'cli' module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Now import the module to be tested.
-from self_healing_import_fixer.cli import (
-    main,
-    main_async,
-    _validate_path_argument,
-    PluginManager,
-)
+from self_healing_import_fixer.cli import PluginManager, _validate_path_argument, main, main_async
 
 # --- Fixtures ---
 

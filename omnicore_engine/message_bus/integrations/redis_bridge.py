@@ -9,12 +9,12 @@ import random
 import time
 import uuid
 from copy import copy
-from typing import Any, Dict, List, Optional, Callable, Awaitable, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 # Attempt to import redis, which is assumed to be installed in a production environment
 try:
     import redis.asyncio as redis
-    from redis.asyncio import Redis, PubSub
+    from redis.asyncio import PubSub, Redis
     from redis.exceptions import ConnectionError, TimeoutError
 except ImportError:
     # Use standard library logging for initial import failure
@@ -27,7 +27,9 @@ except ImportError:
 
 
 from pydantic import BaseModel, Field
+
 from omnicore_engine.core import safe_serialize
+
 from ..message_types import Message
 from ..resilience import CircuitBreaker  # Assumes resilience.py is available
 

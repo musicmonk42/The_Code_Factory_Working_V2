@@ -4,23 +4,19 @@ Tests the abstract base class and DefaultMultiModalProcessor implementation.
 Compatible with Python 3.10 and handles missing optional dependencies.
 """
 
-import pytest
 import asyncio
-import json
 import hashlib
-from unittest.mock import (
-    Mock,
-    MagicMock,
-    AsyncMock,
-    patch,
-)
+import json
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Import from the correct module path
 from arbiter.knowledge_graph.multimodal import (
-    MultiModalProcessor,
-    DefaultMultiModalProcessor,
-    VIDEO_PROCESSING_AVAILABLE,
     PDF_PROCESSING_AVAILABLE,
+    VIDEO_PROCESSING_AVAILABLE,
+    DefaultMultiModalProcessor,
+    MultiModalProcessor,
 )
 from arbiter.knowledge_graph.utils import AgentCoreException, AgentErrorCode
 

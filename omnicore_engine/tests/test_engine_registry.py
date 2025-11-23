@@ -3,22 +3,23 @@ Test suite for omnicore_engine/engines.py
 Tests engine registry, plugin service, and OmniCoreOmega orchestrator.
 """
 
-import pytest
 import os
-from unittest.mock import Mock, patch, AsyncMock, mock_open
 
 # Add the parent directory to path for imports
 import sys
+from unittest.mock import AsyncMock, Mock, mock_open, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.engines import (
     ENGINE_REGISTRY,
-    register_engine,
-    get_engine,
-    PluginService,
-    run_import_fixer,
     OmniCoreOmega,
+    PluginService,
+    get_engine,
+    register_engine,
+    run_import_fixer,
 )
 
 

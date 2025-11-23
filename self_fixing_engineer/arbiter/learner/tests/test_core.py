@@ -1,15 +1,16 @@
 # test_core.py
 
-import pytest
 import json
 from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from cryptography.fernet import Fernet
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
+from arbiter.learner.audit import CircuitBreaker
 
 # Import the classes to test
 from arbiter.learner.core import Arbiter, Learner
 from arbiter.learner.encryption import ArbiterConfig
-from arbiter.learner.audit import CircuitBreaker
+from cryptography.fernet import Fernet
 
 
 class TestArbiter:

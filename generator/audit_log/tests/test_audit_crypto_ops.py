@@ -2,7 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
-from unittest.mock import MagicMock, AsyncMock, patch, call, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
 from cryptography.exceptions import InvalidSignature
@@ -231,9 +231,7 @@ class TestUtilityFunctions:
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_success(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_compute_hash,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
 
         data = [b"hello", b" ", b"world"]
         expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
@@ -242,9 +240,7 @@ class TestUtilityFunctions:
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_invalid_chunk_type(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_compute_hash,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
 
         data = [b"good", "bad", b"chunk"]
         with pytest.raises(TypeError, match="All chunks yielded by data_chunks must be bytes"):
@@ -252,9 +248,7 @@ class TestUtilityFunctions:
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_stream_error(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_compute_hash,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
 
         data = [b"good", b"chunk", RuntimeError("Stream failed")]
         with pytest.raises(RuntimeError, match="Stream failed"):
@@ -279,10 +273,10 @@ class TestSigning:
         global CryptoOperationError, KeyNotFoundError, InvalidKeyStatusError, UnsupportedAlgorithmError, HSMError
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             CryptoOperationError,
-            KeyNotFoundError,
-            InvalidKeyStatusError,
-            UnsupportedAlgorithmError,
             HSMError,
+            InvalidKeyStatusError,
+            KeyNotFoundError,
+            UnsupportedAlgorithmError,
         )
 
     # --- END OF MOVED IMPORT (FIX) ---
@@ -291,10 +285,7 @@ class TestSigning:
     async def test_sign_entry_success(
         self, mock_crypto_provider, mock_log_action, sample_entry_data
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            sign_entry,
-            compute_hash,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import compute_hash, sign_entry
 
         entry = sample_entry_data
         key_id = "key-1"
@@ -471,10 +462,10 @@ class TestVerification:
         global CryptoOperationError, KeyNotFoundError, InvalidKeyStatusError, UnsupportedAlgorithmError, HSMError
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             CryptoOperationError,
-            KeyNotFoundError,
-            InvalidKeyStatusError,
-            UnsupportedAlgorithmError,
             HSMError,
+            InvalidKeyStatusError,
+            KeyNotFoundError,
+            UnsupportedAlgorithmError,
         )
 
     # --- END OF MOVED IMPORT (FIX) ---
@@ -591,9 +582,7 @@ class TestVerification:
     async def test_stream_verify_entry_success(
         self, mock_crypto_provider, mock_log_action, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_verify_entry,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
 
         stream_data = [b"chunk1", b"chunk2"]
         metadata = sample_stream_metadata.copy()
@@ -631,9 +620,7 @@ class TestVerification:
     async def test_stream_verify_entry_hash_fail(
         self, mock_metrics, mock_crypto_provider, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_verify_entry,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
 
         stream_data = [b"chunk1", RuntimeError("stream read error")]
 
@@ -651,9 +638,7 @@ class TestVerification:
     async def test_stream_verify_entry_invalid_signature(
         self, mock_crypto_provider, mock_metrics, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            stream_verify_entry,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
 
         mock_crypto_provider.verify.side_effect = InvalidSignature("sig mismatch")
 
@@ -848,10 +833,10 @@ class TestRotation:
         global CryptoOperationError, KeyNotFoundError, InvalidKeyStatusError, UnsupportedAlgorithmError, HSMError
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             CryptoOperationError,
-            KeyNotFoundError,
-            InvalidKeyStatusError,
-            UnsupportedAlgorithmError,
             HSMError,
+            InvalidKeyStatusError,
+            KeyNotFoundError,
+            UnsupportedAlgorithmError,
         )
 
     # --- END OF MOVED IMPORT (FIX) ---
@@ -933,10 +918,10 @@ class TestFallbackLogic:
         global CryptoOperationError, KeyNotFoundError, InvalidKeyStatusError, UnsupportedAlgorithmError, HSMError
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             CryptoOperationError,
-            KeyNotFoundError,
-            InvalidKeyStatusError,
-            UnsupportedAlgorithmError,
             HSMError,
+            InvalidKeyStatusError,
+            KeyNotFoundError,
+            UnsupportedAlgorithmError,
         )
 
     # --- END OF MOVED IMPORT (FIX) ---
@@ -959,9 +944,7 @@ class TestFallbackLogic:
         mock_log_action.assert_not_called()  # No log_action on success path for safe_sign
 
         # Check that fallback counters were reset
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            _FALLBACK_ATTEMPT_COUNT,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import _FALLBACK_ATTEMPT_COUNT
 
         assert _FALLBACK_ATTEMPT_COUNT.get("total") == 0
         assert _FALLBACK_ATTEMPT_COUNT.get("since_alert") == 0
@@ -992,9 +975,7 @@ class TestFallbackLogic:
         assert result == expected_hmac
 
         # 4. Check state
-        from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            _FALLBACK_ATTEMPT_COUNT,
-        )
+        from generator.audit_log.audit_crypto.audit_crypto_ops import _FALLBACK_ATTEMPT_COUNT
 
         assert _FALLBACK_ATTEMPT_COUNT == {"total": 1, "since_alert": 1}
 
@@ -1081,8 +1062,8 @@ class TestFallbackLogic:
         sample_entry_data,
     ):
         from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            safe_sign,
             _FALLBACK_ATTEMPT_COUNT,
+            safe_sign,
         )
 
         # 1. Configure settings for the test
@@ -1126,8 +1107,8 @@ class TestFallbackLogic:
         self, mock_crypto_provider, mock_settings, mock_send_alert, sample_entry_data
     ):
         from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            safe_sign,
             _FALLBACK_ATTEMPT_COUNT,
+            safe_sign,
         )
 
         # 1. Configure settings for the test

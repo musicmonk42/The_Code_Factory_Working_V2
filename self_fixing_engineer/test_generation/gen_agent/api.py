@@ -1,20 +1,22 @@
 # api.py
 from __future__ import annotations
+
+import asyncio
+import json
+import logging
 import os
 import sys
-import json
 import time
-import asyncio
-import logging
-from typing import Dict, Any, Optional, Literal, TypedDict, Callable
-from datetime import datetime
-from flask import Flask, request, jsonify, g, current_app
-from pathlib import Path
 import uuid
-from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.exceptions import TooManyRequests, BadRequest
 from asyncio import TimeoutError as AsyncTimeoutError
+from datetime import datetime
 from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Dict, Literal, Optional, TypedDict
+
+from flask import Flask, current_app, g, jsonify, request
+from werkzeug.exceptions import BadRequest, TooManyRequests
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 #
 # Guard against optional dependencies at import time with specific logging
@@ -55,7 +57,7 @@ except ImportError:
 
 JWT_AVAILABLE = False
 try:
-    from flask_jwt_extended import JWTManager, jwt_required, create_access_token
+    from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
     JWT_AVAILABLE = True
     logging.info("Flask extension 'flask_jwt_extended' is available.")
@@ -90,17 +92,13 @@ try:
 except ImportError:
     _GUNICORN_OK = False
 
-from pydantic import BaseModel, ValidationError, Field
+from pydantic import BaseModel, Field, ValidationError
+from test_generation.gen_agent.graph import build_graph, invoke_graph
 
 # Using a single, consistent source for runtime imports
-from test_generation.gen_agent.runtime import (
-    FLASK_AVAILABLE,
-    AUDIT_LOGGER_AVAILABLE,
-    audit_logger,
-    init_llm as runtime_init_llm,
-    validate_session_inputs,
-)
-from test_generation.gen_agent.graph import build_graph, invoke_graph
+from test_generation.gen_agent.runtime import AUDIT_LOGGER_AVAILABLE, FLASK_AVAILABLE, audit_logger
+from test_generation.gen_agent.runtime import init_llm as runtime_init_llm
+from test_generation.gen_agent.runtime import validate_session_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +394,7 @@ def create_app(config: Dict[str, Any]) -> Flask:
         from test_generation.orchestrator.metrics import METRICS_AVAILABLE
 
         if METRICS_AVAILABLE:
-            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
             return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
         return jsonify({"error": "Metrics not enabled"}), 404

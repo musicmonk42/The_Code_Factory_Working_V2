@@ -1,18 +1,18 @@
 # plugins/runtime_tracer_plugin.py
 
-import os
 import asyncio
 import json
 import logging
-import time
-import tempfile
-import uuid
-import sys
-import subprocess
-import shutil
+import os
 import platform
 import shlex
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Minimal plugin manifest for integration with PluginManager (AST-extracted) ---
 PLUGIN_MANIFEST = {
@@ -62,7 +62,7 @@ if platform.system().lower().startswith(("linux", "darwin")):
 
 # --- Prometheus Metrics (Idempotent Definition) ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     def _get_or_create_metric(
         metric_type: type,

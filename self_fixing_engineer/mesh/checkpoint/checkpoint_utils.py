@@ -28,51 +28,43 @@ __version__ = "3.0.0"
 __author__ = "Security Engineering Team"
 __classification__ = "CONFIDENTIAL"
 
-# ---- Standard Library Imports ----
-import os
-import sys
-import json
-import gzip
-import zlib
+import base64
 import bz2
-import lzma
+import gzip
 import hashlib
 import hmac
-import secrets
+import json
+import logging
+import lzma
+
+# ---- Standard Library Imports ----
+import os
 import re
-import base64
+import secrets
+import sys
+import threading
 import time
 import uuid
-import logging
 import warnings
-from datetime import datetime, timezone, timedelta
-from typing import (
-    Dict,
-    Any,
-    Union,
-    Optional,
-    List,
-    Tuple,
-    Set,
-    Pattern,
-)
-from functools import lru_cache
-from contextlib import contextmanager
-import threading
+import zlib
 from collections import OrderedDict
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Pattern, Set, Tuple, Union
 
 # ---- Cryptographic Imports ----
 try:
+    import cryptography
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.fernet import Fernet, MultiFernet, InvalidToken
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
     from cryptography.x509 import load_pem_x509_certificate
-    import cryptography
 
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
@@ -122,7 +114,7 @@ except ImportError:
 
 # ---- Observability ----
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:

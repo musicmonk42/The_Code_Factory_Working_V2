@@ -1,12 +1,13 @@
-import os
-import sys
+import asyncio
 import json
 import logging
-import asyncio
+import os
+import sys
 import time
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from cryptography.fernet import Fernet
 
 # Set critical environment variables before importing slack_plugin
@@ -50,21 +51,20 @@ sys.modules["aiofiles.threadpool.binary"] = MagicMock()
 
 # Import from the correct module path
 from plugins.slack_plugin.slack_plugin import (
-    main_logger,
-    audit_logger,
-    SlackTarget,
-    SlackGatewaySettings,
-    SlackMetrics,
-    SlackBlockKitSerializer,
-    PersistentWALQueue,
     CircuitBreaker,
-    TokenBucket,
+    PersistentWALQueue,
+    SlackBlockKitSerializer,
+    SlackEvent,
     SlackGateway,
     SlackGatewayManager,
+    SlackGatewaySettings,
+    SlackMetrics,
+    SlackTarget,
+    TokenBucket,
+    audit_logger,
     dead_letter_to_file,
-    SlackEvent,
+    main_logger,
 )
-
 from pydantic import ValidationError
 
 

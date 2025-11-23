@@ -3,14 +3,15 @@ test_docgen_agent.py
 Comprehensive tests for docgen_agent module.
 """
 
-import sys
-import pytest
 import asyncio
+import sys
 import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
-from typing import Tuple, Optional, Any, List, Dict, AsyncGenerator, Union
+from pathlib import Path
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Mock runner modules before importing docgen_agent
 sys.modules["runner"] = MagicMock()
@@ -82,21 +83,20 @@ sys.modules["aiofiles"] = MagicMock()
 
 # Import the actual code
 from agents.docgen_agent import (
-    DocGenAgent,
-    scrub_text,
+    BatchProcessor,
     CompliancePlugin,
-    LicenseCompliance,
     CopyrightCompliance,
+    DocGenAgent,
+    LicenseCompliance,
     PluginRegistry,
     SphinxDocGenerator,
-    BatchProcessor,
     doc_critique_summary,
     generate,
+    scrub_text,
 )
 
 # Now this import will succeed and LLMError will be our mock type
 from runner.runner_errors import LLMError
-
 
 # =============================================================================
 # FIXTURES

@@ -1,33 +1,26 @@
 import asyncio
-import logging
-import json
-import uuid
-import time
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Tuple, Type
-import os
-import ssl
-import re
-import hashlib
-import subprocess
 import contextlib
+import hashlib
+import json
+import logging
+import os
+import re
+import ssl
+import subprocess
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import asyncpg
-from asyncpg.pool import Pool
-from asyncpg import exceptions as asyncpg_exceptions
-
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_random_exponential,
-    retry_if_exception_type,
-)
-
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from asyncpg import exceptions as asyncpg_exceptions
+from asyncpg.pool import Pool
 from opentelemetry.trace import Status, StatusCode
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 # Logger initialization
 logger = logging.getLogger(__name__)

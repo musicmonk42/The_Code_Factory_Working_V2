@@ -1,19 +1,20 @@
 # test_openai_adapter.py
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
+import openai
+import pytest
+from arbiter.plugins.llm_client import LLMClientError
 
 # Import the adapter and related exceptions
 from arbiter.plugins.openai_adapter import (
-    OpenAIAdapter,
-    AuthError,
-    TimeoutError,
-    RateLimitError,
     APIError,
+    AuthError,
+    OpenAIAdapter,
+    RateLimitError,
+    TimeoutError,
 )
-from arbiter.plugins.llm_client import LLMClientError
-import openai
 
 
 class TestOpenAIAdapter:

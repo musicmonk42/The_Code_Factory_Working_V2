@@ -2,20 +2,17 @@ import asyncio
 import json
 import logging
 import os
+
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+# Import the client and its exceptions
+from arbiter.models.redis_client import ConnectionError, DataError, RedisClient
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
-
-# Import the client and its exceptions
-from arbiter.models.redis_client import (
-    RedisClient,
-    ConnectionError,
-    DataError,
-)
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from pytest_mock import MockerFixture
 
 # Import metrics from redis_client
 

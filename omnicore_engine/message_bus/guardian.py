@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 # --------------------------------------------------------------------------- #
 #  Logging – use structlog (the same logger the bus uses) and add .bind()
@@ -40,10 +40,7 @@ except ImportError:  # pragma: no cover
 # --------------------------------------------------------------------------- #
 #  Local / Relative imports
 # --------------------------------------------------------------------------- #
-from .metrics import (
-    MESSAGE_BUS_HEALTH_STATUS,
-    MESSAGE_BUS_CRITICAL_FAILURES_TOTAL,
-)
+from .metrics import MESSAGE_BUS_CRITICAL_FAILURES_TOTAL, MESSAGE_BUS_HEALTH_STATUS
 
 if TYPE_CHECKING:
     from .sharded_message_bus import ShardedMessageBus

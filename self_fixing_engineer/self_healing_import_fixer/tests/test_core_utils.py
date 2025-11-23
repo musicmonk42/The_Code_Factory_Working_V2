@@ -6,41 +6,42 @@ Tests all critical functionality including alerting, circuit breakers, rate limi
 caching, security features, and operational utilities.
 """
 
-import sys
 import json
-import time
+import sys
 import threading
-from unittest.mock import MagicMock, patch
-import pytest
+import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import from the analyzer module
 from self_healing_import_fixer.analyzer.core_utils import (
-    alert_operator,
-    scrub_secrets,
-    AlertLevel,
+    SERVICE_NAME,
     AlertChannel,
+    AlertLevel,
     CircuitBreaker,
     RateLimiter,
-    get_circuit_breaker,
-    timing_context,
-    retry_with_backoff,
-    cached,
-    validate_input,
-    generate_correlation_id,
-    get_system_health,
-    secure_hash,
-    verify_hash,
-    sanitize_path,
-    encode_for_logging,
-    SERVICE_NAME,
     _alert_config,
+    _cache,
     _circuit_breakers,
     _rate_limiters,
-    _cache,
+    alert_operator,
+    cached,
+    encode_for_logging,
+    generate_correlation_id,
+    get_circuit_breaker,
+    get_system_health,
+    retry_with_backoff,
+    sanitize_path,
+    scrub_secrets,
+    secure_hash,
+    timing_context,
+    validate_input,
+    verify_hash,
 )
 
 

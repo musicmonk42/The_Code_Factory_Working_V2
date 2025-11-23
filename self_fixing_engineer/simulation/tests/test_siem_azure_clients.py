@@ -5,14 +5,15 @@ Comprehensive testing for Azure Sentinel, Event Grid, and Service Bus clients.
 """
 
 import asyncio
+import base64
 import json
 import os
 import sys
 import time
 import uuid
-import base64
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 # Mock modules before importing

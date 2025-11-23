@@ -1,36 +1,25 @@
+import asyncio
 import collections
 import json
 import logging
 import re
 import time
-import asyncio
-from datetime import datetime, date, time as dt_time
-from pathlib import Path
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Union,
-    Callable,
-    ParamSpec,
-    Awaitable,
-)
-from functools import wraps
-
-from pydantic import BaseModel
-
-# Import ReasonerError and ReasonerErrorCode for consistent error handling
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
-from arbiter.explainable_reasoner.reasoner_config import SensitiveValue, ReasonerConfig
 
 # --- Start of Placeholder for METRICS ---
 # In a real application, METRICS would be imported. For this standalone file,
 # we define a dummy structure to make the code executable and demonstrate changes.
 from collections import defaultdict
+from datetime import date, datetime
+from datetime import time as dt_time
+from functools import wraps
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional, ParamSpec, Union
+
+from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
+
+# Import ReasonerError and ReasonerErrorCode for consistent error handling
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from pydantic import BaseModel
 
 
 class DummyCounter:
@@ -70,11 +59,11 @@ except ImportError:
 # Conditional import for MultiModalData and schemas
 try:
     from arbiter.models.multi_modal_schemas import (
-        MultiModalData,
-        ImageAnalysisResult,
         AudioAnalysisResult,
-        VideoAnalysisResult,
+        ImageAnalysisResult,
         MultiModalAnalysisResult,
+        MultiModalData,
+        VideoAnalysisResult,
     )
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True

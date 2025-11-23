@@ -3,14 +3,15 @@ Comprehensive unit tests for gui.py
 Tests Textual TUI application, API interactions, and UI components.
 """
 
-import pytest
 import asyncio
 import os
 import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-import aiohttp
 import threading
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiohttp
+import pytest
 
 # Set testing environment variables
 os.environ["TESTING"] = "true"
@@ -90,8 +91,9 @@ class TestTuiLogHandler:
 
     @pytest.mark.asyncio
     async def test_emit_log_record(self, log_widget, mock_app):
-        from main.gui import TuiLogHandler
         import logging
+
+        from main.gui import TuiLogHandler
 
         # Create a real task for the mock app to "create"
         pending_tasks = []

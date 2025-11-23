@@ -1,17 +1,18 @@
 # test_runner_contracts.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 
-import unittest
-import uuid
 import json
 import logging
-from pathlib import Path
-from pydantic import ValidationError
-from unittest.mock import patch, MagicMock
-from datetime import datetime
 
 # Add parent directory to sys.path
 import sys
+import unittest
+import uuid
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -22,7 +23,7 @@ sys.modules["opentelemetry.sdk.trace"] = MagicMock()
 sys.modules["opentelemetry.sdk.trace.export"] = MagicMock()
 
 # Import runner modules
-from runner.runner_contracts import TaskPayload, TaskResult, BatchTaskPayload
+from runner.runner_contracts import BatchTaskPayload, TaskPayload, TaskResult
 
 
 class TestRunnerContracts(unittest.TestCase):

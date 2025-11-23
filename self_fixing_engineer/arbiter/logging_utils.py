@@ -3,19 +3,19 @@ Production-grade logging utilities for the Arbiter platform.
 Provides PII redaction, structured logging, audit trails, and security features.
 """
 
-import logging
-import re
-import json
 import hashlib
-import sys
+import json
+import logging
 import os
-from typing import Any, Dict, List, Optional, Pattern, Tuple, Union
-from datetime import datetime, timezone
-from functools import lru_cache
-from contextlib import contextmanager
+import re
+import sys
 import threading
-from enum import Enum
 import traceback
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from enum import Enum
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Pattern, Tuple, Union
 
 # Try to import cryptography for advanced redaction
 try:

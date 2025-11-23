@@ -1,9 +1,10 @@
 # arbiter/learner/metrics.py
 
 import os
-from typing import Tuple, Optional, Dict, Any, Type
-from prometheus_client import Counter, Gauge, Histogram, Summary, Info, REGISTRY
+from typing import Any, Dict, Optional, Tuple, Type
+
 import structlog
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Info, Summary
 
 # Structured logging setup
 structlog.configure(

@@ -1,8 +1,9 @@
 # test_parser_priorities_config.py
 
-import pytest
 import json
 from pathlib import Path
+
+import pytest
 
 
 class TestParserPrioritiesConfig:

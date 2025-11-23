@@ -1,26 +1,17 @@
 from __future__ import annotations
 
-import os
 import asyncio
+import hashlib
+import inspect
 import json
 import logging
-import time
-import hashlib
-import uuid
+import os
 import re
-import inspect
 import sys
+import time
+import uuid
+from typing import Any, AsyncGenerator, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Tuple,
-    Callable,
-    AsyncGenerator,
-    Iterable,
-)
 
 # Add the module to sys.modules with the flat name for testability
 sys.modules.setdefault("custom_llm_provider_plugin", sys.modules[__name__])
@@ -82,7 +73,7 @@ class _NoopGauge:
 
 # Prometheus (metrics) imports
 try:
-    from prometheus_client import Counter, Histogram, Gauge  # noqa: F401
+    from prometheus_client import Counter, Gauge, Histogram  # noqa: F401
 
     PROM_AVAILABLE = True
 except Exception as e:
@@ -114,16 +105,16 @@ except ImportError:
 
 # LangChain imports
 try:
+    from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
     from langchain_core.language_models import BaseChatModel
-    from langchain_core.outputs import ChatGenerationChunk, ChatResult, ChatGeneration
     from langchain_core.messages import (
         AIMessage,
+        AIMessageChunk,
+        BaseMessage,
         HumanMessage,
         SystemMessage,
-        BaseMessage,
-        AIMessageChunk,
     )
-    from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+    from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
@@ -176,12 +167,12 @@ except ImportError as e:
 # Tenacity imports for optional retry logic
 try:
     from tenacity import (
+        RetryError,
+        before_sleep_log,
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
-        before_sleep_log,
-        RetryError,
     )
 
     TENACITY_AVAILABLE = True
@@ -207,8 +198,8 @@ try:
     import aiohttp
     from aiohttp.client_exceptions import (
         ClientError,
-        ClientResponseError,
         ClientPayloadError,
+        ClientResponseError,
         ContentTypeError,
     )
 
@@ -1268,9 +1259,7 @@ class CustomLLMChatModel(BaseChatModel):
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> str:
-        from aiohttp.client_exceptions import (
-            ClientError,
-        )
+        from aiohttp.client_exceptions import ClientError
 
         async def _attempt_once():
             try:
@@ -1395,8 +1384,9 @@ class CustomLLMChatModel(BaseChatModel):
         if neg:
             expiry, status = neg
             if expiry > time.time():
-                from aiohttp.client_exceptions import ClientResponseError
                 from unittest.mock import MagicMock
+
+                from aiohttp.client_exceptions import ClientResponseError
 
                 raise ClientResponseError(
                     MagicMock(),

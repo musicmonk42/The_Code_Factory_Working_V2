@@ -43,13 +43,11 @@ import asyncio
 import logging
 import os
 import signal
-from typing import Any, Callable, Dict, Optional, Type, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Optional, Type
 
 # Configuration management
 from dynaconf import Dynaconf, Validator
-from dynaconf.validator import (
-    ValidationError,
-)  # Import ValidationError here for the fix
+from dynaconf.validator import ValidationError  # Import ValidationError here for the fix
 
 # Prometheus metrics
 try:
@@ -61,9 +59,9 @@ except ImportError:
 # OpenTelemetry for tracing
 try:
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     HAS_OPENTELEMETRY = True
     _span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
@@ -95,10 +93,10 @@ except ImportError:
 import aiohttp  # For sending alerts
 
 # Import secret fetching functions
-from .secrets import (
-    aget_kms_master_key_ciphertext_blob,
+from .secrets import (  # Import async secret fetchers
     aget_fallback_hmac_secret,
-)  # Import async secret fetchers
+    aget_kms_master_key_ciphertext_blob,
+)
 
 # Import SecretError from secrets.py
 
@@ -584,11 +582,7 @@ async def retry_operation(
 
 
 # Import CryptoProvider here to avoid circular dependencies in type hints
-from .audit_crypto_provider import (
-    CryptoProvider,
-    SoftwareCryptoProvider,
-    HSMCryptoProvider,
-)
+from .audit_crypto_provider import CryptoProvider, HSMCryptoProvider, SoftwareCryptoProvider
 
 
 class DummyCryptoProvider(CryptoProvider):

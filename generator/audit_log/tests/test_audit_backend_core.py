@@ -8,12 +8,12 @@ Regulated-grade tests for audit_log/audit_backend_core.py
 """
 
 import asyncio
+import importlib.util
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
-import importlib.util
-import sys
 
 import pytest
 import pytest_asyncio

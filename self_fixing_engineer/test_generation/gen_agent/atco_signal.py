@@ -1,19 +1,19 @@
-import signal as signal_module
 import asyncio
+import atexit as _atexit
+import ctypes
 import logging
 import os
-import threading
-from typing import Callable, Any, Optional, Dict, Set, Iterable, List, Tuple
-from functools import partial
-from collections import defaultdict
-import time
-import atexit as _atexit
-import tempfile
-from contextlib import contextmanager
-import ctypes
+import signal as signal_module
 import sys
-from test_generation.orchestrator.cli import graceful_shutdown as cli_graceful_shutdown
+import tempfile
+import threading
+import time
+from collections import defaultdict
+from contextlib import contextmanager
+from functools import partial
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
+from test_generation.orchestrator.cli import graceful_shutdown as cli_graceful_shutdown
 
 #
 # Elevated Signal Handling
@@ -137,7 +137,7 @@ _atexit.register(_flush_logging)
 
 # --- Prometheus Metrics (Optional) ---
 try:
-    from prometheus_client import Counter, REGISTRY
+    from prometheus_client import REGISTRY, Counter
 
     # Fix: Check for existing metrics to prevent multiple registrations in test environments.
     _sig_count = None

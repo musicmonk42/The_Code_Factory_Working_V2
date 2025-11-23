@@ -10,10 +10,11 @@ import time
 from abc import ABC, abstractmethod
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Any, List, Callable, Optional
-from opentelemetry import trace
-from prometheus_client import Counter, Histogram, Gauge
+from typing import Any, Callable, Dict, List, Optional
+
 import aiofiles
+from opentelemetry import trace
+from prometheus_client import Counter, Gauge, Histogram
 
 # --- TOML Compatibility (Python 3.10/3.11+, optional in tests/CI) ---
 try:

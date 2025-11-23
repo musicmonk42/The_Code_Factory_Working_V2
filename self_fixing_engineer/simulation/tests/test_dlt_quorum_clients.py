@@ -1,22 +1,23 @@
 # tests/test_dlt_quorum_clients.py
 
-import pytest
 import json
 import re
 from unittest.mock import AsyncMock, MagicMock, mock_open
+
+import pytest
 from pydantic import ValidationError
 
 # Check if web3 is available before importing anything that depends on it
 try:
     import web3
-    from web3.exceptions import (
-        ContractLogicError,
-        ContractCustomError,
-        TransactionNotFound,
-        TimeExhausted,
-    )
-    from web3.eth import AsyncEth
     from eth_account import Account
+    from web3.eth import AsyncEth
+    from web3.exceptions import (
+        ContractCustomError,
+        ContractLogicError,
+        TimeExhausted,
+        TransactionNotFound,
+    )
 
     WEB3_AVAILABLE = True
 except ImportError:
@@ -47,23 +48,20 @@ except ImportError:
 
 
 # Import base classes that don't depend on web3
-from simulation.plugins.dlt_clients.dlt_base import (
-    BaseOffChainClient,
-    SECRETS_MANAGER,
-)
+from simulation.plugins.dlt_clients.dlt_base import SECRETS_MANAGER, BaseOffChainClient
 
 # Only import Quorum-specific modules if web3 is available
 if WEB3_AVAILABLE:
     try:
         from simulation.plugins.dlt_clients.dlt_quorum_clients import (
-            QuorumClientWrapper,
-            QuorumConfig,
-            _temp_files,
-            temp_file,
-            cleanup_temp_files,
             AWSSecretsBackend,
             AzureKeyVaultBackend,
             GCPSecretManagerBackend,
+            QuorumClientWrapper,
+            QuorumConfig,
+            _temp_files,
+            cleanup_temp_files,
+            temp_file,
         )
 
         QUORUM_AVAILABLE = True
@@ -73,8 +71,9 @@ if WEB3_AVAILABLE:
 else:
     QUORUM_AVAILABLE = False
     # Create mock QuorumConfig for basic validation tests
+    from typing import Any, Dict, List, Literal, Optional
+
     from pydantic import BaseModel, Field, validator
-    from typing import Optional, List, Dict, Any, Literal
 
     class QuorumConfig(BaseModel):
         """Mock QuorumConfig for testing when web3 is not available."""

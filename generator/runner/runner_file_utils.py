@@ -1,26 +1,20 @@
 # runner/file_utils.py
+import asyncio
+import base64  # For binary
+import gzip
+import hashlib  # For integrity checks
+import json
+import mimetypes  # For auto-detect
 import os
+import platform  # For checking OS
 import shutil
 import tempfile
-import asyncio
-import aiofiles  # For async I/O (add to reqs: aiofiles)
-import mimetypes  # For auto-detect
-import json
-import yaml
 import zipfile
-import gzip
-import base64  # For binary
-import hashlib  # For integrity checks
-import platform  # For checking OS
-
-from typing import (
-    Union,
-    Dict,
-    Any,
-    List,
-    Optional,
-)
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import aiofiles  # For async I/O (add to reqs: aiofiles)
+import yaml
 
 # Conditional import for xattr based on OS
 try:
@@ -53,8 +47,8 @@ except ImportError:
 try:
     # Preferred: central security utils module used elsewhere in the project
     from runner.runner_security_utils import (
-        encrypt_data,
         decrypt_data,
+        encrypt_data,
         redact_secrets,
         scan_for_vulnerabilities,
     )
@@ -95,16 +89,12 @@ except ImportError:
 
 # --- END REFACTOR FIX ---
 
-from runner.runner_logging import logger, add_provenance
+from runner.runner_logging import add_provenance, logger
 
 # Metrics + decorator for utility functions (latency / errors)
 try:
     # Preferred: use shared metrics + decorator if available
-    from runner.runner_metrics import (
-        util_decorator,
-        UTIL_ERRORS,
-        UTIL_LATENCY,
-    )
+    from runner.runner_metrics import UTIL_ERRORS, UTIL_LATENCY, util_decorator
 except ImportError:
     # Fallbacks so this module is still importable even if runner_metrics
     # doesn't define these yet in this environment.
@@ -158,8 +148,8 @@ from runner import FILE_HANDLERS, register_file_handler
 
 # Multi-format: Add PDF/OCR handlers, and other formats
 try:
-    from PIL import Image  # Pillow library
     import pytesseract  # For OCR (add to reqs: Pillow, pytesseract)
+    from PIL import Image  # Pillow library
 
     HAS_OCR = True
 except ImportError:
@@ -1087,8 +1077,9 @@ async def get_commits(repo_path: Union[str, Path], limit: int = 3) -> str:
 
 # --- Test Suite ---
 import unittest
+from unittest.mock import MagicMock, patch
+
 import pytest  # FIX: Import pytest explicitly for the skip marker
-from unittest.mock import patch, MagicMock
 
 # --- FIX: Remove the local definition, it's now at the module level ---
 # class SecurityException(Exception):

@@ -1,19 +1,14 @@
-import os
-import json
 import asyncio
 import hashlib
+import json
 import logging
-from typing import Dict, Any, Optional
+import os
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 import aiofiles
 import etcd3
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Local application imports are moved inside methods where they are used to prevent circular dependencies.
 

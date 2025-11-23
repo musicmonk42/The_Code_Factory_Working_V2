@@ -1,49 +1,43 @@
 # web_app.py (corrected & hardened)
-import streamlit as st
-import yaml
+import asyncio
+import importlib.util
 import json
 import logging
 import os
-import importlib.util
 import re  # For input validation
-from datetime import datetime, timezone, timedelta
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
-# P6: Retries for Redis/Agent calls
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    before_sleep_log,
-)
+import bcrypt
 
 # UPGRADE: For real-time collaboration
 import redis
-import bcrypt
-from streamlit_autorefresh import st_autorefresh
+import streamlit as st
+import yaml
 
-# UPGRADE: Observability - Prometheus & OpenTelemetry
-from prometheus_client import start_http_server, Counter
+# Import custom modules - Fixed to use absolute imports
+from intent_capture.agent_core import RedisStateBackend, get_or_create_agent
+from intent_capture.config import Config, PluginManager
+from intent_capture.requirements import generate_coverage_report, get_coverage_history
+from intent_capture.spec_utils import generate_spec_from_memory
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
-# Import custom modules - Fixed to use absolute imports
-from intent_capture.agent_core import (
-    get_or_create_agent,
-    RedisStateBackend,
-)
-from intent_capture.spec_utils import (
-    generate_spec_from_memory,
-)
-from intent_capture.requirements import get_coverage_history, generate_coverage_report
-from intent_capture.config import Config, PluginManager
+# UPGRADE: Observability - Prometheus & OpenTelemetry
+from prometheus_client import Counter, start_http_server
+from streamlit_autorefresh import st_autorefresh
+
+# P6: Retries for Redis/Agent calls
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 # Optional content-safety plugin (fail-safe fallback)
 try:
-    from intent_capture.self_evolution_plugin import initiate_evolution_cycle, _check_content_safety  # type: ignore
+    from intent_capture.self_evolution_plugin import (  # type: ignore
+        _check_content_safety,
+        initiate_evolution_cycle,
+    )
 except Exception:
 
     async def _check_content_safety(text: str) -> tuple[bool, str]:

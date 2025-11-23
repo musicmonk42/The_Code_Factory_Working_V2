@@ -1,52 +1,51 @@
 # simulation/plugins/dlt_clients/dlt_quorum_clients.py
 
 import asyncio
-import json
-import time
-from typing import Any, Dict, Optional, Callable, List, Literal, Final
-from contextlib import contextmanager, suppress
 import atexit
-import tempfile
+import json
 import os
-from pydantic import BaseModel, Field, validator, ValidationError
-from urllib.parse import urlparse
 import re
-from datetime import datetime
-from abc import ABC, abstractmethod
+import tempfile
+import time
 import uuid
+from abc import ABC, abstractmethod
+from contextlib import contextmanager, suppress
+from datetime import datetime
+from typing import Any, Callable, Dict, Final, List, Literal, Optional
+from urllib.parse import urlparse
 
-from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
-from .dlt_base import (
-    BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientConnectivityError,
-    DLTClientAuthError,
-    DLTClientValidationError,
-    DLTClientCircuitBreakerError,
-    DLTClientTimeoutError,
-    async_retry,
-    TRACER,
-    Status,
-    StatusCode,
-    alert_operator,
-    AUDIT,
-    PRODUCTION_MODE,
-)
-from .dlt_base import _base_logger, scrub_secrets
+from eth_account import Account
+from pydantic import BaseModel, Field, ValidationError, validator
 
 # --- Strict Dependency Check for web3.py ---
 # WEB3_AVAILABLE is now determined by the critical import check in dlt_base.py
 # If it's not available, dlt_base.py would have already aborted.
 from web3 import Web3
 from web3.eth import AsyncEth
-from web3.exceptions import (
-    TimeExhausted,
-)
-from eth_account import Account
+from web3.exceptions import TimeExhausted
 from web3.middleware import geth_poa_middleware
 
+from .dlt_base import (
+    AUDIT,
+    PRODUCTION_MODE,
+    TRACER,
+    BaseOffChainClient,
+    DLTClientAuthError,
+    DLTClientCircuitBreakerError,
+    DLTClientConfigurationError,
+    DLTClientConnectivityError,
+    DLTClientQueryError,
+    DLTClientTimeoutError,
+    DLTClientTransactionError,
+    DLTClientValidationError,
+    Status,
+    StatusCode,
+    _base_logger,
+    alert_operator,
+    async_retry,
+    scrub_secrets,
+)
+from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
 
 # --- Secrets Backend Integrations (Strict Checks) ---
 AWS_SECRETS_AVAILABLE = False
@@ -66,8 +65,8 @@ AZURE_KEYVAULT_AVAILABLE = False
 try:
     from azure.identity.aio import DefaultAzureCredential
     from azure.keyvault.secrets.aio import (
-        SecretClient as AsyncSecretClient,
-    )  # Use async client + async credential
+        SecretClient as AsyncSecretClient,  # Use async client + async credential
+    )
 
     AZURE_KEYVAULT_AVAILABLE = True
 except ImportError:
@@ -77,9 +76,7 @@ except ImportError:
 
 GCP_SECRET_MANAGER_AVAILABLE = False
 try:
-    from google.cloud import (
-        secretmanager_v1beta1 as secretmanager,
-    )  # Use v1beta1 for consistency
+    from google.cloud import secretmanager_v1beta1 as secretmanager  # Use v1beta1 for consistency
 
     GCP_SECRET_MANAGER_AVAILABLE = True
 except ImportError:

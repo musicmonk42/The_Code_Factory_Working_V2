@@ -25,37 +25,34 @@ USAGE:
     data = await backend.get()
 """
 
-import json
-import os
-import time
-import logging
 import asyncio
+import json
+import logging
+import os
 import threading
-from typing import List, Any, Optional, Dict, Union, Callable
+import time
+from abc import ABCMeta, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from abc import abstractmethod, ABCMeta
-from prometheus_client import (
-    Counter as PCounter,
-    Histogram as PHistogram,
-    Summary as PSummary,
-    Gauge as PGauge,
-    REGISTRY,
-)
-from prometheus_client.metrics import (
-    Counter as _Counter,
-    Histogram as _Histogram,
-    Summary as _Summary,
-    Gauge as _Gauge,
-)
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-import aiofiles
 from pathlib import Path
-from cryptography.fernet import Fernet, InvalidToken
-from arbiter.otel_config import get_tracer
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import aiofiles
 
 # ---------- FIX: Added missing critical imports ----------
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
+from arbiter.otel_config import get_tracer
+from cryptography.fernet import Fernet, InvalidToken
+from prometheus_client import REGISTRY
+from prometheus_client import Counter as PCounter
+from prometheus_client import Gauge as PGauge
+from prometheus_client import Histogram as PHistogram
+from prometheus_client import Summary as PSummary
+from prometheus_client.metrics import Counter as _Counter
+from prometheus_client.metrics import Gauge as _Gauge
+from prometheus_client.metrics import Histogram as _Histogram
+from prometheus_client.metrics import Summary as _Summary
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 # ---------- end FIX ----------
 

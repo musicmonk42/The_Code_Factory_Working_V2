@@ -1,15 +1,10 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
 import collections
 import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from arbiter.explorer import (
-    ArbiterExplorer,
-    MockLogDB,
-    ExperimentExecutionError,
-    logger,
-)
+import pytest
+from arbiter.explorer import ArbiterExplorer, ExperimentExecutionError, MockLogDB, logger
 
 
 # Fixture to mock logger

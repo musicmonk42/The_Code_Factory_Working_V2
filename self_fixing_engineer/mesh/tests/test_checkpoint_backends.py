@@ -13,9 +13,9 @@ import asyncio
 import json
 import os
 import tempfile
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
 from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -687,7 +687,7 @@ class TestPerformance:
     @pytest.mark.asyncio
     async def test_connection_pooling(self, backend_registry):
         """Test connection pool reuse."""
-        from mesh.checkpoint.checkpoint_backends import registry, Config
+        from mesh.checkpoint.checkpoint_backends import Config, registry
 
         # Reset PROD_MODE to false for this test
         original_prod = Config.PROD_MODE

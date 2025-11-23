@@ -1,25 +1,25 @@
 # test_interface.py
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 from arbiter.plugins.multimodal.interface import (
-    ProcessingResult,
-    ImageProcessor,
-    AudioProcessor,
-    VideoProcessor,
-    TextProcessor,
     AnalysisResultType,
-    ImageAnalysisResult,
     AudioAnalysisResult,
-    VideoAnalysisResult,
-    TextAnalysisResult,
-    MultiModalPluginInterface,
-    DummyMultiModalPlugin,
-    MultiModalException,
-    InvalidInputError,
+    AudioProcessor,
     ConfigurationError,
-    ProviderNotAvailableError,
+    DummyMultiModalPlugin,
+    ImageAnalysisResult,
+    ImageProcessor,
+    InvalidInputError,
+    MultiModalException,
+    MultiModalPluginInterface,
     ProcessingError,
+    ProcessingResult,
+    ProviderNotAvailableError,
+    TextAnalysisResult,
+    TextProcessor,
+    VideoAnalysisResult,
+    VideoProcessor,
 )
 from pydantic import ValidationError
 

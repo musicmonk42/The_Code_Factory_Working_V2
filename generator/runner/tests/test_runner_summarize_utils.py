@@ -10,11 +10,11 @@ Industry-grade test suite for runner_summarize_utils.py (2025 version)
 * Windows-safe
 """
 
-import logging
 import hashlib
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 # --- Module Under Test ---
 # We import the module and its components
@@ -22,12 +22,12 @@ from runner import summarize_utils
 from runner.summarize_utils import (
     SUMMARIZERS,
     code_summary,
-    requirements_summary,
     deployment_summary,
-    llm_summarize,
-    summarize,
     ensemble_summarize,
+    llm_summarize,
     refine_from_feedback,
+    requirements_summary,
+    summarize,
 )
 
 # --------------------------------------------------------------------------- #

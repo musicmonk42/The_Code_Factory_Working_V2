@@ -1,13 +1,13 @@
-import pytest
-import os
 import json
+import os
 import subprocess
 from unittest.mock import MagicMock
 
+import pytest
 from self_healing_import_fixer.analyzer.core_security import (
-    SecurityAnalyzer,
-    SecurityAnalysisError,
     AnalyzerCriticalError,
+    SecurityAnalysisError,
+    SecurityAnalyzer,
 )
 
 

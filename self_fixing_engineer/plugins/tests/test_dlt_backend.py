@@ -1,9 +1,9 @@
-import os
 import json
-import pytest
+import os
 from unittest.mock import MagicMock
 
 import dlt_backend
+import pytest
 
 # --- Test Fixtures and Setup ---
 
@@ -346,8 +346,8 @@ async def test_maybe_sign_checkpoint_and_verify(monkeypatch):
     sig = dlt_backend._maybe_sign_checkpoint(data)
     # Manually verify
     payload = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    import hmac
     import hashlib
+    import hmac
 
     manual = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     assert sig == manual

@@ -1,10 +1,11 @@
 # tests/test_gremlin_chaos_plugin.py
 
-import pytest
+import itertools
 import os
 import sys
-from unittest.mock import patch, MagicMock, AsyncMock, call
-import itertools
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
 
 # --- Best Practice: Add plugins directory to sys.path for direct imports ---
 PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))

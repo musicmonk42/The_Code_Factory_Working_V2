@@ -23,31 +23,31 @@ STRICT FAILURE ENFORCEMENT:
 """
 
 import asyncio
-import logging
+import importlib.util
 import json
+import logging
 import os
 import re
-import time  # *** FIX: Added missing import ***
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-from abc import ABC, abstractmethod
-from pathlib import Path
-import importlib.util
-import sys
 import subprocess
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import sys
+import time  # *** FIX: Added missing import ***
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # --- Format/Tooling Dependencies ---
 import docutils.core  # For RST validation
-from bs4 import BeautifulSoup  # For HTML validation
 import nltk  # For GOAT NLP metrics
+from bs4 import BeautifulSoup  # For HTML validation
 from nltk.sentiment import SentimentIntensityAnalyzer  # For sentiment analysis
 from nltk.tokenize import sent_tokenize
 
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 try:
     from plantuml import PlantUML
@@ -55,28 +55,28 @@ except ImportError:
     PlantUML = None
     logging.warning("PlantUML library not found. Diagram generation in enrichment will be skipped.")
 
-# --- Async/API/CLI Dependencies ---
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import uvicorn  # For running FastAPI in __main__
 import unittest  # For tests in __main__
 
-# --- CENTRAL RUNNER FOUNDATION ---
-from runner import tracer
-from runner.llm_client import call_ensemble_api
-from runner.runner_logging import logger
-from runner.runner_file_utils import get_commits  # For changelog enrichment
-from opentelemetry.trace.status import (
-    Status,
-    StatusCode,
-)  # *** FIX: Added missing import ***
+import uvicorn  # For running FastAPI in __main__
 
-# -----------------------------------
+# --- Async/API/CLI Dependencies ---
+from fastapi import FastAPI, HTTPException
+from opentelemetry.trace.status import Status, StatusCode  # *** FIX: Added missing import ***
 
 # --- Local Prometheus Metrics (Internal Stats Only) ---
 # LLM-related metrics are IMPORTED from the runner.
 # These metrics track the internal operations of this specific service.
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
+from pydantic import BaseModel
+
+# --- CENTRAL RUNNER FOUNDATION ---
+from runner import tracer
+from runner.llm_client import call_ensemble_api
+from runner.runner_file_utils import get_commits  # For changelog enrichment
+from runner.runner_logging import logger
+
+# -----------------------------------
+
 
 process_calls_total = Counter(
     "docgen_validator_calls_total",

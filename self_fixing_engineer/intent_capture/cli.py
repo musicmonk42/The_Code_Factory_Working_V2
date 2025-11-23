@@ -36,6 +36,9 @@ Main CLI for Intent Capture Agent.
 """
 
 import asyncio
+
+# UPGRADE: Sentry and Vault for secrets - [Date: August 19, 2025]
+import contextlib
 import datetime
 import json
 import logging
@@ -61,9 +64,6 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
-
-# UPGRADE: Sentry and Vault for secrets - [Date: August 19, 2025]
-import contextlib
 
 try:
     import hvac

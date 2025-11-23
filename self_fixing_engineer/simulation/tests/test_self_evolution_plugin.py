@@ -1,11 +1,12 @@
 # tests/test_self_evolution_plugin.py
 
-import pytest
+import json
 import os
 import sys
-import json
-from unittest.mock import patch, MagicMock, AsyncMock
 from typing import Tuple
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the plugin from the correct directory
 plugin_paths = [
@@ -20,15 +21,15 @@ for path in plugin_paths:
 
 try:
     from self_evolution_plugin import (
-        plugin_health,
-        initiate_evolution_cycle,
+        ADAPTATION_TYPES,
+        EVOLUTION_ADAPTATIONS_SUCCESS,
+        EVOLUTION_CYCLES_TOTAL,
+        EVOLUTION_ERRORS,
         EvolutionConfig,
         _load_config,
+        initiate_evolution_cycle,
+        plugin_health,
         validate_agents,
-        EVOLUTION_CYCLES_TOTAL,
-        EVOLUTION_ADAPTATIONS_SUCCESS,
-        EVOLUTION_ERRORS,
-        ADAPTATION_TYPES,
     )
 except ImportError as e:
     print(f"Failed to import self_evolution_plugin. Searched in: {plugin_paths}")

@@ -29,17 +29,18 @@ Setup and Configuration:
 
 __version__ = "2.1.0"
 
+import asyncio
+import hashlib
+import hmac
+
 # ---- Standard Library Imports ----
 import json
+import logging
 import os
 import time
-import asyncio
-import hmac
-import hashlib
-import logging
 from enum import Enum
 from logging.handlers import RotatingFileHandler
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 # ---- Third-Party Imports ----
 import structlog
@@ -51,7 +52,8 @@ MIN_VERSIONS = {
 }
 
 try:
-    from opentelemetry import trace, __version__ as otel_version
+    from opentelemetry import __version__ as otel_version
+    from opentelemetry import trace
 
     if otel_version < MIN_VERSIONS["opentelemetry.trace"]:
         logging.warning(
@@ -100,7 +102,6 @@ except ImportError:
 
 # ---- Local Application Imports ----
 from .checkpoint_utils import scrub_data
-
 
 # ---- Module-level Setup ----
 

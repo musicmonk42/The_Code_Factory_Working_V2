@@ -11,30 +11,24 @@ Metrics:
 - arbiter_config_redis_validation_duration_seconds: Duration of Redis URL validation (operation)
 """
 
-import os
-import logging
-import json
-import re
 import asyncio
-from typing import Dict, Any, Optional
-from pydantic import (
-    Field,
-    model_validator,
-    field_validator,
-    PrivateAttr,
-)
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import SecretStr
-import redis.asyncio as redis
-from cryptography.fernet import Fernet
+import json
+import logging
+import os
+import re
 import threading
 import time
-from prometheus_client import Counter, Histogram
+import warnings
+from typing import Any, Dict, Optional
+
+import redis.asyncio as redis
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
-
-import warnings
+from cryptography.fernet import Fernet
+from prometheus_client import Counter, Histogram
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub.utils")
 

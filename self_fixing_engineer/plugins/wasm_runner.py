@@ -1,16 +1,16 @@
-import os
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
-import asyncio
-import time
-import hashlib
-import sys
-import hmac
+import os
 import shutil
+import sys
+import time
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Callable, Tuple, Literal
-from packaging import version
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
+from packaging import version
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -63,9 +63,10 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import alert_operator
+    from core_utils import scrub_secrets as scrub_sensitive_data
 except ImportError as e:
     # Library code: do not sys.exit(); raise and let the orchestrator decide.
     raise WasmStartupError(f"Missing core dependency for WASM runner: {e}") from e
@@ -78,7 +79,7 @@ except ImportError as e:
     raise WasmStartupError(f"wasmtime-py is not installed: {e}") from e
 
 try:
-    from pydantic import BaseModel, ValidationError, Field, validator
+    from pydantic import BaseModel, Field, ValidationError, validator
 except ImportError as e:
     alert_operator("CRITICAL: pydantic missing. WASM runner aborted.", level="CRITICAL")
     raise WasmStartupError(f"pydantic is not installed: {e}") from e

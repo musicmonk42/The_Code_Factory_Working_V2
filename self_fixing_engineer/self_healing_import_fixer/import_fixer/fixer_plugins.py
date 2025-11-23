@@ -9,21 +9,21 @@ lazy loading, clear error handling, and comprehensive audit logging to ensure sy
 stability and security.
 """
 
-import os
-import sys
-import logging
-import importlib.util
-import hmac
-import hashlib
 import asyncio
-import shutil
-from collections import defaultdict
-from typing import List, Dict, Set, Optional, Callable, Any, Mapping, TYPE_CHECKING
-from abc import ABC, abstractmethod
-from pathlib import Path
+import hashlib
+import hmac
+import importlib.util
+import logging
+import os
 import re
-from types import MappingProxyType
+import shutil
 import stat
+import sys
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from pathlib import Path
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Set
 
 # Ensure plugins importing "fixer_plugins" refer to this module instance too
 sys.modules.setdefault("fixer_plugins", sys.modules[__name__])
@@ -32,12 +32,7 @@ logger = logging.getLogger(__name__)
 
 # --- Required Core Dependencies ---
 try:
-    from .compat_core import (
-        alert_operator,
-        scrub_secrets,
-        audit_logger,
-        SECRETS_MANAGER,
-    )
+    from .compat_core import SECRETS_MANAGER, alert_operator, audit_logger, scrub_secrets
 except ImportError as e:
     logger.critical(f"Missing core dependency for fixer_plugins: {e}")
     raise RuntimeError(f"[CRITICAL][PLUGINS] Missing core dependency: {e}")

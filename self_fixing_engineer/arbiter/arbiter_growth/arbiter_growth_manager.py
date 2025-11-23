@@ -1,38 +1,38 @@
 import asyncio
-import logging
-import json
 import hashlib
 import hmac
+import json
+import logging
 import os
-from typing import Dict, Any, List, Optional, Callable, Awaitable, Protocol
 from datetime import datetime, timezone
 from enum import Enum
-
-from opentelemetry.propagate import extract, inject
-from opentelemetry.context import attach, detach
-from pybreaker import CircuitBreaker, CircuitBreakerError
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
 
 from arbiter.otel_config import get_tracer
-from .idempotency import IdempotencyStore
-from .models import GrowthEvent, ArbiterState
-from .metrics import (
-    GROWTH_EVENTS,
-    GROWTH_SAVE_ERRORS,
-    GROWTH_PENDING_QUEUE,
-    GROWTH_SKILL_IMPROVEMENT,
-    GROWTH_SNAPSHOTS,
-    GROWTH_OPERATION_QUEUE_LATENCY,
-    GROWTH_OPERATION_EXECUTION_LATENCY,
-    GROWTH_CIRCUIT_BREAKER_TRIPS,
-    GROWTH_ANOMALY_SCORE,
-)
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import extract, inject
+from pybreaker import CircuitBreaker, CircuitBreakerError
+
+from .config_store import ConfigStore, TokenBucketRateLimiter
 from .exceptions import (
+    AuditChainTamperedError,
+    CircuitBreakerOpenError,
     OperationQueueFullError,
     RateLimitError,
-    CircuitBreakerOpenError,
-    AuditChainTamperedError,
 )
-from .config_store import ConfigStore, TokenBucketRateLimiter
+from .idempotency import IdempotencyStore
+from .metrics import (
+    GROWTH_ANOMALY_SCORE,
+    GROWTH_CIRCUIT_BREAKER_TRIPS,
+    GROWTH_EVENTS,
+    GROWTH_OPERATION_EXECUTION_LATENCY,
+    GROWTH_OPERATION_QUEUE_LATENCY,
+    GROWTH_PENDING_QUEUE,
+    GROWTH_SAVE_ERRORS,
+    GROWTH_SKILL_IMPROVEMENT,
+    GROWTH_SNAPSHOTS,
+)
+from .models import ArbiterState, GrowthEvent
 from .storage_backends import StorageBackend
 
 logger = logging.getLogger(__name__)

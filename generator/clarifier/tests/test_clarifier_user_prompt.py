@@ -1,9 +1,9 @@
 # test_clarifier_user_prompt.py - FIXED VERSION
 
-import unittest
-import os
 import base64
-from unittest.mock import patch, AsyncMock, MagicMock
+import os
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
 
@@ -57,7 +57,7 @@ patcher_sys_exit = patch("generator.clarifier.clarifier.sys.exit")
 patcher_sys_exit.start()
 
 try:
-    from generator.clarifier.clarifier import get_logger, get_fernet, get_config
+    from generator.clarifier.clarifier import get_config, get_fernet, get_logger
 except ImportError:
 
     def get_logger():
@@ -107,22 +107,21 @@ MockTranslatorInstance.translate.side_effect = lambda text, dest, src="en": Magi
 
 # Import the module
 from generator.clarifier.clarifier_user_prompt import (
-    UserProfile,
-    load_profile,
-    save_profile,
-    update_profile_from_feedback,
-    store_compliance_answer,
-    get_channel,
+    COMPLIANCE_ANSWERS_RECEIVED,
+    COMPLIANCE_QUESTIONS_ASKED,
+    HAS_FASTAPI,
+    HAS_SPEECH_RECOGNITION,
+    HAS_TEXTUAL,
     PROMPT_CYCLES,
     PROMPT_ERRORS,
     USER_ENGAGEMENT,
-    HAS_TEXTUAL,
-    HAS_FASTAPI,
-    HAS_SPEECH_RECOGNITION,
-    COMPLIANCE_QUESTIONS_ASKED,
-    COMPLIANCE_ANSWERS_RECEIVED,
+    UserProfile,
+    get_channel,
+    load_profile,
+    save_profile,
+    store_compliance_answer,
+    update_profile_from_feedback,
 )
-
 
 _HAS_TEXTUAL = HAS_TEXTUAL
 _HAS_FASTAPI = HAS_FASTAPI

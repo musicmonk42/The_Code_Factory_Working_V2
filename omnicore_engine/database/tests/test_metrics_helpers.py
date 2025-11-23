@@ -2,11 +2,11 @@
 Comprehensive test suite for omnicore_engine/database/metrics_helpers.py
 """
 
-import pytest
+import os
+import sys
 from unittest.mock import Mock, patch
 
-import sys
-import os
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,7 +15,7 @@ from metrics_helpers import (
     get_or_create_gauge_local,
     get_or_create_histogram_local,
 )
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 
 @pytest.fixture(autouse=True)

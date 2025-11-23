@@ -1,33 +1,29 @@
-import os
-import datetime
 import asyncio
+import datetime
 import json
-import tempfile
-import uuid
+import os
 import re
+import tempfile
 import urllib.parse
-from typing import Dict, Any, List, Tuple, Optional, Callable, Literal, Final
+import uuid
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
+
+from pydantic import BaseModel, Field, ValidationError, validator  # Re-import for local schemas
 
 # Import base classes and utilities from siem_base
 from .siem_base import (
-    BaseSIEMClient,
-    SIEMClientConfigurationError,
-    SIEMClientError,
-    SIEMClientAuthError,
-    SIEMClientConnectivityError,
-    SIEMClientQueryError,
-    SIEMClientPublishError,
-    alert_operator,
     PRODUCTION_MODE,
+    BaseSIEMClient,
+    SIEMClientAuthError,
+    SIEMClientConfigurationError,
+    SIEMClientConnectivityError,
+    SIEMClientError,
+    SIEMClientPublishError,
+    SIEMClientQueryError,
     _base_logger,
+    alert_operator,
 )
-from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    validator,
-)  # Re-import for local schemas
 
 # --- Strict Dependency Checks for GCP SDKs ---
 GCP_AVAILABLE = False
@@ -39,13 +35,8 @@ try:
         from google.cloud import secretmanager as gcp_secretmanager  # v1 (preferred)
     except Exception:
         from google.cloud import secretmanager_v1beta1 as gcp_secretmanager  # fallback
+    from google.api_core.exceptions import Forbidden, GoogleAPICallError, GoogleAPIError, NotFound
     from google.oauth2 import service_account
-    from google.api_core.exceptions import (
-        GoogleAPIError,
-        Forbidden,
-        NotFound,
-        GoogleAPICallError,
-    )
 
     GCP_AVAILABLE = True
 except ImportError as e:

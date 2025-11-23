@@ -7,20 +7,20 @@ Defines the contract for any plugin supporting images, audio, video, and more.
 Extensible, typed, robust. For the Self-Fixing Engineer platform.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple, List, Union, TypeVar, Generic
-from enum import Enum
+import asyncio  # For the async examples in the main block
 import datetime
 import json  # Added for json.dumps in main for better output
-import asyncio  # For the async examples in the main block
 import os
 import time
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 # Using Pydantic for robust data validation and serialization.
 # This makes results automatically JSON-serializable and validates structure.
 try:
-    from pydantic import BaseModel, Field, ValidationError
     from prometheus_client import Counter, Histogram
+    from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     raise ImportError(
         "Pydantic and prometheus_client are required. Please install them with 'pip install pydantic prometheus_client'."

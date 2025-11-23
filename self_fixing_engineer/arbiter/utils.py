@@ -1,28 +1,23 @@
-import random
-import psutil
-import aiohttp
 import asyncio
-import os
 import logging
-from typing import Dict, Any, List
+import os
+import random
+from typing import Any, Dict, List
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+import aiohttp
+import psutil
 from aiolimiter import AsyncLimiter
-from prometheus_client import Counter
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import Counter
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Mock/Placeholder imports for a self-contained fix
 try:
     # FIXED: Correctly import PluginBase from the appropriate registry module
-    from arbiter_plugin_registry import registry, PlugInKind, PluginBase
     from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PluginBase, PlugInKind, registry
 except ImportError:
 
     class registry:

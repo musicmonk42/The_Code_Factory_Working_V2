@@ -21,29 +21,24 @@ from datetime import datetime
 from typing import Callable, Dict, List, Optional
 
 import bleach
+
+# UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
+import boto3
+import hvac
+import pika
 import redis.asyncio as aredis
+import sentry_sdk
 from aiobreaker import CircuitBreaker
+
+# Import centralized OpenTelemetry configuration
+from arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet, InvalidToken
 from langchain_core.language_models.base import BaseLanguageModel
 from opentelemetry import trace
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from rapidfuzz.process import extract
 from redis.exceptions import ConnectionError as RedisConnectionError
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
-# Import centralized OpenTelemetry configuration
-from arbiter.otel_config import get_tracer
-
-# UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
-import boto3
-import hvac
-import pika
-import sentry_sdk
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from transformers import pipeline
 
 __version__ = "2.2.0"

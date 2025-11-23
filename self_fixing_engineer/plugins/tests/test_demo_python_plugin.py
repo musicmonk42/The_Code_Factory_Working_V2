@@ -1,12 +1,13 @@
-import os
-import sys
-import logging
-import pytest
-import importlib.util
 import importlib
+import importlib.util
+import logging
+import os
 import re
-from unittest.mock import MagicMock, patch
+import sys
 from typing import Dict
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Dynamically import the plugin to be tested
 try:
@@ -17,12 +18,7 @@ except ImportError:
     import demo_python_plugin
 
 # Import components from the plugin
-from plugins.demo_python_plugin import (
-    PLUGIN_MANIFEST,
-    plugin_health,
-    PLUGIN_API,
-    logger,
-)
+from plugins.demo_python_plugin import PLUGIN_API, PLUGIN_MANIFEST, logger, plugin_health
 
 
 # --- Test Setup ---

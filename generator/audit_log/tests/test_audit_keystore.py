@@ -7,7 +7,7 @@ os.environ.setdefault("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
 os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
 
 # --- FIX: Patch Prometheus *before* any project imports ---
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # This patch starts NOW and will be active when audit_crypto_factory is imported
 prometheus_patcher = patch("prometheus_client.CollectorRegistry.register", MagicMock())
@@ -18,29 +18,28 @@ prometheus_patcher.start()
 # test_audit_keystore.py
 # FIX: All import paths and patch paths have been corrected to be absolute from the 'generator' root.
 
-import unittest
-import tempfile
-import stat
-import json
 import base64
-import time
+import json
+import stat
 import sys  # <-- ADDED for platform check
-from unittest.mock import patch, MagicMock, AsyncMock
+import tempfile
+import time
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest  # <-- Import pytest
 
 # --- Import the module to be tested ---
 try:
-    from generator.audit_log.audit_crypto.audit_keystore import (
-        KeyStore,
-        FileSystemKeyStorageBackend,
-    )
-
     # We also need the real cryptography exceptions for testing
     from cryptography.exceptions import InvalidTag
 
     # --- FIX: Import the factory to get mock handles ---
-    from generator.audit_log.audit_crypto import audit_crypto_factory
-    from generator.audit_log.audit_crypto import audit_crypto_provider
+    from generator.audit_log.audit_crypto import audit_crypto_factory, audit_crypto_provider
+    from generator.audit_log.audit_crypto.audit_keystore import (
+        FileSystemKeyStorageBackend,
+        KeyStore,
+    )
 except ImportError as e:
     print(
         "Error: Could not import audit_keystore. Ensure it's in the same directory or on your PYTHONPATH."

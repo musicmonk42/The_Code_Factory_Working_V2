@@ -1,59 +1,60 @@
 import asyncio
 import hashlib
+import hmac
 import json
+import os
 import time
 import uuid
-import os
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, List, Optional, Pattern, Union, Tuple
 from collections import defaultdict
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
-import hmac
+from functools import partial
+from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
-from pydantic import ValidationError
 import structlog
-
-# Relative imports from the new modular structure
-from .message_types import Message, MessageSchema
-from .context import ContextPropagationMiddleware
-from .resilience import RetryPolicy, CircuitBreaker
-from .dead_letter_queue import DeadLetterQueue
-from .backpressure import BackpressureManager
-from .hash_ring import ConsistentHashRing
-from .cache import MessageCache
-from .integrations.kafka_bridge import KafkaBridge
-from .integrations.redis_bridge import RedisBridge
-from .guardian import MessageBusGuardian
 
 # External project imports
 from arbiter.config import ArbiterConfig
+from pydantic import ValidationError
+
+from .backpressure import BackpressureManager
+from .cache import MessageCache
+from .context import ContextPropagationMiddleware
+from .dead_letter_queue import DeadLetterQueue
+from .guardian import MessageBusGuardian
+from .hash_ring import ConsistentHashRing
+from .integrations.kafka_bridge import KafkaBridge
+from .integrations.redis_bridge import RedisBridge
+
+# Relative imports from the new modular structure
+from .message_types import Message, MessageSchema
+from .resilience import CircuitBreaker, RetryPolicy
 
 settings = ArbiterConfig()
 
-# FIX: Corrected absolute imports by removing the unnecessary 'app.' prefix.
-# These modules must be available as part of the top-level 'omnicore_engine' package.
-from omnicore_engine.metrics import (
-    MESSAGE_BUS_QUEUE_SIZE,
-    MESSAGE_BUS_DISPATCH_DURATION,
-    MESSAGE_BUS_TOPIC_THROUGHPUT,
-    MESSAGE_BUS_CALLBACK_ERRORS,
-    MESSAGE_BUS_PUBLISH_RETRIES,
-    MESSAGE_BUS_CALLBACK_LATENCY,
-    MESSAGE_BUS_MESSAGE_AGE,
-)
-from omnicore_engine.database import Database
+import aiohttp
 
 # Assuming 'safe_serialize' is either in 'omnicore_engine.core' or 'omnicore_engine.utils'
 # Using 'omnicore_engine.core' for robustness based on project pattern:
 from omnicore_engine.core import safe_serialize
-import aiohttp
-from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+from omnicore_engine.database import Database
 from omnicore_engine.message_bus.message_types import Message
+
+# FIX: Corrected absolute imports by removing the unnecessary 'app.' prefix.
+# These modules must be available as part of the top-level 'omnicore_engine' package.
+from omnicore_engine.metrics import (
+    MESSAGE_BUS_CALLBACK_ERRORS,
+    MESSAGE_BUS_CALLBACK_LATENCY,
+    MESSAGE_BUS_DISPATCH_DURATION,
+    MESSAGE_BUS_MESSAGE_AGE,
+    MESSAGE_BUS_PUBLISH_RETRIES,
+    MESSAGE_BUS_QUEUE_SIZE,
+    MESSAGE_BUS_TOPIC_THROUGHPUT,
+)
+from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
 
 # New imports
 from omnicore_engine.security_utils import get_security_utils
-
 
 logger = structlog.get_logger(__name__)
 logger = logger.bind(module="ShardedMessageBus")

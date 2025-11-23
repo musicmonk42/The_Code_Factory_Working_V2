@@ -1,16 +1,17 @@
-import sys
+import asyncio
+import importlib
 import json
 import logging
-import asyncio
+import sys
 import time
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
-from google.cloud import pubsub_v1
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from google.api_core import exceptions as google_exceptions
-from pydantic import ValidationError
+from google.cloud import pubsub_v1
 from prometheus_client import CollectorRegistry
-import importlib
+from pydantic import ValidationError
 
 # Assuming these are available in a file named pubsub_plugin.py
 # and we are mocking them for the purpose of testing this file in isolation.

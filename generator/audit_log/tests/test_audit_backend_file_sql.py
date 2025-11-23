@@ -5,12 +5,13 @@ Modern test suite for audit_backend_file_sql.py, compatible with the
 new core architecture (encryption, batching, async-native).
 """
 
+import base64
+import datetime
+import json
+
 # --- env must be set before any package import that touches Dynaconf ---
 import os
-import json
-import base64
 import zlib
-import datetime
 from typing import Dict
 
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"
@@ -26,17 +27,17 @@ os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
 os.environ.setdefault("AUDIT_TAMPER_DETECTION_ENABLED", "true")
 # --- end env block ---
 
-import sys
-import types
 import asyncio
 import sqlite3
+import sys
+import types
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiofiles
 import pytest
 import pytest_asyncio
-import aiofiles
 from prometheus_client import REGISTRY
 
 # --- Package Shim ---

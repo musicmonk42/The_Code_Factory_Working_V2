@@ -1,38 +1,39 @@
-import pytest
-import os
-import json
 import asyncio
+import json
+import os
+import sys
 import tempfile
+from pathlib import Path
 
 # Security fix: Use defusedxml to prevent XXE attacks
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from test_generation.utils import CodeEnricher  # Updated to the new class name
+from test_generation.utils import atomic_write  # FIX: Add atomic_write import
+from test_generation.utils import scan_for_uncovered_code_rust  # Import the new function
 from test_generation.utils import (
     ATCOConfig,
-    generate_file_hash,
-    backup_existing_test,
-    compare_files,
-    cleanup_temp_dir,
-    SecurityScanner,
     KnowledgeGraphClient,
-    PRCreator,
     MutationTester,
-    CodeEnricher,  # Updated to the new class name
+    PRCreator,
+    SecurityScanner,
     add_atco_header,
     add_mocking_framework_import,
-    llm_refine_test_plugin,
+    backup_existing_test,
+    check_and_install_dependencies,
+    cleanup_temp_dir,
+    compare_files,
     create_and_install_venv,
-    run_pytest_and_coverage,
+    generate_file_hash,
+    llm_refine_test_plugin,
+    monitor_and_prioritize_uncovered_code,
+    parse_coverage_delta,
     run_jest_and_coverage,
     run_junit_and_coverage,
-    parse_coverage_delta,
+    run_pytest_and_coverage,
     scan_for_uncovered_code_from_xml,
-    monitor_and_prioritize_uncovered_code,
-    check_and_install_dependencies,
-    scan_for_uncovered_code_rust,  # Import the new function
-    atomic_write,  # FIX: Add atomic_write import
 )
-from pathlib import Path
-import sys
 
 # Mark all tests as unit tests for selective running
 pytestmark = pytest.mark.unit

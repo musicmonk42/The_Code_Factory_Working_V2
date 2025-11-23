@@ -1,9 +1,9 @@
 # tests/test_e2e_cli.py
-import json
-import time
 import asyncio
 import importlib
 import importlib.util
+import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 

@@ -31,21 +31,22 @@ Environment Variables:
 - Backend-specific credentials (e.g., KAFKA_USER, KAFKA_PASSWORD, etc.).
 """
 
-import os
-import sys
 import asyncio
-import logging
-import json
-import time
-import re
-import hmac
 import hashlib
-import structlog
-from logging.handlers import TimedRotatingFileHandler
-from typing import Callable, Any, Optional, AsyncGenerator, Dict
-from functools import wraps
+import hmac
+import json
+import logging
+import os
+import re
+import sys
+import time
 from dataclasses import dataclass, field
+from functools import wraps
+from logging.handlers import TimedRotatingFileHandler
+from typing import Any, AsyncGenerator, Callable, Dict, Optional
 from urllib.parse import urlparse
+
+import structlog
 
 # Platform-specific imports for file locking
 try:
@@ -75,7 +76,7 @@ except ImportError:
     nats = None
 
 try:
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     from aiokafka.errors import KafkaConnectionError, KafkaTimeoutError
 except ImportError:
     AIOKafkaProducer, AIOKafkaConsumer = None, None
@@ -92,13 +93,13 @@ except ImportError:
     aiobotocore = None
 
 try:
-    from google.cloud import storage, pubsub_v1
+    from google.cloud import pubsub_v1, storage
 except ImportError:
     storage, pubsub_v1 = None, None
 
 try:
-    from azure.storage.blob.aio import BlobServiceClient
     from azure.servicebus.aio import ServiceBusClient, ServiceBusMessage
+    from azure.storage.blob.aio import BlobServiceClient
 except ImportError:
     BlobServiceClient, ServiceBusClient, ServiceBusMessage = None, None, None
 
@@ -109,7 +110,7 @@ except ImportError:
     etcd3 = None
 
 try:
-    from cryptography.fernet import MultiFernet, Fernet, InvalidToken
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 except ImportError:
     MultiFernet, Fernet, InvalidToken = None, None, None
 
@@ -119,7 +120,8 @@ except ImportError:
     aiofiles = None
 
 try:
-    from prometheus_async.aio import time as time_metric, count_exceptions
+    from prometheus_async.aio import count_exceptions
+    from prometheus_async.aio import time as time_metric
     from prometheus_client import Counter, Gauge, Histogram, Summary
 
     PUB_COUNT = Counter(
@@ -185,15 +187,15 @@ except ImportError:
 
 try:
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.aiohttp import AiohttpInstrumentor
+    from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
+    from opentelemetry.instrumentation.kafka import KafkaInstrumentor
+    from opentelemetry.instrumentation.nats import NatsInstrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
-    from opentelemetry.instrumentation.redis import RedisInstrumentor
-    from opentelemetry.instrumentation.aiohttp import AiohttpInstrumentor
-    from opentelemetry.instrumentation.nats import NatsInstrumentor
-    from opentelemetry.instrumentation.kafka import KafkaInstrumentor
 
     resource = Resource.create(
         {

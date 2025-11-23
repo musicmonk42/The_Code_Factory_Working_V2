@@ -1,13 +1,14 @@
+import asyncio
+import gzip
+import importlib.util
+import logging
 import os
 import sys
-import logging
-import asyncio
 import time
-import pytest
-import gzip
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
-import importlib.util
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
 if sys.platform.startswith("win"):
@@ -99,9 +100,10 @@ os.environ["SIEM_GATEWAY_ADMIN_API_KEY"] = "test-admin-key"
 os.environ["SIEM_AUDIT_LOG_HMAC_KEY"] = "test-hmac-key"
 os.environ["SIEM_WAL_HMAC_KEY"] = "test-wal-hmac-key"
 
+import aiohttp
+
 # Now import required libraries
 from pydantic import ValidationError
-import aiohttp
 
 # Fix the SIEM plugin before importing
 test_dir = os.path.dirname(os.path.abspath(__file__))

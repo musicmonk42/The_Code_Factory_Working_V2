@@ -3,22 +3,23 @@ test_deploy_validator.py
 Comprehensive tests for deploy_validator module.
 """
 
-import pytest
 import asyncio
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the module under test
 # FIX: Use absolute imports from the project root. Remove sys.path hack.
 from generator.agents.deploy_agent.deploy_validator import (
-    ValidatorRegistry,
+    DANGEROUS_CONFIG_PATTERNS,
     DockerValidator,
     HelmValidator,
-    scrub_text,
+    ValidatorRegistry,
     scan_config_for_findings,
-    DANGEROUS_CONFIG_PATTERNS,
+    scrub_text,
 )
 
 # FIX: Removed non-existent imports: TerraformValidator, repair_sections
@@ -181,9 +182,7 @@ class TestValidatorRegistry:
     def test_register_custom_validator(self):
         """Test registering a custom validator."""
         # FIX: Import the correct base class
-        from generator.agents.deploy_agent.deploy_validator import (
-            Validator as BaseValidator,
-        )
+        from generator.agents.deploy_agent.deploy_validator import Validator as BaseValidator
 
         class CustomValidator(BaseValidator):
             async def validate(self, content, target):

@@ -8,19 +8,17 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from arbiter.arbiter_growth.models import (
+    ArbiterState,
+    AuditLog,
+    Base,
+    GrowthEvent,
+    GrowthEventRecord,
+    GrowthSnapshot,
+)
 from pydantic import ValidationError
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
-
-from arbiter.arbiter_growth.models import (
-    GrowthEvent,
-    ArbiterState,
-    GrowthSnapshot,
-    GrowthEventRecord,
-    AuditLog,
-    Base,
-)
-
 
 # --- Fixtures ---
 

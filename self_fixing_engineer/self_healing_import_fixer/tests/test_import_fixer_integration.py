@@ -1,12 +1,12 @@
 # tests/test_import_fixer_integration.py
-import os
 import asyncio
 import importlib
 import importlib.util
+import os
+import sys
 import types
 from pathlib import Path
 from typing import Any, Dict, List
-import sys
 
 import pytest
 

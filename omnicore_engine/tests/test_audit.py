@@ -1,11 +1,12 @@
-import pytest
 import asyncio
-import json
-from unittest.mock import AsyncMock, patch, MagicMock
-from pathlib import Path
 import hashlib
-import sys
+import json
 import os
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add current directory to sys.path for package imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -161,10 +162,11 @@ async def test_audit_entry(tmp_path):
     assert records[0]["foo"] == 1
 
 
+from pathlib import Path
+from unittest.mock import patch
+
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.database import Database
-from unittest.mock import patch
-from pathlib import Path
 
 
 @pytest.mark.asyncio

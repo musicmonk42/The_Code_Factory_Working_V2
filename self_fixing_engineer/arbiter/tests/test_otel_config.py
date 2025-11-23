@@ -5,21 +5,22 @@ Tests for the enterprise OpenTelemetry configuration with proper mocking
 of external dependencies and comprehensive coverage of functionality.
 """
 
-import pytest
+import asyncio
 import os
 import sys
 import threading
 from unittest.mock import MagicMock, patch
-import asyncio
+
+import pytest
 
 # Import the module under test
 from arbiter.otel_config import (
-    OpenTelemetryConfig,
-    Environment,
     CollectorEndpoint,
-    SamplingStrategy,
-    NoOpTracer,
+    Environment,
     NoOpSpan,
+    NoOpTracer,
+    OpenTelemetryConfig,
+    SamplingStrategy,
     get_tracer,
     trace_operation,
 )

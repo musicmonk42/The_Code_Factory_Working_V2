@@ -1,16 +1,17 @@
-import sys
+import asyncio
+import hashlib
 import json
 import logging
-import asyncio
+import sys
 import time
-import hashlib
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaError
-from pydantic import ValidationError
 from prometheus_client import CollectorRegistry
+from pydantic import ValidationError
 
 # Assuming these are available in a file named kafka_plugin.py
 # and we are mocking them for the purpose of testing this file in isolation.

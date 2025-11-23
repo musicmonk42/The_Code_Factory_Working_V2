@@ -2,38 +2,26 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
+
+import aiofiles
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
-from datetime import datetime, timezone, timedelta
-from prometheus_client import (
-    CollectorRegistry,
-)
-from arbiter.otel_config import get_tracer
-import aiofiles
-from aiokafka import AIOKafkaProducer
 import redis.asyncio as aioredis
-
-# Import the orchestrator and related components
-from arbiter.meta_learning_orchestrator.orchestrator import (
-    MetaLearningOrchestrator,
-)
-from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
-from arbiter.meta_learning_orchestrator.models import (
-    ModelVersion,
-    DataIngestionError,
-)
-from arbiter.meta_learning_orchestrator.clients import (
-    MLPlatformClient,
-    AgentConfigurationService,
-)
+from aiokafka import AIOKafkaProducer
 from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
+from arbiter.meta_learning_orchestrator.clients import AgentConfigurationService, MLPlatformClient
+from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
 
 # Import metrics
-from arbiter.meta_learning_orchestrator.metrics import (
-    ML_INGESTION_COUNT,
-    ML_LEADER_STATUS,
-)
+from arbiter.meta_learning_orchestrator.metrics import ML_INGESTION_COUNT, ML_LEADER_STATUS
+from arbiter.meta_learning_orchestrator.models import DataIngestionError, ModelVersion
+
+# Import the orchestrator and related components
+from arbiter.meta_learning_orchestrator.orchestrator import MetaLearningOrchestrator
+from arbiter.otel_config import get_tracer
+from prometheus_client import CollectorRegistry
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

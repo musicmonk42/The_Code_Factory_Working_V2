@@ -5,13 +5,14 @@ Import from this file in all modules that need to increment metrics.
 This file also provides compatibility and legacy helpers for older code.
 """
 
+import json
 import logging
 import os
-import json
-from typing import Optional, Dict, Any, Union
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
-from prometheus_client.metrics import MetricWrapperBase
 from datetime import datetime
+from typing import Any, Dict, Optional, Union
+
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
+from prometheus_client.metrics import MetricWrapperBase
 
 # Setup logger for metrics module
 logger = logging.getLogger(__name__)

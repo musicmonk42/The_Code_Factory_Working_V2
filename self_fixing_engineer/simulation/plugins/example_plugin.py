@@ -1,20 +1,20 @@
 # simulation/plugins/example_plugin.py
 
-import logging
-import sys
-import os
+import hashlib
+import io  # for chunked file reading
 import json
-import re
+import logging
+import os
 import random
+import re
+import sys
+import threading
 import time
 from datetime import datetime
-from typing import Dict, Any, Callable, List
-import threading
-import io  # for chunked file reading
-import hashlib
+from typing import Any, Callable, Dict, List
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
 from cachetools import TTLCache
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # ---------------------------
 # Provisional logger (for early boot messages before plugin logger is configured)
@@ -137,10 +137,7 @@ def _audit_cache_key(path: str) -> str:
 # ---------------------------
 PROMETHEUS_AVAILABLE = False
 try:
-    from prometheus_client import (
-        Counter,
-        Histogram,
-    )  # Exposed on default REGISTRY
+    from prometheus_client import Counter, Histogram  # Exposed on default REGISTRY
 
     PROMETHEUS_AVAILABLE = True
 except Exception as _e:

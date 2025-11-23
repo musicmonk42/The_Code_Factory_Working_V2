@@ -49,47 +49,42 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-# --- Third-Party Imports ---
-from jose import jwt, JOSEError
+# UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
+import hvac
 import redis.asyncio as aredis
+import sentry_sdk
+
+# --- Local Application Imports ---
+from agent_core import AgentError, ConfigurationError, InvalidSessionError, get_or_create_agent
 from bleach import clean
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import BaseSettings
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
-# FIX: Import the rate limit parser from the 'limits' library
-from limits import parse as parse_rate_limit
 
 # --- Caching Imports ---
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
 
+# --- Third-Party Imports ---
+from jose import JOSEError, jwt
+
+# FIX: Import the rate limit parser from the 'limits' library
+from limits import parse as parse_rate_limit
+
 # --- Observability Imports ---
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
-
-# --- Local Application Imports ---
-from agent_core import (
-    AgentError,
-    ConfigurationError,
-    InvalidSessionError,
-    get_or_create_agent,
-)
-
-# UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
-import hvac
-import sentry_sdk
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response, JSONResponse
+from starlette.responses import JSONResponse, Response
 
 try:
     from transformers import pipeline as hf_pipeline

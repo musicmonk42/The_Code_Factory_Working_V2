@@ -1,6 +1,6 @@
 import sys
 import types
-from unittest.mock import MagicMock, Mock, AsyncMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
 
 # Create proper module mocks with all necessary attributes BEFORE any imports
@@ -77,26 +77,27 @@ sys.modules["redis"] = MagicMock()
 sys.modules["redis.asyncio"] = MagicMock()
 sys.modules["asyncpg"] = MagicMock()
 
-# Now we can safely import pytest and other testing modules
-import pytest
 import asyncio
 import json
 import pickle
 
+# Now we can safely import pytest and other testing modules
+import pytest
+
 # Now import the module components to test - this should work because all mocks are in place
 from arbiter.knowledge_graph.core import (
-    StateBackend,
-    RedisStateBackend,
-    PostgresStateBackend,
-    InMemoryStateBackend,
-    MetaLearning,
-    CollaborativeAgent,
-    AgentTeam,
-    get_or_create_agent,
-    setup_conversation,
-    get_transcript,
     AgentCoreException,
     AgentErrorCode,
+    AgentTeam,
+    CollaborativeAgent,
+    InMemoryStateBackend,
+    MetaLearning,
+    PostgresStateBackend,
+    RedisStateBackend,
+    StateBackend,
+    get_or_create_agent,
+    get_transcript,
+    setup_conversation,
 )
 
 

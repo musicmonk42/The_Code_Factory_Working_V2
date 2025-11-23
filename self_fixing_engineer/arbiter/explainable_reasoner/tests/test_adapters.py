@@ -3,28 +3,26 @@
 # Requires: pytest, pytest-asyncio, httpx (for real/mocked HTTP), unittest.mock
 # Run with: pytest test_adapters.py -v --cov=adapters --cov-report=html
 
-import os
 import base64
-import logging
 import json
-from unittest.mock import patch, AsyncMock, MagicMock
+import logging
+import os
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import httpx
+import pytest
 
 # Import the module under test
 from arbiter.explainable_reasoner.adapters import (
-    LLMAdapter,
-    OpenAIGPTAdapter,
-    GeminiAPIAdapter,
     AnthropicAdapter,
+    GeminiAPIAdapter,
+    LLMAdapter,
     LLMAdapterFactory,
+    OpenAIGPTAdapter,
     retry,
 )
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-)
 from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError
 
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)

@@ -1,11 +1,11 @@
 # test_message_types.py
 
-import unittest
-import time
-import uuid
 import json
-from dataclasses import asdict
 import sys
+import time
+import unittest
+import uuid
+from dataclasses import asdict
 from pathlib import Path
 
 # Add parent directory to path for imports

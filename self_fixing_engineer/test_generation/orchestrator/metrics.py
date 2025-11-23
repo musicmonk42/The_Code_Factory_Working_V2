@@ -1,6 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, Optional, List
 import os
+from typing import Any, Callable, Dict, List, Optional
 
 # --- Prometheus Metrics Integration (runtime-aware) ---
 logger = logging.getLogger(__name__)
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 METRICS_AVAILABLE = False
 try:  # import may succeed in prod, fail in minimal test envs
     import prometheus_client  # type: ignore
-    from prometheus_client import Counter, Histogram, Gauge  # type: ignore
+    from prometheus_client import Counter, Gauge, Histogram  # type: ignore
 
     METRICS_AVAILABLE = True
 except ImportError:

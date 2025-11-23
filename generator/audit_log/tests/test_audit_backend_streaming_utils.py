@@ -19,18 +19,18 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import prometheus_client.core as _core
+import prometheus_client.registry as _reg
 import pytest
 
 # Fresh Prometheus registry per test to avoid "Duplicated timeseries"
 from prometheus_client import CollectorRegistry
-import prometheus_client.registry as _reg
-import prometheus_client.core as _core
 
 from generator.audit_log.audit_backend import (
+    FileBackedRetryQueue,
+    PersistentRetryQueue,
     SensitiveDataFilter,
     SimpleCircuitBreaker,
-    PersistentRetryQueue,
-    FileBackedRetryQueue,
 )
 
 # ---------------------------------------------------------------------------

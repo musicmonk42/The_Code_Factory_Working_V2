@@ -4,20 +4,21 @@ This module provides a production-ready genetic algorithm for optimizing
 system configurations with proper sandboxing, caching, and error handling.
 """
 
-import sys
-import numpy as np
-import logging
-import subprocess
-import json
-import time
-import os
-import tempfile
 import hashlib
-from typing import Dict, Any, Optional, Tuple, List, Callable
-from dataclasses import dataclass, field, asdict
-import threading
-from queue import Queue, Empty
+import json
+import logging
+import os
 import pickle
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import asdict, dataclass, field
+from queue import Empty, Queue
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 
 # Configure module logging
 logging.basicConfig(
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import DEAP
 try:
-    from deap import base, creator, tools, algorithms
+    from deap import algorithms, base, creator, tools
 
     DEAP_AVAILABLE = True
 except ImportError:

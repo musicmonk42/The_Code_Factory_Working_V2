@@ -1,6 +1,7 @@
 # tests/test_agents.py
 import json
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
 import pytest
 
 # Fix the import to be an absolute path

@@ -1,14 +1,15 @@
 import json
 import logging
+
 import pytest
 
 # Assuming all modules are in a discoverable path
 from arbiter.arbiter_growth.exceptions import (
     ArbiterGrowthError,
+    AuditChainTamperedError,
+    CircuitBreakerOpenError,
     OperationQueueFullError,
     RateLimitError,
-    CircuitBreakerOpenError,
-    AuditChainTamperedError,
 )
 
 # Define a logger for use in tests that check logging behavior

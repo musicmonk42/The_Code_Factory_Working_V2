@@ -1,15 +1,16 @@
-import pytest
+import signal
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
+
+import pytest
+from test_generation.orchestrator import orchestrator as orchestrator_module
 from test_generation.orchestrator.cli import (
-    main,
+    _check_disk_space,
+    _check_writable,
     _make_run_id,
     graceful_shutdown,
-    _check_writable,
-    _check_disk_space,
+    main,
 )
-import signal
-from test_generation.orchestrator import orchestrator as orchestrator_module
 
 # Corrected import name for the orchestrator
 from test_generation.orchestrator.orchestrator import GenerationOrchestrator
@@ -152,7 +153,7 @@ async def test_cli_args(monkeypatch):
     """
     Verifies that command-line arguments are correctly parsed and used.
     """
-    from test_generation.orchestrator.cli import main, argparse
+    from test_generation.orchestrator.cli import argparse, main
 
     # Mock the command-line arguments and other dependencies
     mock_args = argparse.Namespace(

@@ -18,10 +18,12 @@ Dependencies:
 - audit_log, audit_utils
 """
 
+import base64
+import json
+
 # --- START: Environment setup block ---
 import os
-import json
-import base64
+
 from cryptography.fernet import Fernet
 
 TEST_PLUGIN_DIR = "/tmp/test_audit_plugins"
@@ -62,16 +64,17 @@ os.environ.setdefault("AUDIT_CRYPTO_ALERT_INITIAL_DELAY", "0.1")
 
 import asyncio
 import sys
+import uuid
 from pathlib import Path
+from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from faker import Faker
 from freezegun import freeze_time
+from hypothesis import HealthCheck, given, settings  # Added HealthCheck import
+from hypothesis.strategies import dictionaries, text
 from prometheus_client import REGISTRY
-from hypothesis import given, settings, HealthCheck  # Added HealthCheck import
-from hypothesis.strategies import text, dictionaries
-import uuid
-from typing import Dict, Any, Optional
 
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
@@ -84,21 +87,20 @@ if str(REPO_ROOT) not in sys.path:
 if sys.platform != "win32":
     pass
 
+# We also need a local reference to the module for reloading purposes
+import generator.audit_log.audit_plugins as audit_plugins_module
+
 # --------------------------------------------------------------------------- #
 # 2. Import the module under test
 # --------------------------------------------------------------------------- #
 # FIX: Import 'plugins' by its actual name (not an alias like '_PLUGINS') for module reloading
+from generator.audit_log.audit_plugins import plugins  # Added discover_plugins import
 from generator.audit_log.audit_plugins import (
     AuditPlugin,
-    trigger_event,
-    register_plugin,
     CommercialPlugin,
-    plugins,  # Added discover_plugins import
+    register_plugin,
+    trigger_event,
 )
-
-# We also need a local reference to the module for reloading purposes
-import generator.audit_log.audit_plugins as audit_plugins_module
-
 
 # Initialize faker for test data generation
 fake = Faker()

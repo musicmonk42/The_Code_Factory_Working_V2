@@ -2,8 +2,9 @@
 Metrics helper to handle duplicate registrations gracefully
 """
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 import logging
+
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 

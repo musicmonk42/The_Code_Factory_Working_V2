@@ -3,39 +3,39 @@ Test suite for omnicore_engine/metrics.py
 Tests Prometheus metrics collection, InfluxDB fallback, and metric utilities.
 """
 
-import pytest
-import os
 import json
-import tempfile
-from unittest.mock import Mock, patch
-from datetime import datetime
-from prometheus_client import CollectorRegistry
-from prometheus_client.core import Counter, Gauge, Histogram
+import os
 
 # Add the parent directory to path for imports
 import sys
+import tempfile
+from datetime import datetime
+from unittest.mock import Mock, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
+from prometheus_client.core import Counter, Gauge, Histogram
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import after mocking to prevent server startup
 with patch("omnicore_engine.metrics.start_http_server"):
-    from omnicore_engine.metrics import (
-        _get_or_create_metric,
-        MockInfluxWriteApi,
+    from omnicore_engine.metrics import (  # Import specific metrics for testing
+        ACTIVE_SIMULATIONS,
+        FEATURE_FLAG_TOGGLES_TOTAL,
+        MESSAGE_BUS_QUEUE_SIZE,
+        PLUGIN_ACTIVE_COUNT,
+        PLUGIN_EXECUTION_DURATION_SECONDS,
+        PLUGIN_EXECUTIONS_TOTAL,
+        SIMULATIONS_TOTAL,
         MockInfluxDBClient,
+        MockInfluxWriteApi,
         MockPoint,
         MockWritePrecision,
+        _get_or_create_metric,
         get_all_metrics_data,
         get_plugin_metrics,
         get_test_metrics,
-        # Import specific metrics for testing
-        PLUGIN_EXECUTIONS_TOTAL,
-        PLUGIN_EXECUTION_DURATION_SECONDS,
-        PLUGIN_ACTIVE_COUNT,
-        SIMULATIONS_TOTAL,
-        ACTIVE_SIMULATIONS,
-        MESSAGE_BUS_QUEUE_SIZE,
-        FEATURE_FLAG_TOGGLES_TOTAL,
     )
 
 
@@ -275,7 +275,7 @@ class TestMetricAliases:
 
     def test_plugin_executions_alias(self):
         """Test plugin_executions legacy alias"""
-        from omnicore_engine.metrics import plugin_executions, PLUGIN_EXECUTIONS_TOTAL
+        from omnicore_engine.metrics import PLUGIN_EXECUTIONS_TOTAL, plugin_executions
 
         assert plugin_executions is PLUGIN_EXECUTIONS_TOTAL
 
@@ -346,6 +346,7 @@ class TestPrometheusServerStartup:
         """Test server starts with environment variable port"""
         # Re-import to trigger startup code
         import importlib
+
         import omnicore_engine.metrics
 
         importlib.reload(omnicore_engine.metrics)
@@ -357,6 +358,7 @@ class TestPrometheusServerStartup:
         """Test server starts with default port"""
         with patch.dict(os.environ, {}, clear=True):
             import importlib
+
             import omnicore_engine.metrics
 
             importlib.reload(omnicore_engine.metrics)
@@ -368,6 +370,7 @@ class TestPrometheusServerStartup:
     def test_server_startup_port_in_use(self, mock_logger, mock_start_server):
         """Test handling when port is already in use"""
         import importlib
+
         import omnicore_engine.metrics
 
         importlib.reload(omnicore_engine.metrics)

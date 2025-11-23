@@ -1,5 +1,5 @@
-import os
 import inspect
+import os
 from typing import Any, Dict
 
 import pytest
@@ -9,7 +9,6 @@ os.environ.setdefault("TESTING", "1")
 
 # Import the module under test in a stable way
 import agents.critique_agent.critique_prompt as cp  # type: ignore
-
 
 # Convenience handles
 build_semantic_critique_prompt = cp.build_semantic_critique_prompt

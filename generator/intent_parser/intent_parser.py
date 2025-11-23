@@ -6,13 +6,13 @@ LAZY LOADING STRATEGY:
 ...
 """
 import concurrent.futures
+import datetime  # <-- FIX: Added missing import
 import hashlib
 import json
 import logging
 import os
 import re
 import time
-import datetime  # <-- FIX: Added missing import
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
@@ -26,9 +26,9 @@ import rst_to_myst
 # import transformers  # Moved to lazy loading
 import yaml
 from dotenv import load_dotenv
-from langdetect import detect, DetectorFactory, LangDetectException
+from langdetect import DetectorFactory, LangDetectException, detect
 from prometheus_client import Counter, Gauge, Histogram
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, Field, validator
 
 # ********** FIX 1: Corrected import of log_action **********
 try:

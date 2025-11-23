@@ -25,25 +25,17 @@ Upgrades from the original file:
 
 from __future__ import annotations
 
-import logging
-import time
 import json
-import re
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    Tuple,
-)
-from collections import defaultdict
-import types
-import numpy as np
+import logging
 import os
+import re
 import threading  # FIXED: Added import threading to resolve NameError
+import time
+import types
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+
+import numpy as np
 
 # ---- App/Internal Imports ----
 # Defensive lazy settings accessor to avoid import-time side-effects
@@ -97,7 +89,7 @@ def settings():
 
 
 try:
-    from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
+    from omnicore_engine.message_bus import Message, MessageFilter, ShardedMessageBus
 except ImportError:
     # Allow tests to import without message_bus dependency
     ShardedMessageBus = None  # type: ignore
@@ -117,7 +109,8 @@ except ImportError:
 DASK_AVAILABLE = False
 try:
     import dask.array as da
-    from dask.distributed import Client as DaskClient, LocalCluster
+    from dask.distributed import Client as DaskClient
+    from dask.distributed import LocalCluster
 
     DASK_AVAILABLE = True
 except ImportError:

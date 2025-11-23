@@ -4,13 +4,14 @@ Comprehensive unit tests for api.py
 Tests FastAPI endpoints, authentication, rate limiting, and database operations.
 """
 
-import pytest
 import asyncio
 import os
 import sys
-from unittest.mock import patch, MagicMock, AsyncMock
-import jwt
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx  # Import httpx
+import jwt
+import pytest
 from httpx import ASGITransport  # ADDED as per Step 6
 
 # Set testing environment variables
@@ -27,16 +28,16 @@ sys.modules["runner.runner_metrics"] = MagicMock()
 sys.modules["runner.runner_utils"] = MagicMock()
 sys.modules["intent_parser.intent_parser"] = MagicMock()
 
-from fastapi.testclient import TestClient
-from fastapi import (
-    WebSocketDisconnect,
+from fastapi import (  # ADDED WebSocketDisconnect, Request as per Steps 4 & 5
     Request,
-)  # ADDED WebSocketDisconnect, Request as per Steps 4 & 5
+    WebSocketDisconnect,
+)
+from fastapi.testclient import TestClient
 
 # Import app and DB components for fixture setup
-from main.api import api, Base, get_db
-from sqlalchemy.orm import sessionmaker
+from main.api import Base, api, get_db
 from sqlalchemy import create_engine  # ADDED as per Step 1
+from sqlalchemy.orm import sessionmaker
 
 # --- Fixture Setup for Test Database ---
 # Create a new sessionmaker for the test database
@@ -207,7 +208,7 @@ class TestAuthentication:
         assert isinstance(token, str)
 
         # Decode and verify token
-        from main.api import SECRET_KEY, ALGORITHM
+        from main.api import ALGORITHM, SECRET_KEY
 
         decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         assert decoded["sub"] == test_user_credentials["username"]
@@ -299,7 +300,7 @@ class TestRunnerEndpoints:
     @pytest.fixture(autouse=True)
     def setup_test_user_for_runner(self, test_app):
         """Creates a mock user in the test DB for these tests."""
-        from main.api import User, pwd_context, APIKey
+        from main.api import APIKey, User, pwd_context
 
         db = TestingSessionLocal()
         try:
@@ -668,7 +669,7 @@ class TestDatabaseOperations:
     def test_create_db_tables(self):
         """Test database table creation."""
         # MODIFIED as per Step 1: Use the shared connection's engine
-        from main.api import create_db_tables, Base
+        from main.api import Base, create_db_tables
 
         # This test now runs in isolation
         # We can check if tables exist

@@ -1,24 +1,21 @@
 import asyncio
-import logging
-import smtplib
-import json
-import os
-import sys
 import hashlib
-from email.mime.text import MIMEText
-from typing import Any, Callable, Dict, List, Optional, Union, Awaitable
-from datetime import datetime, timezone
+import json
+import logging
+import os
 import random
+import smtplib
+import sys
+from datetime import datetime, timezone
+from email.mime.text import MIMEText
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 import aiohttp  # For Slack notifications
-from tenacity import retry, stop_after_attempt, wait_exponential
+from arbiter.arbiter_plugin_registry import PlugInKind, register
+from arbiter.arbiter_plugin_registry import registry as arbiter_registry
 from arbiter.otel_config import get_tracer
-from arbiter.arbiter_plugin_registry import (
-    register,
-    PlugInKind,
-    registry as arbiter_registry,
-)
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Mock aiosmtplib if not available
 try:
@@ -65,7 +62,7 @@ except ImportError:
 
 # --- Corrected models.db_clients import block ---
 try:
-    from models.db_clients import PostgresClient, SQLiteClient, DummyDBClient
+    from models.db_clients import DummyDBClient, PostgresClient, SQLiteClient
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
@@ -125,12 +122,10 @@ tracer = get_tracer(__name__)
 
 # --- Logger Setup ---
 try:
-    from arbiter_plugin_registry import (
-        registry as mock_registry,
-        PlugInKind as MockPlugInKind,
-    )
-    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.agent_state import Base
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind as MockPlugInKind
+    from arbiter_plugin_registry import registry as mock_registry
 except ImportError:
 
     class mock_registry:

@@ -5,46 +5,39 @@
 # Created: July 30, 2025.
 
 import asyncio
+import contextlib  # FIX: Added for watcher task cancellation
+import copy  # FIX: Moved import for feedback command
 import datetime
-import sys
-import os
+import importlib  # For dynamic plugin loading
 import json
+import logging  # Explicitly import logging here for use in try/except block
+import os
+import sys
+import time  # FIX: Added missing import for logs command
+import uuid  # FIX: Moved import for feedback command
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+import aiohttp  # For sending feedback to API
 import click
-from prompt_toolkit import (
-    prompt as pt_prompt,
-)  # Renamed to avoid conflict with rich.prompt.Prompt
+import yaml  # Added for config editing
+from prompt_toolkit import prompt as pt_prompt  # Renamed to avoid conflict with rich.prompt.Prompt
 from rich.console import Console
-from rich.progress import Progress
 from rich.panel import Panel
+from rich.progress import Progress
 from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax  # For displaying code/config with highlighting
 from rich.traceback import install as rich_traceback_install  # For better error traces
-from pathlib import Path
-from typing import Dict, Optional, Callable, Any
-import yaml  # Added for config editing
-import importlib  # For dynamic plugin loading
-import aiohttp  # For sending feedback to API
-import logging  # Explicitly import logging here for use in try/except block
-import time  # FIX: Added missing import for logs command
-import copy  # FIX: Moved import for feedback command
-import uuid  # FIX: Moved import for feedback command
-import contextlib  # FIX: Added for watcher task cancellation
 
 # --- Custom Module Imports (conceptual, as they would be separate files) ---
 # Assuming 'engine' provides WorkflowEngine, AGENT_REGISTRY, etc.
 try:
-    from engine import WorkflowEngine, AGENT_REGISTRY, register_agent, hot_swap_agent
-    from runner.runner_config import load_config, ConfigWatcher
-    from runner.runner_logging import (
-        logger,
-        search_logs,
-        log_action,
-    )  # Using runner's logger
-    from runner.runner_metrics import get_metrics_dict
-    from runner.runner_utils import (
-        redact_secrets,
-    )  # Assuming redact_secrets is available
+    from engine import AGENT_REGISTRY, WorkflowEngine, hot_swap_agent, register_agent
     from runner.alerting import send_alert  # FIX: Standardized import
+    from runner.runner_config import ConfigWatcher, load_config
+    from runner.runner_logging import log_action, logger, search_logs  # Using runner's logger
+    from runner.runner_metrics import get_metrics_dict
+    from runner.runner_utils import redact_secrets  # Assuming redact_secrets is available
 except ImportError as e:
     # Fallback to dummy implementations if modules aren't found, for easier CLI development
     # In production, these should ideally be resolved.

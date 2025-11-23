@@ -1,10 +1,11 @@
 # test_decision_optimizer.py
 
-import sys
 import os
-from unittest.mock import MagicMock, AsyncMock, patch
-import pytest
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
+import pytest
 from cryptography.fernet import Fernet
 
 # Mock modules before imports
@@ -22,11 +23,11 @@ sys.modules["arbiter.arbiter_array_backend"].ConcreteArrayBackend = MagicMock(
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from arbiter.decision_optimizer import DecisionOptimizer, Task, Agent, safe_serialize
+from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
 
 # Mock all dependencies
 from arbiter.config import ArbiterConfig
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
+from arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_serialize
 
 
 @pytest.fixture

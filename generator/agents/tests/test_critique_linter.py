@@ -1,13 +1,13 @@
 import json
 
 from agents.critique_agent.critique_linter import (  # type: ignore
-    ruff_json,
+    LINTER_CONFIG,
+    checkstyle_json,
+    clippy_json,
     eslint_json,
     golangci_lint_json,
-    clippy_json,
-    checkstyle_json,
+    ruff_json,
     spotbugs_json,
-    LINTER_CONFIG,
 )
 
 

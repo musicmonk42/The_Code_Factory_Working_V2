@@ -7,22 +7,13 @@ All models are fully type-annotated and compatible with SQLAlchemy 2.0+.
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
-from sqlalchemy import (
-    ForeignKey,
-    String,
-    Integer,
-    Float,
-    JSON,
-    Index,
-)
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column,
-)
+from typing import Any, Dict, Optional
 
 # Import the EXACT Base and parent model from arbiter
-from arbiter.agent_state import Base, AgentState as ArbiterAgentState
+from arbiter.agent_state import AgentState as ArbiterAgentState
+from arbiter.agent_state import Base
+from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 # ----------------------------------------------------------------------

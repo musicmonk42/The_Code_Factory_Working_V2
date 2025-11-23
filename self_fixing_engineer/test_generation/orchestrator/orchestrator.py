@@ -1,50 +1,49 @@
 # test_generation/orchestrator/orchestrator.py
-import os
-import shutil
-import json
-import sys
 import asyncio
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
-import random
-import logging
-import traceback
-import aiofiles
-from collections import defaultdict
-from pathlib import Path
-from unittest.mock import Mock
 import inspect
+import json
+import logging
+import os
+import random
+import shutil
+import sys
+import traceback
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
+from unittest.mock import Mock
+
+import aiofiles
 
 # --- Internal Module Imports ---
 from test_generation.orchestrator.config import (
     AUDIT_LOG_FILE,
+    COVERAGE_REPORTS_DIR,
     QUARANTINE_DIR,
     SARIF_EXPORT_DIR,
-    COVERAGE_REPORTS_DIR,
     _ensure_artifact_dirs,
 )
 
 # Import console utilities from same package for logging and UI.
 from .console import (
-    log,
     RICH_AVAILABLE,
-    console,
-    Progress,
     BarColumn,
+    Progress,
+    TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
-    TextColumn,
+    console,
+    log,
 )
 
 # Import venv utilities from same package for isolation.
 try:
-    from .venvs import (
-        sanitize_path as venv_sanitize_path,
-        temporary_env,
-        create_and_install_venv,
-    )
+    from .venvs import create_and_install_venv
+    from .venvs import sanitize_path as venv_sanitize_path
+    from .venvs import temporary_env
 except ImportError as e:
     logging.getLogger(__name__).error(f"Venvs import failed: {e}. Using stubs.")
 
@@ -63,10 +62,10 @@ except ImportError as e:
 # Metrics from same package for monitoring.
 try:
     from .metrics import (
-        generation_duration,
-        integration_success,
-        integration_failure,
         METRICS_AVAILABLE,
+        generation_duration,
+        integration_failure,
+        integration_success,
     )
 except ImportError:
 
@@ -114,7 +113,7 @@ except ImportError:
 
 # Audit from same package for logging.
 try:
-    from .audit import audit_event, RUN_ID
+    from .audit import RUN_ID, audit_event
 except ImportError:
     # Fallback stubs
     async def _dummy_audit_event(*args, **kwargs):
@@ -138,29 +137,30 @@ except ImportError:
         pass
 
 
-from test_generation.backends import BackendRegistry
-from test_generation.policy_and_audit import PolicyEngine, EventBus, redact_sensitive
 from test_generation import utils
+from test_generation.backends import BackendRegistry
+from test_generation.policy_and_audit import EventBus, PolicyEngine, redact_sensitive
 from test_generation.utils import (
-    SecurityScanner,
-    KnowledgeGraphClient,
-    PRCreator,
-    MutationTester,
     CodeEnricher,
+    KnowledgeGraphClient,
+    MutationTester,
+    PRCreator,
+    SecurityScanner,
     add_atco_header,
     add_mocking_framework_import,
+)
+from test_generation.utils import backup_existing_test as _backup_existing_test
+from test_generation.utils import cleanup_path_safe
+from test_generation.utils import compare_files as _compare_files
+from test_generation.utils import generate_file_hash as _generate_file_hash
+from test_generation.utils import (
     llm_refine_test_plugin,
-    cleanup_path_safe,
     run_jest_and_coverage,
     run_junit_and_coverage,
-    compare_files as _compare_files,
-    backup_existing_test as _backup_existing_test,
-    generate_file_hash as _generate_file_hash,
 )
+
 from ..compliance_mapper import generate_report as generate_compliance_report
-from .stubs import (
-    DummyTestEnricher,
-)
+from .stubs import DummyTestEnricher
 
 
 # --- Backwards-compatible test hook -----------------------------------------

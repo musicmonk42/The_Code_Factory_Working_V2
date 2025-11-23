@@ -1,20 +1,21 @@
 # test_anthropic_adapter.py
-import pytest
 import time
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
+import anthropic
+import pytest
 
 # Import the adapter and related exceptions
 from arbiter.plugins.anthropic_adapter import AnthropicAdapter
 from arbiter.plugins.llm_client import (
-    LLMClientError,
+    APIError,
     AuthError,
+    CircuitBreakerOpenError,
+    LLMClientError,
     RateLimitError,
     TimeoutError,
-    APIError,
-    CircuitBreakerOpenError,
 )
-import anthropic
 from tenacity import RetryError
 
 

@@ -1,6 +1,7 @@
 # message_bus/encryption.py
 
-from typing import Protocol, List
+from typing import List, Protocol
+
 from cryptography.fernet import Fernet, MultiFernet
 
 

@@ -1,19 +1,17 @@
+import json
 import logging
 import os
+
 import pytest
 import pytest_asyncio
-from pytest_mock import MockerFixture
-import json
-from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+
+# Import the filters - assuming the PIIRedactorFilter is the correct name
+from arbiter.meta_learning_orchestrator.logging_utils import LogCorrelationFilter, PIIRedactorFilter
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
-
-# Import the filters - assuming the PIIRedactorFilter is the correct name
-from arbiter.meta_learning_orchestrator.logging_utils import (
-    LogCorrelationFilter,
-    PIIRedactorFilter,
-)
+from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(

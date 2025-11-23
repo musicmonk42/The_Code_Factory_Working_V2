@@ -1,12 +1,12 @@
 # test_e2e_explainable_reasoner.py
-import os
 import asyncio
 import json
-from unittest.mock import patch, AsyncMock, MagicMock
-import time
-from datetime import datetime, timezone, timedelta
+import os
 import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,16 +14,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from arbiter.explainable_reasoner.explainable_reasoner import (
-    ReasonerConfig,
     ExplainableReasoner,
     ExplainableReasonerPlugin,
+    ReasonerConfig,
     SensitiveValue,
 )
-from arbiter.explainable_reasoner.reasoner_errors import (
-    ReasonerError,
-    ReasonerErrorCode,
-)
 from arbiter.explainable_reasoner.metrics import get_metrics_content
+from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
 
 
 # Mock external/optional dependencies for isolation

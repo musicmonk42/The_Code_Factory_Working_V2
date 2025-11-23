@@ -22,37 +22,31 @@
 # pytest-asyncio==1.1.0
 
 import asyncio
+import concurrent.futures
 import hashlib
 import logging
 import os
 import shutil
 import subprocess
 import time
-import concurrent.futures
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 # Pydantic for robust data validation
-from pydantic import BaseModel, Field as PydanticField, field_validator
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
+from pydantic import field_validator
 
 # Import tenacity for retries with exponential backoff
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Feast imports
 try:
-    from feast import Entity, FeatureStore, FeatureView, ValueType
+    from feast import Entity, FeatureStore, FeatureView
     from feast import Field as FeastField
+    from feast import ValueType
     from feast.data_source import DataSource, FileSource
-    from feast.errors import (
-        FeastObjectNotFoundException,
-        FeastProviderError,
-        FeastResourceError,
-    )
+    from feast.errors import FeastObjectNotFoundException, FeastProviderError, FeastResourceError
 
     # Production-ready sources
     from feast.infra.offline_stores.bigquery_source import BigQuerySource
@@ -188,12 +182,13 @@ except ImportError:
             return "stub_tx_hash_123"
 
 
-# Prometheus Metrics
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from arbiter.otel_config import get_tracer
 
 # OpenTelemetry Tracing - Use centralized configuration
 from opentelemetry.trace import Status, StatusCode
-from arbiter.otel_config import get_tracer
+
+# Prometheus Metrics
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Logger initialization
 logger = logging.getLogger(__name__)

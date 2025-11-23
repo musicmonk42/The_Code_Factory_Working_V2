@@ -3,18 +3,19 @@ Patch file to fix the E2E test failures.
 Save this as plugins/tests/test_plugins_e2e_fixed.py
 """
 
+import asyncio
+import hashlib
+import hmac
+import importlib
+import json
+import logging
 import os
 import sys
-import asyncio
-import logging
-import json
-import pytest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
-import importlib
-import tempfile
-import hmac
-import hashlib
+
+import pytest
 
 # Set test environment
 os.environ["PROD_MODE"] = "false"
@@ -191,8 +192,8 @@ def test_plugin_import(plugin_name):
 async def test_core_utils_integration():
     """Test core_utils module integration."""
     try:
-        from core_utils import AlertOperator, get_alert_operator
         from core_secrets import SecretsManager
+        from core_utils import AlertOperator, get_alert_operator
 
         # Test singleton pattern
         operator1 = get_alert_operator()
@@ -234,7 +235,7 @@ async def test_core_audit_integration():
 def test_core_secrets_integration():
     """Test core_secrets module integration."""
     try:
-        from core_secrets import SecretsManager, SECRETS_MANAGER
+        from core_secrets import SECRETS_MANAGER, SecretsManager
 
         # Test singleton
         assert SECRETS_MANAGER is not None

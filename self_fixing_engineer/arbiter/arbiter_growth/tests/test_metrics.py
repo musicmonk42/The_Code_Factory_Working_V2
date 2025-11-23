@@ -1,11 +1,10 @@
-import pytest
-from unittest.mock import MagicMock, patch
 import asyncio
-from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
+from unittest.mock import MagicMock, patch
 
+import pytest
 from arbiter.arbiter_growth.config_store import ConfigStore
 from arbiter.arbiter_growth.metrics import get_or_create_metric
-
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 # --- Fixtures ---
 

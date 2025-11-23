@@ -20,16 +20,16 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # Import the cache layer via the package-qualified path
 from self_healing_import_fixer.import_fixer.cache_layer import (
-    get_cache,
-    _InMemoryCache,
-    _FileCache,
     _connect_redis,
+    _FileCache,
+    _InMemoryCache,
+    get_cache,
 )
 
 PKG_PATH = "self_healing_import_fixer.import_fixer.cache_layer"

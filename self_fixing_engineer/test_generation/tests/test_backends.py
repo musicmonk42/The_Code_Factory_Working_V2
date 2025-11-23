@@ -1,18 +1,19 @@
-import pytest
-import os
 import asyncio
-import tempfile
 import logging
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+import os
+import random
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
+from tenacity import RetryError as RetriesExceeded
 from test_generation.backends import (
     BackendRegistry,
-    PynguinBackend,
-    JestLLMBackend,
     DiffblueBackend,
+    JestLLMBackend,
+    PynguinBackend,
     _validate_inputs,
 )
-from tenacity import RetryError as RetriesExceeded
-import random
 
 # Fix: Added imports for the new backends
 

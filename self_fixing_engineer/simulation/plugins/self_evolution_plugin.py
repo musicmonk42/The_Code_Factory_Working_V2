@@ -12,27 +12,18 @@ Features:
 - Resilient handling of dependencies and error conditions
 """
 
-import os
-import sys
 import asyncio
+import functools
 import json
 import logging
+import os
+import re
+import sys
 import time
 import uuid
-import re
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    Tuple,
-    Callable,
-    List,
-    TypeVar,
-    AsyncContextManager,
-)
-from pathlib import Path
-import functools
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, AsyncContextManager, Callable, Dict, List, Optional, Tuple, TypeVar
 
 # --- Version ---
 __version__ = "1.0.3"
@@ -85,12 +76,15 @@ except ImportError:
 
 try:
     from tenacity import (
+        RetryError,
+        after_log,
+        before_log,
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
+        wait_random_exponential,
     )
-    from tenacity import RetryError, wait_random_exponential, before_log, after_log
 
     tenacity_available = True
 except ImportError:
@@ -123,16 +117,11 @@ except ImportError:
     tenacity_available = False
 
 try:
-    from langchain_core.prompts import PromptTemplate
-    from langchain_core.messages import (
-        SystemMessage,
-        HumanMessage,
-        BaseMessage,
-        AIMessage,
-    )
     from langchain_core.language_models import BaseChatModel
-    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
     from langchain_core.outputs import ChatResult
+    from langchain_core.prompts import PromptTemplate
+    from langchain_openai import ChatOpenAI
 
     langchain_available = True
 except ImportError:
@@ -177,7 +166,7 @@ except ImportError:
     langchain_available = False
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Summary, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
     from prometheus_client.metrics import MetricWrapperBase
 
     prometheus_available = True
@@ -285,7 +274,8 @@ except ImportError:
 
 try:
     from redis.asyncio import Redis
-    from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
+    from redis.exceptions import ConnectionError as RedisConnectionError
+    from redis.exceptions import RedisError
 
     redis_available = True
 

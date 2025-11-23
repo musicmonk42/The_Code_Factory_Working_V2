@@ -5,75 +5,67 @@
 
 import asyncio
 import concurrent.futures
-import heapq
-import tempfile
-import shutil
-import traceback
-import time
-import os
-import json
+import contextlib  # [NEW] Added for shutdown
 import hashlib
-import aiofiles
+import heapq
+import json
+import os
+import shutil
+import tempfile
+import time
+import traceback
+import uuid  # Explicitly import uuid for clarity
 from abc import ABC
-from collections import deque, defaultdict  # Import defaultdict
-from typing import Any, Dict, List, Optional, Union
+from collections import defaultdict, deque  # Import defaultdict
+from contextlib import asynccontextmanager  # [NEW] Added for lifespan
 from functools import partial
 from pathlib import Path
-import uuid  # Explicitly import uuid for clarity
-import contextlib  # [NEW] Added for shutdown
-from contextlib import asynccontextmanager  # [NEW] Added for lifespan
+from typing import Any, Dict, List, Optional, Union
 
+import aiofiles
 import aiohttp
 import opentelemetry.trace as trace  # Explicitly import trace for consistency
-from opentelemetry.trace import (
-    Status,
-    StatusCode,
-)  # Explicitly import Status and StatusCode
-
-# Import project-specific modules
-from runner.runner_config import RunnerConfig, load_config
-from runner.runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
-
-# Gold Standard: Import parser output schemas for strong typing
-from runner.runner_parsers import (
-    parse_junit_xml,
-    parse_coverage_xml,
-    parse_unittest_output,
-    parse_behave_junit,
-    parse_robot_xml,
-    parse_jest_json,
-    parse_go_test_json,
-    parse_surefire_xml,
-    parse_jacoco_xml,
-    parse_istanbul_json,
-    parse_go_coverprofile,
-    TestReportSchema,
-    CoverageReportSchema,
-)
 
 # [CHANGE A] Add direct import for runtime patching
 import runner.runner_parsers as runner_parsers
-from runner.runner_security_utils import redact_secrets
-from runner.runner_logging import logger, log_audit_event
-from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
-from runner.runner_contracts import (
-    TaskPayload,
-    TaskResult,
-    BatchTaskPayload,
-)  # NEW: Contracts
+from opentelemetry.trace import Status, StatusCode  # Explicitly import Status and StatusCode
+from runner.runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
+
+# Import project-specific modules
+from runner.runner_config import RunnerConfig, load_config
+from runner.runner_contracts import BatchTaskPayload, TaskPayload, TaskResult  # NEW: Contracts
 
 # --- FIX: Import 'ExecutionError' and alias it to 'TestExecutionError' ---
+from runner.runner_errors import BackendError, DistributedError
+from runner.runner_errors import ExecutionError as TestExecutionError
 from runner.runner_errors import (
-    RunnerError,
-    BackendError,
     FrameworkError,
-    ExecutionError as TestExecutionError,
     ParsingError,
+    RunnerError,
     SetupError,
     TimeoutError,
-    DistributedError,
     error_codes,
 )
+from runner.runner_logging import log_audit_event, logger
+from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
+
+# Gold Standard: Import parser output schemas for strong typing
+from runner.runner_parsers import (
+    CoverageReportSchema,
+    TestReportSchema,
+    parse_behave_junit,
+    parse_coverage_xml,
+    parse_go_coverprofile,
+    parse_go_test_json,
+    parse_istanbul_json,
+    parse_jacoco_xml,
+    parse_jest_json,
+    parse_junit_xml,
+    parse_robot_xml,
+    parse_surefire_xml,
+    parse_unittest_output,
+)
+from runner.runner_security_utils import redact_secrets
 
 # --- REFACTOR FIX: Import subprocess_wrapper from process_utils ---
 
@@ -82,11 +74,9 @@ from runner.runner_errors import (
 
 # Optional imports for mutation/fuzzing
 try:
-    from runner.runner_mutation import (
-        mutation_test as _mutation_test_func,
-        detect_language as _detect_mutation_lang,
-        fuzz_test as _fuzz_test_func,
-    )
+    from runner.runner_mutation import detect_language as _detect_mutation_lang
+    from runner.runner_mutation import fuzz_test as _fuzz_test_func
+    from runner.runner_mutation import mutation_test as _mutation_test_func
 
     HAS_MUTATION_MODULE = True
 except ImportError:
@@ -2263,9 +2253,9 @@ def _on_config_reload_callback(
 # For running, you would typically uncomment the necessary imports and define these objects.
 
 try:
-    from fastapi import FastAPI, Body, HTTPException, status
-    from uvicorn import run as uvicorn_run
     import click
+    from fastapi import Body, FastAPI, HTTPException, status
+    from uvicorn import run as uvicorn_run
 
     API_AVAILABLE = True
 except ImportError:
@@ -2539,8 +2529,9 @@ if API_AVAILABLE:
         return get_metrics_dict()
 
     # --- CLI (Requires Click) ---
-    import click
     import sys
+
+    import click
 
     @click.group()
     def cli():

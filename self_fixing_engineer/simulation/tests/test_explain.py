@@ -1,22 +1,23 @@
-import pytest
-import pytest_asyncio
 import sqlite3
-from pathlib import Path
-from simulation.explain import ReasonerError
-from unittest.mock import patch, MagicMock
 from datetime import datetime
 from functools import partial
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+import pytest_asyncio
 from simulation.explain import (
-    ExplanationResult,
-    ReasoningResult,
-    ReasoningHistory,
-    ReasonerConfig,
-    HistoryManager,
     ExplainableReasoner,
     ExplainableReasonerPlugin,
-    _sanitize_input,
-    _sanitize_context,
+    ExplanationResult,
+    HistoryManager,
+    ReasonerConfig,
+    ReasonerError,
+    ReasoningHistory,
+    ReasoningResult,
     _rule_based_fallback,
+    _sanitize_context,
+    _sanitize_input,
 )
 
 # Mark all tests as unit tests for selective running

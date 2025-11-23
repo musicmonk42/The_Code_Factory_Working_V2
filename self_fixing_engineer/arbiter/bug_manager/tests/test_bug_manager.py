@@ -4,19 +4,19 @@
 # Run with: pytest test_bug_manager.py -v --cov=bug_manager
 
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 # Import the module to be tested
 from arbiter.bug_manager import bug_manager
 from arbiter.bug_manager.bug_manager import (
-    Settings,
-    RateLimiter,
     BugManager,
     BugManagerArena,
-    Severity,
+    RateLimiter,
     RateLimitExceededError,
+    Settings,
+    Severity,
 )
 
 # --- Fixtures ---

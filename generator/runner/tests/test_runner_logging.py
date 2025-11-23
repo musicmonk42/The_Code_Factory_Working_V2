@@ -19,14 +19,12 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 # --- FIX: ADD MISSING IMPORT ---
 from runner.runner_errors import RunnerError
-
-# --- END FIX ---
 
 # --------------------------------------------------------------------------- #
 # Import only what exists in current runner_logging.py
@@ -40,6 +38,9 @@ from runner.runner_logging import (
     log_audit_event,
     search_logs,
 )
+
+# --- END FIX ---
+
 
 # Setup logging for tests
 logging.basicConfig(level=logging.DEBUG)

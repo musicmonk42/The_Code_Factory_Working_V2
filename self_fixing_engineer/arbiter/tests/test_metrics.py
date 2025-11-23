@@ -1,30 +1,24 @@
-import pytest
-from unittest.mock import patch, MagicMock, Mock
-import threading
 import os
 import sys
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    REGISTRY,
-    generate_latest,
-)
-from fastapi import HTTPException, Response
+import threading
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 import starlette
+from fastapi import HTTPException, Response
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary, generate_latest
 
 # PATCH: Resolve metaclass conflict between starlette and aiohttp
 starlette.testclient.WebSocketTestSession = None
 from arbiter.metrics import (
+    _metrics_logger,
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_histogram,
-    get_or_create_summary,
     get_or_create_metric,
+    get_or_create_summary,
     metrics_handler,
     register_dynamic_metric,
-    _metrics_logger,
 )
 
 

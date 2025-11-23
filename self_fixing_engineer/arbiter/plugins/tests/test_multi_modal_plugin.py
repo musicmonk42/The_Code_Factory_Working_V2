@@ -1,21 +1,21 @@
 # test_multi_modal_plugin.py
-import pytest
 import json
-from unittest.mock import Mock, AsyncMock, patch
 import os
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from arbiter.plugins.multi_modal_plugin import (
-    MultiModalPlugin,
     AuditLogger,
-    MetricsCollector,
     CacheManager,
     InputValidator,
-    OutputValidator,
-    SandboxExecutor,
-    ProcessingResult,
     InvalidInputError,
-    ProcessingError,
+    MetricsCollector,
     MultiModalException,
+    MultiModalPlugin,
+    OutputValidator,
+    ProcessingError,
+    ProcessingResult,
+    SandboxExecutor,
 )
 
 

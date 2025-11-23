@@ -9,9 +9,9 @@ import os
 import sys
 import tempfile
 import time
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -72,7 +72,7 @@ sys.modules["redis.asyncio"] = mock_redis_module
 sys.modules["redis"] = MagicMock()
 
 # Import mesh components after environment setup and mocking
-from mesh import event_bus, mesh_policy, mesh_adapter
+from mesh import event_bus, mesh_adapter, mesh_policy
 from mesh.checkpoint import CheckpointManager
 from pydantic import BaseModel
 

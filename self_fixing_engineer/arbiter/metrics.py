@@ -1,26 +1,19 @@
-import os
 import logging
-import threading
-import sys
+import os
 import secrets
-from typing import Optional, Tuple, Any, Type, Dict
+import sys
+import threading
 from time import time
+from typing import Any, Dict, Optional, Tuple, Type
 
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
-    REGISTRY,
-    generate_latest,
-)
-from fastapi import HTTPException, Depends, Response
+from fastapi import Depends, HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary, generate_latest
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
     from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:

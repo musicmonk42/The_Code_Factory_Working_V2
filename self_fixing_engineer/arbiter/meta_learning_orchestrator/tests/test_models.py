@@ -1,18 +1,19 @@
-import pytest
-from datetime import datetime, timezone
 import json
-from pydantic import ValidationError
+from datetime import datetime, timezone
+
+import pytest
 
 # Import the models and custom exceptions
 from arbiter.meta_learning_orchestrator.models import (
-    LearningRecord,
-    ModelVersion,
-    EventType,
-    DeploymentStatus,
     DataIngestionError,
-    ModelDeploymentError,
+    DeploymentStatus,
+    EventType,
     LeaderElectionError,
+    LearningRecord,
+    ModelDeploymentError,
+    ModelVersion,
 )
+from pydantic import ValidationError
 
 # Sample data for testing
 SAMPLE_LEARNING_RECORD = {

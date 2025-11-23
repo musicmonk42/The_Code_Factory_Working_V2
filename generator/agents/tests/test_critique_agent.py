@@ -3,16 +3,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import agents.critique_agent.critique_agent as core
 import pytest
-
 from agents.critique_agent.critique_agent import (
     CritiqueConfig,
     PythonCritiquePlugin,
     call_llm_for_critique,
     orchestrate_critique_pipeline,
 )
-import agents.critique_agent.critique_agent as core
-
 
 # ---------------------------------------------------------------------------
 # CritiqueConfig tests

@@ -1,11 +1,11 @@
 # test_hash_ring.py
 
-import unittest
 import hashlib
-from unittest.mock import Mock, patch
 import sys
+import unittest
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict, Counter
+from unittest.mock import Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

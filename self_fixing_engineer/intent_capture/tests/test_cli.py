@@ -1,45 +1,27 @@
-import json
 import asyncio
-import threading
-import sys
+import json
 import logging
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
-from rich.console import Console
-from rich.prompt import Prompt
-import psutil
+import sys
+import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the module under test
 import intent_capture.cli as cli_module  # Import the module itself to patch its internals
+import psutil
+import pytest
 
 # Import what's actually available from the cli module
-from intent_capture.cli import (
-    JsonFormatter,
-    shutdown_handler,
-    resource_guard,
-    SessionState,  # Changed from session_state to SessionState
+from intent_capture.cli import SessionState  # Changed from session_state to SessionState
+from intent_capture.cli import (  # These don't appear to exist in the new cli.py:; COMMAND_HELP,; _capture_state,; _save_for_undo,; _restore_from_state,; undo_last_action,; redo_last_undo,; collab_client_listener,; display_markdown,; colored_diff,; process_agent_response,; handle_error,; parse_command,; playback_mode,; show_help_cmd,; display_security_best_practices,; _local_input_worker,; maybe_start_input_thread,
     CollabServer,
     CommandDispatcher,
+    JsonFormatter,
     main_cli_loop,
-    # These don't appear to exist in the new cli.py:
-    # COMMAND_HELP,
-    # _capture_state,
-    # _save_for_undo,
-    # _restore_from_state,
-    # undo_last_action,
-    # redo_last_undo,
-    # collab_client_listener,
-    # display_markdown,
-    # colored_diff,
-    # process_agent_response,
-    # handle_error,
-    # parse_command,
-    # playback_mode,
-    # show_help_cmd,
-    # display_security_best_practices,
-    # _local_input_worker,
-    # maybe_start_input_thread,
+    resource_guard,
+    shutdown_handler,
 )
+from rich.console import Console
+from rich.prompt import Prompt
 
 
 # --- Test Fixtures ---

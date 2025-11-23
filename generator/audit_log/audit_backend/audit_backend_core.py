@@ -3,28 +3,24 @@ import abc
 import asyncio
 import base64
 import datetime
+import functools  # <-- ADDED
 import json
 import logging
 import os
 import time
 import uuid
-import zlib
 import warnings  # <-- ADDED
-import functools  # <-- ADDED
+import zlib
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Type, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, Optional, Type
 
 import boto3  # For KMS
 import botocore  # <-- ADDED
 import botocore.exceptions
 import zstandard as zstd
-from cryptography.fernet import (
-    Fernet,
-    MultiFernet,
-    InvalidToken,
-)  # <-- FIX: ADD InvalidToken HERE
-from prometheus_client import Counter, Gauge, Histogram
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet  # <-- FIX: ADD InvalidToken HERE
 from prometheus_client import REGISTRY  # <-- ADDED
+from prometheus_client import Counter, Gauge, Histogram
 
 # OpenTelemetry imports (guarded)
 try:
@@ -105,7 +101,7 @@ def safe_counter(name, description, labelnames=()):
 
 # Configuration management
 from dynaconf import Dynaconf
-from dynaconf.validator import Validator, ValidationError  # <-- ADDED ValidationError
+from dynaconf.validator import ValidationError, Validator  # <-- ADDED ValidationError
 
 logger = logging.getLogger(__name__)
 

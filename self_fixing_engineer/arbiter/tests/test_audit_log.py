@@ -1,14 +1,15 @@
-import pytest
 import asyncio
+import base64
 import json
+import logging
 import os
 import sys
 import tempfile
-import base64
-import logging
-from pathlib import Path
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Mock third-party dependencies before importing
 sys.modules["cryptography.fernet"] = MagicMock()
@@ -26,11 +27,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the module under test
 from arbiter.audit_log import (
-    TamperEvidentLogger,
     AuditLoggerConfig,
-    RotationType,
     CompressionType,
+    RotationType,
     SizedTimedRotatingFileHandler,
+    TamperEvidentLogger,
     log_event,
     verify_log_integrity,
 )

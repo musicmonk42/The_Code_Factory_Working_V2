@@ -1,13 +1,14 @@
 # tests/test_e2e_simulation_module.py
 
-import os
-import sys
 import asyncio
+import os
 import shutil
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, Mock
+import sys
 import types
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # --- Add simulation and plugins directories to the Python path ---
 TEST_DIR = Path(__file__).parent
@@ -99,9 +100,9 @@ sys.modules["dwave.system"] = mock_dwave_system
 
 # Now import the simulation modules (after mocking problematic dependencies)
 try:
-    from simulation import agentic, parallel, explain, quantum, runners, sandbox
-    from simulation.plugins import plugin_manager
     import simulation.core as core
+    from simulation import agentic, explain, parallel, quantum, runners, sandbox
+    from simulation.plugins import plugin_manager
 except ImportError as e:
     print(f"Warning: Could not import simulation modules: {e}")
     # Create minimal mocks for testing
