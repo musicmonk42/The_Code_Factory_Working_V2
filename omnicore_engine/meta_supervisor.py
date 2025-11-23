@@ -520,9 +520,9 @@ class MetaSupervisor:
 
             # Determine retry exception types
             retry_exceptions = [RedisError]
-            if sqlalchemy and hasattr(sqlalchemy, 'exc'):
+            if sqlalchemy and hasattr(sqlalchemy, "exc"):
                 retry_exceptions.append(sqlalchemy.exc.SQLAlchemyError)
-            
+
             @retry(
                 stop=stop_after_attempt(
                     settings.DB_RETRY_ATTEMPTS
@@ -530,9 +530,7 @@ class MetaSupervisor:
                 wait=wait_exponential(
                     multiplier=settings.DB_RETRY_DELAY, max=10
                 ),  # Use settings for retry delay
-                retry=retry_if_exception_type(
-                    tuple(retry_exceptions)
-                ),
+                retry=retry_if_exception_type(tuple(retry_exceptions)),
             )
             async def execute_with_retry():
                 return (
