@@ -168,10 +168,6 @@ def get_logger():
         _logger.setLevel(log_level)
         return _logger
 
-# Create a module-level logger variable for backward compatibility
-# This will be initialized on first use
-logger = None
-
 
 # Helper function to log with or without structlog
 def _log_info(msg: str, **kwargs) -> None:
@@ -313,8 +309,7 @@ def get_backend() -> _ArrayBackend:
         _backend_instance = _ArrayBackend()
     return _backend_instance
 
-# Keep module-level cp defined for tests that patch it
-cp = None  # already present above
+# Note: cp is already defined at line 99 for test patching
 
 # Provide xp and is_gpu accessors rather than fixed values at import time
 def get_xp():
@@ -345,8 +340,8 @@ class _BackendProxy:
         return getattr(get_backend(), name)
     
     def __bool__(self):
-        # Allow truthiness check without creating backend
-        return _backend_instance is not None or True
+        # Always return True for backward compatibility with truthiness checks
+        return True
 
 backend = _BackendProxy()
 
