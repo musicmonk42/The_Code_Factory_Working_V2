@@ -201,6 +201,10 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Enable memory overcommit for Redis
+        run: |
+          sudo sysctl -w vm.overcommit_memory=1
+          
       - name: Install OmniCore dependencies
         env:
           PIP_NO_CACHE_DIR: "1"
@@ -212,6 +216,7 @@ jobs:
             pytest==7.4.0 \
             pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
+            pytest-timeout \
             tomli_w \
             typing-extensions
           if [ -f omnicore_engine/requirements.txt ]; then
@@ -223,9 +228,14 @@ jobs:
           pip install --no-cache-dir PyYAML httpx PyJWT || true
           # Install missing runtime/test dependencies
           pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
-          # Install CPU-only PyTorch wheel to satisfy imports in tests
-          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu || true
           pip install --no-cache-dir pytest-cov
+          
+      - name: Free more disk space before tests
+        run: |
+          # Additional cleanup right before running tests
+          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
+          rm -rf /home/runner/.cache/pip/* /tmp/* || true
+          df -h
           
       - name: Run OmniCore tests
         env:
@@ -234,7 +244,7 @@ jobs:
         run: |
           export PYTHONPATH="$PYTHONPATH:$PWD"
           if [ -d omnicore_engine/tests ]; then
-            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v
+            pytest omnicore_engine/tests/ --cov=omnicore_engine --cov-report=xml --cov-report=term -v --timeout=120 --maxfail=1
           else
             echo "Error: No tests directory found. Failing the build."
             exit 1
@@ -355,6 +365,10 @@ jobs:
           rm -rf /home/runner/.cache/pip/* /tmp/* || true
           df -h
           
+      - name: Enable memory overcommit for Redis
+        run: |
+          sudo sysctl -w vm.overcommit_memory=1
+          
       - name: Install all dependencies
         env:
           PIP_NO_CACHE_DIR: "1"
@@ -366,6 +380,8 @@ jobs:
             pytest==7.4.0 \
             pytest-asyncio==0.21.0 \
             pytest-mock==3.11.0 \
+            pytest-timeout \
+            pytest-xdist \
             tomli_w \
             typing-extensions
           if [ -f requirements.txt ]; then
@@ -381,7 +397,7 @@ jobs:
           APP_ENV: test
         run: |
           if [ -f conftest.py ]; then
-            pytest -v --tb=short
+            pytest -v --tb=short --timeout=120 -n 2
           else
             echo "No root-level integration tests found"
           fi
