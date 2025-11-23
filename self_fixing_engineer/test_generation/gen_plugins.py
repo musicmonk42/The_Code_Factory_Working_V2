@@ -597,8 +597,10 @@ LANGUAGE_GENERATORS.register("javascript", JavaScriptTestGenerator())
 # Placeholder stub for AI API - to be implemented
 class _XAIAPIStub:
     """Stub for external AI API - not yet implemented."""
-    
-    def generate_tests(self, code: str, language: str, test_framework: Optional[str] = None) -> Dict[str, Any]:
+
+    def generate_tests(
+        self, code: str, language: str, test_framework: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Stub method for AI-based test generation."""
         raise NotImplementedError("AI-based test generation is not yet implemented")
 
