@@ -1537,6 +1537,7 @@ def main_cli():
 if __name__ == "__main__":
 
     async def run_tests():
+        global config
         print("\n--- Running AuditLogger Tests ---")
 
         # Test 1: Basic AuditLogger initialization and add_entry

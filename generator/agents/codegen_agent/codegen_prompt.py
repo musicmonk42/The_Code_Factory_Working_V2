@@ -283,7 +283,6 @@ async def initialize_rag_store(redis_client: aioredis.Redis):
         )
         return
 
-    global doc_embeddings, knowledge_base
     try:
         # Populate the hash keys with embeddings
         for i, emb in enumerate(doc_embeddings):

@@ -452,13 +452,11 @@ async def shutdown(
         )
 
         try:
-            if (
-                _HAS_OTEL
-                and "tracer_provider" in locals()
-                and hasattr(tracer_provider, "force_flush")
-            ):
-                tracer_provider.force_flush()
-                logger.info("OpenTelemetry traces flushed.")
+            if _HAS_OTEL:
+                tracer_provider = trace.get_tracer_provider()
+                if hasattr(tracer_provider, "force_flush"):
+                    tracer_provider.force_flush()
+                    logger.info("OpenTelemetry traces flushed.")
         except Exception as e:
             logger.error(f"Failed to flush OpenTelemetry traces: {e}", exc_info=True)
 
