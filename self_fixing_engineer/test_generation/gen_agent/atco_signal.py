@@ -437,7 +437,7 @@ def install_default_handlers(
         on_reload: An optional callable (sync or async) for a SIGHUP signal.
         signals: An optional list of signal names to install handlers for.
     """
-    global _installed, _installed_with_loop, _installed_signals, _on_interrupt_callback, _on_reload_callback, _active_signals, _shutdown_event, _win_ctrl_handler, _signal_debounce_map, _auto_set_shutdown_event
+    global _installed, _installed_with_loop, _installed_signals, _on_interrupt_callback, _on_reload_callback, _active_signals, _shutdown_event, _win_ctrl_handler, _signal_debounce_map, _auto_set_shutdown_event  # noqa: F824
 
     _auto_set_shutdown_event = on_interrupt is None
 
@@ -482,7 +482,7 @@ def install_default_handlers(
 
     def _handle_signal(signum, frame):
         """Internal handler that chains with the previous handler and calls the interrupt callable."""
-        global _last_signal_time, _signal_count, _shutting_down
+        global _signal_count, _shutting_down
 
         # --- Debounce per signal type (do this before anything else) ---
         now = time.monotonic()
@@ -724,7 +724,7 @@ def uninstall_handlers():
     """
     Restores the signal handlers to their state before `install_default_handlers` was called.
     """
-    global _previous_handlers, _installed_with_loop, _installed_signals, _installed, _fault_dump_fp, _shutdown_event, _win_ctrl_handler
+    global _previous_handlers, _installed_with_loop, _installed_signals, _installed, _fault_dump_fp, _shutdown_event, _win_ctrl_handler  # noqa: F824
 
     if not _installed:
         _log(logging.INFO, "No signal handlers to uninstall.")
@@ -813,8 +813,8 @@ def _reset_for_tests():
     """
     Resets all global state for unit testing purposes.
     """
-    global _shutting_down, _signal_count, _last_signal_time, _installed, _previous_handlers
-    global _installed_signals, _installed_with_loop, _fault_dump_fp, _on_interrupt_callback, _on_reload_callback, _active_signals
+    global _shutting_down, _signal_count, _last_signal_time, _installed, _previous_handlers  # noqa: F824
+    global _installed_signals, _installed_with_loop, _fault_dump_fp, _on_interrupt_callback, _on_reload_callback, _active_signals  # noqa: F824
     global _last_signal_at, _shutdown_event, _win_ctrl_handler
 
     _shutting_down = False
@@ -866,7 +866,6 @@ async def graceful_shutdown_coro(signum: Optional[int] = None):
     """
     An example of a canonical async shutdown coroutine.
     """
-    global _shutting_down
     if not _shutting_down:
         return
 

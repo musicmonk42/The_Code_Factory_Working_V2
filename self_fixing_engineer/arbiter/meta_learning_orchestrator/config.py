@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 from typing import Optional
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationError, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Note: The following are optional dependencies for full functionality.
@@ -402,10 +404,10 @@ class MetaLearningConfig(BaseSettings):
         healthy = True
         if AIOREDIS_INSTALLED:
             try:
-                redis = aioredis.from_url(self.REDIS_URL, decode_responses=True)
-                await redis.ping()
+                redis_client = redis.from_url(self.REDIS_URL, decode_responses=True)
+                await redis_client.ping()
                 logger.info("✅ Redis connection successful.")
-                await redis.close()
+                await redis_client.close()
             except Exception as e:
                 logger.error(f"❌ Redis health check failed: {e}")
                 healthy = False

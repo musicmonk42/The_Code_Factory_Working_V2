@@ -8,6 +8,8 @@ These schemas define the data models for outputs from the MultiModalProcessor,
 ensuring data consistency, validation, and ease of use with LLMs or Knowledge Graphs.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from datetime import datetime, timezone
@@ -121,7 +123,7 @@ class ImageCaptioningResult(BaseConfig):
 
 class ImageAnalysisResult(BaseConfig):
     kind: Literal["image"] = "image"
-    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
         Field(..., description="Unique identifier for the analyzed image.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
@@ -188,7 +190,7 @@ class AudioTranscriptionResult(BaseConfig):
 
 class AudioAnalysisResult(BaseConfig):
     kind: Literal["audio"] = "audio"
-    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
         Field(..., description="Unique identifier for the analyzed audio.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
@@ -274,7 +276,7 @@ class VideoSummaryResult(BaseConfig):
 
 class VideoAnalysisResult(BaseConfig):
     kind: Literal["video"] = "video"
-    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
         Field(..., description="Unique identifier for the analyzed video.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
