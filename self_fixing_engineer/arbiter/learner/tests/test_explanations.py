@@ -54,7 +54,6 @@ tracer = get_tracer(__name__)
 
 @pytest.fixture(autouse=True)
 def setup_opentelemetry(mocker):
-    global in_memory_exporter
     in_memory_exporter.clear()
     # Mock the tracer provider to use our in-memory exporter for testing
     from opentelemetry.sdk.resources import Resource

@@ -10,7 +10,7 @@ import time
 import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Any, Dict, Final, List, Optional, Set, Type, Union
+from typing import Annotated, Any, Dict, Final, List, Optional, Set, Type, Union
 
 # Import tenacity for retries with exponential backoff
 from tenacity import (
@@ -155,7 +155,7 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 
 # Pydantic for input validation
-from pydantic import BaseModel, Field, constr, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 # Logger initialization
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ class AuditEvent(BaseModel):
     Represents a single audit event with validation rules.
     """
 
-    event_type: constr(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50) = Field(  # noqa: F722
+    event_type: Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50)] = Field(
         ...,
         description="Event category, e.g., 'agent:code_update' or 'system:config.change'",
     )
@@ -261,7 +261,7 @@ class AuditEvent(BaseModel):
         ...,
         description="Event payload (details). The JSON representation should not exceed 10KB.",
     )
-    operator: constr(max_length=50) = Field(
+    operator: Annotated[str, StringConstraints(max_length=50)] = Field(
         default="system", description="Identifier of the entity performing the action."
     )
     correlation_id: Optional[str] = Field(

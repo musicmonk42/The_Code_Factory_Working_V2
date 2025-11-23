@@ -11,6 +11,17 @@ import numpy as np
 import torch
 
 try:
+    import sqlalchemy
+    import sqlalchemy.exc
+except ImportError:
+    sqlalchemy = None
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
+
+try:
     from aiolimiter import AsyncLimiter
 except Exception:
     # Simple fallback AsyncLimiter for test / dev environments where aiolimiter isn't installed.
@@ -503,6 +514,11 @@ class MetaSupervisor:
         """
         async with self.rate_limiter:
 
+            # Determine retry exception types
+            retry_exceptions = [RedisError]
+            if sqlalchemy and hasattr(sqlalchemy, 'exc'):
+                retry_exceptions.append(sqlalchemy.exc.SQLAlchemyError)
+            
             @retry(
                 stop=stop_after_attempt(
                     settings.DB_RETRY_ATTEMPTS
@@ -511,7 +527,7 @@ class MetaSupervisor:
                     multiplier=settings.DB_RETRY_DELAY, max=10
                 ),  # Use settings for retry delay
                 retry=retry_if_exception_type(
-                    (RedisError, sqlalchemy.exc.SQLAlchemyError)
+                    tuple(retry_exceptions)
                 ),
             )
             async def execute_with_retry():
@@ -2012,9 +2028,12 @@ if __name__ == "__main__":
                         bind=self.engine, class_=AsyncSession, expire_on_commit=False
                     )
                     self._data_store = defaultdict(dict)  # In-memory mock store
-                    self.encrypter = Fernet(
-                        b"gqT7tQ_YlM5N-u2pZ-YhX5c-k_G2g_VfS_X4f_X2g_W3c"
-                    )  # Dummy key for mock
+                    if Fernet:
+                        self.encrypter = Fernet(
+                            b"gqT7tQ_YlM5N-u2pZ-YhX5c-k_G2g_VfS_X4f_X2g_W3c"
+                        )  # Dummy key for mock
+                    else:
+                        self.encrypter = None
                     self.logger = logging.getLogger("MockDatabase")
                     self.system_audit_merkle_tree = system_audit_merkle_tree
                     # Mock other dependencies needed by Database.__init__

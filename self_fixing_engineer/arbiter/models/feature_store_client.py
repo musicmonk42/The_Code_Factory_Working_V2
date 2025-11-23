@@ -1269,6 +1269,7 @@ class FeatureStoreClient:
         """
         if not self._fs:
             raise RuntimeError("Feast FeatureStore not connected.")
+        start_time = time.monotonic()
         with tracer.start_as_current_span("feast_flag_for_redaction") as span:
             span.set_attribute("feast.feature_view", feature_view_name)
             FS_CALLS_TOTAL.labels(

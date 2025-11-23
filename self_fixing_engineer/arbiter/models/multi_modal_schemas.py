@@ -23,10 +23,10 @@ from pydantic import (
     ConfigDict,
     Field,
     HttpUrl,
+    StringConstraints,
     ValidationError,
     ValidationInfo,
     conlist,
-    constr,
     field_validator,
     model_validator,
 )
@@ -123,7 +123,7 @@ class ImageCaptioningResult(BaseConfig):
 
 class ImageAnalysisResult(BaseConfig):
     kind: Literal["image"] = "image"
-    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
+    image_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
         Field(..., description="Unique identifier for the analyzed image.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
@@ -190,7 +190,7 @@ class AudioTranscriptionResult(BaseConfig):
 
 class AudioAnalysisResult(BaseConfig):
     kind: Literal["audio"] = "audio"
-    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
+    audio_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
         Field(..., description="Unique identifier for the analyzed audio.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
@@ -276,7 +276,7 @@ class VideoSummaryResult(BaseConfig):
 
 class VideoAnalysisResult(BaseConfig):
     kind: Literal["video"] = "video"
-    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
+    video_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
         Field(..., description="Unique identifier for the analyzed video.")
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(

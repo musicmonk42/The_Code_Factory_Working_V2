@@ -215,7 +215,7 @@ async def _amain(
         getattr(args, "treat_review_required_as_success", False)
     )
 
-    global PROJECT_ROOT, CONFIG
+    global PROJECT_ROOT
 
     audit_mod.RUN_ID = _make_run_id()
     RUN_ID = audit_mod.RUN_ID
