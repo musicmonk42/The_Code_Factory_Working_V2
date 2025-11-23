@@ -50,9 +50,7 @@ except Exception:
     _arbiter_audit_logger = None
 
 
-async def audit_event(
-    event_type: str, details: Dict[str, Any], critical: bool = False, **kwargs
-):
+async def audit_event(event_type: str, details: Dict[str, Any], critical: bool = False, **kwargs):
     """
     Dispatch audit events to the best available logger.
     Resolution happens at call-time to honor test patches.
@@ -67,9 +65,7 @@ async def audit_event(
         pass
     if _arbiter_audit_logger:
         try:
-            await _arbiter_audit_logger.log_event(
-                event_type, details, critical=critical, **kwargs
-            )
+            await _arbiter_audit_logger.log_event(event_type, details, critical=critical, **kwargs)
             return
         except Exception:
             pass
@@ -173,11 +169,7 @@ except ImportError:
     aiofiles = type(
         "aiofiles",
         (),
-        {
-            "open": lambda path, mode="r", encoding="utf-8": StubAsyncFile(
-                path, mode, encoding
-            )
-        },
+        {"open": lambda path, mode="r", encoding="utf-8": StubAsyncFile(path, mode, encoding)},
     )
 
 try:
@@ -199,8 +191,10 @@ except ImportError:
 
     def stop_after_attempt(x):
         return None
+
     def wait_exponential(*args, **kwargs):
         return None
+
 
 try:
     from cryptography.fernet import Fernet
@@ -255,40 +249,28 @@ class ComplianceConfig:
     frameworks: List[ComplianceFramework] = field(
         default_factory=lambda: [ComplianceFramework.GDPR]
     )
-    max_file_size: int = int(
-        os.environ.get("COMPLIANCE_MAX_FILE_SIZE", 10 * 1024 * 1024)
-    )
+    max_file_size: int = int(os.environ.get("COMPLIANCE_MAX_FILE_SIZE", 10 * 1024 * 1024))
     batch_size: int = int(os.environ.get("COMPLIANCE_BATCH_SIZE", 100))
     file_extensions: List[str] = field(
         default_factory=lambda: [".py", ".js", ".ts", ".java", ".go"]
     )
     alert_callback: Optional[Callable[[str], None]] = None
-    max_workers: int = int(
-        os.environ.get("COMPLIANCE_MAX_WORKERS", os.cpu_count() or 1)
-    )
+    max_workers: int = int(os.environ.get("COMPLIANCE_MAX_WORKERS", os.cpu_count() or 1))
     timeout_per_file: float = float(os.environ.get("COMPLIANCE_FILE_TIMEOUT", 5.0))
     timeout_per_rule: float = float(os.environ.get("COMPLIANCE_RULE_TIMEOUT", 1.0))
     encryption_key: Optional[str] = os.environ.get("COMPLIANCE_ENCRYPTION_KEY", None)
-    user_id: str = field(
-        default_factory=lambda: os.environ.get("COMPLIANCE_USER_ID", "unknown")
-    )
+    user_id: str = field(default_factory=lambda: os.environ.get("COMPLIANCE_USER_ID", "unknown"))
     custom_framework_config: Optional[Path] = None
 
     def __post_init__(self):
         """Validate configuration with security checks."""
         self.project_root = Path(os.path.realpath(self.project_root)).resolve()
         if not self.project_root.exists() or not self.project_root.is_dir():
-            raise ValueError(
-                f"Project root {self.project_root} is not a valid directory."
-            )
+            raise ValueError(f"Project root {self.project_root} is not a valid directory.")
         if self.batch_size <= 0:
-            raise ValueError(
-                f"Invalid batch_size: {self.batch_size}. Must be positive."
-            )
+            raise ValueError(f"Invalid batch_size: {self.batch_size}. Must be positive.")
         if self.max_workers <= 0:
-            raise ValueError(
-                f"Invalid max_workers: {self.max_workers}. Must be positive."
-            )
+            raise ValueError(f"Invalid max_workers: {self.max_workers}. Must be positive.")
         if self.timeout_per_file <= 0:
             raise ValueError(
                 f"Invalid timeout_per_file: {self.timeout_per_file}. Must be positive."
@@ -461,20 +443,16 @@ class GDPRDataProtectionRule(ComplianceRule):
                     encrypted = False
                     code_snippet = matched_snippet
 
-                    if (
-                        config.encryption_key
-                        and CRYPTOGRAPHY_AVAILABLE
-                        and Fernet is not None
-                    ):
+                    if config.encryption_key and CRYPTOGRAPHY_AVAILABLE and Fernet is not None:
                         try:
                             f = Fernet(
                                 config.encryption_key.encode()
                                 if isinstance(config.encryption_key, str)
                                 else config.encryption_key
                             )
-                            code_snippet = f.encrypt(
-                                matched_snippet.encode("utf-8")
-                            ).decode("utf-8", errors="ignore")
+                            code_snippet = f.encrypt(matched_snippet.encode("utf-8")).decode(
+                                "utf-8", errors="ignore"
+                            )
                             encrypted = True
                         except Exception:
                             encrypted = False
@@ -507,9 +485,7 @@ class GDPRDataProtectionRule(ComplianceRule):
         self, file_path: Path, content: str, config: ComplianceConfig
     ) -> List[ComplianceIssue]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, self._sync_check, file_path, content, config
-        )
+        return await loop.run_in_executor(None, self._sync_check, file_path, content, config)
 
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -537,9 +513,7 @@ class _BuiltinGDPRRule(ComplianceRule):
                         if isinstance(config.encryption_key, str)
                         else config.encryption_key
                     )
-                    snippet = f.encrypt(snippet.encode("utf-8")).decode(
-                        "utf-8", errors="ignore"
-                    )
+                    snippet = f.encrypt(snippet.encode("utf-8")).decode("utf-8", errors="ignore")
                     encrypted = True
                 except Exception:
                     encrypted = False
@@ -642,9 +616,7 @@ class CustomComplianceRule(ComplianceRule):
         self, file_path: Path, content: str, config: ComplianceConfig
     ) -> List[ComplianceIssue]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, self._sync_check, file_path, content, config
-        )
+        return await loop.run_in_executor(None, self._sync_check, file_path, content, config)
 
 
 class ComplianceRuleRegistry:
@@ -682,10 +654,7 @@ class ComplianceRuleRegistry:
             for entry_point in entry_points:
                 try:
                     rule_cls = entry_point.load()
-                    if (
-                        issubclass(rule_cls, ComplianceRule)
-                        and rule_cls != ComplianceRule
-                    ):
+                    if issubclass(rule_cls, ComplianceRule) and rule_cls != ComplianceRule:
                         await self.register_rule(rule_cls())
                 except Exception as e:
                     logger.error(
@@ -695,9 +664,7 @@ class ComplianceRuleRegistry:
                         }
                     )
         except Exception as e:
-            logger.warning(
-                {"message": "Entry point discovery failed", "error": repr(e)}
-            )
+            logger.warning({"message": "Entry point discovery failed", "error": repr(e)})
         await self.register_rule(GDPRDataProtectionRule())
         await self.register_rule(_BuiltinGDPRRule())
 
@@ -708,9 +675,7 @@ class ComplianceRuleRegistry:
                 self.rules[framework] = []
             self.rules[framework].append(rule)
             logger.info(
-                {
-                    "message": f"Registered rule for {framework.value}: {rule.__class__.__name__}"
-                }
+                {"message": f"Registered rule for {framework.value}: {rule.__class__.__name__}"}
             )
 
     async def get_rules(self, framework: ComplianceFramework) -> List[ComplianceRule]:
@@ -781,11 +746,7 @@ async def generate_report_async(
             span.set_attribute("user_id", user_id)
             span.set_attribute("frameworks", [f.value for f in config.frameworks])
 
-        logger.info(
-            {
-                "message": f"Starting compliance check for {project_root} by user {user_id}"
-            }
-        )
+        logger.info({"message": f"Starting compliance check for {project_root} by user {user_id}"})
         await audit_event(
             "compliance_check_started",
             {"project_root": str(project_root), "user_id": user_id},
@@ -796,9 +757,7 @@ async def generate_report_async(
             for f in config.project_root.rglob("*")
             if f.is_file() and f.suffix in config.file_extensions
         ]
-        batch_size = min(
-            config.batch_size, max(1, len(files) // config.max_workers + 1)
-        )
+        batch_size = min(config.batch_size, max(1, len(files) // config.max_workers + 1))
         batches = [files[i : i + batch_size] for i in range(0, len(files), batch_size)]
 
         with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
@@ -915,15 +874,11 @@ async def generate_report_async(
         )
 
 
-async def generate_report(
-    project_root: str, user_id: str, custom_config: Optional[str] = None
-):
+async def generate_report(project_root: str, user_id: str, custom_config: Optional[str] = None):
     """
     Async-friendly entry point used by code and tests.
     """
-    report = await generate_report_async(
-        project_root, user_id=user_id, custom_config=custom_config
-    )
+    report = await generate_report_async(project_root, user_id=user_id, custom_config=custom_config)
 
     issues_by_framework = {
         f.value: [issue for issue in report.issues if issue.framework.value == f.value]
@@ -941,16 +896,12 @@ async def generate_report(
     )
 
 
-def generate_report_sync(
-    project_root: str, *, user_id: str, custom_config: Optional[str] = None
-):
+def generate_report_sync(project_root: str, *, user_id: str, custom_config: Optional[str] = None):
     """
     Synchronous wrapper for CLI scripts.
     """
     return asyncio.run(
-        generate_report_async(
-            project_root, user_id=user_id, custom_config=custom_config
-        )
+        generate_report_async(project_root, user_id=user_id, custom_config=custom_config)
     )
 
 
@@ -1032,9 +983,7 @@ async def _process_file(
         if file_hash in file_cache:
             content = file_cache[file_hash]
         else:
-            async with aiofiles.open(
-                file_path, "r", encoding="utf-8", errors="ignore"
-            ) as f:
+            async with aiofiles.open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = await f.read()
             file_cache[file_hash] = content
     except Exception as e:
@@ -1072,9 +1021,7 @@ async def _process_file(
                 rules = await RULE_REGISTRY.get_rules(framework)
                 for rule in rules:
                     tasks.append(
-                        _run_rule_check(
-                            rule, file_path, content, framework, config, executor
-                        )
+                        _run_rule_check(rule, file_path, content, framework, config, executor)
                     )
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1111,14 +1058,10 @@ async def _process_file(
                         error_type="rule_error", framework="unknown"
                     ).inc()
         except Exception as e:
-            logger.error(
-                {"message": f"Failed to process {file_path}", "error": repr(e)}
-            )
+            logger.error({"message": f"Failed to process {file_path}", "error": repr(e)})
             if span:
                 span.record_exception(e)
-            compliance_file_errors.labels(
-                error_type="task_group_error", framework="unknown"
-            ).inc()
+            compliance_file_errors.labels(error_type="task_group_error", framework="unknown").inc()
             await audit_event(
                 "compliance_file_error",
                 {"file": str(file_path), "error": repr(e), "user_id": config.user_id},
@@ -1160,22 +1103,16 @@ async def _run_rule_check(
                 timeout=config.timeout_per_rule,
             )
             (
-                compliance_checks_total.labels(
-                    framework=framework.value, status="success"
-                ).inc()
+                compliance_checks_total.labels(framework=framework.value, status="success").inc()
                 if PROMETHEUS_AVAILABLE
                 else None
             )
             return issues
         except asyncio.TimeoutError:
             # FIX: Treat rule timeouts as non-compliant issues
-            logger.error(
-                {"message": f"Rule {rule.__class__.__name__} timed out on {file_path}"}
-            )
+            logger.error({"message": f"Rule {rule.__class__.__name__} timed out on {file_path}"})
             (
-                compliance_checks_total.labels(
-                    framework=framework.value, status="timeout"
-                ).inc()
+                compliance_checks_total.labels(framework=framework.value, status="timeout").inc()
                 if PROMETHEUS_AVAILABLE
                 else None
             )
@@ -1200,9 +1137,7 @@ async def _run_rule_check(
                 }
             )
             (
-                compliance_checks_total.labels(
-                    framework=framework.value, status="failure"
-                ).inc()
+                compliance_checks_total.labels(framework=framework.value, status="failure").inc()
                 if PROMETHEUS_AVAILABLE
                 else None
             )
@@ -1232,21 +1167,15 @@ if __name__ == "__main__":
                 (project_path / "gdpr_violation.py").write_text(
                     "def process_user_data(email, ssn):\n    print(f'User email is {email}')\n"
                 )
-                (project_path / "compliant_code.py").write_text(
-                    "def my_function():\n    pass\n"
-                )
+                (project_path / "compliant_code.py").write_text("def my_function():\n    pass\n")
 
             # Create a file that will fail to be read
             non_readable_file = project_path / "non_readable.txt"
-            non_readable_file.write_text(
-                "This file exists but will be made unreadable."
-            )
+            non_readable_file.write_text("This file exists but will be made unreadable.")
             os.chmod(non_readable_file, 0o000)
 
             # FIX: Call generate_report_async with Path object
-            report = await generate_report_async(
-                str(project_path), user_id="admin_user_123"
-            )
+            report = await generate_report_async(str(project_path), user_id="admin_user_123")
 
             reporter = HTMLReporter(project_root=os.getcwd())
             await reporter.generate_report(
@@ -1257,9 +1186,7 @@ if __name__ == "__main__":
             print("\n" + "=" * 50)
             print("Compliance Report")
             print("=" * 50)
-            print(
-                f"Overall Compliance: {'✅ OK' if report.is_compliant else '❌ Non-compliant'}"
-            )
+            print(f"Overall Compliance: {'✅ OK' if report.is_compliant else '❌ Non-compliant'}")
             print(f"Total Issues Found: {report.total_issues}")
             print(f"Timestamp: {report.timestamp.isoformat()}")
             print(f"User ID: {report.user_id}")

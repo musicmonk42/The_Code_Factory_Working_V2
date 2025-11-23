@@ -336,9 +336,7 @@ def _enforce_prod_requirements():
 
     # Check for library versions to mitigate known CVEs
     if aioredis and hasattr(aioredis, "__version__") and aioredis.__version__ < "2.0.1":
-        logging.critical(
-            "CRITICAL: aioredis version is vulnerable. Upgrade to >= 2.0.1. Exiting."
-        )
+        logging.critical("CRITICAL: aioredis version is vulnerable. Upgrade to >= 2.0.1. Exiting.")
         sys.exit(1)
     if nats and hasattr(nats, "__version__") and nats.__version__ < "2.8.0":
         logging.critical(
@@ -346,16 +344,10 @@ def _enforce_prod_requirements():
         )
         sys.exit(1)
     if aio_pika and hasattr(aio_pika, "__version__") and aio_pika.__version__ < "9.4.3":
-        logging.critical(
-            "CRITICAL: aio-pika <9.4.3 vulnerable to smuggling. Upgrade. Exiting."
-        )
+        logging.critical("CRITICAL: aio-pika <9.4.3 vulnerable to smuggling. Upgrade. Exiting.")
         sys.exit(1)
     # Hypothetical checks for other libraries
-    if (
-        aiobotocore
-        and hasattr(aiobotocore, "__version__")
-        and aiobotocore.__version__ < "2.5.0"
-    ):
+    if aiobotocore and hasattr(aiobotocore, "__version__") and aiobotocore.__version__ < "2.5.0":
         logging.warning(
             "WARNING: aiobotocore version may be vulnerable to aiohttp-related smuggling. Upgrade to >= 2.5.0."
         )
@@ -451,15 +443,11 @@ class MeshPubSub:
     ):
         self.backend_url = backend_url or os.getenv("MESH_BACKEND_URL")
         if not self.backend_url:
-            raise ValueError(
-                "Backend URL must be provided or set via MESH_BACKEND_URL."
-            )
+            raise ValueError("Backend URL must be provided or set via MESH_BACKEND_URL.")
 
         parsed_url = urlparse(self.backend_url)
         if PROD_MODE and parsed_url.hostname in ["localhost", "127.0.0.1"]:
-            logger.critical(
-                "CRITICAL: Insecure localhost backend URL not allowed in production."
-            )
+            logger.critical("CRITICAL: Insecure localhost backend URL not allowed in production.")
             sys.exit(1)
 
         self.backend_type = self.detect_backend(self.backend_url)
@@ -468,9 +456,7 @@ class MeshPubSub:
         self._consumer = None
         self.event_schema = event_schema
         self.log_payloads = log_payloads
-        self.dead_letter_path = dead_letter_path or os.getenv(
-            "MESH_DLQ_PATH", "mesh_dlq.jsonl"
-        )
+        self.dead_letter_path = dead_letter_path or os.getenv("MESH_DLQ_PATH", "mesh_dlq.jsonl")
         self._dlq_lock = asyncio.Lock()
         self._closed = False
         self._auto_replay_dlq = auto_replay_dlq
@@ -542,9 +528,9 @@ class MeshPubSub:
     def _prepare_payload(self, message: Any) -> bytes:
         payload = json.dumps(message).encode("utf-8")
         signature = self._sign_payload(payload)
-        signed_payload = json.dumps(
-            {"sig": signature, "data": payload.decode("utf-8")}
-        ).encode("utf-8")
+        signed_payload = json.dumps({"sig": signature, "data": payload.decode("utf-8")}).encode(
+            "utf-8"
+        )
 
         if self.multi_fernet:
             return self.multi_fernet.encrypt(signed_payload)
@@ -580,9 +566,7 @@ class MeshPubSub:
                     if not redis:
                         raise ImportError("redis not installed")
                     if PROD_MODE and not self.backend_url.startswith("rediss://"):
-                        raise RuntimeError(
-                            "Redis URL must use SSL (rediss://) in production."
-                        )
+                        raise RuntimeError("Redis URL must use SSL (rediss://) in production.")
                     # Use the modern redis.asyncio API (v5.0+)
                     # SSL is handled automatically based on the URL scheme
                     self._client = await redis.from_url(
@@ -601,9 +585,7 @@ class MeshPubSub:
                     bootstrap_servers = parsed_url.netloc
                     security_protocol = "SASL_SSL" if PROD_MODE else "PLAINTEXT"
                     if PROD_MODE and (not KAFKA_USER or not KAFKA_PASSWORD):
-                        raise RuntimeError(
-                            "KAFKA_USER and KAFKA_PASSWORD required in production."
-                        )
+                        raise RuntimeError("KAFKA_USER and KAFKA_PASSWORD required in production.")
                     self._producer = AIOKafkaProducer(
                         bootstrap_servers=bootstrap_servers,
                         sasl_mechanism="PLAIN",
@@ -629,12 +611,8 @@ class MeshPubSub:
                     if not aiobotocore:
                         raise ImportError("aiobotocore not installed")
                     session = aiobotocore.get_session()
-                    self._aws_sqs_client = session.create_client(
-                        "sqs", use_ssl=PROD_MODE
-                    )
-                    self._aws_sns_client = session.create_client(
-                        "sns", use_ssl=PROD_MODE
-                    )
+                    self._aws_sqs_client = session.create_client("sqs", use_ssl=PROD_MODE)
+                    self._aws_sns_client = session.create_client("sns", use_ssl=PROD_MODE)
                 elif self.backend_type == "gcs":
                     if not storage or not pubsub_v1:
                         raise ImportError(
@@ -647,21 +625,15 @@ class MeshPubSub:
                     if not ServiceBusClient:
                         raise ImportError("azure-servicebus not installed")
                     if not self.azure_connection_string:
-                        raise ValueError(
-                            "AZURE_STORAGE_CONNECTION_STRING must be configured."
-                        )
-                    self._azure_servicebus_client = (
-                        ServiceBusClient.from_connection_string(
-                            self.azure_connection_string
-                        )
+                        raise ValueError("AZURE_STORAGE_CONNECTION_STRING must be configured.")
+                    self._azure_servicebus_client = ServiceBusClient.from_connection_string(
+                        self.azure_connection_string
                     )
                 elif self.backend_type == "etcd":
                     if not etcd3:
                         raise ImportError("etcd3 not installed")
                     if PROD_MODE and (not self.etcd_user or not self.etcd_password):
-                        raise RuntimeError(
-                            "ETCD_USER and ETCD_PASSWORD required in production."
-                        )
+                        raise RuntimeError("ETCD_USER and ETCD_PASSWORD required in production.")
                     self._etcd_client = etcd3.client(
                         host=self.etcd_host,
                         port=self.etcd_port,
@@ -670,9 +642,7 @@ class MeshPubSub:
                         password=self.etcd_password,
                     )
                 else:
-                    raise NotImplementedError(
-                        f"Backend '{self.backend_type}' not implemented."
-                    )
+                    raise NotImplementedError(f"Backend '{self.backend_type}' not implemented.")
 
                 await self.healthcheck()
                 logger.info(
@@ -682,9 +652,7 @@ class MeshPubSub:
                     tenant=TENANT,
                 )
                 if CONNECT_STATUS:
-                    CONNECT_STATUS.labels(
-                        backend=self.backend_type, env=ENV, tenant=TENANT
-                    ).set(1)
+                    CONNECT_STATUS.labels(backend=self.backend_type, env=ENV, tenant=TENANT).set(1)
                 if CONNECT_LATENCY:
                     CONNECT_LATENCY.labels(
                         backend=self.backend_type, env=ENV, tenant=TENANT
@@ -693,9 +661,7 @@ class MeshPubSub:
                     await self.replay_dlq()
             except Exception as e:
                 if CONNECT_STATUS:
-                    CONNECT_STATUS.labels(
-                        backend=self.backend_type, env=ENV, tenant=TENANT
-                    ).set(0)
+                    CONNECT_STATUS.labels(backend=self.backend_type, env=ENV, tenant=TENANT).set(0)
                 if CONNECT_LATENCY:
                     CONNECT_LATENCY.labels(
                         backend=self.backend_type, env=ENV, tenant=TENANT
@@ -723,9 +689,7 @@ class MeshPubSub:
 
     async def _write_to_dlq(self, payload: dict, native: bool = False):
         with get_tracing_context()("mesh_dlq_write") as span:
-            span.set_attribute(
-                "dlq.path", self.dead_letter_path if not native else "native"
-            )
+            span.set_attribute("dlq.path", self.dead_letter_path if not native else "native")
             span.set_attribute("reason", payload.get("exc"))
 
             try:
@@ -736,9 +700,7 @@ class MeshPubSub:
                         payload_to_write = self._scrub_payload(payload)
                         if self.multi_fernet:
                             payload_str = json.dumps(payload_to_write)
-                            encrypted = self.multi_fernet.encrypt(
-                                payload_str.encode()
-                            ).decode()
+                            encrypted = self.multi_fernet.encrypt(payload_str.encode()).decode()
                             payload_to_write = {
                                 "encrypted": encrypted,
                                 "sig": self._sign_payload(payload_str.encode()),
@@ -754,9 +716,7 @@ class MeshPubSub:
                         else:
                             if not os.path.exists(self.dead_letter_path):
                                 if aiofiles:
-                                    async with aiofiles.open(
-                                        self.dead_letter_path, "a"
-                                    ):
+                                    async with aiofiles.open(self.dead_letter_path, "a"):
                                         pass
                                 else:
                                     with open(self.dead_letter_path, "a"):
@@ -775,9 +735,7 @@ class MeshPubSub:
                                     sys.exit(1)
 
                             if aiofiles:
-                                async with aiofiles.open(
-                                    self.dead_letter_path, "a"
-                                ) as f:
+                                async with aiofiles.open(self.dead_letter_path, "a") as f:
                                     await f.write(json.dumps(payload_to_write) + "\n")
                             else:
                                 with open(self.dead_letter_path, "a") as f:
@@ -804,9 +762,7 @@ class MeshPubSub:
         if self.backend_type == "kafka":
             dlq_topic = f"{payload['channel']}_dlq"
             try:
-                await self._producer.send_and_wait(
-                    dlq_topic, json.dumps(payload).encode("utf-8")
-                )
+                await self._producer.send_and_wait(dlq_topic, json.dumps(payload).encode("utf-8"))
             except Exception as e:
                 logger.error(
                     "Failed to send to native Kafka DLQ. Falling back to file DLQ.",
@@ -846,9 +802,7 @@ class MeshPubSub:
         elif self.backend_type == "aws":
             try:
                 dlq_queue_name = f"{payload['channel']}_dlq"
-                resp = await self._aws_sqs_client.get_queue_url(
-                    QueueName=dlq_queue_name
-                )
+                resp = await self._aws_sqs_client.get_queue_url(QueueName=dlq_queue_name)
                 dlq_url = resp["QueueUrl"]
                 await self._aws_sqs_client.send_message(
                     QueueUrl=dlq_url, MessageBody=json.dumps(payload)
@@ -873,9 +827,7 @@ class MeshPubSub:
                 )
                 await self._write_to_dlq(payload, native=False)
         else:
-            logger.warning(
-                "Native DLQ not supported. Using file DLQ.", backend=self.backend_type
-            )
+            logger.warning("Native DLQ not supported. Using file DLQ.", backend=self.backend_type)
             await self._write_to_dlq(payload, native=False)
 
     async def publish(self, channel: str, message: Any):
@@ -891,9 +843,7 @@ class MeshPubSub:
                     try:
                         self.event_schema(message)
                     except Exception as ve:
-                        logger.error(
-                            "Schema validation failed.", channel=channel, error=str(ve)
-                        )
+                        logger.error("Schema validation failed.", channel=channel, error=str(ve))
                         await self._write_to_dlq(
                             {
                                 "channel": channel,
@@ -932,31 +882,23 @@ class MeshPubSub:
                     await self._producer.send_and_wait(channel, data_bytes, key=key)
                 elif self.backend_type == "rabbitmq":
                     msg = aio_pika.Message(body=data_bytes)
-                    await self._rabbitmq_channel.default_exchange.publish(
-                        msg, routing_key=channel
-                    )
+                    await self._rabbitmq_channel.default_exchange.publish(msg, routing_key=channel)
                 elif self.backend_type == "aws":
                     if channel.startswith("arn:aws:sns:"):
                         await self._aws_sns_client.publish(
                             TopicArn=channel, Message=data_bytes.decode()
                         )
                     else:
-                        resp = await self._aws_sqs_client.get_queue_url(
-                            QueueName=channel
-                        )
+                        resp = await self._aws_sqs_client.get_queue_url(QueueName=channel)
                         q_url = resp["QueueUrl"]
                         await self._aws_sqs_client.send_message(
                             QueueUrl=q_url, MessageBody=data_bytes.decode()
                         )
                 elif self.backend_type == "gcs":
-                    topic_path = self._gcs_pubsub_publisher.topic_path(
-                        self.gcs_project_id, channel
-                    )
+                    topic_path = self._gcs_pubsub_publisher.topic_path(self.gcs_project_id, channel)
                     await self._loop.run_in_executor(
                         None,
-                        lambda: self._gcs_pubsub_publisher.publish(
-                            topic_path, data_bytes
-                        ).result(),
+                        lambda: self._gcs_pubsub_publisher.publish(topic_path, data_bytes).result(),
                     )
                 elif self.backend_type == "azure":
                     async with self._azure_servicebus_client.get_topic_sender(
@@ -986,9 +928,7 @@ class MeshPubSub:
         try:
             if CircuitBreaker and circuit_breakers.get(self.backend_type, None):
                 if hasattr(circuit_breakers[self.backend_type].breaker, "call_async"):
-                    await circuit_breakers[self.backend_type].breaker.call_async(
-                        _do_publish
-                    )
+                    await circuit_breakers[self.backend_type].breaker.call_async(_do_publish)
                 else:
                     await _do_publish()
             else:
@@ -1118,9 +1058,7 @@ class MeshPubSub:
                 try:
                     async for msg in self._consumer:
                         async with semaphore:
-                            delivery_count = (
-                                int(msg.headers.get("delivery_count", "0")) + 1
-                            )
+                            delivery_count = int(msg.headers.get("delivery_count", "0")) + 1
                             if delivery_count > self.MAX_REDELIVERIES:
                                 logger.warning(
                                     "Message exceeded max redeliveries.",
@@ -1136,9 +1074,7 @@ class MeshPubSub:
                                     },
                                     native=self.use_native_dlq,
                                 )
-                                await self._consumer.commit(
-                                    {msg.partition: msg.offset + 1}
-                                )
+                                await self._consumer.commit({msg.partition: msg.offset + 1})
                                 continue
 
                             try:
@@ -1153,9 +1089,7 @@ class MeshPubSub:
                                         env=ENV,
                                         tenant=TENANT,
                                     ).inc()
-                                await self._consumer.commit(
-                                    {msg.partition: msg.offset + 1}
-                                )
+                                await self._consumer.commit({msg.partition: msg.offset + 1})
                             except Exception as e:
                                 logger.error(
                                     "Failed to process Kafka message.",
@@ -1193,9 +1127,7 @@ class MeshPubSub:
                     async for message in queue_iter:
                         async with semaphore:
                             try:
-                                decoded_msg = self._process_incoming_payload(
-                                    message.body
-                                )
+                                decoded_msg = self._process_incoming_payload(message.body)
                                 if self.event_schema:
                                     self.event_schema(decoded_msg)
                                 yield decoded_msg
@@ -1241,9 +1173,7 @@ class MeshPubSub:
                     for msg in resp.get("Messages", []):
                         async with semaphore:
                             delivery_count = int(
-                                msg.get("Attributes", {}).get(
-                                    "ApproximateReceiveCount", 0
-                                )
+                                msg.get("Attributes", {}).get("ApproximateReceiveCount", 0)
                             )
                             if delivery_count > self.MAX_REDELIVERIES:
                                 logger.warning(
@@ -1263,9 +1193,7 @@ class MeshPubSub:
                                 continue
 
                             try:
-                                decoded_msg = self._process_incoming_payload(
-                                    msg["Body"].encode()
-                                )
+                                decoded_msg = self._process_incoming_payload(msg["Body"].encode())
                                 if self.event_schema:
                                     self.event_schema(decoded_msg)
                                 yield decoded_msg
@@ -1356,9 +1284,7 @@ class MeshPubSub:
                     async for msg in receiver:
                         async with semaphore:
                             try:
-                                decoded_msg = self._process_incoming_payload(
-                                    str(msg).encode()
-                                )
+                                decoded_msg = self._process_incoming_payload(str(msg).encode())
                                 if self.event_schema:
                                     self.event_schema(decoded_msg)
                                 yield decoded_msg
@@ -1404,9 +1330,7 @@ class MeshPubSub:
 
                 self._etcd_watch_cancel, _ = await self._loop.run_in_executor(
                     None,
-                    lambda: self._etcd_client.watch_prefix(
-                        etcd_prefix, _watch_callback
-                    ),
+                    lambda: self._etcd_client.watch_prefix(etcd_prefix, _watch_callback),
                 )
 
                 while True:
@@ -1480,9 +1404,7 @@ class MeshPubSub:
                                 rec["encrypted"].encode()
                             ).decode()
                             if rec["sig"] != self._sign_payload(payload_str.encode()):
-                                raise InvalidToken(
-                                    "HMAC signature mismatch on DLQ event."
-                                )
+                                raise InvalidToken("HMAC signature mismatch on DLQ event.")
                             rec = json.loads(payload_str)
                         await self.publish(rec.get("channel"), rec.get("message"))
                         if DLQ_REPLAY_COUNT:
@@ -1583,9 +1505,7 @@ class MeshPubSub:
             elif self.backend_type == "azure":
                 pass
             elif self.backend_type == "etcd":
-                await self._loop.run_in_executor(
-                    None, lambda: self._etcd_client.status()
-                )
+                await self._loop.run_in_executor(None, lambda: self._etcd_client.status())
             else:
                 raise NotImplementedError
 
@@ -1595,26 +1515,20 @@ class MeshPubSub:
                 "latency": time.time() - start_time,
             }
             if CONNECT_STATUS:
-                CONNECT_STATUS.labels(
-                    backend=self.backend_type, env=ENV, tenant=TENANT
-                ).set(1)
+                CONNECT_STATUS.labels(backend=self.backend_type, env=ENV, tenant=TENANT).set(1)
             if CONNECT_LATENCY:
-                CONNECT_LATENCY.labels(
-                    backend=self.backend_type, env=ENV, tenant=TENANT
-                ).observe(time.time() - start_time)
+                CONNECT_LATENCY.labels(backend=self.backend_type, env=ENV, tenant=TENANT).observe(
+                    time.time() - start_time
+                )
             return status
         except Exception as e:
             if CONNECT_STATUS:
-                CONNECT_STATUS.labels(
-                    backend=self.backend_type, env=ENV, tenant=TENANT
-                ).set(0)
+                CONNECT_STATUS.labels(backend=self.backend_type, env=ENV, tenant=TENANT).set(0)
             if CONNECT_LATENCY:
-                CONNECT_LATENCY.labels(
-                    backend=self.backend_type, env=ENV, tenant=TENANT
-                ).observe(time.time() - start_time)
-            logger.critical(
-                "Healthcheck failed.", backend=self.backend_type, error=str(e)
-            )
+                CONNECT_LATENCY.labels(backend=self.backend_type, env=ENV, tenant=TENANT).observe(
+                    time.time() - start_time
+                )
+            logger.critical("Healthcheck failed.", backend=self.backend_type, error=str(e))
             raise ConnectionError(f"Healthcheck failed for {self.backend_type}: {e}")
 
 
@@ -1730,15 +1644,11 @@ if __name__ == "__main__":
 
                 @property
                 def body(self):
-                    return json.dumps(
-                        {"sig": "", "data": json.dumps({"test": "data"})}
-                    ).encode()
+                    return json.dumps({"sig": "", "data": json.dumps({"test": "data"})}).encode()
 
                 @property
                 def value(self):
-                    return json.dumps(
-                        {"sig": "", "data": json.dumps({"test": "data"})}
-                    ).encode()
+                    return json.dumps({"sig": "", "data": json.dumps({"test": "data"})}).encode()
 
                 @property
                 def headers(self):

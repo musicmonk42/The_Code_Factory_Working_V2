@@ -22,9 +22,7 @@ sys.modules["runner.summarize_utils"] = MagicMock()
 
 # --- FIX: Correctly mock runner.runner_errors so LLMError is a TYPE ---
 mock_runner_errors = type(sys)("runner.runner_errors")
-mock_runner_errors.LLMError = type(
-    "LLMError", (Exception,), {}
-)  # Create a mock Exception class
+mock_runner_errors.LLMError = type("LLMError", (Exception,), {})  # Create a mock Exception class
 sys.modules["runner.runner_errors"] = mock_runner_errors
 # --- End Fix ---
 
@@ -169,9 +167,7 @@ def agent(temp_repo):
     # real agent.generate_documentation method.
     with patch("agents.docgen_agent.DocGenPromptAgent") as MockPromptAgent, patch(
         "agents.docgen_agent.ResponseValidator"
-    ) as MockValidator, patch(
-        "agents.docgen_agent.tiktoken.get_encoding"
-    ) as mock_tiktoken, patch(
+    ) as MockValidator, patch("agents.docgen_agent.tiktoken.get_encoding") as mock_tiktoken, patch(
         "agents.docgen_agent.SphinxDocGenerator"
     ) as MockSphinxGen, patch(
         "agents.docgen_agent.BatchProcessor"
@@ -181,9 +177,7 @@ def agent(temp_repo):
         "agents.docgen_agent.docgen_agent.call_ensemble_api", new_callable=AsyncMock
     ):
 
-        MockPromptAgent.return_value.get_doc_prompt = AsyncMock(
-            return_value="Mocked Prompt"
-        )
+        MockPromptAgent.return_value.get_doc_prompt = AsyncMock(return_value="Mocked Prompt")
         MockValidator.return_value.process_and_validate_response = AsyncMock(
             return_value={
                 "overall_status": "success",
@@ -225,8 +219,8 @@ class TestPIIScrubbing:
         mock_presidio_instances["analyzer_instance"].analyze.return_value = [
             RecognizerResult(entity_type="EMAIL_ADDRESS", start=12, end=29, score=0.9)
         ]
-        mock_presidio_instances["anonymizer_instance"].anonymize.return_value = (
-            MagicMock(text="My email is [REDACTED]")
+        mock_presidio_instances["anonymizer_instance"].anonymize.return_value = MagicMock(
+            text="My email is [REDACTED]"
         )
 
         result = scrub_text(text_with_pii)
@@ -324,9 +318,7 @@ class TestCompliancePlugins:
         """Test that registering an invalid plugin raises TypeError."""
         registry = PluginRegistry()
 
-        with pytest.raises(
-            TypeError, match="Plugin must be an instance of CompliancePlugin"
-        ):
+        with pytest.raises(TypeError, match="Plugin must be an instance of CompliancePlugin"):
             registry.register("not a plugin")
 
 
@@ -509,10 +501,7 @@ class TestDocGenAgent:
 
         complete_chunk = chunks[-1]
         assert complete_chunk["stage"] == "complete"
-        assert (
-            complete_chunk["result"]["documentation"]["content"]
-            == "Mocked Validated Docs"
-        )
+        assert complete_chunk["result"]["documentation"]["content"] == "Mocked Validated Docs"
 
     @pytest.mark.asyncio
     async def test_generate_with_human_approval_rejected(self, agent, mock_llm_calls):
@@ -542,9 +531,7 @@ class TestDocGenAgent:
 class TestErrorHandling:
 
     @pytest.mark.asyncio
-    async def test_llm_error_retry(
-        self, temp_repo, mock_llm_calls
-    ):  # *** FIX: Use temp_repo ***
+    async def test_llm_error_retry(self, temp_repo, mock_llm_calls):  # *** FIX: Use temp_repo ***
         """Test that LLM errors trigger retries."""
 
         call_count = 0
@@ -630,9 +617,7 @@ class TestUtilityFunctions:
         # *** FIX: Correct patch path ***
         with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
-            mock_agent_instance.generate_documentation_batch = AsyncMock(
-                return_value=[mock_result]
-            )
+            mock_agent_instance.generate_documentation_batch = AsyncMock(return_value=[mock_result])
             MockAgent.return_value = mock_agent_instance
 
             result = await generate(
@@ -652,9 +637,7 @@ class TestUtilityFunctions:
         # *** FIX: Correct patch path ***
         with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
-            mock_agent_instance.generate_documentation = AsyncMock(
-                return_value=mock_result
-            )
+            mock_agent_instance.generate_documentation = AsyncMock(return_value=mock_result)
             MockAgent.return_value = mock_agent_instance
 
             result = await generate(
@@ -666,9 +649,7 @@ class TestUtilityFunctions:
             mock_agent_instance.generate_documentation.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_generate_plugin_entry_point_streaming(
-        self, temp_repo, mock_llm_calls
-    ):
+    async def test_generate_plugin_entry_point_streaming(self, temp_repo, mock_llm_calls):
         """Test the generate() plugin entry point for streaming mode."""
 
         async def mock_stream_gen():
@@ -679,9 +660,7 @@ class TestUtilityFunctions:
         with patch("agents.docgen_agent.docgen_agent.DocGenAgent") as MockAgent:
             mock_agent_instance = MagicMock()
             # *** FIX: Use AsyncMock for the async method ***
-            mock_agent_instance.generate_documentation = AsyncMock(
-                return_value=mock_stream_gen()
-            )
+            mock_agent_instance.generate_documentation = AsyncMock(return_value=mock_stream_gen())
             MockAgent.return_value = mock_agent_instance
 
             result = await generate(
@@ -701,9 +680,7 @@ class TestUtilityFunctions:
     async def test_generate_plugin_entry_point_missing_target_files(self, temp_repo):
         """Test that generate() raises error when target_files is missing in single mode."""
 
-        with pytest.raises(
-            ValueError, match="target_files must be provided for single mode"
-        ):
+        with pytest.raises(ValueError, match="target_files must be provided for single mode"):
             await generate(repo_path=str(temp_repo))
 
 
@@ -831,13 +808,9 @@ class TestIntegration:
                 return f"Mock Template for {doc_type}. File: {target_files[0]}"
 
             # Patch the prompt agent *inside* the docgen_agent module
-            with patch(
-                "agents.docgen_agent.docgen_agent.DocGenPromptAgent"
-            ) as MockPromptAgent:
+            with patch("agents.docgen_agent.docgen_agent.DocGenPromptAgent") as MockPromptAgent:
                 # Configure the mock instance that will be created
-                MockPromptAgent.return_value.get_doc_prompt.side_effect = (
-                    mock_get_prompt
-                )
+                MockPromptAgent.return_value.get_doc_prompt.side_effect = mock_get_prompt
                 results = await agent.generate_documentation_batch(batch_requests)
 
             assert len(results) == 3

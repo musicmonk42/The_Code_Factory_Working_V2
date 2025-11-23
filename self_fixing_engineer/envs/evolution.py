@@ -119,9 +119,7 @@ class EvolutionConfig:
 class FitnessEvaluator:
     """Handles fitness evaluation with caching and sandboxing"""
 
-    def __init__(
-        self, config: EvolutionConfig, test_function: Optional[Callable] = None
-    ):
+    def __init__(self, config: EvolutionConfig, test_function: Optional[Callable] = None):
         self.config = config
         self.test_function = test_function
         self.evaluation_cache = {}
@@ -320,9 +318,7 @@ class FitnessEvaluator:
                     else:  # float
                         config[param_name] = (min_val + max_val) / 2.0
 
-                    logger.warning(
-                        f"Using default value for missing gene: {param_name}"
-                    )
+                    logger.warning(f"Using default value for missing gene: {param_name}")
                     gene_idx += 1
                     continue
 
@@ -430,9 +426,7 @@ class GeneticOptimizer:
         if not hasattr(creator, fitness_name):
             creator.create(fitness_name, base.Fitness, weights=(1.0,))
         if not hasattr(creator, individual_name):
-            creator.create(
-                individual_name, list, fitness=getattr(creator, fitness_name)
-            )
+            creator.create(individual_name, list, fitness=getattr(creator, fitness_name))
 
         self.fitness_class = getattr(creator, fitness_name)
         self.individual_class = getattr(creator, individual_name)
@@ -449,9 +443,7 @@ class GeneticOptimizer:
             self.toolbox.attr_float,
             n=self.config_space.gene_count,
         )
-        self.toolbox.register(
-            "population", tools.initRepeat, list, self.toolbox.individual
-        )
+        self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
 
         # Genetic operators with configured parameters
         self.toolbox.register("mate", tools.cxBlend, alpha=0.5)
@@ -581,10 +573,7 @@ class GeneticOptimizer:
 
             # Check for early stopping
             current_best = record["max"]
-            if (
-                abs(current_best - last_best)
-                < self.evolution_config.early_stopping_threshold
-            ):
+            if abs(current_best - last_best) < self.evolution_config.early_stopping_threshold:
                 plateau_counter += 1
                 if plateau_counter >= self.evolution_config.early_stopping_generations:
                     if verbose:
@@ -640,9 +629,7 @@ class GeneticOptimizer:
                 else None
             ),
             "generations": len(self.evolution_history),
-            "total_evaluations": (
-                self.evaluator.evaluation_count if self.evaluator else 0
-            ),
+            "total_evaluations": (self.evaluator.evaluation_count if self.evaluator else 0),
             "cache_size": len(self.evaluator.evaluation_cache) if self.evaluator else 0,
             "history": [dict(record) for record in self.evolution_history],
         }
@@ -831,9 +818,7 @@ if __name__ == "__main__":
 
     elif os.environ.get("SANDBOXED_EVOLUTION") == "1":
         # Run in sandboxed mode
-        logging.basicConfig(
-            level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-        )
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
         run_evolution_demonstration()
 
     else:
@@ -841,9 +826,7 @@ if __name__ == "__main__":
         env = os.environ.copy()
         env["SANDBOXED_EVOLUTION"] = "1"
 
-        print(
-            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Launching sandboxed evolution process..."
-        )
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Launching sandboxed evolution process...")
 
         try:
             proc = subprocess.Popen(

@@ -145,9 +145,7 @@ class Ingestor:
             _log_structured(logging.INFO, "Kafka producer for ingestion started.")
         elif self.kafka_producer and not self.kafka_producer.bootstrap_connected():
             await self.kafka_producer.start()
-            _log_structured(
-                logging.INFO, "Injected Kafka producer for ingestion started."
-            )
+            _log_structured(logging.INFO, "Injected Kafka producer for ingestion started.")
 
     async def shutdown(self):
         """Shuts down ingestion clients."""
@@ -164,13 +162,8 @@ class Ingestor:
                 data_line = record.model_dump_json()
 
                 if self.config.USE_KAFKA_INGESTION:
-                    if (
-                        not self.kafka_producer
-                        or not self.kafka_producer.bootstrap_connected()
-                    ):
-                        raise DataIngestionError(
-                            "Kafka producer not initialized or connected."
-                        )
+                    if not self.kafka_producer or not self.kafka_producer.bootstrap_connected():
+                        raise DataIngestionError("Kafka producer not initialized or connected.")
 
                     await self.kafka_producer.send_and_wait(
                         topic=self.config.KAFKA_TOPIC,
@@ -193,9 +186,7 @@ class Ingestor:
                             Key=s3_key,
                             Body=data_line.encode("utf-8"),
                         )
-                    _log_structured(
-                        logging.DEBUG, "Ingested learning record to S3.", s3_key=s3_key
-                    )
+                    _log_structured(logging.DEBUG, "Ingested learning record to S3.", s3_key=s3_key)
 
                 else:
                     async with aiofiles.open(self.config.DATA_LAKE_PATH, "a") as f:
@@ -214,9 +205,7 @@ class Ingestor:
                     exc_info=True,
                 )
                 ML_ORCHESTRATOR_ERRORS.inc()
-                raise DataIngestionError(
-                    f"Invalid learning record data: {e.errors()}"
-                ) from e
+                raise DataIngestionError(f"Invalid learning record data: {e.errors()}") from e
             except Exception as e:
                 _log_structured(
                     logging.ERROR,
@@ -319,24 +308,18 @@ class Trainer:
                     "new_prioritization_weights"
                 )
                 if new_prioritization_weights:
-                    success = (
-                        await self.agent_config_service.update_prioritization_weights(
-                            new_prioritization_weights, model_version.version
-                        )
+                    success = await self.agent_config_service.update_prioritization_weights(
+                        new_prioritization_weights, model_version.version
                     )
                     if not success:
-                        raise ModelDeploymentError(
-                            "Failed to update prioritization weights."
-                        )
+                        raise ModelDeploymentError("Failed to update prioritization weights.")
                     _log_structured(
                         logging.INFO,
                         "Prioritization weights updated.",
                         model_id=model_version.model_id,
                     )
 
-                new_policy_rules = model_version.evaluation_metrics.get(
-                    "new_policy_rules"
-                )
+                new_policy_rules = model_version.evaluation_metrics.get("new_policy_rules")
                 if new_policy_rules:
                     success = await self.agent_config_service.update_policy_rules(
                         new_policy_rules, model_version.version
@@ -378,9 +361,7 @@ class Trainer:
                     error=str(e),
                     exc_info=True,
                 )
-                raise ModelDeploymentError(
-                    f"Deployment failed for {model_version.model_id}"
-                ) from e
+                raise ModelDeploymentError(f"Deployment failed for {model_version.model_id}") from e
             finally:
                 ML_DEPLOYMENT_LATENCY.observe(time.monotonic() - start_time)
 
@@ -415,9 +396,7 @@ class Trainer:
                 status_result = {"status": "running"}
                 while status_result["status"] == "running":
                     await asyncio.sleep(5)
-                    status_result = (
-                        await self.ml_platform_client.get_training_job_status(job_id)
-                    )
+                    status_result = await self.ml_platform_client.get_training_job_status(job_id)
                     _log_structured(
                         logging.DEBUG,
                         "Polling training job status.",
@@ -447,9 +426,7 @@ class Trainer:
                 if await self._evaluate_model(model_version):
                     await self._deploy_model(model_version)
                     model_version.deployment_status = "deployed"
-                    model_version.deployment_timestamp = datetime.now(
-                        timezone.utc
-                    ).isoformat()
+                    model_version.deployment_timestamp = datetime.now(timezone.utc).isoformat()
                     return model_version
                 else:
                     model_version.deployment_status = "failed_evaluation"
@@ -494,9 +471,7 @@ class MetaLearningOrchestrator:
             self.config.AGENT_CONFIG_SERVICE_ENDPOINT
         )
         self.ingestor = Ingestor(self.config, kafka_producer=kafka_producer)
-        self.trainer = Trainer(
-            self.config, self.ml_platform_client, self.agent_config_service
-        )
+        self.trainer = Trainer(self.config, self.ml_platform_client, self.agent_config_service)
         self.audit_utils = AuditUtils(log_path=self.config.LOCAL_AUDIT_LOG_PATH)
 
         self.redis_client = redis_client
@@ -507,9 +482,7 @@ class MetaLearningOrchestrator:
         self._data_cleanup_task: Optional[asyncio.Task] = None
 
         self._new_records_count: int = 0
-        self._records_count_lock = (
-            asyncio.Lock()
-        )  # Protect _new_records_count from race conditions
+        self._records_count_lock = asyncio.Lock()  # Protect _new_records_count from race conditions
         self._current_active_model: Optional[ModelVersion] = None
 
         self._is_leader: bool = False
@@ -545,9 +518,7 @@ class MetaLearningOrchestrator:
                     error=str(e),
                     exc_info=True,
                 )
-                raise SystemExit(
-                    f"Startup failed: Cannot create directory {path}"
-                ) from e
+                raise SystemExit(f"Startup failed: Cannot create directory {path}") from e
         elif not os.access(path, os.W_OK):
             _log_structured(
                 logging.CRITICAL,
@@ -559,15 +530,11 @@ class MetaLearningOrchestrator:
     async def start(self):
         """Starts the Meta-Learning Orchestrator's background tasks."""
         if self._running:
-            _log_structured(
-                logging.WARNING, "MetaLearningOrchestrator is already running."
-            )
+            _log_structured(logging.WARNING, "MetaLearningOrchestrator is already running.")
             return
 
         self._running = True
-        _log_structured(
-            logging.INFO, "Starting MetaLearningOrchestrator background tasks."
-        )
+        _log_structured(logging.INFO, "Starting MetaLearningOrchestrator background tasks.")
 
         await self.ml_platform_client.__aenter__()
         await self.agent_config_service.__aenter__()
@@ -582,9 +549,7 @@ class MetaLearningOrchestrator:
         if not self.redis_client:
             try:
                 self.redis_client = aioredis.from_url(self.config.REDIS_URL)
-                _log_structured(
-                    logging.INFO, "Redis client connected for leader election."
-                )
+                _log_structured(logging.INFO, "Redis client connected for leader election.")
             except Exception as e:
                 _log_structured(
                     logging.CRITICAL,
@@ -595,9 +560,7 @@ class MetaLearningOrchestrator:
                 self.redis_client = None
 
         self._leader_election_task = asyncio.create_task(
-            create_task_with_supervision(
-                self._run_leader_election(), "leader_election_loop"
-            )
+            create_task_with_supervision(self._run_leader_election(), "leader_election_loop")
         )
 
         # Leader-specific tasks are now started in _become_leader to ensure they only run after leadership is confirmed.
@@ -609,9 +572,7 @@ class MetaLearningOrchestrator:
             return
 
         self._running = False
-        _log_structured(
-            logging.INFO, "Stopping MetaLearningOrchestrator background tasks."
-        )
+        _log_structured(logging.INFO, "Stopping MetaLearningOrchestrator background tasks.")
 
         tasks_to_cancel = [
             self._training_check_task,
@@ -819,9 +780,7 @@ class MetaLearningOrchestrator:
         This uses `SET key value NX EX ttl` which is an atomic operation.
         """
         if not self.redis_client:
-            raise LeaderElectionError(
-                "Redis client not initialized for leader election."
-            )
+            raise LeaderElectionError("Redis client not initialized for leader election.")
 
         current_time = time.time()
         fencing_token = int(
@@ -863,9 +822,7 @@ class MetaLearningOrchestrator:
             return self._is_leader
 
         try:
-            current_lock_value_str = await self.redis_client.get(
-                self.config.REDIS_LOCK_KEY
-            )
+            current_lock_value_str = await self.redis_client.get(self.config.REDIS_LOCK_KEY)
 
             if not current_lock_value_str:
                 await self._step_down_leadership("lock_disappeared")
@@ -949,9 +906,7 @@ class MetaLearningOrchestrator:
             end_offsets = await consumer.end_offsets(tps)
             start_offsets = await consumer.beginning_offsets(tps)
 
-            total_records = sum(
-                end_offsets.get(p, 0) - start_offsets.get(p, 0) for p in tps
-            )
+            total_records = sum(end_offsets.get(p, 0) - start_offsets.get(p, 0) for p in tps)
             return total_records
         except Exception as e:
             _log_structured(
@@ -1001,23 +956,23 @@ class MetaLearningOrchestrator:
             )
 
             if self.config.USE_S3_DATA_LAKE:
-                data_location = f"s3://{self.config.DATA_LAKE_S3_BUCKET}/{self.config.DATA_LAKE_S3_PREFIX}"
+                data_location = (
+                    f"s3://{self.config.DATA_LAKE_S3_BUCKET}/{self.config.DATA_LAKE_S3_PREFIX}"
+                )
             elif self.config.USE_KAFKA_INGESTION:
-                data_location = f"kafka://{self.config.KAFKA_BOOTSTRAP_SERVERS}/{self.config.KAFKA_TOPIC}"
+                data_location = (
+                    f"kafka://{self.config.KAFKA_BOOTSTRAP_SERVERS}/{self.config.KAFKA_TOPIC}"
+                )
             else:
                 data_location = self.config.DATA_LAKE_PATH
 
-            new_model = await self.trainer.trigger_model_training_and_deployment(
-                data_location
-            )
+            new_model = await self.trainer.trigger_model_training_and_deployment(data_location)
             if new_model and new_model.deployment_status == "deployed":
                 if self._current_active_model:
                     self._current_active_model = self._current_active_model.model_copy(
                         update={"is_active": False}
                     )
-                self._current_active_model = new_model.model_copy(
-                    update={"is_active": True}
-                )
+                self._current_active_model = new_model.model_copy(update={"is_active": True})
                 # Reset count for file-based accumulation. Kafka topics are streams, so a reset is conceptual.
                 self._new_records_count = 0
                 ML_DATA_QUEUE_SIZE.set(0)
@@ -1057,9 +1012,7 @@ class MetaLearningOrchestrator:
 
     async def _cleanup_s3_data_lake(self):
         """Cleans up old objects from the S3 data lake. Note: S3 Lifecycle Policies are the recommended production approach."""
-        cutoff_time = datetime.now(timezone.utc) - timedelta(
-            days=self.config.DATA_RETENTION_DAYS
-        )
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.config.DATA_RETENTION_DAYS)
         try:
             async with aioboto3.Session().client("s3") as s3_client:
                 paginator = s3_client.get_paginator("list_objects_v2")
@@ -1099,20 +1052,16 @@ class MetaLearningOrchestrator:
         """Cleans up old records from the local data lake file using an atomic replace operation."""
         temp_path = self.config.DATA_LAKE_PATH + ".tmp_cleanup"
         retained_count = 0
-        cutoff_time = datetime.now(timezone.utc) - timedelta(
-            days=self.config.DATA_RETENTION_DAYS
-        )
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.config.DATA_RETENTION_DAYS)
 
         try:
-            async with aiofiles.open(
-                self.config.DATA_LAKE_PATH, "r"
-            ) as infile, aiofiles.open(temp_path, "w") as outfile:
+            async with aiofiles.open(self.config.DATA_LAKE_PATH, "r") as infile, aiofiles.open(
+                temp_path, "w"
+            ) as outfile:
                 async for line in infile:
                     try:
                         record_data = json.loads(line)
-                        record_timestamp = datetime.fromisoformat(
-                            record_data["timestamp"]
-                        )
+                        record_timestamp = datetime.fromisoformat(record_data["timestamp"])
                         if record_timestamp >= cutoff_time:
                             await outfile.write(line)
                             retained_count += 1
@@ -1148,16 +1097,11 @@ class MetaLearningOrchestrator:
     async def get_health_status(self) -> Dict[str, Any]:
         """Returns a cached dictionary reflecting the orchestrator's operational health."""
         current_time = time.time()
-        if (
-            current_time - self._health_cache.get("timestamp", 0)
-            < self._health_cache_ttl
-        ):
+        if current_time - self._health_cache.get("timestamp", 0) < self._health_cache_ttl:
             return self._health_cache["status"]
 
         is_healthy = (
-            self._running
-            and self._leader_election_task
-            and not self._leader_election_task.done()
+            self._running and self._leader_election_task and not self._leader_election_task.done()
         )
 
         status = {
@@ -1168,14 +1112,12 @@ class MetaLearningOrchestrator:
             "tasks_status": {
                 "leader_election": (
                     "running"
-                    if self._leader_election_task
-                    and not self._leader_election_task.done()
+                    if self._leader_election_task and not self._leader_election_task.done()
                     else "stopped"
                 ),
                 "training_check": (
                     "running"
-                    if self._training_check_task
-                    and not self._training_check_task.done()
+                    if self._training_check_task and not self._training_check_task.done()
                     else "stopped"
                 ),
                 "data_cleanup": (
@@ -1186,9 +1128,7 @@ class MetaLearningOrchestrator:
             },
             "new_records_count": self._new_records_count,
             "current_active_model": (
-                self._current_active_model.model_dump()
-                if self._current_active_model
-                else None
+                self._current_active_model.model_dump() if self._current_active_model else None
             ),
         }
 
@@ -1201,8 +1141,7 @@ class MetaLearningOrchestrator:
             status["redis_connected"] = False
 
         status["kafka_connected"] = bool(
-            self.ingestor.kafka_producer
-            and self.ingestor.kafka_producer.bootstrap_connected()
+            self.ingestor.kafka_producer and self.ingestor.kafka_producer.bootstrap_connected()
         )
 
         self._health_cache = {"timestamp": current_time, "status": status}
@@ -1215,10 +1154,7 @@ class MetaLearningOrchestrator:
         and all its critical dependencies are available.
         """
         current_time = time.time()
-        if (
-            current_time - self._readiness_cache.get("timestamp", 0)
-            < self._readiness_cache_ttl
-        ):
+        if current_time - self._readiness_cache.get("timestamp", 0) < self._readiness_cache_ttl:
             return self._readiness_cache["ready"]
 
         is_ready_flag = False
@@ -1238,15 +1174,12 @@ class MetaLearningOrchestrator:
             timeout = 3.0
 
             # Verify leadership lock is still held.
-            if not await asyncio.wait_for(
-                self._verify_leadership_and_fencing(), timeout=timeout
-            ):
+            if not await asyncio.wait_for(self._verify_leadership_and_fencing(), timeout=timeout):
                 raise Exception("Lost leadership during readiness check.")
 
             # Check connectivity to external services.
             if self.config.USE_KAFKA_INGESTION and not (
-                self.ingestor.kafka_producer
-                and self.ingestor.kafka_producer.bootstrap_connected()
+                self.ingestor.kafka_producer and self.ingestor.kafka_producer.bootstrap_connected()
             ):
                 raise Exception("Kafka producer is not connected.")
 
@@ -1294,7 +1227,5 @@ def setup_signal_handlers(orchestrator: MetaLearningOrchestrator):
         await orchestrator.stop()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(
-            sig, lambda s=sig: asyncio.create_task(shutdown_handler(s))
-        )
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown_handler(s)))
     _log_structured(logging.INFO, "Signal handlers registered for graceful shutdown.")

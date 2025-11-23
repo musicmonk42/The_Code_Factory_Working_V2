@@ -103,9 +103,7 @@ def mock_redact_secrets():
 # load_file_content – success (plain text)
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_load_file_content_success(
-    temp_file: Path, mock_aiofiles, mock_redact_secrets
-):
+async def test_load_file_content_success(temp_file: Path, mock_aiofiles, mock_redact_secrets):
     content = "plain text"
     temp_file.write_text(content)
 
@@ -188,12 +186,8 @@ async def test_load_file_content_no_deps(temp_file: Path):
 # save_file_content – success + encryption
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "encrypt, algorithm", [(True, "fernet"), (True, "aes_gcm"), (False, None)]
-)
-async def test_save_file_content(
-    temp_dir: Path, encrypt: bool, algorithm: Optional[str]
-):
+@pytest.mark.parametrize("encrypt, algorithm", [(True, "fernet"), (True, "aes_gcm"), (False, None)])
+async def test_save_file_content(temp_dir: Path, encrypt: bool, algorithm: Optional[str]):
     path = temp_dir / "saved.bin"
     data = b"test data"
 
@@ -215,9 +209,7 @@ async def test_save_file_content_encrypt_fallback(temp_dir: Path):
     path = temp_dir / "fallback.bin"
     data = b"fallback"
 
-    with patch(
-        "runner.runner_file_utils.encrypt_data", side_effect=Exception("crypto fail")
-    ):
+    with patch("runner.runner_file_utils.encrypt_data", side_effect=Exception("crypto fail")):
         await save_file_content(path, data, encrypt=True)
 
     assert path.read_bytes() == data  # plain fallback
@@ -279,9 +271,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
         os.environ["FILE_BACKUP_DIR"] = str(self.backup_dir)
 
         # Patch the global BACKUP_DIR in the module
-        self.backup_patcher = patch(
-            "runner.runner_file_utils.BACKUP_DIR", self.backup_dir
-        )
+        self.backup_patcher = patch("runner.runner_file_utils.BACKUP_DIR", self.backup_dir)
         self.backup_patcher.start()
         self.addCleanup(self.backup_patcher.stop)
 
@@ -332,9 +322,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
 
         content = await load_file_content(file_path, version="v1")
         self.assertEqual(content, "Hello World")
-        self.assertIn(
-            str(file_path.resolve()), FILE_INTEGRITY_STORE
-        )  # Check integrity stored
+        self.assertIn(str(file_path.resolve()), FILE_INTEGRITY_STORE)  # Check integrity stored
 
     @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
@@ -477,9 +465,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(file_to_delete_path.exists())  # File should still exist
 
         # Test actual deletion
-        result_delete = await delete_compliant_data(
-            file_to_delete_path, request_id, log_only=False
-        )
+        result_delete = await delete_compliant_data(file_to_delete_path, request_id, log_only=False)
         self.assertEqual(result_delete["status"], "success")
         mock_remove.assert_called_with(file_to_delete_path)
 
@@ -501,9 +487,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
     )
     @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_file_integrity_check(self, mock_prov, mock_scan, mock_aiofiles):
-        file_path = await self._create_test_file(
-            "integrity_test.txt", "Original content."
-        )
+        file_path = await self._create_test_file("integrity_test.txt", "Original content.")
 
         # Mock file read for load_file_content
         mock_reader = AsyncMock()

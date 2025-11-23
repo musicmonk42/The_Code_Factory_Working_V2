@@ -212,9 +212,7 @@ except ImportError as e:
 
 # --- Config loading ---
 class MockConfig:
-    AUDIT_LOG_PATH = os.environ.get(
-        "AUDIT_LOG_PATH", "simulation/results/audit_trail.log"
-    )
+    AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "simulation/results/audit_trail.log")
     PRIVATE_KEY_PASSWORD = os.environ.get("PRIVATE_KEY_PASSWORD")
     KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     KAFKA_AUDIT_TOPIC = os.environ.get("KAFKA_AUDIT_TOPIC", "sfe_audit_events")
@@ -240,19 +238,15 @@ class MockConfig:
             ),
         },
         "evm": {
-            "rpc_url": os.environ.get("ETHEREUM_RPC")
-            or os.environ.get("AVALANCHE_RPC"),
+            "rpc_url": os.environ.get("ETHEREUM_RPC") or os.environ.get("AVALANCHE_RPC"),
             "chain_id": int(os.environ.get("EVM_CHAIN_ID", "0")),
             "contract_address": os.environ.get("ETHEREUM_AUDIT_CONTRACT"),
             "contract_abi_path": os.environ.get("ETHEREUM_ABI_PATH"),
             "private_key": os.environ.get("ETHEREUM_PRIVATE_KEY")
             or os.environ.get("AVALANCHE_PRIVATE_KEY"),
-            "poa_middleware": os.environ.get("EVM_POA_MIDDLEWARE", "false").lower()
-            == "true",
+            "poa_middleware": os.environ.get("EVM_POA_MIDDLEWARE", "false").lower() == "true",
             "default_gas_limit": int(os.environ.get("EVM_GAS_LIMIT", "200000")),
-            "default_max_fee_per_gas": int(
-                os.environ.get("EVM_MAX_FEE_PER_GAS", "200")
-            ),
+            "default_max_fee_per_gas": int(os.environ.get("EVM_MAX_FEE_PER_GAS", "200")),
             "default_max_priority_fee_per_gas": int(
                 os.environ.get("EVM_MAX_PRIORITY_FEE_PER_GAS", "2")
             ),
@@ -281,17 +275,13 @@ except (ImportError, AttributeError):
     )
 except Exception as e:
     config = MockConfig()
-    logger.error(
-        f"Failed to load config from app.config: {e}. Using MockConfig.", exc_info=True
-    )
+    logger.error(f"Failed to load config from app.config: {e}. Using MockConfig.", exc_info=True)
 
 
 # --- Logger setup ---
 if not logger.handlers:
     # f. Add RotatingFileHandler
-    handler = RotatingFileHandler(
-        "audit_system.log", maxBytes=10 * 1024 * 1024, backupCount=5
-    )
+    handler = RotatingFileHandler("audit_system.log", maxBytes=10 * 1024 * 1024, backupCount=5)
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | [%(correlation_id)s] [%(context)s] %(message)s",
         defaults={"correlation_id": "N/A", "context": "general"},
@@ -308,9 +298,7 @@ if not logger.handlers:
 # --- F. Logging
 def sanitize_log(msg: str) -> str:
     """Strip potential PII/keys."""
-    msg = re.sub(
-        r"(?i)(api_key|password|secret|token|pass)=[^& ]+", r"\1=REDACTED", msg
-    )
+    msg = re.sub(r"(?i)(api_key|password|secret|token|pass)=[^& ]+", r"\1=REDACTED", msg)
     msg = re.sub(
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "REDACTED_EMAIL", msg
     )  # Email
@@ -338,9 +326,7 @@ def validate_dependencies() -> None:
     ]
     for name, available, purpose in required:
         if not available:
-            logger.critical(
-                f"{name} not installed. {purpose} required for production. Aborting."
-            )
+            logger.critical(f"{name} not installed. {purpose} required for production. Aborting.")
             sys.exit(1)
 
 
@@ -377,9 +363,7 @@ def load_public_keys() -> Dict[str, Ed25519PublicKey]:
             for key_b64 in os.environ["PUBLIC_KEY_B64"].split(","):
                 pub_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(key_b64))
                 key_id = hashlib.sha256(
-                    pub_key.public_bytes(
-                        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-                    )
+                    pub_key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
                 ).hexdigest()
                 pub_keys[key_id] = pub_key
         except Exception as e:
@@ -403,9 +387,7 @@ def _strip_signatures(entry: dict) -> dict:
 
 def hash_entry(entry: dict, algo: str = DEFAULT_HASH_ALGO) -> str:
     """Computes the hash of an audit entry after stripping signatures and its own hash."""
-    s = json.dumps(
-        _strip_signatures(entry), sort_keys=True, separators=(",", ":"), default=str
-    )
+    s = json.dumps(_strip_signatures(entry), sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.new(algo, s.encode()).hexdigest()
 
 
@@ -426,9 +408,7 @@ def append_distributed_log(entry: dict, correlation_id: Optional[str] = None) ->
         and config.KAFKA_BOOTSTRAP_SERVERS
     ):
         logger.debug(
-            sanitize_log(
-                "Kafka append skipped: kafka-python library or config missing."
-            ),
+            sanitize_log("Kafka append skipped: kafka-python library or config missing."),
             extra=log_context,
         )
         return False
@@ -470,9 +450,7 @@ def append_distributed_log(entry: dict, correlation_id: Optional[str] = None) ->
             try:
                 producer.close(timeout=5)
             except Exception as e:
-                logger.error(
-                    sanitize_log(f"Error closing Kafka producer: {e}"), exc_info=True
-                )
+                logger.error(sanitize_log(f"Error closing Kafka producer: {e}"), exc_info=True)
 
 
 # ==============================================================================
@@ -490,9 +468,7 @@ def load_private_key() -> Optional[Ed25519PrivateKey]:
             return _cached_private_key
 
         if not CRYPTO_AVAILABLE:
-            logger.warning(
-                "Private key loading skipped: cryptography library not available."
-            )
+            logger.warning("Private key loading skipped: cryptography library not available.")
             return None
 
         log_context = {"context": "key_management"}
@@ -507,13 +483,9 @@ def load_private_key() -> Optional[Ed25519PrivateKey]:
                 return None
 
             key_data = base64.b64decode(key_b64)
-            private_key = serialization.load_pem_private_key(
-                key_data, password=password.encode()
-            )
+            private_key = serialization.load_pem_private_key(key_data, password=password.encode())
             _cached_private_key = private_key
-            logger.info(
-                "Private key loaded successfully from environment.", extra=log_context
-            )
+            logger.info("Private key loaded successfully from environment.", extra=log_context)
             return private_key
         except Exception as e:
             level = (
@@ -550,9 +522,7 @@ async def key_rotation(
         pem = new_private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.BestAvailableEncryption(
-                new_password.encode()
-            ),
+            encryption_algorithm=serialization.BestAvailableEncryption(new_password.encode()),
         )
         pem_b64 = base64.b64encode(pem).decode("utf-8")
         new_key_id = hashlib.sha256(
@@ -782,8 +752,7 @@ class AuditLogger:
                 except Exception as e:
                     level = (
                         logging.CRITICAL
-                        if os.environ.get("APP_ENV", "development").lower()
-                        == "production"
+                        if os.environ.get("APP_ENV", "development").lower() == "production"
                         else logging.ERROR
                     )
                     logger.log(
@@ -937,15 +906,11 @@ class AuditLogger:
             ):
                 requests.post(
                     os.environ["ALERT_WEBHOOK"],
-                    json={
-                        "msg": f"CRITICAL: Audit log file write failed after retries: {e}"
-                    },
+                    json={"msg": f"CRITICAL: Audit log file write failed after retries: {e}"},
                 )
 
         if self.dlt_backend_enabled and _dlt_client_instance:
-            logger.debug(
-                "Attempting to write audit entry to DLT backend...", extra=log_context
-            )
+            logger.debug("Attempting to write audit entry to DLT backend...", extra=log_context)
             try:
                 # g. Add retry to DLT writes
                 @retry(
@@ -964,9 +929,7 @@ class AuditLogger:
                         "signatures": entry["signatures"],
                     }
                     if compliance_control_id is not None:
-                        dlt_payload_metadata["compliance_control_id"] = (
-                            compliance_control_id
-                        )
+                        dlt_payload_metadata["compliance_control_id"] = compliance_control_id
                     if is_compliant is not None:
                         dlt_payload_metadata["is_compliant"] = is_compliant
 
@@ -975,9 +938,7 @@ class AuditLogger:
                         hash=entry_hash,
                         prev_hash=entry["previous_log_hash"],
                         metadata=dlt_payload_metadata,
-                        payload_blob=json.dumps(entry["details"], default=str).encode(
-                            "utf-8"
-                        ),
+                        payload_blob=json.dumps(entry["details"], default=str).encode("utf-8"),
                         correlation_id=log_context["correlation_id"],
                     )
 
@@ -1000,9 +961,7 @@ class AuditLogger:
 
         try:
             # g. Add retries to Kafka
-            append_distributed_log(
-                entry.copy(), correlation_id=log_context["correlation_id"]
-            )
+            append_distributed_log(entry.copy(), correlation_id=log_context["correlation_id"])
             logger.info("Audit entry dispatched to Kafka.", extra=log_context)
         except Exception as e:
             level = (
@@ -1027,9 +986,7 @@ class AuditLogger:
                 )
                 if asyncio.iscoroutinefunction(plugin_func):
                     asyncio.create_task(
-                        plugin_func(
-                            entry.copy(), correlation_id=log_context["correlation_id"]
-                        )
+                        plugin_func(entry.copy(), correlation_id=log_context["correlation_id"])
                     )
                 else:
                     asyncio.get_running_loop().run_in_executor(
@@ -1045,9 +1002,7 @@ class AuditLogger:
                 )
 
         logger.info(
-            sanitize_log(
-                f"Audit entry processed: {event_type} (Hash: {entry_hash[:10]}...)"
-            ),
+            sanitize_log(f"Audit entry processed: {event_type} (Hash: {entry_hash[:10]}...)"),
             extra=log_context,
         )
 
@@ -1092,9 +1047,7 @@ class AuditLogger:
                 finally:
                     portalocker.unlock(f.fileno())
 
-    def _sync_file_write(
-        self, filepath: str, entry: Dict[str, Any], log_context: Dict[str, Any]
-    ):
+    def _sync_file_write(self, filepath: str, entry: Dict[str, Any], log_context: Dict[str, Any]):
         """
         Blocking file write with locking and retries.
         Note: In production, prefer async methods. Monitor performance under high load.
@@ -1140,8 +1093,7 @@ class AuditLogger:
                 if attempt == max_retries - 1:
                     level = (
                         logging.CRITICAL
-                        if os.environ.get("APP_ENV", "development").lower()
-                        == "production"
+                        if os.environ.get("APP_ENV", "development").lower() == "production"
                         else logging.ERROR
                     )
                     logger.log(
@@ -1349,9 +1301,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                 )
                                 is_valid = False
                                 span.set_status(
-                                    Status(
-                                        StatusCode.ERROR, description="Hash mismatch"
-                                    )
+                                    Status(StatusCode.ERROR, description="Hash mismatch")
                                 )
                                 break
 
@@ -1436,9 +1386,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                 extra=log_context,
                             )
                             is_valid = False
-                            span.set_status(
-                                Status(StatusCode.ERROR, description="Corrupted data")
-                            )
+                            span.set_status(Status(StatusCode.ERROR, description="Corrupted data"))
                             break
                         if not is_valid:
                             break
@@ -1504,9 +1452,7 @@ def main_cli():
     """
     CLI entry point for running audit log verification.
     """
-    parser = argparse.ArgumentParser(
-        description="Verify the integrity of the audit log chain."
-    )
+    parser = argparse.ArgumentParser(description="Verify the integrity of the audit log chain.")
     parser.add_argument(
         "--log-path",
         type=str,
@@ -1527,9 +1473,7 @@ def main_cli():
         sys.exit(0 if is_valid else 1)
     else:
         if is_valid:
-            logger.info(
-                "Audit log verification successful. Exiting with status code 0."
-            )
+            logger.info("Audit log verification successful. Exiting with status code 0.")
             sys.exit(0)
         else:
             logger.error("Audit log verification failed. Exiting with status code 1.")
@@ -1619,9 +1563,7 @@ if __name__ == "__main__":
             config = TestConfig2()
 
             print("Initializing DLT backend for Test 2...")
-            audit_logger_dlt = AuditLogger(
-                log_path=test_dlt_log_path, dlt_backend_enabled=True
-            )
+            audit_logger_dlt = AuditLogger(log_path=test_dlt_log_path, dlt_backend_enabled=True)
             await asyncio.sleep(0.5)
 
             if not _initialized_dlt_backend or not _dlt_client_instance:
@@ -1680,10 +1622,7 @@ if __name__ == "__main__":
                             )
                         ).hexdigest()
                         print(f"New Key ID: {new_key_id}")
-                        assert (
-                            initial_key_id != new_key_id
-                            and new_key_id not in REVOKED_KEYS
-                        )
+                        assert initial_key_id != new_key_id and new_key_id not in REVOKED_KEYS
                         assert initial_key_id in REVOKED_KEYS
                         print("Key rotation check PASSED.")
                     else:
@@ -1715,19 +1654,15 @@ if __name__ == "__main__":
                     print(
                         f"\nSimple DLT Client Chain Contents (for 'deployment:start'): {json.dumps(_dlt_client_instance.chain.get('audit_deployment:start'), indent=2)}"
                     )
-                    dlt_entry_hash = _dlt_client_instance.chain.get(
-                        "audit_deployment:start"
-                    )[0]["hash"]
+                    dlt_entry_hash = _dlt_client_instance.chain.get("audit_deployment:start")[0][
+                        "hash"
+                    ]
                     retrieved_tx_info = await _dlt_client_instance.read_checkpoint(
                         "audit_deployment:start", version=1
                     )
-                    print(
-                        f"Retrieved DLT entry hash: {retrieved_tx_info['metadata']['hash']}"
-                    )
+                    print(f"Retrieved DLT entry hash: {retrieved_tx_info['metadata']['hash']}")
                     if retrieved_tx_info["metadata"]["hash"] == dlt_entry_hash:
-                        print(
-                            "DLT record consistency check PASSED for 'deployment:start'."
-                        )
+                        print("DLT record consistency check PASSED for 'deployment:start'.")
                     else:
                         print("DLT record consistency check FAILED.")
 

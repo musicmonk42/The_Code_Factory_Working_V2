@@ -70,9 +70,7 @@ async def redis_client(mocker: MockerFixture):
     mock_client.set = mocker.AsyncMock(return_value=True)
     mock_client.get = mocker.AsyncMock(return_value=json.dumps(SAMPLE_VALUE))
     mock_client.mset = mocker.AsyncMock(return_value=True)
-    mock_client.mget = mocker.AsyncMock(
-        return_value=[json.dumps({"num": i}) for i in range(3)]
-    )
+    mock_client.mget = mocker.AsyncMock(return_value=[json.dumps({"num": i}) for i in range(3)])
     mock_client.delete = mocker.AsyncMock(return_value=1)
     mock_client.close = mocker.AsyncMock()
     mock_client.info = mocker.AsyncMock(return_value={"used_memory": 1048576})
@@ -178,9 +176,7 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_connect_failure(self, redis_client, mocker: MockerFixture):
         """Test connection failure handling."""
-        redis_client._mock_client.ping.side_effect = ConnectionError(
-            "Connection failed"
-        )
+        redis_client._mock_client.ping.side_effect = ConnectionError("Connection failed")
         with pytest.raises(ConnectionError, match="Failed to connect to Redis"):
             await redis_client.connect()
 
@@ -225,9 +221,7 @@ class TestConnection:
     async def test_reconnect(self, redis_client):
         """Test reconnection functionality."""
         await redis_client.connect()
-        redis_client._mock_client.ping.return_value = (
-            False  # Simulate unhealthy connection
-        )
+        redis_client._mock_client.ping.return_value = False  # Simulate unhealthy connection
         await redis_client.reconnect()
         assert redis_client._mock_client.close.call_count == 1
         assert redis_client._mock_client.ping.call_count >= 2
@@ -263,9 +257,7 @@ class TestCRUDOperations:
         await redis_client.connect()
         success = await redis_client.set(SAMPLE_KEY, SAMPLE_VALUE, ex=60)
         assert success
-        redis_client._mock_client.set.assert_called_with(
-            SAMPLE_KEY, SAMPLE_VALUE, ex=60, px=None
-        )
+        redis_client._mock_client.set.assert_called_with(SAMPLE_KEY, SAMPLE_VALUE, ex=60, px=None)
 
     @pytest.mark.asyncio
     async def test_set_invalid_key(self, redis_client):
@@ -337,9 +329,7 @@ class TestCRUDOperations:
         redis_client._mock_client.delete.return_value = 2
         deleted = await redis_client.delete(SAMPLE_KEY, "another_key")
         assert deleted == 2
-        redis_client._mock_client.delete.assert_called_once_with(
-            SAMPLE_KEY, "another_key"
-        )
+        redis_client._mock_client.delete.assert_called_once_with(SAMPLE_KEY, "another_key")
 
     @pytest.mark.asyncio
     async def test_delete_no_keys(self, redis_client):
@@ -355,9 +345,7 @@ class TestCRUDOperations:
         await redis_client.connect()
         success = await redis_client.setex("exp_key", 60, "exp_value")
         assert success
-        redis_client._mock_client.set.assert_called_with(
-            "exp_key", "exp_value", ex=60, px=None
-        )
+        redis_client._mock_client.set.assert_called_with("exp_key", "exp_value", ex=60, px=None)
 
 
 # Batch Operations Tests

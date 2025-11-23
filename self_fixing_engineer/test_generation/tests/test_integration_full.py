@@ -73,9 +73,7 @@ async def test_full_cli_run_with_mocked_agents(tmp_path, runner):
         ]
 
         # Run CLI in a worker thread to avoid "asyncio.run() in running loop"
-        await asyncio.to_thread(
-            runner.invoke, cli.cli, args, catch_exceptions=False
-        )
+        await asyncio.to_thread(runner.invoke, cli.cli, args, catch_exceptions=False)
 
         # Since we're patching sys.exit, we need to manually check if it was called with a non-zero code
         if mock_exit.called:
@@ -146,9 +144,7 @@ async def test_graph_with_real_agent_mocks(tmp_path):
     ):
 
         g = real_graph.build_graph(llm=None)
-        result = await real_graph.invoke_graph(
-            g, {"spec": "test", "repair_attempts": 0}
-        )
+        result = await real_graph.invoke_graph(g, {"spec": "test", "repair_attempts": 0})
 
     assert "plan" in result
     assert "test_code" in result

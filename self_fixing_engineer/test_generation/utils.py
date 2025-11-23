@@ -349,9 +349,7 @@ def validate_and_resolve_path(
 
     # Check for directory traversal with boundary safety
     try:
-        within = os.path.commonpath([real_path, abs_base_path]) == os.path.realpath(
-            abs_base_path
-        )
+        within = os.path.commonpath([real_path, abs_base_path]) == os.path.realpath(abs_base_path)
     except ValueError:
         within = False
     if not within:
@@ -364,9 +362,9 @@ def validate_and_resolve_path(
     if os.path.islink(combined_path):
         link_target = os.path.realpath(os.readlink(combined_path))
         try:
-            link_within = os.path.commonpath(
-                [link_target, abs_base_path]
-            ) == os.path.realpath(abs_base_path)
+            link_within = os.path.commonpath([link_target, abs_base_path]) == os.path.realpath(
+                abs_base_path
+            )
         except ValueError:
             link_within = False
         if not link_within:
@@ -460,14 +458,10 @@ class ATCOConfig:
             # Use Path's is_relative_to for security checks
             if sys.version_info >= (3, 9):
                 if not abs_path.is_relative_to(self.project_root):
-                    raise PathError(
-                        f"Configured path '{abs_path}' is outside the project root."
-                    )
+                    raise PathError(f"Configured path '{abs_path}' is outside the project root.")
             else:
                 if not _is_rel_to(abs_path, self.project_root):
-                    raise PathError(
-                        f"Configured path '{abs_path}' is outside the project root."
-                    )
+                    raise PathError(f"Configured path '{abs_path}' is outside the project root.")
 
             os.makedirs(abs_path, exist_ok=True)
             if not os.access(abs_path, os.W_OK):
@@ -512,17 +506,13 @@ class ATCOConfig:
         self.SUITE_DIR: str = str(full_suite_dir)
         os.makedirs(self.SUITE_DIR, exist_ok=True)
         if not os.access(self.SUITE_DIR, os.W_OK):
-            raise IOError(
-                f"Configured test suite path '{self.SUITE_DIR}' is not writable."
-            )
+            raise IOError(f"Configured test suite path '{self.SUITE_DIR}' is not writable.")
 
         self.ALLOWED_WRITE_PATHS = [
             str(Path(self.project_root, "atco_artifacts").resolve()),
             self.SUITE_DIR,
         ]
-        logger.debug(
-            f"ATCOConfig initialized with allowed write paths: {self.ALLOWED_WRITE_PATHS}"
-        )
+        logger.debug(f"ATCOConfig initialized with allowed write paths: {self.ALLOWED_WRITE_PATHS}")
 
 
 def log(msg: str, level: str = "INFO", style: str = "green") -> None:
@@ -594,17 +584,13 @@ async def monitor_and_prioritize_uncovered_code(
 
     full_path = _sanitize(coverage_file, project_root)
     if not os.path.exists(full_path):
-        logger.warning(
-            f"Coverage file not found at {coverage_file}. No targets to prioritize."
-        )
+        logger.warning(f"Coverage file not found at {coverage_file}. No targets to prioritize.")
         return []
 
     uncovered = scan_for_uncovered_code_from_xml(coverage_file, project_root)
 
     # Prioritizer can take the same relative coverage_file or the full path; both are fine if it resolves internally.
-    return await prioritize_test_targets(
-        coverage_file, project_root, uncovered, policy_engine
-    )
+    return await prioritize_test_targets(coverage_file, project_root, uncovered, policy_engine)
 
 
 @zero_trust_guard
@@ -658,9 +644,7 @@ async def secure_write_file(
     temp_fd, temp_path = await asyncio.to_thread(tempfile.mkstemp, dir=parent_dir)
 
     try:
-        await asyncio.to_thread(
-            os.close, temp_fd
-        )  # Close file descriptor early (Windows-safe)
+        await asyncio.to_thread(os.close, temp_fd)  # Close file descriptor early (Windows-safe)
         if AIOFILES_AVAILABLE:
             async with aiofiles.open(temp_path, mode, encoding="utf-8") as f:
                 await f.write(content)
@@ -788,9 +772,7 @@ async def cleanup_temp_dir(path: str) -> None:
         else:
             # Remove directory tree in a worker thread (works well on Windows)
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None, shutil.rmtree, path, True
-            )  # ignore_errors=True
+            await loop.run_in_executor(None, shutil.rmtree, path, True)  # ignore_errors=True
     except FileNotFoundError:
         return
     except Exception as e:
@@ -843,12 +825,8 @@ class SecurityScanner:
         self, file_path_relative: str, language: str
     ) -> Tuple[bool, List[str], str]:
         """Runs a security scan on a given file."""
-        full_file_path = validate_and_resolve_path(
-            self.project_root, file_path_relative
-        )
-        logger.info(
-            f"Running security scan on {file_path_relative} (Language: {language})..."
-        )
+        full_file_path = validate_and_resolve_path(self.project_root, file_path_relative)
+        logger.info(f"Running security scan on {file_path_relative} (Language: {language})...")
         issues: List[Dict[str, Any]] = []
         severity = "NONE"
 
@@ -883,9 +861,7 @@ class SecurityScanner:
                 ).inc()
 
                 if proc.returncode not in [0, 1]:
-                    raise subprocess.CalledProcessError(
-                        proc.returncode, cmd, stdout, stderr
-                    )
+                    raise subprocess.CalledProcessError(proc.returncode, cmd, stdout, stderr)
 
                 report = json.loads(stdout.decode())
                 issues = [
@@ -903,9 +879,7 @@ class SecurityScanner:
                         self.SEV_RANK.get(r.get("severity", "NONE"), 0) for r in issues
                     )
                     max_rank = max(ranked_severities, default=0)
-                    severity = {v: k for k, v in self.SEV_RANK.items()}.get(
-                        max_rank, "NONE"
-                    )
+                    severity = {v: k for k, v in self.SEV_RANK.items()}.get(max_rank, "NONE")
             except FileNotFoundError:
                 logger.warning(
                     "Security scan skipped for '%s': Bandit not available.",
@@ -945,9 +919,7 @@ class SecurityScanner:
                 )
             return True, issues, severity
         else:
-            logger.info(
-                f"Security scan completed for {full_file_path}: No issues found."
-            )
+            logger.info(f"Security scan completed for {full_file_path}: No issues found.")
             if AUDIT_LOGGER_AVAILABLE:
                 await audit_logger.log_event(
                     event_type="security_scan",
@@ -969,9 +941,7 @@ class KnowledgeGraphClient:
         self.config = config
 
     @zero_trust_guard
-    async def update_module_metrics(
-        self, module_identifier: str, metrics: Dict[str, Any]
-    ):
+    async def update_module_metrics(self, module_identifier: str, metrics: Dict[str, Any]):
         """Simulates updating module metrics in a knowledge graph."""
         logger.debug(
             f"Conceptual: Updating Knowledge Graph for '{module_identifier}' with metrics: {json.dumps(metrics)}"
@@ -994,9 +964,7 @@ class PRCreator:
         if not self.config.get("pr_integration", {}).get("enabled", False):
             return False, "PR integration not enabled in config."
 
-        logger.info(
-            f"Conceptual: Creating PR for branch '{branch_name}' with title '{title}'..."
-        )
+        logger.info(f"Conceptual: Creating PR for branch '{branch_name}' with title '{title}'...")
         await asyncio.sleep(2)
         success = random.random() >= 0.1
         result_message = (
@@ -1035,15 +1003,11 @@ class PRCreator:
         if not jira_api_url:
             return False, "Jira API URL not configured."
 
-        logger.info(
-            f"Conceptual: Creating Jira ticket in {project_key} for '{title}'..."
-        )
+        logger.info(f"Conceptual: Creating Jira ticket in {project_key} for '{title}'...")
         await asyncio.sleep(0.01)
         # Deterministic success for unit tests / conceptual simulation
         success = True
-        result_message = (
-            f"{jira_api_url}/browse/{project_key}-{random.randint(1000, 9999)}"
-        )
+        result_message = f"{jira_api_url}/browse/{project_key}-{random.randint(1000, 9999)}"
 
         if AUDIT_LOGGER_AVAILABLE:
             await audit_logger.log_event(
@@ -1067,18 +1031,12 @@ class MutationTester:
         self.project_root = project_root
         self.config = config
         self.ml_model = None
-        if TORCH_AVAILABLE and config.get("mutation_testing", {}).get(
-            "ml_fault_injection", False
-        ):
+        if TORCH_AVAILABLE and config.get("mutation_testing", {}).get("ml_fault_injection", False):
             try:
                 # Conceptual: Load a pre-trained ML model for fault injection
-                self.ml_model = torch.hub.load(
-                    "pytorch/vision", "resnet18", pretrained=True
-                )
+                self.ml_model = torch.hub.load("pytorch/vision", "resnet18", pretrained=True)
                 self.ml_model.eval()
-                logger.info(
-                    "ML-based fault injection model loaded for mutation testing."
-                )
+                logger.info("ML-based fault injection model loaded for mutation testing.")
             except Exception as e:
                 logger.warning(
                     f"Failed to load ML model for fault injection: {e}. Falling back to standard mutation testing."
@@ -1093,12 +1051,8 @@ class MutationTester:
         if not self.config.get("mutation_testing", {}).get("enabled", False):
             return True, -1.0, "Mutation testing not enabled."
 
-        validate_and_resolve_path(
-            self.project_root, source_file_relative
-        )
-        validate_and_resolve_path(
-            self.project_root, test_file_relative
-        )
+        validate_and_resolve_path(self.project_root, source_file_relative)
+        validate_and_resolve_path(self.project_root, test_file_relative)
 
         logger.info(
             f"Conceptual: Running mutation tests on {source_file_relative} with {test_file_relative} ({language})..."
@@ -1112,17 +1066,13 @@ class MutationTester:
             with torch.no_grad():
                 dummy_input = torch.randn(1, 3, 224, 224)
                 output = self.ml_model(dummy_input)
-            killed_mutants = random.randint(0, total_mutants) + int(
-                output.mean().item() * 5
-            )
+            killed_mutants = random.randint(0, total_mutants) + int(output.mean().item() * 5)
             killed_mutants = min(killed_mutants, total_mutants)
             logger.debug("ML model used for fault injection.")
         else:
             killed_mutants = random.randint(0, total_mutants)
 
-        mutation_score = (
-            (killed_mutants / total_mutants) * 100 if total_mutants > 0 else 100.0
-        )
+        mutation_score = (killed_mutants / total_mutants) * 100 if total_mutants > 0 else 100.0
 
         # FIX: Invert the logic to align with test expectations (a patch of 0.0 should succeed)
         success = random.random() < 0.9
@@ -1164,15 +1114,11 @@ class CodeEnricher:
         logger.info(f"CodeEnricher initialized with {len(self.plugins)} plugins.")
 
     @zero_trust_guard
-    async def enrich_test(
-        self, test_code: str, language: str, project_root: str
-    ) -> str:
+    async def enrich_test(self, test_code: str, language: str, project_root: str) -> str:
         """Applies each plugin to the test code sequentially."""
         modified_code = test_code
         for plugin in self.plugins:
-            plugin_name = (
-                plugin.__name__ if hasattr(plugin, "__name__") else str(plugin)
-            )
+            plugin_name = plugin.__name__ if hasattr(plugin, "__name__") else str(plugin)
             try:
                 if asyncio.iscoroutinefunction(plugin):
                     modified_code = await plugin(modified_code, language, project_root)
@@ -1211,9 +1157,7 @@ def add_atco_header(test_code: str, language: str, project_root: str) -> str:
     return test_code
 
 
-def add_mocking_framework_import(
-    test_code: str, language: str, project_root: str
-) -> str:
+def add_mocking_framework_import(test_code: str, language: str, project_root: str) -> str:
     """A plugin to add a standard mocking import for Python if not present."""
     if (
         language == "python"
@@ -1225,17 +1169,13 @@ def add_mocking_framework_import(
     return test_code
 
 
-async def llm_refine_test_plugin(
-    test_code: str, language: str, project_root: str
-) -> str:
+async def llm_refine_test_plugin(test_code: str, language: str, project_root: str) -> str:
     """A conceptual plugin that uses an LLM to refine test code."""
     logger.debug(f"Conceptual: LLM refining test code ({language})...")
     await asyncio.sleep(random.uniform(0.5, 1.5))
     # FIX: Invert the failure condition to align with test expectations (a patch of 0.0 should succeed)
     if random.random() > 0.95:
-        logger.warning(
-            "Simulated LLM refinement failure. Returning original test code."
-        )
+        logger.warning("Simulated LLM refinement failure. Returning original test code.")
         return test_code
 
     if language == "python":
@@ -1258,9 +1198,7 @@ class _RobustEnvBuilder(venv.EnvBuilder):
         if sys.platform == "win32":
             src_dir = os.path.dirname(sys.executable)
             # Filter out executables that don't exist in the source Python installation
-            executables = [
-                exe for exe in executables if os.path.exists(os.path.join(src_dir, exe))
-            ]
+            executables = [exe for exe in executables if os.path.exists(os.path.join(src_dir, exe))]
         return executables
 
 
@@ -1353,9 +1291,7 @@ async def create_and_install_venv(
             )
             # FIX: Get timeout from config and pass it to asyncio.wait_for
             timeout = config.get("test_exec_timeout_seconds", 30)
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
             if process.returncode != 0:
                 logger.warning(
                     "Error installing dependencies in venv (%s). Stderr: %s",
@@ -1434,9 +1370,7 @@ async def run_pytest_and_coverage(
                 stderr=asyncio.subprocess.PIPE,
                 env=os.environ.copy(),
             )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=exec_timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=exec_timeout)
 
         stdout_str = stdout.decode("utf-8", errors="ignore").strip()
         stderr_str = stderr.decode("utf-8", errors="ignore").strip()
@@ -1468,9 +1402,7 @@ async def run_pytest_and_coverage(
             process.terminate()
             await process.wait()
     except Exception as e:
-        execution_log = (
-            f"Unexpected error during pytest execution for {test_path_relative}: {e}"
-        )
+        execution_log = f"Unexpected error during pytest execution for {test_path_relative}: {e}"
         logger.error(execution_log, exc_info=True)
         process_executions_total.labels(command="pytest", status="error").inc()
 
@@ -1501,16 +1433,12 @@ async def run_jest_and_coverage(
 ) -> Tuple[bool, float, str]:
     """Runs jest and generates a coverage report, returning the results."""
     full_test_path = validate_and_resolve_path(project_root, test_path_relative)
-    full_target_file_path = validate_and_resolve_path(
-        project_root, target_file_path_relative
-    )
+    full_target_file_path = validate_and_resolve_path(project_root, target_file_path_relative)
     full_coverage_report_path = validate_and_resolve_path(
         project_root, coverage_report_path_relative
     )
 
-    logger.info(
-        f"Running Jest on '{test_path_relative}' for '{target_file_path_relative}'..."
-    )
+    logger.info(f"Running Jest on '{test_path_relative}' for '{target_file_path_relative}'...")
     jest_coverage_output_dir = os.path.dirname(full_coverage_report_path)
     os.makedirs(jest_coverage_output_dir, exist_ok=True)
 
@@ -1551,9 +1479,7 @@ async def run_jest_and_coverage(
                 stderr=asyncio.subprocess.PIPE,
                 env=os.environ.copy(),
             )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), timeout=exec_timeout
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=exec_timeout)
 
         stdout_str = stdout.decode("utf-8", errors="ignore").strip()
         stderr_str = stderr.decode("utf-8", errors="ignore").strip()
@@ -1568,9 +1494,7 @@ async def run_jest_and_coverage(
             logger.warning(f"Jest execution FAILED. Log: {execution_log}")
             process_executions_total.labels(command="jest", status="failure").inc()
 
-        jest_json_summary_file = os.path.join(
-            jest_coverage_output_dir, "coverage-summary.json"
-        )
+        jest_json_summary_file = os.path.join(jest_coverage_output_dir, "coverage-summary.json")
         if os.path.exists(jest_json_summary_file):
             coverage_increase = await parse_coverage_delta(
                 jest_json_summary_file, target_file_path_relative, language="javascript"
@@ -1588,9 +1512,7 @@ async def run_jest_and_coverage(
             process.terminate()
             await process.wait()
     except Exception as e:
-        execution_log = (
-            f"Unexpected error during Jest execution for {test_path_relative}: {e}"
-        )
+        execution_log = f"Unexpected error during Jest execution for {test_path_relative}: {e}"
         logger.error(execution_log, exc_info=True)
         process_executions_total.labels(command="jest", status="error").inc()
 
@@ -1624,9 +1546,7 @@ async def run_junit_and_coverage(
         project_root, coverage_report_path_relative
     )
 
-    logger.info(
-        f"Running JUnit on '{test_path_relative}' for '{target_class_identifier}'..."
-    )
+    logger.info(f"Running JUnit on '{test_path_relative}' for '{target_class_identifier}'...")
     report_output_dir = os.path.dirname(full_coverage_report_path)
     os.makedirs(report_output_dir, exist_ok=True)
 
@@ -1720,9 +1640,7 @@ async def run_junit_and_coverage(
             process.terminate()
             await process.wait()
     except Exception as e:
-        execution_log = (
-            f"Unexpected error during JUnit execution for {test_path_relative}: {e}"
-        )
+        execution_log = f"Unexpected error during JUnit execution for {test_path_relative}: {e}"
         logger.error(execution_log, exc_info=True)
         process_executions_total.labels(command="junit", status="error").inc()
 
@@ -1755,9 +1673,7 @@ async def parse_coverage_delta(
 
         if language == "python":
             if AIOFILES_AVAILABLE:
-                async with aiofiles.open(
-                    coverage_report_full_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(coverage_report_full_path, "r", encoding="utf-8") as f:
                     content = await f.read()
                 tree = ET.ElementTree(ET.fromstring(content))
             else:
@@ -1785,15 +1701,11 @@ async def parse_coverage_delta(
 
         elif language in ["javascript", "typescript"]:
             if AIOFILES_AVAILABLE:
-                async with aiofiles.open(
-                    coverage_report_full_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(coverage_report_full_path, "r", encoding="utf-8") as f:
                     content = await f.read()
             else:
                 content = await asyncio.to_thread(
-                    lambda: open(
-                        coverage_report_full_path, "r", encoding="utf-8"
-                    ).read()
+                    lambda: open(coverage_report_full_path, "r", encoding="utf-8").read()
                 )
             jest_cov_data = json.loads(content)
 
@@ -1824,9 +1736,7 @@ async def parse_coverage_delta(
 
         elif language == "java":
             if AIOFILES_AVAILABLE:
-                async with aiofiles.open(
-                    coverage_report_full_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(coverage_report_full_path, "r", encoding="utf-8") as f:
                     content = await f.read()
                 tree = ET.ElementTree(ET.fromstring(content))
             else:
@@ -1847,9 +1757,7 @@ async def parse_coverage_delta(
 
             if total_lines_covered + total_lines_missed == 0:
                 for counter_element in root.findall(".//counter[@type='LINE']"):
-                    total_lines_covered += int(
-                        counter_element.attrib.get("covered", "0")
-                    )
+                    total_lines_covered += int(counter_element.attrib.get("covered", "0"))
                     total_lines_missed += int(counter_element.attrib.get("missed", "0"))
 
             total_lines = total_lines_covered + total_lines_missed
@@ -1865,15 +1773,11 @@ async def parse_coverage_delta(
         # --- fix Rust LCOV parsing ---
         elif language == "rust":
             if AIOFILES_AVAILABLE:
-                async with aiofiles.open(
-                    coverage_report_full_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(coverage_report_full_path, "r", encoding="utf-8") as f:
                     content = await f.read()
             else:
                 content = await asyncio.to_thread(
-                    lambda: open(
-                        coverage_report_full_path, "r", encoding="utf-8"
-                    ).read()
+                    lambda: open(coverage_report_full_path, "r", encoding="utf-8").read()
                 )
 
             lines = content.splitlines()
@@ -1895,11 +1799,7 @@ async def parse_coverage_delta(
                                     covered += 1
                     except Exception:
                         pass
-                elif (
-                    line.startswith("end_of_record")
-                    and current_file
-                    and target in current_file
-                ):
+                elif line.startswith("end_of_record") and current_file and target in current_file:
                     break
 
             return (covered / total * 100.0) if total else 0.0
@@ -1929,9 +1829,7 @@ def scan_for_uncovered_code_from_xml(
     coverage_xml_relative_path: str, project_root: str
 ) -> List[str]:
     """Scans a Cobertura XML report for uncovered Python modules."""
-    full_coverage_xml_path = validate_and_resolve_path(
-        project_root, coverage_xml_relative_path
-    )
+    full_coverage_xml_path = validate_and_resolve_path(project_root, coverage_xml_relative_path)
     uncovered = set()
     try:
         if not os.path.exists(full_coverage_xml_path):
@@ -1964,17 +1862,13 @@ def scan_for_uncovered_code_from_xml(
                 elif lines_covered_percent == -1:
                     for line in clazz.findall("lines/line"):
                         if line.attrib.get("hits") == "0":
-                            mod_name = os.path.splitext(file_name.replace(os.sep, "."))[
-                                0
-                            ]
+                            mod_name = os.path.splitext(file_name.replace(os.sep, "."))[0]
                             uncovered.add(mod_name)
                             break
                 else:
                     for line in clazz.findall("lines/line"):
                         if line.attrib.get("hits") == "0":
-                            mod_name = os.path.splitext(file_name.replace(os.sep, "."))[
-                                0
-                            ]
+                            mod_name = os.path.splitext(file_name.replace(os.sep, "."))[0]
                             uncovered.add(mod_name)
                             break
     except (FileNotFoundError, ET.ParseError) as e:
@@ -1992,9 +1886,7 @@ def scan_for_uncovered_code_from_xml(
 
 
 @zero_trust_guard
-def scan_for_uncovered_code_rust(
-    lcov_report_relative_path: str, project_root: str
-) -> List[str]:
+def scan_for_uncovered_code_rust(lcov_report_relative_path: str, project_root: str) -> List[str]:
     """Scans a Rust LCOV report for uncovered source files."""
     full_lcov_path = validate_and_resolve_path(project_root, lcov_report_relative_path)
     uncovered_files = set()
@@ -2026,9 +1918,7 @@ def scan_for_uncovered_code_rust(
                 if total_lines > covered_lines:
                     uncovered_files.add(current_file)
     except Exception as e:
-        logger.error(
-            f"Error scanning Rust LCOV report at '{full_lcov_path}': {e}", exc_info=True
-        )
+        logger.error(f"Error scanning Rust LCOV report at '{full_lcov_path}': {e}", exc_info=True)
 
     return sorted(list(uncovered_files))
 
@@ -2056,9 +1946,7 @@ async def prioritize_test_targets(
         if not uncovered_python_modules:
             return []
 
-        full_coverage_xml_path = validate_and_resolve_path(
-            project_root, coverage_report_path
-        )
+        full_coverage_xml_path = validate_and_resolve_path(project_root, coverage_report_path)
         try:
             if not os.path.exists(full_coverage_xml_path):
                 logger.error(
@@ -2066,9 +1954,7 @@ async def prioritize_test_targets(
                 )
                 return []
             if AIOFILES_AVAILABLE:
-                async with aiofiles.open(
-                    full_coverage_xml_path, "r", encoding="utf-8"
-                ) as f:
+                async with aiofiles.open(full_coverage_xml_path, "r", encoding="utf-8") as f:
                     content = await f.read()
                 root = ET.fromstring(content)
             else:
@@ -2110,9 +1996,7 @@ async def prioritize_test_targets(
                         f"Module '{target['identifier']}' selected for test generation (Priority: {priority_score:.2f}, Current Coverage: {target['current_line_coverage']:.1f}%)."
                     )
                 else:
-                    logger.info(
-                        f"Module '{target['identifier']}' skipped due to policy: {reason}"
-                    )
+                    logger.info(f"Module '{target['identifier']}' skipped due to policy: {reason}")
                     if AUDIT_LOGGER_AVAILABLE:
                         await audit_logger.log_event(
                             event_type="test_generation_skipped",
@@ -2142,9 +2026,7 @@ async def prioritize_test_targets(
 
 
 @zero_trust_guard
-async def check_and_install_dependencies(
-    dependencies: List[str], project_root: str
-) -> bool:
+async def check_and_install_dependencies(dependencies: List[str], project_root: str) -> bool:
     """Checks for the presence of required command-line tools."""
     missing_tools = []
 
@@ -2154,9 +2036,7 @@ async def check_and_install_dependencies(
         return shutil.which(tool)
 
     with ThreadPoolExecutor() as executor:
-        futures = [
-            loop.run_in_executor(executor, _check_tool, tool) for tool in dependencies
-        ]
+        futures = [loop.run_in_executor(executor, _check_tool, tool) for tool in dependencies]
         results = await asyncio.gather(*futures)
 
     for tool, result in zip(dependencies, results):
@@ -2167,12 +2047,8 @@ async def check_and_install_dependencies(
         logger.info("All required external command-line dependencies are available.")
         return True
 
-    logger.error(
-        f"The following required dependencies are missing: {', '.join(missing_tools)}"
-    )
-    logger.error(
-        "Please install them in your environment or ensure they are in your PATH."
-    )
+    logger.error(f"The following required dependencies are missing: {', '.join(missing_tools)}")
+    logger.error("Please install them in your environment or ensure they are in your PATH.")
 
     if AUDIT_LOGGER_AVAILABLE:
         await audit_logger.log_event(
@@ -2210,15 +2086,11 @@ def init_llm(
         return SimpleNamespace(
             model=model_name,
             temperature=temperature,
-            ainvoke=lambda *args, **kwargs: SimpleNamespace(
-                content="Mock LLM response."
-            ),
+            ainvoke=lambda *args, **kwargs: SimpleNamespace(content="Mock LLM response."),
         )
 
     if backend not in ["openai", "anthropic", "google"]:
-        logger.error(
-            f"Unsupported LLM backend: '{backend}'. Falling back to mock backend."
-        )
+        logger.error(f"Unsupported LLM backend: '{backend}'. Falling back to mock backend.")
         return init_llm(backend="mock")
 
     # Get API key from parameter or environment

@@ -191,9 +191,7 @@ class TestCodeHealthEnvBasics:
 
     def test_environment_initialization(self, basic_config, mock_metrics, mock_action):
         """Test environment initialization"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         assert env.session_id is not None
         assert env.observation_space.shape == (3,)
@@ -229,9 +227,7 @@ class TestCodeHealthEnvBasics:
 
     def test_reset(self, basic_config, mock_metrics, mock_action):
         """Test environment reset"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         # Take some steps
         env.step(ActionType.NOOP.value)
@@ -257,9 +253,7 @@ class TestCodeHealthEnvStep:
 
     def test_basic_step(self, basic_config, mock_metrics, mock_action):
         """Test basic step execution"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         obs, _ = env.reset()
         new_obs, reward, done, info = env.step(ActionType.NOOP.value)
@@ -275,9 +269,7 @@ class TestCodeHealthEnvStep:
 
     def test_invalid_action(self, basic_config, mock_metrics, mock_action):
         """Test handling of invalid action"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
         with pytest.raises(ValueError, match="Invalid action"):
@@ -287,9 +279,7 @@ class TestCodeHealthEnvStep:
 
     def test_action_cooldown(self, basic_config, mock_metrics, mock_action):
         """Test action cooldown mechanism"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
 
@@ -307,9 +297,7 @@ class TestCodeHealthEnvStep:
     def test_max_steps_termination(self, mock_metrics, mock_action):
         """Test termination at max steps"""
         config = EnvironmentConfig(max_steps=3)
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 
@@ -349,9 +337,7 @@ class TestAutomaticRollback:
             enable_auto_rollback=True,
         )
 
-        env = CodeHealthEnv(
-            get_metrics=degrading_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=degrading_metrics, apply_action=mock_action, config=config)
 
         env.reset()
         env.step(ActionType.NOOP.value)
@@ -379,9 +365,7 @@ class TestAutomaticRollback:
                 0.9,
             ]  # Very bad metrics (below default critical threshold of 0.1)
 
-        env = CodeHealthEnv(
-            get_metrics=bad_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=bad_metrics, apply_action=mock_action, config=config)
 
         env.reset()
         obs, reward, done, info = env.step(ActionType.NOOP.value)
@@ -508,9 +492,7 @@ class TestMemoryManagement:
     def test_action_history_limit(self, mock_metrics, mock_action):
         """Test that action history respects max size"""
         config = EnvironmentConfig(max_action_history=5)
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 
@@ -526,9 +508,7 @@ class TestMemoryManagement:
     def test_metrics_history_limit(self, mock_metrics, mock_action):
         """Test that metrics history respects max size"""
         config = EnvironmentConfig(max_action_history=3)
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 
@@ -553,9 +533,7 @@ class TestRewardCalculation:
         def good_metrics():
             return [0.9, 0.1, 0.05]  # Good metrics
 
-        env = CodeHealthEnv(
-            get_metrics=good_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=good_metrics, apply_action=mock_action, config=config)
 
         env.reset()
         obs, reward, done, info = env.step(ActionType.NOOP.value)
@@ -577,9 +555,7 @@ class TestRewardCalculation:
         def mock_action(action_id):
             return {"success": True}
 
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 
@@ -635,9 +611,7 @@ class TestRendering:
 
     def test_human_render(self, basic_config, mock_metrics, mock_action, capsys):
         """Test human-readable rendering"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
         env.render(mode="human")
@@ -651,9 +625,7 @@ class TestRendering:
 
     def test_rgb_array_render(self, basic_config, mock_metrics, mock_action):
         """Test RGB array rendering for video"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
         env.step(ActionType.NOOP.value)
@@ -669,9 +641,7 @@ class TestRendering:
 
     def test_ansi_render(self, basic_config, mock_metrics, mock_action, capsys):
         """Test ANSI colored terminal rendering"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
         env.render(mode="ansi")
@@ -684,9 +654,7 @@ class TestRendering:
 
     def test_invalid_render_mode(self, basic_config, mock_metrics, mock_action):
         """Test invalid render mode"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
         with pytest.raises(NotImplementedError, match="not supported"):
@@ -701,9 +669,7 @@ class TestDataExport:
 
     def test_get_training_data(self, basic_config, mock_metrics, mock_action):
         """Test training data export"""
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=basic_config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=basic_config)
 
         env.reset()
 
@@ -738,13 +704,9 @@ class TestDataExport:
                 0.1 + 0.02 * step_count,
             ]
 
-        config = EnvironmentConfig(
-            observation_keys=["pass_rate", "latency", "alert_ratio"]
-        )
+        config = EnvironmentConfig(observation_keys=["pass_rate", "latency", "alert_ratio"])
 
-        env = CodeHealthEnv(
-            get_metrics=varying_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=varying_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 
@@ -804,9 +766,7 @@ class TestAuditLogging:
             return found_calls
 
         # Check init event
-        init_calls = get_event_types(
-            mock_audit_logger.log_event.call_args_list, "rl_env_init"
-        )
+        init_calls = get_event_types(mock_audit_logger.log_event.call_args_list, "rl_env_init")
         assert len(init_calls) == 1
 
         # Reset
@@ -818,16 +778,12 @@ class TestAuditLogging:
 
         # Step
         env.step(ActionType.RESTART.value)
-        step_calls = get_event_types(
-            mock_audit_logger.log_event.call_args_list, "rl_step"
-        )
+        step_calls = get_event_types(mock_audit_logger.log_event.call_args_list, "rl_step")
         assert len(step_calls) >= 1
 
         # Close
         env.close()
-        close_calls = get_event_types(
-            mock_audit_logger.log_event.call_args_list, "rl_env_closed"
-        )
+        close_calls = get_event_types(mock_audit_logger.log_event.call_args_list, "rl_env_closed")
         assert len(close_calls) == 1
 
 
@@ -857,9 +813,7 @@ class TestIntegration:
             max_steps=10, unacceptable_threshold=0.4, enable_auto_rollback=True
         )
 
-        env = CodeHealthEnv(
-            get_metrics=sequential_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=sequential_metrics, apply_action=mock_action, config=config)
 
         obs, info = env.reset()
         total_reward = 0
@@ -880,18 +834,14 @@ class TestIntegration:
 
         # Check that automatic rollback was triggered
         training_data = env.get_training_data()
-        assert any(
-            "automatic_rollback" in record.get("info", {}) for record in training_data
-        )
+        assert any("automatic_rollback" in record.get("info", {}) for record in training_data)
 
         env.close()
 
     def test_stress_test(self, mock_metrics, mock_action):
         """Stress test with many rapid steps"""
         config = EnvironmentConfig(max_steps=1000)
-        env = CodeHealthEnv(
-            get_metrics=mock_metrics, apply_action=mock_action, config=config
-        )
+        env = CodeHealthEnv(get_metrics=mock_metrics, apply_action=mock_action, config=config)
 
         env.reset()
 

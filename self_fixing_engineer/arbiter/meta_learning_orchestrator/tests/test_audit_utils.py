@@ -141,9 +141,7 @@ async def test_initialization_no_encryption_key(mocker: MockerFixture, tmp_path)
     audit_module.AUDIT_ENCRYPTION_KEY = None
 
     try:
-        audit_utils_no_encryption = AuditUtils(
-            log_path=str(tmp_path / "audit_log_no_enc.jsonl")
-        )
+        audit_utils_no_encryption = AuditUtils(log_path=str(tmp_path / "audit_log_no_enc.jsonl"))
         assert audit_utils_no_encryption.fernet is None
     finally:
         # Restore the original key
@@ -158,9 +156,7 @@ async def test_initialization_no_signing_keys(mocker: MockerFixture, caplog, tmp
     from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Temporarily clear the signing keys
-    mocker.patch.dict(
-        os.environ, {"AUDIT_SIGNING_PRIVATE_KEY": "", "AUDIT_SIGNING_PUBLIC_KEY": ""}
-    )
+    mocker.patch.dict(os.environ, {"AUDIT_SIGNING_PRIVATE_KEY": "", "AUDIT_SIGNING_PUBLIC_KEY": ""})
 
     caplog.set_level(logging.WARNING)
 
@@ -305,9 +301,7 @@ async def test_validate_audit_chain_tampered(audit_utils, tmp_path):
     """Test validation of a tampered audit chain."""
     # Add events
     for i in range(3):
-        await audit_utils.add_audit_event(
-            f"test_event_{i}", {"test_key": f"test_value_{i}"}
-        )
+        await audit_utils.add_audit_event(f"test_event_{i}", {"test_key": f"test_value_{i}"})
 
     # Tamper the second event
     async with aiofiles.open(audit_utils.log_path, "r") as f:
@@ -392,9 +386,7 @@ async def test_log_rotation(setup_env, tmp_path):
 
     # Write enough events to trigger rotation
     for i in range(5):
-        await small_audit_utils.add_audit_event(
-            f"test_event_{i}", {"test_key": f"test_value_{i}"}
-        )
+        await small_audit_utils.add_audit_event(f"test_event_{i}", {"test_key": f"test_value_{i}"})
 
     # Check rotated files exist
     assert os.path.exists(small_audit_utils.log_path)
@@ -414,9 +406,7 @@ async def test_concurrent_add_audit_event(audit_utils, tmp_path):
     """Test concurrent audit event addition."""
 
     async def add_event(i):
-        return await audit_utils.add_audit_event(
-            f"test_event_{i}", {"test_key": f"test_value_{i}"}
-        )
+        return await audit_utils.add_audit_event(f"test_event_{i}", {"test_key": f"test_value_{i}"})
 
     tasks = [add_event(i) for i in range(10)]
     results = await asyncio.gather(*tasks)
@@ -434,9 +424,7 @@ async def test_concurrent_add_audit_event(audit_utils, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_write_audit_event_retry(
-    audit_utils, mocker: MockerFixture, tmp_path, caplog
-):
+async def test_write_audit_event_retry(audit_utils, mocker: MockerFixture, tmp_path, caplog):
     """Test retry mechanism for writing audit events."""
     event_type = "test_event"
     details = {"test_key": "test_value"}

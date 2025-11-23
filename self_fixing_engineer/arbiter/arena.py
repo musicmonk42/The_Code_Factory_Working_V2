@@ -27,9 +27,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -98,17 +96,13 @@ _metrics_lock = (
 
 
 # REFACTORED: Now wraps the imported get_or_create_counter
-def get_or_create_prom_counter(
-    name: str, documentation: str, labelnames: Tuple[str, ...] = ()
-):
+def get_or_create_prom_counter(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
     # The actual locking/creation logic is now deferred to arbiter.metrics
     return get_or_create_counter(name, documentation, labelnames)
 
 
 # REFACTORED: Now wraps the imported get_or_create_gauge
-def get_or_create_prom_gauge(
-    name: str, documentation: str, labelnames: Tuple[str, ...] = ()
-):
+def get_or_create_prom_gauge(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
     # The actual locking/creation logic is now deferred to arbiter.metrics
     return get_or_create_gauge(name, documentation, labelnames)
 
@@ -194,9 +188,7 @@ def require_auth(func: Callable) -> Callable:
                 raise HTTPException(status_code=403, detail="Insufficient privileges.")
 
         except jwt.InvalidTokenError:
-            raise HTTPException(
-                status_code=401, detail="Invalid or expired authentication token."
-            )
+            raise HTTPException(status_code=401, detail="Invalid or expired authentication token.")
         except Exception as e:
             logger.error(f"Authentication failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Authentication service error.")
@@ -225,14 +217,10 @@ class ArbiterArena:
         self._lock = asyncio.Lock()
         self._db_engine = db_engine
         self.session_maker = (
-            async_sessionmaker(self._db_engine, expire_on_commit=False)
-            if self._db_engine
-            else None
+            async_sessionmaker(self._db_engine, expire_on_commit=False) if self._db_engine else None
         )
         self.codebase_map = {}
-        self.app = FastAPI(
-            title=f"Arbiter Arena API - {self.name}", version=self.version
-        )
+        self.app = FastAPI(title=f"Arbiter Arena API - {self.name}", version=self.version)
         self._current_arbiter = 0
         self.http_port = self.settings.ARENA_PORT
 
@@ -241,12 +229,8 @@ class ArbiterArena:
 
         # Initialize SimulationEngine with proper fallback
         try:
-            sim_from_registry = PLUGIN_REGISTRY.get(
-                PlugInKind.CORE_SERVICE, "simulation_module"
-            )
-            self.simulation_module = (
-                sim_from_registry if sim_from_registry else SimulationEngine()
-            )
+            sim_from_registry = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, "simulation_module")
+            self.simulation_module = sim_from_registry if sim_from_registry else SimulationEngine()
             if SIMULATION_AVAILABLE:
                 logger.info("SimulationEngine initialized successfully")
             else:
@@ -255,9 +239,7 @@ class ArbiterArena:
             logger.error(f"Failed to initialize SimulationEngine: {e}")
             self.simulation_module = SimulationEngine()  # Use fallback
         if not self.simulation_module:
-            logger.error(
-                "SimulationModule not found in plugin registry. Falling back to mock."
-            )
+            logger.error("SimulationModule not found in plugin registry. Falling back to mock.")
             self.simulation_module = MockSimulationModule()
 
         self.analyzer = CodebaseAnalyzer(root_dir=self.settings.REPORTS_DIRECTORY)
@@ -281,9 +263,7 @@ class ArbiterArena:
             SLACK_WEBHOOK_URL=self.settings.SLACK_WEBHOOK_URL,
         )
 
-        self.human_in_loop = HumanInLoop(
-            config=hitl_config, feedback_manager=self.feedback
-        )
+        self.human_in_loop = HumanInLoop(config=hitl_config, feedback_manager=self.feedback)
 
         self.monitor = Monitor(
             log_file=os.path.join(
@@ -329,17 +309,13 @@ class ArbiterArena:
         }
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    webhook_url, json=payload, timeout=10
-                ) as response:
+                async with session.post(webhook_url, json=payload, timeout=10) as response:
                     if response.status >= 300:
                         logger.warning(
                             f"Webhook for event '{event_type}' failed with status {response.status}."
                         )
         except Exception as e:
-            logger.error(
-                f"Error sending webhook for event '{event_type}': {e}", exc_info=True
-            )
+            logger.error(f"Error sending webhook for event '{event_type}': {e}", exc_info=True)
             arena_errors_total.labels(error_type="webhook_fail").inc()
 
     def _setup_error_handlers(self):
@@ -383,9 +359,7 @@ class ArbiterArena:
                     }
                 )
             except Exception as e:
-                logger.error(
-                    f"Failed to save codebase map from '{source}': {e}", exc_info=True
-                )
+                logger.error(f"Failed to save codebase map from '{source}': {e}", exc_info=True)
                 self.monitor.log_action(
                     {
                         "type": "codebase_map_persistence",
@@ -418,9 +392,7 @@ class ArbiterArena:
         await self.analyzer.cache_data()
         await self.analyzer.preload_models()
         await self.analyzer.clear_old_logs()
-        self.monitor.log_action(
-            {"type": "arena_initial_scan_complete", "status": "success"}
-        )
+        self.monitor.log_action({"type": "arena_initial_scan_complete", "status": "success"})
         await self._send_webhook(
             "scan_completed",
             {"scan_type": "initial", "files_scanned": len(codebase_map["file_tree"])},
@@ -429,9 +401,7 @@ class ArbiterArena:
 
     async def _create_periodic_scan_coro(self):
         scan_interval = getattr(self.settings, "PERIODIC_SCAN_INTERVAL_S", 3600)
-        logger.info(
-            f"Periodic scanner configured to run every {scan_interval} seconds."
-        )
+        logger.info(f"Periodic scanner configured to run every {scan_interval} seconds.")
         while True:
             await asyncio.sleep(scan_interval)
             logger.info("Running scheduled codebase scan.")
@@ -454,9 +424,7 @@ class ArbiterArena:
             await self.analyzer.cache_data()
             await self.analyzer.preload_models()
             await self.analyzer.clear_old_logs()
-            self.monitor.log_action(
-                {"type": "arena_scheduled_scan_complete", "status": "success"}
-            )
+            self.monitor.log_action({"type": "arena_scheduled_scan_complete", "status": "success"})
             await self._send_webhook(
                 "scan_completed",
                 {
@@ -488,9 +456,7 @@ class ArbiterArena:
                 loop.create_task(create_in_memory_tables())
             except RuntimeError:
                 asyncio.run(create_in_memory_tables())
-            logger.info(
-                "Created in-memory database and agent_state table for arbiters."
-            )
+            logger.info("Created in-memory database and agent_state table for arbiters.")
 
         world_size = getattr(self.settings, "WORLD_SIZE", 3)
         self.arbiters = []
@@ -513,9 +479,7 @@ class ArbiterArena:
                 intent_capture_engine=self.intent_capture_engine,  # NEW: Passing the dependency
             )
             self.arbiters.append(arbiter)
-        logger.info(
-            f"Initialized {len(self.arbiters)} arbiters in the arena structure."
-        )
+        logger.info(f"Initialized {len(self.arbiters)} arbiters in the arena structure.")
         self.monitor.log_action(
             {
                 "type": "arena_arbiters_initialization_struct_only",
@@ -529,9 +493,7 @@ class ArbiterArena:
             if arbiter not in self.arbiters:
                 self.arbiters.append(arbiter)
                 active_arbiters.set(len(self.arbiters))
-                logger.info(
-                    f"Registered arbiter: {arbiter.name} (Total: {len(self.arbiters)})"
-                )
+                logger.info(f"Registered arbiter: {arbiter.name} (Total: {len(self.arbiters)})")
                 arena_ops_total.labels(operation="register_arbiter").inc()
 
     async def remove(self, arbiter: Any):
@@ -540,9 +502,7 @@ class ArbiterArena:
             if arbiter in self.arbiters:
                 self.arbiters.remove(arbiter)
                 active_arbiters.set(len(self.arbiters))
-                logger.info(
-                    f"Removed arbiter: {arbiter.name} (Remaining: {len(self.arbiters)})"
-                )
+                logger.info(f"Removed arbiter: {arbiter.name} (Remaining: {len(self.arbiters)})")
                 await self._send_webhook("agent_removed", {"agent_name": arbiter.name})
                 arena_ops_total.labels(operation="remove_arbiter").inc()
 
@@ -566,9 +526,7 @@ class ArbiterArena:
         """Sets up FastAPI routes for the code guardian arena API."""
         self.router = APIRouter()
 
-        @self.router.get(
-            "/health", summary="Get Service Health", tags=["Arena Operations"]
-        )
+        @self.router.get("/health", summary="Get Service Health", tags=["Arena Operations"])
         @require_auth
         async def health_check_endpoint(
             request: Request,
@@ -594,16 +552,12 @@ class ArbiterArena:
                     arena_errors_total.labels(error_type="health_check").inc()
                     raise HTTPException(status_code=500, detail=str(e))
 
-        @self.router.get(
-            "/version", summary="Get API Version", tags=["Arena Operations"]
-        )
+        @self.router.get("/version", summary="Get API Version", tags=["Arena Operations"])
         async def version_endpoint():
             """Returns the current version of the Arena service and its name."""
             return {"name": self.name, "version": self.version}
 
-        @self.router.get(
-            "/status", summary="Get Full System Status", tags=["Arena Operations"]
-        )
+        @self.router.get("/status", summary="Get Full System Status", tags=["Arena Operations"])
         @require_auth
         async def status_endpoint(
             request: Request,
@@ -613,9 +567,7 @@ class ArbiterArena:
             with tracer.start_as_current_span("arena_status_check"):
                 return await self.handle_status(request)
 
-        @self.router.post(
-            "/scan", summary="Trigger a Codebase Scan", tags=["Code Actions"]
-        )
+        @self.router.post("/scan", summary="Trigger a Codebase Scan", tags=["Code Actions"])
         @require_auth
         async def scan_endpoint(
             request: Request,
@@ -656,9 +608,7 @@ class ArbiterArena:
                     "tool_issues": tool_issues,
                 }
 
-        @self.router.post(
-            "/repair", summary="Attempt a Code Repair", tags=["Code Actions"]
-        )
+        @self.router.post("/repair", summary="Attempt a Code Repair", tags=["Code Actions"])
         @require_auth
         async def repair_endpoint(
             request: Request,
@@ -675,14 +625,10 @@ class ArbiterArena:
                     )
 
                 random_arbiter = await self.get_random_arbiter()
-                repair_result = await random_arbiter.evolve(
-                    arena=self, target_module=target_module
-                )
+                repair_result = await random_arbiter.evolve(arena=self, target_module=target_module)
 
                 if repair_result and isinstance(repair_result, dict):
-                    self.codebase_map.setdefault("repair_history", []).append(
-                        repair_result
-                    )
+                    self.codebase_map.setdefault("repair_history", []).append(repair_result)
                     await self._update_and_persist_map({}, "manual_repair")
 
                 arena_ops_total.labels(operation="manual_repair").inc()
@@ -691,9 +637,7 @@ class ArbiterArena:
                     "result": repair_result,
                 }
 
-        @self.router.get(
-            "/history", summary="Get Repair History", tags=["Code Actions"]
-        )
+        @self.router.get("/history", summary="Get Repair History", tags=["Code Actions"])
         @require_auth
         async def history_endpoint(
             request: Request,
@@ -721,9 +665,7 @@ class ArbiterArena:
                 language = data.get("language", "python")
                 config = data.get("config", {})
 
-                arbiter = next(
-                    (a for a in self.arbiters if a.name == arbiter_name), None
-                )
+                arbiter = next((a for a in self.arbiters if a.name == arbiter_name), None)
                 if not arbiter:
                     raise HTTPException(
                         status_code=404, detail=f"Arbiter '{arbiter_name}' not found."
@@ -733,9 +675,7 @@ class ArbiterArena:
                 arena_ops_total.labels(operation="test_generation").inc()
                 return JSONResponse(content={"result": result})
 
-        @self.router.get(
-            "/arbiters", summary="List All Arbiters", tags=["Arena Operations"]
-        )
+        @self.router.get("/arbiters", summary="List All Arbiters", tags=["Arena Operations"])
         @require_auth
         async def list_arbiters_endpoint(
             request: Request,
@@ -745,8 +685,7 @@ class ArbiterArena:
             with tracer.start_as_current_span("arena_list_arbiters"):
                 try:
                     arbiters_list = [
-                        {"name": a.name, "status": await a.get_status()}
-                        for a in self.arbiters
+                        {"name": a.name, "status": await a.get_status()} for a in self.arbiters
                     ]
                     arena_ops_total.labels(operation="list_arbiters").inc()
                     return JSONResponse(content={"arbiters": arbiters_list})
@@ -789,12 +728,8 @@ class ArbiterArena:
         await self._send_webhook(
             "arena_started", {"http_port": http_port, "arbiters": len(self.arbiters)}
         )
-        logger.info(
-            f"Starting ArbiterArena services for '{self.name}' on HTTP port {http_port}"
-        )
-        self.monitor.log_action(
-            {"type": "arena_services_start", "http_port": http_port}
-        )
+        logger.info(f"Starting ArbiterArena services for '{self.name}' on HTTP port {http_port}")
+        self.monitor.log_action({"type": "arena_services_start", "http_port": http_port})
 
         if self.feedback:
             await self.feedback.connect_db()
@@ -809,8 +744,7 @@ class ArbiterArena:
 
         async with self._lock:
             tasks = [
-                asyncio.create_task(arbiter.start_async_services())
-                for arbiter in self.arbiters
+                asyncio.create_task(arbiter.start_async_services()) for arbiter in self.arbiters
             ]
             await asyncio.gather(*tasks)
             logger.info(f"All {len(self.arbiters)} arbiters' async services started.")
@@ -820,15 +754,11 @@ class ArbiterArena:
 
             # Security: Use environment variable for host binding (default to localhost)
             api_host = os.getenv("API_HOST", "127.0.0.1")
-            config = uvicorn.Config(
-                self.app, host=api_host, port=http_port, log_level="info"
-            )
+            config = uvicorn.Config(self.app, host=api_host, port=http_port, log_level="info")
             self.server = uvicorn.Server(config)
             await self.server.serve()
         except ImportError:
-            logger.error(
-                "Uvicorn not found. Please install it with 'pip install uvicorn'."
-            )
+            logger.error("Uvicorn not found. Please install it with 'pip install uvicorn'.")
             arena_errors_total.labels(error_type="uvicorn_missing").inc()
         except Exception as e:
             logger.error(f"Failed to start arena HTTP services: {e}", exc_info=True)
@@ -852,9 +782,7 @@ class ArbiterArena:
                 "message": "Code Guardian Arena operational",
             }
 
-        logger.info(
-            "Arena status checked. Notification services are handled via webhooks."
-        )
+        logger.info("Arena status checked. Notification services are handled via webhooks.")
         return status_data
 
     async def run_all(self, max_cycles: int = 100):
@@ -869,9 +797,7 @@ class ArbiterArena:
             for arbiter in arbiters_to_remove:
                 await self.remove(arbiter)
                 await arbiter.stop_async_services()
-                logger.info(
-                    f"Arbiter {arbiter.name} was removed due to poor performance."
-                )
+                logger.info(f"Arbiter {arbiter.name} was removed due to poor performance.")
 
             if not self.arbiters:
                 logger.info("All arbiters have been deactivated. Stopping arena run.")
@@ -892,9 +818,7 @@ class ArbiterArena:
 
         repair_outcomes = []
         for i, res in enumerate(results):
-            arbiter_name = (
-                self.arbiters[i].name if i < len(self.arbiters) else "unknown"
-            )
+            arbiter_name = self.arbiters[i].name if i < len(self.arbiters) else "unknown"
             if isinstance(res, Exception):
                 logger.error(
                     f"Error during arbiter evolution for {arbiter_name}: {res}",
@@ -938,9 +862,7 @@ def _handle_shutdown(loop: asyncio.AbstractEventLoop, arena: ArbiterArena):
     async def shutdown_coroutine():
         logger.info("Shutting down code guardian arena services gracefully...")
         await arena.stop_all()
-        tasks = [
-            t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task(loop)
-        ]
+        tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task(loop)]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -993,26 +915,16 @@ def run_arena():
 
     logger.info("Database initialized for arena arbiters.")
 
-    arena = ArbiterArena(
-        name="MainCodeGuardianArena", num=2, settings=settings, db_engine=engine
-    )
+    arena = ArbiterArena(name="MainCodeGuardianArena", num=2, settings=settings, db_engine=engine)
 
     try:
-        main_loop.add_signal_handler(
-            signal.SIGINT, lambda: _handle_shutdown(main_loop, arena)
-        )
-        main_loop.add_signal_handler(
-            signal.SIGTERM, lambda: _handle_shutdown(main_loop, arena)
-        )
+        main_loop.add_signal_handler(signal.SIGINT, lambda: _handle_shutdown(main_loop, arena))
+        main_loop.add_signal_handler(signal.SIGTERM, lambda: _handle_shutdown(main_loop, arena))
     except NotImplementedError:
-        logger.warning(
-            "Cannot add signal handlers on this platform. Use Ctrl+C to stop."
-        )
+        logger.warning("Cannot add signal handlers on this platform. Use Ctrl+C to stop.")
 
     try:
-        main_loop.run_until_complete(
-            arena.start_arena_services(http_port=settings.ARENA_PORT)
-        )
+        main_loop.run_until_complete(arena.start_arena_services(http_port=settings.ARENA_PORT))
     except KeyboardInterrupt:
         logger.info("Arena interrupted by user.")
     finally:
@@ -1032,9 +944,5 @@ if __name__ == "__main__":
         logger.info("Orchestrator: Launching sandboxed Arena process...")
         proc = subprocess.Popen([sys.executable, __file__], env=env)
         proc.wait()
-        logger.info(
-            f"Orchestrator: Sandboxed Arena process exited with code: {proc.returncode}"
-        )
-        logger.info(
-            f"Orchestrator: Sandboxed Arena process exited with code: {proc.returncode}"
-        )
+        logger.info(f"Orchestrator: Sandboxed Arena process exited with code: {proc.returncode}")
+        logger.info(f"Orchestrator: Sandboxed Arena process exited with code: {proc.returncode}")

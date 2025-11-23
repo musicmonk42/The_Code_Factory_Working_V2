@@ -79,10 +79,7 @@ except ImportError:
             neighbors = []
             for edge in self.edges:
                 if edge["from"] == node_id:
-                    if (
-                        relationship_type is None
-                        or edge["relationship"] == relationship_type
-                    ):
+                    if relationship_type is None or edge["relationship"] == relationship_type:
                         neighbors.append((edge["to"], edge["relationship"]))
             return neighbors
 

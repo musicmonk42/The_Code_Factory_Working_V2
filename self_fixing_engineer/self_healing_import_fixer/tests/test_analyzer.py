@@ -185,9 +185,9 @@ def test_load_config_invalid_schema(invalid_schema_config_path, mock_alert_opera
     with pytest.raises(AnalyzerCriticalError) as excinfo:
         load_config(invalid_schema_config_path)
     # The error could be about missing required field or validation
-    assert "project_root" in str(
+    assert "project_root" in str(excinfo.value) or "Unexpected error loading configuration" in str(
         excinfo.value
-    ) or "Unexpected error loading configuration" in str(excinfo.value)
+    )
     assert mock_alert_operator.call_count >= 1
 
 
@@ -267,12 +267,8 @@ def test_prod_mode_blocks_mock_llm(tmp_path):
     with patch.dict(os.environ, {"PRODUCTION_MODE": "true"}):
         # Since we're in production mode but loading from a file (not SSM),
         # we need to mock the file check to pass
-        with patch(
-            "os.path.exists", return_value=False
-        ):  # Make it think file doesn't exist
-            with patch(
-                "self_healing_import_fixer.analyzer.analyzer.boto3"
-            ) as mock_boto3:
+        with patch("os.path.exists", return_value=False):  # Make it think file doesn't exist
+            with patch("self_healing_import_fixer.analyzer.analyzer.boto3") as mock_boto3:
                 # Mock SSM to return config with mock endpoint
                 mock_client = MagicMock()
                 mock_client.get_parameter.return_value = {
@@ -282,9 +278,7 @@ def test_prod_mode_blocks_mock_llm(tmp_path):
 
                 with pytest.raises(AnalyzerCriticalError) as excinfo:
                     load_config(str(config_file))
-                assert "Mock LLM endpoint detected in PRODUCTION_MODE" in str(
-                    excinfo.value
-                )
+                assert "Mock LLM endpoint detected in PRODUCTION_MODE" in str(excinfo.value)
 
 
 def test_prod_mode_blocks_disabled_audit_logging(tmp_path):

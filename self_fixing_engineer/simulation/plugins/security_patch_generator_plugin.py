@@ -39,9 +39,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -233,9 +231,7 @@ else:
 
 # --- Load Config from File or Env ---
 def _load_config() -> LLMPatchGenConfig:
-    config_file_path = (
-        Path(__file__).parent / "configs" / "security_patch_gen_config.json"
-    )
+    config_file_path = Path(__file__).parent / "configs" / "security_patch_gen_config.json"
     config_dict: Dict[str, Any] = {}
     if config_file_path.exists():
         try:
@@ -374,9 +370,7 @@ class LLMClientWrapper:
             generation_info = None
             # Prefer agenerate with batch to extract generation_info
             try:
-                resp: ChatResult = await self._llm_backend.agenerate(
-                    [langchain_messages], **kwargs
-                )
+                resp: ChatResult = await self._llm_backend.agenerate([langchain_messages], **kwargs)
                 gen0 = resp.generations[0][0]
                 text = (
                     getattr(gen0, "text", "")
@@ -389,9 +383,7 @@ class LLMClientWrapper:
                     usage = {}
                     if isinstance(generation_info, dict):
                         usage = (
-                            generation_info.get("token_usage")
-                            or generation_info.get("usage")
-                            or {}
+                            generation_info.get("token_usage") or generation_info.get("usage") or {}
                         )
                     for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
                         if k in usage:
@@ -451,17 +443,13 @@ async def _get_llm_client() -> LLMClientWrapper:
                 generic_llm_client = LLMClient(
                     provider=LLM_PATCH_GEN_CONFIG.llm_provider_name,
                     model=LLM_PATCH_GEN_CONFIG.llm_model_name,
-                    api_key=os.getenv(
-                        f"{LLM_PATCH_GEN_CONFIG.llm_provider_name.upper()}_API_KEY"
-                    ),
+                    api_key=os.getenv(f"{LLM_PATCH_GEN_CONFIG.llm_provider_name.upper()}_API_KEY"),
                     temperature=LLM_PATCH_GEN_CONFIG.llm_temperature,
                     max_tokens=LLM_PATCH_GEN_CONFIG.llm_max_tokens,
                     timeout=LLM_PATCH_GEN_CONFIG.llm_timeout_seconds,
                 )
                 _llm_client_instance = LLMClientWrapper(generic_llm_client)
-                logger.info(
-                    "LangChain not available; using generic LLM client instead."
-                )
+                logger.info("LangChain not available; using generic LLM client instead.")
                 return _llm_client_instance
             except Exception:
                 raise ImportError(
@@ -511,9 +499,7 @@ async def _get_llm_client() -> LLMClientWrapper:
             generic_llm_client = LLMClient(
                 provider=LLM_PATCH_GEN_CONFIG.llm_provider_name,
                 model=LLM_PATCH_GEN_CONFIG.llm_model_name,
-                api_key=os.getenv(
-                    f"{LLM_PATCH_GEN_CONFIG.llm_provider_name.upper()}_API_KEY"
-                ),
+                api_key=os.getenv(f"{LLM_PATCH_GEN_CONFIG.llm_provider_name.upper()}_API_KEY"),
                 temperature=LLM_PATCH_GEN_CONFIG.llm_temperature,
                 max_tokens=LLM_PATCH_GEN_CONFIG.llm_max_tokens,
                 timeout=LLM_PATCH_GEN_CONFIG.llm_timeout_seconds,
@@ -533,9 +519,7 @@ async def plugin_health() -> Dict[str, Any]:
     details: List[str] = []
     try:
         llm_client = await _get_llm_client()
-        details.append(
-            f"LLM client interface acquired: {LLM_PATCH_GEN_CONFIG.llm_interface_type}."
-        )
+        details.append(f"LLM client interface acquired: {LLM_PATCH_GEN_CONFIG.llm_interface_type}.")
         if LLM_PATCH_GEN_CONFIG.health_live_call:
             test_messages = [
                 {"role": "system", "content": "You are a test bot."},
@@ -576,12 +560,7 @@ def _looks_like_unified_diff(text: str) -> bool:
     if not lines[0].startswith("--- ") or not lines[1].startswith("+++ "):
         return False
     for ln in lines[2:]:
-        if (
-            ln.startswith("@@ ")
-            or ln.startswith("+")
-            or ln.startswith("-")
-            or ln.startswith(" ")
-        ):
+        if ln.startswith("@@ ") or ln.startswith("+") or ln.startswith("-") or ln.startswith(" "):
             return True
     return False
 
@@ -604,9 +583,7 @@ EXPLANATION_DELIMITERS = [
 def _parse_llm_output(
     generated_content: str, code_language: str = "python"
 ) -> Tuple[Optional[str], Optional[str], Optional[str], bool]:
-    generated_content = (
-        (generated_content or "").strip().replace("\r\n", "\n").replace("\r", "\n")
-    )
+    generated_content = (generated_content or "").strip().replace("\r\n", "\n").replace("\r", "\n")
     # Try to extract a unified diff
     diff_match = DIFF_PATTERN.search(generated_content)
     if diff_match:
@@ -614,9 +591,7 @@ def _parse_llm_output(
         if _looks_like_unified_diff(patch_content):
             remaining_content = generated_content.replace(patch_content, "", 1).strip()
             explanation = (
-                remaining_content
-                if remaining_content
-                else "AI provided a unified diff patch."
+                remaining_content if remaining_content else "AI provided a unified diff patch."
             )
             logger.debug("Extracted unified diff patch.")
             return patch_content, explanation, None, True
@@ -642,9 +617,7 @@ def _parse_llm_output(
             patch_candidate = generated_content[:explanation_start_index].strip()
             explanation_candidate = generated_content[match.end() :].strip()
             if len(explanation_candidate) > 20:
-                patch_content = (
-                    patch_candidate if patch_candidate else generated_content
-                )
+                patch_content = patch_candidate if patch_candidate else generated_content
                 explanation = explanation_candidate
                 logger.debug("Extracted patch and explanation using delimiter.")
                 return (
@@ -700,9 +673,7 @@ def _validate_patch_syntax(proposed_patch: str, language: str) -> Tuple[bool, st
 _HIGH_CONF_SECRET_REGEXES = [
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS Access Key
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9\-\._~\+\/]+=*"),  # Bearer tokens
-    re.compile(
-        r"(?:eyJ[0-9A-Za-z_\-]{10,}\.[0-9A-Za-z_\-]{10,}\.[0-9A-Za-z_\-]{10,})"
-    ),  # JWT-like
+    re.compile(r"(?:eyJ[0-9A-Za-z_\-]{10,}\.[0-9A-Za-z_\-]{10,}\.[0-9A-Za-z_\-]{10,})"),  # JWT-like
     re.compile(r"[A-Za-z0-9_\-]{32,}"),  # long random tokens
 ]
 
@@ -721,9 +692,7 @@ def _validate_vuln_details(details: Dict[str, Any]):
 
 # --- Basic scrubbing fallback for secrets (used even if detect-secrets is absent) ---
 _SECRET_REGEXES = [
-    re.compile(
-        r'(?i)(api[_-]?key|secret|token)\s*[:=]\s*([^\s\'";]+)'
-    ),  # key=value style
+    re.compile(r'(?i)(api[_-]?key|secret|token)\s*[:=]\s*([^\s\'";]+)'),  # key=value style
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS Access Key
     re.compile(r'(?i)\bpasswd\s*[:=]\s*[^\s\'";]+'),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9\-\._~\+\/]+=*"),
@@ -790,9 +759,7 @@ async def _cache_patch_result(cache_key: str, result: Dict[str, Any]):
         return
     try:
         redis = Redis.from_url(LLM_PATCH_GEN_CONFIG.redis_cache_url)
-        await redis.set(
-            cache_key, json.dumps(result), ex=LLM_PATCH_GEN_CONFIG.redis_cache_ttl
-        )
+        await redis.set(cache_key, json.dumps(result), ex=LLM_PATCH_GEN_CONFIG.redis_cache_ttl)
         await redis.close()
         logger.info(f"Cached patch for key: {cache_key}")
     except Exception as e:
@@ -815,17 +782,13 @@ except Exception:
 try:
     import aiohttp  # type: ignore
 
-    _transient_errors = _transient_errors + (
-        getattr(aiohttp, "ClientError", Exception),
-    )
+    _transient_errors = _transient_errors + (getattr(aiohttp, "ClientError", Exception),)
 except Exception:
     pass
 
 _retry_decorator = retry(
     stop=stop_after_attempt(LLM_PATCH_GEN_CONFIG.retry_attempts),
-    wait=wait_exponential(
-        multiplier=LLM_PATCH_GEN_CONFIG.retry_backoff_factor, min=1, max=10
-    ),
+    wait=wait_exponential(multiplier=LLM_PATCH_GEN_CONFIG.retry_backoff_factor, min=1, max=10),
     retry=retry_if_exception_type(_transient_errors) if TENACITY_AVAILABLE else None,
 )
 
@@ -851,16 +814,12 @@ async def generate_security_patch(
         raise TypeError("llm_params must be a dictionary or None.")
 
     context = context or {}
-    _validate_vuln_details(
-        vulnerability_details
-    )  # Security check for high-confidence secrets
+    _validate_vuln_details(vulnerability_details)  # Security check for high-confidence secrets
 
     # Deterministic cache key with sha256 of normalized inputs
     vuln_json = json.dumps(vulnerability_details, sort_keys=True, separators=(",", ":"))
     ctx_json = json.dumps(context, sort_keys=True, separators=(",", ":"))
-    key_basis = f"{vuln_json}||{vulnerable_code_snippet}||{ctx_json}".encode(
-        "utf-8", "ignore"
-    )
+    key_basis = f"{vuln_json}||{vulnerable_code_snippet}||{ctx_json}".encode("utf-8", "ignore")
     cache_key = "patch:" + hashlib.sha256(key_basis).hexdigest()
 
     cached_result = await _get_cached_patch(cache_key)
@@ -924,9 +883,7 @@ async def generate_security_patch(
             "temperature": (llm_params or {}).get(
                 "temperature", LLM_PATCH_GEN_CONFIG.llm_temperature
             ),
-            "max_tokens": (llm_params or {}).get(
-                "max_tokens", LLM_PATCH_GEN_CONFIG.llm_max_tokens
-            ),
+            "max_tokens": (llm_params or {}).get("max_tokens", LLM_PATCH_GEN_CONFIG.llm_max_tokens),
             "timeout": (llm_params or {}).get(
                 "timeout_seconds", LLM_PATCH_GEN_CONFIG.llm_timeout_seconds
             ),
@@ -944,9 +901,7 @@ async def generate_security_patch(
         # LLM empty content
         if not generated_content:
             result["success"] = False
-            result["explanation"] = (
-                "LLM failed to generate a patch. Manual review required."
-            )
+            result["explanation"] = "LLM failed to generate a patch. Manual review required."
             result["status_reason"] = "LLM returned empty content."
             if PROMETHEUS_AVAILABLE:
                 PATCH_GENERATION_ERRORS.labels(
@@ -968,18 +923,13 @@ async def generate_security_patch(
 
         # Truncate very large outputs before further processing/logging
         MAX_OUTPUT_CHARS = int(os.getenv("PATCH_GEN_MAX_OUTPUT_CHARS", "100000"))
-        if (
-            result["proposed_patch"]
-            and len(result["proposed_patch"]) > MAX_OUTPUT_CHARS
-        ):
+        if result["proposed_patch"] and len(result["proposed_patch"]) > MAX_OUTPUT_CHARS:
             result["proposed_patch"] = (
                 result["proposed_patch"][:MAX_OUTPUT_CHARS] + "\n...[truncated]"
             )
 
         if result["explanation"] and len(result["explanation"]) > MAX_OUTPUT_CHARS:
-            result["explanation"] = (
-                result["explanation"][:MAX_OUTPUT_CHARS] + "\n...[truncated]"
-            )
+            result["explanation"] = result["explanation"][:MAX_OUTPUT_CHARS] + "\n...[truncated]"
 
         # Validation and success determination
         if proposed_patch is None:
@@ -993,13 +943,9 @@ async def generate_security_patch(
             if is_diff:
                 if not _looks_like_unified_diff(proposed_patch):
                     result["success"] = False
-                    result["status_reason"] = (
-                        "Generated patch looks like a malformed diff."
-                    )
+                    result["status_reason"] = "Generated patch looks like a malformed diff."
                     result["error"] = "Malformed diff format."
-                    logger.warning(
-                        f"Malformed diff generated for {vulnerability_type}."
-                    )
+                    logger.warning(f"Malformed diff generated for {vulnerability_type}.")
                 else:
                     result["success"] = True
                     result["status_reason"] = "AI proposed a unified diff patch."
@@ -1010,9 +956,7 @@ async def generate_security_patch(
                     result["success"] = False
                     result["status_reason"] = "Generated patch has a syntax error."
                     result["error"] = "Syntax error in proposed code."
-                    logger.warning(
-                        f"Syntax error in generated code for {vulnerability_type}."
-                    )
+                    logger.warning(f"Syntax error in generated code for {vulnerability_type}.")
                 else:
                     result["success"] = True
                     result["status_reason"] = "AI proposed a code patch."
@@ -1020,12 +964,10 @@ async def generate_security_patch(
             # Metrics on success/failure
             if result["success"]:
                 if PROMETHEUS_AVAILABLE:
-                    PATCH_GENERATION_SUCCESS.labels(
-                        vulnerability_type=vulnerability_type
-                    ).inc()
-                    PATCH_COMPLEXITY.labels(
-                        vulnerability_type=vulnerability_type
-                    ).observe(float(result["patch_lines"]))
+                    PATCH_GENERATION_SUCCESS.labels(vulnerability_type=vulnerability_type).inc()
+                    PATCH_COMPLEXITY.labels(vulnerability_type=vulnerability_type).observe(
+                        float(result["patch_lines"])
+                    )
             else:
                 if PROMETHEUS_AVAILABLE:
                     PATCH_GENERATION_ERRORS.labels(
@@ -1034,9 +976,9 @@ async def generate_security_patch(
                     ).inc()
 
         if PROMETHEUS_AVAILABLE:
-            LLM_PATCH_GEN_LATENCY_SECONDS.labels(
-                vulnerability_type=vulnerability_type
-            ).observe(time.monotonic() - start_time)
+            LLM_PATCH_GEN_LATENCY_SECONDS.labels(vulnerability_type=vulnerability_type).observe(
+                time.monotonic() - start_time
+            )
 
         # Cache successful result
         if result["success"]:
@@ -1046,9 +988,7 @@ async def generate_security_patch(
     except Exception as e:
         result["error"] = str(e)
         result["status_reason"] = f"Patch generation failed due to exception: {e}"
-        logger.error(
-            f"Error generating patch for {vulnerability_type}: {e}", exc_info=True
-        )
+        logger.error(f"Error generating patch for {vulnerability_type}: {e}", exc_info=True)
         if PROMETHEUS_AVAILABLE:
             PATCH_GENERATION_ERRORS.labels(
                 vulnerability_type=vulnerability_type, error_type=type(e).__name__
@@ -1091,9 +1031,7 @@ async def generate_security_patch(
                         if k not in ["full_code", "sensitive_data"]
                     },
                     "context_summary": {
-                        k: v
-                        for k, v in scrubbed_ctx.items()
-                        if k not in ["full_repo_content"]
+                        k: v for k, v in scrubbed_ctx.items() if k not in ["full_repo_content"]
                     },
                     "proposed_patch_summary": patch_summary,
                     "explanation_summary": explanation_summary,
@@ -1103,9 +1041,7 @@ async def generate_security_patch(
                 agent_id="SecurityPatchGeneratorPlugin",
             )
         except ImportError:
-            logger.warning(
-                "Could not import global audit_log. Logging audit event locally."
-            )
+            logger.warning("Could not import global audit_log. Logging audit event locally.")
             try:
                 local_event = {
                     "event_type": "security_patch_generation_attempt",

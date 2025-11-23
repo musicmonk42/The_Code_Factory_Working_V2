@@ -113,9 +113,7 @@ def test_env_loading_and_override(monkeypatch, tmp_path):
     env_path.write_text(env_content)
     monkeypatch.setenv("ENV_FILE", str(env_path))
     monkeypatch.setenv("OPENAI_API_KEY", "from_envvar")
-    monkeypatch.setenv(
-        "LLM_MODEL", "claude-3-sonnet"
-    )  # Use valid anthropic model for override
+    monkeypatch.setenv("LLM_MODEL", "claude-3-sonnet")  # Use valid anthropic model for override
 
     with patch("redis.asyncio.Redis.from_url"):
         cfg = ArbiterConfig(_env_file=str(env_path))
@@ -144,9 +142,7 @@ def test_secret_redaction_to_dict():
     with patch("redis.asyncio.Redis.from_url"):
         # Fernet key must be 32 url-safe base64-encoded bytes.
         valid_key = b"8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
-        cfg = ArbiterConfig(
-            OPENAI_API_KEY="verysecret", ENCRYPTION_KEY=valid_key.decode()
-        )
+        cfg = ArbiterConfig(OPENAI_API_KEY="verysecret", ENCRYPTION_KEY=valid_key.decode())
         out = cfg.to_dict()
         assert out["OPENAI_API_KEY"] == "[REDACTED]"
         assert out["ENCRYPTION_KEY"] == "[REDACTED]"
@@ -156,9 +152,7 @@ def test_secret_redaction_to_dict():
         d["llm_feedback_api_key"] = "deepsecret"
         cfg.DECISION_OPTIMIZER_SETTINGS = d
         out = cfg.to_dict()
-        assert (
-            out["DECISION_OPTIMIZER_SETTINGS"]["llm_feedback_api_key"] == "[REDACTED]"
-        )
+        assert out["DECISION_OPTIMIZER_SETTINGS"]["llm_feedback_api_key"] == "[REDACTED]"
 
 
 ########## get_api_key_for_provider ##########
@@ -205,9 +199,7 @@ def test_singleton_thread_safety(monkeypatch):
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     # Reset for test
-    with patch("redis.asyncio.Redis.from_url"), patch(
-        "arbiter.policy.config._instance", None
-    ):
+    with patch("redis.asyncio.Redis.from_url"), patch("arbiter.policy.config._instance", None):
 
         # Access the private lock on the module to ensure it's reset
         from arbiter.policy import config as config_module
@@ -295,9 +287,7 @@ def test_no_secrets_in_repr():
 
     with patch("redis.asyncio.Redis.from_url"):
         valid_key = b"8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
-        cfg = ArbiterConfig(
-            OPENAI_API_KEY="supersecret", ENCRYPTION_KEY=valid_key.decode()
-        )
+        cfg = ArbiterConfig(OPENAI_API_KEY="supersecret", ENCRYPTION_KEY=valid_key.decode())
         out = repr(cfg)
         assert "supersecret" not in out
         assert valid_key.decode() not in out
@@ -373,9 +363,7 @@ def test_to_dict_all_branches():
         out = cfg.to_dict()
 
         # Check redaction
-        assert (
-            out["DECISION_OPTIMIZER_SETTINGS"]["llm_feedback_api_key"] == "[REDACTED]"
-        )
+        assert out["DECISION_OPTIMIZER_SETTINGS"]["llm_feedback_api_key"] == "[REDACTED]"
         assert out["DECISION_OPTIMIZER_SETTINGS"]["test_api_key"] == "[REDACTED]"
         assert out["DECISION_OPTIMIZER_SETTINGS"]["test_secret"] == "[REDACTED]"
         assert out["DECISION_OPTIMIZER_SETTINGS"]["normal_key"] == "visible"

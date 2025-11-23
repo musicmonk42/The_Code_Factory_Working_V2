@@ -94,9 +94,7 @@ class _MetricProxy:
         Also detect state flips to avoid leaking a cached metric across tests.
         """
         global _WARNED_DISABLED
-        current_state = bool(
-            METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None
-        )
+        current_state = bool(METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None)
 
         # Invalidate cached metric if the state flipped since last use
         if self._last_state is not None and self._last_state != current_state:
@@ -111,9 +109,7 @@ class _MetricProxy:
             try:
                 self._metric = self._factory()
             except Exception as e:
-                logger.warning(
-                    "Failed to instantiate metric from factory: %s. Using no-op.", e
-                )
+                logger.warning("Failed to instantiate metric from factory: %s. Using no-op.", e)
                 self._metric = self._no_op_metric
         else:
             if not _WARNED_DISABLED:

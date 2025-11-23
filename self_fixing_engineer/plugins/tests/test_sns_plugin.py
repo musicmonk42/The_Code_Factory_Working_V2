@@ -54,9 +54,7 @@ except ImportError:
         from plugins.sns_plugin import *
     except ImportError:
         # Third try: Mock everything we need
-        print(
-            "Warning: Could not import sns_plugin module. Creating mocks for all components."
-        )
+        print("Warning: Could not import sns_plugin module. Creating mocks for all components.")
 
         # We'll need to create minimal mock implementations
         class SNSTarget:
@@ -138,9 +136,7 @@ def sample_settings_dict():
     return {
         "signing_secret": "test-signing-secret",
         "admin_api_key": "test-admin-key",
-        "encryption_key": (
-            Fernet.generate_key().decode() if "Fernet" in globals() else "test-key"
-        ),
+        "encryption_key": (Fernet.generate_key().decode() if "Fernet" in globals() else "test-key"),
         "targets": [],
         "persistence_dir": "/tmp/sns_queue",
         "min_workers": 1,
@@ -208,9 +204,7 @@ def test_sns_event_creation():
     """Test SNSEvent creation if available."""
     if "SNSEvent" in globals():
         try:
-            event = SNSEvent(
-                event_name="test_event", details={"key": "value"}, severity="info"
-            )
+            event = SNSEvent(event_name="test_event", details={"key": "value"}, severity="info")
             assert event.event_name == "test_event"
             assert event.severity == "info"
         except Exception as e:
@@ -240,9 +234,7 @@ def test_circuit_breaker_initialization():
     if "CircuitBreaker" in globals():
         try:
             metrics = MagicMock()
-            cb = CircuitBreaker(
-                threshold=5, reset_seconds=60, metrics=metrics, target_name="test"
-            )
+            cb = CircuitBreaker(threshold=5, reset_seconds=60, metrics=metrics, target_name="test")
             assert cb._is_open is False
             assert cb._failure_count == 0
         except Exception as e:
@@ -256,9 +248,7 @@ def test_token_bucket_initialization():
     if "TokenBucket" in globals():
         try:
             metrics = MagicMock()
-            tb = TokenBucket(
-                rate=1.0, capacity=10.0, metrics=metrics, target_name="test"
-            )
+            tb = TokenBucket(rate=1.0, capacity=10.0, metrics=metrics, target_name="test")
             assert tb._tokens >= 0
             assert tb._rate > 0
         except Exception as e:
@@ -354,9 +344,9 @@ async def test_persistent_wal_queue():
         metrics = MagicMock()
         dead_letter_hook = AsyncMock()
 
-        with patch("os.makedirs"), patch("os.chmod"), patch(
-            "os.listdir", return_value=[]
-        ), patch("aiofiles.open", new_callable=AsyncMock):
+        with patch("os.makedirs"), patch("os.chmod"), patch("os.listdir", return_value=[]), patch(
+            "aiofiles.open", new_callable=AsyncMock
+        ):
 
             queue = PersistentWALQueue(
                 target_name="test",

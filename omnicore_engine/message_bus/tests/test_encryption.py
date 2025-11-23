@@ -197,8 +197,7 @@ class TestFernetEncryption(unittest.TestCase):
         # Run concurrent operations
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
-                executor.submit(encrypt_decrypt, i, data)
-                for i, data in enumerate(data_samples)
+                executor.submit(encrypt_decrypt, i, data) for i, data in enumerate(data_samples)
             ]
             concurrent.futures.wait(futures)
 

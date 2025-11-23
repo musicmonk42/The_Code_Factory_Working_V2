@@ -148,9 +148,7 @@ class ConfigStore:
                 for event in event_iterator:
                     key = event.key.decode("utf-8")
                     value = event.value.decode("utf-8")
-                    logger.info(
-                        f"Detected etcd change for key '{key}'. Updating cache."
-                    )
+                    logger.info(f"Detected etcd change for key '{key}'. Updating cache.")
                     async with self._cache_lock:
                         self._cache[key] = (
                             self._parse_value(value),
@@ -158,9 +156,7 @@ class ConfigStore:
                         )
                 await asyncio.sleep(1)  # prevent tight loop on watch error
         except Exception as e:
-            logger.error(
-                f"etcd watch task failed: {e}. Watcher will stop.", exc_info=True
-            )
+            logger.error(f"etcd watch task failed: {e}. Watcher will stop.", exc_info=True)
 
     async def _watch_etcd_updates(self):
         """Watches etcd for updates and invalidates the cache for changed keys."""
@@ -227,13 +223,9 @@ class ConfigStore:
                             v,
                             datetime.now(timezone.utc).timestamp() + 86400,
                         )
-                logger.info(
-                    f"Loaded configurations from fallback file: {self.fallback_path}"
-                )
+                logger.info(f"Loaded configurations from fallback file: {self.fallback_path}")
         except Exception as e:
-            logger.error(
-                f"Failed to read or parse fallback config file {self.fallback_path}: {e}"
-            )
+            logger.error(f"Failed to read or parse fallback config file {self.fallback_path}: {e}")
 
     def _parse_value(self, value_str: str) -> Any:
         """Tries to parse a string value as float or JSON, otherwise returns the string."""
@@ -372,9 +364,7 @@ class TokenBucketRateLimiter:
             now = asyncio.get_running_loop().time()
 
             max_tokens = await self.config_store.get_config("rate_limit_tokens", 10)
-            refill_rate = await self.config_store.get_config(
-                "rate_limit_refill_rate", 10
-            )
+            refill_rate = await self.config_store.get_config("rate_limit_refill_rate", 10)
             effective_timeout = (
                 timeout
                 if timeout is not None

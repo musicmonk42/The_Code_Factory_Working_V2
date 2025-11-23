@@ -77,9 +77,7 @@ async def test_auto_compress_when_threshold_exceeded(temp_dir):
     big_entry = {"data": "x" * (io_utils_mod.FEEDBACK_COMPRESS_BYTES + 100)}
 
     # Force compression AND bypass redaction so the payload is preserved
-    with patch(
-        "test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x
-    ):
+    with patch("test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x):
         await io_utils_mod.append_to_feedback_log(
             str(log_path),
             big_entry,

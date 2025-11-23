@@ -185,13 +185,9 @@ class ValidatorRegistry:
                     asyncio.create_task(self.registry._reload_plugins())
 
         self.observer = Observer()
-        self.observer.schedule(
-            ValidatorReloadHandler(self), PLUGIN_DIR, recursive=False
-        )
+        self.observer.schedule(ValidatorReloadHandler(self), PLUGIN_DIR, recursive=False)
         self.observer.start()
-        logger.info(
-            f"Started hot-reload observer for validator plugins in: {PLUGIN_DIR}"
-        )
+        logger.info(f"Started hot-reload observer for validator plugins in: {PLUGIN_DIR}")
 
     async def _reload_plugins(self):
         """Reloads validator plugins from PLUGIN_DIR."""
@@ -226,13 +222,9 @@ class ValidatorRegistry:
                                 and obj != TestValidator
                             ):
                                 validator_instance = obj()
-                                validator_name_key = name.lower().replace(
-                                    "validator", ""
-                                )
+                                validator_name_key = name.lower().replace("validator", "")
                                 VALIDATORS[validator_name_key] = validator_instance
-                                logger.info(
-                                    f"Loaded custom validator plugin: {validator_name_key}"
-                                )
+                                logger.info(f"Loaded custom validator plugin: {validator_name_key}")
                     except Exception as e:
                         logger.error(
                             f"Failed to load validator plugin {file_path}: {e}",
@@ -412,9 +404,7 @@ class CoverageValidator(TestValidator):
                 "total_lines": total_lines,
                 "test_results": test_results,
                 "issues": issues_summary,
-                "metrics": {
-                    "coverage_percentage": coverage_percentage
-                },  # Nested for compatibility
+                "metrics": {"coverage_percentage": coverage_percentage},  # Nested for compatibility
             }
 
             if (
@@ -521,15 +511,11 @@ class MutationValidator(TestValidator):
             if mutation_score < 70.0:
                 issues_list.append(f"Low mutation score: {mutation_score:.2f}%")
 
-            issues_summary = (
-                "; ".join(issues_list) if issues_list else "All mutation tests passed."
-            )
+            issues_summary = "; ".join(issues_list) if issues_list else "All mutation tests passed."
             metrics = {
                 "mutation_score": mutation_score,
                 "issues": issues_summary,
-                "metrics": {
-                    "mutation_score": mutation_score
-                },  # Nested for compatibility
+                "metrics": {"mutation_score": mutation_score},  # Nested for compatibility
             }
 
             if mutation_score < 70.0 and self.human_review_callback:
@@ -602,9 +588,7 @@ class PropertyBasedValidator(TestValidator):
 
         try:
             temp_dir = tempfile.mkdtemp(prefix="testgen_property_")
-            temp_path = (
-                Path(temp_dir) / "temp_project"
-            )  # Use Path object for easier handling
+            temp_path = Path(temp_dir) / "temp_project"  # Use Path object for easier handling
 
             # REFACTORED: Use async file saving
             await _save_files_async(code_files, str(temp_path / "code"))
@@ -628,9 +612,7 @@ class PropertyBasedValidator(TestValidator):
                     f"Property-based tests failed: {property_outputs.get('fuzz_failures', 'Unknown error.')}"
                 )
 
-            issues_summary = (
-                "; ".join(issues_list) if issues_list else "All properties passed."
-            )
+            issues_summary = "; ".join(issues_list) if issues_list else "All properties passed."
             metrics = {"properties_passed": properties_passed, "issues": issues_summary}
 
             if not properties_passed and self.human_review_callback:
@@ -638,9 +620,7 @@ class PropertyBasedValidator(TestValidator):
                 if asyncio.iscoroutine(review_result):
                     review_result = await review_result
                 if not review_result:
-                    metrics[
-                        "issues"
-                    ] += "; Human review rejected property-based results."
+                    metrics["issues"] += "; Human review rejected property-based results."
 
             self._save_performance_data(metrics)
             return metrics
@@ -737,14 +717,10 @@ class StressPerformanceValidator(TestValidator):
             if error_rate > 5.0:
                 issues_list.append(f"High error rate: {error_rate:.2f}% under load.")
             if avg_response_time > 500:
-                issues_list.append(
-                    f"High average response time: {avg_response_time:.2f}ms."
-                )
+                issues_list.append(f"High average response time: {avg_response_time:.2f}ms.")
 
             issues_summary = (
-                "; ".join(issues_list)
-                if issues_list
-                else "Passed basic stress/performance checks."
+                "; ".join(issues_list) if issues_list else "Passed basic stress/performance checks."
             )
             metrics = {**stress_outputs, "issues": issues_summary}
 
@@ -755,9 +731,7 @@ class StressPerformanceValidator(TestValidator):
                 if asyncio.iscoroutine(review_result):
                     review_result = await review_result
                 if not review_result:
-                    metrics[
-                        "issues"
-                    ] += "; Human review rejected stress/performance results."
+                    metrics["issues"] += "; Human review rejected stress/performance results."
 
             self._save_performance_data(metrics)
             return metrics
@@ -766,9 +740,7 @@ class StressPerformanceValidator(TestValidator):
                 f"Stress/performance validation error for {language}: {e}",
                 exc_info=True,
             )
-            return {
-                "issues": f"Exception during stress/performance validation: {str(e)}"
-            }
+            return {"issues": f"Exception during stress/performance validation: {str(e)}"}
         finally:
             if temp_dir:
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -817,9 +789,7 @@ async def startup():
     asyncio.create_task(start_health_server())
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance(
-            "Startup", {"timestamp": datetime.now(timezone.utc).isoformat()}
-        )
+        await add_provenance("Startup", {"timestamp": datetime.now(timezone.utc).isoformat()})
     except Exception:
         pass
 
@@ -829,17 +799,13 @@ async def shutdown():
     await validator_registry.close()
     # REFACTORED: Use add_provenance
     try:
-        await add_provenance(
-            "Shutdown", {"timestamp": datetime.now(timezone.utc).isoformat()}
-        )
+        await add_provenance("Shutdown", {"timestamp": datetime.now(timezone.utc).isoformat()})
     except Exception:
         pass
 
 
 async def example_human_review(issues: str, metrics: Dict[str, Any]) -> bool:
     """Example async human review callback for validation results."""
-    print(
-        f"Review validation results: {issues}\nMetrics: {json.dumps(metrics, indent=2)}"
-    )
+    print(f"Review validation results: {issues}\nMetrics: {json.dumps(metrics, indent=2)}")
     response = input("Approve? (y/n): ").lower()
     return response == "y"

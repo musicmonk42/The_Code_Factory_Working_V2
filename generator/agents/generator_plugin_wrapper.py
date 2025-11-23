@@ -62,16 +62,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
     logger.addHandler(handler)
 
 # OpenTelemetry setup
 trace.set_tracer_provider(
-    TracerProvider(
-        resource=Resource.create({"service.name": "generator-plugin-wrapper"})
-    )
+    TracerProvider(resource=Resource.create({"service.name": "generator-plugin-wrapper"}))
 )
 tracer = trace.get_tracer(__name__)
 exporter_type = os.getenv("SFE_OTEL_EXPORTER_TYPE", "console").lower()
@@ -144,9 +140,7 @@ class WorkflowInput(BaseModel):
     config: Dict[str, Any] = Field(
         default_factory=dict, description="Configuration for workflow execution"
     )
-    repo_path: str = Field(
-        ..., description="The local path to the codebase repository."
-    )
+    repo_path: str = Field(..., description="The local path to the codebase repository.")
     ambiguities: List[str] = Field(
         default_factory=list,
         description="A list of ambiguous statements found in requirements.",
@@ -163,9 +157,7 @@ class WorkflowOutput(BaseModel):
     status: str = Field(
         ..., description="The final status of the workflow (e.g., 'success', 'failed')."
     )
-    correlation_id: str = Field(
-        ..., description="The unique ID for tracing the workflow run."
-    )
+    correlation_id: str = Field(..., description="The unique ID for tracing the workflow run.")
     final_results: Dict[str, Any] = Field(
         ...,
         description="A dictionary containing the artifacts from each successful stage.",
@@ -262,9 +254,7 @@ async def run_generator_workflow(
             # --- 1. Clarification Stage ---
             clarifier = PLUGIN_REGISTRY.get("clarifier")
             if clarifier and workflow_state["ambiguities"]:
-                with workflow_latency.labels(
-                    stage="clarify", correlation_id=correlation_id
-                ).time():
+                with workflow_latency.labels(stage="clarify", correlation_id=correlation_id).time():
                     clarified_result = await clarifier(
                         requirements=workflow_state["requirements"],
                         ambiguities=workflow_state["ambiguities"],
@@ -272,15 +262,11 @@ async def run_generator_workflow(
                     workflow_state["requirements"] = clarified_result.get(
                         "requirements", workflow_state["requirements"]
                     )
-                    logger.info(
-                        f"Clarification stage complete [Correlation ID: {correlation_id}]"
-                    )
+                    logger.info(f"Clarification stage complete [Correlation ID: {correlation_id}]")
 
             # --- 2. Code Generation Stage ---
             codegen = PLUGIN_REGISTRY.get("codegen_agent")
-            with workflow_latency.labels(
-                stage="codegen", correlation_id=correlation_id
-            ).time():
+            with workflow_latency.labels(stage="codegen", correlation_id=correlation_id).time():
                 code_result = await codegen(
                     requirements=workflow_state["requirements"],
                     state_summary="Initial code generation",
@@ -289,15 +275,11 @@ async def run_generator_workflow(
                 if "error.txt" in code_result:
                     raise WorkflowError(f"Codegen failed: {code_result['error.txt']}")
                 workflow_state["code_files"] = code_result
-                logger.info(
-                    f"Code generation stage complete [Correlation ID: {correlation_id}]"
-                )
+                logger.info(f"Code generation stage complete [Correlation ID: {correlation_id}]")
 
             # --- 3. Critique Stage ---
             critiquer = PLUGIN_REGISTRY.get("critique_agent")
-            with workflow_latency.labels(
-                stage="critique", correlation_id=correlation_id
-            ).time():
+            with workflow_latency.labels(stage="critique", correlation_id=correlation_id).time():
                 critique_result = await critiquer(
                     code_files=workflow_state["code_files"],
                     test_files={},  # No tests yet
@@ -306,29 +288,21 @@ async def run_generator_workflow(
                     config=workflow_state["config"],
                 )
                 workflow_state["critique_results"] = critique_result
-                logger.info(
-                    f"Critique stage complete [Correlation ID: {correlation_id}]"
-                )
+                logger.info(f"Critique stage complete [Correlation ID: {correlation_id}]")
 
             # --- 4. Test Generation Stage ---
             testgen = PLUGIN_REGISTRY.get("testgen_agent")
-            with workflow_latency.labels(
-                stage="testgen", correlation_id=correlation_id
-            ).time():
+            with workflow_latency.labels(stage="testgen", correlation_id=correlation_id).time():
                 test_result = await testgen(
                     code_files=workflow_state["code_files"],
                     requirements=workflow_state["requirements"],
                 )
                 workflow_state["test_files"] = test_result
-                logger.info(
-                    f"Test generation stage complete [Correlation ID: {correlation_id}]"
-                )
+                logger.info(f"Test generation stage complete [Correlation ID: {correlation_id}]")
 
             # --- 5. Deployment Artifact Generation Stage ---
             deployer = PLUGIN_REGISTRY.get("deploy_agent")
-            with workflow_latency.labels(
-                stage="deploy", correlation_id=correlation_id
-            ).time():
+            with workflow_latency.labels(stage="deploy", correlation_id=correlation_id).time():
                 deploy_result = await deployer(
                     repo_path=workflow_state["repo_path"],
                     target_files=list(workflow_state["code_files"].keys()),
@@ -342,9 +316,7 @@ async def run_generator_workflow(
 
             # --- 6. Documentation Generation Stage ---
             docgen = PLUGIN_REGISTRY.get("docgen_agent")
-            with workflow_latency.labels(
-                stage="docgen", correlation_id=correlation_id
-            ).time():
+            with workflow_latency.labels(stage="docgen", correlation_id=correlation_id).time():
                 docs_result = await docgen(
                     repo_path=workflow_state["repo_path"],
                     target_files=list(workflow_state["code_files"].keys()),
@@ -356,9 +328,9 @@ async def run_generator_workflow(
                 )
 
             workflow_success.labels(correlation_id=correlation_id).inc()
-            workflow_latency.labels(
-                stage="total", correlation_id=correlation_id
-            ).observe(time.time() - start_time)
+            workflow_latency.labels(stage="total", correlation_id=correlation_id).observe(
+                time.time() - start_time
+            )
             logger.info(
                 f"Generator workflow completed successfully [Correlation ID: {correlation_id}]"
             )

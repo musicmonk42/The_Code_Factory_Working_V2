@@ -141,8 +141,6 @@ if __name__ == "__main__":
     assert any("core duty" in p for p in constitution.get_purpose())
     assert any("autonomous access" in c for c in constitution.get_powers())
     assert any("transparency" in p for p in constitution.get_principles())
-    assert any(
-        "propose constitutional amendments" in e for e in constitution.get_evolution()
-    )
+    assert any("propose constitutional amendments" in e for e in constitution.get_evolution())
     assert any("goal is to serve" in a for a in constitution.get_aim())
     logger.info("\nBasic assertions passed.")

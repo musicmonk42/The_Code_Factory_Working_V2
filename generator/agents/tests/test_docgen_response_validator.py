@@ -69,9 +69,7 @@ mock_analyzer.AnalyzerEngine.return_value.analyze.return_value = [
 
 mock_anonymizer = MagicMock()
 mock_anonymizer.AnonymizerEngine = MagicMock()
-mock_anonymizer.AnonymizerEngine.return_value.anonymize.return_value = (
-    mock_analyzer_result
-)
+mock_anonymizer.AnonymizerEngine.return_value.anonymize.return_value = mock_analyzer_result
 
 sys.modules["presidio_analyzer"] = mock_analyzer
 sys.modules["presidio_anonymizer"] = mock_anonymizer
@@ -79,9 +77,7 @@ sys.modules["presidio_anonymizer"] = mock_anonymizer
 # FIX: Mock other dependencies
 sys.modules["pypandoc"] = MagicMock()
 # Mock pypandoc.convert_text to just return the input
-sys.modules["pypandoc"].convert_text = MagicMock(
-    side_effect=lambda text, to_fmt, format: text
-)
+sys.modules["pypandoc"].convert_text = MagicMock(side_effect=lambda text, to_fmt, format: text)
 
 sys.modules["docutils"] = MagicMock()
 sys.modules["docutils.core"] = MagicMock()
@@ -153,9 +149,7 @@ mock_nltk.download = MagicMock()
 mock_sentiment = MagicMock()
 mock_sentiment_analyzer = MagicMock()
 mock_sentiment_analyzer.polarity_scores.return_value = {"compound": 0.5}
-mock_sentiment.SentimentIntensityAnalyzer = MagicMock(
-    return_value=mock_sentiment_analyzer
-)
+mock_sentiment.SentimentIntensityAnalyzer = MagicMock(return_value=mock_sentiment_analyzer)
 
 mock_tokenize = MagicMock()
 mock_tokenize.sent_tokenize = MagicMock(return_value=["Sentence 1.", "Sentence 2."])
@@ -231,9 +225,7 @@ builtins.abstractmethod = abstractmethod
 builtins.abstractabstractmethod = abstractmethod  # Typo in source file on line 154
 
 # === PATCH THE TRACER BEFORE IMPORT ===
-with patch(
-    "generator.agents.docgen_agent.docgen_response_validator.tracer", mock_tracer
-):
+with patch("generator.agents.docgen_agent.docgen_response_validator.tracer", mock_tracer):
     # Import modules under test
     from generator.agents.docgen_agent.docgen_response_validator import (
         ResponseValidator,
@@ -515,10 +507,7 @@ def test_markdown_plugin_validation_empty():
 
     assert validation["valid"] is False
     # FIXED: Match actual error message from my implementation
-    assert (
-        any("empty" in issue for issue in validation["issues"])
-        or len(validation["issues"]) > 0
-    )
+    assert any("empty" in issue for issue in validation["issues"]) or len(validation["issues"]) > 0
 
 
 def test_markdown_plugin_validation_too_short():
@@ -586,9 +575,7 @@ def test_html_plugin_validation_success(sample_html):
     plugin = HTMLPlugin()
 
     # Use schema with core sections that match the HTML content
-    validation = plugin.validate(
-        sample_html, {"core_sections": ["introduction", "usage"]}
-    )
+    validation = plugin.validate(sample_html, {"core_sections": ["introduction", "usage"]})
 
     # Should pass with the fixed HTML content that has introduction and usage sections
     assert validation["valid"] is True
@@ -906,9 +893,7 @@ async def test_process_and_validate_response_html_format(temp_repo):
 
 
 @pytest.mark.asyncio
-async def test_process_and_validate_response_invalid_format(
-    mock_llm_response, temp_repo
-):
+async def test_process_and_validate_response_invalid_format(mock_llm_response, temp_repo):
     """Test handling of unsupported format."""
     validator = ResponseValidator(schema=DEFAULT_SCHEMA)
 

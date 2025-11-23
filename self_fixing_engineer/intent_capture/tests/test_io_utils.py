@@ -82,9 +82,7 @@ def mock_aiohttp():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock()
 
-    with patch(
-        "intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session
-    ):
+    with patch("intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session):
         with patch("intent_capture.io_utils.AIOHTTP_AVAILABLE", True):
             yield mock_session
 
@@ -326,15 +324,11 @@ async def test_download_file_to_temp_success(
     mock_session.__aexit__ = AsyncMock()
 
     with patch("intent_capture.io_utils.AIOHTTP_AVAILABLE", True):
-        with patch(
-            "intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session
-        ):
+        with patch("intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session):
             with patch("tempfile.mkstemp", return_value=(999, "/tmp/test_download")):
                 with patch("os.fdopen", mock_open()):
                     with patch("os.path.getsize", return_value=1000):
-                        with patch(
-                            "intent_capture.io_utils.log_audit_event"
-                        ):  # Mock audit logging
+                        with patch("intent_capture.io_utils.log_audit_event"):  # Mock audit logging
                             result = await download_file_to_temp(
                                 "https://example.com/file.txt", file_manager
                             )
@@ -354,9 +348,7 @@ async def test_download_file_rate_limited(file_manager, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_download_file_content_too_large(
-    file_manager, mock_circuit_breaker, monkeypatch
-):
+async def test_download_file_content_too_large(file_manager, mock_circuit_breaker, monkeypatch):
     """Test download with content too large."""
     monkeypatch.setattr("intent_capture.io_utils.last_download_time", 0)
 
@@ -373,13 +365,9 @@ async def test_download_file_content_too_large(
     mock_session.__aexit__ = AsyncMock()
 
     with patch("intent_capture.io_utils.AIOHTTP_AVAILABLE", True):
-        with patch(
-            "intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session
-        ):
+        with patch("intent_capture.io_utils.aiohttp.ClientSession", return_value=mock_session):
             with patch("intent_capture.io_utils.log_audit_event"):  # Mock audit logging
-                result = await download_file_to_temp(
-                    "https://example.com/file.txt", file_manager
-                )
+                result = await download_file_to_temp("https://example.com/file.txt", file_manager)
 
     assert result is None
 

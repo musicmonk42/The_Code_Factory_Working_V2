@@ -157,9 +157,7 @@ class TestEndToEndLearner:
     @pytest.fixture(autouse=True)
     def patch_arbiter_config(self):
         """Patch ArbiterConfig to use short intervals for testing."""
-        with patch(
-            "arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS", 0.1
-        ):
+        with patch("arbiter.learner.core.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS", 0.1):
             with patch(
                 "arbiter.learner.encryption.ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS",
                 0.1,
@@ -211,9 +209,7 @@ class TestEndToEndLearner:
         with patch("arbiter.learner.core.BugManager") as mock_bug_manager:
             with patch("arbiter.learner.core.Neo4jKnowledgeGraph") as mock_neo4j:
                 bug_manager_instance = Mock()
-                bug_manager_instance.bug_detected = (
-                    AsyncMock()
-                )  # Fix: Make it AsyncMock
+                bug_manager_instance.bug_detected = AsyncMock()  # Fix: Make it AsyncMock
                 mock_bug_manager.return_value = bug_manager_instance
                 mock_neo4j.return_value = Mock()
                 arbiter = Arbiter()
@@ -224,9 +220,7 @@ class TestEndToEndLearner:
 
             with patch("arbiter.learner.core.LLMClient") as mock_llm:
                 mock_llm_instance = AsyncMock()
-                mock_llm_instance.generate_text = AsyncMock(
-                    return_value="Generated explanation"
-                )
+                mock_llm_instance.generate_text = AsyncMock(return_value="Generated explanation")
                 mock_llm.return_value = mock_llm_instance
 
                 with patch("arbiter.learner.core.AuditLogger") as mock_audit:
@@ -235,9 +229,7 @@ class TestEndToEndLearner:
                     mock_audit_instance.add_entry = AsyncMock()
                     mock_audit.from_environment.return_value = mock_audit_instance
 
-                    with patch(
-                        "arbiter.learner.core.get_meta_learning_data_store"
-                    ) as mock_meta:
+                    with patch("arbiter.learner.core.get_meta_learning_data_store") as mock_meta:
                         mock_meta_store = AsyncMock()
                         mock_meta_store.connect = AsyncMock()
                         mock_meta_store.disconnect = AsyncMock()
@@ -289,15 +281,11 @@ class TestEndToEndLearner:
 
         try:
             # 1. Learn new fact
-            with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
-            ):
+            with patch("arbiter.learner.core.should_auto_learn", return_value=(True, None)):
                 with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch(
-                        "arbiter.learner.core.generate_explanation"
-                    ) as mock_explain:
+                    with patch("arbiter.learner.core.generate_explanation") as mock_explain:
                         mock_explain.return_value = "New fact learned"
 
                         result = await learner.learn_new_thing(
@@ -318,15 +306,11 @@ class TestEndToEndLearner:
             assert retrieved["version"] == 1
 
             # 3. Update the fact
-            with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
-            ):
+            with patch("arbiter.learner.core.should_auto_learn", return_value=(True, None)):
                 with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch(
-                        "arbiter.learner.core.generate_explanation"
-                    ) as mock_explain:
+                    with patch("arbiter.learner.core.generate_explanation") as mock_explain:
                         mock_explain.return_value = "Fact updated"
 
                         result = await learner.learn_new_thing(
@@ -397,9 +381,7 @@ class TestEndToEndLearner:
                 },
             ]
 
-            with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
-            ):
+            with patch("arbiter.learner.core.should_auto_learn", return_value=(True, None)):
                 with patch(
                     "arbiter.learner.core.generate_explanation",
                     return_value="Batch explanation",
@@ -410,9 +392,7 @@ class TestEndToEndLearner:
 
                     assert len(results) == 3
                     results_by_key = {
-                        r.get("fact", {}).get("key"): r
-                        for r in results
-                        if isinstance(r, dict)
+                        r.get("fact", {}).get("key"): r for r in results if isinstance(r, dict)
                     }
                     if "valid1" in results_by_key:
                         assert results_by_key["valid1"]["status"] == "learned"
@@ -439,15 +419,11 @@ class TestEndToEndLearner:
                 "credit_card": "4111-1111-1111-1111",
             }
 
-            with patch(
-                "arbiter.learner.core.should_auto_learn", return_value=(True, None)
-            ):
+            with patch("arbiter.learner.core.should_auto_learn", return_value=(True, None)):
                 with patch("arbiter.learner.core.validate_data") as mock_validate:
                     mock_validate.return_value = {"is_valid": True}
 
-                    with patch(
-                        "arbiter.learner.core.generate_explanation"
-                    ) as mock_explain:
+                    with patch("arbiter.learner.core.generate_explanation") as mock_explain:
                         mock_explain.return_value = "Sensitive data stored"
 
                         result = await learner.learn_new_thing(

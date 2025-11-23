@@ -29,9 +29,7 @@ from simulation.plugins.jest_runner_plugin import (
 @pytest.fixture
 def mock_node_in_path():
     """Mocks the `which`/`where` command to find Node and package managers."""
-    with patch(
-        "plugins.jest_runner_plugin._which", new=AsyncMock()
-    ) as mock_which, patch(
+    with patch("plugins.jest_runner_plugin._which", new=AsyncMock()) as mock_which, patch(
         "asyncio.create_subprocess_exec", new=AsyncMock()
     ) as mock_subprocess, patch(
         "os.path.exists", return_value=True
@@ -128,9 +126,7 @@ async def test_plugin_health_npx_not_found():
 
         mock_which.side_effect = which_side_effect
 
-        with patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_subprocess:
+        with patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess:
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"v18.12.0", b""))
             mock_process.returncode = 0
@@ -246,9 +242,7 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
                 # Create coverage data with the actual temp project path that was created
                 if temp_jest_dir:
                     # The target file in temp project will be at temp_jest_dir/src/sum.js
-                    coverage_data = {
-                        str(temp_jest_dir / "src" / "sum.js"): {"lines": {"pct": 100}}
-                    }
+                    coverage_data = {str(temp_jest_dir / "src" / "sum.js"): {"lines": {"pct": 100}}}
                     return mock_open(read_data=json.dumps(coverage_data))()
                 return mock_open(read_data="{}")()
             else:
@@ -262,9 +256,7 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
                 test_file_path="tests/sum.test.js",
                 target_identifier=os.path.join("src", "sum.js"),
                 project_root=mock_temp_jest_project,
-                temp_coverage_report_path_relative=os.path.join(
-                    "atco_artifacts", "coverage.json"
-                ),
+                temp_coverage_report_path_relative=os.path.join("atco_artifacts", "coverage.json"),
             )
 
             assert result["success"] is True
@@ -324,8 +316,7 @@ async def test_run_jest_tests_test_failure(mock_temp_jest_project):
             # Temporarily remove package.json to force temp project creation
             with patch(
                 "os.path.exists",
-                side_effect=lambda p: p
-                != os.path.join(mock_temp_jest_project, "package.json"),
+                side_effect=lambda p: p != os.path.join(mock_temp_jest_project, "package.json"),
             ):
                 result = await run_jest_tests(
                     test_file_path="tests/sum.test.js",
@@ -387,17 +378,13 @@ async def test_run_jest_tests_timeout():
             path_str = str(self)
             # The search starts from /mock/project/tests and goes up
             # We need package.json to exist at /mock/project but not at /mock/project/tests
-            if path_str.endswith(
-                os.path.join("mock", "project", "tests", "package.json")
-            ):
+            if path_str.endswith(os.path.join("mock", "project", "tests", "package.json")):
                 return False
             elif path_str.endswith(os.path.join("mock", "project", "package.json")):
                 return True
             elif path_str.endswith(os.path.join("mock", "project", "node_modules")):
                 return True
-            elif path_str.endswith(
-                os.path.join("mock", "project", "tests", "sum.test.js")
-            ):
+            elif path_str.endswith(os.path.join("mock", "project", "tests", "sum.test.js")):
                 return True
             elif path_str.endswith(os.path.join("mock", "project", "src", "sum.js")):
                 return True
@@ -423,10 +410,7 @@ async def test_run_jest_tests_timeout():
             )
 
         assert result["success"] is False
-        assert (
-            "timeout" in result["reason"].lower()
-            or "timed out" in result["raw_log"].lower()
-        )
+        assert "timeout" in result["reason"].lower() or "timed out" in result["raw_log"].lower()
 
 
 @pytest.mark.asyncio
@@ -491,9 +475,7 @@ async def test_which_command():
         ) as mock_exec:
 
             mock_process = MagicMock()
-            mock_process.communicate = AsyncMock(
-                return_value=(b"", b"command not found")
-            )
+            mock_process.communicate = AsyncMock(return_value=(b"", b"command not found"))
             mock_process.returncode = 1
             mock_exec.return_value = mock_process
 
@@ -524,9 +506,9 @@ async def test_run_jest_tests_no_npx():
             return True
         return True
 
-    with patch(
-        "plugins.jest_runner_plugin._which", new=AsyncMock(return_value=None)
-    ), patch.object(Path, "exists", mock_path_exists):
+    with patch("plugins.jest_runner_plugin._which", new=AsyncMock(return_value=None)), patch.object(
+        Path, "exists", mock_path_exists
+    ):
 
         result = await run_jest_tests(
             test_file_path="tests/sum.test.js",

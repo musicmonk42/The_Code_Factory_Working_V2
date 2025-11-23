@@ -164,7 +164,5 @@ class ReasonerConfig(BaseModel):
             logger.error(f"Failed to validate config from file {file_path}: {e}")
             raise
         except Exception as e:
-            logger.critical(
-                f"Failed to load config from file {file_path}: {e}", exc_info=True
-            )
+            logger.critical(f"Failed to load config from file {file_path}: {e}", exc_info=True)
             raise

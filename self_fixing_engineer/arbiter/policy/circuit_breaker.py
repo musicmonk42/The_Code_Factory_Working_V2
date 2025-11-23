@@ -94,9 +94,7 @@ def get_or_create_metric(
 
         # Create metric with appropriate arguments
         if metric_class == Histogram and buckets is not None:
-            metric = metric_class(
-                name, documentation, labelnames=labelnames, buckets=buckets
-            )
+            metric = metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
         else:
             metric = metric_class(name, documentation, labelnames=labelnames)
 
@@ -257,9 +255,7 @@ def get_global_connection_pool(
                 try:
                     socket_connect_timeout = float(socket_connect_timeout_str)
                     if socket_connect_timeout <= 0:
-                        raise ValueError(
-                            "REDIS_SOCKET_CONNECT_TIMEOUT must be positive"
-                        )
+                        raise ValueError("REDIS_SOCKET_CONNECT_TIMEOUT must be positive")
                 except ValueError:
                     _log_validation_error(
                         f"Invalid REDIS_SOCKET_CONNECT_TIMEOUT: {socket_connect_timeout_str}. Using default: 5.0",
@@ -275,9 +271,7 @@ def get_global_connection_pool(
                         socket_connect_timeout=socket_connect_timeout,
                     )
                 except ValueError as e:
-                    _log_validation_error(
-                        f"Invalid REDIS_URL: {e}", "invalid_redis_url"
-                    )
+                    _log_validation_error(f"Invalid REDIS_URL: {e}", "invalid_redis_url")
                     _global_connection_pool = None
             except Exception as e:
                 _log_validation_error(
@@ -366,9 +360,7 @@ class CircuitBreakerState:
         try:
             self._min_operation_interval = float(min_interval_str)
             if self._min_operation_interval <= 0:
-                raise ValueError(
-                    "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be positive"
-                )
+                raise ValueError("CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be positive")
         except ValueError:
             _log_validation_error(
                 f"Invalid CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL: {min_interval_str}. Using default: 0.1",
@@ -389,9 +381,7 @@ class CircuitBreakerState:
         redis_url = getattr(self.config, "REDIS_URL", None)
         # Validate REDIS_URL format to prevent connection errors
         if redis_url and not re.match(r"^redis://[\w.-]+(:\d+)?(/.*)?$", redis_url):
-            _log_validation_error(
-                f"Invalid REDIS_URL format: {redis_url}", "invalid_redis_url"
-            )
+            _log_validation_error(f"Invalid REDIS_URL format: {redis_url}", "invalid_redis_url")
             self.redis_client = None
             return
         if redis_url:
@@ -464,12 +454,8 @@ class CircuitBreakerState:
             await self.redis_client.ping()
             return True
         except redis.RedisError as e:
-            logger.error(
-                f"Redis health check failed for {_sanitize_provider(self.provider)}: {e}"
-            )
-            LLM_CIRCUIT_BREAKER_ERRORS.labels(
-                error_type="redis_health_check_failed"
-            ).inc()
+            logger.error(f"Redis health check failed for {_sanitize_provider(self.provider)}: {e}")
+            LLM_CIRCUIT_BREAKER_ERRORS.labels(error_type="redis_health_check_failed").inc()
             return False
 
     @retry(
@@ -485,14 +471,12 @@ class CircuitBreakerState:
         start_time = time.monotonic()
         await self._rate_limit()
         if not await self._check_redis_health():
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="get_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="get_state").observe(
+                time.monotonic() - start_time
+            )
             return self._in_memory_state.copy()
         try:
-            state_data = await self.redis_client.hgetall(
-                f"circuit_breaker:{self.provider}"
-            )
+            state_data = await self.redis_client.hgetall(f"circuit_breaker:{self.provider}")
             # If key doesn't exist, return in-memory initial state
             if not state_data:
                 REDIS_OPERATION_LATENCY.labels(
@@ -518,34 +502,31 @@ class CircuitBreakerState:
                 )
                 state["failures"] = 0
             for key in ("last_failure_time", "next_try_after"):
-                if (
-                    not isinstance(state[key], datetime)
-                    or state[key].tzinfo != timezone.utc
-                ):
+                if not isinstance(state[key], datetime) or state[key].tzinfo != timezone.utc:
                     _log_validation_error(
                         f"Invalid {key} for {_sanitize_provider(self.provider)}: {state[key]}. Resetting to min value.",
                         "invalid_state",
                     )
                     state[key] = datetime.min.replace(tzinfo=timezone.utc)
 
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="get_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="get_state").observe(
+                time.monotonic() - start_time
+            )
             return state
 
         except ValueError as e:
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="get_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="get_state").observe(
+                time.monotonic() - start_time
+            )
             _log_validation_error(
                 f"Invalid datetime format in Redis state for {_sanitize_provider(self.provider)}: {e}",
                 "invalid_datetime_format",
             )
             return self._in_memory_state.copy()
         except Exception as e:
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="get_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="get_state").observe(
+                time.monotonic() - start_time
+            )
             _log_validation_error(
                 f"Error fetching state from Redis for {_sanitize_provider(self.provider)}: {e}",
                 "redis_get_failed",
@@ -579,10 +560,7 @@ class CircuitBreakerState:
             )
             state["failures"] = min(max(state["failures"], 0), 1000)
         for key in ("last_failure_time", "next_try_after"):
-            if (
-                not isinstance(state[key], datetime)
-                or state[key].tzinfo != timezone.utc
-            ):
+            if not isinstance(state[key], datetime) or state[key].tzinfo != timezone.utc:
                 _log_validation_error(
                     f"Invalid {key} for {_sanitize_provider(self.provider)}: {state[key]}. Resetting to min value.",
                     "invalid_state",
@@ -591,9 +569,9 @@ class CircuitBreakerState:
 
         if not await self._check_redis_health():
             self._in_memory_state.update(state)
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="set_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="set_state").observe(
+                time.monotonic() - start_time
+            )
             return
 
         try:
@@ -610,9 +588,7 @@ class CircuitBreakerState:
                 # Use environment variable as fallback
                 expiry_seconds_str = os.getenv(
                     "CIRCUIT_BREAKER_STATE_TTL_SECONDS",
-                    str(
-                        getattr(self.config, "CIRCUIT_BREAKER_STATE_TTL_SECONDS", 86400)
-                    ),
+                    str(getattr(self.config, "CIRCUIT_BREAKER_STATE_TTL_SECONDS", 86400)),
                 )
                 try:
                     expiry_seconds = int(expiry_seconds_str)
@@ -624,13 +600,13 @@ class CircuitBreakerState:
                     expiry_seconds = 86400
                 await pipe.expire(f"circuit_breaker:{self.provider}", expiry_seconds)
                 await pipe.execute()
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="set_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="set_state").observe(
+                time.monotonic() - start_time
+            )
         except Exception as e:
-            REDIS_OPERATION_LATENCY.labels(
-                provider=self.provider, operation="set_state"
-            ).observe(time.monotonic() - start_time)
+            REDIS_OPERATION_LATENCY.labels(provider=self.provider, operation="set_state").observe(
+                time.monotonic() - start_time
+            )
             _log_validation_error(
                 f"Error setting state in Redis for {_sanitize_provider(self.provider)}: {e}",
                 "redis_set_failed",
@@ -678,9 +654,7 @@ def validate_config(config: "ArbiterConfig") -> None:
             setattr(config, field, default)
 
 
-async def get_breaker_state(
-    provider: str, config: "ArbiterConfig"
-) -> BreakerStateManager:
+async def get_breaker_state(provider: str, config: "ArbiterConfig") -> BreakerStateManager:
     """
     Retrieves or creates a CircuitBreakerState instance for a given provider, with provider validation.
 
@@ -695,9 +669,7 @@ async def get_breaker_state(
         ValueError: If the provider name is invalid.
         RuntimeError: If the maximum number of providers is reached.
     """
-    with tracer.start_as_current_span(
-        "get_breaker_state", attributes={"provider": provider}
-    ):
+    with tracer.start_as_current_span("get_breaker_state", attributes={"provider": provider}):
         # Double-checked locking pattern to avoid holding the lock during async operations
         with _breaker_states_lock:
             if provider in _breaker_states:
@@ -725,17 +697,12 @@ async def get_breaker_state(
                     _sanitize_provider(provider),
                 )
         else:
-            logger.debug(
-                f"No REDIS_URL set for provider {provider}. Using in-memory state."
-            )
+            logger.debug(f"No REDIS_URL set for provider {provider}. Using in-memory state.")
             new_state_manager = InMemoryBreakerStateManager(provider)
 
         # Re-acquire lock to safely update the shared dictionary
         with _breaker_states_lock:
-            if (
-                len(_breaker_states) >= _MAX_PROVIDERS
-                and provider not in _breaker_states
-            ):
+            if len(_breaker_states) >= _MAX_PROVIDERS and provider not in _breaker_states:
                 _log_validation_error(
                     f"Maximum provider limit ({_MAX_PROVIDERS}) reached. Cannot create state for {_sanitize_provider(provider)}.",
                     "max_providers_exceeded",
@@ -811,9 +778,7 @@ async def cleanup_breaker_states() -> None:
                 pause_value = "false"
             is_paused = _pause_tasks or pause_value == "true"
             if is_paused != _last_pause_state:
-                logger.info(
-                    f"Circuit breaker cleanup task {'paused' if is_paused else 'resumed'}"
-                )
+                logger.info(f"Circuit breaker cleanup task {'paused' if is_paused else 'resumed'}")
                 TASK_STATE_TRANSITIONS.labels(
                     task="cleanup", state="paused" if is_paused else "resumed"
                 ).inc()
@@ -824,9 +789,7 @@ async def cleanup_breaker_states() -> None:
                 await asyncio.sleep(60)
                 continue
             try:
-                critical_providers = os.getenv(
-                    "CIRCUIT_BREAKER_CRITICAL_PROVIDERS", ""
-                ).split(",")
+                critical_providers = os.getenv("CIRCUIT_BREAKER_CRITICAL_PROVIDERS", "").split(",")
                 with _breaker_states_lock:
                     expired = []
                     # Iterate over a list to avoid runtime errors from dictionary changes
@@ -864,9 +827,9 @@ async def cleanup_breaker_states() -> None:
                             continue
 
                         # Check if state is stale (no activity for 1 day)
-                        if current_state["next_try_after"] < datetime.now(
-                            timezone.utc
-                        ) - timedelta(days=1):
+                        if current_state["next_try_after"] < datetime.now(timezone.utc) - timedelta(
+                            days=1
+                        ):
                             expired.append(provider)
                             CIRCUIT_BREAKER_CLEANUP_OPERATIONS.labels(
                                 provider=provider, result="expired"
@@ -886,11 +849,7 @@ async def cleanup_breaker_states() -> None:
                     config = get_config()
                     cleanup_interval_str = os.getenv(
                         "CIRCUIT_BREAKER_CLEANUP_INTERVAL_SECONDS",
-                        str(
-                            getattr(
-                                config, "CIRCUIT_BREAKER_CLEANUP_INTERVAL_SECONDS", 3600
-                            )
-                        ),
+                        str(getattr(config, "CIRCUIT_BREAKER_CLEANUP_INTERVAL_SECONDS", 3600)),
                     )
                 except Exception:
                     cleanup_interval_str = os.getenv(
@@ -912,9 +871,7 @@ async def cleanup_breaker_states() -> None:
             except Exception as e:
                 logger.error(f"Error in cleanup_breaker_states: {e}")
                 LLM_CIRCUIT_BREAKER_ERRORS.labels(error_type="cleanup_failed").inc()
-                CIRCUIT_BREAKER_CLEANUP_OPERATIONS.labels(
-                    provider="none", result="error"
-                ).inc()
+                CIRCUIT_BREAKER_CLEANUP_OPERATIONS.labels(provider="none", result="error").inc()
                 span.record_exception(e)
                 await asyncio.sleep(60)
 
@@ -967,15 +924,11 @@ async def periodic_config_refresh() -> None:
                 continue
             try:
                 await refresh_breaker_states()
-                refresh_interval_str = os.getenv(
-                    "CONFIG_REFRESH_INTERVAL_SECONDS", "300"
-                )
+                refresh_interval_str = os.getenv("CONFIG_REFRESH_INTERVAL_SECONDS", "300")
                 try:
                     refresh_interval = int(refresh_interval_str)
                     if refresh_interval < 60:
-                        raise ValueError(
-                            "CONFIG_REFRESH_INTERVAL_SECONDS must be at least 60"
-                        )
+                        raise ValueError("CONFIG_REFRESH_INTERVAL_SECONDS must be at least 60")
                 except ValueError:
                     _log_validation_error(
                         f"Invalid CONFIG_REFRESH_INTERVAL_SECONDS: {refresh_interval_str}. Using default: 300",
@@ -986,9 +939,7 @@ async def periodic_config_refresh() -> None:
                 await asyncio.sleep(refresh_interval)
             except Exception as e:
                 logger.error(f"Error in periodic_config_refresh: {e}")
-                LLM_CIRCUIT_BREAKER_ERRORS.labels(
-                    error_type="config_refresh_failed"
-                ).inc()
+                LLM_CIRCUIT_BREAKER_ERRORS.labels(error_type="config_refresh_failed").inc()
                 CONFIG_REFRESH_OPERATIONS.labels(result="error").inc()
                 span.record_exception(e)
                 await asyncio.sleep(60)
@@ -1015,19 +966,13 @@ async def refresh_breaker_states() -> None:
                 await config.reload_config()
                 span.set_attribute("reload_config", "success")
             else:
-                logger.debug(
-                    "ArbiterConfig.reload_config not available. Using existing config."
-                )
+                logger.debug("ArbiterConfig.reload_config not available. Using existing config.")
                 span.set_attribute("reload_config", "skipped")
         except AttributeError:
-            logger.debug(
-                "ArbiterConfig.reload_config not available. Using existing config."
-            )
+            logger.debug("ArbiterConfig.reload_config not available. Using existing config.")
             span.set_attribute("reload_config", "skipped")
         except Exception as e:
-            _log_validation_error(
-                f"Error reloading config: {e}", "config_reload_failed"
-            )
+            _log_validation_error(f"Error reloading config: {e}", "config_reload_failed")
             span.record_exception(e)
             span.set_attribute("reload_config", "failed")
         with _breaker_states_lock:
@@ -1064,9 +1009,7 @@ async def is_llm_policy_circuit_breaker_open(
         async with breaker_state_manager.state_lock():
             state = await breaker_state_manager.get_state()
             failure_threshold = getattr(config, "LLM_API_FAILURE_THRESHOLD", 3)
-            current_state_str = (
-                "closed" if state["failures"] < failure_threshold else "open"
-            )
+            current_state_str = "closed" if state["failures"] < failure_threshold else "open"
 
             # Add tracing attributes for debugging
             span.set_attribute("failure_count", state["failures"])
@@ -1101,9 +1044,7 @@ async def is_llm_policy_circuit_breaker_open(
                     return False
 
             # Closed state: allow requests
-            LLM_CIRCUIT_BREAKER_STATE.labels(provider=provider).set(
-                0
-            )  # Reflects closed state
+            LLM_CIRCUIT_BREAKER_STATE.labels(provider=provider).set(0)  # Reflects closed state
             LLM_CIRCUIT_BREAKER_TRANSITIONS.labels(
                 provider=provider, from_state=current_state_str, to_state="closed"
             ).inc()
@@ -1181,9 +1122,7 @@ async def record_llm_policy_api_failure(
 
             # Exponential backoff calculation
             delay = min(backoff_max_seconds, 2 ** state["failures"])
-            state["next_try_after"] = state["last_failure_time"] + timedelta(
-                seconds=delay
-            )
+            state["next_try_after"] = state["last_failure_time"] + timedelta(seconds=delay)
 
             log_message = f"LLM policy API failure for '{_sanitize_provider(provider)}'. Failures: {state['failures']}/{failure_threshold}. "
             if error_message:

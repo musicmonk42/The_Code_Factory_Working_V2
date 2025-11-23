@@ -166,9 +166,7 @@ async def _async_retry(
             if attempt >= retries:
                 raise
             sleep_time = backoff_base**attempt
-            logger.warning(
-                f"Retry {attempt + 1}/{retries} after {sleep_time:.2f}s: {e}"
-            )
+            logger.warning(f"Retry {attempt + 1}/{retries} after {sleep_time:.2f}s: {e}")
             await asyncio.sleep(sleep_time)
             attempt += 1
 
@@ -232,18 +230,14 @@ class ModelDeploymentStrategy(ABC):
             or os.environ.get("CORRELATION_ID")
             or hashlib.sha256(os.urandom(16)).hexdigest()[:16]
         )
-        self.logger = logging.LoggerAdapter(
-            logger, {"correlation_id": self.correlation_id}
-        )
+        self.logger = logging.LoggerAdapter(logger, {"correlation_id": self.correlation_id})
         # Redact sensitive fields in logs (deep)
         self.logger.info(
             f"Initializing deployment strategy: {self.name} with config: {_redact(self.config)}"
         )
 
     @abstractmethod
-    async def deploy(
-        self, model_path: str, model_version: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    async def deploy(self, model_path: str, model_version: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Asynchronously deploy the AI model to the target service.
         Return a structured result dict via _result().
@@ -300,15 +294,11 @@ class ModelDeploymentStrategy(ABC):
                         missing_parts.append(item)
                 elif isinstance(item, list):
                     if not item or any(not isinstance(k, str) for k in item):
-                        raise TypeError(
-                            "All keys inside OR-groups must be non-empty strings."
-                        )
+                        raise TypeError("All keys inside OR-groups must be non-empty strings.")
                     if not any(k in present for k in item):
                         missing_parts.append("(" + " OR ".join(item) + ")")
                 else:
-                    raise TypeError(
-                        "required must contain only strings or lists of strings."
-                    )
+                    raise TypeError("required must contain only strings or lists of strings.")
             if missing_parts:
                 raise ValueError(
                     f"Config for {self.name} must include: "
@@ -337,15 +327,9 @@ class LocalAPIDeploymentStrategy(ModelDeploymentStrategy):
         api_key_env_var = self.config.get("api_key_env_var")
         direct_api_key = self.config.get("direct_api_key")
         # Resolve API key (never log value)
-        self.api_key = direct_api_key or (
-            os.getenv(api_key_env_var) if api_key_env_var else None
-        )
+        self.api_key = direct_api_key or (os.getenv(api_key_env_var) if api_key_env_var else None)
         if not self.api_key:
-            env_var_msg = (
-                f" or environment variable '{api_key_env_var}'"
-                if api_key_env_var
-                else ""
-            )
+            env_var_msg = f" or environment variable '{api_key_env_var}'" if api_key_env_var else ""
             raise ValueError(
                 f"No API key found. Either 'direct_api_key' in config{env_var_msg} must be set."
             )
@@ -353,9 +337,7 @@ class LocalAPIDeploymentStrategy(ModelDeploymentStrategy):
             f"Local API Deployment initialized for endpoint: {self.endpoint_url} (credential source: {'direct' if direct_api_key else 'env'})"
         )
 
-    async def deploy(
-        self, model_path: str, model_version: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    async def deploy(self, model_path: str, model_version: str, **kwargs: Any) -> Dict[str, Any]:
         with _start_span("local_api.deploy") as span:
             started = _now_iso()
             timeout = kwargs.get("timeout_seconds")
@@ -366,16 +348,10 @@ class LocalAPIDeploymentStrategy(ModelDeploymentStrategy):
             # Basic input validation
             if not _validate_semver(model_version):
                 raise DeploymentError(f"Invalid model_version: {model_version}")
-            if (
-                model_path
-                and os.path.isabs(model_path)
-                and not os.path.exists(model_path)
-            ):
+            if model_path and os.path.isabs(model_path) and not os.path.exists(model_path):
                 raise DeploymentError(f"Model path does not exist: {model_path}")
 
-            dep_id = _stable_deployment_id(
-                "local", model_path, model_version, self.endpoint_url
-            )
+            dep_id = _stable_deployment_id("local", model_path, model_version, self.endpoint_url)
             if force_redeploy:
                 # include a changing suffix to indicate new rollout
                 dep_id = dep_id + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
@@ -477,9 +453,7 @@ class CloudServiceDeploymentStrategy(ModelDeploymentStrategy):
             f"Cloud Service Deployment initialized for {self.service_name} (region={self.region}, endpoint_id={self.endpoint_id})"
         )
 
-    async def deploy(
-        self, model_path: str, model_version: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    async def deploy(self, model_path: str, model_version: str, **kwargs: Any) -> Dict[str, Any]:
         with _start_span("cloud_service.deploy") as span:
             started = _now_iso()
             timeout = kwargs.get("timeout_seconds")
@@ -489,11 +463,7 @@ class CloudServiceDeploymentStrategy(ModelDeploymentStrategy):
 
             if not _validate_semver(model_version):
                 raise DeploymentError(f"Invalid model_version: {model_version}")
-            if (
-                model_path
-                and os.path.isabs(model_path)
-                and not os.path.exists(model_path)
-            ):
+            if model_path and os.path.isabs(model_path) and not os.path.exists(model_path):
                 # For cloud, models may be in remote storage; only warn if missing locally
                 self.logger.warning(
                     f"Model path does not exist locally: {model_path} (continuing for cloud demo)"
@@ -505,7 +475,9 @@ class CloudServiceDeploymentStrategy(ModelDeploymentStrategy):
             )
             if force_redeploy:
                 dep_id = dep_id + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
-            endpoint_url = f"https://{self.service_name}.{self.region or 'global'}.example.com/models/{dep_id}"
+            endpoint_url = (
+                f"https://{self.service_name}.{self.region or 'global'}.example.com/models/{dep_id}"
+            )
 
             async def _do():
                 # Simulated cloud provisioning
@@ -515,9 +487,7 @@ class CloudServiceDeploymentStrategy(ModelDeploymentStrategy):
 
             try:
                 await _async_retry(_do, retries=retries, backoff_base=backoff_base)
-                status = (
-                    "pending" if self.config.get("async_deploy", False) else "success"
-                )
+                status = "pending" if self.config.get("async_deploy", False) else "success"
                 msg = f"Deployment to {self.service_name} initiated."
                 if _otel_available and span:
                     span.set_attribute("deployment.id", dep_id)
@@ -614,9 +584,7 @@ class ModelDeploymentPlugin:
             try:
                 with open(global_config_path, "r", encoding="utf-8") as f:
                     self.global_config = json.load(f)
-                logger.info(
-                    f"Loaded global deployment configuration from: {global_config_path}"
-                )
+                logger.info(f"Loaded global deployment configuration from: {global_config_path}")
             except json.JSONDecodeError as e:
                 logger.error(
                     f"Error decoding global config file '{global_config_path}': {e}",
@@ -657,12 +625,8 @@ class ModelDeploymentPlugin:
             raise ValueError(
                 f"Unknown deployment strategy type: {strategy_type}. Available: {list(self._strategies.keys())}"
             )
-        merged_config = _deep_merge(
-            self.global_config.get(strategy_type, {}), specific_config
-        )
-        return self._strategies[strategy_type](
-            merged_config, correlation_id=correlation_id
-        )
+        merged_config = _deep_merge(self.global_config.get(strategy_type, {}), specific_config)
+        return self._strategies[strategy_type](merged_config, correlation_id=correlation_id)
 
     async def deploy_model(
         self,
@@ -673,9 +637,7 @@ class ModelDeploymentPlugin:
         correlation_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        current_correlation_id = (
-            correlation_id or hashlib.sha256(os.urandom(16)).hexdigest()[:16]
-        )
+        current_correlation_id = correlation_id or hashlib.sha256(os.urandom(16)).hexdigest()[:16]
         key = self._lock_key(strategy_type, specific_config)
         lock = self._get_lock(key)
         async with lock:
@@ -712,9 +674,7 @@ class ModelDeploymentPlugin:
         correlation_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        current_correlation_id = (
-            correlation_id or hashlib.sha256(os.urandom(16)).hexdigest()[:16]
-        )
+        current_correlation_id = correlation_id or hashlib.sha256(os.urandom(16)).hexdigest()[:16]
         key = self._lock_key(strategy_type, specific_config)
         lock = self._get_lock(key)
         async with lock:
@@ -783,9 +743,9 @@ async def plugin_health() -> Dict[str, Any]:
             details.append("boto3: missing")
 
         # Optional local endpoint reachability
-        health_url = os.environ.get(
-            "MODEL_DEPLOYMENT_LOCAL_HEALTH_URL"
-        ) or os.environ.get("LOCAL_API_HEALTHCHECK_URL")
+        health_url = os.environ.get("MODEL_DEPLOYMENT_LOCAL_HEALTH_URL") or os.environ.get(
+            "LOCAL_API_HEALTHCHECK_URL"
+        )
         if health_url:
             if requests_available:
                 try:
@@ -793,21 +753,15 @@ async def plugin_health() -> Dict[str, Any]:
 
                     resp = requests.get(health_url, timeout=2)
                     if 200 <= resp.status_code < 300:
-                        details.append(
-                            f"local_api_health({health_url}): OK {resp.status_code}"
-                        )
+                        details.append(f"local_api_health({health_url}): OK {resp.status_code}")
                     else:
-                        details.append(
-                            f"local_api_health({health_url}): BAD {resp.status_code}"
-                        )
+                        details.append(f"local_api_health({health_url}): BAD {resp.status_code}")
                         status = "degraded"
                 except Exception as he:
                     details.append(f"local_api_health({health_url}): ERROR {he}")
                     status = "degraded"
             else:
-                details.append(
-                    f"local_api_health({health_url}): skipped (requests missing)"
-                )
+                details.append(f"local_api_health({health_url}): skipped (requests missing)")
                 status = "degraded"
 
         # Optional AWS credentials presence (no network)
@@ -822,9 +776,7 @@ async def plugin_health() -> Dict[str, Any]:
                     import boto3  # type: ignore
 
                     region = os.environ.get("AWS_REGION")
-                    session = (
-                        boto3.Session(region_name=region) if region else boto3.Session()
-                    )
+                    session = boto3.Session(region_name=region) if region else boto3.Session()
                     creds = session.get_credentials()
                     if creds and creds.access_key:
                         details.append("aws_credentials: present")
@@ -998,9 +950,7 @@ def register_plugin_entrypoints(
                         message="undeploy requires strategy_type and deployment_id",
                         metadata={},
                     )
-                res = await plugin.undeploy_model(
-                    strategy_type, deployment_id, cfg, **kwargs
-                )
+                res = await plugin.undeploy_model(strategy_type, deployment_id, cfg, **kwargs)
                 res.setdefault("correlation_id", cfg.get("correlation_id", ""))
                 return res
             else:
@@ -1034,9 +984,7 @@ def register_plugin_entrypoints(
                 metadata={},
             )
         except Exception as e:
-            logger.error(
-                f"Unexpected error in model deployment runner: {e}", exc_info=True
-            )
+            logger.error(f"Unexpected error in model deployment runner: {e}", exc_info=True)
             return _result(
                 status="error",
                 deployment_id=None,

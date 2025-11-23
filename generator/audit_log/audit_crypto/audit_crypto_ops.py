@@ -135,9 +135,7 @@ async def stream_compute_hash(data_chunks: AsyncIterable[bytes]) -> str:
                 raise TypeError("All chunks yielded by data_chunks must be bytes.")
             hasher.update(chunk)
     except Exception as e:
-        logger.error(
-            f"Error while consuming data stream for hashing: {e}", exc_info=True
-        )
+        logger.error(f"Error while consuming data stream for hashing: {e}", exc_info=True)
         raise
 
     return hasher.hexdigest()
@@ -216,9 +214,7 @@ async def sign_entry(entry: Dict[str, Any], key_id: str, prev_hash: str = "") ->
     data_to_sign = json.dumps(entry_for_signing, sort_keys=True).encode("utf-8")
 
     try:
-        current_crypto_provider = crypto_provider_factory.get_provider(
-            settings.PROVIDER_TYPE
-        )
+        current_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
         sig_bytes = await current_crypto_provider.sign(data_to_sign, key_id)
 
         await log_action(
@@ -363,9 +359,7 @@ async def stream_sign_entry(
 
     # 3. Sign the canonical representation
     try:
-        current_crypto_provider = crypto_provider_factory.get_provider(
-            settings.PROVIDER_TYPE
-        )
+        current_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
         sig_bytes = await current_crypto_provider.sign(data_to_sign, key_id)
 
         await log_action(
@@ -413,9 +407,7 @@ async def stream_sign_entry(
         )
         raise
     except Exception as e:
-        logger.critical(
-            f"Unexpected error during streaming signing: {e}", exc_info=True
-        )
+        logger.critical(f"Unexpected error during streaming signing: {e}", exc_info=True)
         CRYPTO_ERRORS.labels(
             type="UnexpectedError",
             provider_type=settings.PROVIDER_TYPE,
@@ -432,9 +424,7 @@ async def stream_sign_entry(
                 "error": str(e),
             },
         )
-        raise CryptoOperationError(
-            f"Unexpected error during streaming signing: {e}"
-        ) from e
+        raise CryptoOperationError(f"Unexpected error during streaming signing: {e}") from e
 
 
 async def verify_entry(entry: Dict[str, Any], signature_b64: str, key_id: str) -> bool:
@@ -516,12 +506,8 @@ async def verify_entry(entry: Dict[str, Any], signature_b64: str, key_id: str) -
         return False
 
     try:
-        current_crypto_provider = crypto_provider_factory.get_provider(
-            settings.PROVIDER_TYPE
-        )
-        verified = await current_crypto_provider.verify(
-            sig_bytes, data_to_verify, key_id
-        )
+        current_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
+        verified = await current_crypto_provider.verify(sig_bytes, data_to_verify, key_id)
 
         await log_action(
             "crypto_key_operation",
@@ -698,12 +684,8 @@ async def stream_verify_entry(
         return False
 
     try:
-        current_crypto_provider = crypto_provider_factory.get_provider(
-            settings.PROVIDER_TYPE
-        )
-        verified = await current_crypto_provider.verify(
-            sig_bytes, data_to_verify, key_id
-        )
+        current_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
+        verified = await current_crypto_provider.verify(sig_bytes, data_to_verify, key_id)
 
         await log_action(
             "crypto_key_operation",
@@ -716,9 +698,7 @@ async def stream_verify_entry(
         )
         return verified
     except InvalidSignature:
-        logger.info(
-            f"Invalid signature detected during streaming verification for key '{key_id}'."
-        )
+        logger.info(f"Invalid signature detected during streaming verification for key '{key_id}'.")
         CRYPTO_ERRORS.labels(
             type="InvalidSignature",
             provider_type=settings.PROVIDER_TYPE,
@@ -767,9 +747,7 @@ async def stream_verify_entry(
         )
         raise
     except Exception as e:
-        logger.critical(
-            f"Unexpected error during streaming verification: {e}", exc_info=True
-        )
+        logger.critical(f"Unexpected error during streaming verification: {e}", exc_info=True)
         CRYPTO_ERRORS.labels(
             type="UnexpectedError",
             provider_type=settings.PROVIDER_TYPE,
@@ -785,9 +763,7 @@ async def stream_verify_entry(
                 "error": str(e),
             },
         )
-        raise CryptoOperationError(
-            f"Unexpected error during streaming verification: {e}"
-        ) from e
+        raise CryptoOperationError(f"Unexpected error during streaming verification: {e}") from e
 
 
 async def verify_chain(entries: List[Dict[str, Any]]) -> bool:
@@ -835,9 +811,7 @@ async def verify_chain(entries: List[Dict[str, Any]]) -> bool:
             "verify_chain called with empty entries list. Returning True.",
             extra={"operation": "verify_chain_empty"},
         )
-        await log_action(
-            "verify_chain", status="success", message="Empty chain, considered valid."
-        )
+        await log_action("verify_chain", status="success", message="Empty chain, considered valid.")
         return True
 
     prev_hash = ""
@@ -903,9 +877,7 @@ async def verify_chain(entries: List[Dict[str, Any]]) -> bool:
         verification_tasks.append(verify_entry(entry_copy, signature_b64, key_id))
 
         # Calculate hash for the *next* iteration's prev_hash
-        data_for_current_hash_calc = json.dumps(entry_copy, sort_keys=True).encode(
-            "utf-8"
-        )
+        data_for_current_hash_calc = json.dumps(entry_copy, sort_keys=True).encode("utf-8")
         prev_hash = compute_hash(data_for_current_hash_calc)
 
     try:
@@ -916,9 +888,7 @@ async def verify_chain(entries: List[Dict[str, Any]]) -> bool:
                 "One or more entries failed cryptographic signature verification within the chain.",
                 extra={"operation": "verify_chain_cryptographic_fail"},
             )
-            await log_action(
-                "verify_chain", status="fail", reason="cryptographic_mismatch"
-            )
+            await log_action("verify_chain", status="fail", reason="cryptographic_mismatch")
             return False
 
         logger.info(
@@ -973,14 +943,10 @@ async def rotate_key(algo: str, old_key_id: Optional[str] = None) -> str:
     if old_key_id is not None and not isinstance(old_key_id, str):
         raise TypeError("Old key ID must be a string or None.")
     if algo not in settings.SUPPORTED_ALGOS:
-        raise UnsupportedAlgorithmError(
-            f"Unsupported algorithm for key rotation: {algo}"
-        )
+        raise UnsupportedAlgorithmError(f"Unsupported algorithm for key rotation: {algo}")
 
     try:
-        current_crypto_provider = crypto_provider_factory.get_provider(
-            settings.PROVIDER_TYPE
-        )
+        current_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
         new_id = await current_crypto_provider.rotate_key(old_key_id, algo)
         logger.info(
             f"Key rotation initiated: New key '{new_id}' generated for algo '{algo}'.",
@@ -1108,9 +1074,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
     # --- END OF FIX ---
 
     # Get the current primary crypto provider instance from the factory
-    primary_crypto_provider = crypto_provider_factory.get_provider(
-        settings.PROVIDER_TYPE
-    )
+    primary_crypto_provider = crypto_provider_factory.get_provider(settings.PROVIDER_TYPE)
     sign_function = primary_crypto_provider.sign
 
     entry_for_signing = entry.copy()
@@ -1136,9 +1100,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
                 )
             )
             loop.create_task(
-                log_action(
-                    "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
-                )
+                log_action("crypto_fallback_disabled", {"reason": "max_attempts_reached"})
             )
         except RuntimeError:
             # If no event loop is running, we must run the async calls synchronously
@@ -1150,9 +1112,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
                     )
                 )
                 asyncio.run(
-                    log_action(
-                        "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
-                    )
+                    log_action("crypto_fallback_disabled", {"reason": "max_attempts_reached"})
                 )
             except Exception:
                 logging.critical(
@@ -1194,9 +1154,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
 
         # Increment fallback attempt counters
         _FALLBACK_ATTEMPT_COUNT["total"] = _FALLBACK_ATTEMPT_COUNT.get("total", 0) + 1
-        _FALLBACK_ATTEMPT_COUNT["since_alert"] = (
-            _FALLBACK_ATTEMPT_COUNT.get("since_alert", 0) + 1
-        )
+        _FALLBACK_ATTEMPT_COUNT["since_alert"] = _FALLBACK_ATTEMPT_COUNT.get("since_alert", 0) + 1
 
         # Rate limit alerts for fallback
         global _LAST_FALLBACK_ALERT_TIME
@@ -1310,9 +1268,7 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
                         "No running event loop to send critical alert or log fallback failure."
                     )
 
-            raise CryptoOperationError(
-                f"Both primary and fallback signing failed: {fallback_e}"
-            )
+            raise CryptoOperationError(f"Both primary and fallback signing failed: {fallback_e}")
 
 
 def hmac_sign_fallback(entry: Dict[str, Any], prev_hash: str) -> str:

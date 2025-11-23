@@ -11,9 +11,7 @@ class TestExplanationPromptConfig:
     @pytest.fixture
     def template_data(self):
         """Load the actual explanation_prompt.json file."""
-        template_path = (
-            Path(__file__).parent.parent / "templates" / "explanation_prompt.json"
-        )
+        template_path = Path(__file__).parent.parent / "templates" / "explanation_prompt.json"
         with open(template_path, "r") as f:
             return json.load(f)
 
@@ -67,17 +65,13 @@ class TestExplanationPromptConfig:
 
             # Security/audit templates should have lower temperature
             if template_name in ["security_alert", "audit_trail", "compliance_check"]:
-                assert (
-                    temp <= 0.5
-                ), f"{template_name} temperature too high for critical template"
+                assert temp <= 0.5, f"{template_name} temperature too high for critical template"
 
     def test_max_tokens_reasonable(self, template_data):
         """Test max_tokens values are reasonable."""
         for template_name, config in template_data.items():
             tokens = config["max_tokens"]
-            assert (
-                100 <= tokens <= 2000
-            ), f"{template_name} unreasonable tokens: {tokens}"
+            assert 100 <= tokens <= 2000, f"{template_name} unreasonable tokens: {tokens}"
 
             # Complex templates should have more tokens
             if template_name in ["conflict_resolution", "compliance_check"]:

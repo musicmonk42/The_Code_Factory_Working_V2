@@ -87,9 +87,7 @@ mock_span_processor = MagicMock()
 
 # Start OpenTelemetry patches BEFORE any imports
 patcher_otel_trace = patch("opentelemetry.trace.get_tracer", return_value=mock_tracer)
-patcher_otel_sampling = patch(
-    "opentelemetry.sdk.trace.sampling.ALWAYS_ON", mock_always_on
-)
+patcher_otel_sampling = patch("opentelemetry.sdk.trace.sampling.ALWAYS_ON", mock_always_on)
 patcher_otel_tracer_provider = patch(
     "opentelemetry.sdk.trace.TracerProvider", return_value=mock_trace_provider
 )
@@ -135,16 +133,11 @@ def dummy_log_action(*args, **kwargs):
 
 
 # FIX: Define the redaction logic that the _recursive_transform mock will use
-def mock_redaction_logic(
-    data: Any, detect_func: Callable, redact_func: Callable
-) -> Any:
+def mock_redaction_logic(data: Any, detect_func: Callable, redact_func: Callable) -> Any:
     if isinstance(data, str):
         return redact_func(data)
     elif isinstance(data, dict):
-        return {
-            k: mock_redaction_logic(v, detect_func, redact_func)
-            for k, v in data.items()
-        }
+        return {k: mock_redaction_logic(v, detect_func, redact_func) for k, v in data.items()}
     elif isinstance(data, list):
         return [mock_redaction_logic(item, detect_func, redact_func) for item in data]
     return data
@@ -175,9 +168,7 @@ patcher_redact_sensitive = patch(
     .replace("admin@example.com", "[REDACTED_EMAIL]")
     .replace("user@example.com", "[REDACTED_EMAIL]"),
 )
-patcher_detect_pii = patch(
-    "generator.clarifier.clarifier_updater.detect_pii", return_value=False
-)
+patcher_detect_pii = patch("generator.clarifier.clarifier_updater.detect_pii", return_value=False)
 patcher_recursive_transform = patch(
     "generator.clarifier.clarifier_updater._recursive_transform",
     side_effect=mock_redaction_logic,
@@ -365,9 +356,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         ):
             updated = await self.updater.update(requirements, ambiguities, answers)
 
-        self.assertIn(
-            "new_feature", updated["inferred_features"]
-        )  # Inferred features go here
+        self.assertIn("new_feature", updated["inferred_features"])  # Inferred features go here
         self.assertIn("old_feature", updated["features"])
 
     async def test_conflict_resolution_prefer_base(self):
@@ -434,9 +423,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.updater,
             "_infer_updates",
-            AsyncMock(
-                return_value={"inferred_features": [], "inferred_constraints": []}
-            ),
+            AsyncMock(return_value={"inferred_features": [], "inferred_constraints": []}),
         ):
             updated = await self.updater.update(requirements, ambiguities, answers)
 
@@ -466,9 +453,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         requirements = {"features": ["f1"], "version": 1, "schema_version": 2}
 
         # FIX 5: Method is _add_versioning and params are user/reason
-        versioned = self.updater._add_versioning(
-            requirements, user="test_user", reason="testing"
-        )
+        versioned = self.updater._add_versioning(requirements, user="test_user", reason="testing")
 
         self.assertEqual(versioned["version"], 2)
         self.assertIn("prev_hash", versioned)
@@ -499,9 +484,9 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         hashable_data["prev_hash"] = (
             "genesis_hash_placeholder"  # Ensure prev_hash is in hashable data
         )
-        canonical_json = json.dumps(
-            hashable_data, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        canonical_json = json.dumps(hashable_data, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         computed_hash = hashlib.sha256(canonical_json).hexdigest()
         requirements["version_hash"] = computed_hash
 
@@ -521,9 +506,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.updater,
             "_infer_updates",
-            AsyncMock(
-                return_value={"inferred_features": [], "inferred_constraints": []}
-            ),
+            AsyncMock(return_value={"inferred_features": [], "inferred_constraints": []}),
         ):
             await self.updater.update(requirements, ambiguities, answers)
 
@@ -540,9 +523,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.updater,
             "_infer_updates",
-            AsyncMock(
-                return_value={"inferred_features": [], "inferred_constraints": []}
-            ),
+            AsyncMock(return_value={"inferred_features": [], "inferred_constraints": []}),
         ):
             result = await self.updater.update(
                 requirements,
@@ -648,9 +629,7 @@ class TestRequirementsUpdater(unittest.IsolatedAsyncioTestCase):
 
             # Should timeout and return empty
             result = await self.updater._infer_updates(clarifications)
-            self.assertEqual(
-                result, {"inferred_features": [], "inferred_constraints": []}
-            )
+            self.assertEqual(result, {"inferred_features": [], "inferred_constraints": []})
 
 
 class TestConvenienceFunction(unittest.IsolatedAsyncioTestCase):
@@ -680,9 +659,7 @@ class TestConvenienceFunction(unittest.IsolatedAsyncioTestCase):
 
     # Add a test for the synchronous (non-running-loop) context
     @patch("generator.clarifier.clarifier_updater.asyncio.run")
-    @patch(
-        "generator.clarifier.clarifier_updater.updater", None
-    )  # Ensure updater is None
+    @patch("generator.clarifier.clarifier_updater.updater", None)  # Ensure updater is None
     @patch("generator.clarifier.clarifier_updater.RequirementsUpdater")
     def test_update_requirements_with_answers_sync_path(
         self, MockRequirementsUpdater, mock_asyncio_run

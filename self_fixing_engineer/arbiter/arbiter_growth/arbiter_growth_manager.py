@@ -69,9 +69,7 @@ class CircuitBreakerListener:
 
     def before_call(self, cb, func, *args, **kwargs):
         """Called before a circuit breaker protected call."""
-        logger.debug(
-            f"Circuit breaker '{cb.name}' checking call for arbiter '{self.arbiter_name}'"
-        )
+        logger.debug(f"Circuit breaker '{cb.name}' checking call for arbiter '{self.arbiter_name}'")
 
     def success(self, cb):
         """Called when a circuit breaker protected call succeeds."""
@@ -139,7 +137,9 @@ class LoggingFeedbackManager:
         self, arbiter_id: str, event_type: str, event_details: Dict[str, Any]
     ) -> None:
         """Logs the feedback for analysis."""
-        log_message = f"[Feedback] Arbiter: {arbiter_id}, Event: {event_type}, Details: {event_details}"
+        log_message = (
+            f"[Feedback] Arbiter: {arbiter_id}, Event: {event_type}, Details: {event_details}"
+        )
         logger.log(logging.getLevelName(self.log_level), log_message)
         await asyncio.sleep(0.005)  # Simulate I/O
 
@@ -171,9 +171,9 @@ class ContextAwareCallable:
                 )
                 start_time = datetime.now(timezone.utc).timestamp()
                 await self._coro()
-                GROWTH_OPERATION_EXECUTION_LATENCY.labels(
-                    arbiter=self._arbiter_id
-                ).observe(datetime.now(timezone.utc).timestamp() - start_time)
+                GROWTH_OPERATION_EXECUTION_LATENCY.labels(arbiter=self._arbiter_id).observe(
+                    datetime.now(timezone.utc).timestamp() - start_time
+                )
         finally:
             detach(token)
 
@@ -206,9 +206,7 @@ class ArbiterGrowthManager:
 
         # --- Sourced from Config ---
         self.SCHEMA_VERSION = self.config_store.get("global.schema_version", 1.0)
-        self.MAX_PENDING_OPERATIONS = self.config_store.get(
-            "arbiter.max_pending_operations", 1000
-        )
+        self.MAX_PENDING_OPERATIONS = self.config_store.get("arbiter.max_pending_operations", 1000)
         self._idempotency_salt = self.config_store.get(
             "security.idempotency_salt", os.urandom(16).hex()
         )
@@ -263,12 +261,8 @@ class ArbiterGrowthManager:
 
             self._flush_task = asyncio.create_task(self._periodic_flush())
             self._evolution_task = asyncio.create_task(self._periodic_evolution_cycle())
-            self._process_ops_task = asyncio.create_task(
-                self._process_pending_operations()
-            )
-            logger.info(
-                f"ArbiterGrowthManager for '{self.arbiter}' started successfully."
-            )
+            self._process_ops_task = asyncio.create_task(self._process_pending_operations())
+            logger.info(f"ArbiterGrowthManager for '{self.arbiter}' started successfully.")
 
     async def stop(self) -> None:
         """
@@ -347,9 +341,7 @@ class ArbiterGrowthManager:
                 logger.info(f"Periodic flush for '{self.arbiter}' cancelled.")
                 break
             except Exception as e:
-                logger.error(
-                    f"Error in periodic flush for '{self.arbiter}': {e}", exc_info=True
-                )
+                logger.error(f"Error in periodic flush for '{self.arbiter}': {e}", exc_info=True)
                 self._last_error = str(e)
                 await asyncio.sleep(60)  # Wait longer after an error
 
@@ -357,9 +349,7 @@ class ArbiterGrowthManager:
         """Periodically triggers a meta-learning and evolution cycle."""
         while self._running:
             try:
-                interval = self.config_store.get(
-                    "arbiter.evolution_cycle_interval_seconds", 3600
-                )
+                interval = self.config_store.get("arbiter.evolution_cycle_interval_seconds", 3600)
                 await asyncio.sleep(interval)
                 await self._run_evolution_cycle()
             except asyncio.CancelledError:
@@ -388,9 +378,7 @@ class ArbiterGrowthManager:
         Verifies the integrity of the entire audit log by checking hashes and timestamps.
         """
         with tracer.start_as_current_span("validate_audit_chain"):
-            logger.info(
-                f"Performing audit chain validation for arbiter: {self.arbiter}"
-            )
+            logger.info(f"Performing audit chain validation for arbiter: {self.arbiter}")
             all_logs = await self.storage_backend.load_all_audit_logs(self.arbiter)
             if not all_logs:
                 logger.info("No audit logs found. Chain is valid by default.")
@@ -465,9 +453,7 @@ class ArbiterGrowthManager:
             events_to_replay = await self.storage_backend.load_events(
                 self.arbiter, from_offset=self._state.event_offset
             )
-            logger.info(
-                f"Replaying {len(events_to_replay)} events for '{self.arbiter}'..."
-            )
+            logger.info(f"Replaying {len(events_to_replay)} events for '{self.arbiter}'...")
 
             for event_dict in events_to_replay:
                 try:
@@ -493,9 +479,7 @@ class ArbiterGrowthManager:
         with tracer.start_as_current_span(f"apply_event_{event.type}"):
             # 1. Validate event details
             if not self._is_event_valid(event):
-                raise ValueError(
-                    f"Invalid event details for type {event.type}: {event.details}"
-                )
+                raise ValueError(f"Invalid event details for type {event.type}: {event.details}")
 
             # Add logging for tests
             if not is_replay:
@@ -513,13 +497,11 @@ class ArbiterGrowthManager:
                 current_score = self._state.skills.get(skill_name, 0.0)
                 new_score = min(1.0, current_score + amount)
                 self._state.set_skill_score(skill_name, new_score)
-                logger.debug(
-                    f"Applied event: skill '{skill_name}' improved to {new_score}"
-                )
+                logger.debug(f"Applied event: skill '{skill_name}' improved to {new_score}")
                 if not is_replay:
-                    GROWTH_SKILL_IMPROVEMENT.labels(
-                        arbiter=self.arbiter, skill=skill_name
-                    ).observe(amount)
+                    GROWTH_SKILL_IMPROVEMENT.labels(arbiter=self.arbiter, skill=skill_name).observe(
+                        amount
+                    )
                     # Anomaly Detection: Check for unusually large improvements
                     anomaly_threshold = self.config_store.get("anomaly_threshold", 0.95)
                     if amount > anomaly_threshold:
@@ -548,9 +530,7 @@ class ArbiterGrowthManager:
     def _is_event_valid(self, event: GrowthEvent) -> bool:
         """Validates the structure and content of an event."""
         if event.type == "skill_improved":
-            return (
-                "skill_name" in event.details and "improvement_amount" in event.details
-            )
+            return "skill_name" in event.details and "improvement_amount" in event.details
         if event.type == "level_up":
             return "new_level" in event.details
         # Add validation for other event types
@@ -561,9 +541,7 @@ class ArbiterGrowthManager:
         snapshot_interval = await self.config_store.get_config(
             "arbiter.snapshot_interval_events", 100
         )
-        if self._dirty and (
-            force or self._event_count_since_snapshot >= snapshot_interval
-        ):
+        if self._dirty and (force or self._event_count_since_snapshot >= snapshot_interval):
             async with self._save_lock:
                 if self._dirty:  # Double-check after acquiring lock
                     logger.debug(f"Saving snapshot for '{self.arbiter}'...")
@@ -589,17 +567,13 @@ class ArbiterGrowthManager:
         except Exception as e:
             GROWTH_SAVE_ERRORS.labels(arbiter=self.arbiter).inc()
             self._last_error = str(e)
-            logger.error(
-                f"Failed to save snapshot for '{self.arbiter}': {e}", exc_info=True
-            )
+            logger.error(f"Failed to save snapshot for '{self.arbiter}': {e}", exc_info=True)
             raise
 
     async def _audit_log(self, operation: str, details: Dict[str, Any]) -> None:
         """Creates an immutable, chained audit log entry for a given operation."""
         previous_hash = await self.storage_backend.get_last_audit_hash(self.arbiter)
-        await self.storage_backend.save_audit_log(
-            self.arbiter, operation, details, previous_hash
-        )
+        await self.storage_backend.save_audit_log(self.arbiter, operation, details, previous_hash)
 
     def _generate_idempotency_key(self, event: GrowthEvent, service_name: str) -> str:
         """Creates a secure, salted hash to be used as an idempotency key."""
@@ -629,9 +603,7 @@ class ArbiterGrowthManager:
             # In a real system with batch-capable SDKs, this would be a single call.
             async def _push():
                 for event in events:
-                    await self.knowledge_graph.add_fact(
-                        self.arbiter, event.type, event.details
-                    )
+                    await self.knowledge_graph.add_fact(self.arbiter, event.type, event.details)
                     await self.feedback_manager.record_feedback(
                         self.arbiter, event.type, event.details
                     )
@@ -642,17 +614,13 @@ class ArbiterGrowthManager:
             logger.error(self._last_error)
             raise CircuitBreakerOpenError(self._last_error)
 
-    async def _queue_operation(
-        self, operation_coro: Callable[[], Awaitable[None]]
-    ) -> None:
+    async def _queue_operation(self, operation_coro: Callable[[], Awaitable[None]]) -> None:
         """Safely queues an operation, applying rate limiting and backpressure."""
         if not await self._rate_limiter.acquire():
             raise RateLimitError("Rate limit exceeded for queuing operation.")
 
         if self._pending_operations.full():
-            raise OperationQueueFullError(
-                f"Operation queue for {self.arbiter} is full."
-            )
+            raise OperationQueueFullError(f"Operation queue for {self.arbiter} is full.")
 
         carrier = {}
         inject(carrier)
@@ -660,9 +628,7 @@ class ArbiterGrowthManager:
 
         await self._pending_operations.put(context_aware_op)
 
-    async def record_growth_event(
-        self, event_type: str, details: Dict[str, Any]
-    ) -> None:
+    async def record_growth_event(self, event_type: str, details: Dict[str, Any]) -> None:
         """
         The primary API method for recording a new event for the arbiter.
         It queues the operation to ensure state consistency and order of operations.
@@ -679,12 +645,8 @@ class ArbiterGrowthManager:
                 )
 
                 # Check idempotency
-                idempotency_key = self._generate_idempotency_key(
-                    event, "growth_manager"
-                )
-                is_new_event = await self.idempotency_store.check_and_set(
-                    idempotency_key
-                )
+                idempotency_key = self._generate_idempotency_key(event, "growth_manager")
+                is_new_event = await self.idempotency_store.check_and_set(idempotency_key)
                 if not is_new_event:
                     logger.info(
                         f"Skipping duplicate event due to idempotency key: {idempotency_key}"
@@ -701,9 +663,7 @@ class ArbiterGrowthManager:
 
             await self._queue_operation(operation)
 
-    async def improve_skill(
-        self, skill_name: str, improvement_amount: float = 0.01
-    ) -> None:
+    async def improve_skill(self, skill_name: str, improvement_amount: float = 0.01) -> None:
         """A convenience API to record a skill improvement event."""
         await self.record_growth_event(
             "skill_improved",
@@ -723,9 +683,7 @@ class ArbiterGrowthManager:
         Useful for monitoring and diagnostics.
         """
         uptime = (
-            (self.clock() - self._start_time).total_seconds()
-            if hasattr(self, "_start_time")
-            else 0
+            (self.clock() - self._start_time).total_seconds() if hasattr(self, "_start_time") else 0
         )
 
         status = HealthStatus.HEALTHY
@@ -756,9 +714,7 @@ class ArbiterGrowthManager:
                 "snapshot": str(self._snapshot_breaker.current_state),
                 "push_event": str(self._push_event_breaker.current_state),
             },
-            "last_audit_hash": await self.storage_backend.get_last_audit_hash(
-                self.arbiter
-            ),
+            "last_audit_hash": await self.storage_backend.get_last_audit_hash(self.arbiter),
         }
 
     def liveness_probe(self) -> bool:

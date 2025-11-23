@@ -427,9 +427,7 @@ except ImportError:
 
     class DummyFeedback:
         def rate(self, item_id, rating, user_id):
-            logging.warning(
-                f"DummyFeedback: Item {item_id} rated {rating} by {user_id}."
-            )
+            logging.warning(f"DummyFeedback: Item {item_id} rated {rating} by {user_id}.")
 
     Runner = DummyRunner
     IntentParser = DummyIntentParser
@@ -504,9 +502,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if (
     not SECRET_KEY and not os.getenv("TESTING") and _FASTAPI_AVAILABLE
 ):  # Only raise if not testing AND fastapi is available
-    logger.critical(
-        "JWT_SECRET_KEY environment variable not set. This is required for production."
-    )
+    logger.critical("JWT_SECRET_KEY environment variable not set. This is required for production.")
     raise ValueError("JWT_SECRET_KEY environment variable not set.")
 elif not SECRET_KEY:
     # Use a test secret key if in testing mode
@@ -523,9 +519,7 @@ pwd_context = CryptContext(
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/token", auto_error=False
 )  # <<< FIX: Added auto_error=False
-api_key_header = APIKeyHeader(
-    name="X-API-Key", auto_error=False
-)  # Uses dummy if not available
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)  # Uses dummy if not available
 
 # --- Database Configuration (SQLite for simplicity, replace with PostgreSQL/MySQL for production) ---
 # PRODUCTION FIX: The DATABASE_URL must be provided from the environment.
@@ -602,9 +596,7 @@ def create_db_tables(bind_engine=None):  # <<< FIX: Added bind_engine=None
         if Base.metadata is not None and hasattr(Base.metadata, "create_all"):
             bind_target = bind_engine or engine  # <<< FIX: Use arg or global
             Base.metadata.create_all(bind=bind_target)  # <<< FIX: Use bind_target
-            logger.info(
-                f"Database tables created or already exist on bind: {bind_target}."
-            )
+            logger.info(f"Database tables created or already exist on bind: {bind_target}.")
         else:
             # This block will run if SQLAlchemy imports failed
             logger.warning(
@@ -615,14 +607,10 @@ def create_db_tables(bind_engine=None):  # <<< FIX: Added bind_engine=None
         raise  # MODIFIED as per Step 2 (re-raises for backoff)
     except Exception as e:
         # This might catch AttributeError if Base.metadata is None and not checked
-        logger.error(
-            f"Error in create_db_tables (likely dummy setup): {e}", exc_info=True
-        )
+        logger.error(f"Error in create_db_tables (likely dummy setup): {e}", exc_info=True)
         # In a dummy setup, we don't want to fail startup
         if not _FASTAPI_AVAILABLE:
-            logger.warning(
-                "Continuing startup despite error in dummy create_db_tables."
-            )
+            logger.warning("Continuing startup despite error in dummy create_db_tables.")
         else:
             raise  # Re-raise if it's not a dummy setup
 
@@ -713,9 +701,7 @@ def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -753,9 +739,7 @@ async def get_user_by_username_from_db(db: Session, username: str) -> Optional[U
         )
         return user
     except OperationalError as e:
-        logger.error(
-            f"Database operational error fetching user {username}: {e}", exc_info=True
-        )
+        logger.error(f"Database operational error fetching user {username}: {e}", exc_info=True)
         # MODIFIED as per Step 5 (already present in file)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -774,9 +758,7 @@ async def get_user_by_username_from_db(db: Session, username: str) -> Optional[U
         return None
 
 
-async def get_api_key_by_hashed_key_from_db(
-    db: Session, api_key: str
-) -> Optional[APIKey]:
+async def get_api_key_by_hashed_key_from_db(db: Session, api_key: str) -> Optional[APIKey]:
     """Retrieves an API key from the database by verifying its hash."""
     try:
         # Fetch all active API keys and verify hash
@@ -788,9 +770,7 @@ async def get_api_key_by_hashed_key_from_db(
                 return api_key_obj
         return None
     except OperationalError as e:
-        logger.error(
-            f"Database operational error verifying API key: {e}", exc_info=True
-        )
+        logger.error(f"Database operational error verifying API key: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Database connection error.")
     except SQLAlchemyError as e:
         logger.error(f"Database error verifying API key: {e}", exc_info=True)
@@ -839,9 +819,7 @@ async def get_current_user_from_token(
                 )
                 raise credentials_exception
         elif user is None:  # In dummy mode, just check if user is None
-            logger.warning(
-                f"Authentication failed: User '{token_data.username}' not found."
-            )
+            logger.warning(f"Authentication failed: User '{token_data.username}' not found.")
             raise credentials_exception
 
     # Update last login time
@@ -886,9 +864,7 @@ async def get_current_api_key(
     try:
         await asyncio.to_thread(db.commit)
     except SQLAlchemyError as e:
-        logger.error(
-            f"Failed to update last_used_at for API key {api_key_obj.api_key_id}: {e}"
-        )
+        logger.error(f"Failed to update last_used_at for API key {api_key_obj.api_key_id}: {e}")
     except Exception as e:
         logger.warning(f"DummyDB: db.commit() for last_used_at called. {e}")
 
@@ -961,13 +937,9 @@ api.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # PRODUCTION FIX: Restrict CORS origins. Load allowed origins from an environment variable.
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
-allowed_origins = [
-    origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()
-]
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
 if not allowed_origins and _FASTAPI_AVAILABLE:
-    logger.warning(
-        "ALLOWED_ORIGINS environment variable not set. CORS will be disabled."
-    )
+    logger.warning("ALLOWED_ORIGINS environment variable not set. CORS will be disabled.")
 
 if _FASTAPI_AVAILABLE:
     api.add_middleware(
@@ -984,9 +956,7 @@ if _FASTAPI_AVAILABLE:
     )  # MODIFIED as per Step 4 (already present in file)
     FastAPIInstrumentor.instrument_app(api)
 else:
-    logger.info(
-        "Skipping middleware and instrumentation setup (FastAPI not available)."
-    )
+    logger.info("Skipping middleware and instrumentation setup (FastAPI not available).")
 
 
 # --- Singleton Instances ---
@@ -1130,9 +1100,7 @@ async def health_check(db: Session = Depends(get_db)):
             db_status = "ok"
         except SQLAlchemyError as e:
             db_status = "failed"
-            logger.error(
-                f"Health check failed: Database connection error: {e}", exc_info=True
-            )
+            logger.error(f"Health check failed: Database connection error: {e}", exc_info=True)
             span.set_status(Status(StatusCode.ERROR, "Database connection failed"))
             span.record_exception(e)
             raise HTTPException(
@@ -1146,12 +1114,8 @@ async def health_check(db: Session = Depends(get_db)):
                 db_status = "dummy"
             else:
                 db_status = "failed"
-                logger.error(
-                    f"Health check failed: Unexpected error: {e}", exc_info=True
-                )
-                span.set_status(
-                    Status(StatusCode.ERROR, "Unexpected health check error")
-                )
+                logger.error(f"Health check failed: Unexpected error: {e}", exc_info=True)
+                span.set_status(Status(StatusCode.ERROR, "Unexpected health check error"))
                 span.record_exception(e)
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1164,15 +1128,11 @@ async def health_check(db: Session = Depends(get_db)):
 
         overall_status = (
             "healthy"
-            if all(
-                [db_status != "failed", runner_status == "ok", parser_status == "ok"]
-            )
+            if all([db_status != "failed", runner_status == "ok", parser_status == "ok"])
             else "degraded"
         )
 
-        span.set_status(
-            Status(StatusCode.OK if overall_status == "healthy" else StatusCode.ERROR)
-        )
+        span.set_status(Status(StatusCode.OK if overall_status == "healthy" else StatusCode.ERROR))
 
         return {
             "status": overall_status,
@@ -1392,15 +1352,11 @@ async def delete_api_key(api_key_id: str, db: Session = Depends(get_db)):
             lambda: db.query(APIKey).filter(APIKey.api_key_id == api_key_id).first()
         )
         if not api_key_to_delete:
-            logger.warning(
-                f"API Key deletion failed: API Key '{api_key_id}' not found."
-            )
+            logger.warning(f"API Key deletion failed: API Key '{api_key_id}' not found.")
             span.set_status(
                 Status(StatusCode.NOT_FOUND, "API Key not found")
             )  # FIX: Use Status object
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
         try:
             await asyncio.to_thread(db.delete, api_key_to_delete)
@@ -1521,9 +1477,7 @@ async def api_parse_text(
     scopes=["parse"],
 )
 async def api_parse_file(
-    file: UploadFile = File(
-        ..., description="The file to parse"
-    ),  # Use File for file uploads
+    file: UploadFile = File(..., description="The file to parse"),  # Use File for file uploads
     format_hint: Optional[str] = Form(
         None, description="Hint about the file format (e.g., 'markdown', 'json')"
     ),
@@ -1599,9 +1553,7 @@ async def api_parse_file(
     scopes=["parse"],
 )
 async def api_submit_parse_feedback(
-    item_id: str = FastAPIPath(
-        ..., description="ID of the parsed item to submit feedback for"
-    ),
+    item_id: str = FastAPIPath(..., description="ID of the parsed item to submit feedback for"),
     rating: float = Body(
         ..., ge=0.0, le=1.0, description="Rating for the parsed item (0.0 to 1.0)"
     ),
@@ -1624,9 +1576,7 @@ async def api_submit_parse_feedback(
             span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
             return {"status": "success", "message": f"Feedback for {item_id} recorded."}
         except Exception as e:
-            logger.error(
-                f"Feedback submission error for entity {entity_id}: {e}", exc_info=True
-            )
+            logger.error(f"Feedback submission error for entity {entity_id}: {e}", exc_info=True)
             span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
             span.record_exception(e)
             raise HTTPException(
@@ -1661,9 +1611,7 @@ async def api_reload_parser_config(
                 "message": "IntentParser configuration reloaded.",
             }
         except Exception as e:
-            logger.error(
-                f"Config reload error for entity {entity_id}: {e}", exc_info=True
-            )
+            logger.error(f"Config reload error for entity {entity_id}: {e}", exc_info=True)
             span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
             span.record_exception(e)
             raise HTTPException(
@@ -1706,9 +1654,7 @@ async def api_submit_runner_feedback(
             span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
             return {"status": "success", "message": "Feedback recorded."}
         except Exception as e:
-            logger.error(
-                f"Feedback submission error for entity {entity_id}: {e}", exc_info=True
-            )
+            logger.error(f"Feedback submission error for entity {entity_id}: {e}", exc_info=True)
             span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
             span.record_exception(e)
             raise HTTPException(
@@ -1718,9 +1664,7 @@ async def api_submit_runner_feedback(
 
 
 # --- Utility Endpoints ---
-@register_api_endpoint(
-    path="/logs/search", method="GET", summary="Search logs", scopes=["logs"]
-)
+@register_api_endpoint(path="/logs/search", method="GET", summary="Search logs", scopes=["logs"])
 async def api_search_logs(
     query: str = Query(..., min_length=1, description="Search query for logs"),
     authenticated_entity: Union[User, APIKey] = Depends(require_scopes(["logs"])),
@@ -1741,9 +1685,7 @@ async def api_search_logs(
             span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
             return {"results": results}
         except Exception as e:
-            logger.error(
-                f"Logs search error for entity {entity_id}: {e}", exc_info=True
-            )
+            logger.error(f"Logs search error for entity {entity_id}: {e}", exc_info=True)
             span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
             span.record_exception(e)
             raise HTTPException(
@@ -1772,9 +1714,7 @@ if __name__ == "__main__":
         # The auto-reloader is a development feature and should be disabled for performance and stability.
         uvicorn.run("api:api", host="0.0.0.0", port=8000, reload=False)
     else:
-        logger.critical(
-            "Cannot run API server directly: FastAPI dependencies are not installed."
-        )
+        logger.critical("Cannot run API server directly: FastAPI dependencies are not installed.")
         print(
             "Cannot run API server directly: FastAPI dependencies are not installed.",
             file=os.stderr,

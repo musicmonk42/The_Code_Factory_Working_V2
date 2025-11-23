@@ -139,9 +139,7 @@ for d in [CONFIG_DIR, LOG_DIR, RESULTS_DIR]:
 # --- Logging Setup ---
 LOG_FILE = os.path.join(LOG_DIR, "simulation_core.log")
 log_handler = RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5)
-formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s"
-)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(correlation_id)s - %(message)s")
 log_handler.setFormatter(formatter)
 
 logging.basicConfig(level=logging.INFO, handlers=[log_handler])
@@ -226,9 +224,7 @@ if PYDANTIC_AVAILABLE:
         user_roles: Dict[str, List[str]]
 
 else:
-    logging.warning(
-        "Pydantic not found. Configuration and RBAC schema validation will be skipped."
-    )
+    logging.warning("Pydantic not found. Configuration and RBAC schema validation will be skipped.")
 
     # Fallback classes to prevent NameErrors
     class JobConfig:
@@ -272,9 +268,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
             except AttributeError:
                 return validated_config.dict()  # Pydantic v1 fallback
         else:
-            logger.warning(
-                "Pydantic not available. Skipping configuration schema validation."
-            )
+            logger.warning("Pydantic not available. Skipping configuration schema validation.")
             return config_data
     except (yaml.YAMLError, Exception) as e:
         logger.critical(
@@ -305,9 +299,7 @@ def load_rbac_policy(rbac_path: str) -> Dict[str, Any]:
             except AttributeError:
                 return validated_rbac.dict()  # Fallback for Pydantic v1
         else:
-            logger.warning(
-                "Pydantic not available. Skipping RBAC policy schema validation."
-            )
+            logger.warning("Pydantic not available. Skipping RBAC policy schema validation.")
             return rbac_data
     except (yaml.YAMLError, ValidationError) as e:
         logger.critical(
@@ -373,9 +365,7 @@ def check_permission(action: str, resource: str = "*") -> bool:
     for role_name in user_roles:
         permissions = get_role_permissions(role_name)
         for perm in permissions:
-            if _matches(perm["action"], action) and _matches(
-                perm.get("resource", "*"), resource
-            ):
+            if _matches(perm["action"], action) and _matches(perm.get("resource", "*"), resource):
                 logger.debug(
                     f"Permission Granted: User '{CURRENT_USER}' with role '{role_name}' has '{action}' permission on '{resource}'."
                 )
@@ -535,9 +525,7 @@ class NotificationManager:
         if not self.slack_webhook_url:
             raise ValueError("Slack webhook URL not configured.")
         try:
-            response = requests.post(
-                self.slack_webhook_url, json={"text": message}, timeout=10
-            )
+            response = requests.post(self.slack_webhook_url, json={"text": message}, timeout=10)
             response.raise_for_status()
             logger.info("Slack notification sent via webhook.")
         except requests.exceptions.RequestException as e:
@@ -579,9 +567,7 @@ class NotificationManager:
     def notify(self, channel: str, message: str, subject: Optional[str] = None):
         correlation_id = getattr(correlation_filter, "correlation_id", "N/A")
         full_message = f"[Correlation ID: {correlation_id}] {message}"
-        full_subject = (
-            f"[Correlation ID: {correlation_id}] {subject}" if subject else None
-        )
+        full_subject = f"[Correlation ID: {correlation_id}] {subject}" if subject else None
 
         if channel == "ops_channel":
             self.ops_channel_notifier(full_message)
@@ -600,13 +586,9 @@ class NotificationManager:
             elif channel == "email":
                 if not full_subject:
                     full_subject = "Simulation Core Notification"
-                cb.attempt_operation(
-                    self._send_email_notification, full_subject, full_message
-                )
+                cb.attempt_operation(self._send_email_notification, full_subject, full_message)
             else:
-                logger.warning(
-                    f"Unsupported notification channel: {channel}. Skipping."
-                )
+                logger.warning(f"Unsupported notification channel: {channel}. Skipping.")
         except Exception:
             pass
 
@@ -721,9 +703,7 @@ def execute_remotely(job_config: Dict[str, Any], backend: str) -> Dict[str, Any]
             "message": "Job submitted successfully.",
         }
     except Exception as e:
-        logger.error(
-            f"Failed to submit job '{job_config.get('name')}' to '{backend}': {e}"
-        )
+        logger.error(f"Failed to submit job '{job_config.get('name')}' to '{backend}': {e}")
         try:
             NOTIFICATION_MANAGER.notify(
                 "email",
@@ -742,14 +722,10 @@ def run_job(job_config: Dict[str, Any]):
 
     if not job_config.get("enabled", True):
         logger.info(f"Job '{job_name}' is disabled. Skipping.")
-        NOTIFICATION_MANAGER.notify(
-            "slack", f"INFO: Job '{job_name}' is disabled and was skipped."
-        )
+        NOTIFICATION_MANAGER.notify("slack", f"INFO: Job '{job_name}' is disabled and was skipped.")
         return {"status": "SKIPPED", "message": "Job is disabled."}
 
-    if not check_permission(
-        action="run:agent", resource=job_config.get("agent_type", "*")
-    ):
+    if not check_permission(action="run:agent", resource=job_config.get("agent_type", "*")):
         logger.error(
             f"Permission denied to run agent type '{job_config.get('agent_type')}' for job '{job_name}'."
         )
@@ -820,9 +796,7 @@ def watch_mode(files_to_watch: List[str], callback: Callable):
     for directory in monitored_dirs:
         dir_to_watch = directory if directory else os.getcwd()
         if not os.path.isdir(dir_to_watch):
-            logger.warning(
-                f"Watch directory '{dir_to_watch}' does not exist; skipping."
-            )
+            logger.warning(f"Watch directory '{dir_to_watch}' does not exist; skipping.")
             continue
         observer.schedule(event_handler, dir_to_watch, recursive=False)
 
@@ -853,9 +827,7 @@ async def main(args=None):
         help="Enable watch mode to monitor config changes.",
     )
     parser.add_argument("--job", type=str, help="Run a specific job by name.")
-    parser.add_argument(
-        "--summary", action="store_true", help="Print a summary of results."
-    )
+    parser.add_argument("--summary", action="store_true", help="Print a summary of results.")
     parser.add_argument(
         "--remote-backend",
         type=str,
@@ -871,18 +843,14 @@ async def main(args=None):
 
     all_jobs_to_run = []
     if args.job:
-        found_job = next(
-            (job for job in APP_CONFIG["jobs"] if job["name"] == args.job), None
-        )
+        found_job = next((job for job in APP_CONFIG["jobs"] if job["name"] == args.job), None)
         if found_job:
             all_jobs_to_run.append(found_job)
         else:
             logger.error(f"Job '{args.job}' not found in configuration.")
             sys.exit(1)
     else:
-        all_jobs_to_run = [
-            job for job in APP_CONFIG["jobs"] if job.get("enabled", True)
-        ]
+        all_jobs_to_run = [job for job in APP_CONFIG["jobs"] if job.get("enabled", True)]
 
     if not all_jobs_to_run:
         logger.info("No enabled jobs to run.")
@@ -901,11 +869,7 @@ async def main(args=None):
             for pattern in files_to_watch:
                 if not os.path.isabs(pattern):
                     pattern = os.path.join(BASE_DIR, pattern)
-                rel = (
-                    os.path.relpath(pattern, BASE_DIR)
-                    if os.path.isabs(pattern)
-                    else pattern
-                )
+                rel = os.path.relpath(pattern, BASE_DIR) if os.path.isabs(pattern) else pattern
                 resolved_files.extend(find_files_by_pattern(BASE_DIR, rel))
             files_to_watch = list(set(resolved_files))
 
@@ -920,15 +884,11 @@ async def main(args=None):
             sys.exit(1)
 
         def run_callback():
-            logger.info(
-                "Detected file change. Re-loading config and re-running jobs..."
-            )
+            logger.info("Detected file change. Re-loading config and re-running jobs...")
             global APP_CONFIG, RBAC_POLICY, NOTIFICATION_MANAGER
             try:
                 if not all(validate_file(f) for f in files_to_watch):
-                    logger.error(
-                        "Skipping job run due to invalid configuration file detected."
-                    )
+                    logger.error("Skipping job run due to invalid configuration file detected.")
                     return
                 APP_CONFIG = load_config(CONFIG_FILE)
                 RBAC_POLICY = load_rbac_policy(RBAC_POLICY_FILE)
@@ -940,9 +900,7 @@ async def main(args=None):
                 )
                 return
 
-            current_jobs_to_run = [
-                job for job in APP_CONFIG["jobs"] if job.get("enabled", True)
-            ]
+            current_jobs_to_run = [job for job in APP_CONFIG["jobs"] if job.get("enabled", True)]
             if args.job:
                 current_jobs_to_run = [
                     job for job in current_jobs_to_run if job["name"] == args.job
@@ -957,9 +915,7 @@ async def main(args=None):
                     f"--- Running job {job_idx + 1}/{len(current_jobs_to_run)} (triggered by watch) ---"
                 )
                 job_config["agentic"] = (
-                    args.agentic
-                    if "agentic" in vars(args)
-                    else job_config.get("agentic", False)
+                    args.agentic if "agentic" in vars(args) else job_config.get("agentic", False)
                 )
                 perm_action = (
                     f"run:{args.remote_backend}"
@@ -987,9 +943,7 @@ async def main(args=None):
                     )
                     if result.get("status") not in ["SUBMITTED", "ERROR"]:
                         print(
-                            "\033[35m"
-                            + json.dumps(summarize_result(result), indent=2)
-                            + "\033[0m"
+                            "\033[35m" + json.dumps(summarize_result(result), indent=2) + "\033[0m"
                         )
                     else:
                         print(f"Message: {result.get('message', 'No details.')}")
@@ -1000,9 +954,7 @@ async def main(args=None):
     for job_idx, job_config in enumerate(all_jobs_to_run):
         logger.info(f"--- Running job {job_idx + 1}/{len(all_jobs_to_run)} ---")
         job_config["agentic"] = (
-            args.agentic
-            if "agentic" in vars(args)
-            else job_config.get("agentic", False)
+            args.agentic if "agentic" in vars(args) else job_config.get("agentic", False)
         )
         perm_action = (
             f"run:{args.remote_backend}"
@@ -1029,11 +981,7 @@ async def main(args=None):
                 f"\033[32mResults for Job {job_idx + 1} Status: {result.get('status')} ({result.get('job_id', 'local')})\033[0m\n"
             )
             if result.get("status") not in ["SUBMITTED", "ERROR"]:
-                print(
-                    "\033[35m"
-                    + json.dumps(summarize_result(result), indent=2)
-                    + "\033[0m"
-                )
+                print("\033[35m" + json.dumps(summarize_result(result), indent=2) + "\033[0m")
             else:
                 print(f"Message: {result.get('message', 'No details.')}")
 

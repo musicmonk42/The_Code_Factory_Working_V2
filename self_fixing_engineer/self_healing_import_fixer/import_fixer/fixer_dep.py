@@ -101,9 +101,7 @@ class SecurityViolationError(HealerError):
                 whitelisted_paths=whitelist,
                 message=message,
             )
-            _alert_operator_or_log(
-                f"CRITICAL: Security violation: {message}", level="CRITICAL"
-            )
+            _alert_operator_or_log(f"CRITICAL: Security violation: {message}", level="CRITICAL")
 
 
 class FilesystemAccessError(HealerError):
@@ -130,9 +128,7 @@ class HealerNonCriticalError(HealerError):
 def _atomic_write_text(path: Path, data: str) -> None:
     """Writes text data to a file atomically."""
     d = path.parent
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=d, delete=False
-    ) as tf:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=d, delete=False) as tf:
         tf.write(data)
     os.replace(tf.name, path)
 
@@ -243,9 +239,7 @@ async def _get_cache_client():
             else None
         )
         if not primary_root:
-            logger.error(
-                "Cannot initialize file cache without a whitelisted root path."
-            )
+            logger.error("Cannot initialize file cache without a whitelisted root path.")
             return None
         _file_cache_dir = primary_root / ".healer_cache"
         _file_cache_dir.mkdir(exist_ok=True)
@@ -256,9 +250,7 @@ async def _get_cache_client():
             self.cache_dir = cache_dir
 
         async def get(self, key):
-            file_path = (
-                self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
-            )
+            file_path = self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
             if file_path.exists():
                 try:
                     raw = file_path.read_text("utf-8")
@@ -281,9 +273,7 @@ async def _get_cache_client():
             return None
 
         async def setex(self, key, expiry, value):
-            file_path = (
-                self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
-            )
+            file_path = self.cache_dir / f"{hashlib.sha256(key.encode()).hexdigest()}.json"
             try:
                 payload = {
                     "v": value,
@@ -511,9 +501,7 @@ async def _get_module_map(
     norm_roots = [os.path.normcase(os.path.realpath(p)) for p in roots]
     cache_key = (
         "module_map:"
-        + hashlib.sha256(
-            json.dumps(sorted(norm_roots), separators=(",", ":")).encode()
-        ).hexdigest()
+        + hashlib.sha256(json.dumps(sorted(norm_roots), separators=(",", ":")).encode()).hexdigest()
     )
 
     if cache_client:
@@ -530,9 +518,7 @@ async def _get_module_map(
 
     if cache_client:
         try:
-            await cache_client.setex(
-                cache_key, 86400, json.dumps((module_map, file_to_mod))
-            )
+            await cache_client.setex(cache_key, 86400, json.dumps((module_map, file_to_mod)))
             logger.debug("Module map cached successfully.")
         except Exception as e:
             logger.warning(f"Failed to cache module map: {e}")
@@ -541,9 +527,7 @@ async def _get_module_map(
     return module_map, file_to_mod
 
 
-def _discover_local_top_levels(
-    roots: List[str], file_to_mod: Dict[str, str]
-) -> Set[str]:
+def _discover_local_top_levels(roots: List[str], file_to_mod: Dict[str, str]) -> Set[str]:
     """
     Determine local top-level packages robustly, including src/ and similar layouts.
     - From module names, take first component; if it's a container dir, also take the second.
@@ -662,9 +646,7 @@ def _parse_file_imports(file_path: str) -> Dict[str, List[str]]:
             mtime = 0.0
         return _parse_file_imports_cached(file_path, mtime)
     except SyntaxError as e:
-        logger.error(
-            f"Syntax error in {file_path}: {e}. Skipping import parsing for this file."
-        )
+        logger.error(f"Syntax error in {file_path}: {e}. Skipping import parsing for this file.")
         if _core_utils_loaded:
             audit_logger.log_event(
                 "dependency_scan_failure",
@@ -798,9 +780,7 @@ def _import_to_distribution(name: str) -> str:
         return "azure-" + parts[1].replace("_", "-")
 
     # 3) fallback to normalized top-level
-    logger.debug(
-        f"dist map fallback: import '{name}' → '{_normalize_dep_name(parts[0])}'"
-    )
+    logger.debug(f"dist map fallback: import '{name}' → '{_normalize_dep_name(parts[0])}'")
     return _normalize_dep_name(parts[0])
 
 
@@ -808,13 +788,9 @@ def _get_pyproject_deps(pyproject_data: Dict) -> Set[str]:
     """Extracts and returns a normalized set of dependency names from pyproject.toml."""
     deps = set()
     if "project" in pyproject_data and "dependencies" in pyproject_data["project"]:
-        deps.update(
-            _normalize_dep_name(d) for d in pyproject_data["project"]["dependencies"]
-        )
+        deps.update(_normalize_dep_name(d) for d in pyproject_data["project"]["dependencies"])
     # Also check optional-dependencies to avoid false positives for missing dependencies
-    for _extra, _deps in (
-        pyproject_data.get("project", {}).get("optional-dependencies", {}).items()
-    ):
+    for _extra, _deps in pyproject_data.get("project", {}).get("optional-dependencies", {}).items():
         for _d in _deps or []:
             deps.add(_normalize_dep_name(_d))
 
@@ -824,11 +800,7 @@ def _get_pyproject_deps(pyproject_data: Dict) -> Set[str]:
 def _is_test_path(p: str) -> bool:
     """Heuristic to check if a path is likely part of a test suite."""
     bn = os.path.basename(p)
-    return (
-        "/tests/" in p.replace("\\", "/")
-        or bn.startswith("test_")
-        or bn.endswith("_test.py")
-    )
+    return "/tests/" in p.replace("\\", "/") or bn.startswith("test_") or bn.endswith("_test.py")
 
 
 # --- Dependency File Healing Logic ---
@@ -886,13 +858,9 @@ async def heal_dependencies(
 
     all_py_files = _get_py_files(project_roots)
     if not all_py_files:
-        logger.info(
-            "No Python files found in specified roots. Skipping dependency healing."
-        )
+        logger.info("No Python files found in specified roots. Skipping dependency healing.")
         if _core_utils_loaded:
-            audit_logger.log_event(
-                "dependency_healing_skipped", reason="no_python_files_found"
-            )
+            audit_logger.log_event("dependency_healing_skipped", reason="no_python_files_found")
         return {
             "added": [],
             "removed": [],
@@ -905,9 +873,7 @@ async def heal_dependencies(
     # Identify local (in-repo) top-level packages to exclude from "external" deps
     local_top_levels = _discover_local_top_levels(project_roots, file_to_mod)
 
-    all_imports_with_locations = await _get_all_imports_async(
-        all_py_files, workers=workers
-    )
+    all_imports_with_locations = await _get_all_imports_async(all_py_files, workers=workers)
 
     _BUILD_TOOLS = {
         "pkg_resources",
@@ -948,9 +914,7 @@ async def heal_dependencies(
             dist_to_imports.pop("google", None)
 
     # Normalize to *distribution* names so missing/unused agree
-    imported_dists_normalized = {
-        _normalize_dep_name(dist) for dist in dist_to_imports.keys()
-    }
+    imported_dists_normalized = {_normalize_dep_name(dist) for dist in dist_to_imports.keys()}
 
     primary_root = Path(project_roots[0])
     pyproject_path = primary_root / "pyproject.toml"
@@ -1026,17 +990,14 @@ async def heal_dependencies(
     unused_deps = []
     for dep_full_spec in pyproject_data.get("project", {}).get("dependencies", []):
         dep_name_normalized = _normalize_dep_name(dep_full_spec)
-        if (
-            dep_name_normalized not in imported_dists_normalized
-            and not _has_env_marker(dep_full_spec)
+        if dep_name_normalized not in imported_dists_normalized and not _has_env_marker(
+            dep_full_spec
         ):
             unused_deps.append(dep_full_spec)
 
     log_unused = logger.info if dry_run else logger.warning
     if unused_deps:
-        log_unused(
-            f"Found potentially unused dependencies in pyproject.toml: {unused_deps}"
-        )
+        log_unused(f"Found potentially unused dependencies in pyproject.toml: {unused_deps}")
     else:
         logger.info("No unused dependencies detected in pyproject.toml.")
 
@@ -1083,9 +1044,7 @@ async def heal_dependencies(
 
     # Add missing dev dependencies
     if dev_extra and dev_deps_to_add:
-        opt_deps = proposed_pyproject_data["project"].setdefault(
-            "optional-dependencies", {}
-        )
+        opt_deps = proposed_pyproject_data["project"].setdefault("optional-dependencies", {})
         dev_deps = opt_deps.setdefault(dev_extra, [])
         for dep in dev_deps_to_add:
             dep_norm = _normalize_dep_name(dep)
@@ -1096,9 +1055,7 @@ async def heal_dependencies(
     # Handle unused dependencies based on flag
     if prune_unused:
         new_pyproject_deps = [
-            d
-            for d in proposed_pyproject_data["project"]["dependencies"]
-            if d not in unused_deps
+            d for d in proposed_pyproject_data["project"]["dependencies"] if d not in unused_deps
         ]
         proposed_pyproject_data["project"]["dependencies"] = new_pyproject_deps
 
@@ -1125,9 +1082,7 @@ async def heal_dependencies(
     if sync_reqs or requirements_path.exists():
         requirements_original_content = ""
         if requirements_path.exists():
-            if not _within_whitelist(
-                str(requirements_path), _whitelisted_project_paths
-            ):
+            if not _within_whitelist(str(requirements_path), _whitelisted_project_paths):
                 raise SecurityViolationError(
                     f"requirements.txt path '{requirements_path}' is outside whitelisted paths.",
                     path=str(requirements_path),
@@ -1198,9 +1153,7 @@ async def heal_dependencies(
             logger.info(f"pyproject.toml has been updated at {pyproject_path}.")
 
             safe_py_diff = (
-                scrub_secrets(pyproject_diff_str)
-                if _core_utils_loaded
-                else pyproject_diff_str
+                scrub_secrets(pyproject_diff_str) if _core_utils_loaded else pyproject_diff_str
             )
             diff_hash = hashlib.sha256(safe_py_diff.encode()).hexdigest()
             if _core_utils_loaded:
@@ -1229,13 +1182,9 @@ async def heal_dependencies(
             ) from e
 
         # Write to requirements.txt
-        if requirements_new_content is not None and (
-            sync_reqs or requirements_path.exists()
-        ):
+        if requirements_new_content is not None and (sync_reqs or requirements_path.exists()):
             try:
-                if not _within_whitelist(
-                    str(requirements_path), _whitelisted_project_paths
-                ):
+                if not _within_whitelist(str(requirements_path), _whitelisted_project_paths):
                     raise SecurityViolationError(
                         f"requirements.txt path '{requirements_path}' is outside whitelisted paths.",
                         path=str(requirements_path),
@@ -1248,9 +1197,7 @@ async def heal_dependencies(
                     )
 
                 if requirements_path.exists():
-                    shutil.copy2(
-                        requirements_path, requirements_path.with_suffix(".txt.bak")
-                    )
+                    shutil.copy2(requirements_path, requirements_path.with_suffix(".txt.bak"))
                     logger.info(
                         f"Backed up requirements.txt to {requirements_path.with_suffix('.txt.bak')}"
                     )
@@ -1262,9 +1209,7 @@ async def heal_dependencies(
                         )
 
                 _atomic_write_text(requirements_path, requirements_new_content)
-                logger.info(
-                    f"requirements.txt has been updated at {requirements_path}."
-                )
+                logger.info(f"requirements.txt has been updated at {requirements_path}.")
 
                 safe_req_diff = (
                     scrub_secrets(requirements_diff_str)
@@ -1316,9 +1261,7 @@ def main():
     import argparse
     import time
 
-    parser = argparse.ArgumentParser(
-        description="Heal Python dependencies in a project."
-    )
+    parser = argparse.ArgumentParser(description="Heal Python dependencies in a project.")
     parser.add_argument(
         "--roots",
         nargs="+",
@@ -1447,9 +1390,7 @@ def main():
             should_apply = False
         elif pyproject_diff or requirements_diff:
             if args.fail_on_diff:
-                logger.error(
-                    "Changes were detected and --fail-on-diff is set. Exiting."
-                )
+                logger.error("Changes were detected and --fail-on-diff is set. Exiting.")
                 sys.exit(1)
             if args.confirm and not args.yes:
                 print("\n--- Proposed changes to pyproject.toml ---")

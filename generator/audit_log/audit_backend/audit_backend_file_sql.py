@@ -62,17 +62,13 @@ class FileBackend(LogBackend):
                 await wal.write(log_entry_for_wal)
                 await wal.flush()
                 # Ensure data is synced to disk for durability before atomic commit
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: os.fsync(wal.fileno())
-                )
+                await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(wal.fileno()))
         except Exception as e:
             logger.error(
                 f"FileBackend WAL write failed for entry {prepared_entry.get('entry_id')}: {e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="WALWriteError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="WALWriteError").inc()
             # Send alert, but this shouldn't stop the main flush flow immediately,
             # as retry_operation is wrapping the flush_batch.
             asyncio.create_task(
@@ -83,18 +79,14 @@ class FileBackend(LogBackend):
             )
             raise  # Re-raise to signal failure to the caller (atomic context/retry logic)
 
-    async def _query_single(
-        self, filters: Dict[str, Any], limit: int
-    ) -> List[Dict[str, Any]]:
+    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """
         Queries log file with basic in-memory filtering based on top-level fields.
         Note: This is inefficient for very large files and should be replaced by an indexed solution
         (e.g., Elasticsearch, Splunk) for production scale.
         """
         if not os.path.exists(self.log_file):
-            logger.info(
-                f"FileBackend: Log file '{self.log_file}' not found during query."
-            )
+            logger.info(f"FileBackend: Log file '{self.log_file}' not found during query.")
             return []
 
         raw_entries = []
@@ -103,9 +95,7 @@ class FileBackend(LogBackend):
                 # Reading all lines into memory can be problematic for very large files.
                 # For a real large-scale scenario, consider streaming reads and external processing.
                 lines = await f.readlines()
-                for line in reversed(
-                    lines
-                ):  # Read from end for more recent entries first
+                for line in reversed(lines):  # Read from end for more recent entries first
                     stripped_line = line.strip()
                     if not stripped_line:
                         continue
@@ -120,14 +110,12 @@ class FileBackend(LogBackend):
                             match = False
                         if (
                             "timestamp >=" in filters
-                            and stored_entry.get("timestamp", "")
-                            < filters["timestamp >="]
+                            and stored_entry.get("timestamp", "") < filters["timestamp >="]
                         ):
                             match = False
                         if (
                             "timestamp <=" in filters
-                            and stored_entry.get("timestamp", "")
-                            > filters["timestamp <=="]
+                            and stored_entry.get("timestamp", "") > filters["timestamp <=="]
                         ):
                             match = False
                         if "schema_version" in filters:
@@ -162,9 +150,7 @@ class FileBackend(LogBackend):
                 f"FileBackend: I/O error reading log file '{self.log_file}': {io_e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="FileReadError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="FileReadError").inc()
             asyncio.create_task(
                 send_alert(
                     f"FileBackend: Failed to read log file '{self.log_file}'. Check permissions/disk.",
@@ -173,12 +159,8 @@ class FileBackend(LogBackend):
             )
             raise  # Re-raise to signify query failure
         except Exception as e:
-            logger.error(
-                f"FileBackend: Unexpected error during query: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="QueryUnknownError"
-            ).inc()
+            logger.error(f"FileBackend: Unexpected error during query: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="QueryUnknownError").inc()
             raise
 
         return raw_entries[::-1]
@@ -201,9 +183,7 @@ class FileBackend(LogBackend):
         )
 
         # Create a unique timestamped backup file
-        timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y%m%d%H%M%S"
-        )
+        timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
         backup_file = os.path.normpath(
             f"{self.log_file}.backup.v{current_on_disk_version}.{timestamp_str}"
         )
@@ -279,9 +259,9 @@ class FileBackend(LogBackend):
                                 or not original_audit_entry["timestamp"]
                             ):
                                 original_audit_entry["timestamp"] = (
-                                    datetime.datetime.now(
-                                        datetime.timezone.utc
-                                    ).isoformat(timespec="milliseconds")
+                                    datetime.datetime.now(datetime.timezone.utc).isoformat(
+                                        timespec="milliseconds"
+                                    )
                                     + "Z"
                                 )
                                 logger.debug(
@@ -295,21 +275,19 @@ class FileBackend(LogBackend):
                                 temp_audit_entry_for_hash = original_audit_entry.copy()
                                 temp_audit_entry_for_hash.pop("_audit_hash", None)
                                 new_hash = compute_hash(
-                                    json.dumps(
-                                        temp_audit_entry_for_hash, sort_keys=True
-                                    ).encode("utf-8")
+                                    json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode(
+                                        "utf-8"
+                                    )
                                 )
                                 original_audit_entry["_audit_hash"] = new_hash
                             # --- END FIX ---
 
-                            updated_data_str = json.dumps(
-                                original_audit_entry, sort_keys=True
-                            )
+                            updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                             updated_compressed = self._compress(updated_data_str)
                             updated_encrypted = self._encrypt(updated_compressed)
-                            updated_base64_data = base64.b64encode(
-                                updated_encrypted
-                            ).decode("utf-8")
+                            updated_base64_data = base64.b64encode(updated_encrypted).decode(
+                                "utf-8"
+                            )
 
                             new_stored_entry = {
                                 "encrypted_data": updated_base64_data,
@@ -320,9 +298,7 @@ class FileBackend(LogBackend):
                                     "_audit_hash"
                                 ],  # Use the *new* hash
                             }
-                            await new_f_handle.write(
-                                json.dumps(new_stored_entry) + "\n"
-                            )
+                            await new_f_handle.write(json.dumps(new_stored_entry) + "\n")
                             migrated_count += 1
 
                         except (
@@ -382,25 +358,17 @@ class FileBackend(LogBackend):
             # Step 4: Clean up old WAL and temp migration file
             if os.path.exists(self.wal_file):
                 await asyncio.to_thread(os.remove, self.wal_file)
-                logger.debug(
-                    f"FileBackend migration: Cleared WAL file '{self.wal_file}'."
-                )
+                logger.debug(f"FileBackend migration: Cleared WAL file '{self.wal_file}'.")
 
             # Keep backup_file for manual inspection/recovery as per doc, but remove temp_new_file
-            if os.path.exists(
-                temp_new_file
-            ):  # Should have been replaced, but defensive check
+            if os.path.exists(temp_new_file):  # Should have been replaced, but defensive check
                 await asyncio.to_thread(os.remove, temp_new_file)
 
         except MigrationError:  # Re-raise custom migration errors
             raise
         except Exception as e:
-            logger.error(
-                f"FileBackend migration failed, attempting rollback: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="MigrationFailed"
-            ).inc()
+            logger.error(f"FileBackend migration failed, attempting rollback: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationFailed").inc()
             asyncio.create_task(
                 send_alert(
                     "FileBackend migration failed. Attempting rollback.",
@@ -451,9 +419,7 @@ class FileBackend(LogBackend):
             async with aiofiles.open(temp_health_file, "a") as f:
                 await f.write("health check\n")
                 await f.flush()
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: os.fsync(f.fileno())
-                )
+                await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(f.fileno()))
             await asyncio.to_thread(os.remove, temp_health_file)
 
             # NOTE: Conceptual check for available disk space removed to avoid platform-specific dependencies.
@@ -464,15 +430,11 @@ class FileBackend(LogBackend):
             logger.warning(
                 f"FileBackend health check failed due to I/O error (e.g., permissions, disk full): {io_e}"
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="HealthCheckIOError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="HealthCheckIOError").inc()
             return False
         except Exception as e:
             logger.warning(f"FileBackend health check failed unexpectedly: {e}")
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="HealthCheckError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="HealthCheckError").inc()
             return False
 
     async def _get_current_schema_version(self) -> int:
@@ -498,31 +460,23 @@ class FileBackend(LogBackend):
                                 backend=self.__class__.__name__,
                                 type="SchemaDetectParseError",
                             ).inc()
-                            return (
-                                1  # Malformed line, assume it's old and needs migration
-                            )
+                            return 1  # Malformed line, assume it's old and needs migration
             return 1  # If file is empty after reading
         except IOError as io_e:
             logger.warning(
                 f"FileBackend: Could not read '{self.log_file}' to determine schema version due to I/O error: {io_e}. Assuming v1."
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="SchemaDetectIOError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="SchemaDetectIOError").inc()
             return 1
         except Exception as e:
             logger.warning(
                 f"FileBackend: Unexpected error determining schema version for '{self.log_file}': {e}. Assuming v1."
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="SchemaDetectError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="SchemaDetectError").inc()
             return 1
 
     @asynccontextmanager
-    async def _atomic_context(
-        self, prepared_entries: List[Dict[str, Any]]
-    ) -> AsyncIterator[None]:
+    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
         """
         Atomic batch writes for FileBackend using a temporary file and `os.replace`.
         Ensures that either the entire batch is committed, or none of it is, for the main log file.
@@ -585,9 +539,7 @@ class FileBackend(LogBackend):
                 await tmp.writelines(all_lines_to_write)
                 await tmp.flush()
                 # Ensure data is written to disk before rename
-                await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: os.fsync(tmp.fileno())
-                )
+                await asyncio.get_event_loop().run_in_executor(None, lambda: os.fsync(tmp.fileno()))
 
             # Atomically replace the main log file
             await asyncio.get_event_loop().run_in_executor(
@@ -614,9 +566,7 @@ class FileBackend(LogBackend):
 
         except Exception as e:
             logger.error(f"FileBackend atomic batch write failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AtomicWriteError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
             asyncio.create_task(
                 send_alert(
                     "FileBackend atomic batch write failed. Data might be inconsistent or lost for batch.",
@@ -628,9 +578,7 @@ class FileBackend(LogBackend):
             if os.path.exists(temp_file):
                 try:
                     await asyncio.to_thread(os.remove, temp_file)
-                    logger.debug(
-                        f"FileBackend: Cleaned up failed temp file '{temp_file}'."
-                    )
+                    logger.debug(f"FileBackend: Cleaned up failed temp file '{temp_file}'.")
                 except Exception as cleanup_e:
                     logger.error(
                         f"FileBackend: Failed to cleanup temp file '{temp_file}' after atomic write failure: {cleanup_e}",
@@ -676,9 +624,7 @@ class FileBackend(LogBackend):
                 f"FileBackend WAL recovery: I/O error reading WAL file '{self.wal_file}': {io_e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="WALReadError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="WALReadError").inc()
             asyncio.create_task(
                 send_alert(
                     "FileBackend WAL read failed during recovery. Potential data loss.",
@@ -692,9 +638,7 @@ class FileBackend(LogBackend):
                 "FileBackend WAL file is empty or contains no valid entries after parsing. No recovery action taken."
             )
             try:
-                await asyncio.to_thread(
-                    os.remove, self.wal_file
-                )  # Clean empty/invalid WAL
+                await asyncio.to_thread(os.remove, self.wal_file)  # Clean empty/invalid WAL
             except IOError as io_e:
                 logger.warning(
                     f"FileBackend WAL recovery: Failed to remove empty WAL file '{self.wal_file}': {io_e}."
@@ -734,9 +678,7 @@ class FileBackend(LogBackend):
                 )
 
         existing_entry_ids = {
-            entry.get("entry_id")
-            for entry in existing_log_entries
-            if "entry_id" in entry
+            entry.get("entry_id") for entry in existing_log_entries if "entry_id" in entry
         }
 
         new_entries_from_wal_to_add = []
@@ -755,9 +697,9 @@ class FileBackend(LogBackend):
                     f"{self.dir_path}/.tmp_recovery_{uuid.uuid4()}"
                 )  # Unique temp for recovery
 
-                all_lines_for_recovery = [
-                    json.dumps(e) + "\n" for e in existing_log_entries
-                ] + [json.dumps(e) + "\n" for e in new_entries_from_wal_to_add]
+                all_lines_for_recovery = [json.dumps(e) + "\n" for e in existing_log_entries] + [
+                    json.dumps(e) + "\n" for e in new_entries_from_wal_to_add
+                ]
 
                 async with aiofiles.open(temp_recovery_file, "w") as tmp_f:
                     await tmp_f.writelines(all_lines_for_recovery)
@@ -870,12 +812,8 @@ class SQLiteBackend(LogBackend):
                 logger.info("SQLiteBackend connection closed.")
                 self.conn = None
             except sqlite3.Error as e:
-                logger.error(
-                    f"Error closing SQLiteBackend connection: {e}", exc_info=True
-                )
-                BACKEND_ERRORS.labels(
-                    backend=self.__class__.__name__, type="CloseError"
-                ).inc()
+                logger.error(f"Error closing SQLiteBackend connection: {e}", exc_info=True)
+                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="CloseError").inc()
 
     async def _init_connection(self):
         """Initializes SQLite connection."""
@@ -907,13 +845,9 @@ class SQLiteBackend(LogBackend):
             logger.info(f"SQLiteBackend initialized for '{self.db_file}'.")
         except Exception as e:
             logger.critical(f"SQLiteBackend initialization failed: {e}", exc_info=True)
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="InitError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="InitError").inc()
             asyncio.create_task(
-                send_alert(
-                    f"SQLiteBackend initialization failed: {e}", severity="critical"
-                )
+                send_alert(f"SQLiteBackend initialization failed: {e}", severity="critical")
             )
             raise
 
@@ -941,23 +875,17 @@ class SQLiteBackend(LogBackend):
                 f"SQLiteBackend: Database error during append for entry '{prepared_entry.get('entry_id')}': {db_e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AppendDBError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AppendDBError").inc()
             raise  # Re-raise to trigger transaction rollback
         except Exception as e:
             logger.error(
                 f"SQLiteBackend: Unexpected error during append for entry '{prepared_entry.get('entry_id')}': {e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="AppendError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AppendError").inc()
             raise
 
-    async def _query_single(
-        self, filters: Dict[str, Any], limit: int
-    ) -> List[Dict[str, Any]]:
+    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Queries SQLite with timestamp, entry_id, and schema_version filtering."""
         if self.conn is None:
             await self.wait_for_init()
@@ -985,9 +913,7 @@ class SQLiteBackend(LogBackend):
         query += f" ORDER BY id DESC LIMIT {limit}"
 
         try:
-            rows_cursor = await asyncio.to_thread(
-                self.conn.execute, query, tuple(values)
-            )
+            rows_cursor = await asyncio.to_thread(self.conn.execute, query, tuple(values))
             fetched_rows = await asyncio.to_thread(rows_cursor.fetchall)
             return [
                 {
@@ -1000,12 +926,8 @@ class SQLiteBackend(LogBackend):
                 for row in fetched_rows
             ]
         except sqlite3.Error as db_e:
-            logger.error(
-                f"SQLiteBackend: Database error during query: {db_e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="QueryDBError"
-            ).inc()
+            logger.error(f"SQLiteBackend: Database error during query: {db_e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="QueryDBError").inc()
             asyncio.create_task(
                 send_alert(
                     f"SQLiteBackend query failed due to database error: {db_e}",
@@ -1014,16 +936,10 @@ class SQLiteBackend(LogBackend):
             )
             raise  # Re-raise to signal query failure
         except Exception as e:
-            logger.error(
-                f"SQLiteBackend: Unexpected error during query: {e}", exc_info=True
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="QueryError"
-            ).inc()
+            logger.error(f"SQLiteBackend: Unexpected error during query: {e}", exc_info=True)
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="QueryError").inc()
             asyncio.create_task(
-                send_alert(
-                    f"SQLiteBackend query failed unexpectedly: {e}", severity="high"
-                )
+                send_alert(f"SQLiteBackend query failed unexpectedly: {e}", severity="high")
             )
             raise
 
@@ -1052,9 +968,7 @@ class SQLiteBackend(LogBackend):
             # --- FIX: Changed 'await self._init_connection()' to a sync check ---
             if self.conn is None:
                 # This should be impossible after wait_for_init(), but safety check
-                raise ConnectionError(
-                    "SQLiteBackend connection not initialized for migration."
-                )
+                raise ConnectionError("SQLiteBackend connection not initialized for migration.")
             # --- END FIX ---
 
             cursor = self.conn.cursor()
@@ -1108,29 +1022,23 @@ class SQLiteBackend(LogBackend):
                         encrypted_data_b64 = row["data"]
 
                         # Decrypt, decompress to get original audit entry
-                        decrypted_bytes = ENCRYPTER.decrypt(
-                            base64.b64decode(encrypted_data_b64)
-                        )
+                        decrypted_bytes = ENCRYPTER.decrypt(base64.b64decode(encrypted_data_b64))
                         decompressed_str = self._decompress(decrypted_bytes)
                         original_audit_entry = json.loads(decompressed_str)
 
                         # Apply migration rules: Ensure all new fields are present/updated
                         entry_id = original_audit_entry.get(
                             "entry_id",
-                            (
-                                row["entry_id"]
-                                if "entry_id" in row.keys()
-                                else str(uuid.uuid4())
-                            ),
+                            (row["entry_id"] if "entry_id" in row.keys() else str(uuid.uuid4())),
                         )
                         timestamp = original_audit_entry.get(
                             "timestamp",
                             (
                                 row["timestamp"]
                                 if "timestamp" in row.keys()
-                                else datetime.datetime.now(
-                                    datetime.timezone.utc
-                                ).isoformat(timespec="milliseconds")
+                                else datetime.datetime.now(datetime.timezone.utc).isoformat(
+                                    timespec="milliseconds"
+                                )
                                 + "Z"
                             ),
                         )
@@ -1146,9 +1054,9 @@ class SQLiteBackend(LogBackend):
                             temp_audit_entry_for_hash = original_audit_entry.copy()
                             temp_audit_entry_for_hash.pop("_audit_hash", None)
                             audit_hash = compute_hash(
-                                json.dumps(
-                                    temp_audit_entry_for_hash, sort_keys=True
-                                ).encode("utf-8")
+                                json.dumps(temp_audit_entry_for_hash, sort_keys=True).encode(
+                                    "utf-8"
+                                )
                             )
                             original_audit_entry["_audit_hash"] = audit_hash
                         else:
@@ -1157,14 +1065,10 @@ class SQLiteBackend(LogBackend):
                         # --- END FIX ---
 
                         # Re-encrypt and re-compress the updated audit log entry with current key
-                        updated_data_str = json.dumps(
-                            original_audit_entry, sort_keys=True
-                        )
+                        updated_data_str = json.dumps(original_audit_entry, sort_keys=True)
                         updated_compressed = self._compress(updated_data_str)
                         updated_encrypted = self._encrypt(updated_compressed)
-                        updated_base64_data = base64.b64encode(
-                            updated_encrypted
-                        ).decode("utf-8")
+                        updated_base64_data = base64.b64encode(updated_encrypted).decode("utf-8")
 
                         cursor.execute(
                             f"INSERT INTO {temp_table_name} (timestamp, entry_id, schema_version, _audit_hash, data) VALUES (?, ?, ?, ?, ?)",
@@ -1182,18 +1086,14 @@ class SQLiteBackend(LogBackend):
                         f"SQLiteBackend migration: Copied {migrated_count} entries from '{old_table_name}'."
                     )
                     cursor.execute(f"DROP TABLE {old_table_name}")
-                    logger.debug(
-                        f"SQLiteBackend migration: Dropped old table '{old_table_name}'."
-                    )
+                    logger.debug(f"SQLiteBackend migration: Dropped old table '{old_table_name}'.")
                 else:
                     logger.info(
                         "SQLiteBackend migration: No old schema table found to copy data from."
                     )
 
                 # 3. Rename the temporary table to the final table name
-                cursor.execute(
-                    f"ALTER TABLE {temp_table_name} RENAME TO {new_table_name}"
-                )
+                cursor.execute(f"ALTER TABLE {temp_table_name} RENAME TO {new_table_name}")
                 logger.debug(
                     f"SQLiteBackend migration: Renamed '{temp_table_name}' to '{new_table_name}'."
                 )
@@ -1205,9 +1105,7 @@ class SQLiteBackend(LogBackend):
                 cursor.execute(
                     f"CREATE INDEX IF NOT EXISTS idx_{new_table_name}_entry_id ON {new_table_name} (entry_id);"
                 )
-                logger.debug(
-                    f"SQLiteBackend migration: Recreated indexes for '{new_table_name}'."
-                )
+                logger.debug(f"SQLiteBackend migration: Recreated indexes for '{new_table_name}'.")
 
                 # 5. Validate database integrity after migration (important for robustness)
                 cursor.execute("PRAGMA integrity_check;")
@@ -1241,17 +1139,11 @@ class SQLiteBackend(LogBackend):
                 cursor.execute(
                     f"DROP TABLE IF EXISTS {temp_table_name}"
                 )  # Clean up temp table on rollback
-                raise MigrationError(
-                    f"SQLite migration failed due to database error: {db_e}"
-                )
+                raise MigrationError(f"SQLite migration failed due to database error: {db_e}")
             except Exception as e:
                 cursor.execute("ROLLBACK")
-                logger.error(
-                    f"SQLiteBackend migration failed unexpectedly: {e}", exc_info=True
-                )
-                BACKEND_ERRORS.labels(
-                    backend=self.__class__.__name__, type="MigrationFailed"
-                ).inc()
+                logger.error(f"SQLiteBackend migration failed unexpectedly: {e}", exc_info=True)
+                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="MigrationFailed").inc()
                 asyncio.create_task(
                     send_alert(
                         f"SQLiteBackend migration failed unexpectedly: {e}. Rolling back.",
@@ -1296,18 +1188,12 @@ class SQLiteBackend(LogBackend):
 
             return True
         except sqlite3.Error as db_e:
-            logger.warning(
-                f"SQLiteBackend health check failed due to database error: {db_e}"
-            )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="HealthCheckDBError"
-            ).inc()
+            logger.warning(f"SQLiteBackend health check failed due to database error: {db_e}")
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="HealthCheckDBError").inc()
             return False
         except Exception as e:
             logger.warning(f"SQLiteBackend health check failed unexpectedly: {e}")
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="HealthCheckError"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="HealthCheckError").inc()
             return False
 
     async def _get_current_schema_version(self) -> int:
@@ -1320,9 +1206,7 @@ class SQLiteBackend(LogBackend):
                 temp_conn = await asyncio.to_thread(
                     lambda: sqlite3.connect(self.db_file, check_same_thread=False)
                 )
-                temp_conn.row_factory = (
-                    sqlite3.Row
-                )  # Ensure row_factory is set for temp_conn
+                temp_conn.row_factory = sqlite3.Row  # Ensure row_factory is set for temp_conn
                 cursor = await asyncio.to_thread(temp_conn.cursor)
             except sqlite3.Error as db_e:
                 logger.warning(
@@ -1352,9 +1236,7 @@ class SQLiteBackend(LogBackend):
                 return self.schema_version
 
             # Check for logs_v1 (base version)
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v1';"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v1';")
             if await asyncio.to_thread(cursor.fetchone):
                 return 1  # Found logs_v1, so it's version 1
 
@@ -1372,9 +1254,7 @@ class SQLiteBackend(LogBackend):
                 await asyncio.to_thread(temp_conn.close)
 
     @asynccontextmanager
-    async def _atomic_context(
-        self, prepared_entries: List[Dict[str, Any]]
-    ) -> AsyncIterator[None]:
+    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
         """
         Manages SQLite transactions for a batch of prepared entries.
         Ensures all entries in the batch are committed together or none are.
@@ -1397,9 +1277,7 @@ class SQLiteBackend(LogBackend):
                 f"SQLiteBackend transaction rolled back due to error: {e}",
                 exc_info=True,
             )
-            BACKEND_ERRORS.labels(
-                backend=self.__class__.__name__, type="TransactionRollback"
-            ).inc()
+            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="TransactionRollback").inc()
             asyncio.create_task(
                 send_alert(
                     "SQLiteBackend transaction rolled back. Data inconsistency possible for batch.",

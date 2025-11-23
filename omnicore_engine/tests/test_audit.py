@@ -65,12 +65,8 @@ with (
         "omnicore_engine.audit.PluginPerformanceTracker",
         mock_settings.PluginPerformanceTracker,
     ),
-    patch(
-        "omnicore_engine.audit.ShadowDeployManager", mock_settings.ShadowDeployManager
-    ),
-    patch(
-        "omnicore_engine.audit.PluginVersionManager", mock_settings.PluginVersionManager
-    ),
+    patch("omnicore_engine.audit.ShadowDeployManager", mock_settings.ShadowDeployManager),
+    patch("omnicore_engine.audit.PluginVersionManager", mock_settings.PluginVersionManager),
     patch("omnicore_engine.audit.PolicyEngine", mock_settings.PolicyEngine),
     patch("omnicore_engine.audit.KnowledgeGraph", mock_settings.KnowledgeGraph),
     # Patches for local methods/functions within the audit module
@@ -98,7 +94,9 @@ with (
         def _recalculate_root(self):
             self.counter += 1
             # Generate a distinct root for each update
-            self.root = f"root_{self.counter}_{hashlib.sha256(b''.join(self.leaves)).hexdigest()[:8]}"
+            self.root = (
+                f"root_{self.counter}_{hashlib.sha256(b''.join(self.leaves)).hexdigest()[:8]}"
+            )
 
         def get_merkle_root(self):
             return self.root
@@ -132,9 +130,7 @@ async def test_audit_entry(tmp_path):
         "should_auto_learn",
         AsyncMock(return_value=(True, "allowed")),
     ):
-        await audit.add_entry_async(
-            "test_event", "test_name", {"foo": 1}, sim_id="sim1"
-        )
+        await audit.add_entry_async("test_event", "test_name", {"foo": 1}, sim_id="sim1")
 
         # Manually flush the buffer to ensure the record is saved to the mock db client
         await audit._flush_buffer()
@@ -196,9 +192,7 @@ async def test_audit_db_failure(mocker, tmp_path):
         await db.initialize()
 
     # Mock the database client's save_audit_record, which is called inside _flush_buffer
-    mocker.patch.object(
-        db, "save_audit_record", AsyncMock(side_effect=Exception("DB error"))
-    )
+    mocker.patch.object(db, "save_audit_record", AsyncMock(side_effect=Exception("DB error")))
 
     audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
     audit._db_client = db  # Assign the db client to the audit instance
@@ -217,9 +211,7 @@ async def test_audit_db_failure(mocker, tmp_path):
 
     db = Database(str(tmp_path / "test.db"))
     await db.initialize()
-    mocker.patch.object(
-        db, "save_audit_record", AsyncMock(side_effect=Exception("DB error"))
-    )
+    mocker.patch.object(db, "save_audit_record", AsyncMock(side_effect=Exception("DB error")))
     audit = ExplainAudit(db)
     with pytest.raises(Exception, match="DB error"):
         await audit.add_entry_async("test_event", "test_name", {"foo": 1})
@@ -300,9 +292,7 @@ async def test_audit_snapshot_replay(tmp_path):
         audit.policy_engine,
         "should_auto_learn",
         AsyncMock(return_value=(True, "allowed")),
-    ), patch.object(
-        audit._db_client, "query_audit_records", AsyncMock(return_value=[])
-    ):
+    ), patch.object(audit._db_client, "query_audit_records", AsyncMock(return_value=[])):
 
         # Mocking decryption result for validation
         with patch.object(audit, "decrypt_str", side_effect=lambda x: {}):
@@ -399,9 +389,7 @@ async def test_concurrent_audit_entries(tmp_path):
         "should_auto_learn",
         AsyncMock(return_value=(True, "allowed")),
     ):
-        tasks = [
-            audit.add_entry_async(f"event{i}", f"name{i}", {"foo": i}) for i in range(5)
-        ]
+        tasks = [audit.add_entry_async(f"event{i}", f"name{i}", {"foo": i}) for i in range(5)]
 
         # Run the tasks concurrently
         await asyncio.gather(*tasks)
@@ -416,9 +404,7 @@ async def test_concurrent_audit_entries(tmp_path):
     audit = ExplainAudit(db)
 
     # Create a list of async tasks to add audit entries
-    tasks = [
-        audit.add_entry_async(f"event{i}", f"name{i}", {"foo": i}) for i in range(5)
-    ]
+    tasks = [audit.add_entry_async(f"event{i}", f"name{i}", {"foo": i}) for i in range(5)]
 
     # Run the tasks concurrently
     await asyncio.gather(*tasks)

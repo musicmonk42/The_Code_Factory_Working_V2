@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 # Set a default logging handler for the metrics file
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -45,9 +43,7 @@ def _get_or_create_metric(
             )
         return existing_metric
     if buckets is not None and collector_class == Histogram:
-        metric = collector_class(
-            name, documentation, labelnames=labelnames, buckets=buckets
-        )
+        metric = collector_class(name, documentation, labelnames=labelnames, buckets=buckets)
     else:
         metric = collector_class(name, documentation, labelnames=labelnames)
     return metric

@@ -33,9 +33,7 @@ try:
         SUMMARIZERS,
     )  # Registry for plug-in summarizers is defined in __init__.py
 except ImportError:
-    logger.warning(
-        "Could not import SUMMARIZERS registry from 'runner'. Defining local registry."
-    )
+    logger.warning("Could not import SUMMARIZERS registry from 'runner'. Defining local registry.")
 
     class Registry:
         def __init__(self):
@@ -91,9 +89,7 @@ def code_summary(state: Dict[str, Any], max_length: int = 2000) -> str:
         if "code_files" in state and state["code_files"]:
             # Limit the number of file names for brevity
             file_names = list(state["code_files"].keys())
-            preview_names = ", ".join(file_names[:5]) + (
-                "..." if len(file_names) > 5 else ""
-            )
+            preview_names = ", ".join(file_names[:5]) + ("..." if len(file_names) > 5 else "")
             summary_parts.append(f"Code files overview: {preview_names}")
         if "critique_results" in state and state["critique_results"]:
             # Summarize critique results
@@ -102,13 +98,9 @@ def code_summary(state: Dict[str, Any], max_length: int = 2000) -> str:
                 f"Critique summary: Alignment={critique.get('semantic_alignment_score', 'N/A')*100}%, Quality={critique.get('test_quality_score', 'N/A')*100}%"
             )
             if critique.get("drift_issues"):
-                summary_parts.append(
-                    f"Found {len(critique['drift_issues'])} drift issues."
-                )
+                summary_parts.append(f"Found {len(critique['drift_issues'])} drift issues.")
             if critique.get("hallucinations"):
-                summary_parts.append(
-                    f"Found {len(critique['hallucinations'])} hallucinations."
-                )
+                summary_parts.append(f"Found {len(critique['hallucinations'])} hallucinations.")
 
     # Simple concatenation for now; could be fed to another summarizer.
     full_summary = ". ".join(summary_parts)
@@ -140,9 +132,7 @@ def deployment_summary(state: Dict[str, Any], max_length: int = 2000) -> str:
 
     if "target_config" in reqs:
         cfg = reqs["target_config"]
-        summary_parts.append(
-            f"Target: {cfg.get('platform', 'N/A')} ({cfg.get('type', 'N/A')})"
-        )
+        summary_parts.append(f"Target: {cfg.get('platform', 'N/A')} ({cfg.get('type', 'N/A')})")
     if "dependencies" in reqs:
         summary_parts.append(f"Dependencies: {len(reqs['dependencies'])} packages")
 
@@ -242,9 +232,7 @@ async def summarize(
     """
     summarizer_func = SUMMARIZERS.get(provider)
     if not summarizer_func:
-        logger.error(
-            f"Unknown summarization provider: '{provider}'. Falling back to 'llm'."
-        )
+        logger.error(f"Unknown summarization provider: '{provider}'. Falling back to 'llm'.")
         summarizer_func = SUMMARIZERS.get("llm")
         if not summarizer_func:  # Should not happen if llm_summarize is registered
             raise KeyError("Default 'llm' summarizer not found in registry.")
@@ -314,9 +302,7 @@ async def ensemble_summarize(
         # [FIX] Use the valid_provider_names list to find the correct name
         try:
             valid_provider_name = valid_provider_names[i]
-            synthesis_prompt += (
-                f"SUMMARY {i+1} (from {valid_provider_name}):\n{s}\n---\n"
-            )
+            synthesis_prompt += f"SUMMARY {i+1} (from {valid_provider_name}):\n{s}\n---\n"
         except IndexError:
             # This should not happen if logic is correct, but good to guard.
             synthesis_prompt += f"SUMMARY {i+1} (from unknown):\n{s}\n---\n"
@@ -405,9 +391,7 @@ SUMMARIZERS.register("deployment", deployment_summary)
 # --- [FIX] Gated this entire block to prevent crash during pytest ---
 # --- Conditional Registration of Local Transformer Summarizer ---
 if TESTING:
-    logger.warning(
-        "Skipping heavy ML dependency load (Transformers/Torch) during Pytest session."
-    )
+    logger.warning("Skipping heavy ML dependency load (Transformers/Torch) during Pytest session.")
 else:
     try:
         # This block attempts to import heavy ML libraries.
@@ -470,9 +454,7 @@ else:
                 raise
 
         SUMMARIZERS.register("local_huggingface", local_transformer_summary)
-        logger.info(
-            "Hugging Face transformers summarizer ('local_huggingface') registered."
-        )
+        logger.info("Hugging Face transformers summarizer ('local_huggingface') registered.")
     except ImportError:
         logger.warning(
             "Hugging Face transformers library not found. Local summarization ('local_huggingface') will not be available. (pip install transformers torch)"
@@ -570,9 +552,7 @@ class TestSummarizeUtils(unittest.TestCase):
 
         text = "This is the original long text."
         ensemble_summary = asyncio.run(
-            ensemble_summarize(
-                text, providers=["summarizer_a", "summarizer_b"], max_length=300
-            )
+            ensemble_summarize(text, providers=["summarizer_a", "summarizer_b"], max_length=300)
         )
 
         self.assertIsInstance(ensemble_summary, str)
@@ -584,9 +564,7 @@ class TestSummarizeUtils(unittest.TestCase):
 
     @patch("runner.runner_logging.send_alert", new_callable=AsyncMock)
     @patch("runner.feedback_handlers.collect_feedback")
-    def test_refine_from_feedback_low_rating(
-        self, mock_collect_feedback, mock_send_alert
-    ):
+    def test_refine_from_feedback_low_rating(self, mock_collect_feedback, mock_send_alert):
         summary = "This is a poor summary."
         rating = 0.2
         feedback_source = "test_case"
@@ -594,9 +572,7 @@ class TestSummarizeUtils(unittest.TestCase):
         provider_name = "test_provider"
 
         with self.assertLogs(logger.name, level="WARNING") as cm:
-            refine_from_feedback(
-                summary, rating, feedback_source, template_name, provider_name
-            )
+            refine_from_feedback(summary, rating, feedback_source, template_name, provider_name)
             self.assertIn("Low rating", cm.output[0])
 
         # Check if an alert was triggered

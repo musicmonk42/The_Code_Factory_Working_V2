@@ -42,12 +42,10 @@ mock_config_instance.TARGET_LANGUAGE = "en"
 
 TEST_FERNET_KEY = base64.urlsafe_b64encode(b"\x00" * 32)
 mock_fernet_instance_test = MagicMock()
-mock_fernet_instance_test.encrypt.side_effect = lambda data: base64.b64encode(
-    b"ENCRYPTED_" + data
+mock_fernet_instance_test.encrypt.side_effect = lambda data: base64.b64encode(b"ENCRYPTED_" + data)
+mock_fernet_instance_test.decrypt.side_effect = lambda data: base64.b64decode(data).replace(
+    b"ENCRYPTED_", b""
 )
-mock_fernet_instance_test.decrypt.side_effect = lambda data: base64.b64decode(
-    data
-).replace(b"ENCRYPTED_", b"")
 
 # Start critical patches
 patcher_load_config = patch(
@@ -151,9 +149,7 @@ class TestUserProfileAndUtilities(unittest.TestCase):
 
     def test_load_save_profile(self):
         # Test 1: Save and Load
-        profile = UserProfile(
-            user_id=self.user_id, preferred_channel="web", language="es"
-        )
+        profile = UserProfile(user_id=self.user_id, preferred_channel="web", language="es")
         profile.compliance_preferences["gdpr_apply"] = True
         save_profile(self.user_id, profile)
 
@@ -234,9 +230,7 @@ class TestCLIPrompt(unittest.IsolatedAsyncioTestCase):
         answers = await self.channel.prompt(questions, self.context)
 
         self.assertEqual(answers, ["[NO_ANSWER_EOF]"])
-        metric_value = PROMPT_ERRORS.labels(
-            channel="CLIPrompt", type="eof"
-        )._value.get()
+        metric_value = PROMPT_ERRORS.labels(channel="CLIPrompt", type="eof")._value.get()
         self.assertEqual(metric_value, 1)
 
 
@@ -397,9 +391,7 @@ class TestSMSPrompt(unittest.IsolatedAsyncioTestCase):
             mock_session.post.assert_called_once()
 
 
-@unittest.skipUnless(
-    _HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed."
-)
+@unittest.skipUnless(_HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed.")
 class TestVoicePrompt(unittest.IsolatedAsyncioTestCase):
     _user_id = "test_voice"
     context = {"user_id": _user_id}
@@ -424,9 +416,7 @@ class TestVoicePrompt(unittest.IsolatedAsyncioTestCase):
         side_effect=["Voice Answer 1", "Voice Answer 2"],
     )
     @patch("speech_recognition.Microphone", new_callable=MagicMock)
-    async def test_voice_prompt_success(
-        self, mock_mic, mock_recognize_google, mock_listen
-    ):
+    async def test_voice_prompt_success(self, mock_mic, mock_recognize_google, mock_listen):
         mock_mic.return_value.__enter__.return_value = mock_mic.return_value
 
         questions = ["Voice Q1?", "Voice Q2?"]

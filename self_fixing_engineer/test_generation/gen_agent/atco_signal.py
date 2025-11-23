@@ -172,9 +172,7 @@ def _get_scheduler(loop: Optional[asyncio.AbstractEventLoop]) -> Callable[[Any],
         except Exception:
             _log(logging.ERROR, "Coroutine runner thread failed", exc_info=True)
 
-    return lambda coro: threading.Thread(
-        target=_runner, args=(coro,), daemon=True
-    ).start()
+    return lambda coro: threading.Thread(target=_runner, args=(coro,), daemon=True).start()
 
 
 def _invoke(handler: Callable, *args: Any):
@@ -239,9 +237,7 @@ def _dump_threads():
                 faulthandler.dump_traceback(file=f, all_threads=True)
             _log(logging.INFO, "Thread dump written", file=dump_path_env)
         else:
-            with tempfile.NamedTemporaryFile(
-                mode="w", delete=False, encoding="utf-8"
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8") as f:
                 faulthandler.dump_traceback(file=f, all_threads=True)
                 dump_file = f.name
             _log(logging.INFO, "Thread dump written", file=dump_file)
@@ -352,9 +348,7 @@ def _setup_faulthandler():
             faulthandler.enable(file=sys.stderr, all_threads=True)
             _log(logging.INFO, "faulthandler enabled.")
             if hasattr(signal, "SIGUSR1"):
-                dump_file_path = os.getenv(
-                    "FAULT_DUMP", tempfile.gettempdir() + "/fault.dump"
-                )
+                dump_file_path = os.getenv("FAULT_DUMP", tempfile.gettempdir() + "/fault.dump")
                 # Only try to register if the function exists (it's POSIX-only)
                 if hasattr(faulthandler, "register"):
                     try:
@@ -605,9 +599,7 @@ def install_default_handlers(
             and os.name != "nt"
         ):
             try:
-                _installed_with_loop.add_signal_handler(
-                    sig, partial(handler, sig, None)
-                )
+                _installed_with_loop.add_signal_handler(sig, partial(handler, sig, None))
                 _installed_signals.add(sig)
                 _log(logging.DEBUG, f"Installed async handler for {sig_name}")
             except (ValueError, OSError) as e:
@@ -637,9 +629,7 @@ def install_default_handlers(
 
             def _ctrl_handler(ctrl_type):
                 if ctrl_type in (CTRL_CLOSE, CTRL_LOGOFF, CTRL_SHUTDOWN):
-                    _handle_signal(
-                        getattr(signal_module, "SIGTERM", signal_module.SIGINT), None
-                    )
+                    _handle_signal(getattr(signal_module, "SIGTERM", signal_module.SIGINT), None)
                     return True
                 return False
 
@@ -703,9 +693,7 @@ def install_signal_handlers(handler=None):
     # This prevents SystemExit in simple tests that don't mock it.
     effective_handler = handler
 
-    install_default_handlers(
-        on_interrupt=effective_handler, signals=["SIGINT", "SIGTERM"]
-    )
+    install_default_handlers(on_interrupt=effective_handler, signals=["SIGINT", "SIGTERM"])
 
     # This part of the original function is now handled by _setup_faulthandler
     # and the main install_default_handlers logic if SIGUSR1 is included.
@@ -735,11 +723,7 @@ def uninstall_handlers():
     loop = _installed_with_loop
     for sig in _installed_signals:
         try:
-            if (
-                loop is not None
-                and hasattr(loop, "remove_signal_handler")
-                and os.name != "nt"
-            ):
+            if loop is not None and hasattr(loop, "remove_signal_handler") and os.name != "nt":
                 loop.remove_signal_handler(sig)
 
             prev = _previous_handlers.get(sig)
@@ -779,15 +763,11 @@ def reconfigure_signals(names: Iterable[str]):
             logging.WARNING,
             "Not installed, calling install_default_handlers to configure signals.",
         )
-        return install_default_handlers(
-            _on_interrupt_callback, _on_reload_callback, signals=names
-        )
+        return install_default_handlers(_on_interrupt_callback, _on_reload_callback, signals=names)
 
     _log(logging.INFO, f"Reconfiguring signals: {names}")
     with temporarily_uninstall():
-        install_default_handlers(
-            _on_interrupt_callback, _on_reload_callback, signals=names
-        )
+        install_default_handlers(_on_interrupt_callback, _on_reload_callback, signals=names)
 
 
 @contextmanager

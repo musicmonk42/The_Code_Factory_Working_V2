@@ -79,9 +79,7 @@ try:
 except ImportError:
     tracer = None
     HAS_OPENTELEMETRY = False
-    logging.getLogger(__name__).warning(
-        "OpenTelemetry not found. Tracing will be unavailable."
-    )
+    logging.getLogger(__name__).warning("OpenTelemetry not found. Tracing will be unavailable.")
 
 # --- FIX 6: Optional gRPC imports should degrade gracefully ---
 try:
@@ -174,9 +172,7 @@ def _get_encryption_key() -> bytes:
         except Exception as e:
             if not _is_test_or_dev_mode():
                 # In production: hard fail
-                logger.critical(
-                    "Invalid AUDIT_LOG_ENCRYPTION_KEY format. Failing fast."
-                )
+                logger.critical("Invalid AUDIT_LOG_ENCRYPTION_KEY format. Failing fast.")
                 raise ValueError("Invalid AUDIT_LOG_ENCRYPTION_KEY format.") from e
             logger.warning(
                 "AUDIT_LOG_ENCRYPTION_KEY is invalid in DEV/TEST; using dummy key instead.",
@@ -284,17 +280,11 @@ def load_users_and_roles(config_path: Optional[str] = None):
         # Validate and load users
         if "users" in config:
             for username, details in config["users"].items():
-                if (
-                    "role" in details
-                    and details["role"] in ROLES
-                    and "token" in details
-                ):
+                if "role" in details and details["role"] in ROLES and "token" in details:
                     details["username"] = username  # Ensure username is in details
                     USERS[username] = details
                 else:
-                    logger.error(
-                        f"Invalid user configuration for '{username}'. Skipping."
-                    )
+                    logger.error(f"Invalid user configuration for '{username}'. Skipping.")
 
         logger.info(f"Loaded {len(USERS)} users from {config_path}.")
 
@@ -313,22 +303,16 @@ IMMUTABLE = os.getenv("AUDIT_LOG_IMMUTABLE", "true").lower() == "true"
 # --- FIX 3: Prometheus labels match usage ---
 # Ensuring that the labels used in the Counter/Histogram definition match the labels used in the code.
 LOG_WRITES = Counter("audit_log_writes_total", "Total writes to the audit log")
-LOG_QUERIES = Counter(
-    "audit_log_queries_total", "Total queries performed on the audit log"
-)
+LOG_QUERIES = Counter("audit_log_queries_total", "Total queries performed on the audit log")
 # The original LOG_ERRORS labels were ['type', 'user', 'action'].
 LOG_ERRORS = Counter(
     "audit_log_errors_total",
     "Total errors in audit log operations",
     ["type", "user", "action"],
 )
-LOG_LATENCY = Histogram(
-    "audit_log_latency_seconds", "Latency of audit log operations", ["op"]
-)
+LOG_LATENCY = Histogram("audit_log_latency_seconds", "Latency of audit log operations", ["op"])
 TAMPER_ALERTS = Counter("audit_tamper_alerts_total", "Total tamper detections")
-SELF_HEAL_EVENTS = Counter(
-    "audit_self_heal_events_total", "Total self-healing events", ["type"]
-)
+SELF_HEAL_EVENTS = Counter("audit_self_heal_events_total", "Total self-healing events", ["type"])
 DOC_GEN_ACTIONS = Counter(
     "audit_doc_gen_actions_total",
     "Total documentation generation actions",
@@ -385,9 +369,7 @@ def register_hook(event_type: str, hook: Callable[..., Any]):
         TypeError: If event_type is not a string or hook is not callable.
     """
     if not isinstance(event_type, str) or not callable(hook):
-        raise TypeError(
-            "event_type must be a string and hook must be a callable function."
-        )
+        raise TypeError("event_type must be a string and hook must be a callable function.")
     hooks[event_type].append(hook)
     logger.info(f"Registered hook '{hook.__name__}' for event type '{event_type}'.")
 
@@ -430,16 +412,12 @@ class AuditLog:
                 backend = get_backend(backend_type, backend_params or {})
 
         if backend is None:
-            raise RuntimeError(
-                "Failed to initialize audit backend (get_backend returned None)."
-            )
+            raise RuntimeError("Failed to initialize audit backend (get_backend returned None).")
 
         self.backend = backend
         self.encrypter = FERNET
         self.immutable = immutable
-        self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=os.cpu_count() or 4
-        )
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
 
         # --- FIX 3.4: Crypto provider wiring (critical for mocking) ---
         provider = None
@@ -450,9 +428,7 @@ class AuditLog:
             factory = getattr(_acf, "crypto_provider_factory", None)
             if factory is not None:
                 # Prefer the factory method which tests explicitly patch
-                provider = factory.get_provider(
-                    os.getenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software")
-                )
+                provider = factory.get_provider(os.getenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software"))
             else:
                 # Fallback to the global instance if the factory isn't exposed (e.g., minimalist setup)
                 provider = getattr(_acf, "crypto_provider", None)
@@ -474,9 +450,7 @@ class AuditLog:
 
         self.crypto_provider = provider
         # FIX: Ensure a default key ID for systems that don't need rotation (e.g., test/dev)
-        self.current_signing_key_id: Optional[str] = (
-            "DUMMY_KEY_ID" if DEV_MODE else None
-        )
+        self.current_signing_key_id: Optional[str] = "DUMMY_KEY_ID" if DEV_MODE else None
 
     # --- FIX 2: Async startup pattern for long-running tasks ---
     async def start(self):
@@ -513,9 +487,7 @@ class AuditLog:
             # Filter out tasks that might be None
             # FIX: Ensure only Future/Task objects are considered for waiting
             valid_tasks = [
-                t
-                for t in tasks_to_wait
-                if t is not None and isinstance(t, asyncio.Future)
+                t for t in tasks_to_wait if t is not None and isinstance(t, asyncio.Future)
             ]
 
             # Wait with a hard timeout of 5 seconds
@@ -533,17 +505,13 @@ class AuditLog:
                         except asyncio.CancelledError:
                             pass
                         except Exception as e:
-                            logger.warning(
-                                f"Task raised exception during cancellation: {e}"
-                            )
+                            logger.warning(f"Task raised exception during cancellation: {e}")
 
             # Log any remaining tasks that failed to stop
             for t in valid_tasks:
                 # get_name() only exists on asyncio.Task
                 if isinstance(t, asyncio.Task) and not t.done():
-                    logger.warning(
-                        f"Task {t.get_name()} failed to shut down within timeout."
-                    )
+                    logger.warning(f"Task {t.get_name()} failed to shut down within timeout.")
                 elif not t.done():
                     logger.warning("Task failed to shut down within timeout.")
 
@@ -557,17 +525,13 @@ class AuditLog:
             try:
                 # Give a small delay for the crypto provider to initialize if needed
                 await asyncio.sleep(0.1)
-                self.current_signing_key_id = await self.crypto_provider.generate_key(
-                    "ed25519"
-                )
+                self.current_signing_key_id = await self.crypto_provider.generate_key("ed25519")
                 logger.info(
                     f"Initialized active signing key with ID: {self.current_signing_key_id}"
                 )
             except Exception as e:
                 logger.critical(f"Failed to initialize signing key: {e}", exc_info=True)
-                LOG_ERRORS.labels(
-                    type="key_init_fail", user="system", action="init"
-                ).inc()
+                LOG_ERRORS.labels(type="key_init_fail", user="system", action="init").inc()
 
     async def _self_heal_periodically(self):
         """Runs the self-healing process at a set interval."""
@@ -700,17 +664,11 @@ class AuditLog:
                     f"Self-healing complete. Found {issues_detected} potential issues out of {total_entries} entries."
                 )
             else:
-                logger.info(
-                    "Self-healing complete. No issues detected. Log integrity verified."
-                )
+                logger.info("Self-healing complete. No issues detected. Log integrity verified.")
 
         except Exception as e:
-            logger.critical(
-                f"Self-healing process failed unexpectedly: {e}", exc_info=True
-            )
-            LOG_ERRORS.labels(
-                type="self_heal_fail", user="system", action="self_heal"
-            ).inc()
+            logger.critical(f"Self-healing process failed unexpectedly: {e}", exc_info=True)
+            LOG_ERRORS.labels(type="self_heal_fail", user="system", action="self_heal").inc()
 
     def _encrypt_entry(self, entry: Dict[str, Any]) -> str:
         """Encrypts a log entry dictionary and returns a base64-encoded string."""
@@ -779,9 +737,7 @@ class AuditLog:
             Optional[Dict]: The user's details if authorized, otherwise None.
         """
         if not credentials:
-            logger.warning(
-                f"Authorization failed: No credentials provided for operation '{op}'."
-            )
+            logger.warning(f"Authorization failed: No credentials provided for operation '{op}'.")
             RBAC_DENIALS.labels(user="anonymous", role="none", operation=op).inc()
             return None
 
@@ -789,9 +745,7 @@ class AuditLog:
         user = next((u for u in USERS.values() if u["token"] == token), None)
 
         if not user:
-            logger.warning(
-                f"Authorization failed: Invalid token provided for operation '{op}'."
-            )
+            logger.warning(f"Authorization failed: Invalid token provided for operation '{op}'.")
             RBAC_DENIALS.labels(user="unknown", role="none", operation=op).inc()
             return None
 
@@ -799,9 +753,7 @@ class AuditLog:
         username = user.get("username", "N/A")
 
         if not role or role not in ROLES:
-            logger.error(
-                f"Authorization failed: User '{username}' has invalid role '{role}'."
-            )
+            logger.error(f"Authorization failed: User '{username}' has invalid role '{role}'.")
             RBAC_DENIALS.labels(user=username, role=role, operation=op).inc()
             return None
 
@@ -877,9 +829,7 @@ class AuditLog:
             authorized_user = self._authorize("write", credentials)
             if not authorized_user:
                 # If authorization fails, log the RBAC denial via _authorize and re-raise
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to write to the log."
-                )
+                raise HTTPException(status_code=403, detail="Not authorized to write to the log.")
 
             user = authorized_user
 
@@ -894,9 +844,7 @@ class AuditLog:
                     "user": user["username"],
                     "role": user["role"],
                 }
-                entry = self._add_rich_context(
-                    entry, session_id=session_id, request=request
-                )
+                entry = self._add_rich_context(entry, session_id=session_id, request=request)
 
                 # 2. Sign the entry
                 if not self.current_signing_key_id:
@@ -919,14 +867,10 @@ class AuditLog:
                     signer = getattr(self.crypto_provider, "sign_data", None)
 
                 if signer is None:
-                    raise RuntimeError(
-                        "Crypto provider does not implement sign/sign_data"
-                    )
+                    raise RuntimeError("Crypto provider does not implement sign/sign_data")
 
                 # CRITICAL FIX: Correct typo from current_signing_id to current_signing_key_id
-                signature = await signer(
-                    data=payload, key_id=self.current_signing_key_id
-                )
+                signature = await signer(data=payload, key_id=self.current_signing_key_id)
                 # --- END FIX 3.6 ---
 
                 # Convert bytes to base64 strings for JSON serialization
@@ -951,9 +895,7 @@ class AuditLog:
                 # 4. Execute hooks
                 await self._execute_hooks("log_success", entry=entry)
 
-                logger.info(
-                    f"Successfully logged action: '{action}' by user '{user['username']}'."
-                )
+                logger.info(f"Successfully logged action: '{action}' by user '{user['username']}'.")
 
             except HTTPException:
                 raise  # Re-raise if it's already an HTTPException (e.g., from _authorize)
@@ -996,9 +938,7 @@ class AuditLog:
         """
         with LOG_LATENCY.labels(op="get_recent_history").time():
             if not self._authorize("read", credentials):
-                raise HTTPException(
-                    status_code=403, detail="Not authorized to read the log."
-                )
+                raise HTTPException(status_code=403, detail="Not authorized to read the log.")
 
             LOG_QUERIES.inc()
 
@@ -1044,9 +984,7 @@ class AuditLog:
                     detail="Internal server error: Failed to retrieve log history.",
                 )
 
-    async def detect_oscillation(
-        self, window: int = 3, hash_key: str = "code_hash"
-    ) -> bool:
+    async def detect_oscillation(self, window: int = 3, hash_key: str = "code_hash") -> bool:
         """
         Analyzes recent log entries to detect "oscillation" or non-productive loops.
         This is a heuristic for detecting bot or script errors.
@@ -1069,17 +1007,13 @@ class AuditLog:
             )
 
             # The authorization in get_recent_history will handle failure if USERS is empty/no match
-            entries = await self.get_recent_history(
-                limit=window, credentials=dummy_creds
-            )
+            entries = await self.get_recent_history(limit=window, credentials=dummy_creds)
 
             if len(entries) < window:
                 return False
 
             recent_hashes = [
-                entry["details"].get(hash_key)
-                for entry in entries
-                if entry.get("details")
+                entry["details"].get(hash_key) for entry in entries if entry.get("details")
             ]
 
             # Check for repeated hashes (e.g., a script generating the same code repeatedly)
@@ -1133,16 +1067,12 @@ class AuditLog:
             ValueError: If the key algorithm is unsupported or the rotation fails.
         """
         if not self._authorize("manage_keys", credentials):
-            raise HTTPException(
-                status_code=403, detail="Not authorized to manage keys."
-            )
+            raise HTTPException(status_code=403, detail="Not authorized to manage keys.")
 
         # FIX: Access supported algos from the provider's settings object
         supported_algos = getattr(self.crypto_provider.settings, "SUPPORTED_ALGOS", [])
         if algo not in supported_algos:
-            raise ValueError(
-                f"Unsupported key algorithm: {algo}. Supported: {supported_algos}"
-            )
+            raise ValueError(f"Unsupported key algorithm: {algo}. Supported: {supported_algos}")
 
         try:
             # FIX: Use crypto_provider.rotate_key which is safer than generating then manually updating.
@@ -1170,9 +1100,7 @@ class AuditLog:
             raise  # Re-raise if it's already an HTTPException (e.g., from _authorize)
         except Exception as e:
             logger.error(f"Failed to rotate signing key: {e}", exc_info=True)
-            LOG_ERRORS.labels(
-                type="key_rotation_fail", user="system", action="rotate_key"
-            ).inc()
+            LOG_ERRORS.labels(type="key_rotation_fail", user="system", action="rotate_key").inc()
             raise HTTPException(
                 status_code=500, detail="Internal server error: Failed to rotate key."
             )
@@ -1241,12 +1169,8 @@ async def log_action(
 def log(
     action: str = typer.Option(..., help="The action performed."),
     details: str = typer.Option("{}", help="JSON string of action details."),
-    requirement_id: Optional[str] = typer.Option(
-        None, help="The associated requirement ID."
-    ),
-    token: str = typer.Option(
-        ..., envvar="AUDIT_TOKEN", help="The user's authorization token."
-    ),
+    requirement_id: Optional[str] = typer.Option(None, help="The associated requirement ID."),
+    token: str = typer.Option(..., envvar="AUDIT_TOKEN", help="The user's authorization token."),
 ):
     try:
         details_dict = json.loads(details)
@@ -1281,9 +1205,7 @@ def log(
 def query(
     limit: int = typer.Option(10, help="The number of recent entries to retrieve."),
     action: Optional[str] = typer.Option(None, help="Filter by a specific action."),
-    token: str = typer.Option(
-        ..., envvar="AUDIT_TOKEN", help="The user's authorization token."
-    ),
+    token: str = typer.Option(..., envvar="AUDIT_TOKEN", help="The user's authorization token."),
 ):
     try:
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
@@ -1313,9 +1235,7 @@ def query(
 @app.command(help="Initiate a key rotation for cryptographic signing.")
 def rotate_key(
     algo: str = typer.Option("ed25519", help="The algorithm for the new key."),
-    token: str = typer.Option(
-        ..., envvar="AUDIT_TOKEN", help="The user's authorization token."
-    ),
+    token: str = typer.Option(..., envvar="AUDIT_TOKEN", help="The user's authorization token."),
 ):
     try:
         creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
@@ -1324,9 +1244,7 @@ def rotate_key(
         async def run_rotate():
             await cli_audit_log.start()
             try:
-                return await cli_audit_log.rotate_signing_key(
-                    algo=algo, credentials=creds
-                )
+                return await cli_audit_log.rotate_signing_key(algo=algo, credentials=creds)
             finally:
                 await cli_audit_log.shutdown()
 
@@ -1364,9 +1282,7 @@ async def shutdown_event():
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
-    user = next(
-        (u for u in USERS.values() if u["token"] == credentials.credentials), None
-    )
+    user = next((u for u in USERS.values() if u["token"] == credentials.credentials), None)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or missing token.")
     return user
@@ -1378,9 +1294,7 @@ def authorize_api(op: str):
         username = user.get("username", "N/A")
         if not role or role not in ROLES or not ROLES[role].get(op):
             RBAC_DENIALS.labels(user=username, role=role, operation=op).inc()
-            raise HTTPException(
-                status_code=403, detail="Not authorized to perform this action."
-            )
+            raise HTTPException(status_code=403, detail="Not authorized to perform this action.")
         request.state.user = user
         return True
 
@@ -1487,9 +1401,7 @@ if HAS_GRPC_PROTOS:
                     action=request.action,
                     details=details_dict,
                     requirement_id=(
-                        request.requirement_id
-                        if request.HasField("requirement_id")
-                        else None
+                        request.requirement_id if request.HasField("requirement_id") else None
                     ),
                     credentials=creds,  # Pass creds for proper RBAC and context
                 )
@@ -1503,16 +1415,12 @@ if HAS_GRPC_PROTOS:
                     else grpc.StatusCode.INTERNAL
                 )
                 # --- FIX: Return status/error_message ---
-                return audit_log_pb2.LogActionResponse(
-                    status="failed", error_message=e.detail
-                )
+                return audit_log_pb2.LogActionResponse(status="failed", error_message=e.detail)
             except Exception as e:
                 context.set_details(str(e))
                 context.set_code(grpc.StatusCode.INTERNAL)
                 # --- FIX: Return status/error_message ---
-                return audit_log_pb2.LogActionResponse(
-                    status="failed", error_message=str(e)
-                )
+                return audit_log_pb2.LogActionResponse(status="failed", error_message=str(e))
 
         # --- START: FIX (Corrected LogStream implementation) ---
         async def LogStream(self, request_iterator, context):
@@ -1525,9 +1433,7 @@ if HAS_GRPC_PROTOS:
                         metadata = dict(context.invocation_metadata())
                         token = metadata.get("access_token")
 
-                        creds = HTTPAuthorizationCredentials(
-                            scheme="Bearer", credentials=token
-                        )
+                        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
                         if not self.audit_log._authorize("write", creds):
                             context.set_details("Not authorized")
                             context.set_code(grpc.StatusCode.PERMISSION_DENIED)
@@ -1539,9 +1445,7 @@ if HAS_GRPC_PROTOS:
                         details_dict = json.loads(request.details_json)
                     except json.JSONDecodeError as e:
                         # Log the error and continue processing, or terminate stream
-                        logger.warning(
-                            f"gRPC LogStream: Skipping message with invalid JSON: {e}"
-                        )
+                        logger.warning(f"gRPC LogStream: Skipping message with invalid JSON: {e}")
                         # To terminate stream on bad data, uncomment below
                         # context.set_details(f"Invalid details_json: {e}")
                         # context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
@@ -1552,9 +1456,7 @@ if HAS_GRPC_PROTOS:
                         action=request.action,
                         details=details_dict,
                         requirement_id=(
-                            request.requirement_id
-                            if request.HasField("requirement_id")
-                            else None
+                            request.requirement_id if request.HasField("requirement_id") else None
                         ),
                         credentials=creds,  # Reuse creds for all subsequent messages
                     )
@@ -1564,14 +1466,10 @@ if HAS_GRPC_PROTOS:
                 return audit_log_pb2.LogActionResponse(status="success")
 
             except Exception as e:
-                logger.error(
-                    f"gRPC LogStream failed after {count} entries: {e}", exc_info=True
-                )
+                logger.error(f"gRPC LogStream failed after {count} entries: {e}", exc_info=True)
                 context.set_details(str(e))
                 context.set_code(grpc.StatusCode.INTERNAL)
-                return audit_log_pb2.LogActionResponse(
-                    status="failed", error_message=str(e)
-                )
+                return audit_log_pb2.LogActionResponse(status="failed", error_message=str(e))
 
         # --- END: FIX ---
 
@@ -1607,15 +1505,11 @@ if HAS_GRPC_PROTOS:
                 return audit_log_pb2.GetRecentHistoryResponse(entries_json=[])
 
     async def serve_grpc_server() -> None:
-        server = grpc_aio.server(
-            concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count())
-        )
+        server = grpc_aio.server(concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()))
 
         # --- FIX: The global AUDIT_LOG instance is used here for consistency with API/CLI ---
         # --- FIX: Corrected typo from add_AuditLogServiceServicer_to_server to add_AuditServiceServicer_to_server ---
-        audit_log_pb2_grpc.add_AuditServiceServicer_to_server(
-            AuditLogServicer(AUDIT_LOG), server
-        )
+        audit_log_pb2_grpc.add_AuditServiceServicer_to_server(AuditLogServicer(AUDIT_LOG), server)
 
         # Add a metadata interceptor for authentication
         # NOTE: This simple interceptor is not fully implemented for auth,

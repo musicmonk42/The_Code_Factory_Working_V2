@@ -130,9 +130,7 @@ def mock_dependencies():
     ) as mock_metrics:
 
         mock_engine_instance = MagicMock()
-        mock_engine_instance.orchestrate = AsyncMock(
-            return_value={"status": "completed"}
-        )
+        mock_engine_instance.orchestrate = AsyncMock(return_value={"status": "completed"})
         mock_engine_instance.health_check = MagicMock(return_value=True)
         mock_engine.return_value = mock_engine_instance
 
@@ -313,9 +311,7 @@ class TestLogsCommand:
                 "2025-01-01 12:01:00 - ERROR - Another error",
             ]
 
-            result = cli_runner.invoke(
-                cli, ["logs", "--query", "error", "--limit", "10"]
-            )
+            result = cli_runner.invoke(cli, ["logs", "--query", "error", "--limit", "10"])
 
             assert result.exit_code in [0, 1, 2]
 
@@ -399,9 +395,7 @@ class TestConfigCommands:
             mock_response.raise_for_status = MagicMock()
 
             mock_session_instance = AsyncMock()
-            mock_session_instance.__aenter__ = AsyncMock(
-                return_value=mock_session_instance
-            )
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
             mock_session_instance.__aexit__ = AsyncMock()
             mock_session_instance.post = AsyncMock(return_value=mock_response)
             MockSession.return_value = mock_session_instance
@@ -432,15 +426,11 @@ class TestFeedbackCommand:
         with patch("main.cli.aiohttp.ClientSession") as MockSession:
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(
-                return_value={"message": "Feedback received"}
-            )
+            mock_response.json = AsyncMock(return_value={"message": "Feedback received"})
             mock_response.raise_for_status = MagicMock()
 
             mock_session_instance = AsyncMock()
-            mock_session_instance.__aenter__ = AsyncMock(
-                return_value=mock_session_instance
-            )
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
             mock_session_instance.__aexit__ = AsyncMock()
             mock_session_instance.post = AsyncMock(return_value=mock_response)
             MockSession.return_value = mock_session_instance

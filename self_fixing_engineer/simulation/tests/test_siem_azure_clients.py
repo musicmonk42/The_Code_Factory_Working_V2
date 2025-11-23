@@ -22,9 +22,7 @@ sys.modules["simulation.plugins.siem_azure_clients"] = MagicMock()
 
 # Create mock exception classes
 class SIEMClientError(Exception):
-    def __init__(
-        self, message, client_type, original_exception=None, correlation_id=None
-    ):
+    def __init__(self, message, client_type, original_exception=None, correlation_id=None):
         self.message = message
         self.client_type = client_type
         self.original_exception = original_exception
@@ -100,9 +98,7 @@ class AzureEventGridConfig:
             raise ValueError("endpoint is required")
         if os.getenv("PRODUCTION_MODE") == "true":
             if not self.key_secret_id and self.key:
-                raise ValueError(
-                    "In PRODUCTION_MODE, 'key' must be loaded via 'key_secret_id'"
-                )
+                raise ValueError("In PRODUCTION_MODE, 'key' must be loaded via 'key_secret_id'")
 
 
 class AzureServiceBusConfig:
@@ -120,9 +116,7 @@ class AzureServiceBusConfig:
         if not self.queue_name and not self.topic_name:
             raise ValueError("Either 'queue_name' or 'topic_name' must be configured")
         if self.queue_name and self.topic_name:
-            raise ValueError(
-                "Only one of 'queue_name' or 'topic_name' can be configured"
-            )
+            raise ValueError("Only one of 'queue_name' or 'topic_name' can be configured")
 
 
 # ============================================================================
@@ -160,9 +154,7 @@ class AzureSentinelClient:
 
     async def _ensure_shared_key_loaded(self):
         if not self.shared_key:
-            raise SIEMClientConfigurationError(
-                "Shared key not configured", self.client_type
-            )
+            raise SIEMClientConfigurationError("Shared key not configured", self.client_type)
 
     async def health_check(self):
         await self._ensure_shared_key_loaded()
@@ -218,9 +210,7 @@ class AzureSentinelClient:
                 total_sent += len(batch)
 
         success = len(failed_logs) == 0
-        message = (
-            f"Batch of {len(log_entries)} logs sent to Azure Sentinel/Log Analytics."
-        )
+        message = f"Batch of {len(log_entries)} logs sent to Azure Sentinel/Log Analytics."
         return success, message, failed_logs
 
     async def query_logs(self, query_string, time_range, limit):
@@ -258,9 +248,7 @@ class AzureEventGridClient:
 
     async def _ensure_key_loaded(self):
         if not self.key:
-            raise SIEMClientConfigurationError(
-                "Event Grid key not configured", self.client_type
-            )
+            raise SIEMClientConfigurationError("Event Grid key not configured", self.client_type)
 
     async def health_check(self):
         await self._ensure_key_loaded()
@@ -459,9 +447,7 @@ class TestConfiguration:
 
     def test_eventgrid_valid_config(self):
         """Test valid Event Grid configuration."""
-        config = AzureEventGridConfig(
-            endpoint="https://test.eventgrid.azure.net", key="test_key"
-        )
+        config = AzureEventGridConfig(endpoint="https://test.eventgrid.azure.net", key="test_key")
         assert config.endpoint
         assert config.topic_name == "sfe-events"  # Default
 
@@ -590,9 +576,7 @@ class TestAzureEventGrid:
 
     async def test_send_batch_events(self, eventgrid_client):
         """Test sending batch of events."""
-        log_entries = [
-            {"event_type": f"Event{i}", "data": f"data{i}"} for i in range(500)
-        ]
+        log_entries = [{"event_type": f"Event{i}", "data": f"data{i}"} for i in range(500)]
         success, message, failed = await eventgrid_client.send_logs(log_entries)
 
         assert success is True
@@ -786,9 +770,7 @@ class TestIntegration:
         """Test Sentinel send and query pipeline."""
         # Send logs
         test_id = str(uuid.uuid4())
-        log_entries = [
-            {"id": test_id, "message": f"Integration test {i}"} for i in range(10)
-        ]
+        log_entries = [{"id": test_id, "message": f"Integration test {i}"} for i in range(10)]
 
         success, _, _ = await sentinel_client.send_logs(log_entries)
         assert success is True
@@ -869,9 +851,7 @@ class TestSecurity:
         """Test production mode security enforcement."""
         # Direct key should be rejected
         with pytest.raises(ValueError):
-            AzureSentinelConfig(
-                workspace_id="test", shared_key="direct_key", log_type="Test_CL"
-            )
+            AzureSentinelConfig(workspace_id="test", shared_key="direct_key", log_type="Test_CL")
 
     async def test_shared_key_encryption(self, sentinel_client):
         """Test shared key is properly handled."""

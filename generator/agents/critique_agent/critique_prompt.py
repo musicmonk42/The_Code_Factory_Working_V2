@@ -83,9 +83,7 @@ try:
     # Stub for legacy dependency (kept only so calls do not explode)
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            logging.error(
-                "LanguageCritiquePlugin is a dependency bleed and should be refactored."
-            )
+            logging.error("LanguageCritiquePlugin is a dependency bleed and should be refactored.")
             return True, {"output": "Mock success"}
 
     def save_files_to_output(*args, **kwargs):
@@ -224,9 +222,7 @@ async def auto_tune_template_based_on_feedback(
 
     grok_api_key = os.getenv("GROK_API_KEY")
     if not grok_api_key:
-        logger.warning(
-            "GROK_API_KEY not set. Cannot auto-tune template based on feedback."
-        )
+        logger.warning("GROK_API_KEY not set. Cannot auto-tune template based on feedback.")
         return template_content
 
     refine_prompt = (
@@ -268,9 +264,7 @@ async def auto_tune_template_based_on_feedback(
                             "```jinja"
                         ).strip()
                     if refined_template_content.endswith("```"):
-                        refined_template_content = refined_template_content.rstrip(
-                            "```"
-                        ).strip()
+                        refined_template_content = refined_template_content.rstrip("```").strip()
                     log_action(
                         "Template Tuned",
                         {
@@ -323,11 +317,7 @@ async def incorporate_multi_modal_data(
                     await f.write(content)
 
             combined_code_content = "\n".join(code_files.values())
-            lang = (
-                await detect_language(combined_code_content)
-                if combined_code_content
-                else None
-            )
+            lang = await detect_language(combined_code_content) if combined_code_content else None
 
             # Language-specific coverage
             if lang == "python":
@@ -353,9 +343,7 @@ async def incorporate_multi_modal_data(
                         percent_covered = coverage_report.get("totals", {}).get(
                             "percent_covered", 0
                         )
-                        coverage_data_str = (
-                            f"Python Code Coverage: {percent_covered:.2f}%"
-                        )
+                        coverage_data_str = f"Python Code Coverage: {percent_covered:.2f}%"
                     except json.JSONDecodeError as e:
                         logger.error("Failed to parse pytest coverage JSON: %s", e)
                 else:
@@ -402,9 +390,7 @@ async def incorporate_multi_modal_data(
                         "npm install failed: %s",
                         (install_result or {}).get("stderr", ""),
                     )
-                    coverage_data_str = (
-                        "JS/TS Code Coverage: Failed to install dependencies."
-                    )
+                    coverage_data_str = "JS/TS Code Coverage: Failed to install dependencies."
                 else:
                     test_success, test_result = await lc_plugin._run_tool(
                         [
@@ -424,13 +410,9 @@ async def incorporate_multi_modal_data(
                             with open(output_file_path, "r", encoding="utf-8") as f:
                                 coverage_report = json.load(f)
                             statements_pct = (
-                                coverage_report.get("total", {})
-                                .get("statements", {})
-                                .get("pct", 0)
+                                coverage_report.get("total", {}).get("statements", {}).get("pct", 0)
                             )
-                            coverage_data_str = (
-                                f"JS/TS Code Coverage: {statements_pct:.2f}%"
-                            )
+                            coverage_data_str = f"JS/TS Code Coverage: {statements_pct:.2f}%"
                         except json.JSONDecodeError as e:
                             logger.error("Failed to parse jest coverage JSON: %s", e)
                     else:
@@ -472,15 +454,13 @@ async def incorporate_multi_modal_data(
                                         n.name
                                         for n in node.body
                                         if hasattr(n, "name")
-                                        and getattr(n, "__class__", None).__name__
-                                        == "FunctionDef"
+                                        and getattr(n, "__class__", None).__name__ == "FunctionDef"
                                     ]
                                     parent = next(
                                         (
                                             b.id
                                             for b in node.bases
-                                            if getattr(b, "__class__", None).__name__
-                                            == "Name"
+                                            if getattr(b, "__class__", None).__name__ == "Name"
                                         ),
                                         None,
                                     )
@@ -497,9 +477,7 @@ async def incorporate_multi_modal_data(
                                     uml_code += f" +{method}()\n"
                                 uml_code += "}\n"
                                 if cls["parent"]:
-                                    relationships.append(
-                                        f"{cls['parent']} <|-- {cls['name']}"
-                                    )
+                                    relationships.append(f"{cls['parent']} <|-- {cls['name']}")
                         except SyntaxError as e:
                             logger.warning("Failed to parse Python code for UML: %s", e)
 
@@ -515,11 +493,7 @@ async def incorporate_multi_modal_data(
                                         for m in node.body.body
                                         if m.type == "MethodDefinition"
                                     ]
-                                    parent = (
-                                        node.superClass.name
-                                        if node.superClass
-                                        else None
-                                    )
+                                    parent = node.superClass.name if node.superClass else None
                                     class_info.append(
                                         {
                                             "name": node.id.name,
@@ -533,9 +507,7 @@ async def incorporate_multi_modal_data(
                                     uml_code += f" +{method}()\n"
                                 uml_code += "}\n"
                                 if cls["parent"]:
-                                    relationships.append(
-                                        f"{cls['parent']} <|-- {cls['name']}"
-                                    )
+                                    relationships.append(f"{cls['parent']} <|-- {cls['name']}")
                         except Exception as e:
                             logger.warning("Failed to parse JS/TS code for UML: %s", e)
 
@@ -585,29 +557,20 @@ async def incorporate_multi_modal_data(
         except Exception as e:
             logger.error("Error generating PlantUML diagram: %s", e)
             uml_diagram_str = (
-                "UML Diagram: Generation failed due to an error. "
-                "Falling back to basic summary."
+                "UML Diagram: Generation failed due to an error. " "Falling back to basic summary."
             )
 
         multi_modal_summary.append(uml_diagram_str)
 
         code_snip = (
-            list(code_files.values())[0][:500]
-            if code_files
-            else "No code snippet available."
+            list(code_files.values())[0][:500] if code_files else "No code snippet available."
         )
         test_snip = (
-            list(test_files.values())[0][:500]
-            if test_files
-            else "No test snippet available."
+            list(test_files.values())[0][:500] if test_files else "No test snippet available."
         )
 
-        multi_modal_summary.append(
-            f"Representative Code Snippet:\n```\n{code_snip}\n```"
-        )
-        multi_modal_summary.append(
-            f"Representative Test Snippet:\n```\n{test_snip}\n```"
-        )
+        multi_modal_summary.append(f"Representative Code Snippet:\n```\n{code_snip}\n```")
+        multi_modal_summary.append(f"Representative Test Snippet:\n```\n{test_snip}\n```")
 
         return "\n\n".join(multi_modal_summary)
 
@@ -649,10 +612,7 @@ class PromptConfig(BaseModel):
     chain_of_thought: bool = Field(default=True)
     multi_modal: bool = Field(default=True)
     user_context: str = Field(
-        default=(
-            "The user is a software developer seeking comprehensive "
-            "code quality feedback."
-        )
+        default=("The user is a software developer seeking comprehensive " "code quality feedback.")
     )
     template_file: Optional[str] = Field(default=None)
     feedback: Optional[str] = Field(default=None)
@@ -736,8 +696,7 @@ async def build_semantic_critique_prompt(
                 translated[k] = await translate_text(str(v), target="en")
             requirements = translated
             state_summary = (
-                state_summary
-                + f"\nNote: Requirements auto-translated from {req_lang} to English."
+                state_summary + f"\nNote: Requirements auto-translated from {req_lang} to English."
             )
         except Exception as exc:
             logger.warning(
@@ -796,9 +755,7 @@ async def build_semantic_critique_prompt(
     multi_modal_data = ""
     if conf.multi_modal:
         try:
-            multi_modal_data = await incorporate_multi_modal_data(
-                code_files, test_files
-            )
+            multi_modal_data = await incorporate_multi_modal_data(code_files, test_files)
         except Exception:
             multi_modal_data = ""
 
@@ -878,9 +835,7 @@ async def build_semantic_critique_prompt(
                 token_count,
                 MAX_PROMPT_TOKENS,
             )
-            prompt = await _maybe_await(
-                summarize_text(prompt, max_length=MAX_PROMPT_TOKENS * 4)
-            )
+            prompt = await _maybe_await(summarize_text(prompt, max_length=MAX_PROMPT_TOKENS * 4))
     except Exception:
         # If counting fails, return the raw prompt — tests only care it's stable.
         pass

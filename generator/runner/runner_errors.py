@@ -90,9 +90,7 @@ class RunnerError(Exception):
         # Register the error code if it hasn't been already
         # This is a defensive check; ideally, all codes are pre-registered below.
         if error_code not in ERROR_CODE_REGISTRY:
-            register_error_code(
-                error_code, detail
-            )  # Use detail as description for unknown codes
+            register_error_code(error_code, detail)  # Use detail as description for unknown codes
 
         self.error_code: str = error_code
 
@@ -120,9 +118,7 @@ class RunnerError(Exception):
                 **kwargs,
             )
         except Exception:  # pragma: no cover
-            logger.debug(
-                "log_action unavailable during error init (circular import avoided)"
-            )
+            logger.debug("log_action unavailable during error init (circular import avoided)")
 
         self.task_id: Optional[str] = task_id
         self.cause: Optional[Exception] = cause
@@ -144,9 +140,7 @@ class RunnerError(Exception):
             if self.cause:
                 current_span.record_exception(self.cause)
             else:
-                current_span.record_exception(
-                    self
-                )  # Record self if no specific cause given
+                current_span.record_exception(self)  # Record self if no specific cause given
             for key, value in self.extra_info.items():
                 current_span.set_attribute(
                     f"error.info.{key}", str(value)
@@ -177,9 +171,7 @@ class RunnerError(Exception):
 # --- Specific Runner Exception Types ---
 
 # Register common error codes
-register_error_code(
-    "BACKEND_INIT_FAILURE", "Failed to initialize the execution backend."
-)
+register_error_code("BACKEND_INIT_FAILURE", "Failed to initialize the execution backend.")
 register_error_code(
     "FRAMEWORK_UNSUPPORTED",
     "The specified or auto-detected test framework is not supported.",
@@ -209,9 +201,7 @@ register_error_code(
 register_error_code(
     "VALIDATION_ERROR", "Data validation failed for input or output contracts."
 )  # For Pydantic validation errors
-register_error_code(
-    "EXPORTER_FAILURE", "Failed to export metrics to an external system."
-)
+register_error_code("EXPORTER_FAILURE", "Failed to export metrics to an external system.")
 
 # FIX: Register the missing LLM-related error codes
 register_error_code("LLM_PROVIDER_ERROR", "The LLM provider API call failed.")
@@ -446,9 +436,7 @@ class ConfigurationError(RunnerError):
         cause: Optional[Exception] = None,
         **kwargs: Any,
     ):
-        super().__init__(
-            error_code, detail, config_file=config_file, cause=cause, **kwargs
-        )
+        super().__init__(error_code, detail, config_file=config_file, cause=cause, **kwargs)
 
 
 class ValidationError(RunnerError):

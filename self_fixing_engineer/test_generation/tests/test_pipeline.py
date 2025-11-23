@@ -52,9 +52,7 @@ def orchestrator(project: Path, monkeypatch):
     # Mock the components that GenerationOrchestrator tries to load
     mock_policy_engine = Mock(spec=PolicyEngine, policy_hash="mock_hash_123")
     mock_policy_engine.should_integrate_test = AsyncMock(return_value=(True, "Allowed"))
-    mock_policy_engine.requires_pr_for_integration = AsyncMock(
-        return_value=(False, "No PR")
-    )
+    mock_policy_engine.requires_pr_for_integration = AsyncMock(return_value=(False, "No PR"))
 
     mock_security_scanner = Mock(
         spec=SecurityScanner, scan_test_file=AsyncMock(return_value=(False, [], "NONE"))
@@ -104,9 +102,7 @@ def orchestrator(project: Path, monkeypatch):
     monkeypatch.setattr(
         "test_generation.orchestrator.orchestrator.aiofiles.open", mock_aiofiles_open
     )
-    monkeypatch.setattr(
-        "test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
-    )
+    monkeypatch.setattr("test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock())
     monkeypatch.setattr(
         "test_generation.orchestrator.orchestrator._write_sarif_atomically", AsyncMock()
     )
@@ -116,9 +112,7 @@ def orchestrator(project: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_empty_targets(orchestrator, project: Path):
-    result = await orchestrator.generate_tests_for_targets(
-        [], "atco_artifacts/generated"
-    )
+    result = await orchestrator.generate_tests_for_targets([], "atco_artifacts/generated")
     assert result == {}
     result = await orchestrator.integrate_and_validate_generated_tests({})
     assert result["summary"]["total_targets_considered"] == 0
@@ -162,9 +156,7 @@ async def test_quarantine_on_low_coverage(orchestrator, project: Path, monkeypat
     )
     result = await orchestrator.integrate_and_validate_generated_tests(gen_summary)
     assert result["summary"]["total_quarantined"] == 1
-    assert (
-        "Test generated insufficient coverage" in result["details"]["module1"]["reason"]
-    )
+    assert "Test generated insufficient coverage" in result["details"]["module1"]["reason"]
 
 
 @pytest.mark.asyncio
@@ -193,9 +185,7 @@ async def test_quarantine_on_security_issues(orchestrator, project: Path, monkey
 
 
 @pytest.mark.asyncio
-async def test_quarantine_on_low_mutation_score(
-    orchestrator, project: Path, monkeypatch
-):
+async def test_quarantine_on_low_mutation_score(orchestrator, project: Path, monkeypatch):
     gen_summary = {
         "module1": {
             "generation_success": True,

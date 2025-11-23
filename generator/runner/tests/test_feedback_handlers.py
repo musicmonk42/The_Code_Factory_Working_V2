@@ -111,9 +111,7 @@ def test_feedback_event_valid():
 def test_feedback_event_default_timestamp():
     """FIX: Test FeedbackEvent with default timestamp using patchable helper."""
     # This patch will now work because the source code uses lambda
-    with patch(
-        "runner.feedback_handlers._get_timestamp", return_value="2025-11-06T12:00:00Z"
-    ):
+    with patch("runner.feedback_handlers._get_timestamp", return_value="2025-11-06T12:00:00Z"):
         event = FeedbackEvent(event_type="test", data={})
         assert event.timestamp == "2025-11-06T12:00:00Z"
 
@@ -132,9 +130,7 @@ def test_filesink_emit(tmp_path):
     event = FeedbackEvent(event_type="test", data={"key": "value"})
     with patch("builtins.open", new_callable=mock_open) as mock_file:
         sink.emit(event)
-        mock_file.assert_called_once_with(
-            str(tmp_path / "test.jsonl"), "a", encoding="utf-8"
-        )
+        mock_file.assert_called_once_with(str(tmp_path / "test.jsonl"), "a", encoding="utf-8")
         mock_file().write.assert_called_once_with(event.to_json() + "\n")
 
 
@@ -227,9 +223,7 @@ def test_collect_feedback(mock_file_sink):
     """Test collect_feedback enqueues events and starts worker."""
     sink, _ = mock_file_sink
     register_sink(sink)  # This guarantees the thread is started
-    collect_feedback(
-        "test_event", {"key": "value"}, source="test_source", severity=Severity.WARN
-    )
+    collect_feedback("test_event", {"key": "value"}, source="test_source", severity=Severity.WARN)
 
     assert _registry.events_collected == 1
     assert _worker_queue.qsize() == 1
@@ -274,8 +268,7 @@ def test_worker_sentinel():
     register_sink(LoggingSink())
     # FIX: Check the variable on the module itself
     assert (
-        feedback_handlers._worker_thread is not None
-        and feedback_handlers._worker_thread.is_alive()
+        feedback_handlers._worker_thread is not None and feedback_handlers._worker_thread.is_alive()
     )
 
     # Put sentinel and wait for it to be processed
@@ -288,8 +281,7 @@ def test_worker_sentinel():
 
     # FIX: Use robust assertion on the module's variable
     assert (
-        feedback_handlers._worker_thread is None
-        or not feedback_handlers._worker_thread.is_alive()
+        feedback_handlers._worker_thread is None or not feedback_handlers._worker_thread.is_alive()
     )
 
 
@@ -365,8 +357,7 @@ def test_shutdown_idempotent():
 
     # FIX: Check the module's variable
     assert (
-        feedback_handlers._worker_thread is None
-        or not feedback_handlers._worker_thread.is_alive()
+        feedback_handlers._worker_thread is None or not feedback_handlers._worker_thread.is_alive()
     )
 
 

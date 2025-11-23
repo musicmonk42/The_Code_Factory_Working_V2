@@ -92,9 +92,7 @@ class MockDLTClient:
             tip = chain[-1]
             # Accept explicit matching prevHash or allow "" / None as "append to tip"
             if prevHash not in (None, "", tip.hash):
-                raise ValueError(
-                    f"prevHash mismatch: expected {tip.hash!r}, got {prevHash!r}"
-                )
+                raise ValueError(f"prevHash mismatch: expected {tip.hash!r}, got {prevHash!r}")
             version = tip.version + 1
             new_prev = tip.hash
         else:
@@ -135,9 +133,7 @@ class MockDLTClient:
             "offChainRef": tip.offChainRef,
             "version": tip.version,
         }
-        self._audit(
-            {"op": "read", "name": name, "hash": tip.hash, "version": tip.version}
-        )
+        self._audit({"op": "read", "name": name, "hash": tip.hash, "version": tip.version})
         return out
 
     def rollback_checkpoint(self, name: str, targetHash: str) -> Dict:
@@ -150,15 +146,11 @@ class MockDLTClient:
             None,
         )
         if idx is None:
-            raise ValueError(
-                f"target hash {targetHash!r} not found in chain for {name!r}"
-            )
+            raise ValueError(f"target hash {targetHash!r} not found in chain for {name!r}")
         # trim to target
         chain[:] = chain[: idx + 1]
         tip = chain[-1]
-        self._audit(
-            {"op": "rollback", "name": name, "hash": tip.hash, "version": tip.version}
-        )
+        self._audit({"op": "rollback", "name": name, "hash": tip.hash, "version": tip.version})
         return {
             "hash": tip.hash,
             "prevHash": tip.prevHash,
@@ -274,9 +266,7 @@ def test_audit_log_file_and_hmac(monkeypatch, tmp_path):
 
     assert audit_path.exists()
     lines = [
-        json.loads(x)
-        for x in audit_path.read_text(encoding="utf-8").splitlines()
-        if x.strip()
+        json.loads(x) for x in audit_path.read_text(encoding="utf-8").splitlines() if x.strip()
     ]
     assert {e["op"] for e in lines} == {"write", "read", "rollback"}
     # presence and basic shape of HMAC

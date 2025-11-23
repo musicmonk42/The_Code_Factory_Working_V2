@@ -179,9 +179,7 @@ except ImportError:
         def __init__(self):
             self.REDIS_URL = "redis://localhost:6379/0"
             self.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-            self.ENCRYPTION_KEY = (
-                "default-encryption-key-for-tests-only-must-be-32-bytes"
-            )
+            self.ENCRYPTION_KEY = "default-encryption-key-for-tests-only-must-be-32-bytes"
             self.REDIS_MAX_CONNECTIONS = 10
             self.MESSAGE_BUS_MAX_QUEUE_SIZE = 100
 
@@ -197,9 +195,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
@@ -291,9 +287,7 @@ class MessageQueueService:
         self._cipher: Optional[Fernet] = None
         if encryption_key:
             if not CRYPTOGRAPHY_AVAILABLE:
-                raise BackendNotAvailableError(
-                    "cryptography library is required for encryption."
-                )
+                raise BackendNotAvailableError("cryptography library is required for encryption.")
             # Fixed: Validate Fernet key format before using it
             if isinstance(encryption_key, str):
                 encryption_key = encryption_key.encode("utf-8")
@@ -334,9 +328,7 @@ class MessageQueueService:
             )
         elif self.backend_type == "kafka":
             if not KAFKA_AVAILABLE:
-                raise BackendNotAvailableError(
-                    "aiokafka is not installed for Kafka backend."
-                )
+                raise BackendNotAvailableError("aiokafka is not installed for Kafka backend.")
             self.kafka_bootstrap_servers = (
                 kafka_bootstrap_servers or self.config.KAFKA_BOOTSTRAP_SERVERS
             )
@@ -346,15 +338,11 @@ class MessageQueueService:
             self.kafka_producer_retries = kafka_producer_retries
             self.kafka_consumer_auto_offset_reset = kafka_consumer_auto_offset_reset
             self.kafka_consumer_enable_auto_commit = kafka_consumer_enable_auto_commit
-            self.kafka_consumer_auto_commit_interval_ms = (
-                kafka_consumer_auto_commit_interval_ms
-            )
+            self.kafka_consumer_auto_commit_interval_ms = kafka_consumer_auto_commit_interval_ms
         elif self.backend_type == "memory":
             self.memory_queue = asyncio.Queue()
 
-        logger.info(
-            f"MessageQueueService initialized with backend: {self.backend_type}"
-        )
+        logger.info(f"MessageQueueService initialized with backend: {self.backend_type}")
 
     async def __aenter__(self):
         """Asynchronous context manager entry point. Connects to the message broker."""
@@ -386,14 +374,10 @@ class MessageQueueService:
             await self.healthcheck()
             self._is_connected = True
             MQ_CONNECTION_STATUS.labels(backend=self.backend_type).set(1)
-            logger.info(
-                f"MessageQueueService connected to {self.backend_type} backend."
-            )
+            logger.info(f"MessageQueueService connected to {self.backend_type} backend.")
         except Exception as e:
             MQ_CONNECTION_STATUS.labels(backend=self.backend_type).set(0)
-            logger.critical(
-                f"Failed to connect to {self.backend_type} backend: {e}", exc_info=True
-            )
+            logger.critical(f"Failed to connect to {self.backend_type} backend: {e}", exc_info=True)
             raise MessageQueueServiceError(
                 f"Failed to connect to {self.backend_type} backend."
             ) from e
@@ -435,9 +419,7 @@ class MessageQueueService:
         finally:
             self._is_connected = False
             MQ_CONNECTION_STATUS.labels(backend=self.backend_type).set(0)
-            logger.info(
-                f"MessageQueueService disconnected from {self.backend_type} backend."
-            )
+            logger.info(f"MessageQueueService disconnected from {self.backend_type} backend.")
 
     async def healthcheck(self) -> Dict[str, Any]:
         """
@@ -453,11 +435,7 @@ class MessageQueueService:
             if self.backend_type == "redis_streams" and self._redis_client:
                 await asyncio.wait_for(self._redis_client.ping(), timeout=5)
                 return {"status": "healthy", "backend": "redis_streams"}
-            elif (
-                self.backend_type == "kafka"
-                and KAFKA_AVAILABLE
-                and self._kafka_producer
-            ):
+            elif self.backend_type == "kafka" and KAFKA_AVAILABLE and self._kafka_producer:
                 if not self._kafka_producer.bootstrap_connected():
                     raise ConnectionError("Kafka producer not bootstrapped.")
                 return {"status": "healthy", "backend": "kafka"}
@@ -468,22 +446,16 @@ class MessageQueueService:
                     "message_count": self.memory_queue.qsize(),
                 }
             else:
-                raise MessageQueueServiceError(
-                    "Backend client not initialized or unavailable."
-                )
+                raise MessageQueueServiceError("Backend client not initialized or unavailable.")
         except Exception as e:
-            logger.error(
-                f"Healthcheck failed for {self.backend_type}: {e}", exc_info=True
-            )
+            logger.error(f"Healthcheck failed for {self.backend_type}: {e}", exc_info=True)
             raise MessageQueueServiceError(
                 f"Healthcheck failed for {self.backend_type}: {e}"
             ) from e
 
     def _get_topic_name(self, event_type: str, is_dlq: bool = False) -> str:
         """Constructs the full topic name with prefix and optional DLQ suffix."""
-        return (
-            f"{self.topic_prefix}_{event_type}{self.dlq_topic_suffix if is_dlq else ''}"
-        )
+        return f"{self.topic_prefix}_{event_type}{self.dlq_topic_suffix if is_dlq else ''}"
 
     def _encrypt_payload(self, payload: bytes) -> bytes:
         """Encrypts the payload using the configured cipher."""
@@ -492,9 +464,7 @@ class MessageQueueService:
         try:
             return self._cipher.encrypt(payload)
         except Exception as e:
-            MQ_ENCRYPTION_ERRORS.labels(
-                backend=self.backend_type, event_type="encryption"
-            ).inc()
+            MQ_ENCRYPTION_ERRORS.labels(backend=self.backend_type, event_type="encryption").inc()
             raise SerializationError(f"Failed to encrypt payload: {e}") from e
 
     def _decrypt_payload(self, encrypted_payload: bytes) -> bytes:
@@ -507,9 +477,7 @@ class MessageQueueService:
             MQ_ENCRYPTION_ERRORS.labels(
                 backend=self.backend_type, event_type="decryption_invalid_token"
             ).inc()
-            raise DecryptionError(
-                f"Invalid encryption token during decryption: {e}"
-            ) from e
+            raise DecryptionError(f"Invalid encryption token during decryption: {e}") from e
         except Exception as e:
             MQ_ENCRYPTION_ERRORS.labels(
                 backend=self.backend_type, event_type="decryption_error"
@@ -549,17 +517,13 @@ class MessageQueueService:
             logger.warning(
                 "Encryption key rotated in-memory. All encrypted data in topics must be re-encrypted."
             )
-            MQ_ENCRYPTION_ERRORS.labels(
-                backend=self.backend_type, event_type="key_rotation"
-            ).inc()
+            MQ_ENCRYPTION_ERRORS.labels(backend=self.backend_type, event_type="key_rotation").inc()
         except Exception as e:
             self._cipher = old_cipher  # Revert to old key on failure
             MQ_ENCRYPTION_ERRORS.labels(
                 backend=self.backend_type, event_type="key_rotation_fail"
             ).inc()
-            raise MessageQueueServiceError(
-                f"Failed to rotate encryption key: {e}"
-            ) from e
+            raise MessageQueueServiceError(f"Failed to rotate encryption key: {e}") from e
 
     @retry(
         stop=stop_after_attempt(3),
@@ -594,18 +558,12 @@ class MessageQueueService:
                         f"{self.omnicore_url}/events",
                         json={"event_type": event_type, "data": data},
                     )
-                    logging.getLogger(__name__).info(
-                        f"Published to omnicore_engine: {event_type}"
-                    )
+                    logging.getLogger(__name__).info(f"Published to omnicore_engine: {event_type}")
                 except Exception as e:
-                    logging.getLogger(__name__).error(
-                        f"Failed to publish to omnicore_engine: {e}"
-                    )
+                    logging.getLogger(__name__).error(f"Failed to publish to omnicore_engine: {e}")
 
         if not self._is_connected:
-            raise MessageQueueServiceError(
-                "Service not connected. Call connect() first."
-            )
+            raise MessageQueueServiceError("Service not connected. Call connect() first.")
         # Conceptual access control
         # if not self.check_permission("user", "publish"):
         #     raise PermissionError("Publish permission required")
@@ -631,9 +589,7 @@ class MessageQueueService:
                 event_type=event_type,
                 status="failed_serialization_encryption",
             ).inc()
-            await self._send_to_dlq(
-                event_type, data, f"Serialization/Encryption error: {e}"
-            )
+            await self._send_to_dlq(event_type, data, f"Serialization/Encryption error: {e}")
             if self.audit_hook:
                 self.audit_hook(
                     event_type,
@@ -669,9 +625,9 @@ class MessageQueueService:
             MQ_PUBLISH_TOTAL.labels(
                 backend=self.backend_type, event_type=event_type, status="success"
             ).inc()
-            MQ_PUBLISH_LATENCY.labels(
-                backend=self.backend_type, event_type=event_type
-            ).observe(time.monotonic() - start_time)
+            MQ_PUBLISH_LATENCY.labels(backend=self.backend_type, event_type=event_type).observe(
+                time.monotonic() - start_time
+            )
             if self.audit_hook:
                 self.audit_hook(event_type, "publish", data, "success", "")
             logger.debug(
@@ -684,13 +640,9 @@ class MessageQueueService:
                 event_type=event_type,
                 status="failed_retries",
             ).inc()
-            await self._send_to_dlq(
-                event_type, data, f"Publish failed after retries: {e}"
-            )
+            await self._send_to_dlq(event_type, data, f"Publish failed after retries: {e}")
             if self.audit_hook:
-                self.audit_hook(
-                    event_type, "publish", data, "failed", f"Max retries reached: {e}"
-                )
+                self.audit_hook(event_type, "publish", data, "failed", f"Max retries reached: {e}")
             raise MessageQueueServiceError(
                 f"Failed to publish '{event_type}' after retries."
             ) from e
@@ -711,26 +663,18 @@ class MessageQueueService:
             PermissionError: If the user lacks consume permission.
         """
         if not self._is_connected:
-            raise MessageQueueServiceError(
-                "Service not connected. Call connect() first."
-            )
+            raise MessageQueueServiceError("Service not connected. Call connect() first.")
         # Conceptual access control
         # if not self.check_permission("user", "consume"):
         #     raise PermissionError("Consume permission required")
 
         topic_name = self._get_topic_name(event_type)
         if self.backend_type == "redis_streams" and self._redis_client:
-            consumer_task = asyncio.create_task(
-                self._redis_stream_consumer(topic_name, handler)
-            )
+            consumer_task = asyncio.create_task(self._redis_stream_consumer(topic_name, handler))
         elif self.backend_type == "kafka" and KAFKA_AVAILABLE:
-            consumer_task = asyncio.create_task(
-                self._kafka_consumer(topic_name, handler)
-            )
+            consumer_task = asyncio.create_task(self._kafka_consumer(topic_name, handler))
         elif self.backend_type == "memory" and self.memory_queue:
-            consumer_task = asyncio.create_task(
-                self._memory_consumer(event_type, handler)
-            )
+            consumer_task = asyncio.create_task(self._memory_consumer(event_type, handler))
         else:
             raise MessageQueueServiceError(
                 f"Subscribe not implemented for {self.backend_type} or client not ready."
@@ -759,9 +703,9 @@ class MessageQueueService:
                         MQ_CONSUME_TOTAL.labels(
                             backend="memory", event_type=event_type, status="success"
                         ).inc()
-                        MQ_CONSUME_LATENCY.labels(
-                            backend="memory", event_type=event_type
-                        ).observe(time.monotonic() - start_time)
+                        MQ_CONSUME_LATENCY.labels(backend="memory", event_type=event_type).observe(
+                            time.monotonic() - start_time
+                        )
                     except (SerializationError, DecryptionError) as e:
                         logger.error(
                             f"In-memory message processing failed: {e}. Sending to DLQ.",
@@ -779,9 +723,7 @@ class MessageQueueService:
                             event_type, message.get("data"), f"Handler error: {e}"
                         )
             except Exception as e:
-                logger.critical(
-                    f"Unhandled error in in-memory consumer: {e}", exc_info=True
-                )
+                logger.critical(f"Unhandled error in in-memory consumer: {e}", exc_info=True)
                 await asyncio.sleep(self.retry_delay_base)
 
     async def _redis_stream_consumer(
@@ -828,9 +770,7 @@ class MessageQueueService:
                                         "Missing 'payload' field in Redis Stream message."
                                     )
                                 decrypted_data = self._decrypt_payload(payload_bytes)
-                                deserialized_data = self._deserialize_message(
-                                    decrypted_data
-                                )
+                                deserialized_data = self._deserialize_message(decrypted_data)
 
                                 # Policy and audit hooks for consume
                                 if self.policy_hook and not self.policy_hook(
@@ -912,9 +852,7 @@ class MessageQueueService:
                                     stream_name, self.consumer_group_id, message_id
                                 )
                 else:
-                    await asyncio.sleep(
-                        0.1
-                    )  # Short sleep to avoid busy-waiting when no messages
+                    await asyncio.sleep(0.1)  # Short sleep to avoid busy-waiting when no messages
             except Exception as e:
                 logger.critical(
                     f"Unhandled error in Redis Stream consumer for '{stream_name}': {e}",
@@ -945,9 +883,7 @@ class MessageQueueService:
                         start_time = time.monotonic()
                         try:
                             decrypted_data = self._decrypt_payload(msg.value)
-                            deserialized_data = self._deserialize_message(
-                                decrypted_data
-                            )
+                            deserialized_data = self._deserialize_message(decrypted_data)
 
                             # Policy and audit hooks for consume
                             if self.policy_hook and not self.policy_hook(
@@ -982,9 +918,7 @@ class MessageQueueService:
                                 topic_name,
                                 {
                                     "offset": msg.offset,
-                                    "value": msg.value.decode(
-                                        "latin-1", errors="replace"
-                                    ),
+                                    "value": msg.value.decode("latin-1", errors="replace"),
                                 },
                                 f"Processing error: {e}",
                             )
@@ -997,9 +931,7 @@ class MessageQueueService:
                                 topic_name,
                                 {
                                     "offset": msg.offset,
-                                    "value": msg.value.decode(
-                                        "latin-1", errors="replace"
-                                    ),
+                                    "value": msg.value.decode("latin-1", errors="replace"),
                                 },
                                 f"Handler error: {e}",
                             )
@@ -1036,15 +968,11 @@ class MessageQueueService:
             encrypted_dlq_data = self._encrypt_payload(serialized_dlq_data)
 
             if self.backend_type == "redis_streams" and self._redis_client:
-                await self._redis_client.xadd(
-                    dlq_topic, {"payload": encrypted_dlq_data}
-                )
+                await self._redis_client.xadd(dlq_topic, {"payload": encrypted_dlq_data})
             elif self.backend_type == "kafka" and self._kafka_producer:
                 await self._kafka_producer.send_and_wait(dlq_topic, encrypted_dlq_data)
             elif self.backend_type == "memory" and self.memory_queue:
-                await self.memory_queue.put(
-                    {"event_type": dlq_topic, "data": dlq_message}
-                )
+                await self.memory_queue.put({"event_type": dlq_topic, "data": dlq_message})
 
             MQ_DLQ_TOTAL.labels(
                 backend=self.backend_type, event_type=event_type, reason=reason
@@ -1066,9 +994,7 @@ class MessageQueueService:
         This operation is typically triggered manually by an operator.
         """
         dlq_topic = self._get_topic_name(event_type, is_dlq=True)
-        logger.info(
-            f"Attempting to replay DLQ for '{event_type}' from topic '{dlq_topic}'."
-        )
+        logger.info(f"Attempting to replay DLQ for '{event_type}' from topic '{dlq_topic}'.")
 
         if self.backend_type == "redis_streams" and self._redis_client:
             messages = await self._redis_client.xrange(dlq_topic)
@@ -1084,9 +1010,7 @@ class MessageQueueService:
                     original_event_type = dlq_entry.get("original_event_type")
                     original_data = dlq_entry.get("original_data")
                     if original_event_type and original_data:
-                        await self.publish(
-                            original_event_type, original_data, is_critical=True
-                        )
+                        await self.publish(original_event_type, original_data, is_critical=True)
                         await self._redis_client.xdel(dlq_topic, message_id)
                         logger.info(
                             f"Replayed and deleted DLQ message ID {message_id} for '{original_event_type}'."
@@ -1101,9 +1025,7 @@ class MessageQueueService:
                         f"Error replaying Redis Stream DLQ message ID {message_id}: {e}. Will retry on next replay_dlq call.",
                         exc_info=True,
                     )
-            logger.info(
-                f"Finished attempting to replay DLQ for '{event_type}' on Redis Streams."
-            )
+            logger.info(f"Finished attempting to replay DLQ for '{event_type}' on Redis Streams.")
 
         elif self.backend_type == "kafka" and KAFKA_AVAILABLE:
             consumer = AIOKafkaConsumer(
@@ -1124,9 +1046,7 @@ class MessageQueueService:
                         original_event_type = dlq_entry.get("original_event_type")
                         original_data = dlq_entry.get("original_data")
                         if original_event_type and original_data:
-                            await self.publish(
-                                original_event_type, original_data, is_critical=True
-                            )
+                            await self.publish(original_event_type, original_data, is_critical=True)
                             await consumer.commit()
                             logger.info(
                                 f"Replayed Kafka DLQ message from offset {msg.offset} for '{original_event_type}'."
@@ -1143,13 +1063,9 @@ class MessageQueueService:
                         )
             finally:
                 await consumer.stop()
-                logger.info(
-                    f"Finished attempting to replay DLQ for '{event_type}' on Kafka."
-                )
+                logger.info(f"Finished attempting to replay DLQ for '{event_type}' on Kafka.")
         else:
-            logger.warning(
-                f"DLQ replay not implemented for {self.backend_type} backend."
-            )
+            logger.warning(f"DLQ replay not implemented for {self.backend_type} backend.")
 
 
 # End of ultra gold standard message_queue_service.py

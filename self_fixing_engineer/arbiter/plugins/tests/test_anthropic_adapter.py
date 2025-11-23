@@ -311,9 +311,7 @@ class TestAnthropicAdapter:
         with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
-            mock_instance.aclose_session = AsyncMock(
-                side_effect=Exception("Close error")
-            )
+            mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close error"))
 
             async with AnthropicAdapter(valid_settings):
                 pass  # Should not raise even if close fails

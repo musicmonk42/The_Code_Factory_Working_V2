@@ -115,9 +115,7 @@ class TestAgentState:
     def test_agent_state_unique_name_constraint(self, session):
         """Test that agent names must be unique."""
         agent1 = AgentState(name="unique_agent", x=0, y=0, energy=100, world_size=100)
-        agent2 = AgentState(
-            name="unique_agent", x=10, y=10, energy=50, world_size=100  # Same name
-        )
+        agent2 = AgentState(name="unique_agent", x=10, y=10, energy=50, world_size=100)  # Same name
 
         session.add(agent1)
         session.commit()
@@ -235,9 +233,7 @@ class TestExplainAuditRecord:
         session.add(record)
         session.commit()
 
-        retrieved = (
-            session.query(ExplainAuditRecord).filter_by(uuid="audit_full").first()
-        )
+        retrieved = session.query(ExplainAuditRecord).filter_by(uuid="audit_full").first()
         assert retrieved.sim_id == "sim_123"
         assert retrieved.agent_id == "agent_456"
         assert retrieved.tenant_id == "tenant_789"
@@ -539,9 +535,7 @@ class TestModelQueries:
         # Query records after base_time + 2 hours
         cutoff_time = base_time + (2 * 3600)
         recent_records = (
-            session.query(ExplainAuditRecord)
-            .filter(ExplainAuditRecord.ts > cutoff_time)
-            .all()
+            session.query(ExplainAuditRecord).filter(ExplainAuditRecord.ts > cutoff_time).all()
         )
 
         assert len(recent_records) == 3

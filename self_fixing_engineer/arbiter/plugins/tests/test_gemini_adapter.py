@@ -306,9 +306,7 @@ class TestGeminiAdapter:
         """Test that circuit breaker enters half-open state after timeout."""
         # Set circuit breaker to open state
         adapter.circuit_breaker_state = "open"
-        adapter.circuit_breaker_last_failure_time = (
-            asyncio.get_event_loop().time() - 301
-        )
+        adapter.circuit_breaker_last_failure_time = asyncio.get_event_loop().time() - 301
         adapter.circuit_breaker_timeout = 300
 
         adapter.client.generate_text.return_value = "Success after recovery"
@@ -417,9 +415,7 @@ class TestGeminiAdapter:
         with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
-            mock_instance.aclose_session = AsyncMock(
-                side_effect=Exception("Close failed")
-            )
+            mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close failed"))
 
             async with GeminiAdapter(valid_settings):
                 pass  # Should not raise even if close fails
@@ -472,9 +468,7 @@ class TestGeminiAdapter:
         adapter.circuit_breaker_state = "open"
         adapter.circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
 
-        with patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
-        ) as mock_errors:
+        with patch("arbiter.plugins.gemini_adapter.gemini_call_errors_total") as mock_errors:
             with pytest.raises(CircuitBreakerOpenError):
                 await adapter.generate("Test", correlation_id="cb-test")
 

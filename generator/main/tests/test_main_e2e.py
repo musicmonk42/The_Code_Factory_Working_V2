@@ -106,9 +106,7 @@ class TestEndToEndWorkflow:
     @pytest.mark.asyncio
     async def test_complete_generation_workflow(self, test_environment):
         """Test complete workflow from README to generated app."""
-        with patch("main.main.Runner") as MockRunner, patch(
-            "main.main.IntentParser"
-        ) as MockParser:
+        with patch("main.main.Runner") as MockRunner, patch("main.main.IntentParser") as MockParser:
 
             # Setup mocks
             mock_runner = MagicMock()
@@ -133,9 +131,7 @@ class TestEndToEndWorkflow:
 
             # Execute workflow
             # 1. Parse README
-            parse_result = await mock_parser.parse(
-                content=test_environment["readme"].read_text()
-            )
+            parse_result = await mock_parser.parse(content=test_environment["readme"].read_text())
             assert parse_result["intent"] == "create_api"
 
             # 2. Run generator
@@ -166,9 +162,7 @@ class TestEndToEndWorkflow:
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock()
             mock_session.post = AsyncMock(return_value=mock_response)
-            mock_session.post.return_value.__aenter__ = AsyncMock(
-                return_value=mock_response
-            )
+            mock_session.post.return_value.__aenter__ = AsyncMock(return_value=mock_response)
             mock_session.post.return_value.__aexit__ = AsyncMock()
 
             MockSession.return_value = mock_session
@@ -321,9 +315,7 @@ class TestCLIIntegration:
             mock_session = AsyncMock()
             MockSession.return_value = mock_session
 
-            result = runner.invoke(
-                cli, ["feedback", "--run-id", "test-123", "--rating", "5"]
-            )
+            result = runner.invoke(cli, ["feedback", "--run-id", "test-123", "--rating", "5"])
 
             assert result.exit_code in [0, 1, 2]
 
@@ -338,9 +330,7 @@ class TestConfigurationPropagation:
             "main.main.load_config"
         ) as mock_load:
 
-            original_config = yaml.safe_load(
-                test_environment["runner_config"].read_text()
-            )
+            original_config = yaml.safe_load(test_environment["runner_config"].read_text())
             mock_load.return_value = original_config
 
             # Simulate config change
@@ -352,9 +342,7 @@ class TestConfigurationPropagation:
                 yaml.dump(new_config, f)
 
             # Reload
-            updated_config = yaml.safe_load(
-                test_environment["runner_config"].read_text()
-            )
+            updated_config = yaml.safe_load(test_environment["runner_config"].read_text())
 
             assert updated_config["backend"] == "updated"
 

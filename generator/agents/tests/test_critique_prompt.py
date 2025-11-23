@@ -98,9 +98,7 @@ def patch_prompt_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(cp, "detect_language", fake_detect_language, raising=False)
     monkeypatch.setattr(cp, "translate_text", fake_translate_text, raising=False)
-    monkeypatch.setattr(
-        cp, "scrub_pii_and_secrets", fake_scrub_pii_and_secrets, raising=False
-    )
+    monkeypatch.setattr(cp, "scrub_pii_and_secrets", fake_scrub_pii_and_secrets, raising=False)
     monkeypatch.setattr(cp, "summarize_text", fake_summarize_text, raising=False)
     monkeypatch.setattr(cp, "count_tokens", fake_count_tokens, raising=False)
     monkeypatch.setattr(cp, "rag_retrieve", fake_rag_retrieve, raising=False)
@@ -239,9 +237,7 @@ async def test_build_semantic_critique_prompt_deterministic_for_same_input() -> 
 
 
 @pytest.mark.asyncio
-async def test_build_semantic_critique_prompt_changes_when_requirements_change() -> (
-    None
-):
+async def test_build_semantic_critique_prompt_changes_when_requirements_change() -> None:
     """
     Changing requirements must meaningfully change the prompt.
 

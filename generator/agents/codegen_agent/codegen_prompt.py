@@ -76,9 +76,7 @@ except ImportError:
     # Since the user instruction implies a replacement, we will remove the old imports and assume the new ones exist.
     class DummyAuditLogger:
         def log_action(self, *args, **kwargs):
-            logging.warning(
-                "Using dummy log_audit_event as runner utility is unavailable."
-            )
+            logging.warning("Using dummy log_audit_event as runner utility is unavailable.")
 
     def log_audit_event(*args, **kwargs):
         logging.warning("Using dummy log_audit_event as runner utility is unavailable.")
@@ -116,9 +114,7 @@ provider = TracerProvider(resource=resource)
 if JaegerExporter:
     provider.add_span_processor(
         SimpleSpanProcessor(
-            JaegerExporter(
-                agent_host_name=os.getenv("OTEL_EXPORTER_JAEGER_ENDPOINT", "localhost")
-            )
+            JaegerExporter(agent_host_name=os.getenv("OTEL_EXPORTER_JAEGER_ENDPOINT", "localhost"))
         )
     )
 else:
@@ -199,9 +195,7 @@ PROMPT_BUILD_LATENCY = get_or_create_histogram(
     ["template"],
 )
 
-PROMPT_ERRORS = get_or_create_counter(
-    "prompt_errors_total", "Prompt build errors", ["error_type"]
-)
+PROMPT_ERRORS = get_or_create_counter("prompt_errors_total", "Prompt build errors", ["error_type"])
 # --- END FIX ---
 
 # --- Expanded Best Practices ---
@@ -251,14 +245,10 @@ if RAG_ENABLED:
         encoder = SentenceTransformer("all-MiniLM-L6-v2")
         embedding_dim = encoder.get_sentence_embedding_dimension()
         knowledge_base = [
-            f"[{lang}] {p}"
-            for lang, practices in BEST_PRACTICES.items()
-            for p in practices
+            f"[{lang}] {p}" for lang, practices in BEST_PRACTICES.items() for p in practices
         ]
         doc_embeddings = encoder.encode(knowledge_base, convert_to_tensor=False)
-        logger.info(
-            "SentenceTransformer model loaded and knowledge base embeddings created."
-        )
+        logger.info("SentenceTransformer model loaded and knowledge base embeddings created.")
     except Exception as e:
         logger.error(
             f"Failed to initialize RAG components during import: {e}. RAG will be disabled."
@@ -286,9 +276,7 @@ async def initialize_rag_store(redis_client: aioredis.Redis):
     try:
         # Populate the hash keys with embeddings
         for i, emb in enumerate(doc_embeddings):
-            await redis_client.hset(
-                f"rag:{i}", mapping={"embedding": json.dumps(emb.tolist())}
-            )
+            await redis_client.hset(f"rag:{i}", mapping={"embedding": json.dumps(emb.tolist())})
 
         # Check if the search index already exists to prevent errors on restart
         try:
@@ -302,9 +290,7 @@ async def initialize_rag_store(redis_client: aioredis.Redis):
                 PROMPT_ERRORS.labels("RedisSearchModuleMissing").inc()
                 return  # Cannot proceed without RediSearch
             # If the index does not exist, a "Not found" or similar error is expected, so we create it.
-            logger.info(
-                "Redis search index 'rag_index' not found. Creating new index..."
-            )
+            logger.info("Redis search index 'rag_index' not found. Creating new index...")
             await redis_client.execute_command(
                 "FT.CREATE",
                 "rag_index",
@@ -355,9 +341,7 @@ class HotReloadingFileSystemLoader(FileSystemLoader):
             raise TemplateNotFound(template)
 
         mtime = os.path.getmtime(path)
-        if template not in self._last_mtime or mtime > self._last_mtime.get(
-            template, 0
-        ):
+        if template not in self._last_mtime or mtime > self._last_mtime.get(template, 0):
             logger.info(f"Template '{template}' has changed. Reloading.")
             self.clear_cache()
             self._last_mtime[template] = mtime
@@ -404,16 +388,12 @@ async def retrieve_augmented_context(
                     ) as resp:
                         resp.raise_for_status()
                         # NB: Adjust to the true Brave API shape in your environment
-                        results = (
-                            (await resp.json()).get("web", {}).get("results", [])[:3]
-                        )
+                        results = (await resp.json()).get("web", {}).get("results", [])[:3]
                         if results:
                             context_snippets.append(
                                 "Relevant Context (from Brave Search):\n- "
                                 + "\n- ".join(
-                                    result["snippet"]
-                                    for result in results
-                                    if "snippet" in result
+                                    result["snippet"] for result in results if "snippet" in result
                                 )
                             )
             except Exception as e:
@@ -423,13 +403,13 @@ async def retrieve_augmented_context(
         # 2. Redis Vector Search
         if RAG_ENABLED and redis_client and encoder:
             try:
-                query_text = f"{target_language} " + json.dumps(
-                    requirements.get("features")
-                )
+                query_text = f"{target_language} " + json.dumps(requirements.get("features"))
                 query_embedding = encoder.encode(query_text).tolist()
 
                 # KNN search query for RediSearch
-                search_query = "(@embedding:[VECTOR_RANGE $radius $embedding])=>{$yield_distance_as: score}"
+                search_query = (
+                    "(@embedding:[VECTOR_RANGE $radius $embedding])=>{$yield_distance_as: score}"
+                )
                 params = {
                     "embedding": json.dumps(query_embedding),
                     "radius": 0.8,  # Cosine similarity threshold
@@ -513,9 +493,7 @@ async def process_multi_modal_input(
                     logger.error(f"Error processing image at {url}: {response}")
                     continue
                 if response.error.message:
-                    raise Exception(
-                        f"Vision API error for {url}: {response.error.message}"
-                    )
+                    raise Exception(f"Vision API error for {url}: {response.error.message}")
 
                 # Text Detection
                 full_text = (
@@ -523,15 +501,11 @@ async def process_multi_modal_input(
                     if response.text_annotations
                     else "No text detected."
                 )
-                image_descriptions.append(
-                    f"Text from image at {url}:\n---\n{full_text}\n---"
-                )
+                image_descriptions.append(f"Text from image at {url}:\n---\n{full_text}\n---")
 
                 # Diagram/Object Detection
                 if response.localized_object_annotations:
-                    diagram_objects = [
-                        obj.name for obj in response.localized_object_annotations
-                    ]
+                    diagram_objects = [obj.name for obj in response.localized_object_annotations]
                     diagram_descriptions.append(
                         f"Diagram objects at {url}:\n- " + "\n- ".join(diagram_objects)
                     )
@@ -547,9 +521,7 @@ async def process_multi_modal_input(
         )
 
 
-def get_best_practices(
-    target_language: str, framework: Optional[str] = None
-) -> List[str]:
+def get_best_practices(target_language: str, framework: Optional[str] = None) -> List[str]:
     """Dynamically injects language and framework-specific best practices."""
     practices = BEST_PRACTICES.get(target_language, [])
     if framework:
@@ -583,9 +555,7 @@ async def translate_requirements_if_needed(
             # Language detection
             async with session.post(
                 "https://language.googleapis.com/v1/documents:analyzeEntities",
-                json={
-                    "document": {"type": "PLAIN_TEXT", "content": " ".join(features)}
-                },
+                json={"document": {"type": "PLAIN_TEXT", "content": " ".join(features)}},
                 params={"key": nlp_api_key},
                 timeout=10,
             ) as resp:
@@ -648,9 +618,7 @@ async def build_code_generation_prompt(
                 or not isinstance(requirements["features"], list)
             ):
                 PROMPT_ERRORS.labels("InvalidInput").inc()
-                raise ValueError(
-                    "Requirements must be a dictionary with a 'features' list."
-                )
+                raise ValueError("Requirements must be a dictionary with a 'features' list.")
             if not isinstance(target_language, str) or not target_language:
                 PROMPT_ERRORS.labels("InvalidInput").inc()
                 raise ValueError("Target language must be a non-empty string.")
@@ -662,17 +630,13 @@ async def build_code_generation_prompt(
                 )
             ):
                 PROMPT_ERRORS.labels("InvalidInput").inc()
-                raise ValueError(
-                    "Multi-modal inputs must include a list of valid URLs."
-                )
+                raise ValueError("Multi-modal inputs must include a list of valid URLs.")
 
             # 2. Internationalization
             requirements = await translate_requirements_if_needed(requirements)
 
             # 3. Process Multi-modal inputs
-            image_desc, diagram_desc = await process_multi_modal_input(
-                multi_modal_inputs
-            )
+            image_desc, diagram_desc = await process_multi_modal_input(multi_modal_inputs)
 
             # 4. Context Augmentation (RAG)
             rag_context = await retrieve_augmented_context(
@@ -724,9 +688,7 @@ async def build_code_generation_prompt(
                         # --- Security Change: Use redacted prompt in API call ---
                         data = {
                             "model": META_LLM_MODEL,
-                            "messages": [
-                                {"role": "user", "content": redacted_critique_prompt}
-                            ],
+                            "messages": [{"role": "user", "content": redacted_critique_prompt}],
                         }
                         # --- End Security Change ---
 
@@ -736,9 +698,7 @@ async def build_code_generation_prompt(
                             ) as resp:
                                 resp.raise_for_status()
                                 jr = await resp.json()
-                                critique = jr["choices"][0]["message"][
-                                    "content"
-                                ].strip()
+                                critique = jr["choices"][0]["message"]["content"].strip()
                         prompt += f"\n\n--- Self-Correction Advisory ---\n{critique}\n--- End Advisory ---"
                         # --- Logging Change: Replace audit_logger.log_action with log_audit_event ---
                         log_audit_event("Prompt Self-Refined", {"refinement": critique})

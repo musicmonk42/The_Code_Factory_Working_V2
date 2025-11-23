@@ -16,9 +16,7 @@ from typing import Optional, Dict
 try:
     from fastapi import HTTPException, status
 except ImportError:
-    logging.getLogger(__name__).warning(
-        "FastAPI not found. Using dummy HTTPException/status."
-    )
+    logging.getLogger(__name__).warning("FastAPI not found. Using dummy HTTPException/status.")
 
     class HTTPException(Exception):
         def __init__(self, status_code: int, detail: str):
@@ -417,9 +415,7 @@ _ = gettext.gettext
 # Load API Key from environment variable
 GENERATOR_API_KEY = os.getenv("GENERATOR_API_KEY")
 if not GENERATOR_API_KEY and _TEXTUAL_AVAILABLE:  # Only warn if textual is available
-    app_logger.critical(
-        "GENERATOR_API_KEY environment variable not set. API calls will fail."
-    )
+    app_logger.critical("GENERATOR_API_KEY environment variable not set. API calls will fail.")
 
 # Define API Endpoints
 API_BASE_URL = os.getenv("GENERATOR_API_BASE_URL", "http://127.0.0.1:8000/api/v1")
@@ -444,9 +440,7 @@ class TuiLogHandler(logging.Handler):
 
     def __init__(self, log_widget: RichLog, app: App):  # FIX: Accept app instance
         super().__init__()
-        self.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
+        self.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
         self.log_widget = log_widget
         self.app = app  # FIX: Store app instance
         self.queue = asyncio.Queue()
@@ -564,9 +558,7 @@ class MainApp(App):
     def __init__(self, production_mode: bool = False):
         super().__init__()
         self.production_mode = production_mode
-        self._thread_id = (
-            threading.get_ident()
-        )  # Store main thread ID for TuiLogHandler
+        self._thread_id = threading.get_ident()  # Store main thread ID for TuiLogHandler
         self._app_initialized = False
         self.config_watcher = None
         self.parser_config_watcher = None
@@ -621,21 +613,15 @@ class MainApp(App):
             # Feedback inputs
             self.feedback_input_run_id = self.query_one("#feedback_input_run_id", Input)
             self.feedback_input_rating = self.query_one("#feedback_input_rating", Input)
-            self.feedback_input_comments = self.query_one(
-                "#feedback_input_comments", TextArea
-            )
+            self.feedback_input_comments = self.query_one("#feedback_input_comments", TextArea)
             self.feedback_error = self.query_one("#feedback_error", Label)
         except NoMatches as e:
-            app_logger.error(
-                f"Failed to query critical widget: {e}. TUI will likely be unusable."
-            )
+            app_logger.error(f"Failed to query critical widget: {e}. TUI will likely be unusable.")
             # Optionally re-raise or handle gracefully if critical
 
         # --- Setup logging and core ---
         if self.runner_log:
-            self.tui_log_handler = TuiLogHandler(
-                self.runner_log, self
-            )  # FIX: Pass self (the app)
+            self.tui_log_handler = TuiLogHandler(self.runner_log, self)  # FIX: Pass self (the app)
             app_logger.addHandler(self.tui_log_handler)
 
         self.runner = Runner(load_config(RUNNER_CONFIG_PATH))
@@ -656,10 +642,7 @@ class MainApp(App):
             self.config_watcher.stop()
         if hasattr(self, "parser_config_watcher") and self.parser_config_watcher:
             self.parser_config_watcher.stop()
-        if (
-            hasattr(self, "metrics_update_interval_task")
-            and self.metrics_update_interval_task
-        ):
+        if hasattr(self, "metrics_update_interval_task") and self.metrics_update_interval_task:
             self.metrics_update_interval_task.stop()  # Use .stop() for Timers
         if hasattr(self, "tui_log_handler") and self.tui_log_handler:
             # FIX: Remove handler to prevent zombie writes during tests
@@ -676,22 +659,16 @@ class MainApp(App):
                 "resource_usage": RUN_RESOURCE_USAGE.get(),
                 "health_status": HEALTH_STATUS.get(),
             }
-            metrics_text = "\n".join(
-                f"{key}: {value}" for key, value in metrics.items()
-            )
+            metrics_text = "\n".join(f"{key}: {value}" for key, value in metrics.items())
             if self.metrics_display:
                 self.metrics_display.update(metrics_text)
             if self.metrics_error:
-                await self._set_success_message(
-                    self.metrics_error, "", clear_after=None
-                )
+                await self._set_success_message(self.metrics_error, "", clear_after=None)
         except Exception as e:
             if self.metrics_display:
                 self.metrics_display.update(f"[red]Error updating metrics: {e}[/red]")
             if self.metrics_error:
-                await self._set_error_message(
-                    self.metrics_error, f"Error updating metrics: {e}"
-                )
+                await self._set_error_message(self.metrics_error, f"Error updating metrics: {e}")
             app_logger.error(f"TUI metrics update error: {e}", exc_info=True)
 
     async def _on_config_reload(self, new_config, diff):
@@ -751,9 +728,7 @@ class MainApp(App):
 
         async def clear_message():
             await asyncio.sleep(clear_after)
-            if (
-                label_widget.classes == "success"
-            ):  # Only clear if it's still our success msg
+            if label_widget.classes == "success":  # Only clear if it's still our success msg
                 label_widget.update("")
                 label_widget.classes = ""
 
@@ -781,9 +756,7 @@ class MainApp(App):
                 detail="API Key not configured. Please set GENERATOR_API_KEY env var.",
             )
 
-        headers = {
-            "X-API-Key": GENERATOR_API_KEY
-        }  # Use X-API-Key matching previous logic
+        headers = {"X-API-Key": GENERATOR_API_KEY}  # Use X-API-Key matching previous logic
 
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
@@ -817,9 +790,7 @@ class MainApp(App):
                         response.raise_for_status()
                         return await response.json()
         except aiohttp.ClientError as e:  # Catch broad client errors
-            app_logger.error(
-                f"API request to {url} failed with client error: {e}", exc_info=True
-            )
+            app_logger.error(f"API request to {url} failed with client error: {e}", exc_info=True)
             if self.runner_error:
                 # Use call_later to schedule UI update from non-main thread if needed
                 self.call_later(
@@ -829,9 +800,7 @@ class MainApp(App):
                 )
             raise  # Re-raise original exception
         except json.JSONDecodeError as e:
-            app_logger.error(
-                f"API returned invalid JSON from {url}: {e}", exc_info=True
-            )
+            app_logger.error(f"API returned invalid JSON from {url}: {e}", exc_info=True)
             if self.runner_error:
                 self.call_later(
                     self._set_error_message,
@@ -840,9 +809,7 @@ class MainApp(App):
                 )
             raise  # Re-raise original exception
         except Exception as e:
-            app_logger.critical(
-                f"Unexpected error during API request to {url}: {e}", exc_info=True
-            )
+            app_logger.critical(f"Unexpected error during API request to {url}: {e}", exc_info=True)
             if self.runner_error:
                 self.call_later(
                     self._set_error_message,
@@ -862,9 +829,7 @@ class MainApp(App):
             app_logger.info(f"Backend {config_type} config reload response: {response}")
         except (HTTPException, aiohttp.ClientError) as e:  # Catch API errors
             detail = getattr(e, "detail", str(e))
-            app_logger.error(
-                f"Failed to trigger backend {config_type} config reload: {detail}"
-            )
+            app_logger.error(f"Failed to trigger backend {config_type} config reload: {detail}")
             raise
 
     def compose(self):
@@ -895,9 +860,7 @@ class MainApp(App):
                             placeholder=_("Run ID (optional)"),
                             id="feedback_input_run_id",
                         ),
-                        Input(
-                            placeholder=_("Rating (1-5)"), id="feedback_input_rating"
-                        ),
+                        Input(placeholder=_("Rating (1-5)"), id="feedback_input_rating"),
                         TextArea(
                             placeholder=_("Comments (optional)"),
                             id="feedback_input_comments",
@@ -905,9 +868,7 @@ class MainApp(App):
                         ),  # Added class for potential styling
                         Label(id="feedback_error"),
                     ),
-                    RichLog(
-                        id="log_output", wrap=True, highlight=True
-                    ),  # Use single log output
+                    RichLog(id="log_output", wrap=True, highlight=True),  # Use single log output
                 )
 
             with TabPane(_("Intent Parser"), id="parser-tab"):
@@ -918,9 +879,7 @@ class MainApp(App):
                         id="intent_parser_input",
                     ),
                     Horizontal(
-                        Button(
-                            _("Parse Text/File"), id="parse-button", variant="primary"
-                        ),
+                        Button(_("Parse Text/File"), id="parse-button", variant="primary"),
                         Button(
                             _("Reload Parser Config"),
                             id="reload-parser-config",
@@ -1037,9 +996,7 @@ class MainApp(App):
                 )
 
             # Call backend API /api/v1/run
-            result = await self._make_api_request(
-                "POST", API_ENDPOINTS["run"], json_data=payload
-            )
+            result = await self._make_api_request("POST", API_ENDPOINTS["run"], json_data=payload)
 
             if self.runner_log:
                 self.runner_log.write(
@@ -1060,9 +1017,7 @@ class MainApp(App):
             if self.runner_log:
                 self.runner_log.write(f"[red]Invalid JSON payload: {e}[/red]")
             if self.runner_error:
-                await self._set_error_message(
-                    self.runner_error, f"Invalid JSON payload: {e}"
-                )
+                await self._set_error_message(self.runner_error, f"Invalid JSON payload: {e}")
         except (HTTPException, aiohttp.ClientError) as e:  # Catch API errors
             detail = getattr(e, "detail", str(e))
             if self.runner_log:
@@ -1072,9 +1027,7 @@ class MainApp(App):
             if self.runner_log:
                 self.runner_log.write(f"[red]Run Error: {e}[/red]")
             if self.runner_error:
-                await self._set_error_message(
-                    self.runner_error, f"Unexpected error: {e}"
-                )
+                await self._set_error_message(self.runner_error, f"Unexpected error: {e}")
             app_logger.error(f"TUI run workflow error: {e}", exc_info=True)
         finally:
             if self.runner_progress:
@@ -1091,14 +1044,10 @@ class MainApp(App):
                     f"\n[green]CLI/TUI configuration reloaded successfully from {RUNNER_CONFIG_PATH}![/green]"
                 )
             if self.runner_error:
-                await self._set_success_message(
-                    self.runner_error, _("CLI/TUI config reloaded!")
-                )
+                await self._set_success_message(self.runner_error, _("CLI/TUI config reloaded!"))
         except Exception as e:
             if self.runner_log:
-                self.runner_log.write(
-                    f"\n[red]Error reloading CLI/TUI config: {e}[/red]"
-                )
+                self.runner_log.write(f"\n[red]Error reloading CLI/TUI config: {e}[/red]")
             if self.runner_error:
                 await self._set_error_message(
                     self.runner_error, f"CLI/TUI config reload failed: {e}"
@@ -1107,17 +1056,13 @@ class MainApp(App):
 
     @on(Button.Pressed, "#submit-runner-feedback-button")
     async def submit_runner_feedback_button(self):
-        run_id = self.feedback_input_run_id.value.strip() or str(
-            uuid.uuid4()
-        )  # Generate if empty
+        run_id = self.feedback_input_run_id.value.strip() or str(uuid.uuid4())  # Generate if empty
         rating_str = self.feedback_input_rating.value.strip()
         comments = self.feedback_input_comments.text.strip()
 
         # Input validation
         if not rating_str:
-            await self._set_error_message(
-                self.feedback_error, _("Rating is required (1-5).")
-            )
+            await self._set_error_message(self.feedback_error, _("Rating is required (1-5)."))
             return
         try:
             rating = int(rating_str)
@@ -1131,9 +1076,7 @@ class MainApp(App):
             self.feedback_error, "", clear_after=None
         )  # Clear previous errors
         if self.runner_log:
-            self.runner_log.write(
-                f"[blue]Submitting feedback for run {run_id}...[/blue]"
-            )
+            self.runner_log.write(f"[blue]Submitting feedback for run {run_id}...[/blue]")
 
         feedback_payload = {"run_id": run_id, "rating": rating, "comments": comments}
 
@@ -1160,9 +1103,7 @@ class MainApp(App):
             detail = getattr(e, "detail", str(e))
             if self.runner_log:
                 self.runner_log.write(f"[red]Feedback API Error: {detail}[/red]")
-            await self._set_error_message(
-                self.feedback_error, f"Feedback API Error: {detail}"
-            )
+            await self._set_error_message(self.feedback_error, f"Feedback API Error: {detail}")
         except Exception as e:
             if self.runner_log:
                 self.runner_log.write(f"[red]Feedback Submission Error: {e}[/red]")
@@ -1196,13 +1137,9 @@ class MainApp(App):
         is_file = False
         try:
             # Heuristic to check if input is intended as a path
-            if os.path.sep in text_input or (
-                os.path.altsep and os.path.altsep in text_input
-            ):
+            if os.path.sep in text_input or (os.path.altsep and os.path.altsep in text_input):
                 if not path.exists():
-                    await self._set_error_message(
-                        self.parser_error, f"Path does not exist: {path}"
-                    )
+                    await self._set_error_message(self.parser_error, f"Path does not exist: {path}")
                     return
                 if not path.is_file():
                     await self._set_error_message(
@@ -1217,13 +1154,9 @@ class MainApp(App):
             )
             is_file = False
 
-        api_endpoint = (
-            API_ENDPOINTS["parse_file"] if is_file else API_ENDPOINTS["parse_text"]
-        )
+        api_endpoint = API_ENDPOINTS["parse_file"] if is_file else API_ENDPOINTS["parse_text"]
         if self.runner_log:  # Log to main log
-            self.runner_log.write(
-                f"[blue]Sending parse request to API: {api_endpoint}...[/blue]"
-            )
+            self.runner_log.write(f"[blue]Sending parse request to API: {api_endpoint}...[/blue]")
 
         try:
             if is_file:
@@ -1254,9 +1187,7 @@ class MainApp(App):
                 self.runner_log.write(
                     f"[green]Parsed Result from API:\n{json.dumps(result, indent=2)}[/green]"
                 )
-            await self._set_success_message(
-                self.parser_error, _("Parsing completed successfully!")
-            )
+            await self._set_success_message(self.parser_error, _("Parsing completed successfully!"))
 
             # Update clarifier questions if ambiguities are returned
             if "ambiguities" in result and result["ambiguities"]:
@@ -1283,9 +1214,7 @@ class MainApp(App):
             detail = getattr(e, "detail", str(e))
             if self.runner_log:
                 self.runner_log.write(f"[red]Parse API Error: {detail}[/red]")
-            await self._set_error_message(
-                self.parser_error, f"Parse API Error: {detail}"
-            )
+            await self._set_error_message(self.parser_error, f"Parse API Error: {detail}")
         except Exception as e:
             if self.runner_log:
                 self.runner_log.write(f"[red]Parse Error: {e}[/red]")
@@ -1312,12 +1241,8 @@ class MainApp(App):
             )
         except Exception as e:
             if self.runner_log:
-                self.runner_log.write(
-                    f"\n[red]Error reloading parser config: {e}[/red]"
-                )
-            await self._set_error_message(
-                self.parser_error, f"Parser config reload failed: {e}"
-            )
+                self.runner_log.write(f"\n[red]Error reloading parser config: {e}[/red]")
+            await self._set_error_message(self.parser_error, f"Parser config reload failed: {e}")
             app_logger.error(f"TUI parser config reload error: {e}", exc_info=True)
 
     @on(Input.Submitted, "#clarifier-input")
@@ -1347,9 +1272,7 @@ class MainApp(App):
                 )
                 return
         except NoMatches:
-            await self._set_error_message(
-                self.clarifier_error, _("Clarifier table not found.")
-            )
+            await self._set_error_message(self.clarifier_error, _("Clarifier table not found."))
             return
 
         try:
@@ -1363,9 +1286,7 @@ class MainApp(App):
                 )
 
             rating_for_api = (
-                1.0
-                if response.lower() == "yes"
-                else (0.0 if response.lower() == "no" else 0.5)
+                1.0 if response.lower() == "yes" else (0.0 if response.lower() == "no" else 0.5)
             )
 
             result = await self._make_api_request(
@@ -1388,24 +1309,17 @@ class MainApp(App):
             detail = getattr(e, "detail", str(e))
             if self.runner_log:
                 self.runner_log.write(f"[red]Clarifier API Error: {detail}[/red]")
-            await self._set_error_message(
-                self.clarifier_error, f"Clarifier API Error: {detail}"
-            )
+            await self._set_error_message(self.clarifier_error, f"Clarifier API Error: {detail}")
         except Exception as e:
             if self.runner_log:
                 self.runner_log.write(f"[red]Clarification Error: {e}[/red]")
-            await self._set_error_message(
-                self.clarifier_error, f"Unexpected error: {e}"
-            )
+            await self._set_error_message(self.clarifier_error, f"Unexpected error: {e}")
             app_logger.error(f"TUI clarification error: {e}", exc_info=True)
 
     @on(Select.Changed, "#metrics-refresh-interval")
     async def on_metrics_refresh_interval_changed(self, event: Select.Changed):
         """Handle change in metrics refresh interval."""
-        if (
-            hasattr(self, "metrics_update_interval_task")
-            and self.metrics_update_interval_task
-        ):
+        if hasattr(self, "metrics_update_interval_task") and self.metrics_update_interval_task:
             self.metrics_update_interval_task.stop()  # Use .stop() for Timers
 
         # Ensure event.value is valid before conversion
@@ -1420,20 +1334,14 @@ class MainApp(App):
                 clear_after=2,
             )
         except (ValueError, TypeError):
-            app_logger.error(
-                f"Invalid metrics refresh interval received: {event.value}"
-            )
-            await self._set_error_message(
-                self.metrics_error, _(f"Invalid interval: {event.value}")
-            )
+            app_logger.error(f"Invalid metrics refresh interval received: {event.value}")
+            await self._set_error_message(self.metrics_error, _(f"Invalid interval: {event.value}"))
 
     @on(Button.Pressed, "#refresh-metrics-button")
     async def refresh_metrics_button(self):
         await self._update_metrics()  # Call the internal metrics update
         await self.update_metrics_display()  # Call the API metrics update
-        await self._set_success_message(
-            self.metrics_error, _("Metrics refreshed!"), clear_after=2
-        )
+        await self._set_success_message(self.metrics_error, _("Metrics refreshed!"), clear_after=2)
 
     async def update_metrics_display(self):
         """Fetches and displays API-side system metrics."""
@@ -1447,13 +1355,9 @@ class MainApp(App):
             # Fetch API version (conceptual endpoint)
             api_version_str = "N/A"
             try:
-                version_info = await self._make_api_request(
-                    "GET", API_ENDPOINTS["api_version"]
-                )
+                version_info = await self._make_api_request("GET", API_ENDPOINTS["api_version"])
                 api_version_str = version_info.get("version", "N/A")
-            except (
-                Exception
-            ):  # Don't fail entire metrics display if version endpoint is missing
+            except Exception:  # Don't fail entire metrics display if version endpoint is missing
                 pass
 
             if self.metrics_display_api_version:  # Check if widget exists
@@ -1472,13 +1376,9 @@ class MainApp(App):
                                 f"  - {sub_key}: [green]{sub_value}[/green]\n"
                             )
                     else:
-                        display_text_parts.append(
-                            f"[cyan]{key}:[/cyan] [green]{value}[/green]\n"
-                        )
+                        display_text_parts.append(f"[cyan]{key}:[/cyan] [green]{value}[/green]\n")
             else:
-                display_text_parts.append(
-                    "[yellow]No metrics data returned from API.[/yellow]"
-                )
+                display_text_parts.append("[yellow]No metrics data returned from API.[/yellow]")
 
             if self.metrics_display:  # Check if widget exists
                 # Combine with local metrics
@@ -1494,21 +1394,15 @@ class MainApp(App):
         except (HTTPException, aiohttp.ClientError) as e:  # Catch API errors
             detail = getattr(e, "detail", str(e))
             if self.metrics_display:
-                self.metrics_display.update(
-                    f"[red]Failed to load API metrics: {detail}[/red]"
-                )
+                self.metrics_display.update(f"[red]Failed to load API metrics: {detail}[/red]")
             await self._set_error_message(
                 self.metrics_error, f"Failed to load API metrics: {detail}"
             )
             app_logger.error(f"TUI API metrics load error: {detail}", exc_info=True)
         except Exception as e:
             if self.metrics_display:
-                self.metrics_display.update(
-                    f"[red]Error updating API metrics: {e}[/red]"
-                )
-            await self._set_error_message(
-                self.metrics_error, f"Error updating API metrics: {e}"
-            )
+                self.metrics_display.update(f"[red]Error updating API metrics: {e}[/red]")
+            await self._set_error_message(self.metrics_error, f"Error updating API metrics: {e}")
             app_logger.error(f"TUI API metrics update error: {e}", exc_info=True)
 
     def action_help(self) -> None:

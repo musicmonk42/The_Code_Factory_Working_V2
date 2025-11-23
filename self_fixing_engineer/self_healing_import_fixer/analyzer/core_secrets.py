@@ -91,25 +91,17 @@ class SecretConfig:
     """Configuration for secrets management."""
 
     provider: SecretProvider = field(default_factory=lambda: SecretProvider.ENV_VARS)
-    aws_region: str = field(
-        default_factory=lambda: os.getenv("AWS_REGION", "us-east-1")
-    )
+    aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
     vault_url: Optional[str] = field(default_factory=lambda: os.getenv("VAULT_URL"))
     vault_token: Optional[str] = field(default_factory=lambda: os.getenv("VAULT_TOKEN"))
-    azure_vault_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("AZURE_VAULT_URL")
-    )
-    gcp_project_id: Optional[str] = field(
-        default_factory=lambda: os.getenv("GCP_PROJECT_ID")
-    )
+    azure_vault_url: Optional[str] = field(default_factory=lambda: os.getenv("AZURE_VAULT_URL"))
+    gcp_project_id: Optional[str] = field(default_factory=lambda: os.getenv("GCP_PROJECT_ID"))
     local_key_file: Optional[str] = field(
         default_factory=lambda: os.getenv("LOCAL_KEY_FILE", ".secrets.key")
     )
     cache_ttl_seconds: int = 300
     auto_rotation_days: int = 90
-    encryption_key: Optional[str] = field(
-        default_factory=lambda: os.getenv("ENCRYPTION_KEY")
-    )
+    encryption_key: Optional[str] = field(default_factory=lambda: os.getenv("ENCRYPTION_KEY"))
 
 
 class SecretsManager:
@@ -139,9 +131,7 @@ class SecretsManager:
                 "secretsmanager", region_name=self.config.aws_region
             )
         elif provider == SecretProvider.AWS_SSM and AWS_AVAILABLE:
-            self._providers[provider] = boto3.client(
-                "ssm", region_name=self.config.aws_region
-            )
+            self._providers[provider] = boto3.client("ssm", region_name=self.config.aws_region)
         elif provider == SecretProvider.HASHICORP_VAULT and VAULT_AVAILABLE:
             if not self.config.vault_url or not self.config.vault_token:
                 raise SecurityAnalysisError(
@@ -174,9 +164,7 @@ class SecretsManager:
     def _setup_encryption(self):
         """Set up local encryption for secrets."""
         if not CRYPTO_AVAILABLE:
-            raise SecurityAnalysisError(
-                "Cryptography library not found for local encryption."
-            )
+            raise SecurityAnalysisError("Cryptography library not found for local encryption.")
 
         try:
             if not self.config.encryption_key:
@@ -191,9 +179,7 @@ class SecretsManager:
                 key = self.config.encryption_key.encode()
                 self._cipher_suite = Fernet(key)
         except Exception as e:
-            raise SecurityAnalysisError(
-                f"Failed to set up local encryption: {e}"
-            ) from e
+            raise SecurityAnalysisError(f"Failed to set up local encryption: {e}") from e
 
     def get_secret(
         self, secret_name: str, version: Optional[str] = None, required: bool = False
@@ -226,9 +212,7 @@ class SecretsManager:
             value = self._get_from_provider(secret_name, version)
 
             if value is None and required:
-                raise SecurityAnalysisError(
-                    f"Required secret '{secret_name}' not found."
-                )
+                raise SecurityAnalysisError(f"Required secret '{secret_name}' not found.")
 
             # Cache the result
             if value is not None:
@@ -245,9 +229,7 @@ class SecretsManager:
             Exception,
         ) as e:
             # Catch specific provider exceptions and wrap in a general one
-            wrapped_e = SecurityAnalysisError(
-                f"Failed to retrieve secret '{secret_name}': {e}"
-            )
+            wrapped_e = SecurityAnalysisError(f"Failed to retrieve secret '{secret_name}': {e}")
             logger.error(str(wrapped_e), exc_info=True)
 
             # In production, always raise on failure
@@ -260,9 +242,7 @@ class SecretsManager:
 
             return None
 
-    def _get_from_provider(
-        self, secret_name: str, version: Optional[str] = None
-    ) -> Optional[str]:
+    def _get_from_provider(self, secret_name: str, version: Optional[str] = None) -> Optional[str]:
         """Retrieve secret from the specific provider."""
         provider = self.config.provider
 
@@ -311,9 +291,7 @@ class SecretsManager:
             if not client:
                 raise ValueError("HashiCorp Vault client not initialized")
 
-            response = client.secrets.kv.v2.read_secret_version(
-                path=secret_name, version=version
-            )
+            response = client.secrets.kv.v2.read_secret_version(path=secret_name, version=version)
             return response["data"]["data"].get("value")
 
         elif provider == SecretProvider.AZURE_KEY_VAULT:
@@ -374,18 +352,14 @@ class SecretsManager:
                 except ClientError as e:
                     if e.response["Error"]["Code"] == "ResourceExistsException":
                         # Update existing secret
-                        client.update_secret(
-                            SecretId=secret_name, SecretString=secret_value
-                        )
+                        client.update_secret(SecretId=secret_name, SecretString=secret_value)
                 return True
 
             elif provider == SecretProvider.LOCAL_ENCRYPTED:
                 return self._set_local_encrypted_secret(secret_name, secret_value)
 
             else:
-                logger.warning(
-                    f"Set operation not implemented for provider: {provider}"
-                )
+                logger.warning(f"Set operation not implemented for provider: {provider}")
                 return False
 
         except Exception as e:
@@ -436,9 +410,7 @@ class SecretsManager:
                 return result
 
             else:
-                logger.warning(
-                    f"Delete operation not implemented for provider: {provider}"
-                )
+                logger.warning(f"Delete operation not implemented for provider: {provider}")
                 return False
 
         except Exception as e:
@@ -552,9 +524,7 @@ class SecretsManager:
             provider = self.config.provider
 
             if provider == SecretProvider.ENV_VARS:
-                secrets = [
-                    k for k in os.environ.keys() if not prefix or k.startswith(prefix)
-                ]
+                secrets = [k for k in os.environ.keys() if not prefix or k.startswith(prefix)]
                 return secrets
 
             elif provider == SecretProvider.AWS_SECRETS_MANAGER:
@@ -582,9 +552,7 @@ class SecretsManager:
                 return secrets
 
             else:
-                logger.warning(
-                    f"List operation not implemented for provider: {provider}"
-                )
+                logger.warning(f"List operation not implemented for provider: {provider}")
                 return []
 
         except Exception as e:

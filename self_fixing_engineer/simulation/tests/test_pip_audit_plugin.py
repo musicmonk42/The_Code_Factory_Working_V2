@@ -128,15 +128,13 @@ def test_load_config_from_env_override():
         with open(mock_config_path, "w") as f:
             json.dump({"default_scan_method": "installed"}, f)
 
-        with patch.dict(
-            os.environ, {"PIP_AUDIT_DEFAULT_SCAN_METHOD": "requirements"}
-        ), patch("simulation.plugins.pip_audit_plugin.Path") as mock_path_cls:
+        with patch.dict(os.environ, {"PIP_AUDIT_DEFAULT_SCAN_METHOD": "requirements"}), patch(
+            "simulation.plugins.pip_audit_plugin.Path"
+        ) as mock_path_cls:
             # Mock the Path class to return our test config path
             mock_path_instance = MagicMock()
             mock_path_instance.__truediv__ = lambda self, other: (
-                mock_config_path
-                if other == "pip_audit_config.json"
-                else Path(temp_dir) / other
+                mock_config_path if other == "pip_audit_config.json" else Path(temp_dir) / other
             )
             mock_path_instance.parent = Path(temp_dir) / "configs"
             mock_path_cls.return_value = mock_path_instance
@@ -172,9 +170,7 @@ async def test_plugin_health_success(mock_external_dependencies):
 @pytest.mark.asyncio
 async def test_plugin_health_cli_not_found():
     """Test that plugin_health returns 'error' when pip-audit is not found."""
-    with patch(
-        "simulation.plugins.pip_audit_plugin._which", new=AsyncMock(return_value=None)
-    ):
+    with patch("simulation.plugins.pip_audit_plugin._which", new=AsyncMock(return_value=None)):
         result = await plugin_health()
         assert result["status"] == "error"
         assert "'pip-audit' not found in PATH" in str(result["details"])
@@ -199,9 +195,7 @@ def test_validate_safe_args_injection_failure():
 
 
 @pytest.mark.asyncio
-async def test_scan_dependencies_success_with_findings(
-    mock_external_dependencies, mock_filesystem
-):
+async def test_scan_dependencies_success_with_findings(mock_external_dependencies, mock_filesystem):
     """
     Tests a successful scan with vulnerabilities found in the output.
     """
@@ -211,9 +205,7 @@ async def test_scan_dependencies_success_with_findings(
         b'{"vulnerabilities": [{"package": {"name": "requests"}, "vuln": {"id": "CVE-123"}}]}',
         b"",
     )
-    mock_subprocess_exec.return_value.returncode = (
-        1  # pip-audit returns 1 on vulnerabilities
-    )
+    mock_subprocess_exec.return_value.returncode = 1  # pip-audit returns 1 on vulnerabilities
 
     result = await scan_dependencies(
         target_path="requirements.txt",
@@ -292,9 +284,7 @@ async def test_scan_dependencies_timeout_persistent_failure(mock_external_depend
     # The test runner shows that the execution consistently stops after 4 calls:
     # 1 (version) + 1 (freeze) + 1 (main scan fail) + 1 (retry freeze)
     # So we will set up our mocks for 4 calls and assert that count.
-    with patch(
-        "simulation.plugins.pip_audit_plugin.PIP_AUDIT_CONFIG.retry_attempts", 1
-    ):
+    with patch("simulation.plugins.pip_audit_plugin.PIP_AUDIT_CONFIG.retry_attempts", 1):
         mock_subprocess_exec.side_effect = [
             version_proc,  # Call 1: --version
             create_freeze_proc(),  # Call 2: freeze for attempt 1
@@ -313,9 +303,7 @@ async def test_scan_dependencies_timeout_persistent_failure(mock_external_depend
 
             # Verify the exception is the correct type.
             assert isinstance(exc_info.value, RetryError)
-            assert isinstance(
-                exc_info.value.last_attempt.exception(), TransientScanError
-            )
+            assert isinstance(exc_info.value.last_attempt.exception(), TransientScanError)
 
         except ImportError:
             # Fallback for when tenacity isn't installed

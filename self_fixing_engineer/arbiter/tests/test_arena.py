@@ -106,9 +106,7 @@ class TestArbiterArena:
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
                     # Mock the start and stop methods
-                    with patch.object(
-                        arena, "start_arena_services", new_callable=AsyncMock
-                    ):
+                    with patch.object(arena, "start_arena_services", new_callable=AsyncMock):
                         with patch.object(arena, "stop_all", new_callable=AsyncMock):
                             async with arena as a:
                                 assert a == arena

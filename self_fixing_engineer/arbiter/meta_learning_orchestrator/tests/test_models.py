@@ -188,9 +188,7 @@ def test_model_version_low_accuracy(model_version_data):
     invalid_data["evaluation_metrics"] = {"accuracy": 0.70, "precision": 0.65}
     invalid_data["deployment_status"] = DeploymentStatus.DEPLOYED
     invalid_data["is_active"] = True
-    with pytest.raises(
-        ValueError, match="Model accuracy.*is below deployment threshold"
-    ):
+    with pytest.raises(ValueError, match="Model accuracy.*is below deployment threshold"):
         ModelVersion(**invalid_data)
 
 
@@ -199,9 +197,7 @@ def test_model_version_deployed_not_active(model_version_data):
     invalid_data = model_version_data.copy()
     invalid_data["deployment_status"] = DeploymentStatus.DEPLOYED
     invalid_data["is_active"] = False
-    with pytest.raises(
-        ValueError, match="'deployed' status must also be 'is_active: True'"
-    ):
+    with pytest.raises(ValueError, match="'deployed' status must also be 'is_active: True'"):
         ModelVersion(**invalid_data)
 
 

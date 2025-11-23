@@ -92,13 +92,9 @@ def mock_dependencies(monkeypatch):
 
         return decorator
 
-    monkeypatch.setattr(
-        "test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator
-    )
+    monkeypatch.setattr("test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator)
 
-    monkeypatch.setattr(
-        "test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1"
-    )
+    monkeypatch.setattr("test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1")
 
     return {
         "limiter": mock_limiter,
@@ -227,9 +223,7 @@ class TestSecurity:
             # The decorator itself is called, which returns another decorator
             mock_jwt_required.return_value = mock_decorator_return()
 
-            app_with_jwt = create_app(
-                {"SECRET_KEY": "test-key", "JWT_SECRET_KEY": "test-jwt-key"}
-            )
+            app_with_jwt = create_app({"SECRET_KEY": "test-key", "JWT_SECRET_KEY": "test-jwt-key"})
             app_with_jwt.testing = True
 
             response = app_with_jwt.test_client().post(
@@ -259,9 +253,7 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
     monkeypatch.setattr("test_generation.gen_agent.api.build_graph", MagicMock())
 
     if env == "prod" and not jwt_available:
-        with pytest.raises(
-            RuntimeError, match="JWT authentication is required in production"
-        ):
+        with pytest.raises(RuntimeError, match="JWT authentication is required in production"):
             create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
     else:
         # Should not raise an error
@@ -320,9 +312,7 @@ class TestOperational:
                 "framework": "pytest",
                 "spec_format": "gherkin",
             }
-            response = app_with_limiter.test_client().post(
-                "/generate-tests", json=payload
-            )
+            response = app_with_limiter.test_client().post("/generate-tests", json=payload)
 
             assert response.status_code == 429
             data = response.get_json()
@@ -357,16 +347,12 @@ class TestFailurePath:
             "test_generation.gen_agent.api.runtime_init_llm",
             side_effect=Exception("LLM connection failed."),
         ):
-            with patch(
-                "test_generation.gen_agent.api.logging.Logger.error"
-            ) as mock_log:
+            with patch("test_generation.gen_agent.api.logging.Logger.error") as mock_log:
                 # The create_app call must be inside the patch block
                 app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
                 app.testing = True
 
-                mock_log.assert_called_with(
-                    "LLM init failed at startup: LLM connection failed."
-                )
+                mock_log.assert_called_with("LLM init failed at startup: LLM connection failed.")
                 assert app.config["_GRAPH"] is None
 
             payload = {

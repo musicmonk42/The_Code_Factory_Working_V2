@@ -173,9 +173,7 @@ class CircuitBreaker:
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
                 async with self._local_lock:
-                    state, failures, last_failure, attempts = await self._get_state(
-                        channel
-                    )
+                    state, failures, last_failure, attempts = await self._get_state(channel)
                     now = time.time()
 
                     if state == "OPEN":
@@ -191,13 +189,9 @@ class CircuitBreaker:
                                     }
                                 )
                             )
-                            await self._set_state(
-                                channel, state, failures, last_failure, attempts
-                            )
+                            await self._set_state(channel, state, failures, last_failure, attempts)
                         else:
-                            NOTIFICATION_CIRCUIT_BREAKER_OPEN.labels(
-                                channel=channel
-                            ).inc()
+                            NOTIFICATION_CIRCUIT_BREAKER_OPEN.labels(channel=channel).inc()
                             logger.warning(
                                 json.dumps(
                                     {
@@ -206,9 +200,7 @@ class CircuitBreaker:
                                     }
                                 )
                             )
-                            raise CircuitBreakerOpenError(
-                                f"Circuit breaker for {channel} is OPEN."
-                            )
+                            raise CircuitBreakerOpenError(f"Circuit breaker for {channel} is OPEN.")
 
                     if state == "HALF_OPEN":
                         if attempts >= self.half_open_attempts:
@@ -224,15 +216,9 @@ class CircuitBreaker:
                                     }
                                 )
                             )
-                            await self._set_state(
-                                channel, state, failures, last_failure, attempts
-                            )
-                            NOTIFICATION_CIRCUIT_BREAKER_OPEN.labels(
-                                channel=channel
-                            ).inc()
-                            raise CircuitBreakerOpenError(
-                                f"Circuit breaker for {channel} is OPEN."
-                            )
+                            await self._set_state(channel, state, failures, last_failure, attempts)
+                            NOTIFICATION_CIRCUIT_BREAKER_OPEN.labels(channel=channel).inc()
+                            raise CircuitBreakerOpenError(f"Circuit breaker for {channel} is OPEN.")
                         else:
                             attempts += 1
                             logger.info(
@@ -245,9 +231,7 @@ class CircuitBreaker:
                                     }
                                 )
                             )
-                            await self._set_state(
-                                channel, state, failures, last_failure, attempts
-                            )
+                            await self._set_state(channel, state, failures, last_failure, attempts)
 
                 try:
                     result = await func(*args, **kwargs)
@@ -267,21 +251,15 @@ class CircuitBreaker:
                                 )
                             )
                             await self._set_state(channel, "CLOSED", 0, 0.0, 0)
-                            NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(
-                                channel=channel
-                            ).set(0)
+                            NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(channel=channel).set(0)
                     return result
                 except Exception as e:
                     async with self._local_lock:
                         # Re-fetch state before modification
-                        state, failures, last_failure, attempts = await self._get_state(
-                            channel
-                        )
+                        state, failures, last_failure, attempts = await self._get_state(channel)
                         failures += 1
                         last_failure = time.time()
-                        NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(channel=channel).set(
-                            failures
-                        )
+                        NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(channel=channel).set(failures)
                         if state == "HALF_OPEN" or failures >= self.failure_threshold:
                             state = "OPEN"
                             logger.error(
@@ -309,9 +287,7 @@ class CircuitBreaker:
                                             }
                                         )
                                     )
-                        await self._set_state(
-                            channel, state, failures, last_failure, attempts
-                        )
+                        await self._set_state(channel, state, failures, last_failure, attempts)
                     raise e
 
             return wrapper
@@ -378,9 +354,7 @@ class RateLimiter:
                             )
                         )
                         NOTIFICATION_RATE_LIMITED.labels(channel=channel).inc()
-                        raise RateLimitExceededError(
-                            f"Rate limit exceeded for channel {channel}."
-                        )
+                        raise RateLimitExceededError(f"Rate limit exceeded for channel {channel}.")
                 else:  # In-memory fallback
                     async with self._local_lock:
                         timestamps = self._call_timestamps[channel]
@@ -462,8 +436,8 @@ class NotificationService:
 
     def __init__(self, settings: Any):
         self.settings = settings
-        self._notification_failures: Dict[str, collections.deque] = (
-            collections.defaultdict(collections.deque)
+        self._notification_failures: Dict[str, collections.deque] = collections.defaultdict(
+            collections.deque
         )
         self._last_escalation_time: Dict[str, float] = collections.defaultdict(float)
         self._escalation_lock = asyncio.Lock()
@@ -472,9 +446,7 @@ class NotificationService:
         # Initialize circuit breaker and rate limiter instances from settings
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=getattr(settings, "NOTIFICATION_FAILURE_THRESHOLD", 5),
-            recovery_timeout=getattr(
-                settings, "NOTIFICATION_RECOVERY_TIMEOUT_SECONDS", 300
-            ),
+            recovery_timeout=getattr(settings, "NOTIFICATION_RECOVERY_TIMEOUT_SECONDS", 300),
             half_open_attempts=getattr(settings, "NOTIFICATION_HALF_OPEN_ATTEMPTS", 1),
             redis_url=getattr(settings, "NOTIFICATION_REDIS_URL", None),
             escalation_handler=getattr(
@@ -483,15 +455,11 @@ class NotificationService:
                 default_escalation_handler,
             ),
         )
-        self.rate_limiter = RateLimiter(
-            redis_url=getattr(settings, "NOTIFICATION_REDIS_URL", None)
-        )
+        self.rate_limiter = RateLimiter(redis_url=getattr(settings, "NOTIFICATION_REDIS_URL", None))
 
         # Settings for retries
         self.retry_attempts = getattr(settings, "NOTIFICATION_RETRY_ATTEMPTS", 3)
-        self.retry_wait_seconds = getattr(
-            settings, "NOTIFICATION_RETRY_WAIT_SECONDS", 2
-        )
+        self.retry_wait_seconds = getattr(settings, "NOTIFICATION_RETRY_WAIT_SECONDS", 2)
 
         # Validate settings
         self._validate_settings()
@@ -514,9 +482,7 @@ class NotificationService:
                     self.settings.EMAIL_SMTP_PASSWORD,
                 ]
             ):
-                raise ValueError(
-                    "Email SMTP settings incomplete but channel is enabled."
-                )
+                raise ValueError("Email SMTP settings incomplete but channel is enabled.")
         if "pagerduty" in enabled_channels and not getattr(
             self.settings, "PAGERDUTY_ROUTING_KEY", None
         ):
@@ -527,9 +493,7 @@ class NotificationService:
         Performs asynchronous initialization tasks, including setting up
         client sessions and Redis connections.
         """
-        connector = aiohttp.TCPConnector(
-            limit=getattr(self.settings, "AIOHTTP_CONN_LIMIT", 100)
-        )
+        connector = aiohttp.TCPConnector(limit=getattr(self.settings, "AIOHTTP_CONN_LIMIT", 100))
         self._session = aiohttp.ClientSession(connector=connector)
         await self.circuit_breaker.initialize()
         await self.rate_limiter.initialize()
@@ -553,15 +517,12 @@ class NotificationService:
             timestamps = self._notification_failures[channel]
             while (
                 timestamps
-                and timestamps[0]
-                <= now - self.settings.NOTIFICATION_FAILURE_WINDOW_SECONDS
+                and timestamps[0] <= now - self.settings.NOTIFICATION_FAILURE_WINDOW_SECONDS
             ):
                 timestamps.popleft()
 
             consecutive_failures = len(timestamps)
-            NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(channel=channel).set(
-                consecutive_failures
-            )
+            NOTIFICATION_CURRENT_FAILURES_GAUGE.labels(channel=channel).set(consecutive_failures)
 
             if consecutive_failures >= self.settings.NOTIFICATION_FAILURE_THRESHOLD:
                 if (
@@ -638,9 +599,7 @@ class NotificationService:
                     }
                 )
             )
-            raise NotificationError(
-                f"Simulated {channel} failure.", channel, "SIMULATED_FAILURE"
-            )
+            raise NotificationError(f"Simulated {channel} failure.", channel, "SIMULATED_FAILURE")
 
     @property
     def _notify_slack_with_decorators(self):
@@ -688,11 +647,7 @@ class NotificationService:
                         await self._record_notification_success("slack")
                         return True
                 except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    error_code = (
-                        "TIMEOUT"
-                        if isinstance(e, asyncio.TimeoutError)
-                        else "API_ERROR"
-                    )
+                    error_code = "TIMEOUT" if isinstance(e, asyncio.TimeoutError) else "API_ERROR"
                     error_message = f"Slack notification failed: {e}"
                     logger.error(
                         json.dumps(
@@ -704,9 +659,7 @@ class NotificationService:
                             }
                         )
                     )
-                    await self._record_notification_failure(
-                        "slack", error_message, error_code
-                    )
+                    await self._record_notification_failure("slack", error_message, error_code)
                     raise NotificationError(error_message, "slack", error_code) from e
                 except Exception as e:
                     await self._record_notification_failure(
@@ -789,15 +742,11 @@ class NotificationService:
                     if self.settings.EMAIL_USE_STARTTLS:
                         await smtp.starttls()
                     else:
-                        logger.warning(
-                            "STARTTLS disabled - insecure; forcing enable if possible."
-                        )
+                        logger.warning("STARTTLS disabled - insecure; forcing enable if possible.")
                         try:
                             await smtp.starttls()
                         except Exception:
-                            logger.warning(
-                                "Failed to enable STARTTLS. Continuing without it."
-                            )
+                            logger.warning("Failed to enable STARTTLS. Continuing without it.")
 
                     await smtp.login(
                         self.settings.EMAIL_SMTP_USERNAME,
@@ -806,9 +755,9 @@ class NotificationService:
                     await smtp.send_message(msg)
                     await smtp.quit()
 
-                    redacted_recipients = redact_pii(
-                        {"recipients": ", ".join(recipients)}
-                    )["recipients"]
+                    redacted_recipients = redact_pii({"recipients": ", ".join(recipients)})[
+                        "recipients"
+                    ]
                     logger.info(
                         json.dumps(
                             {
@@ -829,9 +778,7 @@ class NotificationService:
                     ) from e
                 except Exception as e:
                     error_code = (
-                        "TIMEOUT"
-                        if isinstance(e, asyncio.TimeoutError)
-                        else "UNEXPECTED_ERROR"
+                        "TIMEOUT" if isinstance(e, asyncio.TimeoutError) else "UNEXPECTED_ERROR"
                     )
                     await self._record_notification_failure(
                         "email", f"Unexpected email error: {e}", error_code
@@ -887,9 +834,7 @@ class NotificationService:
                     "source": "ArbiterAI.BugManager",
                     "severity": "critical",  # Default to critical for PD
                     "custom_details": (
-                        validate_input_details(redacted_details)
-                        if redacted_details
-                        else {}
+                        validate_input_details(redacted_details) if redacted_details else {}
                     ),
                 },
             }
@@ -913,11 +858,7 @@ class NotificationService:
                         await self._record_notification_success("pagerduty")
                         return True
                 except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    error_code = (
-                        "TIMEOUT"
-                        if isinstance(e, asyncio.TimeoutError)
-                        else "API_ERROR"
-                    )
+                    error_code = "TIMEOUT" if isinstance(e, asyncio.TimeoutError) else "API_ERROR"
                     error_message = f"PagerDuty API failed: {e}"
                     logger.error(
                         json.dumps(
@@ -929,12 +870,8 @@ class NotificationService:
                             }
                         )
                     )
-                    await self._record_notification_failure(
-                        "pagerduty", error_message, error_code
-                    )
-                    raise NotificationError(
-                        error_message, "pagerduty", error_code
-                    ) from e
+                    await self._record_notification_failure("pagerduty", error_message, error_code)
+                    raise NotificationError(error_message, "pagerduty", error_code) from e
                 except Exception as e:
                     await self._record_notification_failure(
                         "pagerduty",
@@ -963,9 +900,7 @@ class NotificationService:
             List[Any]: A list containing the results of each notification task,
                        including raised exceptions.
         """
-        sem = asyncio.Semaphore(
-            getattr(self.settings, "NOTIFICATION_BATCH_CONCURRENCY", 10)
-        )
+        sem = asyncio.Semaphore(getattr(self.settings, "NOTIFICATION_BATCH_CONCURRENCY", 10))
         tasks = []
 
         async def bounded_task(task):
@@ -1000,11 +935,7 @@ class NotificationService:
                     )
                 )
             else:
-                logger.error(
-                    json.dumps(
-                        {"event": "unknown_channel_in_batch", "channel": channel}
-                    )
-                )
+                logger.error(json.dumps({"event": "unknown_channel_in_batch", "channel": channel}))
 
                 # Create a failed task for unknown channels
                 async def failed_task():

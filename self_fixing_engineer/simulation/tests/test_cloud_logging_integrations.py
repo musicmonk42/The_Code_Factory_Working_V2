@@ -52,9 +52,7 @@ def aws_mocks():
         boto3_instance.describe_log_groups.return_value = {
             "logGroups": [{"logGroupName": "mock-group"}]
         }
-        boto3_instance.put_log_events.return_value = {
-            "nextSequenceToken": "new-mock-token"
-        }
+        boto3_instance.put_log_events.return_value = {"nextSequenceToken": "new-mock-token"}
         boto3_instance.describe_log_streams.return_value = {
             "logStreams": [{"uploadSequenceToken": "mock-token"}]
         }
@@ -371,9 +369,7 @@ class MockGCPLogger:
 async def test_gcp_logger_health_check_success(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
-    with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
-    ):
+    with patch("simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
 
@@ -386,14 +382,10 @@ async def test_gcp_logger_health_check_success(gcp_mocks):
 async def test_gcp_logger_health_check_auth_error(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
-    with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
-    ):
+    with patch("simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
-        logger._health_check_error = CloudLoggingAuthError(
-            "No permission", cloud_type="gcp"
-        )
+        logger._health_check_error = CloudLoggingAuthError("No permission", cloud_type="gcp")
 
         with pytest.raises(CloudLoggingAuthError, match="No permission"):
             await logger.health_check()
@@ -404,9 +396,7 @@ async def test_gcp_logger_health_check_auth_error(gcp_mocks):
 async def test_gcp_logger_flushes_batch(gcp_mocks):
     config = {"gcp_logging": {"project_id": "mock-project"}}
 
-    with patch(
-        "simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger
-    ):
+    with patch("simulation.plugins.cloud_logging_integrations.GCPLogger", MockGCPLogger):
         logger = MockGCPLogger(config)
         logger._client = gcp_mocks
 
@@ -545,9 +535,7 @@ async def test_azure_logger_auto_flushes_on_exit(azure_config, azure_mocks):
 
 
 def test_get_cloud_logger_factory_with_valid_config(azure_config):
-    with patch(
-        "simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True
-    ), patch(
+    with patch("simulation.plugins.cloud_logging_integrations.AWS_AVAILABLE", True), patch(
         "simulation.plugins.cloud_logging_integrations.GCP_AVAILABLE", True
     ), patch(
         "simulation.plugins.cloud_logging_integrations.AZURE_MONITOR_INGESTION_AVAILABLE",
@@ -560,16 +548,12 @@ def test_get_cloud_logger_factory_with_valid_config(azure_config):
     ):
 
         aws_config = {"aws_cloudwatch": {"log_group_name": "test-group"}}
-        assert isinstance(
-            get_cloud_logger("aws_cloudwatch", aws_config), CloudWatchLogger
-        )
+        assert isinstance(get_cloud_logger("aws_cloudwatch", aws_config), CloudWatchLogger)
 
         gcp_config = {"gcp_logging": {"project_id": "test-project"}}
         assert isinstance(get_cloud_logger("gcp_logging", gcp_config), GCPLogger)
 
-        assert isinstance(
-            get_cloud_logger("azure_monitor", azure_config), AzureMonitorLogger
-        )
+        assert isinstance(get_cloud_logger("azure_monitor", azure_config), AzureMonitorLogger)
 
 
 def test_get_cloud_logger_factory_with_invalid_type():

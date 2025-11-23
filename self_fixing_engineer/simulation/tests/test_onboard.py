@@ -43,9 +43,7 @@ def mock_external_dependencies():
 
     mock_checkpoint_manager = MagicMock()
     mock_checkpoint_manager.return_value.save = AsyncMock()
-    mock_checkpoint_manager.return_value.load = AsyncMock(
-        return_value={"status": "healthy"}
-    )
+    mock_checkpoint_manager.return_value.load = AsyncMock(return_value={"status": "healthy"})
     mock_checkpoint_manager.return_value.delete = AsyncMock()
     mock_checkpoint_manager._BACKENDS = {"fs": None}
 
@@ -72,9 +70,7 @@ def mock_external_dependencies():
         patch("simulation.plugins.onboard.crypto_available", True),
         patch("simulation.plugins.onboard.prometheus_available", True),
         patch("simulation.plugins.onboard.tenacity_available", True),
-        patch(
-            "simulation.plugins.onboard.aiofiles_available", False
-        ),  # Use sync file operations
+        patch("simulation.plugins.onboard.aiofiles_available", False),  # Use sync file operations
         patch("simulation.plugins.onboard.requests.post"),
         (
             patch("simulation.plugins.onboard.hvac.Client")
@@ -98,12 +94,8 @@ def mock_external_dependencies():
     mock_requests_post.return_value.raise_for_status = MagicMock()
 
     mock_hvac_client = started_patches[8] if len(started_patches) > 8 else MagicMock()
-    mock_subprocess_run = (
-        started_patches[9] if len(started_patches) > 9 else MagicMock()
-    )
-    mock_webbrowser_open = (
-        started_patches[10] if len(started_patches) > 10 else MagicMock()
-    )
+    mock_subprocess_run = started_patches[9] if len(started_patches) > 9 else MagicMock()
+    mock_webbrowser_open = started_patches[10] if len(started_patches) > 10 else MagicMock()
 
     yield {
         "mock_requests_post": mock_requests_post,
@@ -210,13 +202,9 @@ async def test_onboarding_wizard_full_flow(
 
         # Verify that all key files were created
         assert (mock_filesystem["temp_path"] / "configs" / "config.json").exists()
-        assert (
-            mock_filesystem["temp_path"] / "plugins" / "demo_python_plugin.py"
-        ).exists()
+        assert (mock_filesystem["temp_path"] / "plugins" / "demo_python_plugin.py").exists()
         assert (mock_filesystem["temp_path"] / "results" / "README.md").exists()
-        assert (
-            mock_filesystem["temp_path"] / ".github" / "workflows" / "ci.yaml"
-        ).exists()
+        assert (mock_filesystem["temp_path"] / ".github" / "workflows" / "ci.yaml").exists()
 
         # Verify health checks were called
         mock_external_dependencies["MockMeshPubSub"].assert_called()
@@ -227,9 +215,7 @@ async def test_onboarding_wizard_full_flow(
 
 
 @pytest.mark.asyncio
-async def test_safe_mode_profile_generation(
-    mock_filesystem, mock_external_dependencies
-):
+async def test_safe_mode_profile_generation(mock_filesystem, mock_external_dependencies):
     """Test the --safe mode to ensure local-only config is generated."""
     with patch("simulation.plugins.onboard.print_status"):
         await _safe_mode_profile()
@@ -249,9 +235,7 @@ async def test_safe_mode_profile_generation(
 
 
 @pytest.mark.asyncio
-async def test_run_health_checks_with_failures(
-    mock_external_dependencies, mock_filesystem
-):
+async def test_run_health_checks_with_failures(mock_external_dependencies, mock_filesystem):
     """Test that health checks correctly report failures."""
     # Mock one health check to fail
     mock_external_dependencies["MockMeshPubSub"].return_value.healthcheck = AsyncMock(
@@ -267,9 +251,7 @@ async def test_run_health_checks_with_failures(
         await _run_health_checks(mock_config)
 
         # Verify that an error message was printed for the failed check
-        mock_print_status.assert_any_call(
-            "Pub/Sub Health: ERROR - Mocked failure", "err"
-        )
+        mock_print_status.assert_any_call("Pub/Sub Health: ERROR - Mocked failure", "err")
         mock_print_status.assert_any_call(
             "Checkpoint Health: OK (saved and loaded test data successfully for fs).",
             "ok",
@@ -301,9 +283,7 @@ async def test_reset_to_safe_mode(mock_filesystem, mock_external_dependencies):
 # ==============================================================================
 
 
-def test_generate_secure_config_local_encrypted(
-    mock_filesystem, mock_external_dependencies
-):
+def test_generate_secure_config_local_encrypted(mock_filesystem, mock_external_dependencies):
     """Test local secret encryption and storage."""
     with patch("simulation.plugins.onboard.print_status"), patch(
         "simulation.plugins.onboard.crypto_available", True
@@ -333,9 +313,7 @@ def test_generate_secure_config_local_encrypted(
         assert data["secrets"]["API_KEY"] == "encrypted_value"
 
 
-def test_load_secure_config_local_decrypted(
-    mock_filesystem, mock_external_dependencies
-):
+def test_load_secure_config_local_decrypted(mock_filesystem, mock_external_dependencies):
     """Test local secret decryption and loading."""
     # First, generate an encrypted file
     key = Fernet.generate_key()

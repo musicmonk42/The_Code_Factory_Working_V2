@@ -388,16 +388,12 @@ class TestPublishing:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)
-    async def test_publish_fails_after_max_retries(
-        self, mock_redis_client, reset_circuit_breaker
-    ):
+    async def test_publish_fails_after_max_retries(self, mock_redis_client, reset_circuit_breaker):
         mock_redis_client.publish.side_effect = ConnectionError()
         mock_redis_client.xadd.return_value = b"dlq-1"
         with patch("event_bus.get_redis_client", return_value=mock_redis_client):
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with pytest.raises(
-                    RuntimeError, match="Event publish failed permanently"
-                ):
+                with pytest.raises(RuntimeError, match="Event publish failed permanently"):
                     await publish_event("test", {"data": "value"})
                 assert mock_redis_client.publish.call_count == 3
                 mock_redis_client.xadd.assert_called()
@@ -430,9 +426,7 @@ class TestSubscription:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(2)  # Reduced timeout
-    async def test_subscribe_receives_message(
-        self, mock_redis_client, reset_circuit_breaker
-    ):
+    async def test_subscribe_receives_message(self, mock_redis_client, reset_circuit_breaker):
         received = []
 
         async def handler(data):
@@ -502,18 +496,14 @@ class TestDLQ:
         with patch("event_bus.get_redis_client", return_value=mock_redis_client):
             with patch("event_bus.publish_event", new_callable=AsyncMock) as mock_pub:
                 await replay_dlq()
-                mock_pub.assert_called_once_with(
-                    "test", {"key": "value"}, is_replay=True
-                )
+                mock_pub.assert_called_once_with("test", {"key": "value"}, is_replay=True)
                 mock_redis_client.xdel.assert_called_once()
 
 
 class TestIntegration:
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)
-    async def test_concurrent_publishers(
-        self, mock_redis_client, reset_circuit_breaker
-    ):
+    async def test_concurrent_publishers(self, mock_redis_client, reset_circuit_breaker):
         with patch("event_bus.get_redis_client", return_value=mock_redis_client):
             tasks = [publish_event(f"event_{i}", {"id": i}) for i in range(5)]
             await asyncio.gather(*tasks)

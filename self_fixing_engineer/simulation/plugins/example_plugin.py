@@ -32,17 +32,13 @@ if not _boot_logger.handlers:
 # Configuration Integration
 # ---------------------------
 # Load plugin configuration from adjacent JSON file if present; fall back to env/defaults.
-CONFIG_PATH = os.path.join(
-    os.path.dirname(__file__), "configs", "example_plugin_config.json"
-)
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "example_plugin_config.json")
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         PLUGIN_CONFIG = json.load(f)
         _boot_logger.info(f"Loaded plugin config: {CONFIG_PATH}")
 except FileNotFoundError:
-    _boot_logger.warning(
-        "Plugin config file not found. Using environment variables and defaults."
-    )
+    _boot_logger.warning("Plugin config file not found. Using environment variables and defaults.")
     PLUGIN_CONFIG = {}
 except json.JSONDecodeError as e:
     _boot_logger.error(f"Failed to parse plugin config JSON: {e}. Using defaults.")
@@ -124,9 +120,7 @@ def _scrub_secrets(content: str) -> str:
 # ---------------------------
 # In-memory cache for security audit results (thread-safe)
 # ---------------------------
-_audit_cache = TTLCache(
-    maxsize=256, ttl=int(os.getenv("SEC_AUDIT_CACHE_TTL_SECONDS", "3600"))
-)
+_audit_cache = TTLCache(maxsize=256, ttl=int(os.getenv("SEC_AUDIT_CACHE_TTL_SECONDS", "3600")))
 _audit_cache_lock = threading.Lock()
 
 
@@ -187,9 +181,7 @@ def _safe_counter(name: str, doc: str, labelnames: tuple = ()):
         _METRICS[name] = m
         return m
     except ValueError:
-        plugin_logger.warning(
-            f"Metric '{name}' already registered. Using no-op for this instance."
-        )
+        plugin_logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
         no = _noop_counter()
         _METRICS[name] = no
         return no
@@ -205,9 +197,7 @@ def _safe_histogram(name: str, doc: str, labelnames: tuple = (), buckets=None):
         _METRICS[name] = m
         return m
     except ValueError:
-        plugin_logger.warning(
-            f"Metric '{name}' already registered. Using no-op for this instance."
-        )
+        plugin_logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
         no = _noop_histogram()
         _METRICS[name] = no
         return no
@@ -241,9 +231,7 @@ def _get_env_float(name: str, default: float) -> float:
     try:
         return float(raw)
     except ValueError:
-        plugin_logger.warning(
-            f"Invalid float for env {name}: {raw}. Using default {default}."
-        )
+        plugin_logger.warning(f"Invalid float for env {name}: {raw}. Using default {default}.")
         return default
 
 
@@ -270,9 +258,7 @@ def plugin_health() -> Dict[str, Any]:
         _ = float(os.getenv("CHAOS_INTENSITY_DEFAULT", "0.5"))
     except ValueError:
         status = "degraded"
-        details.append(
-            "CHAOS_INTENSITY_DEFAULT is not a valid float; falling back to 0.5"
-        )
+        details.append("CHAOS_INTENSITY_DEFAULT is not a valid float; falling back to 0.5")
 
     # Check SANCTIONED_CODE_DIR existence
     sanctioned_dir = os.getenv("SANCTIONED_CODE_DIR", os.getcwd())
@@ -296,18 +282,16 @@ class ChaosExperimentParams(BaseModel):
     intensity: float = Field(0.5, ge=0.0, le=1.0)  # 0..1
 
 
-def run_custom_chaos_experiment(
-    target_id: str, intensity: float = 0.5
-) -> Dict[str, Any]:
+def run_custom_chaos_experiment(target_id: str, intensity: float = 0.5) -> Dict[str, Any]:
     """
     Simulates a custom chaos experiment.
     @param target_id: The ID of the system or agent to target.
     @param intensity: A float from 0.0 to 1.0 representing the intensity of the chaos.
     @return A dictionary with the outcome of the experiment.
     """
-    correlation_id = hashlib.sha256(
-        f"{target_id}:{time.time_ns()}".encode("utf-8")
-    ).hexdigest()[:12]
+    correlation_id = hashlib.sha256(f"{target_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[
+        :12
+    ]
 
     # Validate inputs
     try:
@@ -348,9 +332,7 @@ def run_custom_chaos_experiment(
             message = "High intensity chaos experiment caused a simulated failure."
         else:
             outcome = "EXPERIMENT_COMPLETED"
-            message = (
-                "Low intensity chaos experiment completed without significant impact."
-            )
+            message = "Low intensity chaos experiment completed without significant impact."
 
         CHAOS_EXPERIMENT_TOTAL.labels(status=outcome).inc()
         return {
@@ -592,9 +574,7 @@ def perform_custom_security_audit(code_path: str) -> Dict[str, Any]:
             "message": f"Permission denied for file access: {e}",
         }
     except Exception as e:
-        plugin_logger.error(
-            f"Error during security audit of {_scrub_secrets(code_path)}: {e}"
-        )
+        plugin_logger.error(f"Error during security audit of {_scrub_secrets(code_path)}: {e}")
         return {
             "plugin_name": PLUGIN_MANIFEST["name"],
             "status": "ERROR",
@@ -626,9 +606,7 @@ def example_plugin_dashboard_panel(st_dash_obj: Any, current_result: Dict[str, A
         )
         st_dash_obj.info(last_chaos_run.get("message", ""))
     else:
-        st_dash_obj.info(
-            "No chaos experiment data from this plugin in the current result."
-        )
+        st_dash_obj.info("No chaos experiment data from this plugin in the current result.")
 
     st_dash_obj.markdown("---")
 
@@ -665,9 +643,7 @@ def register_my_dashboard_panels(register_func: Callable):
     Called by the dashboard module to register panels.
     @param register_func: The registration function from the core dashboard.
     """
-    plugin_logger.info(
-        "Registering dashboard panels from ExampleChaosSecurityPlugin..."
-    )
+    plugin_logger.info("Registering dashboard panels from ExampleChaosSecurityPlugin...")
     register_func(
         panel_id="example_plugin_metrics",
         title="Chaos & Security Plugin Insights",

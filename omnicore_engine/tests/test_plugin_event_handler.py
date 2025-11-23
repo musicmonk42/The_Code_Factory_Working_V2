@@ -94,9 +94,7 @@ class TestPluginEventHandler:
             assert "Failed to schedule" in mock_logger.error.call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_handle_plugin_file_event_async_modified(
-        self, handler, mock_registry
-    ):
+    async def test_handle_plugin_file_event_async_modified(self, handler, mock_registry):
         """Test handling modified plugin file"""
         with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
             temp_file = f.name
@@ -120,9 +118,7 @@ class TestPluginEventHandler:
             await handler._handle_plugin_file_event_async(temp_file, "modified")
 
             # Verify registry was reloaded
-            mock_registry.load_from_directory.assert_called_once_with(
-                handler.plugin_dir
-            )
+            mock_registry.load_from_directory.assert_called_once_with(handler.plugin_dir)
 
             # Verify plugin was saved to DB
             mock_registry.db.save_plugin_legacy.assert_called_once()
@@ -172,18 +168,14 @@ class TestPluginEventHandler:
 
         with patch("os.path.realpath", return_value=temp_file):
             with patch("os.path.getmtime", return_value=current_mtime):
-                with patch(
-                    "omnicore_engine.plugin_event_handler.logger"
-                ) as mock_logger:
+                with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
                     await handler._handle_plugin_file_event_async(temp_file, "modified")
 
                     mock_logger.debug.assert_called()
                     assert "Skipping redundant" in mock_logger.debug.call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_handle_plugin_file_event_async_no_load_method(
-        self, handler, mock_registry
-    ):
+    async def test_handle_plugin_file_event_async_no_load_method(self, handler, mock_registry):
         """Test handling when registry lacks load_from_directory method"""
         delattr(mock_registry, "load_from_directory")
 
@@ -203,9 +195,7 @@ class TestPluginEventHandler:
             os.unlink(temp_file)
 
     @pytest.mark.asyncio
-    async def test_handle_plugin_file_event_async_plugin_not_found(
-        self, handler, mock_registry
-    ):
+    async def test_handle_plugin_file_event_async_plugin_not_found(self, handler, mock_registry):
         """Test handling when plugin not found in registry after reload"""
         with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as f:
             temp_file = f.name
@@ -249,9 +239,7 @@ class TestPluginEventHandler:
         """Test error handling in _handle_plugin_file_event_async"""
         with patch("os.path.realpath", side_effect=Exception("Path error")):
             with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
-                await handler._handle_plugin_file_event_async(
-                    "/tmp/test.py", "modified"
-                )
+                await handler._handle_plugin_file_event_async("/tmp/test.py", "modified")
 
                 mock_logger.error.assert_called()
                 assert "Error during async plugin" in mock_logger.error.call_args[0][0]

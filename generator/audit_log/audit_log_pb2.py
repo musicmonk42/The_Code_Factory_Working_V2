@@ -22,9 +22,7 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "audit_log_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\016ai.x.audit_logZ\016x.ai/audit_log"
-    )
+    _globals["DESCRIPTOR"]._serialized_options = b"\n\016ai.x.audit_logZ\016x.ai/audit_log"
     _globals["_LOGACTIONREQUEST"]._serialized_start = 31
     _globals["_LOGACTIONREQUEST"]._serialized_end = 388
     _globals["_LOGACTIONRESPONSE"]._serialized_start = 390

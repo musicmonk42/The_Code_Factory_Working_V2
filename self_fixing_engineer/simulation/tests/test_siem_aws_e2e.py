@@ -107,9 +107,7 @@ SECRETS_MANAGER = MockSecretsManager()
 
 # Test constants
 DEFAULT_REGION = os.environ.get("AWS_REGION", "us-east-1")
-LOG_GROUP_NAME = os.environ.get(
-    "SIEM_TEST_LOG_GROUP", f"siem-e2e-test-{uuid.uuid4().hex}"
-)
+LOG_GROUP_NAME = os.environ.get("SIEM_TEST_LOG_GROUP", f"siem-e2e-test-{uuid.uuid4().hex}")
 LOG_STREAM_NAME = f"e2e-test-{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
 TEST_SECRET_ID = os.environ.get("SIEM_TEST_SECRET_ID", None)
 TEST_QUERY_TIMEOUT_SECONDS = 120
@@ -121,12 +119,8 @@ class MockAwsCloudWatchClient:
         self.config = config
         self.metrics_hook = metrics_hook
         self.client_type = "AWSCloudWatch"
-        self.project_id = config.get("awscloudwatch", {}).get(
-            "region_name", DEFAULT_REGION
-        )
-        self.log_group_name = config.get("awscloudwatch", {}).get(
-            "log_group_name", LOG_GROUP_NAME
-        )
+        self.project_id = config.get("awscloudwatch", {}).get("region_name", DEFAULT_REGION)
+        self.log_group_name = config.get("awscloudwatch", {}).get("log_group_name", LOG_GROUP_NAME)
         self.log_stream_name = config.get("awscloudwatch", {}).get(
             "log_stream_name", LOG_STREAM_NAME
         )
@@ -175,9 +169,7 @@ class MockAwsCloudWatchClient:
             )
         return True, f"Batch of {len(log_entries)} logs sent to AWS CloudWatch Logs", []
 
-    async def query_logs(
-        self, query_string, time_range="1h", limit=100, correlation_id=None
-    ):
+    async def query_logs(self, query_string, time_range="1h", limit=100, correlation_id=None):
         """Mock querying logs."""
         # Simulate finding logs based on query
         results = []
@@ -272,9 +264,7 @@ def metrics_collector():
     logger.info(f"Collected {len(collector._metrics)} metrics during tests")
     if collector._metrics:
         success_count = sum(1 for m in collector._metrics if m["status"] == "success")
-        logger.info(
-            f"Success rate: {success_count / len(collector._metrics) * 100:.2f}%"
-        )
+        logger.info(f"Success rate: {success_count / len(collector._metrics) * 100:.2f}%")
 
 
 @pytest.fixture
@@ -436,9 +426,7 @@ async def test_send_log_batch(aws_client):
 
     success, message, failed_logs = await aws_client.send_logs(test_batch)
 
-    assert (
-        success is True
-    ), f"Failed to send batch: {message}, failed logs: {failed_logs}"
+    assert success is True, f"Failed to send batch: {message}, failed logs: {failed_logs}"
     assert f"Batch of {batch_size} logs sent" in message
     assert len(failed_logs) == 0, f"Some logs failed to send: {failed_logs}"
 
@@ -468,9 +456,7 @@ async def test_query_logs(aws_client):
     results = await aws_client.query_logs(query, time_range="10m", limit=10)
 
     assert len(results) >= 1, "Query did not return expected results"
-    assert any(
-        "unique_query_id" in r and r["unique_query_id"] == unique_id for r in results
-    )
+    assert any("unique_query_id" in r and r["unique_query_id"] == unique_id for r in results)
 
 
 @pytest.mark.asyncio
@@ -504,9 +490,7 @@ async def test_rate_limiting(siem_config, metrics_collector):
     strict_config["rate_limit_tps"] = 2
     strict_config["rate_limit_burst"] = 3
 
-    client = await get_siem_client(
-        "aws_cloudwatch", strict_config, metrics_hook=metrics_collector
-    )
+    client = await get_siem_client("aws_cloudwatch", strict_config, metrics_hook=metrics_collector)
 
     try:
         log_entries = generate_log_batch(10)
@@ -523,9 +507,7 @@ async def test_rate_limiting(siem_config, metrics_collector):
             assert not isinstance(result, Exception), f"Operation failed with: {result}"
 
         success_count = sum(1 for r in results if r[0] is True)
-        assert (
-            success_count == 10
-        ), f"Only {success_count}/10 logs were sent successfully"
+        assert success_count == 10, f"Only {success_count}/10 logs were sent successfully"
     finally:
         await client.close()
 
@@ -539,9 +521,7 @@ async def test_retry_logic(aws_client, monkeypatch):
     async def mock_send_with_failures(log_entry):
         retry_counter["count"] += 1
         if retry_counter["count"] <= 2:
-            raise SIEMClientConnectivityError(
-                "Simulated transient error", "AWSCloudWatch"
-            )
+            raise SIEMClientConnectivityError("Simulated transient error", "AWSCloudWatch")
         # Call the original method on the third attempt
         return True, "Log sent to AWS CloudWatch Logs"
 
@@ -561,9 +541,7 @@ async def test_retry_logic(aws_client, monkeypatch):
             await asyncio.sleep(0.1)  # Small delay between retries
 
     assert success is True, f"Operation failed after retries: {message}"
-    assert (
-        retry_counter["count"] == 3
-    ), f"Expected 3 attempts but got {retry_counter['count']}"
+    assert retry_counter["count"] == 3, f"Expected 3 attempts but got {retry_counter['count']}"
 
 
 @pytest.mark.asyncio
@@ -576,9 +554,7 @@ async def test_concurrent_operations(aws_client):
     operations.extend([aws_client.send_logs(generate_log_batch(5)) for _ in range(2)])
     operations.extend(
         [
-            aws_client.query_logs(
-                "fields @timestamp | limit 5", time_range="1h", limit=5
-            )
+            aws_client.query_logs("fields @timestamp | limit 5", time_range="1h", limit=5)
             for _ in range(2)
         ]
     )

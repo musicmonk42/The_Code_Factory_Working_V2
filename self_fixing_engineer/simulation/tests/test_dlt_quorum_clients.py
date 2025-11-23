@@ -86,9 +86,7 @@ else:
         contract_abi_secret_id: Optional[str] = None
         private_key: Optional[str] = None
         private_key_secret_id: Optional[str] = None
-        secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
-            default_factory=list
-        )
+        secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
         secrets_provider_config: Optional[Dict[str, Any]] = None
         poa_middleware: bool = True
         privacy_group_id: Optional[str] = None
@@ -122,9 +120,7 @@ else:
         @validator("private_key", pre=True, always=True)
         def validate_private_key_source(cls, v, values):
             if not v and not values.get("private_key_secret_id"):
-                raise ValueError(
-                    "Either private_key or private_key_secret_id must be provided."
-                )
+                raise ValueError("Either private_key or private_key_secret_id must be provided.")
             if v and not re.match(r"^(0x)?[a-fA-F0-9]{64}$", v):
                 raise ValueError("private_key must be a 64-character hex string.")
             return v
@@ -227,9 +223,7 @@ class TestQuorumConfigValidation:
                 # Missing private_for
             }
             QuorumConfig(**invalid_config)
-        assert "Both privacy_group_id and private_for must be provided" in str(
-            exc_info.value
-        )
+        assert "Both privacy_group_id and private_for must be provided" in str(exc_info.value)
 
     def test_valid_privacy_config(self):
         """Test that valid privacy configuration passes validation."""
@@ -257,9 +251,8 @@ class TestQuorumConfigValidation:
                 "private_key": "0x" + "1" * 64,
             }
             QuorumConfig(**invalid_config)
-        assert (
-            "Either contract_abi_path or contract_abi_secret_id must be provided"
-            in str(exc_info.value)
+        assert "Either contract_abi_path or contract_abi_secret_id must be provided" in str(
+            exc_info.value
         )
 
     def test_missing_private_key_source(self):
@@ -273,15 +266,11 @@ class TestQuorumConfigValidation:
                 # Missing both private_key and private_key_secret_id
             }
             QuorumConfig(**invalid_config)
-        assert "Either private_key or private_key_secret_id must be provided" in str(
-            exc_info.value
-        )
+        assert "Either private_key or private_key_secret_id must be provided" in str(exc_info.value)
 
 
 # Tests that require web3 and full Quorum implementation
-@pytest.mark.skipif(
-    not QUORUM_AVAILABLE, reason="Quorum client not available (web3 not installed)"
-)
+@pytest.mark.skipif(not QUORUM_AVAILABLE, reason="Quorum client not available (web3 not installed)")
 class TestQuorumClient:
     """Tests that require the full Quorum client implementation."""
 
@@ -333,9 +322,7 @@ class TestQuorumClient:
         mock_w3.eth.get_code = AsyncMock(return_value=b"0x123")
         mock_w3.eth.get_balance = AsyncMock(return_value=1000000000000000000)
         mock_w3.eth.get_transaction_count = AsyncMock(return_value=0)
-        mock_w3.eth.send_raw_transaction = AsyncMock(
-            return_value=b"\x12\x34\x56\x78" * 8
-        )
+        mock_w3.eth.send_raw_transaction = AsyncMock(return_value=b"\x12\x34\x56\x78" * 8)
         mock_w3.eth.wait_for_transaction_receipt = AsyncMock(
             return_value=MagicMock(status=1, blockNumber=123)
         )
@@ -354,16 +341,10 @@ class TestQuorumClient:
         mock_w3.eth.account.from_key = MagicMock(return_value=mock_account)
 
         # Utility functions
-        mock_w3.to_wei = lambda value, unit: (
-            value * (10**9) if unit == "gwei" else value
-        )
-        mock_w3.from_wei = lambda value, unit: (
-            value / (10**9) if unit == "gwei" else value
-        )
+        mock_w3.to_wei = lambda value, unit: (value * (10**9) if unit == "gwei" else value)
+        mock_w3.from_wei = lambda value, unit: (value / (10**9) if unit == "gwei" else value)
         mock_w3.to_hex = lambda x: "0x" + x.hex() if isinstance(x, bytes) else str(x)
-        mock_w3.to_bytes = lambda hexstr=None: (
-            bytes.fromhex(hexstr[2:]) if hexstr else b""
-        )
+        mock_w3.to_bytes = lambda hexstr=None: (bytes.fromhex(hexstr[2:]) if hexstr else b"")
         mock_w3.keccak = lambda x: b"mock_keccak_hash"
 
         # Mock provider
@@ -387,9 +368,7 @@ class TestQuorumClient:
         mocker.patch("os.urandom", return_value=b"test-hmac-key-for-testing-only-123")
 
     @pytest.mark.asyncio
-    async def test_quorum_init_success(
-        self, mock_off_chain, mock_web3_provider, mocker
-    ):
+    async def test_quorum_init_success(self, mock_off_chain, mock_web3_provider, mocker):
         """Test that the Quorum client initializes successfully with a valid configuration."""
         mock_loop = MagicMock()
         mock_loop.create_task = MagicMock()

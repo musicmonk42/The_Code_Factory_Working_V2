@@ -38,9 +38,7 @@ class TestUtilityFunctions:
 
         assert os.environ["TEST_PASSWORD"] == "[REDACTED]"
         assert os.environ["API_KEY"] == "[REDACTED]"
-        assert (
-            os.environ["NORMAL_VAR"] == "normal_value"
-        )  # Doesn't contain sensitive keywords
+        assert os.environ["NORMAL_VAR"] == "normal_value"  # Doesn't contain sensitive keywords
 
         # Cleanup
         del os.environ["TEST_PASSWORD"]
@@ -156,9 +154,7 @@ class TestListPluginsCommand:
         mock_engine = Mock()
         mock_engine.is_initialized = True
         mock_engine.plugin_registry = Mock()
-        mock_engine.plugin_registry.get_plugin_names = Mock(
-            return_value=["plugin1", "plugin2"]
-        )
+        mock_engine.plugin_registry.get_plugin_names = Mock(return_value=["plugin1", "plugin2"])
 
         # Test would verify the command calls the right methods
 
@@ -216,9 +212,7 @@ class TestPluginManagementCommands:
         mock_engine.plugin_registry = Mock()
 
         with patch("omnicore_engine.cli.OmniCoreOmega_instance", mock_engine):
-            with patch(
-                "omnicore_engine.cli.PluginMarketplace"
-            ) as mock_marketplace_class:
+            with patch("omnicore_engine.cli.PluginMarketplace") as mock_marketplace_class:
                 mock_marketplace = Mock()
                 mock_marketplace.install_plugin = AsyncMock()
                 mock_marketplace_class.return_value = mock_marketplace
@@ -482,9 +476,7 @@ class TestImportFixerCommand:
 
             with patch("omnicore_engine.cli.AIManager") as mock_ai_class:
                 mock_ai = Mock()
-                mock_ai.get_refactoring_suggestion = Mock(
-                    return_value="Suggested refactoring"
-                )
+                mock_ai.get_refactoring_suggestion = Mock(return_value="Suggested refactoring")
                 mock_ai_class.return_value = mock_ai
 
                 # Test execution

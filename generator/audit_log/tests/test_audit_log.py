@@ -52,9 +52,7 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
-    "utf-8"
-)
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode("utf-8")
 
 # We also provide an ENCRYPTION_KEYS-style bundle, in case audit_log uses it.
 encryption_keys_payload = json.dumps(
@@ -283,12 +281,8 @@ def mock_crypto_provider_factory(mock_software_key_master):
     # Mock the CryptoProvider instance returned by the factory
     mock_provider = MagicMock()
     mock_provider.supported_algos = ["ed25519"]
-    mock_provider.settings = SimpleNamespace(
-        SUPPORTED_ALGOS=["ed25519"]
-    )  # Added settings mock
-    mock_provider.generate_key = AsyncMock(
-        return_value=str(uuid.uuid4())
-    )  # Use UUID for key ID
+    mock_provider.settings = SimpleNamespace(SUPPORTED_ALGOS=["ed25519"])  # Added settings mock
+    mock_provider.generate_key = AsyncMock(return_value=str(uuid.uuid4()))  # Use UUID for key ID
     mock_provider.rotate_key = AsyncMock(return_value=str(uuid.uuid4()))
     mock_provider.sign_data = AsyncMock(return_value=b"mock-signature")
     mock_provider.verify_signature = AsyncMock(return_value=True)

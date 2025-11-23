@@ -491,9 +491,7 @@ async def _write_to_dlq(
         "env": Config.ENV,
     }
 
-    dlq_path = Path(
-        os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl")
-    )
+    dlq_path = Path(os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl"))
     dlq_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -583,16 +581,12 @@ class BackendRegistry:
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 if Config.PROD_MODE:
-                    raise CheckpointBackendError(
-                        f"S3 bucket {Config.S3_BUCKET} not found"
-                    )
+                    raise CheckpointBackendError(f"S3 bucket {Config.S3_BUCKET} not found")
                 else:
                     # Create bucket in non-prod
                     await self._clients["s3"].create_bucket(
                         Bucket=Config.S3_BUCKET,
-                        CreateBucketConfiguration={
-                            "LocationConstraint": Config.S3_REGION
-                        },
+                        CreateBucketConfiguration={"LocationConstraint": Config.S3_REGION},
                     )
 
     async def _init_redis(self, manager: Any):
@@ -667,9 +661,7 @@ class BackendRegistry:
             bucket.reload()
         except GCSNotFound:
             if Config.PROD_MODE:
-                raise CheckpointBackendError(
-                    f"GCS bucket {Config.GCS_BUCKET} not found"
-                )
+                raise CheckpointBackendError(f"GCS bucket {Config.GCS_BUCKET} not found")
             else:
                 # Create bucket in non-prod
                 bucket = self._clients["gcs"].create_bucket(
@@ -688,16 +680,12 @@ class BackendRegistry:
         )
 
         # Verify container exists
-        container_client = self._clients["azure"].get_container_client(
-            Config.AZURE_CONTAINER
-        )
+        container_client = self._clients["azure"].get_container_client(Config.AZURE_CONTAINER)
         try:
             await container_client.get_container_properties()
         except AzureNotFound:
             if Config.PROD_MODE:
-                raise CheckpointBackendError(
-                    f"Azure container {Config.AZURE_CONTAINER} not found"
-                )
+                raise CheckpointBackendError(f"Azure container {Config.AZURE_CONTAINER} not found")
             else:
                 # Create container in non-prod
                 await container_client.create_container()
@@ -719,9 +707,7 @@ class BackendRegistry:
         # Verify bucket exists
         if not self._clients["minio"].bucket_exists(Config.MINIO_BUCKET):
             if Config.PROD_MODE:
-                raise CheckpointBackendError(
-                    f"MinIO bucket {Config.MINIO_BUCKET} not found"
-                )
+                raise CheckpointBackendError(f"MinIO bucket {Config.MINIO_BUCKET} not found")
             else:
                 # Create bucket in non-prod
                 self._clients["minio"].make_bucket(Config.MINIO_BUCKET)
@@ -782,9 +768,7 @@ def backend_operation(operation: str):
             name = args[0] if args else "unknown"
             start_time = time.time()
 
-            async with tracer.start_as_current_span(
-                f"backend.{backend}.{operation}"
-            ) as span:
+            async with tracer.start_as_current_span(f"backend.{backend}.{operation}") as span:
                 span.set_attribute("backend", backend)
                 span.set_attribute("operation", operation)
                 span.set_attribute("checkpoint.name", str(name))
@@ -797,9 +781,7 @@ def backend_operation(operation: str):
                         breaker = circuit_breakers[backend]
                         # Check circuit breaker state before calling
                         if breaker.state == "open":
-                            raise CheckpointBackendError(
-                                f"Circuit breaker is open for {backend}"
-                            )
+                            raise CheckpointBackendError(f"Circuit breaker is open for {backend}")
 
                         try:
                             result = await func(manager, *args, **kwargs)
@@ -984,9 +966,7 @@ async def s3_save(
         raise CheckpointBackendError(f"S3 save failed: {e}") from e
 
 
-async def s3_load(
-    manager: Any, name: str, version: Optional[str], **kwargs
-) -> Dict[str, Any]:
+async def s3_load(manager: Any, name: str, version: Optional[str], **kwargs) -> Dict[str, Any]:
     """Load checkpoint from S3."""
     try:
         client = await registry.get_client("s3", manager)
@@ -998,9 +978,7 @@ async def s3_load(
             # Get latest version
             latest_key = f"{Config.S3_PREFIX}{shard}/{name}/latest"
             try:
-                response = await client.get_object(
-                    Bucket=Config.S3_BUCKET, Key=latest_key
-                )
+                response = await client.get_object(Bucket=Config.S3_BUCKET, Key=latest_key)
                 s3_key = (await response["Body"].read()).decode()
             except ClientError as e:
                 if e.response["Error"]["Code"] == "NoSuchKey":
@@ -1016,9 +994,7 @@ async def s3_load(
             signature = response["Metadata"].get("checkpoint-signature", "")
         except ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchKey":
-                raise FileNotFoundError(
-                    f"Checkpoint {name} version {version} not found"
-                )
+                raise FileNotFoundError(f"Checkpoint {name} version {version} not found")
             raise
 
         # Verify signature
@@ -1035,9 +1011,7 @@ async def s3_load(
 
         # Decompress
         checkpoint_data = (
-            decompress_json(data_bytes)
-            if manager.enable_compression
-            else json.loads(data_bytes)
+            decompress_json(data_bytes) if manager.enable_compression else json.loads(data_bytes)
         )
 
         # Verify hash chain
@@ -1198,9 +1172,7 @@ async def redis_save(
         raise CheckpointBackendError(f"Redis save failed: {e}") from e
 
 
-async def redis_load(
-    manager: Any, name: str, version: Optional[str], **kwargs
-) -> Dict[str, Any]:
+async def redis_load(manager: Any, name: str, version: Optional[str], **kwargs) -> Dict[str, Any]:
     """Load checkpoint from Redis."""
     try:
         client = await registry.get_client("redis", manager)
@@ -1219,9 +1191,7 @@ async def redis_load(
         # Decrypt and decompress
         data_bytes = encryption_mgr.decrypt(data_bytes)
         checkpoint_data = (
-            decompress_json(data_bytes)
-            if manager.enable_compression
-            else json.loads(data_bytes)
+            decompress_json(data_bytes) if manager.enable_compression else json.loads(data_bytes)
         )
 
         # Verify hash chain
@@ -1370,9 +1340,7 @@ async def postgres_load(
                 )
 
             if not row:
-                raise FileNotFoundError(
-                    f"Checkpoint {name} version {version} not found"
-                )
+                raise FileNotFoundError(f"Checkpoint {name} version {version} not found")
 
             # Decrypt and decompress
             data_bytes = encryption_mgr.decrypt(row["data"])
@@ -1436,9 +1404,7 @@ async def get_backend_handler(backend: str, operation: str) -> Callable:
 
     handler = backend_handlers.get(operation)
     if not handler:
-        raise NotImplementedError(
-            f"Operation {operation} not implemented for {backend}"
-        )
+        raise NotImplementedError(f"Operation {operation} not implemented for {backend}")
 
     return handler
 

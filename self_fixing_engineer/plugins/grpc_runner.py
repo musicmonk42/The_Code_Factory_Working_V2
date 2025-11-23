@@ -48,9 +48,7 @@ try:
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
 except ImportError as e:
-    logger.critical(
-        "CRITICAL: Missing core dependency for gRPC runner: %s. Aborting startup.", e
-    )
+    logger.critical("CRITICAL: Missing core dependency for gRPC runner: %s. Aborting startup.", e)
     # Provide fallbacks so importing this module doesn't kill pytest, but fail when actually used
     MISSING_DEPS = True
 
@@ -75,21 +73,15 @@ except ImportError as e:
     class _MockSecrets:
         def get_secret(self, key, required=False):
             if PRODUCTION_MODE or required:
-                raise ImportError(
-                    "core_secrets.SECRETS_MANAGER is required but missing"
-                )
-            logger.warning(
-                "SECRETS_MANAGER.get_secret called but core_secrets is missing."
-            )
+                raise ImportError("core_secrets.SECRETS_MANAGER is required but missing")
+            logger.warning("SECRETS_MANAGER.get_secret called but core_secrets is missing.")
             return None
 
     SECRETS_MANAGER = _MockSecrets()
 
     # Only exit in production mode; allow import for testing
     if PRODUCTION_MODE:
-        logger.critical(
-            "Cannot run gRPC runner in production without core dependencies"
-        )
+        logger.critical("Cannot run gRPC runner in production without core dependencies")
         sys.exit(1)
 
 
@@ -121,9 +113,7 @@ try:
     from pydantic import BaseModel, Extra, ValidationError, Field, validator
     from grpc_health.v1 import health_pb2, health_pb2_grpc
 except ImportError as e:
-    logger.critical(
-        f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup."
-    )
+    logger.critical(f"CRITICAL: Missing core dependency for gRPC runner: {e}. Aborting startup.")
     MISSING_DEPS = True
     grpc = None
     prometheus_client = None
@@ -151,9 +141,7 @@ except ImportError as e:
 
 # --- Prometheus Metrics (own registry to avoid global collisions) ---
 _metrics_registry = (
-    prometheus_client.CollectorRegistry(auto_describe=True)
-    if prometheus_client
-    else None
+    prometheus_client.CollectorRegistry(auto_describe=True) if prometheus_client else None
 )
 
 PLUGIN_HEALTH_GAUGE = (
@@ -223,31 +211,21 @@ GRPC_ENDPOINT_ALLOWLIST_SECRET = (
 def _get_tls_credentials() -> Optional[grpc.ChannelCredentials]:
     """Load TLS credentials from secrets manager."""
     try:
-        cert_path = SECRETS_MANAGER.get_secret(
-            GRPC_TLS_CERT_PATH_SECRET, required=PRODUCTION_MODE
-        )
-        key_path = SECRETS_MANAGER.get_secret(
-            GRPC_TLS_KEY_PATH_SECRET, required=PRODUCTION_MODE
-        )
-        ca_path = SECRETS_MANAGER.get_secret(
-            GRPC_TLS_CA_PATH_SECRET, required=PRODUCTION_MODE
-        )
+        cert_path = SECRETS_MANAGER.get_secret(GRPC_TLS_CERT_PATH_SECRET, required=PRODUCTION_MODE)
+        key_path = SECRETS_MANAGER.get_secret(GRPC_TLS_KEY_PATH_SECRET, required=PRODUCTION_MODE)
+        ca_path = SECRETS_MANAGER.get_secret(GRPC_TLS_CA_PATH_SECRET, required=PRODUCTION_MODE)
     except AnalyzerCriticalError:
         sys.exit(1)
 
     if not all([cert_path, key_path, ca_path]):
         if PRODUCTION_MODE:
-            logger.critical(
-                "CRITICAL: Missing TLS credentials for gRPC. Aborting startup."
-            )
+            logger.critical("CRITICAL: Missing TLS credentials for gRPC. Aborting startup.")
             alert_operator(
                 "CRITICAL: Missing gRPC TLS credentials in PRODUCTION_MODE. Aborting.",
                 level="CRITICAL",
             )
             sys.exit(1)
-        logger.warning(
-            "Missing TLS credential paths. Insecure gRPC allowed in non-prod only."
-        )
+        logger.warning("Missing TLS credential paths. Insecure gRPC allowed in non-prod only.")
         return None
 
     try:
@@ -289,9 +267,7 @@ def _is_endpoint_allowed(address: str) -> bool:
                 level="CRITICAL",
             )
             sys.exit(1)
-        logger.warning(
-            "gRPC endpoint allowlist not configured. All endpoints allowed in non-prod."
-        )
+        logger.warning("gRPC endpoint allowlist not configured. All endpoints allowed in non-prod.")
         return True
 
     allowlist = [ep.strip() for ep in allowlist_str.split(",") if ep.strip()]
@@ -301,9 +277,7 @@ def _is_endpoint_allowed(address: str) -> bool:
     logger.critical(
         f"CRITICAL: gRPC endpoint '{address}' is not in the allowlist. Aborting connection."
     )
-    audit_logger.log_event(
-        "grpc_connection_forbidden", endpoint=address, reason="not_in_allowlist"
-    )
+    audit_logger.log_event("grpc_connection_forbidden", endpoint=address, reason="not_in_allowlist")
     alert_operator(
         f"CRITICAL: gRPC endpoint '{address}' not in allowlist. Aborting.",
         level="CRITICAL",
@@ -327,9 +301,7 @@ async def plugin_health(
         )
         status_str = health_pb2.HealthCheckResponse.ServingStatus.Name(response.status)
         logger.info(f"Health check PASSED for plugin '{plugin_name}': {status_str}")
-        PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(
-            1 if status_str == "SERVING" else 0
-        )
+        PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(1 if status_str == "SERVING" else 0)
         PLUGIN_OPERATION_COUNTER.labels(
             plugin_name=plugin_name, operation_type="health_check"
         ).inc()
@@ -353,19 +325,11 @@ async def plugin_health(
             status=status_str,
             reason="timeout",
         )
-        alert_operator(
-            f"CRITICAL: Plugin '{plugin_name}' health check TIMEOUT.", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Plugin '{plugin_name}' health check TIMEOUT.", level="CRITICAL")
         return status_str
     except grpc.aio.AioRpcError as e:
-        status_str = (
-            "NOT_SERVING"
-            if e.code() == grpc.StatusCode.UNAVAILABLE
-            else "SERVICE_UNKNOWN"
-        )
-        logger.error(
-            f"Health check FAILED for '{plugin_name}': {e.details()} (Code: {e.code()})"
-        )
+        status_str = "NOT_SERVING" if e.code() == grpc.StatusCode.UNAVAILABLE else "SERVICE_UNKNOWN"
+        logger.error(f"Health check FAILED for '{plugin_name}': {e.details()} (Code: {e.code()})")
         PLUGIN_HEALTH_GAUGE.labels(plugin_name=plugin_name).set(0)
         PLUGIN_OPERATION_COUNTER.labels(
             plugin_name=plugin_name, operation_type="health_check_failed"
@@ -420,9 +384,7 @@ async def connect(
 
     tls_credentials = _get_tls_credentials()
     if PRODUCTION_MODE and not tls_credentials:
-        logger.critical(
-            "CRITICAL: TLS credentials required in PRODUCTION_MODE but not loaded."
-        )
+        logger.critical("CRITICAL: TLS credentials required in PRODUCTION_MODE but not loaded.")
         alert_operator(
             "CRITICAL: TLS credentials missing for gRPC in PRODUCTION_MODE.",
             level="CRITICAL",
@@ -438,24 +400,18 @@ async def connect(
                 logger.debug(f"Attempting secure gRPC connection to {address}...")
             else:
                 channel = grpc.aio.insecure_channel(address)
-                logger.warning(
-                    f"Attempting INSECURE gRPC connection to {address} (non-prod only)."
-                )
+                logger.warning(f"Attempting INSECURE gRPC connection to {address} (non-prod only).")
 
             await asyncio.wait_for(channel.channel_ready(), timeout=5.0)
             logger.info(f"Connected to gRPC server at {address} (attempt {attempt})")
-            audit_logger.log_event(
-                "grpc_connect_success", endpoint=address, attempt=attempt
-            )
+            audit_logger.log_event("grpc_connect_success", endpoint=address, attempt=attempt)
             return channel
         except asyncio.TimeoutError:
             last_error = "Timeout"
             logger.warning(
                 f"Connection timeout to {address} (attempt {attempt}/{retries}). Retrying in {delay:.1f}s..."
             )
-            audit_logger.log_event(
-                "grpc_connect_timeout", endpoint=address, attempt=attempt
-            )
+            audit_logger.log_event("grpc_connect_timeout", endpoint=address, attempt=attempt)
         except grpc.aio.AioRpcError as e:
             last_error = e.details() if hasattr(e, "details") else str(e)
             logger.warning(
@@ -498,9 +454,7 @@ async def connect(
         f"CRITICAL: Failed to connect to gRPC endpoint {address} after {retries} attempts.",
         level="CRITICAL",
     )
-    raise ConnectionError(
-        f"Failed to connect to {address} after {retries} attempts: {last_error}"
-    )
+    raise ConnectionError(f"Failed to connect to {address} after {retries} attempts: {last_error}")
 
 
 # --- Plugin method runner ---
@@ -531,9 +485,7 @@ async def run_method(stub: Any, method_name: str, request: Any, timeout: float) 
         )
         return response
     except grpc.aio.AioRpcError as e:
-        logger.error(
-            f"gRPC call to {method_name} failed: {e.details()} (Code: {e.code()})"
-        )
+        logger.error(f"gRPC call to {method_name} failed: {e.details()} (Code: {e.code()})")
         audit_logger.log_event(
             "grpc_call_failed",
             method=method_name,
@@ -554,14 +506,10 @@ async def run_method(stub: Any, method_name: str, request: Any, timeout: float) 
             timeout=timeout,
             request_summary=scrub_sensitive_data(str(request)[:200]),
         )
-        alert_operator(
-            f"CRITICAL: gRPC call to {method_name} timed out.", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: gRPC call to {method_name} timed out.", level="CRITICAL")
         raise NonCriticalError("gRPC call timeout")
     except Exception as e:
-        logger.error(
-            f"Unexpected error during gRPC call to {method_name}: {e}", exc_info=True
-        )
+        logger.error(f"Unexpected error during gRPC call to {method_name}: {e}", exc_info=True)
         audit_logger.log_event(
             "grpc_call_error",
             method=method_name,
@@ -576,18 +524,12 @@ async def run_method(stub: Any, method_name: str, request: Any, timeout: float) 
 
 
 # --- Metrics helper ---
-def emit_metric(
-    name: str, value: float, labels: Dict[str, str], metric_type: str = "counter"
-):
+def emit_metric(name: str, value: float, labels: Dict[str, str], metric_type: str = "counter"):
     """
     Emit a metric to the local registry (scrape/push is external to this file).
     """
     try:
-        if (
-            name == "plugin_health_status"
-            and metric_type == "gauge"
-            and PLUGIN_HEALTH_GAUGE
-        ):
+        if name == "plugin_health_status" and metric_type == "gauge" and PLUGIN_HEALTH_GAUGE:
             PLUGIN_HEALTH_GAUGE.labels(**labels).set(value)
         elif (
             name == "plugin_operations_total"
@@ -606,9 +548,7 @@ def emit_metric(
         )
     except Exception as e:
         logger.error(f"Failed to emit metric {name}: {e}", exc_info=True)
-        alert_operator(
-            f"ERROR: Failed to emit Prometheus metric {name}: {e}.", level="ERROR"
-        )
+        alert_operator(f"ERROR: Failed to emit Prometheus metric {name}: {e}.", level="ERROR")
 
 
 # --- Manifest validation ---
@@ -619,9 +559,9 @@ def validate_manifest(manifest_data: Dict[str, Any]) -> None:
     try:
         data_for_hmac = dict(manifest_data)  # shallow copy
         signature = data_for_hmac.pop("signature", None)
-        manifest_content_str = json.dumps(
-            data_for_hmac, sort_keys=True, ensure_ascii=False
-        ).encode("utf-8")
+        manifest_content_str = json.dumps(data_for_hmac, sort_keys=True, ensure_ascii=False).encode(
+            "utf-8"
+        )
 
         manifest_hmac_key = SECRETS_MANAGER.get_secret(
             "MANIFEST_HMAC_KEY", required=PRODUCTION_MODE
@@ -661,18 +601,14 @@ def validate_manifest(manifest_data: Dict[str, Any]) -> None:
             manifest_name=manifest_data.get("name"),
         )
     except ValidationError as e:
-        logger.critical(
-            f"CRITICAL: Plugin manifest validation failed: {e}.", exc_info=True
-        )
+        logger.critical(f"CRITICAL: Plugin manifest validation failed: {e}.", exc_info=True)
         audit_logger.log_event(
             "manifest_validation",
             status="failure",
             manifest_name=manifest_data.get("name"),
             error=str(e),
         )
-        alert_operator(
-            f"CRITICAL: Plugin manifest validation failed: {e}.", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Plugin manifest validation failed: {e}.", level="CRITICAL")
         raise
     except Exception as e:
         logger.critical(
@@ -743,14 +679,10 @@ def list_plugins(directory_path: str) -> List[Dict[str, Any]]:
             audit_logger.log_event("plugin_manifest_invalid_json", file=filename)
         except ValidationError as e:
             logger.warning(f"Invalid manifest format in {filename}: {e}")
-            audit_logger.log_event(
-                "plugin_manifest_validation_failed", file=filename, error=str(e)
-            )
+            audit_logger.log_event("plugin_manifest_validation_failed", file=filename, error=str(e))
         except Exception as e:
             logger.error(f"Error processing manifest {filename}: {e}", exc_info=True)
-            audit_logger.log_event(
-                "plugin_manifest_processing_error", file=filename, error=str(e)
-            )
+            audit_logger.log_event("plugin_manifest_processing_error", file=filename, error=str(e))
 
     audit_logger.log_event(
         "list_plugins_complete",
@@ -776,13 +708,9 @@ def generate_plugin_docs(manifest: Dict[str, Any], output_path: str) -> None:
     try:
         Path(output_path).write_text("\n".join(content), encoding="utf-8")
         logger.info(f"Generated documentation for {name} at {output_path}")
-        audit_logger.log_event(
-            "plugin_doc_generated", plugin_name=name, path=output_path
-        )
+        audit_logger.log_event("plugin_doc_generated", plugin_name=name, path=output_path)
     except OSError as e:
-        logger.error(
-            f"Failed to write documentation to {output_path}: {e}", exc_info=True
-        )
+        logger.error(f"Failed to write documentation to {output_path}: {e}", exc_info=True)
         audit_logger.log_event(
             "plugin_doc_generation_failed",
             plugin_name=name,
@@ -800,13 +728,9 @@ async def start_prometheus_exporter(address: str, port: int):
     """Start the Prometheus metrics exporter (plaintext HTTP)."""
     try:
         if prometheus_client:
-            prometheus_client.start_http_server(
-                port, address, registry=_metrics_registry
-            )
+            prometheus_client.start_http_server(port, address, registry=_metrics_registry)
             logger.info(f"Prometheus metrics exporter started on {address}:{port}")
-            audit_logger.log_event(
-                "prometheus_exporter_started", address=address, port=port
-            )
+            audit_logger.log_event("prometheus_exporter_started", address=address, port=port)
     except Exception as e:
         logger.critical(
             f"CRITICAL: Failed to start Prometheus exporter on {address}:{port}: {e}",
@@ -815,7 +739,5 @@ async def start_prometheus_exporter(address: str, port: int):
         audit_logger.log_event(
             "prometheus_exporter_failed", address=address, port=port, error=str(e)
         )
-        alert_operator(
-            f"CRITICAL: Failed to start Prometheus exporter: {e}.", level="CRITICAL"
-        )
+        alert_operator(f"CRITICAL: Failed to start Prometheus exporter: {e}.", level="CRITICAL")
         sys.exit(1)

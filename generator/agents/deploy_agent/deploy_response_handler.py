@@ -186,13 +186,9 @@ def parse_llm_response(response: str, lang: str = "raw") -> Dict[str, str]:
         # Try to parse as JSON (multi-file format)
         data = json.loads(response)
         if not isinstance(data, dict):
-            raise json.JSONDecodeError(
-                "Response is valid JSON but not a dictionary.", response, 0
-            )
+            raise json.JSONDecodeError("Response is valid JSON but not a dictionary.", response, 0)
 
-        logger.info(
-            f"Parsing multi-file JSON response with {len(data)} potential files."
-        )
+        logger.info(f"Parsing multi-file JSON response with {len(data)} potential files.")
 
         for filename, content in data.items():
             if not isinstance(content, str):
@@ -342,9 +338,7 @@ def scrub_text(text: str) -> str:
     except Exception as e:
         logger.error("Central runner redaction failed critically: %s", e, exc_info=True)
         # In a strict-fail model, re-raise the exception if scrubbing cannot be performed
-        raise RuntimeError(
-            f"Critical error during sensitive data scrubbing: {e}"
-        ) from e
+        raise RuntimeError(f"Critical error during sensitive data scrubbing: {e}") from e
 
 
 # --- End of REPLACED Function ---
@@ -383,8 +377,7 @@ async def scan_config_for_findings(
     # Trivy often needs the config as a file. Use a temp file for this.
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_config_path = (
-            Path(temp_dir)
-            / f"config.{config_format.lower().replace('dockerfile', 'docker')}"
+            Path(temp_dir) / f"config.{config_format.lower().replace('dockerfile', 'docker')}"
         )  # Use common file extension
         try:
             # Write the config text to a temporary file. It's assumed `config_text` is already scrubbed.
@@ -407,8 +400,7 @@ async def scan_config_for_findings(
                 *trivy_command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                limit=1024
-                * 1024,  # Set a buffer limit to prevent very large outputs from hanging
+                limit=1024 * 1024,  # Set a buffer limit to prevent very large outputs from hanging
             )
             stdout, stderr = await process.communicate()
 
@@ -419,21 +411,15 @@ async def scan_config_for_findings(
                         trivy_results = json.loads(trivy_output_str)
                         for result_section in trivy_results.get("Results", []):
                             # Trivy can find 'Misconfigurations', 'Vulnerabilities', etc.
-                            for misconfig in result_section.get(
-                                "Misconfigurations", []
-                            ):
+                            for misconfig in result_section.get("Misconfigurations", []):
                                 findings.append(
                                     {
                                         "type": "Misconfiguration_Trivy",
                                         "category": misconfig.get("Type", "N/A"),
-                                        "description": misconfig.get(
-                                            "Title", "No Title"
-                                        )
+                                        "description": misconfig.get("Title", "No Title")
                                         + ": "
                                         + misconfig.get("Description", ""),
-                                        "severity": misconfig.get(
-                                            "Severity", "Unknown"
-                                        ),
+                                        "severity": misconfig.get("Severity", "Unknown"),
                                     }
                                 )
                                 scan_total_findings.labels(
@@ -492,9 +478,7 @@ async def scan_config_for_findings(
             logger.error(
                 "Trivy command not found. Skipping Trivy scan. This tool is required for full compliance checks."
             )  # Error level for missing tool
-            scan_total_findings.labels(
-                format=config_format, finding_type="Trivy_NotFound"
-            ).inc()
+            scan_total_findings.labels(format=config_format, finding_type="Trivy_NotFound").inc()
         except Exception as e:
             findings.append(
                 {
@@ -510,9 +494,9 @@ async def scan_config_for_findings(
             ).inc()
 
     # Update gauge with current number of unique findings.
-    scan_findings_gauge.labels(
-        format=config_format, finding_type="OverallFindingsCount"
-    ).set(len(findings))
+    scan_findings_gauge.labels(format=config_format, finding_type="OverallFindingsCount").set(
+        len(findings)
+    )
 
     return findings
 
@@ -570,9 +554,7 @@ class FormatHandler(ABC):
         # For long text (unit tests specifically testing summarization), use LLM
         if os.getenv("TESTING") == "1" and len(section_text) < 500:
             # Short text in integration tests - return simple summary
-            summary = (
-                f"[Test Summary] Section '{section_name}': {len(section_text)} chars"
-            )
+            summary = f"[Test Summary] Section '{section_name}': {len(section_text)} chars"
             logger.debug(
                 f"TESTING mode: Returning simple summary for short section '{section_name}'"
             )
@@ -601,7 +583,9 @@ class FormatHandler(ABC):
             summary = summary_response.get("content", "").strip()
 
             if not summary:
-                error_msg = f"LLM summarization for section '{section_name}' returned empty content."
+                error_msg = (
+                    f"LLM summarization for section '{section_name}' returned empty content."
+                )
                 logger.error(error_msg)
                 LLM_ERRORS_TOTAL.labels(
                     provider="deploy_response_handler",
@@ -634,9 +618,7 @@ class FormatHandler(ABC):
                     error_type=type(e).__name__,
                 ).inc()
             # STRICT FAILURES ENFORCED: No fallback to original text.
-            raise RuntimeError(
-                f"Critical error during LLM-based config summarization: {e}"
-            ) from e
+            raise RuntimeError(f"Critical error during LLM-based config summarization: {e}") from e
 
 
 class DockerfileHandler(FormatHandler):
@@ -656,9 +638,7 @@ class DockerfileHandler(FormatHandler):
     def convert(self, data: List[str], to_format: str) -> str:
         """Converts Dockerfile lines to a string or YAML representation."""
         if not isinstance(data, list):
-            raise TypeError(
-                "Data must be a list of strings for DockerfileHandler conversion."
-            )
+            raise TypeError("Data must be a list of strings for DockerfileHandler conversion.")
 
         if to_format == "yaml":
             # Convert Dockerfile to a YAML representation (e.g., for K8s configmaps or structured logging)
@@ -675,9 +655,7 @@ class DockerfileHandler(FormatHandler):
             return string_stream.getvalue()
         elif to_format == "dockerfile":
             return "\n".join(data)
-        raise ValueError(
-            f"DockerfileHandler does not support conversion to '{to_format}'."
-        )
+        raise ValueError(f"DockerfileHandler does not support conversion to '{to_format}'.")
 
     def extract_sections(self, data: List[str]) -> Dict[str, str]:
         """Extracts sections like FROM, RUN, COPY, CMD from Dockerfile lines."""
@@ -715,9 +693,7 @@ class DockerfileHandler(FormatHandler):
             sections["RUN_commands"].append(" ".join(current_run_block))
 
         return {
-            k: (v if isinstance(v, str) else "\n".join(v))
-            for k, v in sections.items()
-            if v
+            k: (v if isinstance(v, str) else "\n".join(v)) for k, v in sections.items() if v
         }  # Flatten lists to strings
 
     def lint(self, data: List[str]) -> List[str]:
@@ -749,17 +725,13 @@ class DockerfileHandler(FormatHandler):
             elif line_upper.startswith("USER"):
                 has_user = True
                 if "ROOT" in line_upper:
-                    issues.append(
-                        "Avoid running as root user. Use a non-root user for security."
-                    )
+                    issues.append("Avoid running as root user. Use a non-root user for security.")
             elif line_upper.startswith("CMD") or line_upper.startswith("ENTRYPOINT"):
                 has_cmd_or_entrypoint = True
             elif line_upper.startswith("EXPOSE") and re.search(
                 r"EXPOSE\s+\d{1,5}\s*-\s*\d{1,5}", line, re.IGNORECASE
             ):
-                issues.append(
-                    "Avoid exposing port ranges; expose only necessary specific ports."
-                )
+                issues.append("Avoid exposing port ranges; expose only necessary specific ports.")
 
         if not has_from:
             issues.append("Dockerfile missing a FROM instruction.")
@@ -985,12 +957,8 @@ class HandlerRegistry:
 
     def __init__(self, plugin_dir: str = "handler_plugins"):
         self.plugin_dir = plugin_dir
-        self.handlers: Dict[str, Type[FormatHandler]] = (
-            {}
-        )  # Stores handler classes, not instances
-        self.handler_info: Dict[str, Dict[str, Any]] = (
-            {}
-        )  # Stores metadata about handlers
+        self.handlers: Dict[str, Type[FormatHandler]] = {}  # Stores handler classes, not instances
+        self.handler_info: Dict[str, Dict[str, Any]] = {}  # Stores metadata about handlers
         self._load_plugins()  # Initial load of plugins
         self._setup_hot_reload()  # Setup watchdog for hot-reloading
 
@@ -1050,15 +1018,11 @@ class HandlerRegistry:
             module_name_base = Path(file_path).stem
             # Create a unique module name for hot-reloading to ensure fresh import
             # This is critical to avoid Python's module caching issues.
-            unique_module_name = (
-                f"dynamic_handler_{module_name_base}_{uuid.uuid4().hex}"
-            )
+            unique_module_name = f"dynamic_handler_{module_name_base}_{uuid.uuid4().hex}"
 
             spec = importlib.util.spec_from_file_location(unique_module_name, file_path)
             if spec is None or spec.loader is None:
-                logger.warning(
-                    f"Could not find module spec for plugin file: {file_path}"
-                )
+                logger.warning(f"Could not find module spec for plugin file: {file_path}")
                 continue
 
             try:
@@ -1113,18 +1077,14 @@ class HandlerRegistry:
         """Sets up a Watchdog observer to monitor the plugin directory for changes."""
         # --- FIX: Guard hot-reload for testing environments ---
         if os.getenv("TESTING") == "1":
-            logger.info(
-                "TESTING environment detected. Skipping hot-reload observer setup."
-            )
+            logger.info("TESTING environment detected. Skipping hot-reload observer setup.")
             return
         # --- End Fix ---
 
         # Check if the directory exists before starting the observer
         if not Path(self.plugin_dir).exists():
             os.makedirs(self.plugin_dir, exist_ok=True)
-            logger.info(
-                f"Plugin directory '{self.plugin_dir}' did not exist. Created it."
-            )
+            logger.info(f"Plugin directory '{self.plugin_dir}' did not exist. Created it.")
 
         class ReloadHandler(FileSystemEventHandler):
             def __init__(self, registry_instance: "HandlerRegistry"):
@@ -1147,9 +1107,7 @@ class HandlerRegistry:
         observer.schedule(ReloadHandler(self), self.plugin_dir, recursive=False)
         try:
             observer.start()
-            logger.info(
-                f"Started hot-reload observer for handler plugins in: {self.plugin_dir}"
-            )
+            logger.info(f"Started hot-reload observer for handler plugins in: {self.plugin_dir}")
         except Exception as e:
             logger.error(f"Failed to start Watchdog observer: {e}", exc_info=True)
 
@@ -1193,9 +1151,7 @@ async def repair_sections(
         clean_data = convert_ruamel(current_data)
         current_data_str = json.dumps(clean_data, indent=2)
     except Exception as e:
-        logger.warning(
-            f"Could not serialize current data for LLM repair prompt: {e}. Using str()."
-        )
+        logger.warning(f"Could not serialize current data for LLM repair prompt: {e}. Using str().")
         current_data_str = str(current_data)
 
     # Truncate for prompt to avoid massive context and ensure the prompt fits within the limit
@@ -1231,9 +1187,9 @@ async def repair_sections(
         LLM_CALLS_TOTAL.labels(
             provider="deploy_response_handler", model="gpt-4o"
         ).inc()  # Removed task="config_repair" as it's not a standard label
-        LLM_LATENCY_SECONDS.labels(
-            provider="deploy_response_handler", model="gpt-4o"
-        ).observe(time.time() - start_time_repair_llm)
+        LLM_LATENCY_SECONDS.labels(provider="deploy_response_handler", model="gpt-4o").observe(
+            time.time() - start_time_repair_llm
+        )
         # FIX: Changed to match log_audit_event signature: (event_name, data)
         add_provenance(
             "provenance",
@@ -1261,9 +1217,7 @@ async def repair_sections(
         # Attempt to extract the 'config' field from the LLM's JSON wrapper
         try:
             # Clean up potential markdown fences
-            llm_content_cleaned = (
-                re.sub(r"```(json)?", "", llm_content).strip("`").strip()
-            )
+            llm_content_cleaned = re.sub(r"```(json)?", "", llm_content).strip("`").strip()
             wrapper = json.loads(llm_content_cleaned)
             repaired_content = wrapper.get("config", "").strip()
             if not repaired_content:
@@ -1287,9 +1241,7 @@ async def repair_sections(
 
         try:
             repaired_normalized_data = handler.normalize(repaired_content)
-            logger.info(
-                f"LLM successfully repaired and provided full {output_format} config."
-            )
+            logger.info(f"LLM successfully repaired and provided full {output_format} config.")
             return repaired_normalized_data
         except ValueError as ve:
             # If normalization fails, the LLM-provided content is invalid/unmergeable
@@ -1367,9 +1319,7 @@ async def enrich_config_output(
         # Use central utility for file operations
         log_output = await get_commits(repo_path, limit=3)
         if log_output and "ERROR" not in log_output and "Failed" not in log_output:
-            enriched_content_parts.append(
-                f"## Recent Change Log\n```\n{log_output}\n```\n"
-            )
+            enriched_content_parts.append(f"## Recent Change Log\n```\n{log_output}\n```\n")
         else:
             enriched_content_parts.append(
                 "## Recent Change Log\n_Failed to retrieve changelog or repository not found._\n"
@@ -1424,9 +1374,7 @@ def analyze_quality(data: Any, handler: FormatHandler) -> Dict[str, Any]:
 
         clean_data = convert_ruamel(data)
         string_representation = (
-            json.dumps(clean_data)
-            if isinstance(clean_data, (dict, list))
-            else str(clean_data)
+            json.dumps(clean_data) if isinstance(clean_data, (dict, list)) else str(clean_data)
         )
         # Example heuristic: score decreases with length, capped at 0.0-1.0
         quality_analysis_result["readability_score"] = max(
@@ -1505,9 +1453,7 @@ async def handle_deploy_response(
             for section_name, section_text in extracted_sections.items():
                 if section_text:  # Only summarize non-empty sections
                     try:
-                        summary = await handler.summarize_section(
-                            section_name, section_text
-                        )
+                        summary = await handler.summarize_section(section_name, section_text)
                         summarized_sections[section_name] = summary
                     except Exception as e:
                         # STRICT FAILURES ENFORCED: If summarization fails, propagate the error
@@ -1544,12 +1490,10 @@ async def handle_deploy_response(
                     output_format,
                     handler_registry,
                 )
-                normalized_data = (
-                    repaired_data  # Use the repaired data for subsequent steps
+                normalized_data = repaired_data  # Use the repaired data for subsequent steps
+                handler_latency.labels(format=output_format, operation="repair").observe(
+                    time.time() - start_repair
                 )
-                handler_latency.labels(
-                    format=output_format, operation="repair"
-                ).observe(time.time() - start_repair)
                 span.set_attribute("repair_attempted", True)
                 span.set_attribute("repair_successful", True)
 
@@ -1565,9 +1509,7 @@ async def handle_deploy_response(
                     f"Failed to convert normalized data to string for scanning: {e}",
                     exc_info=True,
                 )
-                current_config_string = str(
-                    normalized_data
-                )  # Fallback to string representation
+                current_config_string = str(normalized_data)  # Fallback to string representation
 
             # --- FIX: Pass DANGEROUS_CONFIG_PATTERNS to scan_config_for_findings ---
             # NOTE: This is a circular dependency. The patterns *should* be defined
@@ -1598,15 +1540,9 @@ async def handle_deploy_response(
 
             # 5. Quality Analysis (Linting, Readability, Compliance)
             quality_analysis_result = analyze_quality(normalized_data, handler)
-            span.set_attribute(
-                "lint_issues_count", len(quality_analysis_result["lint_issues"])
-            )
-            span.set_attribute(
-                "readability_score", quality_analysis_result["readability_score"]
-            )
-            span.set_attribute(
-                "compliance_score", quality_analysis_result["compliance_score"]
-            )
+            span.set_attribute("lint_issues_count", len(quality_analysis_result["lint_issues"]))
+            span.set_attribute("readability_score", quality_analysis_result["readability_score"])
+            span.set_attribute("compliance_score", quality_analysis_result["compliance_score"])
 
             # 6. Convert to desired output format (if specified)
             handler_calls.labels(format=output_format, operation="convert").inc()
@@ -1638,8 +1574,7 @@ async def handle_deploy_response(
             # 8. Provenance Stamping
             provenance = {
                 "run_id": run_id,
-                "timestamp_utc": datetime.utcnow().isoformat()
-                + "Z",  # ISO 8601 with Z for UTC
+                "timestamp_utc": datetime.utcnow().isoformat() + "Z",  # ISO 8601 with Z for UTC
                 "handler_class": handler.__class__.__name__,
                 "handler_version": handler.__version__,
                 "handler_source": handler.__source__,
@@ -1653,12 +1588,8 @@ async def handle_deploy_response(
             add_provenance("provenance", provenance)
 
             total_latency = time.perf_counter() - start_time
-            handler_latency.labels(format=output_format, operation="total").observe(
-                total_latency
-            )
-            span.set_status(
-                Status(StatusCode.OK, "Response handling completed successfully.")
-            )
+            handler_latency.labels(format=output_format, operation="total").observe(total_latency)
+            span.set_status(Status(StatusCode.OK, "Response handling completed successfully."))
 
             result = {
                 "final_config_output": enriched_final_output,  # The final string with all enrichments
@@ -1680,9 +1611,7 @@ async def handle_deploy_response(
             handler_errors.labels(
                 format=output_format, operation="overall", error_type=error_type
             ).inc()
-            logger.error(
-                f"Response handling failed: {e}", exc_info=True, extra=log_extra
-            )
+            logger.error(f"Response handling failed: {e}", exc_info=True, extra=log_extra)
             span.set_status(Status(StatusCode.ERROR, str(e)))
             span.record_exception(e)
             # Re-raise the exception after logging and metrics, as this is a critical failure in strict mode

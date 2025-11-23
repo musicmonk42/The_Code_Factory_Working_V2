@@ -14,9 +14,7 @@ import os
 import base64
 
 # Set the encryption key environment variable for tests
-os.environ["ARBITER_ENCRYPTION_KEY"] = base64.urlsafe_b64encode(os.urandom(32)).decode(
-    "utf-8"
-)
+os.environ["ARBITER_ENCRYPTION_KEY"] = base64.urlsafe_b64encode(os.urandom(32)).decode("utf-8")
 
 from sqlalchemy.exc import SQLAlchemyError
 from cryptography.fernet import InvalidToken
@@ -245,9 +243,7 @@ async def test_sqlite_handles_decryption_failure(sqlite_backend):
 
 
 @pytest.mark.asyncio
-async def test_redis_load_snapshot_returns_none_if_not_found(
-    redis_backend, mock_redis_client
-):
+async def test_redis_load_snapshot_returns_none_if_not_found(redis_backend, mock_redis_client):
     """Test that loading a non-existent snapshot from Redis returns None."""
     mock_redis_client.hgetall.return_value = {}
     snapshot = await redis_backend.load_snapshot("non_existent")
@@ -274,9 +270,7 @@ async def test_redis_save_and_load_snapshot(redis_backend, mock_redis_client):
         b"skills_encrypted": redis_backend.cipher.encrypt(
             json.dumps({"python": 0.7}).encode("utf-8")
         ),
-        b"user_preferences_encrypted": redis_backend.cipher.encrypt(
-            json.dumps({}).encode("utf-8")
-        ),
+        b"user_preferences_encrypted": redis_backend.cipher.encrypt(json.dumps({}).encode("utf-8")),
         b"schema_version": b"1.0",
         b"event_offset": b"0",
         b"experience_points": b"500.0",
@@ -299,9 +293,7 @@ async def test_redis_circuit_breaker_opens(redis_backend, caplog):
     try:
         # This should raise ArbiterGrowthError due to circuit breaker
         with caplog.at_level(logging.ERROR):
-            with pytest.raises(
-                ArbiterGrowthError, match="Redis operation 'load_snapshot' failed"
-            ):
+            with pytest.raises(ArbiterGrowthError, match="Redis operation 'load_snapshot' failed"):
                 await redis_backend.load_snapshot("test_arbiter_5")
             assert "CircuitBreakerError" in caplog.text
     finally:
@@ -388,9 +380,7 @@ def test_storage_backend_factory_unknown(mock_config_store):
     mock_config = MagicMock()
     mock_config.get.return_value = "unknown_backend"
 
-    with pytest.raises(
-        ValueError, match="Unknown storage backend type: unknown_backend"
-    ):
+    with pytest.raises(ValueError, match="Unknown storage backend type: unknown_backend"):
         storage_backend_factory(mock_config)
 
 
@@ -498,10 +488,7 @@ async def test_concurrent_writes(sqlite_backend):
     ]
 
     # Save concurrently
-    tasks = [
-        sqlite_backend.save_snapshot(state.arbiter_id, state.model_dump())
-        for state in states
-    ]
+    tasks = [sqlite_backend.save_snapshot(state.arbiter_id, state.model_dump()) for state in states]
     await asyncio.gather(*tasks)
 
     # Verify all were saved

@@ -48,9 +48,7 @@ try:
     SQLLITE_AVAILABLE = True
 except ImportError:
     SQLLITE_AVAILABLE = False
-    logging.warning(
-        "aiosqlite not available. SQLiteClient functionality will be limited."
-    )
+    logging.warning("aiosqlite not available. SQLiteClient functionality will be limited.")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -62,9 +60,7 @@ if not logger.handlers:
 # Get tracer using centralized configuration
 tracer = get_tracer("arbiter_policy_core")
 
-PolicyRuleCallable = Callable[
-    [str, str, Optional[str], Optional[Any]], Awaitable[Tuple[bool, str]]
-]
+PolicyRuleCallable = Callable[[str, str, Optional[str], Optional[Any]], Awaitable[Tuple[bool, str]]]
 
 SQLITE_QUERY_LATENCY = get_or_create_metric(
     Histogram,
@@ -134,16 +130,9 @@ class SQLiteClient:
         self._conn: Optional[aiosqlite.Connection] = None
         self._last_query_time: float = 0.0
         try:
-            self._query_interval: float = (
-                get_config().CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
-            )
-            if (
-                not isinstance(self._query_interval, (int, float))
-                or self._query_interval <= 0
-            ):
-                raise ValueError(
-                    "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be a positive number"
-                )
+            self._query_interval: float = get_config().CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
+            if not isinstance(self._query_interval, (int, float)) or self._query_interval <= 0:
+                raise ValueError("CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be a positive number")
         except AttributeError:
             logger.warning(
                 "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL not found in ArbiterConfig. Using default: 30.0"
@@ -164,9 +153,7 @@ class SQLiteClient:
             "sqlite_connect", attributes={"db_file": self.db_file}
         ) as span:
             if not os.path.isabs(self.db_file):
-                raise ValueError(
-                    f"Invalid db_file: {self.db_file} must be an absolute path"
-                )
+                raise ValueError(f"Invalid db_file: {self.db_file} must be an absolute path")
             if self._conn is None:
                 self._conn = await aiosqlite.connect(self.db_file)
                 await self._init_db()
@@ -203,9 +190,7 @@ class SQLiteClient:
             start_time = time.monotonic()
             current_time = time.monotonic()
             if current_time - self._last_query_time < self._query_interval:
-                await asyncio.sleep(
-                    self._query_interval - (current_time - self._last_query_time)
-                )
+                await asyncio.sleep(self._query_interval - (current_time - self._last_query_time))
             entry_copy = entry.copy()
             if not isinstance(entry_copy, dict):
                 span.record_exception(ValueError("Entry must be a dictionary"))
@@ -238,9 +223,7 @@ class SQLiteClient:
                 self._last_query_time = time.monotonic()
                 span.set_attribute("save_status", "success")
             logger.debug(f"SQLiteClient: Saved feedback entry {entry_copy.get('id')}")
-            SQLITE_QUERY_LATENCY.labels(operation="save").observe(
-                time.monotonic() - start_time
-            )
+            SQLITE_QUERY_LATENCY.labels(operation="save").observe(time.monotonic() - start_time)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -285,9 +268,7 @@ class SQLiteClient:
                         f"SELECT data FROM feedback WHERE {where_sql}", params
                     )
                 rows = await cursor.fetchall()
-                SQLITE_QUERY_LATENCY.labels(operation="get").observe(
-                    time.monotonic() - start_time
-                )
+                SQLITE_QUERY_LATENCY.labels(operation="get").observe(time.monotonic() - start_time)
                 return [json.loads(row[0]) for row in rows]
             return []
 
@@ -299,17 +280,13 @@ class SQLiteClient:
             f"Retrying update_feedback_entry: attempt {retry_state.attempt_number}"
         ),
     )
-    async def update_feedback_entry(
-        self, query: Dict[str, Any], updates: Dict[str, Any]
-    ) -> bool:
+    async def update_feedback_entry(self, query: Dict[str, Any], updates: Dict[str, Any]) -> bool:
         """Updates feedback entries with validated query and update parameters."""
         with tracer.start_as_current_span(
             "update_feedback_entry", attributes={"query": str(query)}
         ) as span:
             if not isinstance(query, dict) or not isinstance(updates, dict):
-                span.record_exception(
-                    ValueError("Query and updates must be dictionaries")
-                )
+                span.record_exception(ValueError("Query and updates must be dictionaries"))
                 raise ValueError("Query and updates must be dictionaries")
             start_time = time.monotonic()
             if self._conn:
@@ -324,9 +301,7 @@ class SQLiteClient:
                         where_clauses.append(f"json_extract(data, '$.{k}') = ?")
                         params.append(v)
                     else:
-                        span.record_exception(
-                            ValueError(f"Invalid query key or value: {k}={v}")
-                        )
+                        span.record_exception(ValueError(f"Invalid query key or value: {k}={v}"))
                         raise ValueError(f"Invalid query key or value: {k}={v}")
                 where_sql = " AND ".join(where_clauses)
                 cursor = await self._conn.execute(
@@ -403,35 +378,25 @@ class BasicDecisionOptimizer:
             "default_score",
         ]
         for key in required_keys:
-            if key not in self.score_rules or not isinstance(
-                self.score_rules[key], (int, float)
-            ):
+            if key not in self.score_rules or not isinstance(self.score_rules[key], (int, float)):
                 logger.error(f"Invalid score_rules: missing or invalid {key}")
                 raise ValueError(f"Invalid score_rules: {key} must be a number")
         if not 0.0 <= self.score_rules["default_score"] <= 1.0:
             logger.error(
                 f"Invalid default_score: {self.score_rules['default_score']} must be between 0.0 and 1.0"
             )
-            raise ValueError(
-                f"Invalid default_score: {self.score_rules['default_score']}"
-            )
+            raise ValueError(f"Invalid default_score: {self.score_rules['default_score']}")
         self._last_score_time: float = 0.0
-        self._score_interval: float = (
-            get_config().CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
-        )
+        self._score_interval: float = get_config().CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
 
-    async def compute_trust_score(
-        self, auth_context: Dict, user_id: Optional[str]
-    ) -> float:
+    async def compute_trust_score(self, auth_context: Dict, user_id: Optional[str]) -> float:
         """Computes trust score based on configurable rules with rate-limiting."""
         with tracer.start_as_current_span(
             "compute_trust_score", attributes={"user_id": user_id}
         ) as span:
             current_time = time.monotonic()
             if current_time - self._last_score_time < self._score_interval:
-                await asyncio.sleep(
-                    self._score_interval - (current_time - self._last_score_time)
-                )
+                await asyncio.sleep(self._score_interval - (current_time - self._last_score_time))
             if not isinstance(auth_context, dict):
                 span.record_exception(ValueError("auth_context must be a dictionary"))
                 raise ValueError("auth_context must be a dictionary")
@@ -456,9 +421,7 @@ class BasicDecisionOptimizer:
                     if (datetime.now(timezone.utc) - last_login) < timedelta(days=7):
                         score += self.score_rules["recent_login_bonus"]
                 except ValueError:
-                    logger.warning(
-                        f"Invalid 'last_login' timestamp: {auth_context['last_login']}"
-                    )
+                    logger.warning(f"Invalid 'last_login' timestamp: {auth_context['last_login']}")
                     span.record_exception(ValueError("Invalid last_login timestamp"))
             if user_id and user_id.startswith("admin"):
                 score += self.score_rules["admin_user_bonus"]
@@ -494,26 +457,18 @@ class PolicyEngine:
                 not isinstance(config.POLICY_REFRESH_INTERVAL_SECONDS, (int, float))
                 or config.POLICY_REFRESH_INTERVAL_SECONDS <= 0
             ):
-                raise ValueError(
-                    "POLICY_REFRESH_INTERVAL_SECONDS must be a positive number"
-                )
+                raise ValueError("POLICY_REFRESH_INTERVAL_SECONDS must be a positive number")
             if not isinstance(config.LLM_PROVIDER, str) or config.LLM_PROVIDER not in {
                 "openai",
                 "anthropic",
                 "gemini",
             }:
-                raise ValueError(
-                    "LLM_PROVIDER must be one of 'openai', 'anthropic', 'gemini'"
-                )
+                raise ValueError("LLM_PROVIDER must be one of 'openai', 'anthropic', 'gemini'")
             if (
-                not isinstance(
-                    config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL, (int, float)
-                )
+                not isinstance(config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL, (int, float))
                 or config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL <= 0
             ):
-                raise ValueError(
-                    "CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be a positive number"
-                )
+                raise ValueError("CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL must be a positive number")
             if not isinstance(config.POLICY_CONFIG_FILE_PATH, str) or not os.path.isabs(
                 config.POLICY_CONFIG_FILE_PATH
             ):
@@ -522,9 +477,7 @@ class PolicyEngine:
                 not isinstance(config.POLICY_PAUSE_POLLING_INTERVAL, (int, float))
                 or config.POLICY_PAUSE_POLLING_INTERVAL <= 0
             ):
-                raise ValueError(
-                    "POLICY_PAUSE_POLLING_INTERVAL must be a positive number"
-                )
+                raise ValueError("POLICY_PAUSE_POLLING_INTERVAL must be a positive number")
 
             self.arbiter = arbiter_instance
             self.config = config
@@ -537,13 +490,9 @@ class PolicyEngine:
             self._pause_policy_refresh: bool = False
             self._last_pause_state: bool = False
             self._last_llm_call_time: float = 0.0
-            self._llm_call_interval: float = (
-                config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
-            )
+            self._llm_call_interval: float = config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
             self._last_trust_score_time: float = 0.0
-            self._trust_score_interval: float = (
-                config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
-            )
+            self._trust_score_interval: float = config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
 
             self._load_policies_from_file()
             self._load_compliance_controls()
@@ -566,9 +515,7 @@ class PolicyEngine:
             model=self.config.LLM_MODEL,
         )
 
-    async def _call_llm_for_policy_evaluation(
-        self, prompt: str
-    ) -> Tuple[str, str, float]:
+    async def _call_llm_for_policy_evaluation(self, prompt: str) -> Tuple[str, str, float]:
         """Evaluates a policy using an LLM client with circuit breaker, auditing, and rate-limiting."""
         with tracer.start_as_current_span(
             "call_llm_for_policy_evaluation",
@@ -593,9 +540,7 @@ class PolicyEngine:
 
             llm_provider = self.config.LLM_PROVIDER
             if not get_config().get_api_key_for_provider(llm_provider):
-                reason = (
-                    f"LLM evaluation skipped: API key missing for '{llm_provider}'."
-                )
+                reason = f"LLM evaluation skipped: API key missing for '{llm_provider}'."
                 span.set_attribute("api_key_status", "missing")
                 return "NO", reason, 0.0
 
@@ -613,9 +558,7 @@ class PolicyEngine:
                 await record_llm_policy_api_success()
                 decision, reason, trust_score = self._validate_llm_policy_output(
                     llm_response,
-                    self._policies.get("llm_rules", {}).get(
-                        "valid_responses", ["YES", "NO"]
-                    ),
+                    self._policies.get("llm_rules", {}).get("valid_responses", ["YES", "NO"]),
                 )
                 span.set_attribute("llm_response", llm_response)
                 span.set_attribute("llm.decision", decision)
@@ -662,17 +605,13 @@ class PolicyEngine:
                     os.makedirs(policy_dir, exist_ok=True)
                 if not os.path.exists(self.config.POLICY_CONFIG_FILE_PATH):
                     self._policies = self._get_default_policies()
-                    with open(
-                        self.config.POLICY_CONFIG_FILE_PATH, "w", encoding="utf-8"
-                    ) as f:
+                    with open(self.config.POLICY_CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
                         json.dump(self._policies, f, indent=4)
                     logger.info(
                         f"Created default policy file at {self.config.POLICY_CONFIG_FILE_PATH}"
                     )
                     return
-                with open(
-                    self.config.POLICY_CONFIG_FILE_PATH, "r", encoding="utf-8"
-                ) as f:
+                with open(self.config.POLICY_CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
                     loaded_policies = json.load(f)
                     old_policies = self._policies.copy()
                     if not self.validate_policies(loaded_policies):
@@ -688,24 +627,18 @@ class PolicyEngine:
                         )
                     policy_file_reload_count.inc()
                     policy_last_reload_timestamp.set(datetime.now().timestamp())
-                    logger.info(
-                        f"Policies reloaded from {self.config.POLICY_CONFIG_FILE_PATH}."
-                    )
+                    logger.info(f"Policies reloaded from {self.config.POLICY_CONFIG_FILE_PATH}.")
             except FileNotFoundError:
                 logger.warning("Policy file not found. Loading default policies.")
                 self._policies = self._get_default_policies()
                 span.set_attribute("load_status", "file_not_found")
             except json.JSONDecodeError as e:
-                logger.error(
-                    f"Error parsing policy file: {e}. Loading default policies."
-                )
+                logger.error(f"Error parsing policy file: {e}. Loading default policies.")
                 self._policies = self._get_default_policies()
                 span.record_exception(e)
                 span.set_attribute("load_status", "json_decode_error")
             except Exception as e:
-                logger.error(
-                    f"Unexpected error loading policies: {e}. Loading default policies."
-                )
+                logger.error(f"Unexpected error loading policies: {e}. Loading default policies.")
                 self._policies = self._get_default_policies()
                 span.record_exception(e)
                 span.set_attribute("load_status", "unexpected_error")
@@ -722,17 +655,11 @@ class PolicyEngine:
         """Loads and validates compliance controls with retry logic."""
         with tracer.start_as_current_span("load_compliance_controls") as span:
             try:
-                self._compliance_controls = load_compliance_map(
-                    self.config.POLICY_CONFIG_FILE_PATH
-                )
+                self._compliance_controls = load_compliance_map(self.config.POLICY_CONFIG_FILE_PATH)
                 for control_id, control_info in self._compliance_controls.items():
-                    if not isinstance(control_id, str) or not isinstance(
-                        control_info, dict
-                    ):
+                    if not isinstance(control_id, str) or not isinstance(control_info, dict):
                         raise ValueError(f"Invalid compliance control: {control_id}")
-                    if not all(
-                        key in control_info for key in ["name", "status", "required"]
-                    ):
+                    if not all(key in control_info for key in ["name", "status", "required"]):
                         raise ValueError(
                             f"Missing required keys in compliance control: {control_id}"
                         )
@@ -741,9 +668,7 @@ class PolicyEngine:
                         "partially_enforced",
                         "not_implemented",
                     }:
-                        raise ValueError(
-                            f"Invalid status for compliance control: {control_id}"
-                        )
+                        raise ValueError(f"Invalid status for compliance control: {control_id}")
                 logger.info(
                     f"Loaded {len(self._compliance_controls)} compliance controls via compliance_mapper."
                 )
@@ -837,9 +762,7 @@ class PolicyEngine:
         """Registers a custom policy rule with retry logic."""
         with self._lock:
             if not asyncio.iscoroutinefunction(rule_func):
-                raise TypeError(
-                    "Custom policy rule function must be an async coroutine."
-                )
+                raise TypeError("Custom policy rule function must be an async coroutine.")
             self._custom_rules.append(rule_func)
             logger.info(f"Registered custom policy rule: {rule_func.__name__}")
 
@@ -948,14 +871,9 @@ class PolicyEngine:
         for key in required_keys:
             if key not in policies:
                 return False
-            if (
-                not isinstance(policies[key], dict)
-                and key != "custom_python_rules_enabled"
-            ):
+            if not isinstance(policies[key], dict) and key != "custom_python_rules_enabled":
                 return False
-            if key == "custom_python_rules_enabled" and not isinstance(
-                policies[key], bool
-            ):
+            if key == "custom_python_rules_enabled" and not isinstance(policies[key], bool):
                 return False
         for domain, rule in policies["domain_rules"].items():
             if (
@@ -1189,14 +1107,9 @@ class PolicyEngine:
                     ).inc()
                     return False, reason
 
-                if (
-                    "required_roles" in domain_rule
-                    and effective_user_id_str != "anonymous"
-                ):
+                if "required_roles" in domain_rule and effective_user_id_str != "anonymous":
                     user_roles = await self._get_user_roles(effective_user_id_str)
-                    if not any(
-                        role in user_roles for role in domain_rule["required_roles"]
-                    ):
+                    if not any(role in user_roles for role in domain_rule["required_roles"]):
                         reason = f"Domain '{domain}' requires roles {domain_rule['required_roles']}, but user has {user_roles}."
                         await self._audit_policy_decision(
                             "should_auto_learn",
@@ -1218,9 +1131,7 @@ class PolicyEngine:
 
                 if domain_rule.get("max_size_kb") is not None and value is not None:
                     try:
-                        value_size_kb = (
-                            len(json.dumps(value, default=str).encode("utf-8")) / 1024
-                        )
+                        value_size_kb = len(json.dumps(value, default=str).encode("utf-8")) / 1024
                         if value_size_kb > domain_rule["max_size_kb"]:
                             reason = f"Value size ({value_size_kb:.2f} KB) exceeds max for domain '{domain}'."
                             await self._audit_policy_decision(
@@ -1241,9 +1152,7 @@ class PolicyEngine:
                             ).inc()
                             return False, reason
                     except TypeError:
-                        reason = (
-                            f"Value for domain '{domain}' is not JSON serializable."
-                        )
+                        reason = f"Value for domain '{domain}' is not JSON serializable."
                         await self._audit_policy_decision(
                             "should_auto_learn",
                             domain,
@@ -1289,9 +1198,7 @@ class PolicyEngine:
 
                 user_rule = self._policies["user_rules"].get(
                     effective_user_id_str,
-                    self._policies["user_rules"].get(
-                        "*", {"allow": True, "reason": "Default"}
-                    ),
+                    self._policies["user_rules"].get("*", {"allow": True, "reason": "Default"}),
                 )
                 user_control_tag = user_rule.get("control_tag")
                 if not user_rule["allow"]:
@@ -1314,10 +1221,7 @@ class PolicyEngine:
                     ).inc()
                     return False, reason
 
-                if (
-                    "restricted_domains" in user_rule
-                    and domain in user_rule["restricted_domains"]
-                ):
+                if "restricted_domains" in user_rule and domain in user_rule["restricted_domains"]:
                     reason = f"User '{effective_user_id_str}' is restricted from domain '{domain}'."
                     await self._audit_policy_decision(
                         "should_auto_learn",
@@ -1339,10 +1243,7 @@ class PolicyEngine:
 
                 llm_rules = self._policies.get("llm_rules", {})
                 llm_control_tag = llm_rules.get("control_tag")
-                if (
-                    llm_rules.get("enabled", False)
-                    and self.config.LLM_POLICY_EVALUATION_ENABLED
-                ):
+                if llm_rules.get("enabled", False) and self.config.LLM_POLICY_EVALUATION_ENABLED:
                     try:
                         llm_prompt = llm_rules["prompt_template"].format(
                             domain=domain, key=key, value=value
@@ -1350,9 +1251,7 @@ class PolicyEngine:
                         sanitized_prompt = self._sanitize_prompt(llm_prompt)
 
                         llm_response_decision, llm_reason, llm_trust_score = (
-                            await self._call_llm_for_policy_evaluation(
-                                prompt=sanitized_prompt
-                            )
+                            await self._call_llm_for_policy_evaluation(prompt=sanitized_prompt)
                         )
 
                         if llm_trust_score < self.config.LLM_POLICY_MIN_TRUST_SCORE:
@@ -1376,9 +1275,7 @@ class PolicyEngine:
                             return False, reason
 
                         if llm_response_decision == "YES":
-                            logger.debug(
-                                f"LLM allowed for {domain}/{key}. Reason: {llm_reason}"
-                            )
+                            logger.debug(f"LLM allowed for {domain}/{key}. Reason: {llm_reason}")
                         else:
                             reason = f"LLM denied: {llm_reason}"
                             await self._audit_policy_decision(
@@ -1421,9 +1318,7 @@ class PolicyEngine:
             if self._policies.get("custom_python_rules_enabled", True):
                 for custom_rule_func in self._custom_rules:
                     try:
-                        allowed, reason = await custom_rule_func(
-                            domain, key, user_id, value
-                        )
+                        allowed, reason = await custom_rule_func(domain, key, user_id, value)
                         if not allowed:
                             await self._audit_policy_decision(
                                 "should_auto_learn",
@@ -1446,9 +1341,7 @@ class PolicyEngine:
                                 f"Custom rule '{custom_rule_func.__name__}' denied: {reason}",
                             )
                     except Exception as e:
-                        reason = (
-                            f"Error in custom rule '{custom_rule_func.__name__}': {e}"
-                        )
+                        reason = f"Error in custom rule '{custom_rule_func.__name__}': {e}"
                         await self._audit_policy_decision(
                             "should_auto_learn",
                             domain,
@@ -1467,9 +1360,7 @@ class PolicyEngine:
                         ).inc()
                         return False, reason
 
-            final_control_tag_for_action = (
-                domain_control_tag or user_control_tag or llm_control_tag
-            )
+            final_control_tag_for_action = domain_control_tag or user_control_tag or llm_control_tag
             action_id_for_compliance_check = f"{domain}:{key}"
 
             compliance_check_passed, compliance_reason = await self._enforce_compliance(
@@ -1477,9 +1368,7 @@ class PolicyEngine:
             )
 
             if not compliance_check_passed:
-                final_reason = (
-                    f"Compliance enforcement blocked action: {compliance_reason}"
-                )
+                final_reason = f"Compliance enforcement blocked action: {compliance_reason}"
                 await self._audit_policy_decision(
                     "should_auto_learn",
                     domain,
@@ -1589,9 +1478,7 @@ class PolicyEngine:
                     "*": ["user"],
                 }
             except AttributeError:
-                logger.warning(
-                    "ROLE_MAPPINGS not found in ArbiterConfig. Using default mappings."
-                )
+                logger.warning("ROLE_MAPPINGS not found in ArbiterConfig. Using default mappings.")
                 role_mappings = {
                     "admin": ["admin", "user", "explorer_user"],
                     "auditor": ["auditor", "user"],
@@ -1630,11 +1517,7 @@ class PolicyEngine:
                 parsed_decision = parts[0].strip()
                 if parsed_decision in valid_responses:
                     decision = parsed_decision
-                    reason = (
-                        parts[1].strip()
-                        if len(parts) > 1
-                        else f"LLM decided {decision}."
-                    )
+                    reason = parts[1].strip() if len(parts) > 1 else f"LLM decided {decision}."
                     trust_score = 1.0
                 else:
                     reason, trust_score = (
@@ -1663,8 +1546,7 @@ class PolicyEngine:
             current_time = time.monotonic()
             if current_time - self._last_trust_score_time < self._trust_score_interval:
                 await asyncio.sleep(
-                    self._trust_score_interval
-                    - (current_time - self._last_trust_score_time)
+                    self._trust_score_interval - (current_time - self._last_trust_score_time)
                 )
 
             if not isinstance(domain, str) or not re.match(
@@ -1691,9 +1573,7 @@ class PolicyEngine:
                     "Missing authentication context for trust score evaluation.",
                 )
 
-            effective_user_id_for_stats = (
-                user_id if user_id is not None else "anonymous"
-            )
+            effective_user_id_for_stats = user_id if user_id is not None else "anonymous"
             try:
                 from app.ai_assistant.decision_optimizer import DecisionOptimizer
 
@@ -1754,9 +1634,7 @@ class PolicyEngine:
                     "DecisionOptimizer not available. Using basic trust score.",
                     exc_info=True,
                 )
-                optimizer = BasicDecisionOptimizer(
-                    settings=self.config.DECISION_OPTIMIZER_SETTINGS
-                )
+                optimizer = BasicDecisionOptimizer(settings=self.config.DECISION_OPTIMIZER_SETTINGS)
                 score = await optimizer.compute_trust_score(value, user_id)
                 self._last_trust_score_time = time.monotonic()
                 threshold = trust_rules.get("threshold", 0.6)
@@ -1811,9 +1689,7 @@ class PolicyEngine:
         with tracer.start_as_current_span("start_policy_refresher") as span:
             with self._lock:
                 if not self._policy_refresh_task or self._policy_refresh_task.done():
-                    self._policy_refresh_task = asyncio.create_task(
-                        self._periodic_policy_refresh()
-                    )
+                    self._policy_refresh_task = asyncio.create_task(self._periodic_policy_refresh())
                     logger.info("Policy refresher started.")
                     span.set_attribute("task_status", "started")
 
@@ -1824,15 +1700,11 @@ class PolicyEngine:
                 pause_value = os.getenv("PAUSE_POLICY_REFRESH_TASKS", "false").lower()
                 is_paused = self._pause_policy_refresh or pause_value == "true"
                 if is_paused != self._last_pause_state:
-                    logger.info(
-                        f"Policy refresh task {'paused' if is_paused else 'resumed'}"
-                    )
+                    logger.info(f"Policy refresh task {'paused' if is_paused else 'resumed'}")
                     POLICY_REFRESH_STATE_TRANSITIONS.labels(
                         state="paused" if is_paused else "resumed"
                     ).inc()
-                    span.set_attribute(
-                        "task_state", "paused" if is_paused else "resumed"
-                    )
+                    span.set_attribute("task_state", "paused" if is_paused else "resumed")
                     self._last_pause_state = is_paused
                 if is_paused:
                     await asyncio.sleep(self.config.POLICY_PAUSE_POLLING_INTERVAL or 60)
@@ -1848,9 +1720,7 @@ class PolicyEngine:
                     logger.info("Policy refresh task cancelled.")
                     break
                 except Exception as e:
-                    logger.error(
-                        f"Error during periodic policy refresh: {e}", exc_info=True
-                    )
+                    logger.error(f"Error during periodic policy refresh: {e}", exc_info=True)
                     POLICY_REFRESH_ERRORS.labels(error_type="refresh_failed").inc()
                     span.record_exception(e)
                     await asyncio.sleep(60)
@@ -1880,16 +1750,10 @@ def initialize_policy_engine(arbiter_instance: Any):
                 if _policy_engine_instance is None:
                     logger.info("Initializing global PolicyEngine instance...")
                     # Create PolicyEngine with provided arbiter instance and config
-                    _policy_engine_instance = PolicyEngine(
-                        arbiter_instance, get_config()
-                    )
+                    _policy_engine_instance = PolicyEngine(arbiter_instance, get_config())
                     # Start policy refresher task
-                    asyncio.create_task(
-                        _policy_engine_instance.start_policy_refresher()
-                    )
-                    logger.info(
-                        "Global PolicyEngine initialized and refresher started."
-                    )
+                    asyncio.create_task(_policy_engine_instance.start_policy_refresher())
+                    logger.info("Global PolicyEngine initialized and refresher started.")
                     span.set_attribute("init_status", "success")
             except Exception as e:
                 logger.error(f"Failed to initialize PolicyEngine: {e}")
@@ -1905,9 +1769,7 @@ async def should_auto_learn(
     if _policy_engine_instance is None:
         with _policy_engine_lock:
             if _policy_engine_instance is None:
-                logger.warning(
-                    "PolicyEngine not initialized. Using MinimalMockArbiter."
-                )
+                logger.warning("PolicyEngine not initialized. Using MinimalMockArbiter.")
 
                 class MinimalMockArbiter:
                     name = "AutoInitMockArbiter"
@@ -1915,9 +1777,7 @@ async def should_auto_learn(
                     knowledge_graph = None
                     plugin_registry = None
 
-                _policy_engine_instance = PolicyEngine(
-                    MinimalMockArbiter(), get_config()
-                )
+                _policy_engine_instance = PolicyEngine(MinimalMockArbiter(), get_config())
                 asyncio.create_task(_policy_engine_instance.start_policy_refresher())
     return await _policy_engine_instance.should_auto_learn(domain, key, user_id, value)
 

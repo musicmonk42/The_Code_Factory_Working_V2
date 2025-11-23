@@ -72,14 +72,10 @@ def test_initialize_with_multiproc_success_real_dir(mock_structlog):
         multiproc_dir = Path(temp_dir) / "prom"
 
         # Patch both the environment variable AND the global variable
-        with patch.dict(
-            os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}
-        ), patch(
+        with patch.dict(os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}), patch(
             "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
             str(multiproc_dir),
-        ), patch(
-            "arbiter.explainable_reasoner.metrics.multiprocess"
-        ) as mock_multiprocess:
+        ), patch("arbiter.explainable_reasoner.metrics.multiprocess") as mock_multiprocess:
 
             mock_collector = MagicMock()
             mock_multiprocess.MultiProcessCollector.return_value = mock_collector
@@ -98,14 +94,10 @@ def test_initialize_with_multiproc_permission_error(mock_structlog):
         multiproc_dir = Path(temp_dir) / "prom_unwritable"
 
         # Patch to simulate permission error
-        with patch.dict(
-            os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}
-        ), patch(
+        with patch.dict(os.environ, {"PROMETHEUS_MULTIPROC_DIR": str(multiproc_dir)}), patch(
             "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR",
             str(multiproc_dir),
-        ), patch(
-            "arbiter.explainable_reasoner.metrics.Path"
-        ) as mock_path_class:
+        ), patch("arbiter.explainable_reasoner.metrics.Path") as mock_path_class:
 
             # Mock Path to raise PermissionError on mkdir
             mock_path = MagicMock()
@@ -124,9 +116,7 @@ def test_initialize_with_multiproc_mkdir_exception(mock_structlog):
     fake_dir = "/dev/null/fake/path"
 
     # Patch the global variable to have the fake path
-    with patch(
-        "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", fake_dir
-    ):
+    with patch("arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", fake_dir):
         initialize_metrics()
 
         # Should log error and warning due to mkdir failure on invalid path
@@ -137,9 +127,7 @@ def test_initialize_with_multiproc_mkdir_exception(mock_structlog):
 def test_initialize_no_multiproc_dir(mock_structlog):
     """Tests initialization without the multiproc env var set."""
     # Patch the global variable to be None
-    with patch(
-        "arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", None
-    ), patch(
+    with patch("arbiter.explainable_reasoner.metrics.PROMETHEUS_MULTIPROC_DIR", None), patch(
         "arbiter.explainable_reasoner.metrics.ProcessCollector"
     ) as mock_process_collector:
 

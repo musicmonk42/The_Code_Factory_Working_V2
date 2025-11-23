@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
     logger.addHandler(handler)
 
 
@@ -77,9 +75,7 @@ class OllamaAdapter:
         self._circuit_breaker_failures = 0
         self._circuit_breaker_last_failure_time = 0.0
         self._circuit_breaker_threshold = settings.get("CIRCUIT_BREAKER_THRESHOLD", 3)
-        self._circuit_breaker_timeout = settings.get(
-            "CIRCUIT_BREAKER_TIMEOUT_SECONDS", 30
-        )
+        self._circuit_breaker_timeout = settings.get("CIRCUIT_BREAKER_TIMEOUT_SECONDS", 30)
 
         # Security configuration for PII masking
         self.security_config = settings.get("security_config", {})
@@ -117,9 +113,7 @@ class OllamaAdapter:
         self.logger.info("Exiting OllamaAdapter async context.")
         await self.client.aclose_session()
         if exc_val:
-            self.logger.error(
-                f"OllamaAdapter exited with an exception: {exc_val}", exc_info=True
-            )
+            self.logger.error(f"OllamaAdapter exited with an exception: {exc_val}", exc_info=True)
         self.logger.info("OllamaAdapter cleanup complete.")
 
     def _check_circuit_breaker(self):
@@ -136,9 +130,7 @@ class OllamaAdapter:
                 self.circuit_breaker_state_gauge.set(1)  # 1 for "half-open"
                 self.logger.warning("Circuit breaker is now 'half-open'.")
             else:
-                raise LLMClientError(
-                    "Circuit breaker is open. Not attempting Ollama API call."
-                )
+                raise LLMClientError("Circuit breaker is open. Not attempting Ollama API call.")
 
     def _update_circuit_breaker(self, success: bool):
         """
@@ -146,9 +138,7 @@ class OllamaAdapter:
         """
         if success:
             if self._circuit_breaker_state in ["open", "half-open"]:
-                self.logger.info(
-                    "Circuit breaker is now 'closed' after a successful request."
-                )
+                self.logger.info("Circuit breaker is now 'closed' after a successful request.")
                 self.circuit_breaker_state_gauge.set(0)  # 0 for "closed"
             self._circuit_breaker_failures = 0
             self._circuit_breaker_state = "closed"
@@ -158,9 +148,7 @@ class OllamaAdapter:
                 self._circuit_breaker_state = "open"
                 self._circuit_breaker_last_failure_time = time.monotonic()
                 self.circuit_breaker_state_gauge.set(2)  # 2 for "open"
-                self.logger.error(
-                    "Circuit breaker failed in 'half-open' state and is now 'open'."
-                )
+                self.logger.error("Circuit breaker failed in 'half-open' state and is now 'open'.")
             elif self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_state = "open"
                 self._circuit_breaker_last_failure_time = time.monotonic()
@@ -231,13 +219,11 @@ class OllamaAdapter:
             self.requests_total.labels(
                 status="success", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(
-                correlation_id=correlation_id or "none"
-            ).observe((time.monotonic() - start_time))
-            self._update_circuit_breaker(success=True)
-            self.logger.info(
-                f"Ollama generation successful for correlation_id: {correlation_id}"
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
+                (time.monotonic() - start_time)
             )
+            self._update_circuit_breaker(success=True)
+            self.logger.info(f"Ollama generation successful for correlation_id: {correlation_id}")
             return response_text
 
         except LLMClientError as e:
@@ -245,9 +231,9 @@ class OllamaAdapter:
             self.requests_total.labels(
                 status="failure", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(
-                correlation_id=correlation_id or "none"
-            ).observe((time.monotonic() - start_time))
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
+                (time.monotonic() - start_time)
+            )
             self._update_circuit_breaker(success=False)
 
             # Handle connection, timeout, and API errors
@@ -294,9 +280,9 @@ class OllamaAdapter:
             self.requests_total.labels(
                 status="failure", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(
-                correlation_id=correlation_id or "none"
-            ).observe((time.monotonic() - start_time))
+            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
+                (time.monotonic() - start_time)
+            )
             self._update_circuit_breaker(success=False)
             self.logger.critical(
                 f"A critical, unhandled error occurred in OllamaAdapter: {e} [Correlation ID: {correlation_id}]",

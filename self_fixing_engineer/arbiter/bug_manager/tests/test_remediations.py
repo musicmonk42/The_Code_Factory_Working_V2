@@ -98,12 +98,8 @@ class TestMLRemediationModel:
         # Just verify retry count is correct
 
     @pytest.mark.asyncio
-    async def test_record_feedback_success(
-        self, ml_model, bug_details, mock_aiohttp_session
-    ):
-        await ml_model.record_remediation_outcome(
-            bug_details, "TestPlaybook", "success"
-        )
+    async def test_record_feedback_success(self, ml_model, bug_details, mock_aiohttp_session):
+        await ml_model.record_remediation_outcome(bug_details, "TestPlaybook", "success")
         feedback_endpoint = f"{ml_model.model_endpoint}/feedback"
         mock_aiohttp_session.post.assert_called_once()
         # Verify the call was to the feedback endpoint with correct data
@@ -126,9 +122,7 @@ class TestRemediationStep:
     @pytest.mark.asyncio
     async def test_execute_with_retries_on_failure(self, bug_details):
         # Tenacity retries on exceptions, not False return values. Test exception retry.
-        mock_action = AsyncMock(
-            side_effect=[ValueError("Fail 1"), ValueError("Fail 2"), True]
-        )
+        mock_action = AsyncMock(side_effect=[ValueError("Fail 1"), ValueError("Fail 2"), True])
         RemediationStep.register_action("flaky_action", mock_action)
         step = RemediationStep(
             name="FlakyStep",
@@ -222,9 +216,7 @@ class TestRemediationPlaybook:
         mock_action_step2 = AsyncMock(return_value=True)
         RemediationStep.register_action("failure_playbook_action2", mock_action_step2)
         mock_action_notify = AsyncMock(return_value=True)
-        RemediationStep.register_action(
-            "failure_playbook_notify_action", mock_action_notify
-        )
+        RemediationStep.register_action("failure_playbook_notify_action", mock_action_notify)
 
         step1 = RemediationStep(
             name="Step1", action_name="failure_playbook_action1", on_failure="Notify"
@@ -237,9 +229,7 @@ class TestRemediationPlaybook:
             action_name="failure_playbook_notify_action",
             on_success="ABORT",
         )
-        playbook = RemediationPlaybook(
-            name="FailurePlaybook", steps=[step1, step2, step_notify]
-        )
+        playbook = RemediationPlaybook(name="FailurePlaybook", steps=[step1, step2, step_notify])
 
         result = await playbook.execute("test.location", bug_details)
 
@@ -265,9 +255,7 @@ class TestBugFixerRegistry:
             "Specific", [RemediationStep("s1", action_name="specific_action")]
         )
 
-        RemediationStep.register_action(
-            "general_loc_action", AsyncMock(return_value=True)
-        )
+        RemediationStep.register_action("general_loc_action", AsyncMock(return_value=True))
         pb_general_loc = RemediationPlaybook(
             "GeneralLoc", [RemediationStep("s2", action_name="general_loc_action")]
         )
@@ -283,9 +271,7 @@ class TestBugFixerRegistry:
         BugFixerRegistry.register_playbook(
             pb_general_loc, location="database.connector", bug_signature_prefix="*"
         )
-        BugFixerRegistry.register_playbook(
-            pb_global, location="*", bug_signature_prefix="*"
-        )
+        BugFixerRegistry.register_playbook(pb_global, location="*", bug_signature_prefix="*")
 
         # Mock the execute method to track which playbook was called
         with patch.object(
@@ -321,9 +307,7 @@ class TestBugFixerRegistry:
             "RulePlaybook", [RemediationStep("s1", action_name="ml_rule_action")]
         )
 
-        RemediationStep.register_action(
-            "ml_playbook_action", AsyncMock(return_value=True)
-        )
+        RemediationStep.register_action("ml_playbook_action", AsyncMock(return_value=True))
         ml_playbook = RemediationPlaybook(
             "ML_Playbook", [RemediationStep("s_ml", action_name="ml_playbook_action")]
         )
@@ -351,9 +335,7 @@ class TestBugFixerRegistry:
             mock_exec_rule.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_feedback_is_skipped_when_no_playbook_found(
-        self, bug_details, ml_model
-    ):
+    async def test_feedback_is_skipped_when_no_playbook_found(self, bug_details, ml_model):
         """Ensure feedback is not sent if no remediation was even attempted."""
         BugFixerRegistry.set_ml_model(ml_model)
 
@@ -364,9 +346,7 @@ class TestBugFixerRegistry:
             ml_model, "record_remediation_outcome", new_callable=AsyncMock
         ) as mock_feedback:
             # Run with a bug that has no matching rule-based playbook
-            await BugFixerRegistry.run_remediation(
-                "unknown.location", bug_details, "unknown_sig"
-            )
+            await BugFixerRegistry.run_remediation("unknown.location", bug_details, "unknown_sig")
 
             # Assert that feedback was NOT called
             mock_feedback.assert_not_awaited()
