@@ -1226,6 +1226,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
+
             def send_alert(*args, **kwargs):
                 return None
 
@@ -1457,9 +1458,7 @@ class HSMCryptoProvider(CryptoProvider):
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )
-            SimpleNamespace(
-                labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
-            )
+            SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: None))
 
             async def log_action(*args, **kwargs):
                 return None
@@ -1724,6 +1723,7 @@ class HSMCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
+
             def send_alert(*args, **kwargs):
                 return None
 
@@ -1732,6 +1732,7 @@ class HSMCryptoProvider(CryptoProvider):
 
             def retry_operation(*args, **kwargs):
                 return SimpleNamespace()
+
         # --- End Delayed Import ---
 
         # If _hsm_init_task is a Future (placeholder), wait for it to be set (either success or failure)
@@ -2438,6 +2439,7 @@ class HSMCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
+
             def send_alert(*args, **kwargs):
                 return None
 

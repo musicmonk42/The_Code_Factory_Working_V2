@@ -1612,9 +1612,7 @@ async def handle_deploy_response(
             handler_calls.labels(format=output_format, operation="convert").inc()
             start_convert = time.time()
             # Convert normalized data to the final desired string format
-            handler.convert(
-                normalized_data, to_format or output_format
-            )
+            handler.convert(normalized_data, to_format or output_format)
             handler_latency.labels(format=output_format, operation="convert").observe(
                 time.time() - start_convert
             )

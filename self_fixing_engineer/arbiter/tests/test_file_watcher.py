@@ -310,12 +310,8 @@ async def test_notify_changes(valid_config):
     file_watcher_module.config = valid_config
     file_watcher_module.email_limiter = AsyncLimiter(1, 1)
 
-    with patch(
-        "arbiter.file_watcher.send_email_alert", new_callable=AsyncMock
-    ):
-        with patch(
-            "arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock
-        ):
+    with patch("arbiter.file_watcher.send_email_alert", new_callable=AsyncMock):
+        with patch("arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock):
             with patch(
                 "arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock
             ):
@@ -371,12 +367,8 @@ async def test_metrics_health_server(valid_config):
 
     # Patch all the web-related classes before instantiation
     with patch("aiohttp.web.Application", return_value=mock_app):
-        with patch(
-            "aiohttp.web.AppRunner", return_value=mock_runner
-        ):
-            with patch(
-                "aiohttp.web.TCPSite", return_value=mock_site
-            ):
+        with patch("aiohttp.web.AppRunner", return_value=mock_runner):
+            with patch("aiohttp.web.TCPSite", return_value=mock_site):
                 # Now create the server with mocked dependencies
                 server = MetricsAndHealthServer(valid_config)
 

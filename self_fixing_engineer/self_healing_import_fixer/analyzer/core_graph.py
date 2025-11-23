@@ -675,6 +675,7 @@ if __name__ == "__main__":
 
     # Since the real Redis client is lazy-loaded, we need to mock the lazy function
     REDIS_CLIENT = DummyRedis()
+
     def _get_redis_client():
         return REDIS_CLIENT
 

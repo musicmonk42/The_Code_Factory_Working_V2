@@ -99,7 +99,7 @@ except Exception:
         @staticmethod
         def from_url(*args, **kwargs):
             raise ImportError("redis.asyncio not installed")
-    
+
     RedisError = aioredis.RedisError
 
 
@@ -429,9 +429,7 @@ class ConcreteArrayBackend(ArrayBackend):
         """Initializes the array backend, setting up storage and loading data."""
         start_time = time.time()
         async with self._lock:
-            with self._tracer.start_as_current_span(
-                f"array_initialize_{self.name}"
-            ):
+            with self._tracer.start_as_current_span(f"array_initialize_{self.name}"):
                 try:
                     if self.storage_type == "redis":
                         try:
@@ -832,9 +830,7 @@ class ConcreteArrayBackend(ArrayBackend):
         """
         start_time = time.time()
         async with self._lock:
-            with self._tracer.start_as_current_span(
-                f"array_delete_{self.name}"
-            ):
+            with self._tracer.start_as_current_span(f"array_delete_{self.name}"):
                 if index is not None:
                     if not (0 <= index < len(self._data)):
                         array_errors_total.labels(

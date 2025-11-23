@@ -574,11 +574,7 @@ class CollaborativeAgent:
             ]
         )
 
-        (
-            RunnablePassthrough.assign(context=self._get_rag_context)
-            | prompt
-            | self.llm
-        )
+        (RunnablePassthrough.assign(context=self._get_rag_context) | prompt | self.llm)
 
         # UPGRADE: Enforce structured output
         structured_llm = self.llm.with_structured_output(AgentResponse)

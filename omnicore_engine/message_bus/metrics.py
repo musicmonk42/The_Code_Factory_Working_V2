@@ -192,13 +192,11 @@ except ImportError:
                     self.observe(time.time() - start)
 
     def Counter(name, doc, labelnames=None):
-        return MockMetric(
-            name, doc, labelnames, "counter"
-        )
+        return MockMetric(name, doc, labelnames, "counter")
+
     def Gauge(name, doc, labelnames=None):
-        return MockMetric(
-            name, doc, labelnames, "gauge"
-        )
+        return MockMetric(name, doc, labelnames, "gauge")
+
     def Histogram(name, doc, labelnames=None, buckets=None):
         return MockMetric(
             name, doc, labelnames, "histogram"

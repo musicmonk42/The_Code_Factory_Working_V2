@@ -576,9 +576,7 @@ class MetaSupervisor:
                     )  # Set to zeros to avoid proactive hot-swap
 
             for i, (plugin_id, stats) in enumerate(plugin_metrics.items()):
-                plugin_id.split(":")[
-                    1
-                ]  # Assuming plugin_id is "kind:name"
+                plugin_id.split(":")[1]  # Assuming plugin_id is "kind:name"
                 plugin_id.split(":")[0]
 
                 current_failure_prob = (
@@ -738,18 +736,19 @@ class MetaSupervisor:
             # For this example, assuming a simplified mock that returns a list of dummy changes.
             def mock_get_recent_config_changes():
                 return [
-                            (
-                                {
-                                    "user_id": "test_user",
-                                    "new_value": {"ethical_setting": "bad"},
-                                    "previous": {"ethical_setting": "good"},
-                                    "timestamp": time.time(),
-                                }
-                                if random.random() > 0.5
-                                else {}
-                            )
-                            for _ in range(3)
-                        ]
+                    (
+                        {
+                            "user_id": "test_user",
+                            "new_value": {"ethical_setting": "bad"},
+                            "previous": {"ethical_setting": "good"},
+                            "timestamp": time.time(),
+                        }
+                        if random.random() > 0.5
+                        else {}
+                    )
+                    for _ in range(3)
+                ]
+
             config_changes_raw = await self._rate_limited_operation(
                 mock_get_recent_config_changes
             )
@@ -1914,6 +1913,7 @@ if __name__ == "__main__":
 
         # Ensure settings are loaded for the example
         # In a real app, settings would be loaded at the application entry point.
+        global settings  # Make it clear we're checking/modifying the global settings
         if not hasattr(settings, "DATABASE_URL"):
             # Provide dummy settings for standalone execution if not loaded via dotenv/main.py
             class DummySettings:

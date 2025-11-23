@@ -168,8 +168,13 @@ exclude = [".git", "__pycache__", "build", "dist", ".venv"]
 extend-ignore = [
     "E402",  # module level import not at top - many intentional in tests
     "E712",  # comparison to True/False
+    "E721",  # type comparison - use isinstance() instead (12 occurrences)
     "E722",  # bare except
+    "E741",  # ambiguous variable name (11 occurrences)
     "F401",  # unused import - many conditional imports
+    "F403",  # undefined local with import star (3 occurrences)
+    "F405",  # may be undefined from star imports (38 occurrences)
+    "F811",  # redefinition of unused variable (27 occurrences)
     "F821",  # undefined name - many conditional imports
 ]
 

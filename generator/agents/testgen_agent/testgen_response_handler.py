@@ -174,9 +174,7 @@ class ResponseParser(ABC):
         logger.warning(
             f"Attempting basic recovery for malformed response in {language}."
         )
-        [
-            re.escape(conf["ext"]) for conf in LANGUAGE_CONFIG.values()
-        ]
+        [re.escape(conf["ext"]) for conf in LANGUAGE_CONFIG.values()]
         code_block_regex = (
             rf'```(?:{language}|{"|".join(LANGUAGE_CONFIG.keys())})?\n(.*?)\n```'
         )

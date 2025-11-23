@@ -280,6 +280,7 @@ except ImportError as e:
 
     def Column(*args, **kwargs):
         return None
+
     String = _DummyColumnType
     Text = _DummyColumnType
     DateTime = _DummyColumnType

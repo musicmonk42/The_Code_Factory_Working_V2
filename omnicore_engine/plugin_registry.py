@@ -1397,19 +1397,21 @@ class PluginVersionManager:
                                 self.logger.warning(
                                     f"Dynamically loaded plugin {name}:{version} from DB has no 'execute' method or '{name}' function."
                                 )
+
                                 def loaded_fn(*args, **kwargs):
                                     return {
-                                                                    "error": "Plugin function not found after dynamic load."
-                                                                }
+                                        "error": "Plugin function not found after dynamic load."
+                                    }
+
                     except Exception as compile_err:
                         self.logger.error(
                             f"Failed to dynamically load code for plugin {name}:{version}: {compile_err}",
                             exc_info=True,
                         )
+
                         def loaded_fn(*args, **kwargs):
-                            return {
-                                                    "error": f"Dynamic code load failed: {compile_err}"
-                                                }
+                            return {"error": f"Dynamic code load failed: {compile_err}"}
+
                     finally:
                         # Improved temp file cleanup with multiple attempts
                         if temp_file_path.exists():
@@ -1438,10 +1440,11 @@ class PluginVersionManager:
                                     )
 
                 if loaded_fn is None:
+
                     def loaded_fn(*args, **kwargs):
                         return {
-                                            "error": "Plugin function not available or load failed."
-                                        }
+                            "error": "Plugin function not available or load failed."
+                        }
 
                 plugin_instance = Plugin(
                     meta=meta,

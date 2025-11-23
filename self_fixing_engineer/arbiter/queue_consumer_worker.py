@@ -100,8 +100,10 @@ if not SFE_CORE_AVAILABLE:
             return DummySpan()
 
     tracer = DummyTracer()
+
     def meter():
         return None
+
     def propagator():
         return None
 
@@ -222,8 +224,10 @@ if SFE_CORE_AVAILABLE:
                 return DummySpan()
 
         tracer = DummyTracer()
+
         def meter():
             return None
+
         def propagator():
             return None
 

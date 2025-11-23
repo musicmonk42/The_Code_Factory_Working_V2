@@ -301,9 +301,7 @@ async def test_get_db_conn_pool_missing_vars(monkeypatch):
     # The code will use default "localhost" for REQ_DB_HOST
 
     # Mock asyncpg.create_pool to prevent actual connection attempts
-    with patch(
-        "intent_capture.requirements.asyncpg.create_pool", AsyncMock()
-    ):
+    with patch("intent_capture.requirements.asyncpg.create_pool", AsyncMock()):
         with pytest.raises(SystemExit):
             await get_db_conn_pool()
 

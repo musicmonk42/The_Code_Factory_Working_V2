@@ -252,9 +252,7 @@ class TestFailureAndRecovery:
                 pass  # Expected to fail
 
         # Step 2: Check DLQ file was created (may not exist in test env)
-        Path(
-            os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl")
-        )
+        Path(os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl"))
         # Note: In test environment, DLQ might not be written to actual file
 
         # Step 3: Test event bus DLQ for failed publication

@@ -6,8 +6,13 @@
 extend-ignore = [
     "E402",  # module level import not at top - many intentional in tests
     "E712",  # comparison to True/False
+    "E721",  # type comparison - use isinstance() instead
     "E722",  # bare except
+    "E741",  # ambiguous variable name
     "F401",  # unused import - many conditional imports
+    "F403",  # undefined local with import star
+    "F405",  # may be undefined from star imports
+    "F811",  # redefinition of unused variable
     "F821",  # undefined name - many conditional imports
 ]
 

@@ -399,16 +399,18 @@ class LLMClient:
         # Define predicates for specific SDK transient errors
         def is_anthropic_transient(e):
             return isinstance(e, anthropic.APIStatusError) and (
-                    e.status_code == 429 or e.status_code >= 500
-                )
+                e.status_code == 429 or e.status_code >= 500
+            )
+
         def is_google_transient(e):
-            return isinstance(
-                    e, google_exceptions.GoogleAPICallError
-                ) and (e.code == 429 or e.code >= 500)
+            return isinstance(e, google_exceptions.GoogleAPICallError) and (
+                e.code == 429 or e.code >= 500
+            )
+
         def is_aiohttp_transient(e):
-            return isinstance(
-                    e, aiohttp.ClientResponseError
-                ) and (e.status == 429 or e.status >= 500)
+            return isinstance(e, aiohttp.ClientResponseError) and (
+                e.status == 429 or e.status >= 500
+            )
 
         @retry(
             stop=stop_after_attempt(self.retry_attempts),
@@ -661,9 +663,8 @@ class LLMClient:
         messages_for_llm = [{"role": "user", "content": sanitized_prompt}]
 
         def coro_producer():
-            return self._generate_core(
-                    messages_for_llm, max_tokens, temperature
-                )
+            return self._generate_core(messages_for_llm, max_tokens, temperature)
+
         return await self._handle_llm_call(
             coro_producer, prompt, is_streaming=False, correlation_id=correlation_id
         )
@@ -1114,10 +1115,11 @@ class LoadBalancedLLMClient:
                 # Coroutine producer for non-streaming generation
                 def coro_producer():
                     return selected_provider._generate_core(
-                                    messages=[{"role": "user", "content": prompt}],
-                                    max_tokens=max_tokens,
-                                    temperature=temperature,
-                                )
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+
                 response = await selected_provider._handle_llm_call(
                     coro_producer,
                     prompt,
