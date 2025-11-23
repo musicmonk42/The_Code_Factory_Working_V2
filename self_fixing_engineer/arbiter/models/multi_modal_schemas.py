@@ -123,9 +123,10 @@ class ImageCaptioningResult(BaseConfig):
 
 class ImageAnalysisResult(BaseConfig):
     kind: Literal["image"] = "image"
-    image_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
-        Field(..., description="Unique identifier for the analyzed image.")
-    )
+    image_id: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$"),
+    ] = Field(..., description="Unique identifier for the analyzed image.")
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
         description="URL from which the image was obtained (can be HTTP or object store URI).",
@@ -190,9 +191,10 @@ class AudioTranscriptionResult(BaseConfig):
 
 class AudioAnalysisResult(BaseConfig):
     kind: Literal["audio"] = "audio"
-    audio_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
-        Field(..., description="Unique identifier for the analyzed audio.")
-    )
+    audio_id: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$"),
+    ] = Field(..., description="Unique identifier for the analyzed audio.")
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
         description="URL from which the audio was obtained (can be HTTP or object store URI).",
@@ -276,9 +278,10 @@ class VideoSummaryResult(BaseConfig):
 
 class VideoAnalysisResult(BaseConfig):
     kind: Literal["video"] = "video"
-    video_id: Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$")] = (
-        Field(..., description="Unique identifier for the analyzed video.")
-    )
+    video_id: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$"),
+    ] = Field(..., description="Unique identifier for the analyzed video.")
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
         description="URL from which the video was obtained (can be HTTP or object store URI).",

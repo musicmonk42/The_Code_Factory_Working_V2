@@ -155,7 +155,13 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 
 # Pydantic for input validation
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 # Logger initialization
 logger = logging.getLogger(__name__)
@@ -253,7 +259,9 @@ class AuditEvent(BaseModel):
     Represents a single audit event with validation rules.
     """
 
-    event_type: Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50)] = Field(
+    event_type: Annotated[
+        str, StringConstraints(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50)
+    ] = Field(
         ...,
         description="Event category, e.g., 'agent:code_update' or 'system:config.change'",
     )
