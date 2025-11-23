@@ -27,9 +27,12 @@ import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import structlog
+
+if TYPE_CHECKING:
+    from .message_types import Message
 
 # Optional Redis (for distributed rate limiting)
 try:

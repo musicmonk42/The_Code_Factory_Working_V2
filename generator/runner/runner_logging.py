@@ -1759,7 +1759,7 @@ async def log_listener(queue: asyncio.Queue):
             queue.task_done()
         except json.JSONDecodeError as e:
             sys.stderr.write(
-                f"Log listener: Failed to decode JSON log record: {e}. Raw: {record_str[:200]}...\n"
+                f"Log listener: Failed to decode JSON log record: {e}. Raw: {str(record)[:200]}...\n"
             )
             logger.error(f"Log listener: JSONDecodeError: {e}", exc_info=True)
         except asyncio.CancelledError:

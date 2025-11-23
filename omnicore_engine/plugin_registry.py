@@ -1407,9 +1407,10 @@ class PluginVersionManager:
                             f"Failed to dynamically load code for plugin {name}:{version}: {compile_err}",
                             exc_info=True,
                         )
+                        error_msg = f"Dynamic code load failed: {compile_err}"
 
                         def loaded_fn(*args, **kwargs):
-                            return {"error": f"Dynamic code load failed: {compile_err}"}
+                            return {"error": error_msg}
 
                     finally:
                         # Improved temp file cleanup with multiple attempts

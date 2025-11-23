@@ -5,6 +5,7 @@ import random
 import time
 import traceback
 import uuid
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import numpy as np
@@ -49,6 +50,13 @@ try:
     from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
 except ImportError:
     PLUGIN_REGISTRY = None
+
+try:
+    import sqlalchemy
+    import sqlalchemy.exc
+except ImportError:
+    sqlalchemy = None
+
 from arbiter.config import ArbiterConfig
 
 settings = ArbiterConfig()
@@ -467,11 +475,13 @@ class MetaSupervisor:
                 self.logger.exception(
                     "MetaSupervisor main loop encountered an error: %s", ex
                 )
+                error_msg = str(ex)
+                error_traceback = traceback.format_exc()
                 await self._rate_limited_operation(
                     lambda: self._record_audit_event(
                         "supervisor_run_loop_error",
                         "run_loop",
-                        {"error": str(ex), "traceback": traceback.format_exc()},
+                        {"error": error_msg, "traceback": error_traceback},
                     )
                 )
 
@@ -502,6 +512,10 @@ class MetaSupervisor:
             Exception: If the operation fails after retries or due to non-retryable errors.
         """
         async with self.rate_limiter:
+            # Build exception types for retry
+            retry_exceptions = [RedisError]
+            if sqlalchemy is not None:
+                retry_exceptions.append(sqlalchemy.exc.SQLAlchemyError)
 
             @retry(
                 stop=stop_after_attempt(
@@ -510,9 +524,7 @@ class MetaSupervisor:
                 wait=wait_exponential(
                     multiplier=settings.DB_RETRY_DELAY, max=10
                 ),  # Use settings for retry delay
-                retry=retry_if_exception_type(
-                    (RedisError, sqlalchemy.exc.SQLAlchemyError)
-                ),
+                retry=retry_if_exception_type(tuple(retry_exceptions)),
             )
             async def execute_with_retry():
                 return (
@@ -1976,6 +1988,8 @@ if __name__ == "__main__":
                 create_async_engine,
             )
             from sqlalchemy.ext.declarative import declarative_base
+            from cryptography.fernet import Fernet
+            from collections import defaultdict
 
             Base = declarative_base()  # Define Base for mock DB
 

@@ -1267,6 +1267,7 @@ class FeatureStoreClient:
             ImportError: If postgres_client.py is not available.
             ValueError: If the redaction request fails.
         """
+        start_time = time.monotonic()
         if not self._fs:
             raise RuntimeError("Feast FeatureStore not connected.")
         with tracer.start_as_current_span("feast_flag_for_redaction") as span:
