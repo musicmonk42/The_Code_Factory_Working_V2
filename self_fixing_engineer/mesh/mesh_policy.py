@@ -73,8 +73,10 @@ try:
 except ImportError:
     BaseModel = object
     ValidationError = Exception
+
     def Field(*args, **kwargs):
         return None
+
 
 try:
     from cryptography.fernet import MultiFernet, Fernet, InvalidToken

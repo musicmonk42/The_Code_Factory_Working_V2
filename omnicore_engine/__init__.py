@@ -27,10 +27,10 @@ if not logger.handlers:
 
 def get_plugin_registry():
     """Return the PLUGIN_REGISTRY singleton (lazy import).
-    
+
     This function lazily imports the plugin registry to avoid heavy
     initialization during package import or pytest collection.
-    
+
     Returns:
         The global plugin registry singleton instance.
     """
@@ -41,10 +41,10 @@ def get_plugin_registry():
 
 def get_plugin_event_handler_class():
     """Return the PluginEventHandler class (lazy import).
-    
+
     This function lazily imports the plugin event handler class to avoid heavy
     initialization during package import or pytest collection.
-    
+
     Returns:
         The PluginEventHandler class (not an instance).
     """

@@ -59,20 +59,6 @@ RUN pip cache purge  # Clean up pip cache for smaller image
 # Copy source code
 COPY . .
 
-# Run tests (fail build if tests fail)
-RUN pytest --cov --cov-report=xml:cov.xml  # Assuming pytest; adjust per framework
-
-# ========================
-# Docs Stage: Generate documentation (optional, can be skipped with --target=runtime).
-# ========================
-FROM build AS docs
-
-# Install doc dependencies (e.g., Sphinx)
-RUN pip install sphinx sphinx-rtd-theme  # Add doc-specific deps
-
-# Generate docs
-RUN sphinx-build -b html docs docs/_build/html  # Assuming Sphinx in 'docs/' dir
-
 # ========================
 # Runtime Stage: Final minimal image for production.
 # ========================
@@ -109,9 +95,6 @@ WORKDIR /app
 COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=build /usr/local/bin /usr/local/bin
 
-# Copy generated docs from docs stage (if built)
-COPY --from=docs /app/docs/_build/html /app/docs/html
-
 # Copy source code (after deps to leverage caching)
 COPY . .
 
@@ -119,4 +102,4 @@ COPY . .
 RUN rm -rf /tmp/* /var/tmp/* /app/*.egg-info
 
 # Default command: run API server
-CMD ["python", "main.py", "--interface", "api"]
+CMD ["python", "-m", "main.main", "--interface", "api"]

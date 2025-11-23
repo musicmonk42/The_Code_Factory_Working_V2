@@ -56,8 +56,24 @@ except ImportError:
     # Fallback for missing metrics
     class DummyMetric:
         # Add DEFAULT_BUCKETS to match Histogram.DEFAULT_BUCKETS
-        DEFAULT_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0, float("inf"))
-        
+        DEFAULT_BUCKETS = (
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.075,
+            0.1,
+            0.25,
+            0.5,
+            0.75,
+            1.0,
+            2.5,
+            5.0,
+            7.5,
+            10.0,
+            float("inf"),
+        )
+
         def inc(self, amount: float = 1.0):
             pass
 
