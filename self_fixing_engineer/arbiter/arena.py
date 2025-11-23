@@ -257,8 +257,9 @@ class ArbiterArena:
                 "SimulationModule not found in plugin registry. Falling back to mock."
             )
             # fmt: off
-            self.simulation_module = MockSimulationModule()  # noqa: F821 - TODO: define mock
+            self.simulation_module = MockSimulationModule()  # noqa: F821 - TODO: define mock or remove this fallback
             # fmt: on
+            # WARNING: This will cause a NameError at runtime. MockSimulationModule needs to be defined.
 
         self.analyzer = CodebaseAnalyzer(root_dir=self.settings.REPORTS_DIRECTORY)
 
