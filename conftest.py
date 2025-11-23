@@ -25,23 +25,23 @@ try:
             return func
         return decorator
     
-    # Defensive: if field_validator/model_validator are not callables (e.g. MagicMock),
-    # replace with safe no-op decorators so class definitions don't create non-annotated attributes.
-    try:
-        if not callable(getattr(pydantic, "field_validator", None)):
-            pydantic.field_validator = _noop_validator
-    except Exception:
-        # keep tests from failing because of unexpected pydantic internal structure
-        pydantic.field_validator = _noop_validator  # best-effort
+    # Helper function to safely set pydantic decorators
+    def _set_pydantic_decorator_safely(decorator_name):
+        """Set a pydantic decorator to no-op if it's not callable."""
+        try:
+            if not callable(getattr(pydantic, decorator_name, None)):
+                setattr(pydantic, decorator_name, _noop_validator)
+        except (AttributeError, TypeError):
+            # Attribute doesn't exist or has unexpected type
+            setattr(pydantic, decorator_name, _noop_validator)  # best-effort
     
-    try:
-        if not callable(getattr(pydantic, "model_validator", None)):
-            pydantic.model_validator = _noop_validator
-    except Exception:
-        pydantic.model_validator = _noop_validator
+    # Apply to commonly mocked decorators
+    _set_pydantic_decorator_safely("field_validator")
+    _set_pydantic_decorator_safely("model_validator")
+    # If your tests also mock other pydantic decorators, add them here:
+    # _set_pydantic_decorator_safely("field_serializer")
+    # _set_pydantic_decorator_safely("validator")
         
-    # If your tests also mock other pydantic decorators, add similar guards here:
-    # pydantic.field_serializer, pydantic.validator, etc.
 except ImportError:
     # pydantic not installed, skip shim
     pass

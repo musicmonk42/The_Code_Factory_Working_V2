@@ -220,11 +220,21 @@ jobs:
             tomli_w \
             typing-extensions \
             aiohttp==3.8.5
-          # Install self_fixing_engineer package first (contains arbiter)
+          # Install self_fixing_engineer package first (contains arbiter - CRITICAL)
           if [ -f self_fixing_engineer/requirements.txt ]; then
-            pip install --no-cache-dir -r self_fixing_engineer/requirements.txt || true
+            echo "Installing self_fixing_engineer requirements..."
+            pip install --no-cache-dir -r self_fixing_engineer/requirements.txt || echo "WARNING: Some self_fixing_engineer requirements failed (may be optional)"
           fi
-          python -m pip install --no-cache-dir -e ./self_fixing_engineer || true
+          echo "Installing self_fixing_engineer package (contains arbiter)..."
+          python -m pip install --no-cache-dir -e ./self_fixing_engineer || {
+            echo "ERROR: Failed to install self_fixing_engineer package"
+            exit 1
+          }
+          # Verify arbiter is importable
+          python -c "import arbiter; print('arbiter module successfully imported')" || {
+            echo "ERROR: arbiter module not importable after installing self_fixing_engineer"
+            exit 1
+          }
           # Install omnicore_engine requirements and package
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
