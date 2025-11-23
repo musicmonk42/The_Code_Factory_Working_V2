@@ -789,7 +789,6 @@ def backend_operation(operation: str):
                 span.set_attribute("operation", operation)
                 span.set_attribute("checkpoint.name", str(name))
 
-                last_error = None
                 result = None
 
                 try:
@@ -822,8 +821,7 @@ def backend_operation(operation: str):
                             try:
                                 result = await func(manager, *args, **kwargs)
                                 break  # Success, exit retry loop
-                            except (ConnectionError, TimeoutError, OSError) as e:
-                                last_error = e
+                            except (ConnectionError, TimeoutError, OSError):
                                 if attempt < max_retries:
                                     await asyncio.sleep(
                                         retry_delay * (2**attempt)

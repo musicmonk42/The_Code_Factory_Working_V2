@@ -96,7 +96,7 @@ class TestOllamaAdapter:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
-            adapter = OllamaAdapter(settings)
+            OllamaAdapter(settings)
 
             mock_client.assert_called_once()
             # Should use "llama3" as default
@@ -356,7 +356,7 @@ class TestOllamaAdapter:
             mock_instance.aclose_session = AsyncMock()
 
             with pytest.raises(ValueError):
-                async with OllamaAdapter(valid_settings) as adapter:
+                async with OllamaAdapter(valid_settings):
                     raise ValueError("Test error")
 
             # Should still close session even with exception

@@ -216,14 +216,14 @@ async def test_send_email_alert_failure(valid_config, caplog):
 @pytest.mark.asyncio
 async def test_send_slack_alert():
     result = await send_slack_alert("Message")
-    assert result == True  # Placeholder function returns True
+    assert result  # Placeholder function returns True
 
 
 # Test send_pagerduty_alert (simplified version)
 @pytest.mark.asyncio
 async def test_send_pagerduty_alert():
     result = await send_pagerduty_alert("Title", "Details")
-    assert result == True  # Placeholder function returns True
+    assert result  # Placeholder function returns True
 
 
 # Test summarize_code_changes
@@ -284,7 +284,7 @@ async def test_deploy_code_success():
         mock_subprocess.return_value = mock_proc
 
         result = await deploy_code("echo deploy")
-        assert result["success"] == True
+        assert result["success"]
         assert result["output"] == "output"
 
 
@@ -300,7 +300,7 @@ async def test_deploy_code_failure():
         mock_subprocess.return_value = mock_proc
 
         result = await deploy_code("echo deploy")
-        assert result["success"] == False
+        assert not result["success"]
         assert result["error"] == "error"
 
 
@@ -312,13 +312,13 @@ async def test_notify_changes(valid_config):
 
     with patch(
         "arbiter.file_watcher.send_email_alert", new_callable=AsyncMock
-    ) as mock_email:
+    ):
         with patch(
             "arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock
-        ) as mock_slack:
+        ):
             with patch(
                 "arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock
-            ) as mock_pd:
+            ):
                 await notify_changes("file.py", "diff", "summary", {"success": True})
                 # These are called but may fail, which is handled
                 assert True  # Just verify no exceptions
@@ -351,7 +351,7 @@ async def test_code_change_handler_on_modified():
     event.src_path = "file.py"
     event.is_directory = False
 
-    with patch.object(handler, "process_file", new_callable=AsyncMock) as mock_process:
+    with patch.object(handler, "process_file", new_callable=AsyncMock):
         handler.on_modified(event)
         # Give the event loop time to run the task
         await asyncio.sleep(0.1)
@@ -373,10 +373,10 @@ async def test_metrics_health_server(valid_config):
     with patch("aiohttp.web.Application", return_value=mock_app):
         with patch(
             "aiohttp.web.AppRunner", return_value=mock_runner
-        ) as mock_runner_class:
+        ):
             with patch(
                 "aiohttp.web.TCPSite", return_value=mock_site
-            ) as mock_site_class:
+            ):
                 # Now create the server with mocked dependencies
                 server = MetricsAndHealthServer(valid_config)
 
