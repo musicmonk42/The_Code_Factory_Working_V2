@@ -123,8 +123,10 @@ class ImageCaptioningResult(BaseConfig):
 
 class ImageAnalysisResult(BaseConfig):
     kind: Literal["image"] = "image"
-    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
-        Field(..., description="Unique identifier for the analyzed image.")
+    image_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+        Field(  # noqa: F722
+            ..., description="Unique identifier for the analyzed image."
+        )
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
@@ -190,8 +192,10 @@ class AudioTranscriptionResult(BaseConfig):
 
 class AudioAnalysisResult(BaseConfig):
     kind: Literal["audio"] = "audio"
-    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
-        Field(..., description="Unique identifier for the analyzed audio.")
+    audio_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+        Field(  # noqa: F722
+            ..., description="Unique identifier for the analyzed audio."
+        )
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,
@@ -276,8 +280,10 @@ class VideoSummaryResult(BaseConfig):
 
 class VideoAnalysisResult(BaseConfig):
     kind: Literal["video"] = "video"
-    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (  # noqa: F722
-        Field(..., description="Unique identifier for the analyzed video.")
+    video_id: constr(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9._-]+$") = (
+        Field(  # noqa: F722
+            ..., description="Unique identifier for the analyzed video."
+        )
     )
     source_url: Optional[Union[HttpUrl, AnyUrl]] = Field(
         None,

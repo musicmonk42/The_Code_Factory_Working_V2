@@ -253,9 +253,11 @@ class AuditEvent(BaseModel):
     Represents a single audit event with validation rules.
     """
 
-    event_type: constr(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50) = Field(  # noqa: F722
-        ...,
-        description="Event category, e.g., 'agent:code_update' or 'system:config.change'",
+    event_type: constr(pattern=r"^[a-zA-Z0-9:_.-]+$", max_length=50) = (
+        Field(  # noqa: F722
+            ...,
+            description="Event category, e.g., 'agent:code_update' or 'system:config.change'",
+        )
     )
     details: Dict[str, Any] = Field(
         ...,
