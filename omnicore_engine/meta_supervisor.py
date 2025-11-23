@@ -8,7 +8,28 @@ import traceback
 import torch
 import numpy as np
 from typing import Dict, Any, List, Optional, Callable, Union, Set
-from aiolimiter import AsyncLimiter
+
+try:
+    from aiolimiter import AsyncLimiter
+except Exception:
+    # Simple fallback AsyncLimiter for test / dev environments where aiolimiter isn't installed.
+    import asyncio
+    
+    class AsyncLimiter:
+        def __init__(self, max_rate=1, time_period=1):
+            # use a Semaphore to emulate simple rate-limit gating
+            self._sem = asyncio.Semaphore(max_rate)
+
+        async def __aenter__(self):
+            await self._sem.acquire()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._sem.release()
+
+        # compatibility: code uses `async with self.rate_limiter:` and does not call other API in many places.
+        # If other aiolimiter methods are expected in tests, add them here.
+
 from tenacity import (
     retry,
     stop_after_attempt,

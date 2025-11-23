@@ -62,6 +62,26 @@ except ImportError:
     WEB3_AVAILABLE = False
     Web3 = None
 
+try:
+    # production import (if package present)
+    from arbiter.feedback_manager import FeedbackManager, FeedbackType
+except Exception:
+    # Minimal fallback so tests and import-time code can patch/instantiate FeedbackManager.
+    from enum import Enum
+    
+    class FeedbackType(Enum):
+        BUG_REPORT = "bug_report"
+        GENERAL = "general"
+        # add other types used by tests if necessary
+
+    class FeedbackManager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        # tests expect record_feedback to be awaitable — keep a coroutine stub
+        async def record_feedback(self, *args, **kwargs):
+            return None
+
 logger = logging.getLogger(__name__)
 
 

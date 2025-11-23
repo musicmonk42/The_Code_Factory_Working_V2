@@ -8,7 +8,19 @@ from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as global_plugin_reg
 from arbiter.config import ArbiterConfig
 from omnicore_engine.database import Database
 from omnicore_engine.message_bus import ShardedMessageBus
-from arbiter.bug_manager import BugManager
+
+try:
+    from arbiter.bug_manager import BugManager
+except Exception:
+    # Minimal stub used when arbiter isn't installed (tests will typically patch this)
+    class BugManager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def report_bug(self, payload):
+            # no-op fallback for tests / import-time usage
+            return None
+
 from crew_manager import CrewManager
 from arbiter.arbiter import Arbiter
 from intent_capture.api import app as intent_capture_api

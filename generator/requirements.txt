@@ -204,7 +204,7 @@ openai==1.107.1
 opencv-python==4.12.0.88
 opentelemetry-api==1.35.0
 opentelemetry-sdk==1.35.0
-opentelemetry-semantic-conventions==0.59b0
+opentelemetry-semantic-conventions==0.56b0
 ordered-set==4.1.0
 orjson==3.11.4
 ormsgpack==1.11.0
