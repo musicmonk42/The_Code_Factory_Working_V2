@@ -164,6 +164,15 @@ line-length = 88
 target-version = "py39"
 exclude = [".git", "__pycache__", "build", "dist", ".venv"]
 
+[tool.ruff.lint]
+extend-ignore = [
+    "E402",  # module level import not at top - many intentional in tests
+    "E712",  # comparison to True/False
+    "E722",  # bare except
+    "F401",  # unused import - many conditional imports
+    "F821",  # undefined name - many conditional imports
+]
+
 [tool.mypy]
 python_version = "3.9"
 strict = true

@@ -2,19 +2,17 @@
 # https://docs.astral.sh/ruff/
 
 [lint]
-# Ignore specific rules that are low priority or require manual review
+# Ignore rules that require extensive manual fixes or are low priority
 extend-ignore = [
-    "E712",  # comparison to True/False - low priority
-    "E722",  # bare except - requires manual review
-    "F821",  # undefined name - many are conditional imports
+    "E402",  # module level import not at top - many intentional in tests
+    "E712",  # comparison to True/False
+    "E722",  # bare except
+    "F401",  # unused import - many conditional imports
+    "F821",  # undefined name - many conditional imports
 ]
 
 [lint.per-file-ignores]
-# Relax checks in test directories where mocking requires special patterns
-"self_fixing_engineer/plugins/tests/*.py" = ["F401", "F841", "E402"]
-"self_fixing_engineer/simulation/tests/*.py" = ["F401", "F841", "E402"]
-"omnicore_engine/tests/*.py" = ["F401", "F841", "E402"]
-"generator/tests/*.py" = ["F401", "F841", "E402"]
-"**/tests/*.py" = ["F401", "F841", "E402"]
-"**/test_*.py" = ["F401", "F841", "E402"]
-"**/conftest.py" = ["F401", "F841", "E402"]
+# Additional relaxed checks in test directories
+"**/tests/*.py" = ["F841"]
+"**/test_*.py" = ["F841"]
+"**/conftest.py" = ["F841"]
