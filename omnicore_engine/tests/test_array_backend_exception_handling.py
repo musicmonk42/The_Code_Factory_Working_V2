@@ -139,15 +139,33 @@ def test_import_with_runtimeerror_during_instantiation():
 def test_settings_fallback_attributes():
     """
     Test that the fallback settings object has all required attributes.
+    
+    This test validates that when arbiter.config is unavailable, the fallback
+    settings object is correctly created with the required attributes.
     """
-    from omnicore_engine.array_backend import _create_fallback_settings
+    # Clear the module cache to force reimport
+    if "omnicore_engine.array_backend" in sys.modules:
+        del sys.modules["omnicore_engine.array_backend"]
     
-    settings = _create_fallback_settings()
+    # Ensure arbiter.config is not available for this test
+    import builtins
+    original_import = builtins.__import__
     
-    # Verify required attributes
-    assert hasattr(settings, "log_level")
-    assert hasattr(settings, "enable_array_backend_benchmarking")
+    def mock_import(name, *args, **kwargs):
+        if name == "arbiter.config" or name.startswith("arbiter."):
+            raise ModuleNotFoundError(f"No module named '{name}'")
+        return original_import(name, *args, **kwargs)
     
-    # Verify default values
-    assert settings.log_level == "INFO"
-    assert settings.enable_array_backend_benchmarking is False
+    with mock.patch("builtins.__import__", side_effect=mock_import):
+        import omnicore_engine.array_backend
+        
+        # Verify the settings object has required attributes from fallback
+        settings = omnicore_engine.array_backend.settings
+        
+        # Verify required attributes
+        assert hasattr(settings, "log_level")
+        assert hasattr(settings, "enable_array_backend_benchmarking")
+        
+        # Verify default values
+        assert settings.log_level == "INFO"
+        assert settings.enable_array_backend_benchmarking is False
