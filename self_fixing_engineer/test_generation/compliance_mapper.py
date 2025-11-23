@@ -38,6 +38,7 @@ from types import SimpleNamespace
 import yaml
 from collections import defaultdict
 from test_generation.orchestrator.reporting import HTMLReporter
+from test_generation.utils import maybe_await
 
 # Robust audit logger resolution:
 # - Prefer orchestrator.AuditLogger (resolved at call-time so tests can patch it)

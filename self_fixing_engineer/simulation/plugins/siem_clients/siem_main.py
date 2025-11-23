@@ -21,6 +21,7 @@ from .siem_factory import (
 from .siem_base import (
     SIEMClientConfigurationError,
     SIEMClientError,
+    SIEMClientQueryError,
     _base_logger,
     PRODUCTION_MODE,
     alert_operator,

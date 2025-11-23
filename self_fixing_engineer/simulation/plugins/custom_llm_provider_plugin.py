@@ -204,6 +204,55 @@ except ImportError:
         return decorator
 
 
+# aiohttp imports for HTTP client functionality
+try:
+    import aiohttp
+    from aiohttp.client_exceptions import (
+        ClientError,
+        ClientResponseError,
+        ClientPayloadError,
+        ContentTypeError,
+    )
+
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+    logger.warning("aiohttp not found. HTTP client functionality will be limited.")
+
+    # Define minimal fallback for type checking
+    class aiohttp:  # type: ignore
+        class ClientTimeout:
+            def __init__(self, **kwargs):
+                pass
+
+        class TCPConnector:
+            def __init__(self, **kwargs):
+                pass
+
+        class ClientSession:
+            def __init__(self, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class ClientResponseError(Exception):
+            def __init__(self, **kwargs):
+                super().__init__()
+
+        class ClientPayloadError(Exception):
+            pass
+
+        class ClientError(Exception):
+            pass
+
+        class ContentTypeError(Exception):
+            pass
+
+
 # ---------------------------
 # Configuration
 # ---------------------------

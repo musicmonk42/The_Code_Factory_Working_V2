@@ -1,3 +1,4 @@
+import time
 import pytest
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.database import Database

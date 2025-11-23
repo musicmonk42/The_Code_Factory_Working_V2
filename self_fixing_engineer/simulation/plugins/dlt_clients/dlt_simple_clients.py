@@ -13,6 +13,7 @@ from collections import OrderedDict
 
 from .dlt_base import (
     BaseDLTClient,
+    BaseOffChainClient,
     DLTClientConfigurationError,
     DLTClientError,
     DLTClientTransactionError,

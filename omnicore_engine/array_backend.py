@@ -51,8 +51,9 @@ import threading  # FIXED: Added import threading to resolve NameError
 # Defensive initialization for config_instance to prevent NameError
 # This variable may be referenced by some modules that import array_backend
 # Initialize it as None if it doesn't already exist in the global scope
-if 'config_instance' not in globals():
+if "config_instance" not in globals():
     config_instance = None  # Provide a fallback value
+
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""

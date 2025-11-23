@@ -33,6 +33,7 @@ from pydantic import (
 
 from .dlt_base import (
     BaseDLTClient,
+    BaseOffChainClient,
     DLTClientValidationError,
     DLTClientConfigurationError,
     DLTClientConnectivityError,
