@@ -371,7 +371,11 @@ class BackendBenchmarker:
 
     def __init__(self):
         self.results: Dict[str, List[float]] = defaultdict(list)
-        self.logger = logger.bind(sub_module="BackendBenchmarker")
+        # Handle logger binding safely
+        if _using_structlog and hasattr(logger, 'bind'):
+            self.logger = logger.bind(sub_module="BackendBenchmarker")
+        else:
+            self.logger = logger
 
     def run_benchmark(
         self,
