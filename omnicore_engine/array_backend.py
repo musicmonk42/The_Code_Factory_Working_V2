@@ -45,35 +45,35 @@ import numpy as np
 import os
 import threading  # FIXED: Added import threading to resolve NameError
 
+import types
+
 # ---- App/Internal Imports ----
 # Replace top-level config instantiation with a defensive lazy/fallback approach
 
+# Helper function to create fallback settings
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        enable_array_backend_benchmarking=False,
+    )
+
 try:
     from arbiter.config import ArbiterConfig  # type: ignore
-except Exception:
+except (ImportError, ModuleNotFoundError):
     ArbiterConfig = None  # tests or minimal installs may not have arbiter available
 
 # Create a safe settings object without importing or running Arbiter application init
 if ArbiterConfig is not None:
     try:
         settings = ArbiterConfig()
-    except Exception as e:
+    except (NameError, AttributeError, ImportError) as e:
         # If ArbiterConfig raises during instantiation (missing globals like config_instance),
         # fall back to a minimal settings object to allow safe imports in tests.
-        import types
-
-        settings = types.SimpleNamespace(
-            log_level="INFO",
-            enable_array_backend_benchmarking=False,
-        )
+        settings = _create_fallback_settings()
         # optional: log/debug the fallback if you have logger available later
 else:
-    import types
-
-    settings = types.SimpleNamespace(
-        log_level="INFO",
-        enable_array_backend_benchmarking=False,
-    )
+    settings = _create_fallback_settings()
 
 try:
     from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
