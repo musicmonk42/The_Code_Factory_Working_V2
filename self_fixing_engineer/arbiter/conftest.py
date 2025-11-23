@@ -8,8 +8,6 @@ This conftest.py handles:
 3. Pydantic v1/v2 compatibility
 4. OpenTelemetry test setup
 5. Custom pytest markers
-
-Note: pytest_plugins has been moved to the root conftest.py to avoid deprecation warnings.
 """
 
 from __future__ import annotations
@@ -25,8 +23,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# NOTE: pytest_plugins declaration removed from nested conftest
-# It is now in the root conftest.py to avoid pytest deprecation warnings
+# Add pytest_asyncio plugin for async test support
+pytest_plugins = ["pytest_asyncio"]
 
 # -----------------------------------------------------------------------------
 # TEST ENVIRONMENT SETUP - Must happen before any imports

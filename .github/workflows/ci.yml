@@ -218,8 +218,7 @@ jobs:
             pytest-mock==3.11.0 \
             pytest-timeout \
             tomli_w \
-            typing-extensions \
-            aiohttp==3.8.5
+            typing-extensions
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
           fi

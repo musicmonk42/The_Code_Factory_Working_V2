@@ -9,23 +9,9 @@ import structlog
 from decimal import Decimal
 from uuid import UUID
 import numpy as np
+from arbiter.config import ArbiterConfig
 
-# arbiter is an optional app-level dependency. Provide a safe fallback stub for tests/CI
-try:
-    from arbiter.config import ArbiterConfig  # type: ignore
-except Exception:
-    logging.warning(
-        "Optional dependency 'arbiter' not found — using fallback ArbiterConfig stub for tests."
-    )
-    
-    class ArbiterConfig:
-        """Minimal fallback for tests and CI when arbiter is not installed."""
-        def __init__(self) -> None:
-            # keep defaults that your module expects
-            self.log_level = "INFO"
-            self.enable_array_backend_benchmarking = False
-
-# Initialize the configuration object (real or fallback)
+# Initialize the configuration object
 settings = ArbiterConfig()
 
 
