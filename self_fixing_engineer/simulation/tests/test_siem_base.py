@@ -262,7 +262,6 @@ class BaseSIEMClient:
         for key in list(os.environ.keys()):
             if any(pattern in key.upper() for pattern in sensitive_patterns):
                 # Check the global PRODUCTION_MODE at the time of execution
-                global PRODUCTION_MODE
                 if PRODUCTION_MODE:
                     os.environ[key] = "[SCRUBBED_ENV_VAR]"
                     scrubbed_count += 1

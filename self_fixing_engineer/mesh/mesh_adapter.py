@@ -71,6 +71,11 @@ except ImportError:
     redis = None
 
 try:
+    import aioredis  # type: ignore
+except ImportError:
+    aioredis = None
+
+try:
     import nats
 except ImportError:
     nats = None

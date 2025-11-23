@@ -50,6 +50,14 @@ try:
 except ImportError:
     ETCD_AVAILABLE = False
 
+try:
+    import grpc
+
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
+    grpc = None  # type: ignore
+
 from circuitbreaker import circuit
 
 # OpenTelemetry imports with comprehensive fallback

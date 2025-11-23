@@ -309,7 +309,6 @@ async def _initialize_simulation_module():
 
 async def _shutdown_simulation_module():
     """Gracefully shutdown simulation module."""
-    global _simulation_module
     if _simulation_module:
         try:
             await _simulation_module.shutdown()

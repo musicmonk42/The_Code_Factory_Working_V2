@@ -802,7 +802,7 @@ def backend_operation(operation: str):
                             result = await func(manager, *args, **kwargs)
                             # Record success (this resets failure count)
                             breaker.call(lambda: None)
-                        except Exception:
+                        except Exception as e:
                             # Record failure
                             try:
                                 breaker.call(lambda: (_ for _ in ()).throw(e))

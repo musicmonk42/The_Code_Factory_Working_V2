@@ -1467,7 +1467,6 @@ def update_requirements_with_answers(
     """
 
     async def _async_update():
-        global updater
         if updater is None:
             await initialize_updater()
         return await updater.update(

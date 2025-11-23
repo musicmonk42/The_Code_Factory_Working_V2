@@ -113,7 +113,6 @@ def _ensure_background_loop():
     Starts (or reuses) a dedicated background event loop running in a daemon thread.
     Thread-safe and idempotent. Returns the running loop.
     """
-    global _BG_LOOP, _BG_THREAD
     if _BG_LOOP and _BG_LOOP.is_running():
         return _BG_LOOP
 

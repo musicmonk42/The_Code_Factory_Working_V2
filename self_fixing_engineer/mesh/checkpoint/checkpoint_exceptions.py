@@ -428,7 +428,7 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
                             # Record success
                             BREAKER.call(lambda: None)
                             return result
-                        except Exception:
+                        except Exception as e:
                             # Record failure
                             try:
                                 BREAKER.call(lambda: (_ for _ in ()).throw(e))

@@ -309,7 +309,6 @@ def load_config_with_env(config_path: Optional[str]) -> Config:
 
 def is_valid_file(filename: str) -> bool:
     """Check if file should be processed."""
-    global config
     if config is None:
         logger.error("Configuration not loaded. Cannot validate file.")
         return False
@@ -331,7 +330,6 @@ async def read_file(filepath: str) -> Optional[str]:
 
 async def get_cached_summary(filename: str, content: str) -> Optional[str]:
     """Check for cached summary."""
-    global redis_client, config
     if redis_client is None:
         return None
     cache_key = f"summary:{filename}:{hash(content)}"
@@ -346,7 +344,6 @@ async def get_cached_summary(filename: str, content: str) -> Optional[str]:
 
 async def cache_summary(filename: str, content: str, summary: str) -> None:
     """Cache summary in Redis."""
-    global redis_client, config
     if redis_client is None:
         return
     cache_key = f"summary:{filename}:{hash(content)}"
@@ -358,7 +355,6 @@ async def cache_summary(filename: str, content: str, summary: str) -> None:
 
 async def log_audit(event: str, details: Dict[str, Any]) -> None:
     """Log audit event to file."""
-    global config
     audit_entry = {
         "timestamp": datetime.now().isoformat(),
         "event": event,
@@ -378,7 +374,6 @@ async def log_audit(event: str, details: Dict[str, Any]) -> None:
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def summarize_code(filename: str, code: str) -> str:
     """Summarize code using configured LLM."""
-    global config
 
     if not _LLM_AVAILABLE:
         logger.warning("LLMClient is not available. Skipping LLM summarization.")
@@ -432,7 +427,6 @@ async def summarize_code(filename: str, code: str) -> str:
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def send_to_api(filename: str, content: str, summary: str) -> bool:
     """Send file data to API."""
-    global config, rate_limiter
     async with rate_limiter:
         json_data = {"filename": filename, "content": content, "summary": summary}
         try:
@@ -473,7 +467,6 @@ async def send_to_api(filename: str, content: str, summary: str) -> bool:
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def send_email_alert(subject: str, body: str) -> None:
     """Send email alert via SMTP."""
-    global config, email_limiter
     if not config.alerter.smtp.username or not config.alerter.smtp.password:
         logger.warning("SMTP credentials not configured. Skipping email alert.")
         return
@@ -510,7 +503,6 @@ async def send_email_alert(subject: str, body: str) -> None:
 
 async def upload_to_s3(filename: str, content: str) -> bool:
     """Upload file to S3."""
-    global config
 
     if not config.deploy.aws_s3.bucket:
         logger.info("No S3 bucket configured, skipping upload")
@@ -543,7 +535,6 @@ async def upload_to_s3(filename: str, content: str) -> bool:
 
 async def send_notification(filename: str, status: str, summary: str) -> None:
     """Send notifications to Slack, Discord, and email."""
-    global config
     payload = {
         "filename": filename,
         "status": status,
@@ -624,7 +615,6 @@ async def send_notification(filename: str, status: str, summary: str) -> None:
 
 async def trigger_deployment(filename: str, content: str) -> bool:
     """Trigger deployment, CI/CD, S3 upload, and notifications."""
-    global config
     if not (
         config.deploy.command or config.deploy.ci_cd_url or config.deploy.aws_s3.bucket
     ):
@@ -708,7 +698,6 @@ async def write_changelog(
     filename: str, summary: str, old_content: Optional[str], new_content: str
 ) -> None:
     """Generate and write changelog with diff."""
-    global config
     diff = ""
     if old_content:
         diff_lines = difflib.unified_diff(
@@ -913,7 +902,6 @@ class CodeChangeHandler(FileSystemEventHandler):
 
     async def process_file(self, filepath: str) -> None:
         """Process a single file change."""
-        global config
         if not is_valid_file(filepath):
             return
 
@@ -989,7 +977,6 @@ class CodeChangeHandler(FileSystemEventHandler):
 
 async def batch_process(semaphore: asyncio.Semaphore) -> None:
     """Process all files in watch folder."""
-    global config
     if lock_file.exists():
         logger.info("Batch processing skipped: lock file exists.")
         return

@@ -152,7 +152,6 @@ def get_siem_client(
     """
     Factory function to get an initialized SIEM client.
     """
-    global PRODUCTION_MODE
 
     # Enforce paranoid mode in production
     paranoid_mode = config.get("paranoid_mode", False)

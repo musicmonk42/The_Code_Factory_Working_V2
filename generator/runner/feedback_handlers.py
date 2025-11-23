@@ -496,7 +496,6 @@ def shutdown() -> None:
     """FIX: Stop the worker robustly, flush all queued records, and close sinks. Idempotent."""
     _worker_stop.set()
 
-    global _worker_thread
     if _worker_thread and _worker_thread.is_alive():
         # Wake the worker to exit its loop
         try:

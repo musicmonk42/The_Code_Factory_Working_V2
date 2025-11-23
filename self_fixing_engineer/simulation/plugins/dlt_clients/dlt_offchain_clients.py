@@ -121,7 +121,6 @@ _temp_files: Dict[str, float] = {}
 
 def cleanup_temp_files() -> None:
     """Cleans up temporary files created by temp_file context manager."""
-    global _temp_files
     files_to_clean = list(_temp_files.keys())
     for temp_file in files_to_clean:
         try:
@@ -141,7 +140,6 @@ def create_temp_file(content: str, ttl: float = 3600.0) -> str:
     Creates a temporary file with specified content and registers it for cleanup.
     The file is created with restrictive permissions (0o600).
     """
-    global _temp_files
     fd, path = tempfile.mkstemp(
         mode="w", delete=False, suffix=".json", prefix="offchain_"
     )

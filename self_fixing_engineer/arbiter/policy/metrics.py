@@ -120,7 +120,7 @@ def _sanitize_label(value: Any) -> str:
 
 def _log_error_rate_limited(message: str, error_type: str) -> None:
     """Logs errors with rate-limiting to prevent flooding."""
-    global _last_error_time, _error_log_interval
+    global _last_error_time
     current_time = time.monotonic()
     if current_time - _last_error_time >= _error_log_interval:
         logger.error(message)

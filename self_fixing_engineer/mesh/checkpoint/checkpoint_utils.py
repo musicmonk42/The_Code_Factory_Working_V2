@@ -72,7 +72,7 @@ except ImportError:
     warnings.warn(
         "cryptography library not available. Operating in INSECURE mode. "
         "NOT SUITABLE FOR PRODUCTION USE.",
-        SecurityWarning,
+        UserWarning,
     )
 
 # ---- Additional Security Libraries ----

@@ -872,7 +872,6 @@ async def heal_dependencies(
             "Call init_dependency_healing_module([...]) with whitelisted project roots first."
         )
 
-    global _metrics
     _metrics.clear()
 
     logger.info("Healing external dependencies...")

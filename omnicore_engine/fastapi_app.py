@@ -413,7 +413,6 @@ async def startup_event_fastapi():
 
 @app.on_event("shutdown")
 async def shutdown_event_fastapi():
-    global chatbot_arbiter, arena, meta_supervisor_instance, simulation_module
 
     if simulation_module:
         await simulation_module.shutdown()
@@ -573,7 +572,6 @@ async def execute_simulation(request: Request):
     """
     Executes a simulation using the simulation engine.
     """
-    global simulation_module
     if not simulation_module:
         raise HTTPException(
             status_code=500, detail="Simulation engine is not initialized."
@@ -592,7 +590,6 @@ async def explain_simulation(request: Request):
     """
     Requests an explanation for a simulation result from the simulation engine.
     """
-    global simulation_module
     if not simulation_module:
         raise HTTPException(
             status_code=500, detail="Simulation engine is not initialized."
@@ -633,7 +630,6 @@ async def chat_with_bot(chat_request: ChatRequest):
             message="AI assistant not loaded",
         )
     try:
-        global chatbot_arbiter
         if chatbot_arbiter is None:
             logger.error("AI assistant is None. Cannot respond.")
             return ChatResponse(
@@ -798,7 +794,6 @@ async def export_audit_proof_bundle(
 @admin_router.get("/generate-test-cases")
 async def generate_test_cases(user_id: str = Depends(get_user_id)):
     API_REQUESTS.labels(endpoint="/admin/generate-test-cases").inc()
-    global meta_supervisor_instance
     if meta_supervisor_instance is None:
         raise HTTPException(status_code=500, detail="MetaSupervisor not initialized.")
 

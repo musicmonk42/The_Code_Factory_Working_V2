@@ -328,7 +328,6 @@ async def get_dashboard_state() -> Dict[str, Any]:
 
 async def update_dashboard_state(update_data: Dict[str, Any]):
     """Updates the dashboard state, persisting to Redis if configured."""
-    global _DASHBOARD_MEMORY_STATE
 
     if CONFIG.state_storage == "redis" and REDIS_AVAILABLE and CONFIG.redis_url:
         try:
