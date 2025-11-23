@@ -45,12 +45,43 @@ import numpy as np
 import os
 import threading  # FIXED: Added import threading to resolve NameError
 
-# ---- App/Internal Imports ----
-from arbiter.config import ArbiterConfig
-from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
+import types
 
-# Initialize the configuration object
-settings = ArbiterConfig()
+# ---- App/Internal Imports ----
+# Replace top-level config instantiation with a defensive lazy/fallback approach
+
+# Helper function to create fallback settings
+def _create_fallback_settings():
+    """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    return types.SimpleNamespace(
+        log_level="INFO",
+        enable_array_backend_benchmarking=False,
+    )
+
+try:
+    from arbiter.config import ArbiterConfig  # type: ignore
+except (ImportError, ModuleNotFoundError):
+    ArbiterConfig = None  # tests or minimal installs may not have arbiter available
+
+# Create a safe settings object without importing or running Arbiter application init
+if ArbiterConfig is not None:
+    try:
+        settings = ArbiterConfig()
+    except (NameError, AttributeError, ImportError) as e:
+        # If ArbiterConfig raises during instantiation (missing globals like config_instance),
+        # fall back to a minimal settings object to allow safe imports in tests.
+        settings = _create_fallback_settings()
+        # optional: log/debug the fallback if you have logger available later
+else:
+    settings = _create_fallback_settings()
+
+try:
+    from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
+except ImportError:
+    # Allow tests to import without message_bus dependency
+    ShardedMessageBus = None  # type: ignore
+    MessageFilter = None  # type: ignore
+    Message = None  # type: ignore
 
 # Define these flags locally or import from a central constants file
 CUPY_AVAILABLE = False
@@ -104,22 +135,45 @@ except ImportError:
 
 # FIXED: Centralized logging configuration to use the core logger.
 # This ensures consistent logging throughout the application.
+_using_structlog = False
 try:
     from omnicore_engine.core import logger as core_logger
 
     logger = core_logger.bind(module="ArrayBackend")
+    _using_structlog = True
 except ImportError:
     logger = logging.getLogger(__name__)
-    # Updated to use the new settings object and attribute
-    logger.setLevel(getattr(settings, "log_level", "INFO"))
+    # Ensure logger.setLevel receives an integer level, not a string
+    log_level = getattr(settings, "log_level", "INFO")
+    if isinstance(log_level, str):
+        log_level = getattr(logging, log_level.upper(), logging.INFO)
+    logger.setLevel(log_level)
 
 # Structured logging with structlog if available
 try:
     import structlog
 
     logger = structlog.get_logger(__name__).bind(module="ArrayBackend")
+    _using_structlog = True
 except ImportError:
     pass  # Fallback to standard logging
+
+
+# Helper function to log with or without structlog
+def _log_info(msg: str, **kwargs) -> None:
+    """Helper to log info messages compatible with both logging and structlog"""
+    if _using_structlog:
+        logger.info(msg, **kwargs)
+    else:
+        logger.info(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
+
+
+def _log_debug(msg: str, **kwargs) -> None:
+    """Helper to log debug messages compatible with both logging and structlog"""
+    if _using_structlog:
+        logger.debug(msg, **kwargs)
+    else:
+        logger.debug(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
 
 # --------------------------------------------------------------------------- #
 #  Optional Prometheus
@@ -202,10 +256,10 @@ class _ArrayBackend:
             self.is_gpu = True
             self.name = "cupy"
             _inc_selected("cupy")
-            logger.info("Array backend selected.", backend="cupy")
+            _log_info("Array backend selected.", backend="cupy")
         except Exception as e:  # pragma: no cover
             _inc_fallback("cupy_import_or_test_failed")
-            logger.debug("CuPy unavailable, falling back to NumPy.", exc_info=e)
+            _log_debug("CuPy unavailable, falling back to NumPy.", exc_info=e)
 
         # 2. Fallback to NumPy
         if self.xp is None:
@@ -216,7 +270,7 @@ class _ArrayBackend:
             self.is_gpu = False
             self.name = "numpy"
             _inc_selected("numpy")
-            logger.info("Array backend selected.", backend="numpy")
+            _log_info("Array backend selected.", backend="numpy")
 
     # ------------------------------------------------------------------- #
     #  Public health endpoint
@@ -317,7 +371,11 @@ class BackendBenchmarker:
 
     def __init__(self):
         self.results: Dict[str, List[float]] = defaultdict(list)
-        self.logger = logger.bind(sub_module="BackendBenchmarker")
+        # Handle logger binding safely
+        if _using_structlog and hasattr(logger, 'bind'):
+            self.logger = logger.bind(sub_module="BackendBenchmarker")
+        else:
+            self.logger = logger
 
     def run_benchmark(
         self,

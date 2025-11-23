@@ -18,6 +18,7 @@ from omnicore_engine.array_backend import (
     validate_array_size,
     sanitize_array_input,
     MAX_ARRAY_SIZE,
+    Benchmarker,
 )
 
 

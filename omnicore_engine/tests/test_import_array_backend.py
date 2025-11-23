@@ -1,0 +1,63 @@
+"""
+Test to ensure omnicore_engine.array_backend can be imported without errors.
+
+This test validates that the array_backend module can be imported safely
+even in test environments where ArbiterConfig may not be fully initialized
+or where the config_instance global may not exist.
+"""
+
+import importlib
+import sys
+
+
+def test_import_array_backend():
+    """
+    Test that array_backend can be imported without NameError or other import-time errors.
+    
+    This test ensures that the defensive import pattern in array_backend.py
+    works correctly and doesn't fail with NameError: config_instance not defined.
+    """
+    # Clear the module from cache if it exists to test fresh import
+    if "omnicore_engine.array_backend" in sys.modules:
+        del sys.modules["omnicore_engine.array_backend"]
+    
+    # This should not raise any errors
+    import omnicore_engine.array_backend
+    
+    # Verify key components are available
+    assert hasattr(omnicore_engine.array_backend, "ArrayBackend")
+    assert hasattr(omnicore_engine.array_backend, "backend")
+    assert hasattr(omnicore_engine.array_backend, "xp")
+    
+    # Verify settings fallback works
+    assert hasattr(omnicore_engine.array_backend, "settings")
+    settings = omnicore_engine.array_backend.settings
+    
+    # Should have at least log_level attribute (either from ArbiterConfig or SimpleNamespace)
+    assert hasattr(settings, "log_level")
+
+
+def test_array_backend_instantiation():
+    """
+    Test that ArrayBackend can be instantiated without errors.
+    """
+    from omnicore_engine.array_backend import ArrayBackend
+    
+    # Should be able to create an instance
+    backend = ArrayBackend(mode="numpy")
+    
+    # Verify basic functionality
+    assert backend.xp is not None
+    arr = backend.zeros((3, 3))
+    assert arr.shape == (3, 3)
+
+
+def test_defensive_settings():
+    """
+    Test that settings object has required attributes even when ArbiterConfig fails.
+    """
+    from omnicore_engine.array_backend import settings
+    
+    # These should always be available (either from ArbiterConfig or fallback)
+    assert hasattr(settings, "log_level")
+    assert hasattr(settings, "enable_array_backend_benchmarking")
