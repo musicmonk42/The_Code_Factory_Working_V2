@@ -2706,7 +2706,7 @@ class Arbiter:
                     "explain_log": [{"error": f"Failed to filter companies: {e}"}],
                 }
         else:
-            logging.getLogger(__name).warning(
+            logging.getLogger(__name__).warning(
                 "Company data plugin not available for filtering."
             )
             return {

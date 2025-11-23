@@ -5,10 +5,23 @@ import random
 import time
 import traceback
 import uuid
+from collections import defaultdict
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import numpy as np
 import torch
+
+try:
+    import sqlalchemy
+    import sqlalchemy.exc
+except ImportError:
+    sqlalchemy = None
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
 
 try:
     from aiolimiter import AsyncLimiter
@@ -467,11 +480,13 @@ class MetaSupervisor:
                 self.logger.exception(
                     "MetaSupervisor main loop encountered an error: %s", ex
                 )
+                error_str = str(ex)
+                error_traceback = traceback.format_exc()
                 await self._rate_limited_operation(
                     lambda: self._record_audit_event(
                         "supervisor_run_loop_error",
                         "run_loop",
-                        {"error": str(ex), "traceback": traceback.format_exc()},
+                        {"error": error_str, "traceback": error_traceback},
                     )
                 )
 
@@ -503,6 +518,11 @@ class MetaSupervisor:
         """
         async with self.rate_limiter:
 
+            # Determine retry exception types
+            retry_exceptions = [RedisError]
+            if sqlalchemy and hasattr(sqlalchemy, 'exc'):
+                retry_exceptions.append(sqlalchemy.exc.SQLAlchemyError)
+            
             @retry(
                 stop=stop_after_attempt(
                     settings.DB_RETRY_ATTEMPTS
@@ -511,7 +531,7 @@ class MetaSupervisor:
                     multiplier=settings.DB_RETRY_DELAY, max=10
                 ),  # Use settings for retry delay
                 retry=retry_if_exception_type(
-                    (RedisError, sqlalchemy.exc.SQLAlchemyError)
+                    tuple(retry_exceptions)
                 ),
             )
             async def execute_with_retry():
@@ -2012,9 +2032,12 @@ if __name__ == "__main__":
                         bind=self.engine, class_=AsyncSession, expire_on_commit=False
                     )
                     self._data_store = defaultdict(dict)  # In-memory mock store
-                    self.encrypter = Fernet(
-                        b"gqT7tQ_YlM5N-u2pZ-YhX5c-k_G2g_VfS_X4f_X2g_W3c"
-                    )  # Dummy key for mock
+                    if Fernet:
+                        self.encrypter = Fernet(
+                            b"gqT7tQ_YlM5N-u2pZ-YhX5c-k_G2g_VfS_X4f_X2g_W3c"
+                        )  # Dummy key for mock
+                    else:
+                        self.encrypter = None
                     self.logger = logging.getLogger("MockDatabase")
                     self.system_audit_merkle_tree = system_audit_merkle_tree
                     # Mock other dependencies needed by Database.__init__

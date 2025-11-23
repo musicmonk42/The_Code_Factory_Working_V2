@@ -389,7 +389,7 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
     Creates, signs, and logs a secure, chained audit event using the
     V0 audit_crypto system.
     """
-    global _LAST_AUDIT_HASH, _DEFAULT_AUDIT_KEY_ID
+    global _LAST_AUDIT_HASH
 
     # --- FIX: Lazy import metrics and security functions to break circular dependencies ---
     try:
@@ -1644,7 +1644,7 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
 
     [NEW] This function also initializes the audit system key ID.
     """
-    global _DEFAULT_AUDIT_KEY_ID, _LAST_AUDIT_HASH
+    global _DEFAULT_AUDIT_KEY_ID
 
     logger = logging.getLogger("runner")
     logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels
@@ -1759,7 +1759,7 @@ async def log_listener(queue: asyncio.Queue):
             queue.task_done()
         except json.JSONDecodeError as e:
             sys.stderr.write(
-                f"Log listener: Failed to decode JSON log record: {e}. Raw: {record_str[:200]}...\n"
+                f"Log listener: Failed to decode JSON log record: {e}. Raw: {record[:200]}...\n"
             )
             logger.error(f"Log listener: JSONDecodeError: {e}", exc_info=True)
         except asyncio.CancelledError:
