@@ -272,7 +272,7 @@ def add_to_history(line: str):
     state = asyncio.run(AutocompleteState.instance())
     try:
         if state.encryptor:
-            encrypted = state.encryptor.encrypt(anonymize_pii(line))
+            state.encryptor.encrypt(anonymize_pii(line))
             readline.add_history(anonymize_pii(line))
         else:
             readline.add_history(anonymize_pii(line))

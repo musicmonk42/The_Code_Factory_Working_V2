@@ -446,7 +446,7 @@ class Explorer:
             experiment_id = self._generate_experiment_id(
                 experiment_config.get("type", "generic")
             )
-            start_time = time.time()
+            time.time()
             exp_type = experiment_config.get("type", "A/B")
             variants = experiment_config.get("variants", [])
             results = []

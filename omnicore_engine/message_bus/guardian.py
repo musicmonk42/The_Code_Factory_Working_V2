@@ -413,7 +413,7 @@ class MessageBusGuardian:
             logger.warning("Initiating self-healing – shutting down bus.")
             await self.message_bus.shutdown()
 
-            new_bus = type(self.message_bus)(
+            type(self.message_bus)(
                 config=self.message_bus.config,
                 db=self.message_bus.db,
                 audit_client=self.message_bus.audit_client,

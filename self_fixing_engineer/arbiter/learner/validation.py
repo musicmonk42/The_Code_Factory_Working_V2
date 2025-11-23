@@ -287,7 +287,7 @@ async def reload_schemas(learner: Any, directory: Optional[str] = None) -> None:
         OSError: If directory access fails.
         json.JSONDecodeError: If schema file is invalid JSON.
     """
-    with tracer.start_as_current_span("reload_schemas") as span:
+    with tracer.start_as_current_span("reload_schemas"):
         start_time = time.perf_counter()
 
         directory = directory or ArbiterConfig.DEFAULT_SCHEMA_DIR

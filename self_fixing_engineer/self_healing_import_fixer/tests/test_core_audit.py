@@ -186,7 +186,7 @@ def test_os_chown_windows_compatibility():
 
                     config = {"audit_dir": "/tmp/test"}
                     try:
-                        logger = RegulatoryAuditLogger(config)
+                        RegulatoryAuditLogger(config)
                     except AttributeError as e:
                         if "chown" in str(e):
                             pytest.fail(f"os.chown called on Windows: {e}")
@@ -253,7 +253,7 @@ def test_file_operations_error_handling():
         config = {"audit_dir": "/invalid\0path/test"}  # Invalid path
 
         try:
-            logger = RegulatoryAuditLogger(config)
+            RegulatoryAuditLogger(config)
             # If it doesn't raise an error, check if it handles it gracefully
         except (OSError, ValueError):
             # This is expected

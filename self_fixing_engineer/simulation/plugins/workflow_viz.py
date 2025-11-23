@@ -109,7 +109,8 @@ except ImportError:
         def labels(self, *args, **kwargs):
             return self
 
-    _get_or_create_metric = lambda *args, **kwargs: DummyMetric()
+    def _get_or_create_metric(*args, **kwargs):
+        return DummyMetric()
 
 try:
     from detect_secrets.core import SecretsCollection

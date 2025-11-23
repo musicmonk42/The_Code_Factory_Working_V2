@@ -22,7 +22,7 @@ class TestCircuitBreaker:
     @pytest.fixture
     def circuit_breaker(self):
         """Create a CircuitBreaker instance for testing."""
-        with patch("arbiter.learner.audit.circuit_breaker_state") as mock_metric:
+        with patch("arbiter.learner.audit.circuit_breaker_state"):
             cb = CircuitBreaker(
                 failure_threshold=3, cooldown_seconds=1, name="test_breaker"
             )

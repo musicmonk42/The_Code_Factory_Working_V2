@@ -197,8 +197,10 @@ except ImportError:
 
         return decorator
 
-    stop_after_attempt = lambda x: None
-    wait_exponential = lambda *args, **kwargs: None
+    def stop_after_attempt(x):
+        return None
+    def wait_exponential(*args, **kwargs):
+        return None
 
 try:
     from cryptography.fernet import Fernet
@@ -445,7 +447,7 @@ class GDPRDataProtectionRule(ComplianceRule):
             r"\b\d{3}-\d{2}-\d{4}\b": "SSN",
             r"\b\d{4}-\d{4}-\d{4}-\d{4}\b": "credit_card",
         }
-        fernet = (
+        (
             Fernet(config.encryption_key.encode())
             if config.encryption_key and CRYPTOGRAPHY_AVAILABLE
             else None

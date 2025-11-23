@@ -294,7 +294,7 @@ async def test_main_cli_health_check(mock_env, monkeypatch, capsys):
     """Test main_cli --health-check option."""
     with patch("argparse.ArgumentParser.parse_args") as mock_parse:
         mock_parse.return_value = argparse.Namespace(health_check=True)
-        with pytest.raises(SystemExit) as exc:
+        with pytest.raises(SystemExit):
             main_cli()
         captured = capsys.readouterr()
         assert "prometheus_available" in captured.out

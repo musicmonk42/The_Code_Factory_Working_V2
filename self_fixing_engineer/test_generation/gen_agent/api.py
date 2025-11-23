@@ -20,9 +20,12 @@ from functools import wraps
 # Guard against optional dependencies at import time with specific logging
 #
 CORS = Limiter = JWTManager = PrometheusMetrics = get_swaggerui_blueprint = None
-jwt_required = lambda *a, **k: (lambda f: f)
-create_access_token = lambda *a, **k: "jwt-disabled"
-get_remote_address = lambda *a, **k: "unknown"
+def jwt_required(*a, **k):
+    return (lambda f: f)
+def create_access_token(*a, **k):
+    return "jwt-disabled"
+def get_remote_address(*a, **k):
+    return "unknown"
 
 try:
     from flask_cors import CORS

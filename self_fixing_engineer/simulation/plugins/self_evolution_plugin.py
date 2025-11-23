@@ -225,7 +225,8 @@ except ImportError:
         def labels(self, *args, **kwargs):
             return self
 
-    _get_or_create_metric = lambda *args, **kwargs: DummyMetric()
+    def _get_or_create_metric(*args, **kwargs):
+        return DummyMetric()
 
 try:
     from detect_secrets.core import SecretsCollection
@@ -278,7 +279,8 @@ except ImportError:
             pass
 
     SecretsCollection = FallbackSecretsCollection
-    transient_settings = lambda: FallbackTransientSettings()
+    def transient_settings():
+        return FallbackTransientSettings()
 
 try:
     from redis.asyncio import Redis
@@ -1348,7 +1350,7 @@ async def _strategy_prompt_optimization(
     Returns:
         Dict[str, Any]: Result of the optimization strategy
     """
-    optimization_scope = strategy_params.get("optimization_scope", "system_prompt")
+    strategy_params.get("optimization_scope", "system_prompt")
     feedback_window_days = strategy_params.get(
         "feedback_window_days", EVOLUTION_CONFIG.evolution_data_window_days
     )

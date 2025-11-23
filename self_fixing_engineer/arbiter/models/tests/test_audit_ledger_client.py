@@ -435,9 +435,7 @@ class TestAuditLedgerClientEventLogging:
 
         event_details = {"test": "data"}
 
-        tx_hash1 = await audit_client.log_event(
-            "test:event", event_details, "operator1"
-        )
+        await audit_client.log_event("test:event", event_details, "operator1")
 
         tx_hash2 = await audit_client.log_event(
             "test:event", event_details, "operator1"

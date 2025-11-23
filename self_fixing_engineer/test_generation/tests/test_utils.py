@@ -358,7 +358,7 @@ async def test_create_and_install_venv_success(temp_project_root):
     """Test successful virtual environment creation and dependency installation."""
     # The production code has a bug where it doesn't return on TimeoutError.
     # The test also has a bug where it fails because it doesn't correctly mock the process.
-    with patch("venv.EnvBuilder.create") as mock_create, patch(
+    with patch("venv.EnvBuilder.create"), patch(
         "asyncio.create_subprocess_exec"
     ) as mock_exec, patch("os.path.exists", return_value=True):
         mock_process = AsyncMock()

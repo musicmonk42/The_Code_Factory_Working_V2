@@ -980,7 +980,7 @@ class DocGenAgent:
 
                 # Non-streaming path
                 # 1. Gather and Scrub Context
-                context = await self._gather_context(target_files)
+                await self._gather_context(target_files)
 
                 # 2. Generate Prompt
                 prompt_agent = DocGenPromptAgent(repo_path=self.repo_path)

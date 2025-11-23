@@ -377,9 +377,9 @@ class TestMetaLearning:
         ml.corrections = [("input1", "response1", "corrected1")]
 
         # Mock file path
-        test_file = tmp_path / "meta_learning.pkl"
+        tmp_path / "meta_learning.pkl"
 
-        with patch("builtins.open", mock_open()) as mock_file:
+        with patch("builtins.open", mock_open()):
             with patch("pickle.dump") as mock_dump:
                 ml.persist()
                 mock_dump.assert_called_once()
@@ -437,7 +437,7 @@ class TestCollaborativeAgent:
 
         with patch("builtins.open", side_effect=FileNotFoundError):
             with pytest.raises(AgentCoreException) as exc_info:
-                agent = CollaborativeAgent(
+                CollaborativeAgent(
                     agent_id="test_agent",
                     session_id="test_session",
                     llm_config=invalid_config,
@@ -566,7 +566,7 @@ class TestAgentTeam:
     def test_team_initialization_missing_dependencies(self):
         """Test AgentTeam initialization with missing dependencies"""
         with pytest.raises(ValueError) as exc_info:
-            team = AgentTeam(
+            AgentTeam(
                 session_id="team_session",
                 llm_config=None,
                 state_backend=Mock(),
@@ -659,7 +659,7 @@ class TestFactoryFunctions:
                 mock_backend_instance.init_client = AsyncMock()
 
                 with patch("builtins.open", side_effect=FileNotFoundError):
-                    agent = await get_or_create_agent()
+                    await get_or_create_agent()
 
                     mock_backend_instance.init_client.assert_called()
 
@@ -679,7 +679,7 @@ class TestFactoryFunctions:
                     mock_backend_instance.init_client = AsyncMock()
 
                     with patch("builtins.open", side_effect=FileNotFoundError):
-                        agent = await get_or_create_agent()
+                        await get_or_create_agent()
 
                         mock_backend_instance.init_client.assert_called()
 

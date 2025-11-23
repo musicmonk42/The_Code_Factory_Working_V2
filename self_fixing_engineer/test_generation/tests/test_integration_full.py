@@ -73,7 +73,7 @@ async def test_full_cli_run_with_mocked_agents(tmp_path, runner):
         ]
 
         # Run CLI in a worker thread to avoid "asyncio.run() in running loop"
-        result = await asyncio.to_thread(
+        await asyncio.to_thread(
             runner.invoke, cli.cli, args, catch_exceptions=False
         )
 

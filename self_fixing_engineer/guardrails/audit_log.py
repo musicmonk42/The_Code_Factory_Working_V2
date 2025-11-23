@@ -737,7 +737,6 @@ class AuditLogger:
             return
 
         with AUDIT_LOCK:
-            last_line = None
             try:
                 with open(self.log_path, "r", encoding="utf-8") as f:
                     for line in f:

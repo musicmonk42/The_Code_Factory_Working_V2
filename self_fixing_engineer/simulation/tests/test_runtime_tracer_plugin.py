@@ -109,7 +109,7 @@ def mock_external_dependencies():
         "runtime_tracer_plugin.os.path.exists", return_value=True
     ), patch(
         "runtime_tracer_plugin.os.remove"
-    ) as mock_os_remove, patch(
+    ), patch(
         "runtime_tracer_plugin.os.makedirs"
     ), patch(
         "runtime_tracer_plugin.shutil.rmtree"
@@ -294,11 +294,11 @@ async def test_analyze_runtime_behavior_success(mock_filesystem):
 
     # Get initial metric values
     initial_attempts = get_metric_value(TRACE_ANALYSIS_ATTEMPTS)
-    initial_success = get_metric_value(TRACE_ANALYSIS_SUCCESS)
-    initial_dynamic_calls = get_metric_value(
+    get_metric_value(TRACE_ANALYSIS_SUCCESS)
+    get_metric_value(
         DYNAMIC_CALLS_DETECTED, call_type="eval/exec/__import__"
     )
-    initial_exceptions = get_metric_value(
+    get_metric_value(
         RUNTIME_EXCEPTIONS_CAPTURED, exception_type="ValueError"
     )
 

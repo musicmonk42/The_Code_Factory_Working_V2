@@ -191,15 +191,16 @@ except ImportError:
                 if self.parent.metric_type == "histogram":
                     self.observe(time.time() - start)
 
-    Counter = lambda name, doc, labelnames=None: MockMetric(
-        name, doc, labelnames, "counter"
-    )
-    Gauge = lambda name, doc, labelnames=None: MockMetric(
-        name, doc, labelnames, "gauge"
-    )
-    Histogram = lambda name, doc, labelnames=None, buckets=None: MockMetric(
-        name, doc, labelnames, "histogram"
-    )  # buckets ignored in mock, use default
+    def Counter(name, doc, labelnames=None):
+        return MockMetric(name, doc, labelnames, "counter")
+
+    def Gauge(name, doc, labelnames=None):
+        return MockMetric(name, doc, labelnames, "gauge")
+
+    def Histogram(name, doc, labelnames=None, buckets=None):
+        return MockMetric(
+            name, doc, labelnames, "histogram"
+        )  # buckets ignored in mock, use default
 
 
 # --- Metric Registry to Prevent Duplicates ---

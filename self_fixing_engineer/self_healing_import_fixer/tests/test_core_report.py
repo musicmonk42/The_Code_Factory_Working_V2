@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 # --- ReportGenerator Initialization Tests ---
 def test_init_with_valid_dir_succeeds(tmp_path):
     output_dir = tmp_path / "test_reports_approved"
-    generator = ReportGenerator(str(output_dir), approved_report_dirs=[str(tmp_path)])
+    ReportGenerator(str(output_dir), approved_report_dirs=[str(tmp_path)])
     assert os.path.isdir(output_dir)
 
 

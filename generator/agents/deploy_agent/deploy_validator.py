@@ -963,7 +963,7 @@ async def api_validate(request: Request) -> Response:
     API endpoint to validate a configuration file.
     """
     with tracer.start_as_current_span("api_validate") as span:
-        start_time = time.time()
+        time.time()
         target = "unknown"  # Set initial target for error logging
         try:
             data = await request.json()
@@ -1013,7 +1013,7 @@ async def api_fix(request: Request) -> Response:
     API endpoint to fix a configuration file using LLM auto-correction.
     """
     with tracer.start_as_current_span("api_fix") as span:
-        start_time = time.time()
+        time.time()
         target = "unknown"  # Set initial target for error logging
         try:
             data = await request.json()

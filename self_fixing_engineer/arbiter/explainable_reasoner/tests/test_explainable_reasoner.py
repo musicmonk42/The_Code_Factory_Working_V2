@@ -466,8 +466,6 @@ async def test_health_check_degraded_no_models(reasoner_instance):
 @pytest.mark.asyncio
 async def test_shutdown_success(reasoner_instance):
     # Store references before shutdown
-    history_mock = reasoner_instance.history
-    audit_mock = reasoner_instance.audit_ledger_client
 
     # Create a new shutdown without the fixture's automatic cleanup
     reasoner = ExplainableReasoner(config=reasoner_instance.config)

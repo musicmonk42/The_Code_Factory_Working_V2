@@ -382,7 +382,7 @@ class SecurityIntegrationManager:
 
     async def _update_password_hash(self, username: str, password: str):
         """Update password hash with new algorithm"""
-        new_hash = self.security_utils.hash_password(password)
+        self.security_utils.hash_password(password)
         # Update in database
         pass
 

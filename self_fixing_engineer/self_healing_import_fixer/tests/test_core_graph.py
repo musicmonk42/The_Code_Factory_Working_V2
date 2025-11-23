@@ -343,7 +343,7 @@ def test_max_files_limit(tmp_path, mock_alert_operator_graph):
 
     config = {"max_python_files": 5}
     analyzer = ImportGraphAnalyzer(str(tmp_path), config)
-    graph = analyzer.build_graph()
+    analyzer.build_graph()
 
     # Should have warned about limit
     assert mock_alert_operator_graph.called

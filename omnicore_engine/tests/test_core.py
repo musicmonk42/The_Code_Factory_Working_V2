@@ -38,7 +38,7 @@ class TestSafeSerialize:
         assert safe_serialize(42) == 42
         assert safe_serialize(3.14) == 3.14
         assert safe_serialize(True) == True
-        assert safe_serialize(None) == None
+        assert safe_serialize(None) is None
 
     def test_datetime_serialization(self):
         """Test datetime and date serialization"""

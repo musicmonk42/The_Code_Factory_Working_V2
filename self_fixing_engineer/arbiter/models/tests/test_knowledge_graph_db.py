@@ -195,7 +195,6 @@ async def test_connect_success(kg_client):
 async def test_connect_idempotent(kg_client):
     """Test connect is idempotent - reconnects if already connected."""
     await kg_client.connect()
-    first_driver = kg_client._driver
     await kg_client.connect()
     # The implementation closes and recreates the driver
     assert kg_client._driver is not None
@@ -570,7 +569,7 @@ async def test_audit_logging(kg_client, tmp_path):
 
     client = Neo4jKnowledgeGraph(audit_logger=audit_logger)
     await client.connect()
-    node_id = await client.add_node("AuditTest", {"prop": "value"})
+    await client.add_node("AuditTest", {"prop": "value"})
     await client.disconnect()
 
     # Wait for audit logger to flush

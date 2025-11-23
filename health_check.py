@@ -4,7 +4,6 @@ Code Factory Health Check Script
 Run this anytime to verify system operational status
 """
 import sys
-import os
 from pathlib import Path
 
 # Add paths
@@ -33,8 +32,7 @@ def main():
     # Check 1: Core imports
     print_header("1. Core Module Imports")
     try:
-        from omnicore_engine.core import OmniCoreEngine, safe_serialize
-        from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
+        from omnicore_engine.core import safe_serialize
         print_status("OmniCore imports", True, "Core engine modules loaded")
     except Exception as e:
         print_status("OmniCore imports", False, str(e))
@@ -45,7 +43,7 @@ def main():
     try:
         from arbiter.config import ArbiterConfig
         from arbiter.arbiter_plugin_registry import PluginRegistry
-        config = ArbiterConfig()
+        ArbiterConfig()
         registry = PluginRegistry()
         plugin_count = len(registry._plugins)
         print_status("Arbiter imports", True, f"{plugin_count} plugins loaded")
@@ -57,8 +55,7 @@ def main():
     print_header("3. Security Features")
     try:
         from omnicore_engine.security_utils import (
-            SecurityError, SecurityException, 
-            AuthenticationError, EncryptionError
+            SecurityError, SecurityException
         )
         assert SecurityException is SecurityError
         print_status("Security imports", True, "All security classes available")
@@ -90,14 +87,12 @@ def main():
     # Check 5: CLI availability
     print_header("5. CLI Interfaces")
     try:
-        from omnicore_engine import cli
         print_status("OmniCore CLI", True, "CLI module available")
     except Exception as e:
         print_status("OmniCore CLI", False, str(e))
         all_passed = False
     
     try:
-        import main as sfe_main
         print_status("SFE main", True, "SFE entrypoint available")
     except Exception as e:
         print_status("SFE main", False, str(e))

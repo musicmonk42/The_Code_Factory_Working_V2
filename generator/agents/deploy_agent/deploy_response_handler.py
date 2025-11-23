@@ -1349,7 +1349,6 @@ async def enrich_config_output(
 
     # 1. Add Compliance Badges (Simple logic based on security findings and linting - requires provenance data, which isn't available until handle_deploy_response is complete)
     # We'll use a placeholder and rely on the provenance data in the final dict for the true status.
-    overall_status_for_badge = "pending_analysis"
     badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
 
     enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
@@ -1613,9 +1612,7 @@ async def handle_deploy_response(
             handler_calls.labels(format=output_format, operation="convert").inc()
             start_convert = time.time()
             # Convert normalized data to the final desired string format
-            final_converted_string = handler.convert(
-                normalized_data, to_format or output_format
-            )
+            handler.convert(normalized_data, to_format or output_format)
             handler_latency.labels(format=output_format, operation="convert").observe(
                 time.time() - start_convert
             )

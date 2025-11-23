@@ -604,7 +604,7 @@ class DeployAgent:
     async def validate_configs_final(
         self, config_string: str, target: str
     ) -> Dict[str, Any]:
-        with tracer.start_as_current_span(f"deploy.validate_final.{target}") as span:
+        with tracer.start_as_current_span(f"deploy.validate_final.{target}"):
             # --- FIX: Use singleton registry ---
             validator = self.validator_registry.get_validator(target)
             # -----------------------------------

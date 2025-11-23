@@ -413,7 +413,7 @@ class TestKnowledgeGraphE2EWorkflow:
 
             # 1. LLM initialization failure
             with pytest.raises(AgentCoreException) as exc_info:
-                agent = CollaborativeAgent(
+                CollaborativeAgent(
                     agent_id="test",
                     session_id="test",
                     llm_config={"provider": "invalid_provider", "model": "test"},

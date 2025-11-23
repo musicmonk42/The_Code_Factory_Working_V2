@@ -304,7 +304,7 @@ async def ensemble_summarize(
     SUMMARIES_TO_SYNTHESIZE:
     ---
     """
-    valid_providers_list = [p for p in providers if p in all_providers]
+    [p for p in providers if p in all_providers]
     # [FIX] Need to get the provider name from the valid summary index
     # This logic assumes the order of successful summaries matches the order of providers
     # that were in the original 'providers' list AND also in 'all_providers'.

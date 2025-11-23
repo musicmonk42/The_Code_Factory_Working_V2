@@ -1093,10 +1093,10 @@ class MutationTester:
         if not self.config.get("mutation_testing", {}).get("enabled", False):
             return True, -1.0, "Mutation testing not enabled."
 
-        full_source_path = validate_and_resolve_path(
+        validate_and_resolve_path(
             self.project_root, source_file_relative
         )
-        full_test_path = validate_and_resolve_path(
+        validate_and_resolve_path(
             self.project_root, test_file_relative
         )
 
@@ -1888,7 +1888,7 @@ async def parse_coverage_delta(
                     try:
                         line_parts = line[3:].split(",")
                         if len(line_parts) >= 2:
-                            line_number, hits = line_parts[0], line_parts[1]
+                            _line_number, hits = line_parts[0], line_parts[1]
                             if current_file and target in current_file:
                                 total += 1
                                 if int(hits) > 0:

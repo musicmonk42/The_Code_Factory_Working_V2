@@ -1119,7 +1119,7 @@ async def review_code(review_request: Dict[str, Any]):
     initial_state = review_request.get("initial_state", "")
     config_path = review_request.get("config_path", "prod_config.yaml")
 
-    code_files = await generate_code(requirements, initial_state, config_path)
+    await generate_code(requirements, initial_state, config_path)
     req_hash = hash(json.dumps(requirements, sort_keys=True))
     review_url = f"/submit_review?req_hash={req_hash}"
 

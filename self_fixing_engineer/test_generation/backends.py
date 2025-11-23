@@ -40,7 +40,8 @@ try:
 except ImportError:
     if TYPE_CHECKING:
 
-        runtime_checkable = lambda x: x
+        def runtime_checkable(x):
+            return x
     else:
 
         def runtime_checkable(cls):  # type: ignore

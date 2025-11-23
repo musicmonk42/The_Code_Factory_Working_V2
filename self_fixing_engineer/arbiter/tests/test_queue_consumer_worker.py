@@ -439,7 +439,7 @@ class TestQueueConsumerWorker:
         worker = queue_consumer_worker.QueueConsumerWorker(settings=mock_settings)
 
         # Mock web app components
-        with patch("aiohttp.web.Application") as mock_app:
+        with patch("aiohttp.web.Application"):
             with patch("aiohttp.web.AppRunner") as mock_runner_class:
                 mock_runner = AsyncMock()
                 mock_runner_class.return_value = mock_runner

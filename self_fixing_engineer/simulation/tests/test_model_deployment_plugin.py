@@ -28,7 +28,7 @@ def mock_external_dependencies():
         "os.getenv"
     ) as mock_getenv, patch(
         "os.remove"
-    ) as mock_os_remove, patch(
+    ), patch(
         "json.dump"
     ) as mock_json_dump, patch(
         "simulation.plugins.model_deployment_plugin.logger"
@@ -85,7 +85,7 @@ def test_model_deployment_strategy_abstract_methods():
 
     # This should raise TypeError because abstract methods are not implemented
     with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-        strategy = MockStrategy({}, correlation_id="test")
+        MockStrategy({}, correlation_id="test")
 
 
 def test_model_deployment_strategy_concrete():

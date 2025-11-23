@@ -906,7 +906,7 @@ class ArbiterConfig(BaseSettings):
         This operation should be handled with extreme care in a production environment.
         """
         try:
-            old_key = self.ENCRYPTION_KEY.get_secret_value()
+            self.ENCRYPTION_KEY.get_secret_value()
             new_key = Fernet.generate_key()
             self.ENCRYPTION_KEY = SecretStr(new_key.decode())
             # In a real-world scenario, you would need to:

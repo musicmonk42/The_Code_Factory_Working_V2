@@ -516,7 +516,7 @@ async def test_rate_limiting(siem_config, metrics_collector):
         results = await asyncio.gather(
             *[client.send_log(entry) for entry in log_entries], return_exceptions=True
         )
-        elapsed_time = time.time() - start_time
+        time.time() - start_time
 
         # Verify all operations succeeded
         for result in results:
@@ -534,7 +534,6 @@ async def test_rate_limiting(siem_config, metrics_collector):
 async def test_retry_logic(aws_client, monkeypatch):
     """Test that operations are retried on transient failures."""
     # Store the original method
-    original_func = aws_client._perform_send_log_logic
     retry_counter = {"count": 0}
 
     async def mock_send_with_failures(log_entry):

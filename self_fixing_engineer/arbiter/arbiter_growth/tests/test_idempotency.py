@@ -106,7 +106,7 @@ async def test_check_and_set_miss(idempotency_store, mock_redis, tracer):
     mock_redis.set.return_value = True
 
     with tracer.start_as_current_span("test-span"):
-        result = await idempotency_store.check_and_set("new_key")
+        await idempotency_store.check_and_set("new_key")
 
 
 async def test_check_and_set_miss(idempotency_store, mock_redis):
@@ -130,7 +130,7 @@ async def test_check_and_set_hit(idempotency_store, mock_redis, tracer):
     mock_redis.set.return_value = False
 
     with tracer.start_as_current_span("test-span"):
-        result = await idempotency_store.check_and_set("existing_key")
+        await idempotency_store.check_and_set("existing_key")
     # Verify metrics
     assert (
         IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
@@ -159,16 +159,6 @@ async def test_check_and_set_redis_error(idempotency_store, mock_redis, tracer):
             IdempotencyStoreError, match="Failed to check/set idempotency key"
         ):
             await idempotency_store.check_and_set("error_key")
-
-
-async def test_check_and_set_redis_error(idempotency_store, mock_redis):
-    """Tests that a specific error is raised when Redis fails."""
-    mock_redis.set.side_effect = RedisError("Connection failed")
-
-    with pytest.raises(
-        IdempotencyStoreError, match="Failed to check/set idempotency key"
-    ):
-        await idempotency_store.check_and_set("error_key")
 
 
 @pytest.mark.asyncio

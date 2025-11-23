@@ -824,7 +824,7 @@ class RequirementsUpdater:
                 span.record_exception(e)
             # FIX: Check for event loop before attempting async call
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(
                     send_alert(
                         f"Schema validation failed: {e.message}", severity="critical"
@@ -1471,7 +1471,7 @@ def update_requirements_with_answers(
 
     # FIX: Check if we're already in an async context
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # We're in an async context - this shouldn't be called synchronously
         raise RuntimeError(
             "update_requirements_with_answers() called from async context. "

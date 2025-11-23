@@ -491,7 +491,7 @@ class ArbiterConfig(BaseSettings):
                     conn = redis.Redis.from_url(url)
                     try:
                         # Check if we're in an async context
-                        loop = asyncio.get_running_loop()
+                        asyncio.get_running_loop()
                         # We're already in async - skip ping or schedule it
                         logger.debug("Skipping Redis ping in validator (async context)")
                         span.set_attribute(

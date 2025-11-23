@@ -493,7 +493,7 @@ async def test_auto_fix_spec_failure(mock_llm, temp_locales):
 # --- Tests for Traceable Artifact ---
 def test_traceable_artifact_persistence(mock_requests):
     """Test artifact persistence."""
-    artifact = TraceableArtifact("content", "type", "source", "prompt")
+    TraceableArtifact("content", "type", "source", "prompt")
     # Check that post was called (it's mocked so won't actually fail)
     mock_requests["post"].assert_called()
 

@@ -79,7 +79,7 @@ class TestEnvironmentConfig:
         assert config.max_steps == 100
         assert config.unacceptable_threshold == 0.2
         assert config.critical_threshold == 0.1
-        assert config.enable_auto_rollback == True
+        assert config.enable_auto_rollback
 
     def test_configuration_validation(self):
         """Test configuration validation rules"""
@@ -412,7 +412,7 @@ class TestAsyncSupport:
         env.reset()
         obs, reward, done, info = env.step(ActionType.RESTART.value)
 
-        assert info["action_result"]["async"] == True
+        assert info["action_result"]["async"]
         assert info["action_result"]["action_id"] == ActionType.RESTART.value
 
         env.close()
@@ -427,7 +427,7 @@ class TestAsyncSupport:
         env.reset()
         obs, reward, done, info = env.step(ActionType.NOOP.value)
 
-        assert info["action_result"]["success"] == True
+        assert info["action_result"]["success"]
 
         env.close()
 

@@ -438,7 +438,7 @@ class TestIntegration:
         """Test strategies with actual prompt templates"""
         mock_logger = Mock(spec=logging.Logger)
 
-        strategy = DefaultPromptStrategy(mock_logger)
+        DefaultPromptStrategy(mock_logger)
 
         # Test with each template type
         templates_to_test = [

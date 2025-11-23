@@ -580,7 +580,7 @@ class TamperEvidentLogger:
                 f"Invalid event_type: {event_type}. Must be one of {self.config.valid_event_types}"
             )
 
-        now = datetime.utcnow().isoformat() + "Z"
+        datetime.utcnow().isoformat() + "Z"
         trace_id, span_id = self._get_trace_ids()
 
         try:

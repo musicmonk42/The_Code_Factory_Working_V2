@@ -848,7 +848,6 @@ async def run_quantum_mutation(
             RunMutationCircuitParams if PYDANTIC_AVAILABLE else RunMutationCircuitParams
         )
         params = params_class(code_file=code_file, backend=backend, **(config or {}))
-        validated_config = params.backend_config
         n_qubits = params.n_qubits
         n_vars = params.n_vars
     except (ValidationError, ValueError) as e:

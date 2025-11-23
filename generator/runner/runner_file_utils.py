@@ -374,7 +374,6 @@ async def load_yaml_file(filepath: Path) -> Dict[str, Any]:
 @register_file_handler("application/zip", [".zip"])
 async def load_zip_file(filepath: Path) -> Dict[str, str]:
     """Loads text contents from all files within a ZIP archive."""
-    contents = {}
 
     # Zipfile module operations are synchronous; run in thread
     def _read_zip_sync():
@@ -422,7 +421,6 @@ if HAS_PDF:
     @register_file_handler("application/pdf", [".pdf"])
     async def load_pdf_file(filepath: Path) -> str:
         """Loads text from a PDF file using PyPDF2."""
-        text = []
         try:
             # PyPDF2 requires sync file handle, aiofiles.open is async. We use to_thread for the entire blocking op.
             def _extract_pdf_text_sync():
@@ -1293,7 +1291,7 @@ class TestFileUtils(unittest.TestCase):
         file_path = await self._create_test_file(
             "integrity_test.txt", "Original content."
         )
-        first_hash = await compute_file_hash(file_path)
+        await compute_file_hash(file_path)
 
         # Load the file to store its integrity data
         await load_file_content(file_path)

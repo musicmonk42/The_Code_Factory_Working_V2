@@ -127,7 +127,6 @@ def _setup_opentelemetry_context():
                 return NoOpSpan()
 
         # Mock the trace functions
-        original_get_tracer = trace.get_tracer
 
         def mock_get_tracer(name, version=None):
             return NoOpTracer()
@@ -165,15 +164,11 @@ def isolate_plugin_registry():
 
     # Ensure the registry uses our test file instead of the production one
     # We need to handle both the case where the singleton exists and where it doesn't
-    original_persist_path = None
 
     # Monkey-patch the default persist path before singleton creation
     if hasattr(registry_module, "PluginRegistry"):
         # Store original for potential restoration
         if registry_module.PluginRegistry._instance:
-            original_persist_path = (
-                registry_module.PluginRegistry._instance._persist_path
-            )
             registry_module.PluginRegistry._instance._persist_path = TEST_PLUGIN_FILE
         else:
             # Patch the class default before instantiation

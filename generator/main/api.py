@@ -278,7 +278,9 @@ except ImportError as e:
     class _DummyColumnType:
         pass
 
-    Column = lambda *args, **kwargs: None
+    def Column(*args, **kwargs):
+        return None
+
     String = _DummyColumnType
     Text = _DummyColumnType
     DateTime = _DummyColumnType

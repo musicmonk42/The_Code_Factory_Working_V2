@@ -199,11 +199,11 @@ async def test_run_scala_tests_success_full_workflow():
         "os.makedirs"
     ) as mock_makedirs, patch(
         "shutil.copy"
-    ) as mock_copy, patch(
+    ), patch(
         "shutil.copy2"
-    ) as mock_copy2, patch(
+    ), patch(
         "shutil.copyfile"
-    ) as mock_copyfile, patch(
+    ), patch(
         "scala_test_runner_plugin._parse_junit_xml",
         return_value={"tests": 1, "failures": 0, "errors": 0, "skipped": 0},
     ), patch(
@@ -217,7 +217,7 @@ async def test_run_scala_tests_success_full_workflow():
         "tempfile.TemporaryDirectory"
     ) as mock_temp_dir, patch(
         "builtins.open", new_callable=mock_open
-    ) as mock_file_open:
+    ):
 
         # Configure _which to return sbt path
         mock_which.return_value = "/usr/bin/sbt"
@@ -290,7 +290,7 @@ async def test_run_scala_tests_test_failure():
         "shutil.copyfile"
     ), patch(
         "builtins.open", new_callable=mock_open
-    ) as mock_file_open:
+    ):
 
         # Configure _which to return sbt path
         mock_which.return_value = "/usr/bin/sbt"

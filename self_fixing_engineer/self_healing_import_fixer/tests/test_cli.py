@@ -436,9 +436,7 @@ def test_selftest_command_runs_diagnostics(mock_plugin_manager, mock_core_depend
         "self_healing_import_fixer.cli.ImportGraphAnalyzer",
         create=True,
         return_value=mock_analyzer,
-    ), patch(
-        "self_healing_import_fixer.cli.heal_entrypoint", create=True
-    ) as mock_heal, patch(
+    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True), patch(
         "shutil.which", return_value=True
     ), patch(
         "sys.exit"

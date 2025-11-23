@@ -1236,7 +1236,7 @@ async def fuzz_test(
         )
 
         for i in range(fuzz_iterations_count):
-            fuzzed_input: str = f"fuzz_input_{i}_{random.randint(0, 1000)}"
+            f"fuzz_input_{i}_{random.randint(0, 1000)}"
 
             # In a real scenario, this is where you'd call the user's code with fuzzed_input
             # For example, if it's a CLI tool, you'd execute a subprocess:
@@ -1540,7 +1540,6 @@ if __name__ == "__main__":
         code_files = {
             "my_prop_code.py": 'def fuzz_square(x: int):\n  if x == 0: raise ValueError("Zero input")\n  return x*x'
         }
-        test_files: Dict[str, str] = {}
 
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
@@ -1625,7 +1624,6 @@ if __name__ == "__main__":
             instance_id="gen_fuzz_instance",
         )
         code_files = {"my_fuzz_code.py": "def process_data(data): return data.upper()"}
-        test_files: Dict[str, str] = {}
 
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

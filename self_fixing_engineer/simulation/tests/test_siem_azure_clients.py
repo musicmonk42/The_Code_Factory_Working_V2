@@ -316,7 +316,7 @@ class AzureServiceBusClient:
         return self._service_bus_client
 
     async def health_check(self):
-        client = await self._get_servicebus_client()
+        await self._get_servicebus_client()
         if self.queue_name:
             # Simulate queue check
             return True, "Azure Service Bus is reachable."
@@ -326,7 +326,7 @@ class AzureServiceBusClient:
         return False, "No queue or topic configured."
 
     async def send_log(self, log_entry):
-        client = await self._get_servicebus_client()
+        await self._get_servicebus_client()
         if self.queue_name:
             return True, f"Log sent to Azure Service Bus Queue '{self.queue_name}'."
         elif self.topic_name:
@@ -336,7 +336,7 @@ class AzureServiceBusClient:
         )
 
     async def send_logs(self, log_entries):
-        client = await self._get_servicebus_client()
+        await self._get_servicebus_client()
         return True, f"Batch of {len(log_entries)} logs sent to Azure Service Bus.", []
 
     async def query_logs(self, query_string, time_range, limit):

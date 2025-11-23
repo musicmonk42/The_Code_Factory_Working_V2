@@ -454,12 +454,12 @@ def test_redis_failure_alerting(mock_core_dependencies):
         _redis_alert_on_failure(Exception("Redis error"))
 
     assert fixer_ai._redis_failure_count == 6
-    assert fixer_ai._redis_failure_alerted == True
+    assert fixer_ai._redis_failure_alerted
 
     # Reset should clear state
     _reset_redis_failure_counter()
     assert fixer_ai._redis_failure_count == 0
-    assert fixer_ai._redis_failure_alerted == False
+    assert not fixer_ai._redis_failure_alerted
 
 
 if __name__ == "__main__":

@@ -114,7 +114,7 @@ class TestInitialization:
         mocker.patch.dict(os.environ, SAMPLE_ENV)
         client = RedisClient()
         assert client.redis_url == SAMPLE_ENV["REDIS_URL"]
-        assert client.use_ssl == False
+        assert not client.use_ssl
         assert client.client is None
 
     def test_initialization_with_custom_url(self, mocker: MockerFixture):
@@ -129,7 +129,7 @@ class TestInitialization:
         mocker.patch.dict(os.environ, SAMPLE_ENV)
         ssl_url = "rediss://secure:6380/0"
         client = RedisClient(redis_url=ssl_url)
-        assert client.use_ssl == True
+        assert client.use_ssl
 
     def test_initialization_with_ssl_env(self, mocker: MockerFixture):
         """Test SSL detection from environment variable."""
@@ -137,7 +137,7 @@ class TestInitialization:
         env["REDIS_USE_SSL"] = "true"
         mocker.patch.dict(os.environ, env)
         client = RedisClient()
-        assert client.use_ssl == True
+        assert client.use_ssl
 
     def test_initialization_invalid_url(self, mocker: MockerFixture):
         """Test initialization with invalid URL."""
@@ -213,13 +213,13 @@ class TestConnection:
         """Test successful ping operation."""
         await redis_client.connect()
         result = await redis_client.ping()
-        assert result == True
+        assert result
 
     @pytest.mark.asyncio
     async def test_ping_when_disconnected(self, redis_client):
         """Test ping returns False when disconnected."""
         result = await redis_client.ping()
-        assert result == False
+        assert not result
 
     @pytest.mark.asyncio
     async def test_reconnect(self, redis_client):
@@ -242,7 +242,7 @@ class TestCRUDOperations:
         """Test successful SET operation."""
         await redis_client.connect()
         success = await redis_client.set(SAMPLE_KEY, SAMPLE_VALUE)
-        assert success == True
+        assert success
         redis_client._mock_client.set.assert_called_once_with(
             SAMPLE_KEY, SAMPLE_VALUE, ex=None, px=None
         )
@@ -252,7 +252,7 @@ class TestCRUDOperations:
         """Test SET with JSON serialization."""
         await redis_client.connect()
         success = await redis_client.set("json_key", SAMPLE_JSON_VALUE)
-        assert success == True
+        assert success
         # Verify JSON serialization
         call_args = redis_client._mock_client.set.call_args
         assert json.loads(call_args[0][1]) == SAMPLE_JSON_VALUE
@@ -262,7 +262,7 @@ class TestCRUDOperations:
         """Test SET with expiration time."""
         await redis_client.connect()
         success = await redis_client.set(SAMPLE_KEY, SAMPLE_VALUE, ex=60)
-        assert success == True
+        assert success
         redis_client._mock_client.set.assert_called_with(
             SAMPLE_KEY, SAMPLE_VALUE, ex=60, px=None
         )
@@ -354,7 +354,7 @@ class TestCRUDOperations:
         """Test successful SETEX operation."""
         await redis_client.connect()
         success = await redis_client.setex("exp_key", 60, "exp_value")
-        assert success == True
+        assert success
         redis_client._mock_client.set.assert_called_with(
             "exp_key", "exp_value", ex=60, px=None
         )
@@ -370,7 +370,7 @@ class TestBatchOperations:
         await redis_client.connect()
         mapping = {"key1": "value1", "key2": {"data": 2}}
         success = await redis_client.mset(mapping)
-        assert success == True
+        assert success
         # Verify JSON serialization for dict value
         call_args = redis_client._mock_client.mset.call_args[0][0]
         assert "key1" in call_args
@@ -381,7 +381,7 @@ class TestBatchOperations:
         """Test MSET with empty mapping."""
         await redis_client.connect()
         success = await redis_client.mset({})
-        assert success == True
+        assert success
         redis_client._mock_client.mset.assert_not_called()
 
     @pytest.mark.asyncio
@@ -440,7 +440,7 @@ class TestDistributedLocking:
         await redis_client.connect()
         lock = redis_client.lock(SAMPLE_LOCK_NAME)
         acquired = await lock.acquire()
-        assert acquired == True
+        assert acquired
         await lock.release()
 
     @pytest.mark.asyncio
@@ -477,7 +477,7 @@ class TestRetryAndErrorHandling:
         redis_client._mock_client.ping.return_value = False  # Force reconnect
 
         success = await redis_client.set(SAMPLE_KEY, SAMPLE_VALUE)
-        assert success == True
+        assert success
         assert redis_client._mock_client.set.call_count == 2
 
     @pytest.mark.asyncio
@@ -536,7 +536,7 @@ class TestSecurityAndValidation:
         # Test maximum key length
         long_key = "x" * 1024
         success = await redis_client.set(long_key, "value")
-        assert success == True
+        assert success
 
         # Test exceeding maximum
         too_long_key = "x" * 1025
@@ -550,7 +550,7 @@ class TestSecurityAndValidation:
         # Test maximum value size (1MB)
         large_value = "x" * (1024 * 1024)
         success = await redis_client.set("key", large_value)
-        assert success == True
+        assert success
 
         # Test exceeding maximum
         too_large_value = "x" * (1024 * 1024 + 1)

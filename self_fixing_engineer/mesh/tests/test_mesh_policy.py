@@ -217,7 +217,7 @@ class TestBackends:
         mock_client.put_object.assert_called_once()
 
         # Load policy
-        loaded = await backend.load("test_policy")
+        await backend.load("test_policy")
         mock_client.get_object.assert_called_once()
 
     @pytest.mark.asyncio
@@ -313,7 +313,7 @@ class TestPolicyOperations:
 
         # Modify and save again
         test_policy["allow"] = ["write", "delete"]
-        v2 = await local_backend.save("rollback_test", test_policy)
+        await local_backend.save("rollback_test", test_policy)
 
         # Rollback to v1
         await local_backend.rollback("rollback_test", v1)
@@ -559,12 +559,12 @@ class TestPerformance:
         # First load - cache miss
         start = time.perf_counter()
         loaded1 = await local_backend.load("cache_test")
-        first_time = time.perf_counter() - start
+        time.perf_counter() - start
 
         # Second load - cache hit
         start = time.perf_counter()
         loaded2 = await local_backend.load("cache_test")
-        cached_time = time.perf_counter() - start
+        time.perf_counter() - start
 
         assert loaded1 == loaded2
         # Just verify cache works, don't test exact timing

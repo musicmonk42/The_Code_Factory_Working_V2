@@ -381,7 +381,7 @@ class Learner:
         """
         Learn and store new knowledge with validation, encryption, and auditing.
         """
-        with tracer.start_as_current_span("learn_new_thing") as span:
+        with tracer.start_as_current_span("learn_new_thing"):
             async with self.learn_semaphore:
                 start_time = time.monotonic()
                 try:

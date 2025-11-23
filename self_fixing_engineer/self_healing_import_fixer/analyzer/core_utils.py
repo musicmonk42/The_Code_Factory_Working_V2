@@ -786,45 +786,48 @@ def validate_input(data: Any, schema: Dict[str, Any]) -> Tuple[bool, Optional[st
     if not isinstance(data, dict):
         return False, "Data must be a dictionary"
 
-    for field, requirements in schema.items():
+    for field_name, requirements in schema.items():
         if "required" in requirements and requirements["required"]:
-            if field not in data:
-                return False, f"Required field '{field}' is missing"
+            if field_name not in data:
+                return False, f"Required field '{field_name}' is missing"
 
-        if field in data:
-            value = data[field]
+        if field_name in data:
+            value = data[field_name]
 
             if "type" in requirements:
                 expected_type = requirements["type"]
                 if not isinstance(value, expected_type):
                     return (
                         False,
-                        f"Field '{field}' must be of type {expected_type.__name__}",
+                        f"Field '{field_name}' must be of type {expected_type.__name__}",
                     )
 
             if "min_length" in requirements and isinstance(value, str):
                 if len(value) < requirements["min_length"]:
                     return (
                         False,
-                        f"Field '{field}' must be at least {requirements['min_length']} characters",
+                        f"Field '{field_name}' must be at least {requirements['min_length']} characters",
                     )
 
             if "max_length" in requirements and isinstance(value, str):
                 if len(value) > requirements["max_length"]:
                     return (
                         False,
-                        f"Field '{field}' must be at most {requirements['max_length']} characters",
+                        f"Field '{field_name}' must be at most {requirements['max_length']} characters",
                     )
 
             if "pattern" in requirements and isinstance(value, str):
                 if not re.match(requirements["pattern"], value):
-                    return False, f"Field '{field}' does not match required pattern"
+                    return (
+                        False,
+                        f"Field '{field_name}' does not match required pattern",
+                    )
 
             if "enum" in requirements:
                 if value not in requirements["enum"]:
                     return (
                         False,
-                        f"Field '{field}' must be one of {requirements['enum']}",
+                        f"Field '{field_name}' must be one of {requirements['enum']}",
                     )
 
     return True, None
@@ -908,7 +911,6 @@ def verify_hash(data: str, hashed: str) -> bool:
 
 def sanitize_path(path: str) -> str:
     """Sanitize file paths to prevent directory traversal attacks."""
-    original_path = path
 
     # Check if path contains directory traversal attempts
     has_traversal = ".." in path

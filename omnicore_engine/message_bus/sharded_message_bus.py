@@ -996,7 +996,7 @@ class ShardedMessageBus:
     def unsubscribe(
         self, topic: Union[str, Pattern], callback: Callable[[Message], None]
     ) -> None:
-        logger_for_unsubscribe = logger.bind(
+        logger.bind(
             topic=str(topic), callback=getattr(callback, "__name__", str(callback))
         )
         asyncio.run_coroutine_threadsafe(

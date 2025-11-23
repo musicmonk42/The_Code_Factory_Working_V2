@@ -69,7 +69,6 @@ def test_module_imports_cleanly():
     Test that the module can be imported without triggering backend initialization.
     This ensures import-time side effects are minimal.
     """
-    import importlib
 
     # Clear module cache
     if "omnicore_engine.array_backend" in sys.modules:

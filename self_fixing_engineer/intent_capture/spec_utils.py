@@ -272,7 +272,7 @@ def validate_spec(
     Returns:
         A tuple: (is_valid, validation_message).
     """
-    start_time = time.perf_counter()
+    time.perf_counter()
     format_lower = format.lower()
     logger.info(f"Starting validation for format: {format_lower} (version {version})")
 

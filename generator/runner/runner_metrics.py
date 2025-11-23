@@ -1423,7 +1423,7 @@ async def alert_monitor(config: "RunnerConfig"):
 
         if len(cpu_history) >= anomaly_window:
             # We take the *window size* values from the end of the deque
-            recent_cpu_values = [val for val, _ in list(cpu_history)[-anomaly_window:]]
+            [val for val, _ in list(cpu_history)[-anomaly_window:]]
 
             # Recalculate mean/std_dev from the window *excluding* the very latest point if it was just added
             # The current_cpu_value is already the *latest* value. The history contains up to `anomaly_window`

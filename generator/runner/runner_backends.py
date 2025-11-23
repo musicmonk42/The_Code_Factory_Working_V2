@@ -1012,7 +1012,7 @@ class JavaBackend(Backend):
         if class_name_match:  # Looks like raw code
             class_name = class_name_match.group(1)
             java_file = work_dir / f"{class_name}.java"
-            code_hash = hashlib.sha256(code.encode()).hexdigest()
+            hashlib.sha256(code.encode()).hexdigest()
 
             try:
                 async with aiofiles.open(java_file, "w", encoding="utf-8") as f:

@@ -395,7 +395,7 @@ class TestFailurePath:
             "test_generation.gen_agent.api._generate_tests_logic",
             new_callable=AsyncMock,
             side_effect=asyncio.TimeoutError,
-        ) as mock_logic:
+        ):
             payload = {
                 "spec": "test",
                 "language": "Python",

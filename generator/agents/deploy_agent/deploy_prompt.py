@@ -1492,12 +1492,6 @@ Output must be in JSON format: {"config": "string content"}
                     f"Running A/B test for target '{args.target}' with variants: {args.ab_variants}..."
                 )
                 # Pass model_specific_info for prompt generation.
-                dummy_model_info_for_ab_test = {
-                    "name": "gpt-4o",
-                    "few_shot_support": True,
-                    "token_limit": 8000,
-                    "optimization_model": "gpt-4o",
-                }
                 ab_results = await agent_instance.ab_test_prompts(
                     target=args.target,
                     files=args.files,

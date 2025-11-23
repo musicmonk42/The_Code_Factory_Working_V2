@@ -720,7 +720,7 @@ async def sandboxed_execute(
             final_modified_data, updated_plugin_state = result_or_exception
 
             # C. PATCH: Stop overwriting plugin instance with child-process copy
-            plugin_key = plugin.get_plugin_name()
+            plugin.get_plugin_name()
             # Do NOT overwrite parent instance with child copy.
             # Tests require parent instance to accumulate counters.
             pass

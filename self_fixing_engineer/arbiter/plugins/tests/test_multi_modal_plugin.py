@@ -385,7 +385,7 @@ class TestMultiModalPlugin:
                     {"success": True, "data": {"cached": True}}
                 )
 
-                result2 = await plugin.process_text("test")
+                await plugin.process_text("test")
                 # Should get cached result without processing
 
     def test_get_supported_providers(self, plugin):

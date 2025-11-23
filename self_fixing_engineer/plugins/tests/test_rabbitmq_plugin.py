@@ -214,7 +214,7 @@ def mock_aiormq(monkeypatch):
     mock_connection.close = AsyncMock()
     mock_connect = AsyncMock(return_value=mock_connection)
 
-    with patch("aiormq.connect", mock_connect) as connect_patch:
+    with patch("aiormq.connect", mock_connect):
         yield mock_connect, mock_connection
 
 

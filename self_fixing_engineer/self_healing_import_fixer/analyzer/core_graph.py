@@ -675,7 +675,9 @@ if __name__ == "__main__":
 
     # Since the real Redis client is lazy-loaded, we need to mock the lazy function
     REDIS_CLIENT = DummyRedis()
-    _get_redis_client = lambda: REDIS_CLIENT
+
+    def _get_redis_client():
+        return REDIS_CLIENT
 
     test_project_root = "test_graph_project"
     os.makedirs(test_project_root, exist_ok=True)

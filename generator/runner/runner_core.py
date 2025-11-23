@@ -1337,7 +1337,7 @@ class Runner(ABC):
     ) -> None:
         """Synchronous wrapper for _update_task_status for backwards compatibility."""
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # If there's a running loop, schedule the coroutine
             asyncio.create_task(self._update_task_status(task_id, status, **kwargs))
         except RuntimeError:

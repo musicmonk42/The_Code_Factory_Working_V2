@@ -65,7 +65,7 @@ from cryptography.fernet import Fernet
 import psutil
 
 # Import centralized exceptions
-from self_fixing_engineer.exceptions import AnalyzerCriticalError, NonCriticalError
+from self_fixing_engineer.exceptions import AnalyzerCriticalError
 
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"

@@ -574,11 +574,7 @@ class CollaborativeAgent:
             ]
         )
 
-        chain = (
-            RunnablePassthrough.assign(context=self._get_rag_context)
-            | prompt
-            | self.llm
-        )
+        (RunnablePassthrough.assign(context=self._get_rag_context) | prompt | self.llm)
 
         # UPGRADE: Enforce structured output
         structured_llm = self.llm.with_structured_output(AgentResponse)
@@ -626,13 +622,13 @@ class CollaborativeAgent:
             tracer.start_as_current_span("self_correction_cycle")
             if tracer
             else open(os.devnull, "w")
-        ) as f:
+        ):
             # 1. Initial Response
             with (
                 tracer.start_as_current_span("initial_response")
                 if tracer
                 else open(os.devnull, "w")
-            ) as f:
+            ):
                 initial_response_msg: AgentResponse = await llm_breaker.call_async(
                     asyncio.wait_for,
                     self._runnable.ainvoke({"input": user_input}),

@@ -202,7 +202,7 @@ async def test_core_utils_integration():
         assert operator1 is operator2, "AlertOperator should be a singleton"
 
         # Test alert functionality (mocked)
-        with patch("core_utils.AlertDispatcher") as mock_dispatcher:
+        with patch("core_utils.AlertDispatcher"):
             operator = AlertOperator()
             operator.alert("Test message", level="INFO")
             # Verify no exceptions were raised

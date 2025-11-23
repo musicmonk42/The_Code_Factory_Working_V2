@@ -85,7 +85,9 @@ try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     BaseModel = object
-    Field = lambda *a, **k: None
+
+    def Field(*a, **k):
+        return None
 
     class ValidationError(Exception):
         pass

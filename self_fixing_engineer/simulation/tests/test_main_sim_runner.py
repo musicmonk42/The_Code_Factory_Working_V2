@@ -409,7 +409,7 @@ class TestEnforcement:
 
     def test_enforce_kernel_sandboxing_with_apparmor(self):
         """Test sandboxing with AppArmor profile."""
-        with patch("subprocess.check_call") as mock_check:
+        with patch("subprocess.check_call"):
             enforce_kernel_sandboxing(None, apparmor_profile="test-profile")
             # May or may not call check_call depending on implementation
 
@@ -445,7 +445,7 @@ class TestIntegration:
             with patch("sys.argv", ["main_sim_runner.py", "--validate"]):
                 with patch(
                     "simulation.plugins.main_sim_runner.validate_deployment_or_exit"
-                ) as mock_validate:
+                ):
                     with pytest.raises(SystemExit):
                         main()
                     # Validate should be called

@@ -100,8 +100,12 @@ if not SFE_CORE_AVAILABLE:
             return DummySpan()
 
     tracer = DummyTracer()
-    meter = lambda: None
-    propagator = lambda: None
+
+    def meter():
+        return None
+
+    def propagator():
+        return None
 
     class MockCallTracker:
         """Helper class to track method calls for testing."""
@@ -220,8 +224,12 @@ if SFE_CORE_AVAILABLE:
                 return DummySpan()
 
         tracer = DummyTracer()
-        meter = lambda: None
-        propagator = lambda: None
+
+        def meter():
+            return None
+
+        def propagator():
+            return None
 
 
 # --- Prometheus Metrics ---

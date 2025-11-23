@@ -1046,7 +1046,7 @@ class PluginRegistry:
                 try:
                     # New: Add security validation before loading
                     security = get_security_utils()
-                    safe_filename = security.sanitize_filename(file_path.name)
+                    security.sanitize_filename(file_path.name)
                     with open(file_path, "rb") as f:
                         content = f.read()
                         is_valid, mime_type = security.validate_file_type(
@@ -1397,17 +1397,21 @@ class PluginVersionManager:
                                 self.logger.warning(
                                     f"Dynamically loaded plugin {name}:{version} from DB has no 'execute' method or '{name}' function."
                                 )
-                                loaded_fn = lambda *args, **kwargs: {
-                                    "error": "Plugin function not found after dynamic load."
-                                }
+
+                                def loaded_fn(*args, **kwargs):
+                                    return {
+                                        "error": "Plugin function not found after dynamic load."
+                                    }
+
                     except Exception as compile_err:
                         self.logger.error(
                             f"Failed to dynamically load code for plugin {name}:{version}: {compile_err}",
                             exc_info=True,
                         )
-                        loaded_fn = lambda *args, **kwargs: {
-                            "error": f"Dynamic code load failed: {compile_err}"
-                        }
+
+                        def loaded_fn(*args, **kwargs):
+                            return {"error": f"Dynamic code load failed: {compile_err}"}
+
                     finally:
                         # Improved temp file cleanup with multiple attempts
                         if temp_file_path.exists():
@@ -1436,9 +1440,11 @@ class PluginVersionManager:
                                     )
 
                 if loaded_fn is None:
-                    loaded_fn = lambda *args, **kwargs: {
-                        "error": "Plugin function not available or load failed."
-                    }
+
+                    def loaded_fn(*args, **kwargs):
+                        return {
+                            "error": "Plugin function not available or load failed."
+                        }
 
                 plugin_instance = Plugin(
                     meta=meta,
