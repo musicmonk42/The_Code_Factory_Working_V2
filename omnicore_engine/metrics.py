@@ -277,6 +277,10 @@ API_ERRORS_TOTAL = _get_or_create_metric(
     ["endpoint", "method", "error_type"],
 )
 
+# Legacy aliases for backward compatibility
+API_REQUESTS = API_REQUESTS_TOTAL
+API_ERRORS = API_ERRORS_TOTAL
+
 # CLI Metrics
 CLI_COMMANDS_TOTAL = _get_or_create_metric(
     Counter, "omnicore_cli_commands_total", "Total CLI commands executed", ["command"]

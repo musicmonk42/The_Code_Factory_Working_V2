@@ -130,12 +130,19 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Pin critical dependencies to ensure compatibility
+          pip install --no-cache-dir \
+            pytest==7.4.0 \
+            pytest-asyncio==0.21.0 \
+            pytest-mock==3.11.0 \
+            tomli_w \
+            typing-extensions
           if [ -f generator/requirements.txt ]; then
             pip install --no-cache-dir -r generator/requirements.txt
           elif [ -f generator/master_requirements.txt ]; then
             pip install --no-cache-dir -r generator/master_requirements.txt
           fi
-          pip install --no-cache-dir pytest pytest-cov pytest-asyncio pytest-mock
+          pip install --no-cache-dir pytest-cov
           
       - name: Run Generator tests
         run: |
@@ -200,6 +207,13 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Pin critical dependencies to ensure compatibility
+          pip install --no-cache-dir \
+            pytest==7.4.0 \
+            pytest-asyncio==0.21.0 \
+            pytest-mock==3.11.0 \
+            tomli_w \
+            typing-extensions
           if [ -f omnicore_engine/requirements.txt ]; then
             pip install --no-cache-dir -r omnicore_engine/requirements.txt
           fi
@@ -211,7 +225,7 @@ jobs:
           pip install --no-cache-dir fastapi-csrf-protect circuitbreaker defusedxml || true
           # Install CPU-only PyTorch wheel to satisfy imports in tests
           pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu || true
-          pip install --no-cache-dir pytest pytest-cov pytest-asyncio pytest-mock
+          pip install --no-cache-dir pytest-cov
           
       - name: Run OmniCore tests
         env:
@@ -268,10 +282,17 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Pin critical dependencies to ensure compatibility
+          pip install --no-cache-dir \
+            pytest==7.4.0 \
+            pytest-asyncio==0.21.0 \
+            pytest-mock==3.11.0 \
+            tomli_w \
+            typing-extensions
           if [ -f self_fixing_engineer/requirements.txt ]; then
             pip install --no-cache-dir -r self_fixing_engineer/requirements.txt
           fi
-          pip install --no-cache-dir pytest pytest-cov pytest-asyncio pytest-mock
+          pip install --no-cache-dir pytest-cov
           
       - name: Run SFE tests
         run: |
@@ -340,13 +361,19 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
+          # Pin critical dependencies to ensure compatibility
+          pip install --no-cache-dir \
+            pytest==7.4.0 \
+            pytest-asyncio==0.21.0 \
+            pytest-mock==3.11.0 \
+            tomli_w \
+            typing-extensions
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt
           fi
           if [ -f master_requirements.txt ]; then
             pip install --no-cache-dir -r master_requirements.txt || true
           fi
-          pip install --no-cache-dir pytest pytest-asyncio pytest-mock
           
       - name: Run integration tests
         env:

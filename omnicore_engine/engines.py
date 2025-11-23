@@ -21,7 +21,7 @@ except Exception:
             # no-op fallback for tests / import-time usage
             return None
 
-from crew_manager import CrewManager
+from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
 from arbiter.arbiter import Arbiter
 from intent_capture.api import app as intent_capture_api
 from test_generation.orchestrator import TestGenerationOrchestrator
