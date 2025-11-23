@@ -58,20 +58,31 @@ def _create_fallback_settings():
         enable_array_backend_benchmarking=False,
     )
 
+# Safe import of ArbiterConfig: guard against ImportError and any runtime errors
+# inside arbiter.config (e.g. NameError from a broken module). If import or
+# instantiation fails, fall back to a minimal settings object so tests and
+# lightweight installs can import this module safely.
 try:
     from arbiter.config import ArbiterConfig  # type: ignore
-except (ImportError, ModuleNotFoundError):
-    ArbiterConfig = None  # tests or minimal installs may not have arbiter available
+except Exception as e:
+    # Avoid failing import time if arbiter.config contains runtime errors.
+    logging.warning(
+        "Could not import arbiter.config safely; using fallback settings. Import error: %s",
+        e,
+    )
+    ArbiterConfig = None
 
-# Create a safe settings object without importing or running Arbiter application init
+# Instantiate settings defensively; if ArbiterConfig exists but its constructor
+# raises, fall back to the minimal settings object.
 if ArbiterConfig is not None:
     try:
         settings = ArbiterConfig()
-    except (NameError, AttributeError, ImportError) as e:
-        # If ArbiterConfig raises during instantiation (missing globals like config_instance),
-        # fall back to a minimal settings object to allow safe imports in tests.
+    except Exception as e:
+        logging.warning(
+            "ArbiterConfig() raised during instantiation; falling back to minimal settings. Error: %s",
+            e,
+        )
         settings = _create_fallback_settings()
-        # optional: log/debug the fallback if you have logger available later
 else:
     settings = _create_fallback_settings()
 
