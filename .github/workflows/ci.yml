@@ -477,11 +477,6 @@ jobs:
         
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
-          buildkitd-flags: --allow-insecure-entitlement network.host
         
       - name: Build Docker image - ${{ matrix.component }}
         env:
@@ -490,14 +485,11 @@ jobs:
         run: |
           if [ "${{ matrix.component }}" = "root" ]; then
             docker build \
-              --no-cache \
               --build-arg SKIP_HEAVY_DEPS=0 \
-              --build-arg BUILDKIT_INLINE_CACHE=1 \
               -t code-factory:latest \
               -f Dockerfile .
           elif [ "${{ matrix.component }}" = "generator" ] && [ -f generator/Dockerfile ]; then
             docker build \
-              --no-cache \
               -t code-factory-generator:latest \
               -f generator/Dockerfile ./generator
           else
