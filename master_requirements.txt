@@ -128,7 +128,7 @@ google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
 googletrans==4.0.2
 graphviz==0.21
-greenlet==3.2.4
+greenlet==3.1.1  # Pinned to 3.1.1 for compatibility with playwright 1.49.1
 grpc-google-iam-v1==0.14.2
 grpcio==1.74.0
 grpcio-health-checking==1.63.2

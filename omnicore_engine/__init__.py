@@ -2,21 +2,14 @@
 """
 OmniCore Engine: Robust modular system for Legal Tender.
 Manages dynamic plugin registration, loading, and invocation for all analytical engines.
+
+Note: This package uses lazy imports to minimize import-time overhead and prevent
+heavy initialization during pytest collection or package import.
 """
 
 import logging
 import sys
-from typing import Any, Callable, Optional, Type, Dict, List
-
-# Import PLUGIN_REGISTRY and plugin_event_handler as they are global singletons
-from .plugin_registry import PLUGIN_REGISTRY
-from .plugin_event_handler import PluginEventHandler as plugin_event_handler
-
-# Note: Other modules (audit, core, cli, engines, etc.) should be imported
-# directly when needed, not at package level, to avoid circular imports.
-# Example: from omnicore_engine import audit
-#          or: from omnicore_engine.audit import ExplainAudit
-
+from typing import Any
 
 # ---- Logging Configuration (simple for __init__.py) ----
 logger = logging.getLogger("omnicore_engine_init")
@@ -28,7 +21,37 @@ if not logger.handlers:
     )
     logger.addHandler(handler)
 
-# FIXED: Removed misleading entries from __all__.
-# The __all__ list now only contains names actually imported or defined in this file,
-# making the package's public API explicit and avoiding import errors.
-__all__ = ["PLUGIN_REGISTRY", "plugin_event_handler"]
+# Avoid importing submodules at package import time to prevent heavy initialization.
+# Provide accessor functions that import lazily.
+
+
+def get_plugin_registry():
+    """Return the PLUGIN_REGISTRY singleton (lazy import).
+    
+    This function lazily imports the plugin registry to avoid heavy
+    initialization during package import or pytest collection.
+    
+    Returns:
+        The global plugin registry singleton instance.
+    """
+    from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
+
+    return _PLUGIN_REGISTRY
+
+
+def get_plugin_event_handler_class():
+    """Return the PluginEventHandler class (lazy import).
+    
+    This function lazily imports the plugin event handler class to avoid heavy
+    initialization during package import or pytest collection.
+    
+    Returns:
+        The PluginEventHandler class (not an instance).
+    """
+    from .plugin_event_handler import PluginEventHandler as _PluginEventHandler
+
+    return _PluginEventHandler
+
+
+# Export the accessor functions
+__all__ = ["get_plugin_registry", "get_plugin_event_handler_class"]
