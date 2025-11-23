@@ -2483,7 +2483,6 @@ if API_AVAILABLE:
     # @api.on_event("shutdown") # DECORATOR REMOVED
     async def shutdown_event():
         """Gracefully shut down Runner on API shutdown."""
-        global runner_instance
         if runner_instance:
             logger.info("Runner API shutdown initiated.")
             await runner_instance.shutdown_services()  # [FIX] Call async shutdown
@@ -2504,7 +2503,6 @@ if API_AVAILABLE:
         response_model=TaskResult,
     )
     async def api_run_test_task(payload: TaskPayload = Body(...)):
-        global runner_instance
         if runner_instance is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2562,7 +2560,6 @@ if API_AVAILABLE:
         response_model=TaskResult,
     )
     async def api_enqueue_test_task(payload: TaskPayload = Body(...)):
-        global runner_instance
         if runner_instance is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2610,7 +2607,6 @@ if API_AVAILABLE:
         response_model=Dict[str, Any],
     )
     async def api_enqueue_test_task_batch(batch_payload: BatchTaskPayload = Body(...)):
-        global runner_instance
         if runner_instance is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2667,7 +2663,6 @@ if API_AVAILABLE:
         response_model=TaskResult,
     )
     async def api_get_task_status(task_id: str):
-        global runner_instance
         if runner_instance is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

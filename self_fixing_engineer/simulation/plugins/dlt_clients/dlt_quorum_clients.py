@@ -128,7 +128,6 @@ _temp_files: Dict[str, float] = {}  # Store {file_path: creation_time}
 
 def cleanup_temp_files() -> None:
     """Cleans up temporary files created by temp_file context manager."""
-    global _temp_files
     files_to_clean = list(_temp_files.keys())  # Iterate over a copy
     for temp_file in files_to_clean:
         try:
@@ -157,7 +156,6 @@ def temp_file(content: str, ttl: float = 3600.0) -> str:
     Yields:
         str: The path to the created temporary file.
     """
-    global _temp_files
     fd, path = tempfile.mkstemp(suffix=".json", prefix="quorum_abi_")
     try:
         with os.fdopen(fd, "w") as tmp:

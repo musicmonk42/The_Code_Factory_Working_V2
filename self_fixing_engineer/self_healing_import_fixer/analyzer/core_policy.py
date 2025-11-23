@@ -396,7 +396,7 @@ def start_policy_watcher(policy_file_path: str, poll_interval: float = 10.0):
 
 
 def stop_policy_watcher():
-    global _watcher_thread, _watcher_stop_event
+    global _watcher_thread
     if _watcher_thread and _watcher_thread.is_alive():
         _watcher_stop_event.set()
         _watcher_thread.join()

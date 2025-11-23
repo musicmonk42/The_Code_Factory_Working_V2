@@ -1010,7 +1010,6 @@ class Clarifier:
     async def get_clarifications(
         self, ambiguities: List[str], requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
-        global HAS_OPENTELEMETRY
         span = None
         if HAS_OPENTELEMETRY and self.tracer:
             span = self.tracer.start_span("get_clarifications_workflow")

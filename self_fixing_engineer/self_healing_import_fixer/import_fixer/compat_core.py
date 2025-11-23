@@ -654,7 +654,7 @@ except ImportError:
     retry=tenacity.retry_if_exception_type(ImportError),
 )
 def _initialize_core_modules() -> None:
-    global _core_initialized, _core_init_error, _alert_operator, _scrub_secrets, _audit_logger, _secrets_manager
+    global _core_initialized
     total_start_time = time.monotonic()
     metrics, tracer = _get_metrics(), _get_tracer()
     if redis_client := _get_redis_client():

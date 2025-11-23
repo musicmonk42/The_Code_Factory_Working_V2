@@ -2065,7 +2065,7 @@ def get_plugin_manifest() -> Dict[str, Any]:
 
 
 async def _monitor_config_changes():
-    global _siem_plugin_instance, _config_reload_task
+    global _siem_plugin_instance
     last_config_hash = None
     while True:
         try:

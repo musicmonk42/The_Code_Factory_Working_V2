@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import sys
@@ -125,13 +126,11 @@ kafka_audit_producer = None
 
 
 async def kafka_audit_hook(event_name, details):
-    global kafka_audit_producer
     if kafka_audit_producer:
         await kafka_audit_producer.send(event_name, details)
 
 
 async def shutdown_kafka_producer():
-    global kafka_audit_producer
     if kafka_audit_producer:
         await kafka_audit_producer.stop()
 

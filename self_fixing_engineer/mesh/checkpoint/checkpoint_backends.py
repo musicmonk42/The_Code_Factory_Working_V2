@@ -802,13 +802,15 @@ def backend_operation(operation: str):
                             result = await func(manager, *args, **kwargs)
                             # Record success (this resets failure count)
                             breaker.call(lambda: None)
-                        except Exception:
+                        # fmt: off
+                        except Exception as e:  # noqa: F841 - used in lambda
                             # Record failure
                             try:
-                                breaker.call(lambda: (_ for _ in ()).throw(e))
+                                breaker.call(lambda: (_ for _ in ()).throw(e))  # noqa: F821 - e from outer except
                             except:
                                 pass
                             raise
+                        # fmt: on
                     else:
                         # If no circuit breaker, implement basic retry logic for transient errors
                         max_retries = Config.MAX_RETRIES

@@ -160,7 +160,6 @@ async def audit_metrics_instance():
     This prevents the test session from hanging.
     """
     # Reset the global instance with a fresh one to ensure clean state for instance properties
-    global audit_metrics
     fresh_instance = type(audit_metrics)()
 
     # We remove fresh_instance.start() to prevent the initial hang.

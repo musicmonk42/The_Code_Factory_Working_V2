@@ -318,7 +318,7 @@ async def test_concurrent_check_and_set(idempotency_store, mock_redis, tracer):
             return await idempotency_store.check_and_set("concurrent_key")
 
     # Don't initialize redis
-    await store.stop()  # Should not raise
+    await idempotency_store.stop()  # Should not raise
 
 
 @pytest.mark.asyncio

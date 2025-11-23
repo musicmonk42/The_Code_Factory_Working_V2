@@ -428,13 +428,15 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
                             # Record success
                             BREAKER.call(lambda: None)
                             return result
-                        except Exception:
+                        # fmt: off
+                        except Exception as e:  # noqa: F841 - used in lambda
                             # Record failure
                             try:
-                                BREAKER.call(lambda: (_ for _ in ()).throw(e))
+                                BREAKER.call(lambda: (_ for _ in ()).throw(e))  # noqa: F821 - e from outer except
                             except:
                                 pass
                             raise
+                        # fmt: on
 
                     return await retryable_func(*args, **kwargs)
                 except Exception as e:

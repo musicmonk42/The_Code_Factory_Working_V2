@@ -238,7 +238,6 @@ USERS: Dict[str, Dict[str, Any]] = {}
 
 def load_users_and_roles(config_path: Optional[str] = None):
     """Loads users and roles from a YAML or JSON file."""
-    global USERS
 
     if not config_path:
         if DEV_MODE:

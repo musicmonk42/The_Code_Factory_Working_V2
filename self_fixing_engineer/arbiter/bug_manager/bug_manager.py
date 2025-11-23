@@ -414,7 +414,7 @@ class BugManager:
                         json.dumps(
                             {
                                 "event": "remediation_failed",
-                                "bug_id": bug_id.get(),
+                                "bug_id": _bug_id_var.get(),
                                 "error": str(e),
                             }
                         ),
@@ -428,14 +428,14 @@ class BugManager:
 
             BUG_REPORT_SUCCESS.labels(severity=severity_enum.value).inc()
         except RateLimitExceededError:
-            logger.warning(f"Rate limited bug {bug_id.get()}")
+            logger.warning(f"Rate limited bug {_bug_id_var.get()}")
             raise
         except Exception as e:
             logger.critical(
                 json.dumps(
                     {
                         "event": "bug_processing_failed",
-                        "bug_id": bug_id.get(),
+                        "bug_id": _bug_id_var.get(),
                         "error": str(e),
                     }
                 ),
