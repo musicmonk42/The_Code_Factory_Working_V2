@@ -576,10 +576,10 @@ class MetaSupervisor:
                     )  # Set to zeros to avoid proactive hot-swap
 
             for i, (plugin_id, stats) in enumerate(plugin_metrics.items()):
-                plugin_name = plugin_id.split(":")[
+                plugin_id.split(":")[
                     1
                 ]  # Assuming plugin_id is "kind:name"
-                plugin_kind = plugin_id.split(":")[0]
+                plugin_id.split(":")[0]
 
                 current_failure_prob = (
                     failure_probs[i] if failure_probs is not None else 0.0
@@ -736,19 +736,20 @@ class MetaSupervisor:
             # For now, it's a mock or external import.
             # FIX: get_recent_config_changes should be an async method of Database or an audit query.
             # For this example, assuming a simplified mock that returns a list of dummy changes.
-            mock_get_recent_config_changes = lambda: [
-                (
-                    {
-                        "user_id": "test_user",
-                        "new_value": {"ethical_setting": "bad"},
-                        "previous": {"ethical_setting": "good"},
-                        "timestamp": time.time(),
-                    }
-                    if random.random() > 0.5
-                    else {}
-                )
-                for _ in range(3)
-            ]
+            def mock_get_recent_config_changes():
+                return [
+                            (
+                                {
+                                    "user_id": "test_user",
+                                    "new_value": {"ethical_setting": "bad"},
+                                    "previous": {"ethical_setting": "good"},
+                                    "timestamp": time.time(),
+                                }
+                                if random.random() > 0.5
+                                else {}
+                            )
+                            for _ in range(3)
+                        ]
             config_changes_raw = await self._rate_limited_operation(
                 mock_get_recent_config_changes
             )
@@ -1945,30 +1946,28 @@ if __name__ == "__main__":
             try:
                 from omnicore_engine.database.database import Database as DummyDatabase
             except ImportError:
-                DummyDatabase = None
+                pass
             try:
                 from omnicore_engine.audit import ExplainAudit as DummyExplainAudit
             except ImportError:
-                DummyExplainAudit = None
+                pass
             try:
                 from omnicore_engine.merkle_tree import MerkleTree as DummyMerkleTree
             except ImportError:
-                DummyMerkleTree = None
+                pass
             try:
                 from omnicore_engine.plugin_registry import (
                     PLUGIN_REGISTRY as DummyPluginRegistry,
                 )
                 from omnicore_engine.plugin_registry import PluginMeta, PlugInKind
             except ImportError:
-                DummyPluginRegistry = None
-                PluginMeta = None
-                PlugInKind = None
+                pass
             try:
                 from omnicore_engine.array_backend import (
                     ArrayBackend as DummyArrayBackend,
                 )
             except ImportError:
-                DummyArrayBackend = None
+                pass
             from sqlalchemy.ext.asyncio import (
                 create_async_engine,
                 AsyncSession,

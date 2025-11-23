@@ -89,14 +89,14 @@ try:
     from simulation.utils import get_or_create_metric
 
     # Use the safe metric creation function from simulation.utils
-    _safe_counter = lambda name, doc, labelnames=(): get_or_create_metric(
-        Counter, name, doc, labelnames
-    )
-    _safe_histogram = (
-        lambda name, doc, labelnames=(), buckets=None: get_or_create_metric(
-            Histogram, name, doc, labelnames, buckets
+    def _safe_counter(name, doc, labelnames=()):
+        return get_or_create_metric(
+            Counter, name, doc, labelnames
         )
-    )
+    def _safe_histogram(name, doc, labelnames=(), buckets=None):
+        return (get_or_create_metric(
+                Histogram, name, doc, labelnames, buckets
+            ))
 
     # Low-cardinality metrics (no refactor_id label to avoid cardinality explosion)
     CROSS_REPO_REFACTOR_ATTEMPTS = _safe_counter(

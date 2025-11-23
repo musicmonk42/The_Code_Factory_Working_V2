@@ -132,7 +132,7 @@ class TestDefaultMultiModalProcessor:
             mock_config.MAX_MM_DATA_SIZE_MB = 100
             mock_config.CACHE_EXPIRATION_SECONDS = 3600
 
-            processor = DefaultMultiModalProcessor(mock_logger)
+            DefaultMultiModalProcessor(mock_logger)
 
             # Just verify that Redis initialization was attempted
             # The actual connection might fail in test environment, which is handled
@@ -143,7 +143,7 @@ class TestDefaultMultiModalProcessor:
         with patch("arbiter.knowledge_graph.multimodal.TRANSFORMERS_AVAILABLE", True):
             with patch("arbiter.knowledge_graph.multimodal.pipeline") as mock_pipeline:
                 mock_pipeline.return_value = Mock()
-                processor = DefaultMultiModalProcessor(mock_logger)
+                DefaultMultiModalProcessor(mock_logger)
 
                 # Check that pipelines were initialized
                 assert mock_pipeline.call_count == 3  # image, audio, text

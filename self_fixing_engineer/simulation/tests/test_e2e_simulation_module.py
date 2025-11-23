@@ -236,7 +236,7 @@ async def test_simulation_module_end_to_end(setup_test_environment):
     """
     create_mock_core_functions()
 
-    sim_dir = setup_test_environment["simulation_dir"]
+    setup_test_environment["simulation_dir"]
     plugins_dir = setup_test_environment["plugins_dir"]
 
     print("\nStarting Comprehensive E2E Test...")

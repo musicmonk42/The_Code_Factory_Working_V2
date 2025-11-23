@@ -664,7 +664,6 @@ class SoftwareCryptoProvider(CryptoProvider):
         start_time = time.perf_counter()
         # FIX 2.2: Initialize algo and status_label for finally block protection
         algo = "unknown"
-        status_label = "failed"
 
         key_info = self.keys.get(key_id)
         if not key_info:
@@ -713,7 +712,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                     )
                     SIGN_OPERATIONS.labels(algo=algo, provider_type="software").inc()
                     span.set_status(trace.StatusCode.OK)
-                    status_label = "success"
                     await log_action(
                         "sign",
                         key_id=key_id,
@@ -727,7 +725,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                     self._sign_with_key_internal, data, key_obj, algo
                 )
                 SIGN_OPERATIONS.labels(algo=algo, provider_type="software").inc()
-                status_label = "success"
                 await log_action(
                     "sign", key_id=key_id, algo=algo, provider="software", success=True
                 )
@@ -1229,7 +1226,8 @@ class SoftwareCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
-            send_alert = lambda *args, **kwargs: None
+            def send_alert(*args, **kwargs):
+                return None
 
             async def log_action(*args, **kwargs):
                 return None
@@ -1459,7 +1457,7 @@ class HSMCryptoProvider(CryptoProvider):
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )
-            CRYPTO_ERRORS = SimpleNamespace(
+            SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
 
@@ -1726,12 +1724,14 @@ class HSMCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
-            send_alert = lambda *args, **kwargs: None
+            def send_alert(*args, **kwargs):
+                return None
 
             async def log_action(*args, **kwargs):
                 return None
 
-            retry_operation = lambda *args, **kwargs: SimpleNamespace()
+            def retry_operation(*args, **kwargs):
+                return SimpleNamespace()
         # --- End Delayed Import ---
 
         # If _hsm_init_task is a Future (placeholder), wait for it to be set (either success or failure)
@@ -2039,8 +2039,6 @@ class HSMCryptoProvider(CryptoProvider):
         start_time = time.perf_counter()
         # FIX 2.2: Initialize algo and status_label for finally block protection
         # HSM operations do not typically have an 'algo' label unless parsed from the key, use 'hsm'
-        algo = "hsm"
-        status_label = "failed"
 
         await self._initialize_hsm_session()
         if not self.session:
@@ -2067,7 +2065,6 @@ class HSMCryptoProvider(CryptoProvider):
                     )
                     SIGN_OPERATIONS.labels(algo="hsm", provider_type="hsm").inc()
                     span.set_status(trace.StatusCode.OK)
-                    status_label = "success"
                     await log_action(
                         "sign", key_id=key_id, algo="hsm", provider="hsm", success=True
                     )
@@ -2077,7 +2074,6 @@ class HSMCryptoProvider(CryptoProvider):
                     self._sign_internal_hsm, data, key_id
                 )
                 SIGN_OPERATIONS.labels(algo="hsm", provider_type="hsm").inc()
-                status_label = "success"
                 await log_action(
                     "sign", key_id=key_id, algo="hsm", provider="hsm", success=True
                 )
@@ -2248,7 +2244,6 @@ class HSMCryptoProvider(CryptoProvider):
 
         start_time = time.perf_counter()
         # FIX 2.2: Initialize algo and status_label for finally block protection
-        algo = "hsm"
         status_label = "no_session"
 
         await self._initialize_hsm_session()
@@ -2443,7 +2438,8 @@ class HSMCryptoProvider(CryptoProvider):
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
-            send_alert = lambda *args, **kwargs: None
+            def send_alert(*args, **kwargs):
+                return None
 
             async def log_action(*args, **kwargs):
                 return None

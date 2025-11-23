@@ -908,7 +908,6 @@ def verify_hash(data: str, hashed: str) -> bool:
 
 def sanitize_path(path: str) -> str:
     """Sanitize file paths to prevent directory traversal attacks."""
-    original_path = path
 
     # Check if path contains directory traversal attempts
     has_traversal = ".." in path

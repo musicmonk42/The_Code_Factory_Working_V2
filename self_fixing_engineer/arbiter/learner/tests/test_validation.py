@@ -284,7 +284,8 @@ class TestRegisterValidationHook:
 
     def test_register_lambda_hook(self, mock_learner):
         """Test registering a lambda function as hook."""
-        lambda_validator = lambda v: v is not None
+        def lambda_validator(v):
+            return v is not None
 
         register_validation_hook(mock_learner, "TestDomain", lambda_validator)
 

@@ -137,7 +137,7 @@ def test_debounce_per_signal(monkeypatch):
         handler(signal.SIGINT, None)
 
     assert signal_mod._signal_count == 1
-    assert signal_mod._shutting_down == True
+    assert signal_mod._shutting_down
     assert fake_event.set.call_count == 0
 
 

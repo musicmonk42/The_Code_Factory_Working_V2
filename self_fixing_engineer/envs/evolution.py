@@ -785,7 +785,7 @@ def run_evolution_demonstration():
 
     # Run evolution
     print("Starting evolution process...\n")
-    best_config = optimizer.evolve(test_function=test_function, verbose=True)
+    optimizer.evolve(test_function=test_function, verbose=True)
 
     # Show summary
     print("\n" + "=" * 70)

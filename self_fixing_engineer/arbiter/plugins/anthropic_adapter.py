@@ -240,7 +240,7 @@ class AnthropicAdapter:
                 raise CircuitBreakerOpenError("Anthropic API circuit breaker is open.")
 
         # Sanitize and hash prompt for secure logging
-        sanitized_prompt = self._sanitize_prompt(prompt)
+        self._sanitize_prompt(prompt)
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         self.logger.info(
             f"Attempting Anthropic generation for prompt hash: {prompt_hash[:10]}... [Correlation ID: {correlation_id}]"

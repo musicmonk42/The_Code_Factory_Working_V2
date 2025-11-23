@@ -743,7 +743,7 @@ class PluginRegistry:
 
         with self._kind_locks[kind]:
             plugin = self.get(kind, name)
-            meta = self.get_metadata(kind, name)
+            self.get_metadata(kind, name)
 
             if plugin is None:
                 logger.warning(

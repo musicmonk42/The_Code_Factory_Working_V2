@@ -261,7 +261,7 @@ async def test_audit_hook_success():
     assert hook._event_queue.qsize() == 1
 
     # Get the event but don't remove it from queue
-    event = await asyncio.wait_for(hook._event_queue.get(), timeout=1.0)
+    await asyncio.wait_for(hook._event_queue.get(), timeout=1.0)
     hook._event_queue.task_done()
 
     # Check that the event was logged
@@ -574,7 +574,7 @@ async def test_close_external_session(mock_aiohttp_session):
 
     # External session should not be closed by the hook
     # The hook sets _own_session = False when a session is provided
-    assert hook._own_session == False
+    assert not hook._own_session
     # The mock close() should not have been called
     mock_session.close.assert_not_called()
 

@@ -594,7 +594,6 @@ class AuditLog:
         logger.info("Starting self-healing process...")
         issues_detected = 0
         total_entries = 0
-        last_signature = None
 
         try:
             # --- FIX: Using read_last_n(limit=a_large_number) as a stand-in for read_all ---

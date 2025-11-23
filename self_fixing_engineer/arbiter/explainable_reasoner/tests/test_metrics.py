@@ -180,7 +180,7 @@ def test_get_or_create_metric_success(
 def test_get_or_create_metric_caching():
     """Tests that metrics are cached properly."""
     # Create a metric
-    metric1 = get_or_create_metric(Counter, "cache_test_unique", "Doc", ())
+    get_or_create_metric(Counter, "cache_test_unique", "Doc", ())
 
     # Try to create the same metric again
     metric2 = get_or_create_metric(Counter, "cache_test_unique", "Doc", ())

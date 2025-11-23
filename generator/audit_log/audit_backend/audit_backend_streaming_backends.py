@@ -357,7 +357,7 @@ class HTTPBackend(LogBackend):
                 "Circuit breaker is OPEN. Endpoint is deemed unhealthy for queries."
             )
 
-        params = {"limit": str(limit)}
+        {"limit": str(limit)}
         # Input validation/sanitization should ideally happen at the API boundary,
         # but for untrusted inputs, ensure parameters are safely encoded.
         # Sensitive data in `filters` should be redacted from logs (handled by SensitiveDataFilter).

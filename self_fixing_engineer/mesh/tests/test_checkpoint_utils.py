@@ -371,8 +371,8 @@ class TestKeyRotation:
         assert len(key1) == 44  # Base64 encoded
 
         # Derived key
-        key3 = create_fernet_key("passphrase")
-        key4 = create_fernet_key("passphrase")
+        create_fernet_key("passphrase")
+        create_fernet_key("passphrase")
         # Note: Will be different due to random salt
 
     def test_rotate_keys(self):

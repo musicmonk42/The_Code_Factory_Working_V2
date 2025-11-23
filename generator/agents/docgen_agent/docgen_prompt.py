@@ -1002,7 +1002,7 @@ class DocGenPromptAgent:
                 )
                 span.record_exception(e)
 
-                fallback_prompt = scrub_text(
+                scrub_text(
                     f"Generate {doc_type} documentation for files: {', '.join(target_files)}. Instructions: {instructions or 'None'}. Due to an internal error, full context was not available. Please generate comprehensive and accurate documentation. Include an introduction, installation, usage, API reference, and a conclusion. Output in Markdown format."
                 )
                 raise RuntimeError(

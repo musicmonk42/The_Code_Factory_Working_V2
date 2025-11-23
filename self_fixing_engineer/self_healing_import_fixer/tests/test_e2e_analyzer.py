@@ -237,7 +237,7 @@ def helper():
         """Test error handling and recovery"""
         # Test with non-existent project directory
         with pytest.raises(Exception):
-            graph_analyzer = core_graph.ImportGraphAnalyzer("/non/existent/path")
+            core_graph.ImportGraphAnalyzer("/non/existent/path")
 
         # Test with malformed config
         bad_config = os.path.join(self.config_dir, "bad_config.yaml")
@@ -246,7 +246,7 @@ def helper():
 
         # This should raise an error due to invalid YAML
         with pytest.raises(Exception):
-            config = analyzer.load_config(bad_config)
+            analyzer.load_config(bad_config)
 
     def test_secrets_management(self):
         """Test secrets management and scrubbing"""

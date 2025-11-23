@@ -633,7 +633,7 @@ def main():
     )
 
     # REPL mode
-    repl_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "repl",
         aliases=["shell"],
         help="Enter an interactive shell (Read-Eval-Print Loop)",
@@ -1221,7 +1221,7 @@ def main():
         return None
 
     async def _run_feature_flag_set_cmd(current_args: argparse.Namespace):
-        engine_instance = await _initialize_omnicore_engine()
+        await _initialize_omnicore_engine()
         value = True if current_args.value == "true" else False
         setattr(settings, current_args.flag_name.upper(), value)
         logger.info(

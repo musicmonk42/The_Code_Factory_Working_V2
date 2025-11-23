@@ -371,7 +371,7 @@ async def test_main_no_args(mock_event, mock_workflow, mock_health, mock_setup):
         mock_load.return_value = {"log_file": "test.log", "health_port": 8080}
 
         with patch("asyncio.create_task", return_value=workflow_task):
-            with pytest.raises(SystemExit) as exc:
+            with pytest.raises(SystemExit):
                 await main()
 
         mock_load.assert_called_once_with(None)

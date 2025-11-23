@@ -127,7 +127,7 @@ class TestMetaLearningConfig:
                 "ML_LOCAL_AUDIT_LOG_PATH": f"{temp_data_dir}/audit.jsonl",
             },
         ):
-            config = MetaLearningConfig()
+            MetaLearningConfig()
             assert test_path.parent.exists()
             assert test_path.exists()
 
@@ -212,7 +212,6 @@ class TestMetaLearningConfig:
             },
         ):
             config = MetaLearningConfig()
-            initial_provider = config.DEFAULT_PROVIDER
 
             # Simulate reload
             config.reload_config()

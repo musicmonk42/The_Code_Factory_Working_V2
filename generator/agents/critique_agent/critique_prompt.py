@@ -458,7 +458,7 @@ async def incorporate_multi_modal_data(
                     "PLANTUML_SERVER_URL",
                     "http://www.plantuml.com/plantuml",
                 )
-                plantuml = PlantUML(plantuml_server_url)
+                PlantUML(plantuml_server_url)
 
                 for _, content in code_files.items():
                     if lang == "python":

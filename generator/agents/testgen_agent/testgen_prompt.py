@@ -445,7 +445,7 @@ class AdvancedTemplateTracker:
         model = "gpt-4o"  # Use a strong model for refinement
         try:
             # REFACTORED: Use runner.llm_client.call_llm_api
-            start_time = time.time()
+            time.time()
             response = await call_llm_api(prompt=scrubbed_prompt, model=model)
 
             # REMOVED: Manual LLM Metrics (Handled by llm_client)
@@ -829,7 +829,7 @@ class AgenticPromptBuilder(abc.ABC):
             logger.warning(f"Prompt over limit ({tokens}); summarizing.")
 
             # REFACTORED: Use runner.llm_client.call_llm_api
-            start_time = time.time()
+            time.time()
             model = "gpt-3.5-turbo"  # Fast summarizer
             try:
                 summary_response = await call_llm_api(

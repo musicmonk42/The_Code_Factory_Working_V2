@@ -167,7 +167,7 @@ def test_import_resolver_init(test_project_setup, mock_core_dependencies):
 
     assert resolver.current_module_path == "my_package.sub_module.analyzer"
     assert resolver.project_root == test_project_setup["project_root"]
-    assert resolver.modified == False
+    assert not resolver.modified
 
 
 def test_import_resolver_converts_relative_imports(
@@ -187,7 +187,7 @@ def test_import_resolver_converts_relative_imports(
 
     new_tree = resolver.visit(tree)
 
-    assert resolver.modified == True
+    assert resolver.modified
 
     # Check that relative imports were converted
     new_code = ast.unparse(new_tree)

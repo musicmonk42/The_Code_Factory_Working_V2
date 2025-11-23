@@ -369,7 +369,7 @@ class CircuitBreaker:
                 self._error_count = 0
                 # FIX: Check for running loop before creating task
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     asyncio.create_task(
                         log_action("circuit_breaker_event", status="half_open")
                     )
@@ -403,7 +403,7 @@ class CircuitBreaker:
 
             # FIX: Check for running loop before creating task
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(
                     send_alert(
                         f"Clarifier circuit breaker tripped! Consecutive errors: {self._error_count}. Last error: {error}",
@@ -433,7 +433,7 @@ class CircuitBreaker:
             )
             # FIX: Same for non-critical errors
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(
                     log_action(
                         "circuit_breaker_event",
@@ -453,7 +453,7 @@ class CircuitBreaker:
             )
             # FIX: Check for loop
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(
                     log_action("circuit_breaker_event", status="closed_after_success")
                 )
@@ -919,7 +919,7 @@ class Clarifier:
             manager = SQLiteContextManager(self.config.CONTEXT_DB_PATH, fernet=None)
             # Schedule initialization if we have an event loop
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(manager.ensure_initialized())
             except RuntimeError:
                 self.logger.warning(
@@ -1355,7 +1355,7 @@ async def main():
 
     if args.test:
         # To run async tests, we need a different approach than unittest.main()
-        suite = unittest.TestSuite()
+        unittest.TestSuite()
         # unittest.TestLoader().loadTestsFromTestCase(TestClarifier) doesn't work well with async.
         # A better approach for async tests would be to use a runner like `pytest` with `pytest-asyncio`.
         # For this script, we can run them manually.

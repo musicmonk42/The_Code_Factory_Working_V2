@@ -68,7 +68,7 @@ def mock_external_dependencies():
         f"{plugin_path}.QUERY_PARSER_AVAILABLE", True
     ), patch(
         f"{plugin_path}.SiemQueryLanguageParser"
-    ) as mock_query_parser_class, patch(
+    ), patch(
         f"{plugin_path}._sfe_audit_logger.add_entry", new=AsyncMock()
     ) as mock_audit_add_entry, patch.dict(
         os.environ,

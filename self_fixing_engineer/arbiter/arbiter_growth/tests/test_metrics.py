@@ -181,7 +181,7 @@ def test_get_or_create_uses_custom_buckets_from_config(
 def test_get_or_create_handles_unregister_failure(isolated_registry):
     """Tests that unregister failures are handled gracefully."""
     # Create a Counter
-    counter = get_or_create_metric(
+    get_or_create_metric(
         Counter, "test_metric", "Test metric", registry=isolated_registry
     )
 

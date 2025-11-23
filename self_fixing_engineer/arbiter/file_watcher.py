@@ -829,11 +829,9 @@ async def summarize_code_changes(diff: str, prompt_template: str) -> str:
         # Try to import a shared config if your module uses one.
         # If file_watcher already has a module-level `config`, reuse it.
         try:
-            from arbiter.policy.config import (
-                ArbiterConfig,
-            )  # optional, for typing/structure only
+            pass  # optional, for typing/structure only
         except Exception:
-            ArbiterConfig = None  # type: ignore
+            pass  # type: ignore
 
         # Try module-level config first, else synthesize a minimal one
         cfg = globals().get("config", None)

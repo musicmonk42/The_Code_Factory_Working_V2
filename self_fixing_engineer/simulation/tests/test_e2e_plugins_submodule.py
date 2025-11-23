@@ -303,7 +303,7 @@ async def test_plugins_submodule_end_to_end(
     """
 
     # --- 1. Setup Phase ---
-    base_dir = setup_test_environment["base_dir"]
+    setup_test_environment["base_dir"]
     plugins_dir = setup_test_environment["plugins_dir"]
 
     # --- 2. Plugin Manager Initialization ---

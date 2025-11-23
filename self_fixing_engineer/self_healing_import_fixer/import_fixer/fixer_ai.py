@@ -628,8 +628,8 @@ async def main_test():
     sys.modules["core_utils"] = sys.modules["__main__"]
     sys.modules["core_audit"] = sys.modules["__main__"]
     sys.modules["core_secrets"] = sys.modules["__main__"]
-    SECRETS_MANAGER = DummySecretsManager()
-    audit_logger = DummyAuditLogger()
+    DummySecretsManager()
+    DummyAuditLogger()
 
     if "OPENAI_API_KEY" not in os.environ:
         os.environ["OPENAI_API_KEY"] = "sk-dummy-test-key"
@@ -655,11 +655,6 @@ async def main_test():
     print(f"Refactoring Suggestion:\n{suggestion}\n")
 
     print("\n--- Testing AI Cycle-Breaking Suggestion ---")
-    sample_cycle_path = ["module_a", "module_b", "module_a"]
-    sample_code_snippets = {
-        "module_a": "import module_b\ndef func_a(): return module_b.func_b()",
-        "module_b": "import module_a\ndef func_b(): return module_a.func_a()",
-    }
     cycle_suggestion = get_ai_patch(
         "Circular import between modules",
         "some code",

@@ -330,7 +330,8 @@ def build_graph(llm: Any, checkpointer: Optional[Any] = None) -> Any:
 
         workflow = StateGraph(TestAgentState)
 
-        _bind = lambda f: partial(f, llm=llm) if not _stategraph_is_mock else f
+        def _bind(f):
+            return partial(f, llm=llm) if not _stategraph_is_mock else f
 
         workflow.add_node("planner", _bind(planner_agent))
         workflow.add_node("generate", _bind(generator_agent))

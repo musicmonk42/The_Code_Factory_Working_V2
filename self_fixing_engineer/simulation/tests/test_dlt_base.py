@@ -59,9 +59,9 @@ def mock_external_deps(mocker):
     mocker.patch("simulation.plugins.dlt_clients.dlt_base.atexit.register")
 
     # Mock Prometheus metrics to prevent real registration errors during tests
-    MockCounter = namedtuple("MockCounter", ["labels", "inc"])
-    MockHistogram = namedtuple("MockHistogram", ["labels", "observe"])
-    MockGauge = namedtuple("MockGauge", ["labels", "set"])
+    namedtuple("MockCounter", ["labels", "inc"])
+    namedtuple("MockHistogram", ["labels", "observe"])
+    namedtuple("MockGauge", ["labels", "set"])
     mocker.patch(
         "simulation.plugins.dlt_clients.dlt_base.Counter",
         return_value=MagicMock(labels=MagicMock(return_value=MagicMock())),

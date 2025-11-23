@@ -481,7 +481,6 @@ def redact_sensitive_data(data: Any) -> Any:
         Any: The data structure with sensitive information replaced by '[REDACTED]'.
     """
     if isinstance(data, str):
-        original_data = data
         for pattern in REDACTION_PATTERNS:
             new_data, count = pattern.subn("[REDACTED]", data)
             if count > 0:
@@ -826,7 +825,7 @@ def run_self_tests(on_demand: bool = True) -> Dict[str, bool]:
         Dict[str, bool]: A dictionary of test results.
     """
     if IS_PRODUCTION and not on_demand:
-        test_frequency_minutes = int(os.getenv("SELF_TEST_FREQUENCY_MINUTES", 60))
+        int(os.getenv("SELF_TEST_FREQUENCY_MINUTES", 60))
         # Simple check, real implementation would use a scheduled task.
         pass
 

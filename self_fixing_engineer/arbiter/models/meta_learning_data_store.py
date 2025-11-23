@@ -454,7 +454,7 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
     ) -> List[MetaLearningRecord]:
         op = "list_records"
         start = time.monotonic()
-        with tracer.start_as_current_span(f"meta_learning_{op}") as span:
+        with tracer.start_as_current_span(f"meta_learning_{op}"):
             MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 async with self._lock:
@@ -784,7 +784,7 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
     ) -> List[MetaLearningRecord]:
         op = "list_records"
         start = time.monotonic()
-        with tracer.start_as_current_span(f"meta_learning_{op}") as span:
+        with tracer.start_as_current_span(f"meta_learning_{op}"):
             MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 all_records_data = await self._redis.hgetall(self.redis_hash_key)

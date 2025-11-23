@@ -135,7 +135,7 @@ def mock_llm():
     async def mock_ainvoke(*args, **kwargs):
         # Check if config is provided and extract session_id
         config = kwargs.get("config", {})
-        configurable = config.get("configurable", {})
+        config.get("configurable", {})
 
         # The RunnableWithMessageHistory requires session_id in configurable
         # We'll accept any invocation for testing purposes

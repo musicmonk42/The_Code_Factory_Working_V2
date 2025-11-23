@@ -58,7 +58,8 @@ try:
     CACHETOOLS_AVAILABLE = True
 except ImportError:
     TTLCache = None
-    cached = lambda *args, **kwargs: lambda func: func  # Dummy decorator
+    def cached(*args, **kwargs):
+        return lambda func: func  # Dummy decorator
     CACHETOOLS_AVAILABLE = False
 
 # P5: Observability: Prometheus Metrics

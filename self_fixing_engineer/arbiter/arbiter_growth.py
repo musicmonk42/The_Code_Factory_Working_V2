@@ -742,7 +742,6 @@ class RedisStreamsStorageBackend:
         snapshot_key = await self._get_snapshot_key(arbiter_id)
         snapshot_data_bytes = await self.redis.hgetall(snapshot_key)
         if snapshot_data_bytes:
-            snapshot_data = {}
             # Manually decode bytes to string for known fields
             level = int(snapshot_data_bytes.get(b"level", b"1").decode())
             schema_version = float(

@@ -604,7 +604,7 @@ class S3OffChainClient(BaseOffChainClient):
                 )
             try:
                 async with self._session.client("s3") as client:
-                    response = await client.list_objects_v2(
+                    await client.list_objects_v2(
                         Bucket=self.bucket_name, MaxKeys=1
                     )
                     span.set_status(Status(StatusCode.OK))

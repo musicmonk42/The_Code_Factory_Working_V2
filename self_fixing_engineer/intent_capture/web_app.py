@@ -259,11 +259,6 @@ def init_session_state():
             @st.cache_resource(ttl=3600)  # Cache agent for 1 hour
             def get_cached_agent(session_id: str):
                 app_config = Config()
-                llm_config = {
-                    "provider": app_config.LLM_PROVIDER,
-                    "model": app_config.LLM_MODEL,
-                    "temperature": app_config.LLM_TEMPERATURE,
-                }
 
                 # Prefer Redis state if available
                 state_backend = None

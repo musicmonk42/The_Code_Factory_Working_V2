@@ -829,7 +829,7 @@ async def test_audit_chain_validation_detects_tampering():
     await storage.save_audit_log(
         "test-arbiter", "op1", {"data": "test"}, "genesis_hash"
     )
-    hash2 = await storage.save_audit_log(
+    await storage.save_audit_log(
         "test-arbiter", "op2", {"data": "test2"}, storage._last_hash
     )
 
@@ -878,7 +878,7 @@ async def test_idempotency():
     # First event
     await mgr.record_growth_event("skill_acquired", event_details)
     await asyncio.sleep(0.1)
-    initial_facts = len(knowledge_graph.facts)
+    len(knowledge_graph.facts)
 
     # Try to record the same event again
     await mgr.record_growth_event("skill_acquired", event_details)

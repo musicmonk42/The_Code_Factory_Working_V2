@@ -413,7 +413,7 @@ class Database:
                     from alembic import config, command
 
                     alembic_cfg = config.Config()
-                    current_dir = Path(__file__).parent
+                    Path(__file__).parent
                     project_root = Path(__file__).parent.parent
                     alembic_cfg.set_main_option(
                         "script_location", str(project_root / "migrations")
@@ -465,7 +465,7 @@ class Database:
                     from alembic import config, command
 
                     alembic_cfg = config.Config()
-                    current_dir = Path(__file__).parent
+                    Path(__file__).parent
                     project_root = Path(__file__).parent.parent
                     alembic_cfg.set_main_option(
                         "script_location", str(project_root / "migrations")

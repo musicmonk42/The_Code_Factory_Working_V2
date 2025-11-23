@@ -90,7 +90,7 @@ class TestLearner:
         with patch("arbiter.learner.core.PostgresClient") as mock_postgres:
             mock_postgres.return_value = mock_db
 
-            with patch("arbiter.learner.core.LLMClient") as mock_llm:
+            with patch("arbiter.learner.core.LLMClient"):
                 with patch("arbiter.learner.core.AuditLogger") as mock_audit:
                     mock_audit_instance = AsyncMock()
                     mock_audit_instance.log_event = AsyncMock()

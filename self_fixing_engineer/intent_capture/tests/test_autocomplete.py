@@ -186,10 +186,10 @@ def test_is_toxic():
         mock_mdl.return_value = [[{"label": "TOXIC", "score": 0.8}]]
         mock_pipeline.return_value.__enter__.return_value = mock_mdl
 
-        assert is_toxic("bad content") == True
+        assert is_toxic("bad content")
 
         mock_mdl.return_value = [[{"label": "NOT_TOXIC", "score": 0.9}]]
-        assert is_toxic("good content") == False
+        assert not is_toxic("good content")
 
 
 # --- Tests for History Management ---

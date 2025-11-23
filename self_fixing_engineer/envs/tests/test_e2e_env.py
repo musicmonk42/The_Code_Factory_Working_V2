@@ -400,7 +400,7 @@ class TestE2EAsyncOperations:
         # Should handle mixed operations smoothly
         for _ in range(3):
             obs, reward, done, info = env.step(ActionType.NOOP.value)
-            assert info["action_result"]["async"] == True
+            assert info["action_result"]["async"]
 
         env.close()
 
@@ -449,7 +449,6 @@ class TestE2EPerformanceAndScale:
     def test_concurrent_environments(self):
         """Test multiple environments running concurrently"""
         num_envs = 5
-        environments = []
         threads = []
         results = []
 
@@ -732,7 +731,7 @@ class TestE2EProductionScenarios:
                 break
 
         # Analyze rollout
-        successful_rollout = all(not r["triggered_rollback"] for r in rollout_history)
+        all(not r["triggered_rollback"] for r in rollout_history)
 
         env.close()
 
@@ -777,7 +776,7 @@ class TestE2EAuditingAndCompliance:
         assert "rl_env_closed" in event_types
 
         # Check for incident-related events (may have critical or rollback events)
-        critical_events = [
+        [
             e
             for e in audit_events
             if "critical" in str(e.get("type", ""))
@@ -808,7 +807,7 @@ class TestE2EAuditingAndCompliance:
                 env.step(ActionType.NOOP.value)
 
         # Training data should include session info
-        training_data = env.get_training_data()
+        env.get_training_data()
 
         # All data from same session
         env.close()

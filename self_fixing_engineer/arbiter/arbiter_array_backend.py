@@ -89,16 +89,18 @@ except Exception:
 
 # redis (ensure RedisError exists for retry tuples)
 try:
-    import redis  # type: ignore
-    import redis.asyncio as redis
+    import redis.asyncio as aioredis  # type: ignore
+    from redis.exceptions import RedisError as RedisError  # noqa: F401
 except Exception:
 
-    class redis:  # noqa: N801
+    class aioredis:  # noqa: N801
         class RedisError(Exception): ...
 
         @staticmethod
         def from_url(*args, **kwargs):
             raise ImportError("redis.asyncio not installed")
+    
+    RedisError = aioredis.RedisError
 
 
 # gym / stable_baselines3 are optional; silence import errors if they're referenced
@@ -421,7 +423,7 @@ class ConcreteArrayBackend(ArrayBackend):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(2),
-        retry=retry_if_exception_type((IOError, aiosqlite.Error, redis.RedisError)),
+        retry=retry_if_exception_type((IOError, aiosqlite.Error, RedisError)),
     )
     async def initialize(self) -> None:
         """Initializes the array backend, setting up storage and loading data."""
@@ -429,11 +431,11 @@ class ConcreteArrayBackend(ArrayBackend):
         async with self._lock:
             with self._tracer.start_as_current_span(
                 f"array_initialize_{self.name}"
-            ) as span:
+            ):
                 try:
                     if self.storage_type == "redis":
                         try:
-                            self._redis = redis.from_url(
+                            self._redis = aioredis.from_url(
                                 self.config.REDIS_URL,
                                 max_connections=max(
                                     self.config.REDIS_MAX_CONNECTIONS, 50
@@ -446,7 +448,7 @@ class ConcreteArrayBackend(ArrayBackend):
                                     "name": self.name,
                                 }
                             )
-                        except redis.RedisError:
+                        except RedisError:
                             logger.warning(
                                 {
                                     "event": "redis_init_failed",
@@ -565,7 +567,7 @@ class ConcreteArrayBackend(ArrayBackend):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(2),
-        retry=retry_if_exception_type((IOError, aiosqlite.Error, redis.RedisError)),
+        retry=retry_if_exception_type((IOError, aiosqlite.Error, RedisError)),
     )
     async def _save_to_storage(self) -> None:
         """Saves the array data to the configured storage backend. Assumes lock is held."""
@@ -832,7 +834,7 @@ class ConcreteArrayBackend(ArrayBackend):
         async with self._lock:
             with self._tracer.start_as_current_span(
                 f"array_delete_{self.name}"
-            ) as span:
+            ):
                 if index is not None:
                     if not (0 <= index < len(self._data)):
                         array_errors_total.labels(

@@ -1570,7 +1570,7 @@ class MeshPubSub:
                 if not self._client.is_connected:
                     raise ConnectionError("NATS not connected.")
             elif self.backend_type == "kafka":
-                topics = await self._producer.partitions_for_topic("healthcheck_topic")
+                await self._producer.partitions_for_topic("healthcheck_topic")
             elif self.backend_type == "rabbitmq":
                 if self._rabbitmq_conn.is_closed:
                     raise ConnectionError("RabbitMQ not connected.")

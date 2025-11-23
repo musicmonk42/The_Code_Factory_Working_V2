@@ -174,7 +174,7 @@ class ResponseParser(ABC):
         logger.warning(
             f"Attempting basic recovery for malformed response in {language}."
         )
-        lang_ext_patterns = [
+        [
             re.escape(conf["ext"]) for conf in LANGUAGE_CONFIG.values()
         ]
         code_block_regex = (
@@ -232,7 +232,7 @@ Return only the corrected response with proper file names and code structure.
 
         for attempt in range(MAX_HEAL_ATTEMPTS):
             try:
-                start_time = time.time()
+                time.time()
                 heal_response = await call_llm_api(
                     prompt=heal_prompt, model="gpt-4o", temperature=0.2, max_tokens=4000
                 )
@@ -568,7 +568,7 @@ class DefaultResponseParser(ResponseParser):
                 continue
 
             # Language-specific AST validation
-            config = LANGUAGE_CONFIG.get(language, {})
+            LANGUAGE_CONFIG.get(language, {})
 
             if language == "python":
                 file_issues.extend(self._validate_python_content(filename, content))

@@ -52,7 +52,7 @@ def mock_external_deps():
         "arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"
     ) as mock_tracemalloc, patch(
         "arbiter.explainable_reasoner.adapters.httpx.AsyncClient"
-    ) as mock_httpx_client, patch(
+    ), patch(
         "arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"
     ) as mock_sanitize, patch(
         "arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
@@ -119,9 +119,9 @@ def mock_external_deps():
         def mock_get_adapter(config_json):
             # The actual code passes a JSON string to get_adapter due to lru_cache
             if isinstance(config_json, str):
-                config = json.loads(config_json)
+                json.loads(config_json)
             else:
-                config = config_json
+                pass
             return mock_adapter_instance
 
         mock_adapter_factory.get_adapter.side_effect = mock_get_adapter

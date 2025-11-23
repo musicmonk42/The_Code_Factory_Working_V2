@@ -170,7 +170,7 @@ async def test_get_cache_prefers_redis_when_available(monkeypatch):
 
     with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(
         f"{PKG_PATH}._redis", fake_redis_mod
-    ), patch(f"{PKG_PATH}.json_logger.info") as mock_log_info:
+    ), patch(f"{PKG_PATH}.json_logger.info"):
         cache = await get_cache(project_root=None)
         # The redis path returns the underlying client (FakeRedisClient)
         assert hasattr(cache, "ping")

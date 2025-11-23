@@ -289,7 +289,7 @@ class TestPIIRedaction:
     def test_redact_sensitive_pii_pattern_phone(self):
         """Test PII redaction for phone number pattern"""
         # Fix: Use correct module path
-        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS") as mock_metrics:
+        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS"):
             result = _redact_sensitive_pii("phone", "555-123-4567")
 
             assert result == "[PII_REDACTED_PATTERN_MATCH]"
@@ -297,7 +297,7 @@ class TestPIIRedaction:
     def test_redact_sensitive_pii_pattern_credit_card(self):
         """Test PII redaction for credit card pattern"""
         # Fix: Use correct module path
-        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS") as mock_metrics:
+        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS"):
             result = _redact_sensitive_pii("payment", "1234 5678 9012 3456")
 
             assert result == "[PII_REDACTED_PATTERN_MATCH]"
@@ -390,7 +390,7 @@ class TestSanitizeContext:
             current = current["nested"]
 
         # Fix: Use correct module path
-        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS") as mock_metrics:
+        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS"):
             result = await _sanitize_context(context, max_nesting_depth=5)
 
             # Should have truncated at max depth
@@ -443,7 +443,7 @@ class TestSanitizeUserInput:
     def test_sanitize_sql_injection(self):
         """Test sanitizing SQL injection attempts"""
         # Fix: Use correct module path
-        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS") as mock_metrics:
+        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS"):
             result = _sanitize_user_input("'; DROP TABLE users; --")
 
             assert "DROP TABLE" not in result
@@ -451,7 +451,7 @@ class TestSanitizeUserInput:
     def test_sanitize_command_injection(self):
         """Test sanitizing command injection attempts"""
         # Fix: Use correct module path
-        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS") as mock_metrics:
+        with patch("arbiter.knowledge_graph.utils.AGENT_METRICS"):
             result = _sanitize_user_input("test; rm -rf /")
 
             assert "rm -rf" not in result.lower()

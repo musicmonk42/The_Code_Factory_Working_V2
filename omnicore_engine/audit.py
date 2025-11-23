@@ -1331,7 +1331,7 @@ class ExplainAudit:
                         record_to_process.get("custom_attributes")
                     )
 
-                    validated_record = AuditRecordSchema(**record_to_process)
+                    AuditRecordSchema(**record_to_process)
 
                     replayed_results.append(record_data)
 

@@ -250,8 +250,8 @@ async def test_rollback_and_diff(monkeypatch, redis_mock, scrub_patch):
     cm = dlt_backend.CheckpointManager()
     s1 = {"value": 1, "timestamp": "2022-01-01T00:00:00Z", "metadata": {"foo": "a"}}
     s2 = {"value": 2, "timestamp": "2022-01-02T00:00:00Z", "metadata": {"foo": "b"}}
-    tx1 = await cm.save("rolltest", s1, metadata={})
-    tx2 = await cm.save("rolltest", s2, metadata={})
+    await cm.save("rolltest", s1, metadata={})
+    await cm.save("rolltest", s2, metadata={})
     diff = await cm.diff("rolltest", 1, 2)
     assert isinstance(diff, dict)
     assert "value" in diff and diff["value"] == (1, 2)

@@ -291,7 +291,7 @@ def get_global_connection_pool(
                 test_client = redis.Redis(connection_pool=_global_connection_pool)
                 # Check if we're in an async context
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # We're already in an async context, can't use asyncio.run
                     logger.debug("Skipping Redis ping check - already in async context")
                 except RuntimeError:

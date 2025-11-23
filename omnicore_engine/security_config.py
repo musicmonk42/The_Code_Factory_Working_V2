@@ -601,7 +601,7 @@ def validate_compliance() -> bool:
 def get_encryption_key_age() -> timedelta:
     """Get the age of the current encryption key"""
     # This would integrate with your key management system
-    config = get_security_config()
+    get_security_config()
     # Placeholder - implement actual key age checking
     return timedelta(days=0)
 

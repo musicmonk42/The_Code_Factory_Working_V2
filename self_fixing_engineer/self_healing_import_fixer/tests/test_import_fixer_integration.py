@@ -335,11 +335,11 @@ async def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
     # --- Import modules (now that core stubs are installed)
     mods = load_import_fixer_modules(Path(__file__).resolve().parent)
     engine = mods["engine"]
-    validate = mods["validate"]
-    plugins = mods["plugins"]
-    dep = mods["dep"]
-    astfix = mods["ast"]
-    ai = mods["ai"]
+    mods["validate"]
+    mods["plugins"]
+    mods["dep"]
+    mods["ast"]
+    mods["ai"]
 
     # --- Patch infra (Redis & AI hooks)
     _patch_infra(monkeypatch, mods)

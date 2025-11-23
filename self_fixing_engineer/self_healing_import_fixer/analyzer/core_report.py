@@ -99,9 +99,12 @@ except ImportError:
     FLASK_AVAILABLE = False
     app = None
     JWTManager = None
-    jwt_required = lambda f: f
-    get_jwt = lambda: {}
-    create_access_token = lambda *args, **kwargs: "dummy_token"
+    def jwt_required(f):
+        return f
+    def get_jwt():
+        return {}
+    def create_access_token(*args, **kwargs):
+        return "dummy_token"
 
 if FLASK_AVAILABLE:
     jwt_secret = SECRETS_MANAGER.get_secret("JWT_SECRET_KEY")

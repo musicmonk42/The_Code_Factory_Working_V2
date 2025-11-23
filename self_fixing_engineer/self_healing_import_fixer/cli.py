@@ -959,7 +959,7 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
         help="The target dashboard API URL.",
     )
 
-    selftest_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "selftest",
         help="Run self-diagnostic and report health of the CLI suite, plugins, and core engine.",
     )
@@ -1109,7 +1109,7 @@ async def main_async():
             root_path = _validate_path_argument(
                 args.root, "root", is_dir=True, allowlist=allowlist
             )
-            output_file = _validate_path_argument(
+            _validate_path_argument(
                 args.output_file, "output_file", is_dir=False, allowlist=allowlist
             )
             load_analyzer()

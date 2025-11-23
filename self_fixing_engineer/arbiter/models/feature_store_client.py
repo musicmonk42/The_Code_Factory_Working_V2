@@ -520,7 +520,7 @@ class FeatureStoreClient:
 
     async def health_check(self) -> bool:
         """Verify connection status."""
-        with tracer.start_as_current_span("feast_health_check") as span:
+        with tracer.start_as_current_span("feast_health_check"):
             FS_CALLS_TOTAL.labels(
                 operation="health_check", status="attempt", **self.metric_labels
             ).inc()

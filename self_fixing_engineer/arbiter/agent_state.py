@@ -348,7 +348,7 @@ class AgentState(Base):
         try:
             # Check if we're in an async context
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # We're in an async context but can't use asyncio.run
                 # Just do synchronous validation for deep schema checks
                 AgentState._validate_fields_sync(target)
@@ -488,7 +488,7 @@ class AgentMetadata(Base):
         """Synchronous validation wrapper for SQLAlchemy events."""
         try:
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 AgentMetadata._validate_fields_sync(target)
             except RuntimeError:
                 asyncio.run(

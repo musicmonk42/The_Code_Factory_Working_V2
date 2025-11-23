@@ -235,7 +235,7 @@ class GcpLoggingClient(BaseSIEMClient):
             for provider in self.secrets_providers:
                 if provider == "gcp":
                     backend = GCPSecretManagerBackend(self.project_id)
-                    creds_json = await backend.get_secret(self.credentials_secret_id)
+                    await backend.get_secret(self.credentials_secret_id)
                     self._temp_credentials_path = (
                         f"/tmp/gcp_sa_key_{uuid.uuid4().hex}.json"
                     )
@@ -300,7 +300,7 @@ class GcpLoggingClient(BaseSIEMClient):
 
     async def send_logs(self, log_entries, validate_schema=True, correlation_id=None):
         """Send multiple log entries."""
-        client = await self._get_gcp_client()
+        await self._get_gcp_client()
 
         # Batch logs
         batches = []
@@ -329,10 +329,10 @@ class GcpLoggingClient(BaseSIEMClient):
         self, query_string, time_range="24h", limit=100, correlation_id=None
     ):
         """Query logs from GCP."""
-        client = await self._get_gcp_client()
+        await self._get_gcp_client()
 
         end_time = datetime.datetime.utcnow()
-        start_time = end_time - self._parse_relative_time_range_to_timedelta(time_range)
+        end_time - self._parse_relative_time_range_to_timedelta(time_range)
 
         # Mock query results
         return [

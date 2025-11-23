@@ -54,13 +54,13 @@ def mock_external_dependencies():
         onboard_module.MeshPubSub = mock_mesh_pubsub
     else:
         # If it exists, save the original to restore later
-        original_mesh = getattr(onboard_module, "MeshPubSub", None)
+        getattr(onboard_module, "MeshPubSub", None)
         onboard_module.MeshPubSub = mock_mesh_pubsub
 
     if not hasattr(onboard_module, "CheckpointManager"):
         onboard_module.CheckpointManager = mock_checkpoint_manager
     else:
-        original_checkpoint = getattr(onboard_module, "CheckpointManager", None)
+        getattr(onboard_module, "CheckpointManager", None)
         onboard_module.CheckpointManager = mock_checkpoint_manager
 
     # Create patches list that we'll apply

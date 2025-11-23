@@ -283,7 +283,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         request.state.request_id = str(uuid.uuid4())
         response = await call_next(request)
         if os.getenv("ENABLE_AUDIT_LOGGING", "false").lower() == "true":
-            log_data = {
+            {
                 "requestId": request.state.request_id,
                 "timestamp": datetime.utcnow().isoformat(),
                 "clientHost": request.client.host,

@@ -128,7 +128,7 @@ class TestGetOrCreateMetric:
                 mock_histogram = Mock(spec=Histogram)
                 MockHistogram.return_value = mock_histogram
 
-                metric = _get_or_create_metric(
+                _get_or_create_metric(
                     Histogram,
                     "mismatched_metric",
                     "New metric",

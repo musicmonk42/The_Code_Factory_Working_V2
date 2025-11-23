@@ -266,7 +266,7 @@ async def test_jest_llm_backend_generate_success(
 
     with patch.object(backend.llm, "ainvoke") as mock_ainvoke, patch(
         "builtins.open", mock_open(read_data="source code")
-    ) as mock_file:
+    ):
         mock_ainvoke.return_value.content = "// Generated test code"
 
         success, err, path = await backend.generate_tests(

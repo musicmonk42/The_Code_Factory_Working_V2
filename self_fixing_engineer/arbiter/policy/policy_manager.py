@@ -482,7 +482,7 @@ class PolicyManager:
     async def save_policies(self) -> None:
         """Persist current policies to encrypted file and upsert DB (if configured)."""
         async with self._lock:
-            with tracer.start_as_current_span("save_policies") as span:
+            with tracer.start_as_current_span("save_policies"):
                 if self.policies is None:
                     raise ValueError(
                         "No policies in memory. Call set_policies() or load_policies() first."
@@ -566,7 +566,7 @@ class PolicyManager:
                 "new_key_b64 must be a 32-byte base64-encoded Fernet key (44 chars)"
             )
         async with self._lock:
-            with tracer.start_as_current_span("rotate_key") as span:
+            with tracer.start_as_current_span("rotate_key"):
                 # ensure we can load current payload
                 if self.policies is None:
                     await self.load_policies()

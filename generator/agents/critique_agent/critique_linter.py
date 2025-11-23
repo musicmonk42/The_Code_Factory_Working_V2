@@ -1073,7 +1073,7 @@ async def run_all_lints_and_checks(
     project_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     with tracer.start_as_current_span("run_lints", attributes={"language": language}):
-        start_time = time.monotonic()
+        time.monotonic()
         if (
             not isinstance(code_files, dict)
             or not code_files

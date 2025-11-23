@@ -719,7 +719,7 @@ class TestPerformance:
             # Mock the Redis client initialization to avoid localhost issues
             with patch(
                 "mesh.checkpoint.checkpoint_backends.aioredis.ConnectionPool.from_url"
-            ) as mock_pool:
+            ):
                 with patch(
                     "mesh.checkpoint.checkpoint_backends.aioredis.Redis"
                 ) as mock_redis:

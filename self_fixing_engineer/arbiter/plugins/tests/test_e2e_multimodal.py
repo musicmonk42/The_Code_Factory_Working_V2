@@ -156,7 +156,7 @@ class TestE2EMultiModalSystem:
         # Text with PII
         text_with_pii = "Contact john@example.com or call 555-123-4567"
 
-        with patch("arbiter.plugins.multi_modal_plugin.logger") as mock_logger:
+        with patch("arbiter.plugins.multi_modal_plugin.logger"):
             result = await plugin_with_config.process_text(text_with_pii)
             assert result.success is True
             # PII should be masked in logs but not necessarily in results

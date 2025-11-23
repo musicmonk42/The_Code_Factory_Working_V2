@@ -189,9 +189,9 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
         "shutil.copy2"
     ) as mock_copy2, patch(
         "shutil.copyfile"
-    ) as mock_copyfile, patch(
+    ), patch(
         "simulation.plugins.jest_runner_plugin._copytree_compat"
-    ) as mock_copytree, patch(
+    ), patch(
         "simulation.plugins.jest_runner_plugin._install_packages",
         new=AsyncMock(return_value=(True, "")),
     ):

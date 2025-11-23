@@ -136,7 +136,7 @@ class TestEvolutionConfig:
         assert config.generations == 10
         assert config.population_size == 20
         assert config.crossover_probability == 0.7
-        assert config.cache_evaluations == True
+        assert config.cache_evaluations
 
     def test_evolution_config_validation(self):
         """Test evolution configuration validation"""
@@ -215,7 +215,7 @@ class TestFitnessEvaluator:
 
         # Different individual
         individual2 = [0.1, 0.2, 0.3]
-        fitness3 = evaluator.evaluate_single(individual2)
+        evaluator.evaluate_single(individual2)
         assert evaluator.evaluation_count == 2
 
         evaluator.cleanup()
@@ -371,7 +371,7 @@ class TestGeneticOptimizer:
 
         optimizer = GeneticOptimizer(evolution_config=config)
 
-        best_config = optimizer.evolve(test_function=constant_fitness, verbose=False)
+        optimizer.evolve(test_function=constant_fitness, verbose=False)
 
         # Should stop early
         assert len(optimizer.evolution_history) < 20

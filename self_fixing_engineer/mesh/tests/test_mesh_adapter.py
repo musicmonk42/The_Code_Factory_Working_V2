@@ -518,7 +518,7 @@ class TestReliability:
         if "redis" in circuit_breakers and circuit_breakers["redis"].breaker:
             # The circuit breaker might already be open from failures
             # We'll test that it prevents further calls
-            original_state = circuit_breakers["redis"].breaker.current_state
+            circuit_breakers["redis"].breaker.current_state
 
             # Simulate failures
             failure_count = 0
@@ -627,7 +627,7 @@ class TestProductionMode:
                     from mesh.mesh_adapter import MeshPubSub
 
                     # Try to create adapter with localhost
-                    adapter = MeshPubSub("redis://localhost:6379")
+                    MeshPubSub("redis://localhost:6379")
                     # If we get here, check if exit was called
                     mock_exit.assert_called_with(1)
                 except SystemExit:

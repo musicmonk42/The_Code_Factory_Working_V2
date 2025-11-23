@@ -670,7 +670,7 @@ class BugManagerArena(BugManager):
         Schedules the report as a task if a loop is running, otherwise creates a new loop.
         """
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             asyncio.create_task(super().report(error, **kwargs))
             logger.debug("Bug report scheduled as an asyncio task.")
         except RuntimeError:

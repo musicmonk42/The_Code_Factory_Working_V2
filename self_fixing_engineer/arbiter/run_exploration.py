@@ -443,7 +443,7 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 )
 
             # Use a semaphore to limit concurrent Arbiter executions
-            semaphore = asyncio.Semaphore(config.get("max_concurrent_arbiters", 5))
+            asyncio.Semaphore(config.get("max_concurrent_arbiters", 5))
 
             for i, arbiter in enumerate(arena.arbiters):
                 if shutdown_event.is_set():

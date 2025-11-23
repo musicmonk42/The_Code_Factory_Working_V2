@@ -458,7 +458,7 @@ class TestLoadBalancedLLMClient:
         lb_client.QUARANTINE_DURATION_SECONDS = 300
 
         # Select provider should attempt recovery
-        provider = lb_client._select_provider()
+        lb_client._select_provider()
         # After timeout, it should try to use the provider again
         assert lb_client.provider_status["openai"]["status"] == "ok"
 

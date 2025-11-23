@@ -305,7 +305,7 @@ class TestBugManagerArena:
     async def test_report_with_no_loop(self):
         with patch(
             "arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
-        ) as mock_super_report:
+        ):
             with patch("asyncio.get_running_loop", side_effect=RuntimeError):
                 with patch("asyncio.run") as mock_asyncio_run:
                     arena = BugManagerArena(

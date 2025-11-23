@@ -536,7 +536,7 @@ async def test_redis_consumer_group(redis_backend, mock_redis_client):
 async def test_kafka_offset_management(kafka_backend, mock_kafka_producer):
     """Test that event offsets are correctly managed and returned from Kafka."""
     # Mock the consumer to return a specific event
-    mock_consumer = AsyncMock()
+    AsyncMock()
 
     # Mock the load_events method to return a specific payload
     async def mock_load_events(*args, **kwargs):

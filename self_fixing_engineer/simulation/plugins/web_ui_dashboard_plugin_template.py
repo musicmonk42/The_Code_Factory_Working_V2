@@ -40,7 +40,8 @@ except ImportError:
     WebSocketDisconnect = Exception
     JSONResponse = object
     BaseModel = object
-    Field = lambda default, description=None: default
+    def Field(default, description=None):
+        return default
     uvicorn = None
 
 try:
@@ -108,7 +109,8 @@ except ImportError:
         def labels(self, *args, **kwargs):
             return self
 
-    _get_or_create_metric = lambda *args, **kwargs: DummyMetric()
+    def _get_or_create_metric(*args, **kwargs):
+        return DummyMetric()
 
 try:
     from tenacity import (

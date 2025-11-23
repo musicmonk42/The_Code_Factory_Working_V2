@@ -43,7 +43,7 @@ def main():
     try:
         from arbiter.config import ArbiterConfig
         from arbiter.arbiter_plugin_registry import PluginRegistry
-        config = ArbiterConfig()
+        ArbiterConfig()
         registry = PluginRegistry()
         plugin_count = len(registry._plugins)
         print_status("Arbiter imports", True, f"{plugin_count} plugins loaded")

@@ -1669,7 +1669,7 @@ async def run_chaos_experiment(app: str, experiment_type: str) -> dict:
         raise RuntimeError("Gremlin SDK not available.")
     client = Client()
     experiment_spec = {"target": app, "attack": experiment_type}
-    result = await asyncio.to_thread(client.run_experiment, experiment_spec)
+    await asyncio.to_thread(client.run_experiment, experiment_spec)
     return {"status": "STARTED", "result": {"experiment_id": secrets.token_hex(8)}}
 
 

@@ -209,7 +209,7 @@ def run_coro_sync(coro: Awaitable[Any]) -> Any:
     This is for synchronous contexts like CLI commands that need to call async functions.
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
 

@@ -612,7 +612,7 @@ Agent --> Dev : Deliver Report
             logger.debug(f"Calling LLM for purpose: {purpose}", extra=log_extra)
 
             try:
-                start_time = time.time()
+                time.time()
 
                 # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
                 response = await call_ensemble_api(
@@ -1213,7 +1213,7 @@ async def main():
     try:
         # Use default Policy values if not in file or CLI
         # This requires manually checking against a default Policy instance
-        default_pol = Policy()
+        Policy()
         for field_name, field_def in Policy.__dataclass_fields__.items():
             if field_name not in policy_dict:
                 if field_def.default_factory is not field.MISSING:

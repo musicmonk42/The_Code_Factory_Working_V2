@@ -303,7 +303,7 @@ async def test_get_db_conn_pool_missing_vars(monkeypatch):
     # Mock asyncpg.create_pool to prevent actual connection attempts
     with patch(
         "intent_capture.requirements.asyncpg.create_pool", AsyncMock()
-    ) as mock_create_pool:
+    ):
         with pytest.raises(SystemExit):
             await get_db_conn_pool()
 

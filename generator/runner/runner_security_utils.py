@@ -633,11 +633,11 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
                 # Try to get the captured value group (e.g., group 2 for password=VALUE)
                 # The first two patterns use groups (1, 2)
                 if len(match.groups()) > 1:
-                    matched_value = match.group(2)
+                    match.group(2)
                 else:
-                    matched_value = match.group(0)  # Fallback to full match
+                    match.group(0)  # Fallback to full match
             except IndexError:
-                matched_value = match.group(0)
+                match.group(0)
 
             findings.append(
                 {
