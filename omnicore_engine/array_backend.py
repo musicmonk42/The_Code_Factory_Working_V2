@@ -48,6 +48,13 @@ import threading  # FIXED: Added import threading to resolve NameError
 # ---- App/Internal Imports ----
 # Defensive lazy settings accessor to avoid import-time side-effects
 
+# Defensive check for config_instance to prevent NameError
+# This variable may be referenced by some modules that import array_backend
+try:
+    config_instance  # type: ignore
+except NameError:
+    config_instance = None  # Provide a fallback value
+
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
     return types.SimpleNamespace(

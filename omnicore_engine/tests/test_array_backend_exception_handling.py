@@ -47,7 +47,8 @@ def test_import_with_nameerror_in_arbiter_config():
         assert hasattr(omnicore_engine.array_backend, "settings")
         
         # Verify settings fallback works
-        settings = omnicore_engine.array_backend.settings
+        settings_func = omnicore_engine.array_backend.settings
+        settings = settings_func()  # Call the function to get the settings object
         assert hasattr(settings, "log_level")
         assert settings.log_level == "INFO"
 
@@ -81,7 +82,8 @@ def test_import_with_attributeerror_in_arbiter_config():
         import omnicore_engine.array_backend
         
         # Verify fallback settings work
-        settings = omnicore_engine.array_backend.settings
+        settings_func = omnicore_engine.array_backend.settings
+        settings = settings_func()  # Call the function to get the settings object
         assert hasattr(settings, "log_level")
         assert hasattr(settings, "enable_array_backend_benchmarking")
 
@@ -127,7 +129,8 @@ def test_import_with_runtimeerror_during_instantiation():
         import omnicore_engine.array_backend
         
         # Verify fallback settings work
-        settings = omnicore_engine.array_backend.settings
+        settings_func = omnicore_engine.array_backend.settings
+        settings = settings_func()  # Call the function to get the settings object
         assert hasattr(settings, "log_level")
         assert settings.log_level == "INFO"
         assert hasattr(settings, "enable_array_backend_benchmarking")
@@ -158,7 +161,8 @@ def test_settings_fallback_attributes():
         import omnicore_engine.array_backend
         
         # Verify the settings object has required attributes from fallback
-        settings = omnicore_engine.array_backend.settings
+        settings_func = omnicore_engine.array_backend.settings
+        settings = settings_func()  # Call the function to get the settings object
         
         # Verify required attributes
         assert hasattr(settings, "log_level")
