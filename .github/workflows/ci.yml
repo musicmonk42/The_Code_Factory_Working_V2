@@ -397,8 +397,8 @@ jobs:
           # Clear apt cache
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
-          # Clear docker cache from previous runs
-          docker system prune -af || true
+          # Clear docker cache from previous runs (preserve images with -f only, not -af)
+          docker system prune -f || true
           echo "=== Disk space after cleanup ==="
           df -h
         

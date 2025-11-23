@@ -70,7 +70,7 @@ RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
     fi; \
     # Clean up pip cache, temp files, and package caches to free disk space
-    rm -rf /root/.cache/pip/* /tmp/* /var/tmp/* /root/.cache/* || true; \
+    rm -rf /root/.cache/* /tmp/* /var/tmp/* || true; \
     # Remove pip's wheel cache and build artifacts
     find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true; \
     find /opt/venv -type f -name '*.pyc' -delete 2>/dev/null || true; \
