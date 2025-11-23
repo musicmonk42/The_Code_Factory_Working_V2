@@ -383,6 +383,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
+      - name: Free up disk space for Docker build
+        run: |
+          # Remove large packages and unused tools to free disk space
+          echo "=== Disk space before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/swift
+          # Clear apt cache
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          # Clear docker cache from previous runs
+          docker system prune -af || true
+          echo "=== Disk space after cleanup ==="
+          df -h
+        
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
