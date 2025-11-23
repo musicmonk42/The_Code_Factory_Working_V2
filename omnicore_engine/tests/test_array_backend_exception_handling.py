@@ -170,7 +170,7 @@ def test_settings_fallback_attributes():
 
         settings_func = omnicore_engine.array_backend.settings
         settings = settings_func()  # Call the function to get the settings object
-        
+
         # Verify required attributes
         assert hasattr(settings, "log_level")
         assert hasattr(settings, "enable_array_backend_benchmarking")

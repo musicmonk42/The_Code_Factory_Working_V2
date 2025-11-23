@@ -141,6 +141,10 @@ def _make_histogram(name, desc, labelnames=("agent",)):
     return _NoopMetric()
 
 
+# Initialize metrics variables to avoid NameError in globals() check
+agent_runs_total = None  # type: ignore[assignment]
+agent_execution_duration = None  # type: ignore[assignment]
+
 if "agent_runs_total" not in globals() or agent_runs_total is None:  # type: ignore[name-defined]
     agent_runs_total = _make_counter("atco_agent_executions_total", "Total number of agent executions", ("agent_name", "status"))  # type: ignore[assignment]
 if "agent_execution_duration" not in globals() or agent_execution_duration is None:  # type: ignore[name-defined]

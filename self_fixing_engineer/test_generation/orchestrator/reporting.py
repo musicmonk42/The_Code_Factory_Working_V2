@@ -31,6 +31,10 @@ from test_generation.utils import atomic_write, maybe_await
 from pathlib import Path
 
 
+# Initialize module exports
+__all__ = []
+
+
 # ---- test helper: DummyMetric (exported) ------------------------------------
 class DummyMetric:
     """

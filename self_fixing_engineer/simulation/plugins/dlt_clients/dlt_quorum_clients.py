@@ -17,6 +17,7 @@ import uuid
 
 from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
 from .dlt_base import (
+    BaseOffChainClient,
     DLTClientConfigurationError,
     DLTClientTransactionError,
     DLTClientQueryError,

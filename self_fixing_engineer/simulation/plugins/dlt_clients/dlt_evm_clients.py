@@ -29,6 +29,7 @@ from pydantic import BaseModel, HttpUrl, Field, validator, ValidationError
 
 from .dlt_base import (
     BaseDLTClient,
+    BaseOffChainClient,
     DLTClientConfigurationError,
     DLTClientValidationError,
     DLTClientConnectivityError,
