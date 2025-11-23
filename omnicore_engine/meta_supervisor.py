@@ -5,6 +5,8 @@ import random
 import time
 import traceback
 import uuid
+from collections import defaultdict
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import numpy as np
@@ -478,11 +480,13 @@ class MetaSupervisor:
                 self.logger.exception(
                     "MetaSupervisor main loop encountered an error: %s", ex
                 )
+                error_str = str(ex)
+                error_traceback = traceback.format_exc()
                 await self._rate_limited_operation(
                     lambda: self._record_audit_event(
                         "supervisor_run_loop_error",
                         "run_loop",
-                        {"error": str(ex), "traceback": traceback.format_exc()},
+                        {"error": error_str, "traceback": error_traceback},
                     )
                 )
 

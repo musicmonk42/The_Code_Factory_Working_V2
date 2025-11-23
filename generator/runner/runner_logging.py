@@ -389,7 +389,7 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
     Creates, signs, and logs a secure, chained audit event using the
     V0 audit_crypto system.
     """
-    global _LAST_AUDIT_HASH, _DEFAULT_AUDIT_KEY_ID
+    global _LAST_AUDIT_HASH
 
     # --- FIX: Lazy import metrics and security functions to break circular dependencies ---
     try:
