@@ -32,21 +32,21 @@ def get_plugin_registry():
     initialization during package import or pytest collection.
     
     Returns:
-        PluginRegistry: The global plugin registry instance.
+        The global plugin registry singleton instance.
     """
     from .plugin_registry import PLUGIN_REGISTRY as _PLUGIN_REGISTRY
 
     return _PLUGIN_REGISTRY
 
 
-def get_plugin_event_handler():
+def get_plugin_event_handler_class():
     """Return the PluginEventHandler class (lazy import).
     
-    This function lazily imports the plugin event handler to avoid heavy
+    This function lazily imports the plugin event handler class to avoid heavy
     initialization during package import or pytest collection.
     
     Returns:
-        Type[PluginEventHandler]: The PluginEventHandler class.
+        The PluginEventHandler class (not an instance).
     """
     from .plugin_event_handler import PluginEventHandler as _PluginEventHandler
 
@@ -54,4 +54,4 @@ def get_plugin_event_handler():
 
 
 # Export the accessor functions
-__all__ = ["get_plugin_registry", "get_plugin_event_handler"]
+__all__ = ["get_plugin_registry", "get_plugin_event_handler_class"]
