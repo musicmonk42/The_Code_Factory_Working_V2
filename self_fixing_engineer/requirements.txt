@@ -279,7 +279,7 @@ opentelemetry-instrumentation-asgi==0.56b0
 opentelemetry-instrumentation-fastapi==0.56b0
 opentelemetry-proto==1.38.0
 opentelemetry-sdk==1.38.0
-opentelemetry-semantic-conventions==0.56b0
+opentelemetry-semantic-conventions==0.59b0
 opentelemetry-util-http==0.56b0
 optuna==3.6.1
 ordered-set==4.1.0
