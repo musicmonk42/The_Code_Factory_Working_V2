@@ -125,6 +125,9 @@ class AuthenticationRequest(BaseModel):
 
 class SessionContext(BaseModel):
     """Session context model"""
+    
+    # allow arbitrary types (e.g., MagicMock replacing SecurityLevel in tests)
+    model_config = {"arbitrary_types_allowed": True}
 
     user_id: str
     username: str
