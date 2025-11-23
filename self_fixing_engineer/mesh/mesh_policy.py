@@ -37,7 +37,6 @@ except ImportError:
 # ---- Conditional Imports for Backends and Enhancements ----
 try:
     import boto3
-    import botocore.session
 except ImportError:
     boto3 = None
 
@@ -74,7 +73,8 @@ try:
 except ImportError:
     BaseModel = object
     ValidationError = Exception
-    Field = lambda *args, **kwargs: None
+    def Field(*args, **kwargs):
+        return None
 
 try:
     from cryptography.fernet import MultiFernet, Fernet, InvalidToken
@@ -87,7 +87,7 @@ except ImportError:
     TTLCache = None
 
 try:
-    from prometheus_async.aio import time as time_metric, count_exceptions
+    from prometheus_async.aio import time as time_metric
     from prometheus_client import Histogram, Counter
 
     PROMETHEUS_AVAILABLE = True
@@ -103,14 +103,6 @@ except ImportError:
 
 
 try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.boto3 import Boto3Instrumentor
-    from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
     TRACING_AVAILABLE = True
 except ImportError:
     TRACING_AVAILABLE = False
@@ -612,7 +604,7 @@ class MeshPolicyBackend:
                         raise Exception("Backend failure")
 
                     breaker(failing_func)()
-                except:
+                except Exception:
                     pass  # Expected to fail, this increments the failure count
 
                 await _dlq_policy_op("save", policy_id, e)
@@ -741,7 +733,7 @@ class MeshPolicyBackend:
                 ):
                     # This is plain signed data (not encrypted)
                     return json.loads(test_data["data"])
-            except:
+            except Exception:
                 pass
 
             if self.multi_fernet:
@@ -1006,12 +998,12 @@ if __name__ == "__main__":
 
             # Test allowed action
             result = await enforcer.enforce_policy("read")
-            assert result == True
+            assert result
             print("Read action: Allowed")
 
             # Test denied action
             result = await enforcer.enforce_policy("delete")
-            assert result == False
+            assert not result
             print("Delete action: Denied")
 
             print("\nTest harness completed successfully.")

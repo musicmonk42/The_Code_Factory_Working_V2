@@ -173,7 +173,7 @@ async def test_spec_validation():
         # - None if successful
 
         # Just check it doesn't raise an exception
-        assert result is not None or result == (True, "") or result == True
+        assert result is not None or result == (True, "") or result
 
         # Test invalid JSON should return something falsy or raise
         try:
@@ -183,7 +183,7 @@ async def test_spec_validation():
                 assert result2[0] is False
             elif isinstance(result2, bool):
                 assert result2 is False
-        except:
+        except Exception:
             # If it raises on invalid input, that's also OK
             pass
 

@@ -28,7 +28,7 @@ if project_root not in sys.path:
 
 # Try to import - with better error handling
 try:
-    import workflow_viz
+    import workflow_viz  # noqa: F401 - needed for patching in tests
     from workflow_viz import (
         WorkflowVizConfig,
         _scrub_secrets,
@@ -37,12 +37,8 @@ try:
         render_workflow_viz,
         DashboardAPI,
         VIZ_RENDER_TOTAL,
-        VIZ_EXPORT_TOTAL,
         VIZ_RENDER_ERRORS,
         WorkflowPhase,
-        PLOTLY_AVAILABLE,
-        MATPLOTLIB_AVAILABLE,
-        RESULTS_DIR,
     )
 except ImportError as e:
     print(f"Error importing workflow_viz: {e}")
@@ -314,7 +310,7 @@ async def test_batch_export_panels_success(
         # If viz module exists and has the function, test it properly
         with patch("viz.get_registered_viz_panels") as mock_get_panels, patch(
             "builtins.open", new_callable=mock_open
-        ) as mock_file_open:
+        ) as _mock_file_open:
 
             mock_get_panels.return_value = {
                 "flakiness_trend": {
@@ -377,7 +373,7 @@ def test_dashboard_api_methods():
         # Test button
         mock_st.button.return_value = True
         result = api.button("Click me")
-        assert result == True
+        assert result
         mock_st.button.assert_called_once_with("Click me", key=None)
 
         # Test that success method doesn't exist (known issue in workflow_viz.py)
