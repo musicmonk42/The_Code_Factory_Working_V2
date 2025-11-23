@@ -429,7 +429,7 @@ web3==7.13.0
 webencodings==0.5.1
 websocket-client==1.8.0
 websockets==15.0.1
-wexpect==4.0.0
+wexpect==4.0.0; sys_platform == "win32"
 wrapt==1.17.3
 wsproto==1.2.0
 xxhash==3.5.0
