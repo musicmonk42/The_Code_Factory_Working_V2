@@ -448,17 +448,30 @@ jobs:
           # Remove large packages and unused tools to free disk space
           echo "=== Disk space before cleanup ==="
           df -h
+          # Remove large tool chains and runtimes
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/share/boost
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/swift
-          # Clear apt cache
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /opt/hostedtoolcache
+          # Remove additional large directories
+          sudo rm -rf /usr/local/graalvm
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/sqlpackage
+          # Clear package manager caches
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
-          # Clear docker cache from previous runs (preserve images with -f only, not -af)
-          docker system prune -f || true
+          sudo rm -rf /var/cache/apt/archives/*
+          # Clear other caches (be careful not to remove files in use)
+          find /tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
+          find /var/tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
+          # Aggressively prune Docker (but preserve volumes that might be needed)
+          docker system prune -af || true
+          # Clear BuildKit cache
+          docker buildx prune -af || true
           echo "=== Disk space after cleanup ==="
           df -h
         
@@ -466,14 +479,24 @@ jobs:
         uses: docker/setup-buildx-action@v3
         
       - name: Build Docker image - ${{ matrix.component }}
+        env:
+          DOCKER_BUILDKIT: 1
+          BUILDKIT_PROGRESS: plain
         run: |
           if [ "${{ matrix.component }}" = "root" ]; then
-            docker build -t code-factory:latest -f Dockerfile .
+            docker build \
+              --build-arg SKIP_HEAVY_DEPS=0 \
+              -t code-factory:latest \
+              -f Dockerfile .
           elif [ "${{ matrix.component }}" = "generator" ] && [ -f generator/Dockerfile ]; then
-            docker build -t code-factory-generator:latest -f generator/Dockerfile ./generator
+            docker build \
+              -t code-factory-generator:latest \
+              -f generator/Dockerfile ./generator
           else
             echo "Dockerfile not found for ${{ matrix.component }}"
           fi
+          # Clean up build cache immediately after build
+          docker builder prune -af || true
           
       - name: Test Docker image
         run: |
