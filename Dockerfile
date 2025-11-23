@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1.7
+# 
+# Build arguments:
+# - SKIP_HEAVY_DEPS: Set to 1 to skip installing heavy dependencies (useful for CI/testing)
+#   Example: docker build --build-arg SKIP_HEAVY_DEPS=1 -t code-factory:latest .
 
 ###############################################
 # Builder stage: install Python dependencies
@@ -64,8 +68,13 @@ RUN if [ "$SKIP_HEAVY_DEPS" = "1" ]; then \
          pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org .); \
     else \
         echo "No requirements.txt or pyproject.toml found. Skipping dependency install."; \
-    fi && \
-    rm -rf /root/.cache/pip /tmp/*
+    fi; \
+    # Clean up pip cache, temp files, and package caches to free disk space
+    rm -rf /root/.cache/* /tmp/* /var/tmp/* || true; \
+    # Remove pip's wheel cache and build artifacts
+    find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true; \
+    find /opt/venv -type f -name '*.pyc' -delete 2>/dev/null || true; \
+    find /opt/venv -type f -name '*.pyo' -delete 2>/dev/null || true
 
 # Copy the rest of the application
 COPY . /app
