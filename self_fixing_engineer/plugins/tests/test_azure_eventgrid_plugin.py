@@ -65,7 +65,9 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -239,11 +241,16 @@ def test_init_not_in_allowlist_prod(set_env, monkeypatch):
 
     mock_secrets_manager.get_secret.side_effect = mock_get_secret
 
-    with pytest.raises(AnalyzerCriticalError, match="not in the allowed_endpoints list"):
+    with pytest.raises(
+        AnalyzerCriticalError, match="not in the allowed_endpoints list"
+    ):
         AzureEventGridAuditHook(endpoint_url="https://forbidden.com")
 
     mock_alert_operator_instance.alert.assert_called()
-    assert "not in the allowed_endpoints list" in mock_alert_operator_instance.alert.call_args[0][0]
+    assert (
+        "not in the allowed_endpoints list"
+        in mock_alert_operator_instance.alert.call_args[0][0]
+    )
 
 
 # --- Event Hook Tests ---
@@ -296,7 +303,9 @@ async def test_send_batch_success(mock_aiohttp_session):
     mock_response = MockResponse(status=200, text="OK")
     mock_post.return_value = mock_response
 
-    hook = AzureEventGridAuditHook(endpoint_url="http://localhost", session=mock_session)
+    hook = AzureEventGridAuditHook(
+        endpoint_url="http://localhost", session=mock_session
+    )
     batch = [
         {
             "id": "1",
@@ -381,7 +390,9 @@ async def test_send_batch_permanent_failure(mock_aiohttp_session):
     mock_response = MockResponse(status=400, text="Bad Request")
     mock_post.return_value = mock_response
 
-    hook = AzureEventGridAuditHook(endpoint_url="http://localhost", session=mock_session)
+    hook = AzureEventGridAuditHook(
+        endpoint_url="http://localhost", session=mock_session
+    )
     batch = [
         {
             "id": "1",
@@ -557,7 +568,9 @@ async def test_close_external_session(mock_aiohttp_session):
     mock_session, _, _ = mock_aiohttp_session
     mock_session.closed = False
 
-    hook = AzureEventGridAuditHook(endpoint_url="http://localhost", session=mock_session)
+    hook = AzureEventGridAuditHook(
+        endpoint_url="http://localhost", session=mock_session
+    )
     await hook.close()
 
     # External session should not be closed by the hook

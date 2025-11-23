@@ -21,7 +21,9 @@ try:
 except ImportError:
     Fernet = None
     CRYPTOGRAPHY_AVAILABLE = False
-    logging.warning("cryptography library not found. Session encryption will be disabled.")
+    logging.warning(
+        "cryptography library not found. Session encryption will be disabled."
+    )
 
 # P5: Observability - Prometheus Metrics
 try:
@@ -47,7 +49,9 @@ try:
     SESSION_LOAD_LATENCY = Histogram(
         "session_load_latency_seconds", "Latency of loading session", ["session_name"]
     )
-    SESSIONS_PRUNED_TOTAL = Counter("sessions_pruned_total", "Total sessions pruned", ["reason"])
+    SESSIONS_PRUNED_TOTAL = Counter(
+        "sessions_pruned_total", "Total sessions pruned", ["reason"]
+    )
     SESSION_PRUNE_LATENCY_SECONDS = Histogram(
         "session_prune_latency_seconds", "Latency of session pruning operation"
     )
@@ -146,7 +150,10 @@ def _get_config():
             )
 
             # P1: Security - Get encryption key from Config
-            if hasattr(_CONFIG_INSTANCE, "ENCRYPTION_KEY") and _CONFIG_INSTANCE.ENCRYPTION_KEY:
+            if (
+                hasattr(_CONFIG_INSTANCE, "ENCRYPTION_KEY")
+                and _CONFIG_INSTANCE.ENCRYPTION_KEY
+            ):
                 encryption_key_str = _CONFIG_INSTANCE.ENCRYPTION_KEY.get_secret_value()
 
         # P1: Initialize Fernet instance if key is available
@@ -180,9 +187,15 @@ class AgentMemory(BaseModel):
 
 
 class SessionMetadata(BaseModel):
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    last_accessed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    last_accessed_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     status: str = "active"
     version: str = "1.0.0"
     user_id: Optional[str] = None
@@ -202,7 +215,9 @@ class SessionState(BaseModel):
     llm_config: Dict[str, Any]
     persona_key: str
     language: str
-    memory: Union[AgentMemory, str]  # P1: Memory can be encrypted string or AgentMemory object
+    memory: Union[
+        AgentMemory, str
+    ]  # P1: Memory can be encrypted string or AgentMemory object
     last_spec: Optional[str] = None
     last_spec_format: str = "gherkin"
     last_trace: Optional[Dict[str, Any]] = None
@@ -224,7 +239,9 @@ def _validate_path(path: str, base_dir: str) -> str:
     """
     safe_path = os.path.normpath(os.path.join(base_dir, path))
     if not os.path.abspath(safe_path).startswith(os.path.abspath(base_dir)):
-        raise ValueError(f"Path '{path}' is outside the allowed directory '{base_dir}'.")
+        raise ValueError(
+            f"Path '{path}' is outside the allowed directory '{base_dir}'."
+        )
     return safe_path
 
 
@@ -320,10 +337,14 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
         validated_session_state = SessionState(session_id=session_name, **session_data)
 
         if not validated_session_state.meta.created_at:
-            validated_session_state.meta.created_at = datetime.now(timezone.utc).isoformat()
+            validated_session_state.meta.created_at = datetime.now(
+                timezone.utc
+            ).isoformat()
         validated_session_state.meta.updated_at = datetime.now(timezone.utc).isoformat()
 
-        await _atomic_write_json(session_path, validated_session_state.model_dump(mode="json"))
+        await _atomic_write_json(
+            session_path, validated_session_state.model_dump(mode="json")
+        )
 
         latency = time.perf_counter() - start_time
         SESSION_SAVE_LATENCY.observe(
@@ -342,7 +363,9 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
         return True
     except (ValidationError, ValueError) as e:
         SESSION_ERRORS.inc(session_name=session_name, error_type="validation_error")
-        logger.error(f"Session data validation failed for '{session_name}': {e}. Save aborted.")
+        logger.error(
+            f"Session data validation failed for '{session_name}': {e}. Save aborted."
+        )
         log_action(
             "session_save_failed",
             {
@@ -387,13 +410,17 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
                     decrypted_memory_bytes = _FERNET_INSTANCE.decrypt(
                         encrypted_memory.encode("utf-8")
                     )
-                    raw_data["memory"] = json.loads(decrypted_memory_bytes.decode("utf-8"))
+                    raw_data["memory"] = json.loads(
+                        decrypted_memory_bytes.decode("utf-8")
+                    )
                 except Exception as e:
                     logger.error(
                         f"Failed to decrypt memory for session {session_name}: {e}. Data might be corrupted.",
                         exc_info=True,
                     )
-                    SESSION_ERRORS.inc(session_name=session_name, error_type="decryption_failed")
+                    SESSION_ERRORS.inc(
+                        session_name=session_name, error_type="decryption_failed"
+                    )
                     return None  # Fail to load if decryption fails
             else:
                 logger.warning(
@@ -401,10 +428,14 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
                 )
 
         validated_session_state = SessionState(**raw_data)
-        validated_session_state.meta.last_accessed_at = datetime.now(timezone.utc).isoformat()
+        validated_session_state.meta.last_accessed_at = datetime.now(
+            timezone.utc
+        ).isoformat()
 
         # Update the timestamp atomically after successful load
-        await _atomic_write_json(session_path, validated_session_state.model_dump(mode="json"))
+        await _atomic_write_json(
+            session_path, validated_session_state.model_dump(mode="json")
+        )
 
         latency = time.perf_counter() - start_time
         SESSION_LOAD_LATENCY.observe(
@@ -419,13 +450,17 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
                 "latency_seconds": latency,
             },
         )
-        logger.info(f"Session '{session_name}' loaded successfully from {session_path}.")
+        logger.info(
+            f"Session '{session_name}' loaded successfully from {session_path}."
+        )
         return validated_session_state.model_dump(mode="json")
     except (FileNotFoundError, ValueError):
         logger.warning(
             f"Session '{session_name}' not found at {_get_session_path(session_name)}. Returning None."
         )
-        log_action("session_load_failed", {"session_id": session_name, "reason": "not_found"})
+        log_action(
+            "session_load_failed", {"session_id": session_name, "reason": "not_found"}
+        )
         return None
     except ValidationError as e:
         SESSION_ERRORS.inc(session_name=session_name, error_type="validation_error")
@@ -463,7 +498,9 @@ async def list_sessions() -> List[str]:
         if await aiofiles.os.path.exists(session_dir):
             entries = await aiofiles.os.listdir(session_dir)
             for filename in entries:
-                if filename.endswith(".json") and not filename.endswith("_history.json"):
+                if filename.endswith(".json") and not filename.endswith(
+                    "_history.json"
+                ):
                     sessions.append(os.path.splitext(filename)[0])
         log_action("list_sessions", {"count": len(sessions), "status": "success"})
     except Exception as e:
@@ -487,9 +524,13 @@ async def export_spec(
             await aiofiles.os.makedirs(output_dir, exist_ok=True)
 
         content_to_write = (
-            spec_content if isinstance(spec_content, str) else json.dumps(spec_content, indent=2)
+            spec_content
+            if isinstance(spec_content, str)
+            else json.dumps(spec_content, indent=2)
         )  # Ensure dict is dumped to string
-        await _atomic_write_json(output_path, {"format": file_format, "content": content_to_write})
+        await _atomic_write_json(
+            output_path, {"format": file_format, "content": content_to_write}
+        )
 
         log_action(
             "spec_exported",
@@ -508,7 +549,9 @@ async def export_spec(
         return False
 
 
-async def save_session_history(session_name: str, history_data: List[Dict[str, Any]]) -> bool:
+async def save_session_history(
+    session_name: str, history_data: List[Dict[str, Any]]
+) -> bool:
     """
     Saves the command history for a specific session.
     P5: Observability - Metrics for history save operations.
@@ -545,8 +588,12 @@ async def save_session_history(session_name: str, history_data: List[Dict[str, A
         return False
     except Exception as e:
         SESSION_ERRORS.inc(error_type=type(e).__name__)
-        logger.error(f"Failed to save history for session '{session_name}': {e}.", exc_info=True)
-        log_action("session_history_save_failed", {"session_id": session_name, "error": str(e)})
+        logger.error(
+            f"Failed to save history for session '{session_name}': {e}.", exc_info=True
+        )
+        log_action(
+            "session_history_save_failed", {"session_id": session_name, "error": str(e)}
+        )
         return False
 
 
@@ -589,7 +636,9 @@ async def load_session_history(session_name: str) -> List[Dict[str, Any]]:
         return []
     except Exception as e:
         SESSION_ERRORS.inc(error_type=type(e).__name__)
-        logger.error(f"Failed to load history for session '{session_name}': {e}.", exc_info=True)
+        logger.error(
+            f"Failed to load history for session '{session_name}': {e}.", exc_info=True
+        )
         log_action(
             "session_history_load_failed",
             {"session_id": session_name, "error": str(e), "reason": "io_error"},
@@ -620,10 +669,14 @@ async def delete_session(session_name: str) -> bool:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 
         if await aiofiles.os.path.exists(session_path):
-            archive_session_path = os.path.join(archive_dir, f"{session_name}.{timestamp}.json")
+            archive_session_path = os.path.join(
+                archive_dir, f"{session_name}.{timestamp}.json"
+            )
             try:
                 await aiofiles.os.rename(session_path, archive_session_path)
-                logger.info(f"Archived session '{session_name}' to {archive_session_path}.")
+                logger.info(
+                    f"Archived session '{session_name}' to {archive_session_path}."
+                )
                 deleted_files.append(archive_session_path)
             except Exception as e:
                 logger.error(f"Failed to archive session file {session_path}: {e}")
@@ -634,7 +687,9 @@ async def delete_session(session_name: str) -> bool:
             )
             try:
                 await aiofiles.os.rename(history_path, archive_history_path)
-                logger.info(f"Archived session history '{session_name}' to {archive_history_path}.")
+                logger.info(
+                    f"Archived session history '{session_name}' to {archive_history_path}."
+                )
                 deleted_files.append(archive_history_path)
             except Exception as e:
                 logger.error(f"Failed to archive history file {history_path}: {e}")
@@ -650,7 +705,9 @@ async def delete_session(session_name: str) -> bool:
             deleted_files.append(history_path)
 
         if not deleted_files:
-            logger.warning(f"Session '{session_name}' or its history not found for deletion.")
+            logger.warning(
+                f"Session '{session_name}' or its history not found for deletion."
+            )
             log_action(
                 "session_delete_failed",
                 {"session_id": session_name, "reason": "not_found"},
@@ -669,7 +726,9 @@ async def delete_session(session_name: str) -> bool:
     except Exception as e:
         SESSION_ERRORS.inc(session_name=session_name, error_type=type(e).__name__)
         logger.error(f"Failed to delete session '{session_name}': {e}.", exc_info=True)
-        log_action("session_delete_failed", {"session_id": session_name, "error": str(e)})
+        log_action(
+            "session_delete_failed", {"session_id": session_name, "error": str(e)}
+        )
         return False
 
 
@@ -690,7 +749,9 @@ async def get_session_metadata(session_name: str) -> Optional[SessionMetadata]:
                     decrypted_memory_bytes = _FERNET_INSTANCE.decrypt(
                         encrypted_memory.encode("utf-8")
                     )
-                    raw_data["memory"] = json.loads(decrypted_memory_bytes.decode("utf-8"))
+                    raw_data["memory"] = json.loads(
+                        decrypted_memory_bytes.decode("utf-8")
+                    )
                 except Exception as e:
                     logger.error(
                         f"Failed to decrypt memory for metadata of session {session_name}: {e}. Skipping decryption.",
@@ -725,11 +786,17 @@ async def prune_old_sessions(max_age_days: Optional[int] = None) -> int:
     start_time = time.perf_counter()
 
     config_params = _get_config()
-    age_threshold = max_age_days if max_age_days is not None else config_params["max_age_days"]
+    age_threshold = (
+        max_age_days if max_age_days is not None else config_params["max_age_days"]
+    )
 
     if age_threshold <= 0:
-        logger.info("Session pruning is disabled as max_age_days is not a positive value.")
-        SESSIONS_PRUNED_TOTAL.labels(reason="disabled").inc(0)  # Log 0 pruned if disabled
+        logger.info(
+            "Session pruning is disabled as max_age_days is not a positive value."
+        )
+        SESSIONS_PRUNED_TOTAL.labels(reason="disabled").inc(
+            0
+        )  # Log 0 pruned if disabled
         SESSION_PRUNE_LATENCY_SECONDS.observe(0)  # Observe 0 latency if disabled
         return 0
 
@@ -759,7 +826,9 @@ async def prune_old_sessions(max_age_days: Optional[int] = None) -> int:
                     f"Error processing session '{session_name}' for pruning: {e}",
                     exc_info=True,
                 )
-                SESSION_ERRORS.inc(session_name=session_name, error_type="prune_processing_error")
+                SESSION_ERRORS.inc(
+                    session_name=session_name, error_type="prune_processing_error"
+                )
 
     latency = time.perf_counter() - start_time
     SESSION_PRUNE_LATENCY_SECONDS.observe(latency)

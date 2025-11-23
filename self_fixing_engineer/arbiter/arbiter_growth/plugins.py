@@ -96,7 +96,9 @@ class PluginHook(ABC):
         pass
 
     @abstractmethod
-    async def on_growth_event(self, event: "GrowthEvent", state: "ArbiterState") -> None:
+    async def on_growth_event(
+        self, event: "GrowthEvent", state: "ArbiterState"
+    ) -> None:
         """
         (Required) Called after a growth event has been successfully applied to the state.
         This is the primary method for reacting to changes in the arbiter.

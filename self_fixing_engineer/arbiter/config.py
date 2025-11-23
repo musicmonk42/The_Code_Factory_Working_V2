@@ -69,7 +69,9 @@ logging.basicConfig(
 logger = logging.getLogger("ArbiterConfig")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -78,7 +80,9 @@ _metrics_lock = threading.Lock()
 
 
 # --- Helper functions for idempotent and thread-safe metric creation ---
-def get_or_create_counter(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
+def get_or_create_counter(
+    name: str, documentation: str, labelnames: Tuple[str, ...] = ()
+):
     with _metrics_lock:
         try:
             return Counter(name, documentation, labelnames=labelnames)
@@ -86,7 +90,9 @@ def get_or_create_counter(name: str, documentation: str, labelnames: Tuple[str, 
             return REGISTRY._names_to_collectors[name]
 
 
-def get_or_create_gauge(name: str, documentation: str, labelnames: Tuple[str, ...] = ()):
+def get_or_create_gauge(
+    name: str, documentation: str, labelnames: Tuple[str, ...] = ()
+):
     with _metrics_lock:
         try:
             return Gauge(name, documentation, labelnames=labelnames)
@@ -102,7 +108,9 @@ def get_or_create_histogram(
 ):
     with _metrics_lock:
         try:
-            return Histogram(name, documentation, labelnames=labelnames, buckets=buckets)
+            return Histogram(
+                name, documentation, labelnames=labelnames, buckets=buckets
+            )
         except ValueError:
             return REGISTRY._names_to_collectors[name]
 
@@ -128,9 +136,13 @@ class ConfigError(Exception):
 # --- Nested Pydantic Model for LLM Settings ---
 class LLMSettings(BaseSettings):
     default_provider: str = Field("openai", env="LLM_DEFAULT_PROVIDER")
-    retry_providers: List[str] = Field(["anthropic", "google"], env="LLM_RETRY_PROVIDERS")
+    retry_providers: List[str] = Field(
+        ["anthropic", "google"], env="LLM_RETRY_PROVIDERS"
+    )
     timeout_seconds: float = Field(30.0, env="LLM_TIMEOUT_SECONDS")
-    api_url: HttpUrl = Field(default="https://api.openai.com/v1/completions", env="LLM_API_URL")
+    api_url: HttpUrl = Field(
+        default="https://api.openai.com/v1/completions", env="LLM_API_URL"
+    )
     api_key: Optional[SecretStr] = Field(
         default=SecretStr("sk-dummy-llm-key-for-tests"), env="OPENAI_API_KEY"
     )
@@ -170,7 +182,9 @@ class ArbiterConfig(BaseSettings):
     # --- Core System Settings ---
     REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
     REDIS_POOL_SIZE: int = Field(default=10, env="REDIS_POOL_SIZE")
-    KAFKA_BOOTSTRAP_SERVERS: str = Field(default="localhost:9092", env="KAFKA_BOOTSTRAP_SERVERS")
+    KAFKA_BOOTSTRAP_SERVERS: str = Field(
+        default="localhost:9092", env="KAFKA_BOOTSTRAP_SERVERS"
+    )
 
     DB_PATH: str = Field(default="sqlite:///./omnicore.db", env="DATABASE_URL")
     DB_POOL_SIZE: int = Field(default=50, env="DB_POOL_SIZE")
@@ -183,10 +197,14 @@ class ArbiterConfig(BaseSettings):
 
     NEO4J_URI: str = Field(default="neo4j://localhost:7687", env="NEO4J_URI")
     NEO4J_USER: str = Field(default="neo4j", env="NEO4J_USER")
-    NEO4J_PASSWORD: SecretStr = Field(default=SecretStr("password"), env="NEO4J_PASSWORD")
+    NEO4J_PASSWORD: SecretStr = Field(
+        default=SecretStr("password"), env="NEO4J_PASSWORD"
+    )
 
     REPORTS_DIRECTORY: str = Field(default="reports", env="REPORTS_DIRECTORY")
-    CODEBASE_PATHS: List[str] = Field(default_factory=lambda: ["."], env="CODEBASE_PATHS")
+    CODEBASE_PATHS: List[str] = Field(
+        default_factory=lambda: ["."], env="CODEBASE_PATHS"
+    )
 
     TF_ENABLE_ONEDNN_OPTS: str = Field(default="1", env="TF_ENABLE_ONEDNN_OPTS")
 
@@ -202,10 +220,16 @@ class ArbiterConfig(BaseSettings):
     ENCRYPTION_KEY_BYTES: bytes = b""
 
     MAX_LEARN_RETRIES: int = Field(default=3, env="MAX_LEARN_RETRIES")
-    VALID_DOMAIN_PATTERN: str = Field(default=r"^[a-zA-Z0-9_.-]+$", env="VALID_DOMAIN_PATTERN")
-    ML_MODEL_PATH: str = Field(default="models/relevance_classifier.pth", env="ML_MODEL_PATH")
+    VALID_DOMAIN_PATTERN: str = Field(
+        default=r"^[a-zA-Z0-9_.-]+$", env="VALID_DOMAIN_PATTERN"
+    )
+    ML_MODEL_PATH: str = Field(
+        default="models/relevance_classifier.pth", env="ML_MODEL_PATH"
+    )
     QUANTUM_ENABLED: bool = Field(default=False, env="ENABLE_QUANTUM")
-    KNOWLEDGE_REFRESH_INTERVAL: int = Field(default=86400, env="KNOWLEDGE_REFRESH_INTERVAL")
+    KNOWLEDGE_REFRESH_INTERVAL: int = Field(
+        default=86400, env="KNOWLEDGE_REFRESH_INTERVAL"
+    )
     LOW_CONFIDENCE_THRESHOLD: float = Field(default=0.2, env="LOW_CONFIDENCE_THRESHOLD")
     SIMILARITY_THRESHOLD: float = Field(default=0.8, env="SIMILARITY_THRESHOLD")
     POLICY_CONFIG_FILE: str = Field(default="./policies.json", env="POLICY_CONFIG_FILE")
@@ -213,7 +237,9 @@ class ArbiterConfig(BaseSettings):
     # --- Audit Settings ---
     AUDIT_BUFFER_SIZE: int = Field(default=100, env="AUDIT_BUFFER_SIZE")
     AUDIT_FLUSH_INTERVAL: float = Field(default=1.0, env="AUDIT_FLUSH_INTERVAL")
-    AUDIT_BLOCKCHAIN_ENABLED: bool = Field(default=False, env="AUDIT_BLOCKCHAIN_ENABLED")
+    AUDIT_BLOCKCHAIN_ENABLED: bool = Field(
+        default=False, env="AUDIT_BLOCKCHAIN_ENABLED"
+    )
     WEB3_PROVIDER_URL: Optional[HttpUrl] = Field(default=None, env="WEB3_PROVIDER_URL")
 
     # --- Agent State Settings ---
@@ -223,8 +249,12 @@ class ArbiterConfig(BaseSettings):
     # --- Message Bus Settings ---
     ARBITER_SHARDS: int = Field(default=4, env="ARBITER_SHARDS")
     MESSAGE_BUS_SHARD_COUNT: int = Field(default=4, env="MESSAGE_BUS_SHARD_COUNT")
-    MESSAGE_BUS_MAX_QUEUE_SIZE: int = Field(default=10000, env="MESSAGE_BUS_MAX_QUEUE_SIZE")
-    MESSAGE_BUS_WORKERS_PER_SHARD: int = Field(default=2, env="MESSAGE_BUS_WORKERS_PER_SHARD")
+    MESSAGE_BUS_MAX_QUEUE_SIZE: int = Field(
+        default=10000, env="MESSAGE_BUS_MAX_QUEUE_SIZE"
+    )
+    MESSAGE_BUS_WORKERS_PER_SHARD: int = Field(
+        default=2, env="MESSAGE_BUS_WORKERS_PER_SHARD"
+    )
 
     # --- LLM Integration Settings (now nested) ---
     llm: LLMSettings = Field(default_factory=LLMSettings)
@@ -246,18 +276,26 @@ class ArbiterConfig(BaseSettings):
     EMAIL_SMTP_SERVER: str = Field(default="", env="EMAIL_SMTP_SERVER")
     EMAIL_SMTP_PORT: int = Field(default=587, env="EMAIL_SMTP_PORT")
     EMAIL_SMTP_USERNAME: Optional[str] = Field(default=None, env="EMAIL_SMTP_USERNAME")
-    EMAIL_SMTP_PASSWORD: Optional[SecretStr] = Field(default=None, env="EMAIL_SMTP_PASSWORD")
+    EMAIL_SMTP_PASSWORD: Optional[SecretStr] = Field(
+        default=None, env="EMAIL_SMTP_PASSWORD"
+    )
     EMAIL_USE_TLS: bool = Field(default=True, env="EMAIL_USE_TLS")
     EMAIL_TIMEOUT_SECONDS: float = Field(default=10.0, env="EMAIL_TIMEOUT_SECONDS")
     PAGERDUTY_ENABLED: bool = Field(default=False, env="PAGERDUTY_ENABLED")
-    PAGERDUTY_ROUTING_KEY: Optional[SecretStr] = Field(default=None, env="PAGERDUTY_ROUTING_KEY")
-    PAGERDUTY_API_TIMEOUT_SECONDS: float = Field(default=10.0, env="PAGERDUTY_API_TIMEOUT_SECONDS")
+    PAGERDUTY_ROUTING_KEY: Optional[SecretStr] = Field(
+        default=None, env="PAGERDUTY_ROUTING_KEY"
+    )
+    PAGERDUTY_API_TIMEOUT_SECONDS: float = Field(
+        default=10.0, env="PAGERDUTY_API_TIMEOUT_SECONDS"
+    )
 
     # --- API Keys and Secrets (Mapped from .env directly) ---
     ADMIN_API_KEY: Optional[SecretStr] = Field(
         default=SecretStr("dummy-admin-key-for-tests"), env="ADMIN_API_KEY"
     )
-    ANTHROPIC_API_KEY: Optional[SecretStr] = Field(default=None, env="ANTHROPIC_API_KEY")
+    ANTHROPIC_API_KEY: Optional[SecretStr] = Field(
+        default=None, env="ANTHROPIC_API_KEY"
+    )
     GOOGLE_API_KEY: Optional[SecretStr] = Field(default=None, env="GOOGLE_API_KEY")
     CDP_API_KEY: SecretStr = Field(default=SecretStr(""), env="CDP_API_KEY")
     GLASSDOOR_API_KEY: SecretStr = Field(default=SecretStr(""), env="GLASSDOOR_API_KEY")
@@ -270,13 +308,19 @@ class ArbiterConfig(BaseSettings):
     CENSUS_API_KEY: SecretStr = Field(default=SecretStr(""), env="CENSUS_API_KEY")
     BLS_API_KEY: SecretStr = Field(default=SecretStr(""), env="BLS_API_KEY")
     USDA_API_KEY: SecretStr = Field(default=SecretStr(""), env="USDA_API_KEY")
-    ALPHAVANTAGE_API_KEY: SecretStr = Field(default=SecretStr(""), env="ALPHAVANTAGE_API_KEY")
-    BRANDFETCH_API_KEY: SecretStr = Field(default=SecretStr(""), env="BRANDFETCH_API_KEY")
+    ALPHAVANTAGE_API_KEY: SecretStr = Field(
+        default=SecretStr(""), env="ALPHAVANTAGE_API_KEY"
+    )
+    BRANDFETCH_API_KEY: SecretStr = Field(
+        default=SecretStr(""), env="BRANDFETCH_API_KEY"
+    )
     FINNHUB_API_KEY: SecretStr = Field(default=SecretStr(""), env="FINNHUB_API_KEY")
     POLYGON_API_KEY: SecretStr = Field(default=SecretStr(""), env="POLYGON_API_KEY")
     NEWSAPI_KEY: SecretStr = Field(default=SecretStr(""), env="NEWSAPI_KEY")
     AWS_ACCESS_KEY_ID: SecretStr = Field(default=SecretStr(""), env="AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY: SecretStr = Field(default=SecretStr(""), env="AWS_SECRET_ACCESS_KEY")
+    AWS_SECRET_ACCESS_KEY: SecretStr = Field(
+        default=SecretStr(""), env="AWS_SECRET_ACCESS_KEY"
+    )
     AWS_REGION: str = Field(default="us-east-1", env="AWS_REGION")
     EXPLORER_MOCK_MODE: bool = Field(default=False, env="EXPLORER_MOCK_MODE")
 
@@ -288,7 +332,9 @@ class ArbiterConfig(BaseSettings):
 
     STRIPE_SECRET_KEY: SecretStr = Field(default=SecretStr(""), env="STRIPE_SECRET_KEY")
     STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")
-    STRIPE_WEBHOOK_SECRET: SecretStr = Field(default=SecretStr(""), env="STRIPE_WEBHOOK_SECRET")
+    STRIPE_WEBHOOK_SECRET: SecretStr = Field(
+        default=SecretStr(""), env="STRIPE_WEBHOOK_SECRET"
+    )
     CAPTCHA_API_KEY: SecretStr = Field(default=SecretStr(""), env="CAPTCHA_API_KEY")
 
     # --- System Operational Parameters ---
@@ -301,7 +347,9 @@ class ArbiterConfig(BaseSettings):
     RELOAD_VALIDATE_FILES: bool = Field(default=False, env="RELOAD_VALIDATE_FILES")
 
     # --- Advanced Features ---
-    EXPERIMENTAL_FEATURES_ENABLED: bool = Field(default=False, env="EXPERIMENTAL_FEATURES_ENABLED")
+    EXPERIMENTAL_FEATURES_ENABLED: bool = Field(
+        default=False, env="EXPERIMENTAL_FEATURES_ENABLED"
+    )
     PLUGIN_DIR: str = Field(default="./plugins", env="PLUGIN_DIR")
     DREAM_MODE_ENABLED: bool = Field(default=False, env="DREAM_MODE_ENABLED")
     PLUGIN_CONFIG: str = Field(default="{}", env="PLUGIN_CONFIG")
@@ -317,7 +365,9 @@ class ArbiterConfig(BaseSettings):
     MERKLE_TREE_PRIVATE_KEY: Optional[SecretStr] = Field(
         default=None, env="MERKLE_TREE_PRIVATE_KEY"
     )
-    MERKLE_TREE_BRANCHING_FACTOR: int = Field(default=2, env="MERKLE_TREE_BRANCHING_FACTOR")
+    MERKLE_TREE_BRANCHING_FACTOR: int = Field(
+        default=2, env="MERKLE_TREE_BRANCHING_FACTOR"
+    )
 
     # -------- Dream Mode --------
     DREAM_MODE_MAX_WORKERS: int = Field(default=2, env="DREAM_MODE_MAX_WORKERS")
@@ -351,7 +401,9 @@ class ArbiterConfig(BaseSettings):
     REASONER_LOG_PROMPTS: bool = Field(default=False, env="REASONER_LOG_PROMPTS")
 
     # --- Feature Toggles (from .env) ---
-    ENABLE_LIVE_COMPANY_LOOKUP: bool = Field(default=True, env="ENABLE_LIVE_COMPANY_LOOKUP")
+    ENABLE_LIVE_COMPANY_LOOKUP: bool = Field(
+        default=True, env="ENABLE_LIVE_COMPANY_LOOKUP"
+    )
     ENABLE_LIVE_TICKERS: bool = Field(default=True, env="ENABLE_LIVE_TICKERS")
     ENABLE_YAHOO_FINANCE: bool = Field(default=True, env="ENABLE_YAHOO_FINANCE")
     ENABLE_EPA: bool = Field(default=True, env="ENABLE_EPA")
@@ -371,13 +423,17 @@ class ArbiterConfig(BaseSettings):
     _is_initialized: bool = False
     _loaded_at: Optional[str] = None
 
-    DEFAULT_API_TIMEOUT_SECONDS: float = Field(default=30.0, env="DEFAULT_API_TIMEOUT_SECONDS")
+    DEFAULT_API_TIMEOUT_SECONDS: float = Field(
+        default=30.0, env="DEFAULT_API_TIMEOUT_SECONDS"
+    )
     FRONTEND_URL: HttpUrl = Field(default="http://localhost:8000", env="FRONTEND_URL")
     ARENA_PORT: int = Field(default=9001, env="ARENA_PORT")
 
     # --- Missing fields to complete the class ---
     REDIS_MAX_CONNECTIONS: int = Field(10, description="Maximum Redis connections")
-    CONFIG_REFRESH_INTERVAL_SECONDS: int = Field(300, description="Interval for config refresh")
+    CONFIG_REFRESH_INTERVAL_SECONDS: int = Field(
+        300, description="Interval for config refresh"
+    )
     ZOOKEEPER_URL: Optional[str] = Field(default=None, env="ZOOKEEPER_URL")
     KAFKA_SCHEMA_REGISTRY_URL: Optional[HttpUrl] = Field(
         default=None, env="KAFKA_SCHEMA_REGISTRY_URL"
@@ -388,12 +444,20 @@ class ArbiterConfig(BaseSettings):
     ARRAY_STORAGE_TYPE: str = Field(
         "json", description="Array storage type: json, sqlite, redis, postgres"
     )
-    ARRAY_STORAGE_PATH: str = Field("./arrays.json", description="Path for array storage")
+    ARRAY_STORAGE_PATH: str = Field(
+        "./arrays.json", description="Path for array storage"
+    )
     ARRAY_MAX_SIZE: int = Field(100000, description="Max size for array backend")
-    ARRAY_ENCRYPTION_ENABLED: bool = Field(False, description="Enable encryption for array backend")
+    ARRAY_ENCRYPTION_ENABLED: bool = Field(
+        False, description="Enable encryption for array backend"
+    )
     ARRAY_PAGE_SIZE: int = Field(1000, description="Page size for array backend")
-    ANALYZER_MAX_WORKERS: int = Field(4, description="Max workers for codebase analyzer")
-    ENABLE_CRITICAL_FAILURES: bool = Field(default=False, env="ENABLE_CRITICAL_FAILURES")
+    ANALYZER_MAX_WORKERS: int = Field(
+        4, description="Max workers for codebase analyzer"
+    )
+    ENABLE_CRITICAL_FAILURES: bool = Field(
+        default=False, env="ENABLE_CRITICAL_FAILURES"
+    )
     AI_API_TIMEOUT: int = Field(30, description="Default timeout for AI API calls")
     MEMORY_LIMIT: int = Field(40, description="Memory limit in GB")
     OMNICORE_URL: HttpUrl = Field(
@@ -404,7 +468,9 @@ class ArbiterConfig(BaseSettings):
     )
     ALERT_WEBHOOK_URL: Optional[HttpUrl] = Field(default=None, env="ALERT_WEBHOOK_URL")
     SENTRY_DSN: Optional[str] = Field(default=None, env="SENTRY_DSN")
-    PROMETHEUS_GATEWAY: Optional[HttpUrl] = Field(default=None, env="PROMETHEUS_GATEWAY")
+    PROMETHEUS_GATEWAY: Optional[HttpUrl] = Field(
+        default=None, env="PROMETHEUS_GATEWAY"
+    )
     RL_MODEL_PATH: str = Field(
         default="./models/ppo_model.zip", description="Path to save/load RL model"
     )
@@ -459,7 +525,9 @@ class ArbiterConfig(BaseSettings):
 
         # Fast path - if already initialized
         if cls._instance is not None:
-            logger.info("ArbiterConfig already initialized. Returning existing instance.")
+            logger.info(
+                "ArbiterConfig already initialized. Returning existing instance."
+            )
             return cls._instance
 
         # Thread-safe initialization
@@ -475,7 +543,9 @@ class ArbiterConfig(BaseSettings):
 
                 # Process encryption key
                 encryption_key_val = (
-                    instance.ENCRYPTION_KEY.get_secret_value() if instance.ENCRYPTION_KEY else ""
+                    instance.ENCRYPTION_KEY.get_secret_value()
+                    if instance.ENCRYPTION_KEY
+                    else ""
                 )
                 if (
                     encryption_key_val
@@ -483,7 +553,9 @@ class ArbiterConfig(BaseSettings):
                     != "default-encryption-key-for-tests-only-must-be-32-bytes"
                 ):
                     try:
-                        instance.ENCRYPTION_KEY_BYTES = encryption_key_val.encode("utf-8")
+                        instance.ENCRYPTION_KEY_BYTES = encryption_key_val.encode(
+                            "utf-8"
+                        )
                         instance._cipher = Fernet(instance.ENCRYPTION_KEY_BYTES)
                         logger.info("Encryption key loaded and validated.")
                     except Exception as e:
@@ -492,7 +564,9 @@ class ArbiterConfig(BaseSettings):
                 else:
                     instance.ENCRYPTION_KEY_BYTES = Fernet.generate_key()
                     instance._cipher = Fernet(instance.ENCRYPTION_KEY_BYTES)
-                    logger.warning("Generated new encryption key for development/testing.")
+                    logger.warning(
+                        "Generated new encryption key for development/testing."
+                    )
                     instance.ENCRYPTION_KEY = SecretStr(
                         instance.ENCRYPTION_KEY_BYTES.decode("utf-8")
                     )
@@ -520,7 +594,9 @@ class ArbiterConfig(BaseSettings):
 
             except Exception as e:
                 CONFIG_ERRORS.labels(error_type="initialization_fail").inc()
-                logger.critical(f"Failed to initialize ArbiterConfig: {e}", exc_info=True)
+                logger.critical(
+                    f"Failed to initialize ArbiterConfig: {e}", exc_info=True
+                )
                 raise ConfigError(f"Configuration initialization failed: {e}")
 
     @classmethod
@@ -589,7 +665,9 @@ class ArbiterConfig(BaseSettings):
                     )
                     return
             else:
-                logger.warning("Encryption key not set. Skipping decryption of sensitive fields.")
+                logger.warning(
+                    "Encryption key not set. Skipping decryption of sensitive fields."
+                )
                 return
 
         if not hasattr(self, "_sensitive_fields"):
@@ -648,7 +726,9 @@ class ArbiterConfig(BaseSettings):
         if not (0.0 <= self.SIMILARITY_THRESHOLD <= 1.0):
             raise ConfigError("SIMILARITY_THRESHOLD must be between 0.0 and 1.0.")
         if self.SIMILARITY_THRESHOLD < self.LOW_CONFIDENCE_THRESHOLD:
-            logger.warning("SIMILARITY_THRESHOLD is less than LOW_CONFIDENCE_THRESHOLD.")
+            logger.warning(
+                "SIMILARITY_THRESHOLD is less than LOW_CONFIDENCE_THRESHOLD."
+            )
         if self.LOG_LEVEL.upper() not in [
             "DEBUG",
             "INFO",
@@ -735,7 +815,9 @@ class ArbiterConfig(BaseSettings):
                     os.path.dirname(os.path.abspath(__file__)), "personas.json"
                 )
                 if os.path.exists(persona_file_path):
-                    async with aiofiles.open(persona_file_path, "r", encoding="utf-8") as f:
+                    async with aiofiles.open(
+                        persona_file_path, "r", encoding="utf-8"
+                    ) as f:
                         personas = json.loads(await f.read())
                         if isinstance(personas, dict):
                             self.PERSONAS = personas
@@ -766,7 +848,9 @@ class ArbiterConfig(BaseSettings):
 
         try:
             redis_url_str = cls._instance.REDIS_URL
-            async with redis.from_url(redis_url_str, decode_responses=True) as redis_client:
+            async with redis.from_url(
+                redis_url_str, decode_responses=True
+            ) as redis_client:
                 # Safely redact secret values before publishing
                 safe_value = value
                 if isinstance(value, SecretStr):
@@ -867,14 +951,17 @@ def load_persona_dict() -> Dict[str, str]:
     Loads persona definitions from a JSON file.
     This is a placeholder implementation.
     """
-    persona_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "personas.json")
+    persona_file_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "personas.json"
+    )
 
     if os.path.exists(persona_file_path):
         try:
             with open(persona_file_path, "r", encoding="utf-8") as f:
                 personas = json.load(f)
                 if isinstance(personas, dict) and all(
-                    isinstance(k, str) and isinstance(v, str) for k, v in personas.items()
+                    isinstance(k, str) and isinstance(v, str)
+                    for k, v in personas.items()
                 ):
                     logger.info(f"Loaded personas from {persona_file_path}.")
                     CONFIG_OPS_TOTAL.labels(operation="load_persona").inc()
@@ -892,7 +979,9 @@ def load_persona_dict() -> Dict[str, str]:
             CONFIG_ERRORS.labels(error_type="load_persona_fail").inc()
             raise  # Re-raise for tenacity
     else:
-        logger.info(f"Persona file {persona_file_path} not found. Using empty dict for personas.")
+        logger.info(
+            f"Persona file {persona_file_path} not found. Using empty dict for personas."
+        )
         return {}
 
 

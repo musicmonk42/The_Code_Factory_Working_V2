@@ -320,7 +320,9 @@ async def test_redis_state_backend_save_load(mock_redis_client):
     # Test save
     state = {"messages": ["Hello", "World"], "count": 42}
     await backend.save_state("session123", state)
-    mock_redis_client.set.assert_called_with("agent_state:session123", json.dumps(state), ex=86400)
+    mock_redis_client.set.assert_called_with(
+        "agent_state:session123", json.dumps(state), ex=86400
+    )
 
     # Test load
     mock_redis_client.get.return_value = json.dumps(state)
@@ -521,7 +523,9 @@ async def test_agent_state_persistence(mock_env_vars, mock_llm, mock_redis_clien
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_agent_with_token(mock_env_vars, mock_llm_factory, mock_redis_client):
+async def test_get_or_create_agent_with_token(
+    mock_env_vars, mock_llm_factory, mock_redis_client
+):
     """Test get_or_create_agent function with token"""
     token = jwt.encode(
         {

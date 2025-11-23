@@ -105,7 +105,9 @@ class PluginRegistry:
                 f"Unsupported modality: {modality}. Supported: {list(cls._processors.keys())}"
             )
         if name in cls._processors[modality]:
-            raise MultiModalException(f"Processor '{name}' already registered for {modality}.")
+            raise MultiModalException(
+                f"Processor '{name}' already registered for {modality}."
+            )
         cls._processors[modality][name] = processor_class
         logger.info(f"Registered {modality} processor: {name}")
 
@@ -151,7 +153,9 @@ class PluginRegistry:
             )
         processor_class = cls._processors[modality].get(name)
         if not processor_class:
-            raise ProviderNotAvailableError(f"No provider '{name}' for modality '{modality}'")
+            raise ProviderNotAvailableError(
+                f"No provider '{name}' for modality '{modality}'"
+            )
         try:
             return processor_class(config)
         except ValidationError as e:
@@ -185,8 +189,12 @@ class PluginRegistry:
 class DefaultImageProcessorConfig(BaseModel):
     """Configuration schema for DefaultImageProcessor."""
 
-    mock_min_latency_ms: int = Field(10, ge=0, description="Minimum mock latency in milliseconds")
-    mock_max_latency_ms: int = Field(100, ge=0, description="Maximum mock latency in milliseconds")
+    mock_min_latency_ms: int = Field(
+        10, ge=0, description="Minimum mock latency in milliseconds"
+    )
+    mock_max_latency_ms: int = Field(
+        100, ge=0, description="Maximum mock latency in milliseconds"
+    )
     max_size_mb: int = Field(10, ge=1, description="Maximum input size in megabytes")
 
 
@@ -225,7 +233,9 @@ class DefaultImageProcessor(ImageProcessor):
         try:
             self.config = DefaultImageProcessorConfig.model_validate(config)
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid configuration for DefaultImageProcessor: {e}") from e
+            raise ConfigurationError(
+                f"Invalid configuration for DefaultImageProcessor: {e}"
+            ) from e
 
         self.requests_total = get_or_create(
             Counter(
@@ -269,9 +279,12 @@ class DefaultImageProcessor(ImageProcessor):
                 )
 
             if isinstance(image_bytes, bytes) and not (
-                image_bytes.startswith(b"\xff\xd8") or image_bytes.startswith(b"\x89PNG")
+                image_bytes.startswith(b"\xff\xd8")
+                or image_bytes.startswith(b"\x89PNG")
             ):
-                raise InvalidInputError("Unsupported image format; only JPEG and PNG are supported")
+                raise InvalidInputError(
+                    "Unsupported image format; only JPEG and PNG are supported"
+                )
 
             latency = random.uniform(
                 self.config.mock_min_latency_ms / 1000,
@@ -293,14 +306,16 @@ class DefaultImageProcessor(ImageProcessor):
                 "caption": caption,
                 "size_bytes": len(image_bytes),
             }
-            summary = (
-                f"Image processed. OCR: '{processed_text[:50]}...', Caption: '{caption[:50]}...' "
+            summary = f"Image processed. OCR: '{processed_text[:50]}...', Caption: '{caption[:50]}...' "
+
+            logger.info(
+                f"[{op_id}] Image processing completed successfully. Summary: {summary}"
             )
 
-            logger.info(f"[{op_id}] Image processing completed successfully. Summary: {summary}")
-
             self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
 
             return ProcessingResult(
                 success=True,
@@ -316,7 +331,9 @@ class DefaultImageProcessor(ImageProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
@@ -324,7 +341,9 @@ class DefaultImageProcessor(ImageProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -348,7 +367,12 @@ class DefaultImageProcessor(ImageProcessor):
                 # Try to decode as base64
                 try:
                     # Remove any whitespace and newlines
-                    cleaned = data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                    cleaned = (
+                        data.strip()
+                        .replace("\n", "")
+                        .replace("\r", "")
+                        .replace(" ", "")
+                    )
                     # Add padding if needed
                     missing_padding = len(cleaned) % 4
                     if missing_padding:
@@ -383,7 +407,9 @@ class DefaultAudioProcessor(AudioProcessor):
         try:
             self.config = DefaultAudioProcessorConfig.model_validate(config)
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid configuration for DefaultAudioProcessor: {e}") from e
+            raise ConfigurationError(
+                f"Invalid configuration for DefaultAudioProcessor: {e}"
+            ) from e
 
         self.requests_total = get_or_create(
             Counter(
@@ -430,7 +456,9 @@ class DefaultAudioProcessor(AudioProcessor):
             if isinstance(audio_bytes, bytes) and not (
                 audio_bytes.startswith(b"RIFF") or audio_bytes.startswith(b"ID3")
             ):
-                raise InvalidInputError("Unsupported audio format; only WAV and MP3 are supported")
+                raise InvalidInputError(
+                    "Unsupported audio format; only WAV and MP3 are supported"
+                )
 
             latency = random.uniform(
                 self.config.mock_min_latency_ms / 1000,
@@ -452,10 +480,14 @@ class DefaultAudioProcessor(AudioProcessor):
             }
             summary = f"Audio processed. Transcript: '{transcription[:50]}...'"
 
-            logger.info(f"[{op_id}] Audio processing completed successfully. Summary: {summary}")
+            logger.info(
+                f"[{op_id}] Audio processing completed successfully. Summary: {summary}"
+            )
 
             self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
 
             return ProcessingResult(
                 success=True,
@@ -470,7 +502,9 @@ class DefaultAudioProcessor(AudioProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
@@ -478,7 +512,9 @@ class DefaultAudioProcessor(AudioProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -499,7 +535,12 @@ class DefaultAudioProcessor(AudioProcessor):
             else:
                 # Try to decode as base64
                 try:
-                    cleaned = data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                    cleaned = (
+                        data.strip()
+                        .replace("\n", "")
+                        .replace("\r", "")
+                        .replace(" ", "")
+                    )
                     return base64.b64decode(cleaned)
                 except Exception as e:
                     logger.error(f"Failed to base64 decode audio data: {e}")
@@ -531,7 +572,9 @@ class DefaultVideoProcessor(VideoProcessor):
         try:
             self.config = DefaultVideoProcessorConfig.model_validate(config)
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid configuration for DefaultVideoProcessor: {e}") from e
+            raise ConfigurationError(
+                f"Invalid configuration for DefaultVideoProcessor: {e}"
+            ) from e
 
         self.requests_total = get_or_create(
             Counter(
@@ -578,7 +621,9 @@ class DefaultVideoProcessor(VideoProcessor):
             if isinstance(video_bytes, bytes) and not (
                 b"ftyp" in video_bytes[:100] or video_bytes.startswith(b"AVI")
             ):
-                raise InvalidInputError("Unsupported video format; only MP4 and AVI are supported")
+                raise InvalidInputError(
+                    "Unsupported video format; only MP4 and AVI are supported"
+                )
 
             latency = random.uniform(
                 self.config.mock_min_latency_ms / 1000,
@@ -593,9 +638,7 @@ class DefaultVideoProcessor(VideoProcessor):
             )
 
             summary = f"A concise summary of the video content. (Video data starts with '{data_start}...')"
-            audio_transcription = (
-                f"Mock transcription from video audio. (Video data starts with '{data_start}...')"
-            )
+            audio_transcription = f"Mock transcription from video audio. (Video data starts with '{data_start}...')"
 
             result_data = {
                 "summary": summary,
@@ -609,7 +652,9 @@ class DefaultVideoProcessor(VideoProcessor):
             )
 
             self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
 
             return ProcessingResult(
                 success=True,
@@ -624,7 +669,9 @@ class DefaultVideoProcessor(VideoProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
@@ -632,7 +679,9 @@ class DefaultVideoProcessor(VideoProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -653,7 +702,12 @@ class DefaultVideoProcessor(VideoProcessor):
             else:
                 # Try to decode as base64
                 try:
-                    cleaned = data.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                    cleaned = (
+                        data.strip()
+                        .replace("\n", "")
+                        .replace("\r", "")
+                        .replace(" ", "")
+                    )
                     return base64.b64decode(cleaned)
                 except Exception as e:
                     logger.error(f"Failed to base64 decode video data: {e}")
@@ -685,7 +739,9 @@ class DefaultTextProcessor(TextProcessor):
         try:
             self.config = DefaultTextProcessorConfig.model_validate(config)
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid configuration for DefaultTextProcessor: {e}") from e
+            raise ConfigurationError(
+                f"Invalid configuration for DefaultTextProcessor: {e}"
+            ) from e
 
         self.requests_total = get_or_create(
             Counter(
@@ -743,7 +799,9 @@ class DefaultTextProcessor(TextProcessor):
             )
 
             self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
 
             return ProcessingResult(
                 success=True,
@@ -758,7 +816,9 @@ class DefaultTextProcessor(TextProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
@@ -766,7 +826,9 @@ class DefaultTextProcessor(TextProcessor):
                 exc_info=True,
             )
             self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(asyncio.get_event_loop().time() - start_time)
+            self.processing_latency_seconds.observe(
+                asyncio.get_event_loop().time() - start_time
+            )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",

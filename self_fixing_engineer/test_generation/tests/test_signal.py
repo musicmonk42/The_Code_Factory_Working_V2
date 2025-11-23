@@ -37,7 +37,9 @@ def test_signal_debounce(monkeypatch):
     fake_event = MagicMock()
     monkeypatch.setattr(signal_mod, "shutdown_event", fake_event)
     # Set the last signal time to now, so the next signal is debounced
-    monkeypatch.setattr(signal_mod, "_last_signal_at", {signal.SIGINT: time.monotonic()})
+    monkeypatch.setattr(
+        signal_mod, "_last_signal_at", {signal.SIGINT: time.monotonic()}
+    )
 
     # Use the full handler installation
     signal_mod.install_default_handlers(on_interrupt=fake_event.set)
@@ -85,10 +87,14 @@ def test_faulthandler_enabled(monkeypatch):
     # Patch the function where it is guaranteed to exist
     with patch("faulthandler.register", fake_register, create=True):
         # Use the full installer which sets up SIGUSR1
-        signal_mod.install_default_handlers(on_interrupt=lambda: None, signals=["SIGUSR1"])
+        signal_mod.install_default_handlers(
+            on_interrupt=lambda: None, signals=["SIGUSR1"]
+        )
 
     # Assert that register was called for SIGUSR1
-    was_called = any(call.args[0] == signal.SIGUSR1 for call in fake_register.call_args_list)
+    was_called = any(
+        call.args[0] == signal.SIGUSR1 for call in fake_register.call_args_list
+    )
     assert was_called, "faulthandler.register was not called with SIGUSR1"
 
 

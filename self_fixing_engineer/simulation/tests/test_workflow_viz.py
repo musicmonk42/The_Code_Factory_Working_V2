@@ -92,10 +92,15 @@ def mock_external_dependencies():
         mock_nx.nx_agraph.graphviz_layout.return_value = workflow_positions
 
         # Mock the retry decorator used in workflow_viz
-        with patch("workflow_viz.retry", side_effect=lambda **kwargs: lambda func: func):
+        with patch(
+            "workflow_viz.retry", side_effect=lambda **kwargs: lambda func: func
+        ):
             # Use a fresh Prometheus registry for each test
-            with patch("workflow_viz.PROMETHEUS_AVAILABLE", True), patch(
-                "workflow_viz.REGISTRY", new=CollectorRegistry(auto_describe=True)
+            with (
+                patch("workflow_viz.PROMETHEUS_AVAILABLE", True),
+                patch(
+                    "workflow_viz.REGISTRY", new=CollectorRegistry(auto_describe=True)
+                ),
             ):
 
                 # Patch matplotlib.pyplot if it exists
@@ -199,13 +204,17 @@ def test_scrub_secrets():
 
 
 @pytest.mark.asyncio
-async def test_render_workflow_viz_plotly_success(mock_external_dependencies, mock_result_data):
+async def test_render_workflow_viz_plotly_success(
+    mock_external_dependencies, mock_result_data
+):
     """
     Test successful rendering with the Plotly backend.
     """
-    with patch("workflow_viz.PLOTLY_AVAILABLE", True), patch("workflow_viz.go") as mock_go, patch(
-        "workflow_viz.st"
-    ) as mock_st:
+    with (
+        patch("workflow_viz.PLOTLY_AVAILABLE", True),
+        patch("workflow_viz.go") as mock_go,
+        patch("workflow_viz.st") as mock_st,
+    ):
 
         # Mock plotly graph objects
         mock_figure = MagicMock()
@@ -220,7 +229,9 @@ async def test_render_workflow_viz_plotly_success(mock_external_dependencies, mo
         # Record initial metric
         initial_renders = VIZ_RENDER_TOTAL.labels(backend="plotly")._value.get()
 
-        fig = render_workflow_viz(mock_result_data, prefer_plotly=True, dashboard_api=api)
+        fig = render_workflow_viz(
+            mock_result_data, prefer_plotly=True, dashboard_api=api
+        )
 
         assert fig is not None
         # Verify that the figure was created
@@ -229,7 +240,10 @@ async def test_render_workflow_viz_plotly_success(mock_external_dependencies, mo
         mock_st.plotly_chart.assert_called_once()
 
         # Check that metrics increased
-        assert VIZ_RENDER_TOTAL.labels(backend="plotly")._value.get() == initial_renders + 1
+        assert (
+            VIZ_RENDER_TOTAL.labels(backend="plotly")._value.get()
+            == initial_renders + 1
+        )
 
 
 @pytest.mark.asyncio
@@ -239,9 +253,11 @@ async def test_render_workflow_viz_matplotlib_fallback(
     """
     Test that the system falls back to Matplotlib if Plotly rendering fails.
     """
-    with patch("workflow_viz.PLOTLY_AVAILABLE", True), patch(
-        "workflow_viz.MATPLOTLIB_AVAILABLE", True
-    ), patch("workflow_viz.st") as mock_st:
+    with (
+        patch("workflow_viz.PLOTLY_AVAILABLE", True),
+        patch("workflow_viz.MATPLOTLIB_AVAILABLE", True),
+        patch("workflow_viz.st") as mock_st,
+    ):
 
         # Mock the button to return False so it doesn't try to export
         mock_st.button.return_value = False
@@ -253,19 +269,28 @@ async def test_render_workflow_viz_matplotlib_fallback(
         initial_plotly_errors = VIZ_RENDER_ERRORS.labels(
             backend="plotly", error_type="runtime_error"
         )._value.get()
-        initial_matplotlib_renders = VIZ_RENDER_TOTAL.labels(backend="matplotlib")._value.get()
+        initial_matplotlib_renders = VIZ_RENDER_TOTAL.labels(
+            backend="matplotlib"
+        )._value.get()
 
         # Make Plotly fail by patching go.Figure to raise an exception
         with patch("workflow_viz.go") as mock_go_fail:
             mock_go_fail.Figure.side_effect = Exception("Plotly failed")
             mock_go_fail.Scatter.side_effect = Exception("Plotly failed")
 
-            fig = render_workflow_viz(mock_result_data, prefer_plotly=True, dashboard_api=api)
+            fig = render_workflow_viz(
+                mock_result_data, prefer_plotly=True, dashboard_api=api
+            )
 
         # Should have tried plotly and failed (check deltas)
-        assert VIZ_RENDER_TOTAL.labels(backend="plotly")._value.get() == initial_plotly_renders + 1
         assert (
-            VIZ_RENDER_ERRORS.labels(backend="plotly", error_type="runtime_error")._value.get()
+            VIZ_RENDER_TOTAL.labels(backend="plotly")._value.get()
+            == initial_plotly_renders + 1
+        )
+        assert (
+            VIZ_RENDER_ERRORS.labels(
+                backend="plotly", error_type="runtime_error"
+            )._value.get()
             == initial_plotly_errors + 1
         )
 
@@ -287,11 +312,14 @@ async def test_batch_export_panels_success(
     Test that batch export correctly renders and saves all panels.
     """
     # Test with our imported batch_export_panels (either from viz or our dummy)
-    if "viz" in sys.modules and hasattr(sys.modules["viz"], "get_registered_viz_panels"):
+    if "viz" in sys.modules and hasattr(
+        sys.modules["viz"], "get_registered_viz_panels"
+    ):
         # If viz module exists and has the function, test it properly
-        with patch("viz.get_registered_viz_panels") as mock_get_panels, patch(
-            "builtins.open", new_callable=mock_open
-        ) as _mock_file_open:
+        with (
+            patch("viz.get_registered_viz_panels") as mock_get_panels,
+            patch("builtins.open", new_callable=mock_open) as _mock_file_open,
+        ):
 
             mock_get_panels.return_value = {
                 "flakiness_trend": {
@@ -374,20 +402,26 @@ def test_render_workflow_viz_no_data(mock_external_dependencies):
         result = render_workflow_viz({}, dashboard_api=api)
 
         assert result is None
-        mock_st.warning.assert_called_once_with("No result data available to visualize.")
+        mock_st.warning.assert_called_once_with(
+            "No result data available to visualize."
+        )
 
         # Check that error count increased by 1
         assert (
-            VIZ_RENDER_ERRORS.labels(backend="streamlit", error_type="no_data")._value.get()
+            VIZ_RENDER_ERRORS.labels(
+                backend="streamlit", error_type="no_data"
+            )._value.get()
             == initial_errors + 1
         )
 
 
 def test_render_workflow_viz_no_libraries():
     """Test rendering when no visualization libraries are available."""
-    with patch("workflow_viz.PLOTLY_AVAILABLE", False), patch(
-        "workflow_viz.MATPLOTLIB_AVAILABLE", False
-    ), patch("workflow_viz.st") as mock_st:
+    with (
+        patch("workflow_viz.PLOTLY_AVAILABLE", False),
+        patch("workflow_viz.MATPLOTLIB_AVAILABLE", False),
+        patch("workflow_viz.st") as mock_st,
+    ):
 
         api = DashboardAPI(backend="streamlit")
 

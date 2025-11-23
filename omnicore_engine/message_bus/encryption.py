@@ -21,7 +21,9 @@ class FernetEncryption:
                                 The first key in the list is the primary key for encryption.
         """
         if not keys or not all(keys):
-            raise ValueError("At least one encryption key is required, and none can be empty.")
+            raise ValueError(
+                "At least one encryption key is required, and none can be empty."
+            )
 
         fernets = [Fernet(key) for key in keys]
         self.multi_fernet = MultiFernet(fernets)

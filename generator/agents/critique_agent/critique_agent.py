@@ -29,7 +29,9 @@ try:
     from runner.runner_core import (
         run_tests as runner_run_tests,  # Central test runner for safety checks
     )
-    from runner.runner_file_utils import save_files_to_output  # Use canonical file saver
+    from runner.runner_file_utils import (
+        save_files_to_output,
+    )  # Use canonical file saver
     from runner.runner_logging import log_audit_event
     from runner.runner_security_utils import (  # Central security scan utility
         scan_for_vulnerabilities,
@@ -248,7 +250,9 @@ class CritiqueConfig(BaseModel):
 
         if langs and not sanitized_langs:
             # Only invalid languages were provided: fail fast.
-            raise ValueError("No valid languages specified in CritiqueConfig.languages.")
+            raise ValueError(
+                "No valid languages specified in CritiqueConfig.languages."
+            )
         if sanitized_langs:
             values["languages"] = sanitized_langs
         else:
@@ -268,7 +272,9 @@ class CritiqueConfig(BaseModel):
         steps = values.get("pipeline_steps") or []
         if not isinstance(steps, list):
             raise ValueError("pipeline_steps must be a list of strings")
-        sanitized_steps = [s for s in steps if isinstance(s, str) and s in allowed_steps]
+        sanitized_steps = [
+            s for s in steps if isinstance(s, str) and s in allowed_steps
+        ]
 
         if steps and not sanitized_steps:
             # Caller attempted only invalid steps: hard fail.
@@ -332,7 +338,9 @@ async def call_llm_for_critique(
             else:
                 return parsed_content
         except json.JSONDecodeError:
-            logger.warning(f"LLM response not valid JSON for {step_name}. Returning raw content.")
+            logger.warning(
+                f"LLM response not valid JSON for {step_name}. Returning raw content."
+            )
             return {
                 "content": content,
                 "error": "LLM output was not valid JSON.",
@@ -543,13 +551,17 @@ class LanguageCritiquePlugin(ABC):
 
             # Try line-delimited JSON
             lines = [line.strip() for line in stdout_dec.splitlines() if line.strip()]
-            if lines and all(line.startswith("{") and line.endswith("}") for line in lines):
+            if lines and all(
+                line.startswith("{") and line.endswith("}") for line in lines
+            ):
                 parsed_lines: List[Any] = []
                 for line in lines:
                     try:
                         parsed_lines.append(json.loads(line))
                     except json.JSONDecodeError:
-                        logger.warning(f"Skipping malformed JSON line from {tool_name}: {line}")
+                        logger.warning(
+                            f"Skipping malformed JSON line from {tool_name}: {line}"
+                        )
                 if parsed_lines:
                     return True, {
                         "line_delimited_json_results": parsed_lines,
@@ -821,7 +833,9 @@ def get_plugin(language: str, config: CritiqueConfig) -> LanguageCritiquePlugin:
     lang = (language or "python").lower()
     plugin_cls = _PLUGINS.get(lang)
     if not plugin_cls:
-        logger.error(f"No critique plugin for {lang}. Available: {list(_PLUGINS.keys())}")
+        logger.error(
+            f"No critique plugin for {lang}. Available: {list(_PLUGINS.keys())}"
+        )
         raise ValueError(f"Unsupported language: {lang}")
     return plugin_cls(config)
 
@@ -852,13 +866,17 @@ def detect_language(code_files: Dict[str, str]) -> str:
         return most_common_lang
 
     logger.warning(
-        f"Detected '{most_common_lang}' but no plugin registered; " f"defaulting to 'python'."
+        f"Detected '{most_common_lang}' but no plugin registered; "
+        f"defaulting to 'python'."
     )
     return "python"
 
 
 def generate_provenance_id() -> str:
-    return f"{uuid.uuid4().hex}-" f"{hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:12]}"
+    return (
+        f"{uuid.uuid4().hex}-"
+        f"{hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:12]}"
+    )
 
 
 async def resilient_step(
@@ -981,7 +999,9 @@ def chaos_injection(step_name: str, config: CritiqueConfig) -> None:
             raise RuntimeError(f"Simulated chaos failure during {step_name}.")
         if r < 0.3:
             delay = random.uniform(0.5, 2.0)
-            logger.warning(f"CHAOS INJECTION: Adding {delay:.2f}s latency to {step_name}.")
+            logger.warning(
+                f"CHAOS INJECTION: Adding {delay:.2f}s latency to {step_name}."
+            )
             time.sleep(delay)
     elif config.enable_chaos_injection:
         logger.warning(
@@ -1043,7 +1063,9 @@ async def orchestrate_critique_pipeline(
         if (
             not isinstance(code_files, dict)
             or not code_files
-            or not all(isinstance(k, str) and isinstance(v, str) for k, v in code_files.items())
+            or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in code_files.items()
+            )
         ):
             CRITIQUE_ERRORS.labels(
                 "orchestrate",
@@ -1051,7 +1073,8 @@ async def orchestrate_critique_pipeline(
                 "none",
             ).inc()
             raise ValueError(
-                "code_files must be a non-empty dictionary with " "string keys and values."
+                "code_files must be a non-empty dictionary with "
+                "string keys and values."
             )
 
         if test_files:
@@ -1063,7 +1086,9 @@ async def orchestrate_critique_pipeline(
                     "InvalidInput",
                     "none",
                 ).inc()
-                raise ValueError("test_files must be a dictionary with string keys and values.")
+                raise ValueError(
+                    "test_files must be a dictionary with string keys and values."
+                )
 
         # --- Config validation ---
         # Removed redundant CritiqueConfig instantiation.
@@ -1233,7 +1258,9 @@ async def orchestrate_critique_pipeline(
             # --- Sequential: Semantic critique ---
             if "semantic" in config.pipeline_steps:
                 provenance_id = generate_provenance_id()
-                results["provenance_chain"].append({"step": "semantic", "id": provenance_id})
+                results["provenance_chain"].append(
+                    {"step": "semantic", "id": provenance_id}
+                )
 
                 try:
                     prompt = await build_semantic_critique_prompt(
@@ -1303,9 +1330,12 @@ async def orchestrate_critique_pipeline(
                     logger.info("No fixes suggested, skipping fix step.")
                     results["fixes_applied"] = False
                 elif not all(
-                    isinstance(k, str) and isinstance(v, list) for k, v in fixes_suggested.items()
+                    isinstance(k, str) and isinstance(v, list)
+                    for k, v in fixes_suggested.items()
                 ):
-                    logger.warning("Invalid format for fixes_suggested, skipping fix step.")
+                    logger.warning(
+                        "Invalid format for fixes_suggested, skipping fix step."
+                    )
                     results["fix_error"] = "Invalid fixes_suggested format"
                     results["fixes_applied"] = False
                 else:

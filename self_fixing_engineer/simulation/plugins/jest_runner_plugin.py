@@ -83,7 +83,9 @@ def _is_path_under(base: Path, child: Path) -> bool:
     try:
         base_res = base.resolve()
         child_res = child.resolve()
-        return child_res == base_res or str(child_res).startswith(str(base_res) + os.sep)
+        return child_res == base_res or str(child_res).startswith(
+            str(base_res) + os.sep
+        )
     except Exception:
         return False
 
@@ -123,7 +125,9 @@ def _copytree_compat(src: Path, dst: Path) -> None:
                 shutil.copy2(Path(root) / f, target_dir / f)
 
 
-async def _detect_package_manager() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+async def _detect_package_manager() -> (
+    Tuple[Optional[str], Optional[str], Optional[str]]
+):
     """
     Detect available Node.js package managers in PATH.
     Returns (npx_path, npm_path, yarn_path).
@@ -143,13 +147,15 @@ async def _get_package_version(cwd: str, package: str) -> Optional[str]:
         try:
             with open(package_json_path, "r", encoding="utf-8") as f:
                 package_json = json.load(f)
-            version = package_json.get("devDependencies", {}).get(package) or package_json.get(
-                "dependencies", {}
-            ).get(package)
+            version = package_json.get("devDependencies", {}).get(
+                package
+            ) or package_json.get("dependencies", {}).get(package)
             if version:
                 return str(version).lstrip("^~=<>")
         except Exception as e:
-            logger.debug(f"Could not parse package.json for {package} version in {cwd}: {e}")
+            logger.debug(
+                f"Could not parse package.json for {package} version in {cwd}: {e}"
+            )
 
     if package == "jest":
         try:
@@ -231,7 +237,9 @@ async def _install_packages(
         logger.error(error_msg)
         return False, error_msg
 
-    logger.info(f"Installing packages using {manager_name}: {' '.join(install_command)} in {cwd}")
+    logger.info(
+        f"Installing packages using {manager_name}: {' '.join(install_command)} in {cwd}"
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
             *install_command,
@@ -282,7 +290,9 @@ async def plugin_health() -> Dict[str, Any]:
         details.append(f"yarn detected: {yarn_path}")
     else:
         status = "degraded"
-        details.append("npm or yarn not found in PATH. Package installation for Jest may fail.")
+        details.append(
+            "npm or yarn not found in PATH. Package installation for Jest may fail."
+        )
 
     node_path = await _which("node")
     if node_path:
@@ -308,7 +318,9 @@ async def plugin_health() -> Dict[str, Any]:
     if jest_version:
         details.append(f"Jest detected in project: version {jest_version}")
     else:
-        details.append("Jest not detected in project package.json; version check failed.")
+        details.append(
+            "Jest not detected in project package.json; version check failed."
+        )
 
     ts_jest_version = await _get_package_version(project_root_env, "ts-jest")
     if ts_jest_version:
@@ -345,7 +357,9 @@ async def run_jest_tests(
     project_root_path = Path(project_root).resolve()
     full_test_file_path = (project_root_path / test_file_path).resolve()
     full_target_path = (project_root_path / target_identifier).resolve()
-    full_coverage_report_path = (project_root_path / temp_coverage_report_path_relative).resolve()
+    full_coverage_report_path = (
+        project_root_path / temp_coverage_report_path_relative
+    ).resolve()
 
     result: Dict[str, Any] = {
         "success": False,
@@ -402,7 +416,8 @@ async def run_jest_tests(
     # Determine Jest project root, bounded to project_root
     start_dir = full_test_file_path.parent
     jest_project_root_path = (
-        _bound_search_for_package_json(start_dir, project_root_path) or project_root_path
+        _bound_search_for_package_json(start_dir, project_root_path)
+        or project_root_path
     )
 
     # If no package.json within project_root or node_modules missing, set up a temp Jest environment
@@ -418,7 +433,9 @@ async def run_jest_tests(
         using_temp_project = True
         artifacts_dir = project_root_path / "atco_artifacts"
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir_obj = tempfile.TemporaryDirectory(prefix="jest_run_", dir=str(artifacts_dir))
+        temp_dir_obj = tempfile.TemporaryDirectory(
+            prefix="jest_run_", dir=str(artifacts_dir)
+        )
         temp_jest_dir = Path(temp_dir_obj.name)
         result["temp_dirs_used"].append(str(temp_jest_dir))
 
@@ -521,7 +538,9 @@ async def run_jest_tests(
         )
 
         # Install dependencies in temp project
-        success, msg = await _install_packages(str(temp_jest_dir), [], npm_path, yarn_path)
+        success, msg = await _install_packages(
+            str(temp_jest_dir), [], npm_path, yarn_path
+        )
         if not success:
             result["reason"] = f"Failed to setup Jest environment: {msg}"
             # Cleanup temp dir via context manager in finally
@@ -557,13 +576,18 @@ async def run_jest_tests(
 
     # Prepare JSON results output file path inside jest project root
     jest_results_json_path = jest_project_root_path / "jest-results.json"
-    jest_results_json_cli = str(jest_results_json_path).replace("\\", "/")  # normalize for CLI
+    jest_results_json_cli = str(jest_results_json_path).replace(
+        "\\", "/"
+    )  # normalize for CLI
 
     # JUnit reporter availability: only include when temp project or when present
     use_junit_reporter = (
-        using_temp_project or (jest_project_root_path / "node_modules" / "jest-junit").exists()
+        using_temp_project
+        or (jest_project_root_path / "node_modules" / "jest-junit").exists()
     )
-    junit_xml_path = (jest_project_root_path / "jest-junit.xml") if use_junit_reporter else None
+    junit_xml_path = (
+        (jest_project_root_path / "jest-junit.xml") if use_junit_reporter else None
+    )
 
     # Build Jest command
     npx = npx_path
@@ -586,9 +610,9 @@ async def run_jest_tests(
 
     # Collect coverage from target if available
     if collect_coverage_from:
-        rel_target_for_cli = str(collect_coverage_from.relative_to(jest_project_root_path)).replace(
-            "\\", "/"
-        )
+        rel_target_for_cli = str(
+            collect_coverage_from.relative_to(jest_project_root_path)
+        ).replace("\\", "/")
         cmd.append(f"--collectCoverageFrom={rel_target_for_cli}")
 
     # Add --config if a jest.config.js exists in project root
@@ -609,7 +633,9 @@ async def run_jest_tests(
         (project_root_path / log_artifact_rel).resolve() if log_artifact_rel else None
     )
     if log_artifact_path and not _is_path_under(project_root_path, log_artifact_path):
-        logger.error(f"Invalid log artifact path outside project_root: {log_artifact_path}")
+        logger.error(
+            f"Invalid log artifact path outside project_root: {log_artifact_path}"
+        )
         log_artifact_path = None
 
     logger.info(f"Running Jest command: {' '.join(cmd)} in {jest_project_root_path}")
@@ -635,7 +661,9 @@ async def run_jest_tests(
                 proc.communicate(), timeout=timeout_seconds
             )
         except asyncio.TimeoutError:
-            logger.warning(f"Jest process timed out after {timeout_seconds}s; terminating...")
+            logger.warning(
+                f"Jest process timed out after {timeout_seconds}s; terminating..."
+            )
             if proc.returncode is None:
                 try:
                     proc.terminate()
@@ -661,7 +689,9 @@ async def run_jest_tests(
                 log_artifact_path.parent.mkdir(parents=True, exist_ok=True)
                 log_artifact_path.write_text(full_log, encoding="utf-8")
             except Exception as e:
-                logger.warning(f"Failed to write log artifact to {log_artifact_path}: {e}")
+                logger.warning(
+                    f"Failed to write log artifact to {log_artifact_path}: {e}"
+                )
 
         # Cap logs in result
         result["raw_log"] = _cap_text_tail(full_log, log_max_bytes)
@@ -703,7 +733,9 @@ async def run_jest_tests(
                 )
 
         # Coverage extraction
-        coverage_final_json_path = jest_project_root_path / "coverage" / "coverage-final.json"
+        coverage_final_json_path = (
+            jest_project_root_path / "coverage" / "coverage-final.json"
+        )
         if coverage_final_json_path.exists():
             try:
                 with open(coverage_final_json_path, "r", encoding="utf-8") as f:
@@ -747,9 +779,16 @@ async def run_jest_tests(
         # Save coverage report JSON (either coverage-final.json or coverageMap)
         try:
             full_coverage_report_path.parent.mkdir(parents=True, exist_ok=True)
-            if coverage_final_json_path.exists() and result["coverage_increase_percent"] >= 0.0:
-                shutil.copyfile(str(coverage_final_json_path), str(full_coverage_report_path))
-                logger.info(f"Jest coverage report saved to {full_coverage_report_path}")
+            if (
+                coverage_final_json_path.exists()
+                and result["coverage_increase_percent"] >= 0.0
+            ):
+                shutil.copyfile(
+                    str(coverage_final_json_path), str(full_coverage_report_path)
+                )
+                logger.info(
+                    f"Jest coverage report saved to {full_coverage_report_path}"
+                )
             elif (
                 jest_json_output
                 and isinstance(jest_json_output, dict)
@@ -761,7 +800,9 @@ async def run_jest_tests(
             else:
                 logger.warning("No coverage report data available to save.")
         except Exception as e:
-            logger.warning(f"Failed to write coverage JSON to {full_coverage_report_path}: {e}")
+            logger.warning(
+                f"Failed to write coverage JSON to {full_coverage_report_path}: {e}"
+            )
             # keep going
 
     except FileNotFoundError:
@@ -826,7 +867,9 @@ def register_plugin_entrypoints(register_func: Callable):
 
 if __name__ == "__main__":
 
-    async def _mock_register_test_runner(lang_or_framework: str, runner_info: Dict[str, Any]):
+    async def _mock_register_test_runner(
+        lang_or_framework: str, runner_info: Dict[str, Any]
+    ):
         print(f"Mocked registration for {lang_or_framework}: {runner_info}")
 
     _mock_runners = {}
@@ -855,7 +898,9 @@ if __name__ == "__main__":
             # Create a dummy JS test file (preserve directory)
             dummy_test_path_relative = os.path.join("tests", "sum.test.js")
             os.makedirs(os.path.join(temp_dir, "tests"), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_test_path_relative), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(temp_dir, dummy_test_path_relative), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     """
                     const sum = require('../src/sum');
@@ -883,7 +928,9 @@ if __name__ == "__main__":
                 extra_jest_args=["--verbose"],
                 timeout_seconds=120,
                 log_max_bytes=64_000,
-                log_artifact_path_relative=os.path.join("atco_artifacts", "logs", "jest_run.log"),
+                log_artifact_path_relative=os.path.join(
+                    "atco_artifacts", "logs", "jest_run.log"
+                ),
             )
 
             print(f"\nTest Result: {'PASS' if res['success'] else 'FAIL'}")
@@ -906,12 +953,16 @@ if __name__ == "__main__":
                 "w",
                 encoding="utf-8",
             ) as f:
-                f.write("export function sum(a: number, b: number): number { return a + b; }")
+                f.write(
+                    "export function sum(a: number, b: number): number { return a + b; }"
+                )
 
             # Create a dummy TS test file
             dummy_test_path_relative = os.path.join("tests", "sum.test.ts")
             os.makedirs(os.path.join(temp_dir, "tests"), exist_ok=True)
-            with open(os.path.join(temp_dir, "tests", "sum.test.ts"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(temp_dir, "tests", "sum.test.ts"), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     """
                     import { sum } from '../src/sum';

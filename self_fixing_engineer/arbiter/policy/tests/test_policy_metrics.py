@@ -60,8 +60,12 @@ def mock_config(monkeypatch):
 
 
 def test_counter_idempotency():
-    c1 = get_or_create_metric(Counter, "test_counter_idem", "Idempotent counter", ("label1",))
-    c2 = get_or_create_metric(Counter, "test_counter_idem", "Idempotent counter", ("label1",))
+    c1 = get_or_create_metric(
+        Counter, "test_counter_idem", "Idempotent counter", ("label1",)
+    )
+    c2 = get_or_create_metric(
+        Counter, "test_counter_idem", "Idempotent counter", ("label1",)
+    )
     assert c1 is c2
     c1.labels(label1="foo").inc()
     c2.labels(label1="foo").inc()
@@ -98,8 +102,12 @@ def test_histogram_buckets_and_idempotency():
 
 
 def test_summary_idempotency():
-    s1 = get_or_create_metric(Summary, "test_summary_idem", "Idempotent summary", ("label4",))
-    s2 = get_or_create_metric(Summary, "test_summary_idem", "Idempotent summary", ("label4",))
+    s1 = get_or_create_metric(
+        Summary, "test_summary_idem", "Idempotent summary", ("label4",)
+    )
+    s2 = get_or_create_metric(
+        Summary, "test_summary_idem", "Idempotent summary", ("label4",)
+    )
     assert s1 is s2
     s1.labels(label4="qux").observe(0.5)
     s2.labels(label4="qux").observe(0.5)
@@ -137,14 +145,18 @@ def test_dynamic_compliance_metrics_exist(mock_config):
     COMPLIANCE_CONTROL_ACTIONS_TOTAL.labels(
         control_id="FAKE-1", result="passed", action_type="auto_learn"
     ).inc()
-    COMPLIANCE_VIOLATIONS_TOTAL.labels(control_id="FAKE-1", violation_type="missing").inc()
+    COMPLIANCE_VIOLATIONS_TOTAL.labels(
+        control_id="FAKE-1", violation_type="missing"
+    ).inc()
 
 
 ########## Label Cardinality and Value Correctness ##########
 
 
 def test_metric_label_cardinality():
-    c = get_or_create_metric(Counter, "test_label_cardinality", "Cardinality test", ("a",))
+    c = get_or_create_metric(
+        Counter, "test_label_cardinality", "Cardinality test", ("a",)
+    )
     for i in range(5):
         c.labels(a=f"v{i}").inc()
     # Should have 5 different series
@@ -162,7 +174,9 @@ def test_invalid_label_raises():
 
 def test_metrics_thread_safety():
     # Register and update metrics in multiple threads
-    c = get_or_create_metric(Counter, "test_concurrent_counter", "Threaded counter", ("x",))
+    c = get_or_create_metric(
+        Counter, "test_concurrent_counter", "Threaded counter", ("x",)
+    )
 
     def worker(val):
         for _ in range(100):
@@ -242,7 +256,9 @@ def test_duplicate_registration_does_not_crash():
 def test_bad_buckets_graceful():
     # Non-monotonic buckets should raise
     with pytest.raises(ValueError):
-        get_or_create_metric(Histogram, "test_bad_buckets", "Bad buckets", ("bar",), buckets=(5, 1))
+        get_or_create_metric(
+            Histogram, "test_bad_buckets", "Bad buckets", ("bar",), buckets=(5, 1)
+        )
 
 
 ########## Coverage: All Public Symbols ##########
@@ -265,7 +281,9 @@ def test_public_symbols_present(mock_config):
 
 def test_metric_updates_observable():
     # Counter
-    c = get_or_create_metric(Counter, "test_observable_counter", "Observable counter", ("x",))
+    c = get_or_create_metric(
+        Counter, "test_observable_counter", "Observable counter", ("x",)
+    )
     c.labels(x="foo").inc(3)
     assert c.labels(x="foo")._value.get() == 3
     # Gauge

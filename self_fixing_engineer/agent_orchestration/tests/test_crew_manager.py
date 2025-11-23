@@ -236,7 +236,9 @@ async def test_add_agent_rbac_failure(crew_manager):
     """Test RBAC failure for add_agent."""
     crew_manager._check_rbac = AsyncMock(return_value=False)
     with pytest.raises(PermissionError):
-        await crew_manager.add_agent("test_agent", TestAgent, caller_role="unauthorized")
+        await crew_manager.add_agent(
+            "test_agent", TestAgent, caller_role="unauthorized"
+        )
     crew_manager._check_rbac = AsyncMock(return_value=True)
 
 
@@ -291,7 +293,9 @@ async def test_start_agent_resource_error(crew_manager, monkeypatch):
         # Check that the agent is marked as FAILED
         assert crew_manager.agents["test_agent"]["status"] == "FAILED"
         assert len(crew_manager.agents["test_agent"]["failures"]) > 0
-        assert "High CPU usage" in str(crew_manager.agents["test_agent"]["failures"][-1]["error"])
+        assert "High CPU usage" in str(
+            crew_manager.agents["test_agent"]["failures"][-1]["error"]
+        )
     else:
         pytest.skip("psutil not available")
 

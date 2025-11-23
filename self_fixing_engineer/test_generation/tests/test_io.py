@@ -77,7 +77,9 @@ async def test_auto_compress_when_threshold_exceeded(temp_dir):
     big_entry = {"data": "x" * (io_utils_mod.FEEDBACK_COMPRESS_BYTES + 100)}
 
     # Force compression AND bypass redaction so the payload is preserved
-    with patch("test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x):
+    with patch(
+        "test_generation.gen_agent.io_utils.redact_sensitive", side_effect=lambda x: x
+    ):
         await io_utils_mod.append_to_feedback_log(
             str(log_path),
             big_entry,
@@ -129,7 +131,10 @@ async def test_no_prometheus_duplicates(temp_dir):
             await io_utils_mod.append_to_feedback_log(str(log_path), {})
 
             # The metric proxy should be a real metric now, not a dummy
-            from test_generation.gen_agent.io_utils import _NoopMetric, io_write_duration
+            from test_generation.gen_agent.io_utils import (
+                _NoopMetric,
+                io_write_duration,
+            )
 
             assert not isinstance(io_write_duration, _NoopMetric)
     finally:

@@ -188,15 +188,21 @@ def test_get_panels_for_role():
     """Test role-based panel filtering."""
 
     # Register panels with different roles
-    @viz.register_viz_panel(panel_id="test_role_admin", title="Admin Panel", roles=["admin"])
+    @viz.register_viz_panel(
+        panel_id="test_role_admin", title="Admin Panel", roles=["admin"]
+    )
     def admin_panel():
         pass
 
-    @viz.register_viz_panel(panel_id="test_role_user", title="User Panel", roles=["user", "admin"])
+    @viz.register_viz_panel(
+        panel_id="test_role_user", title="User Panel", roles=["user", "admin"]
+    )
     def user_panel():
         pass
 
-    @viz.register_viz_panel(panel_id="test_role_public", title="Public Panel", roles=None)
+    @viz.register_viz_panel(
+        panel_id="test_role_public", title="Public Panel", roles=None
+    )
     def public_panel():
         pass
 
@@ -249,7 +255,9 @@ async def test_batch_export_panels(mock_matplotlib, mock_filesystem):
     try:
         with patch.object(viz.CONFIG, "default_plot_format", "png"):
             with patch.object(viz.CONFIG, "redis_cache_url", None):
-                result = await batch_export_panels(panel_ids=["test_export"], format="png")
+                result = await batch_export_panels(
+                    panel_ids=["test_export"], format="png"
+                )
 
                 assert "test_export" in result
                 assert result["test_export"] is not None
@@ -296,7 +304,9 @@ def test_post_plot_hooks():
 
     mock_plot = MagicMock()
     test_metadata = {"original": "metadata"}
-    result_plot, result_metadata = viz.post_plot_hook("plotly", mock_plot, test_metadata)
+    result_plot, result_metadata = viz.post_plot_hook(
+        "plotly", mock_plot, test_metadata
+    )
 
     assert result_plot == mock_plot
     assert result_metadata["original"] == "metadata"

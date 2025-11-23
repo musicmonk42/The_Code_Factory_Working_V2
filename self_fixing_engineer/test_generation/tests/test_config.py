@@ -54,7 +54,10 @@ class TestLoadConfig:
     def test_missing_file_uses_defaults_and_sets_globals(self, project: pathlib.Path):
         frozen = config.load_config(str(project), "atco_config.json")
         assert isinstance(frozen, Mapping)
-        assert frozen["max_parallel_generation"] == config.DEFAULT_CONFIG["max_parallel_generation"]
+        assert (
+            frozen["max_parallel_generation"]
+            == config.DEFAULT_CONFIG["max_parallel_generation"]
+        )
         assert config.PROJECT_ROOT == str(project.resolve())
         assert isinstance(frozen, MappingProxyType)
 
@@ -91,7 +94,9 @@ class TestLoadConfig:
         sys.platform == "win32",
         reason="Creating symlinks requires special privileges on Windows",
     )
-    def test_symlink_escaping_is_blocked(self, project: pathlib.Path, tmp_path: pathlib.Path):
+    def test_symlink_escaping_is_blocked(
+        self, project: pathlib.Path, tmp_path: pathlib.Path
+    ):
         outside = tmp_path / "outside.json"
         outside.write_text("{}", encoding="utf-8")
         sneaky = project / "link.json"
@@ -121,7 +126,9 @@ class TestLoadConfig:
 
     def test_immutability_and_independence_from_globals(self, project: pathlib.Path):
         cfg_path = project / "atco_config.json"
-        cfg_path.write_text(json.dumps({"jira_integration": {"enabled": True}}), encoding="utf-8")
+        cfg_path.write_text(
+            json.dumps({"jira_integration": {"enabled": True}}), encoding="utf-8"
+        )
         frozen = config.load_config(str(project), str(cfg_path))
         with pytest.raises(TypeError):
             frozen["new"] = 1  # type: ignore[index]
@@ -132,7 +139,9 @@ class TestLoadConfig:
         config.CONFIG["jira_integration"]["enabled"] = False
         assert frozen["jira_integration"]["enabled"] is True
 
-    def test_coerce_critical_dicts_when_wrong_types(self, project: pathlib.Path, caplog):
+    def test_coerce_critical_dicts_when_wrong_types(
+        self, project: pathlib.Path, caplog
+    ):
         cfg_path = project / "atco_config.json"
         cfg_path.write_text(
             json.dumps(
@@ -195,7 +204,8 @@ class TestRegressionGuards:
         s = json.dumps(config.DEFAULT_CONFIG)
         roundtrip = json.loads(s)
         assert (
-            roundtrip["max_parallel_generation"] == config.DEFAULT_CONFIG["max_parallel_generation"]
+            roundtrip["max_parallel_generation"]
+            == config.DEFAULT_CONFIG["max_parallel_generation"]
         )
 
 
@@ -203,7 +213,9 @@ class TestRegressionGuards:
 # Property-style fuzzing (optional, cheap)
 # -----------------------------
 @pytest.mark.parametrize("bad_value", [None, 0, 1.23, "x", [1, 2, 3]])
-def test_deep_merge_resilience_on_malformed_overrides(project: pathlib.Path, bad_value, caplog):
+def test_deep_merge_resilience_on_malformed_overrides(
+    project: pathlib.Path, bad_value, caplog
+):
     cfg_path = project / "atco_config.json"
     # Place malformed types under keys that expect dict/list
     cfg_path.write_text(

@@ -30,7 +30,9 @@ from .docgen_response_validator import (
     ValidationReportResponse,
     ValidationRequest,
 )
-from .docgen_response_validator import app as validator_api_app  # Export the FastAPI app
+from .docgen_response_validator import (
+    app as validator_api_app,
+)  # Export the FastAPI app
 
 # Re-export dependencies that tests need to patch
 # These are imported in docgen_agent.py and need to be accessible for mocking

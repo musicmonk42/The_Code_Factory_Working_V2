@@ -10,11 +10,17 @@ import pytest_asyncio
 import redis.asyncio as aioredis
 from aiokafka import AIOKafkaProducer
 from arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
-from arbiter.meta_learning_orchestrator.clients import AgentConfigurationService, MLPlatformClient
+from arbiter.meta_learning_orchestrator.clients import (
+    AgentConfigurationService,
+    MLPlatformClient,
+)
 from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
 
 # Import metrics
-from arbiter.meta_learning_orchestrator.metrics import ML_INGESTION_COUNT, ML_LEADER_STATUS
+from arbiter.meta_learning_orchestrator.metrics import (
+    ML_INGESTION_COUNT,
+    ML_LEADER_STATUS,
+)
 from arbiter.meta_learning_orchestrator.models import DataIngestionError, ModelVersion
 
 # Import the orchestrator and related components
@@ -112,7 +118,9 @@ async def mock_config(mocker: MockerFixture, tmp_path):
     config.REDIS_LOCK_TTL_SECONDS = 5
     config.REDIS_LOCK_KEY = "ml_orchestrator_leader_lock"
     config.ML_PLATFORM_ENDPOINT = SAMPLE_ENV["ML_ML_PLATFORM_ENDPOINT"]
-    config.AGENT_CONFIG_SERVICE_ENDPOINT = SAMPLE_ENV["ML_AGENT_CONFIG_SERVICE_ENDPOINT"]
+    config.AGENT_CONFIG_SERVICE_ENDPOINT = SAMPLE_ENV[
+        "ML_AGENT_CONFIG_SERVICE_ENDPOINT"
+    ]
     config.POLICY_ENGINE_ENDPOINT = SAMPLE_ENV["ML_POLICY_ENGINE_ENDPOINT"]
     config.USE_KAFKA_INGESTION = False
     config.USE_S3_DATA_LAKE = False
@@ -207,7 +215,9 @@ async def orchestrator(
 ):
     """Fixture for MetaLearningOrchestrator with mocked dependencies."""
     # Mock internal methods for test isolation
-    mocker.patch.object(MetaLearningOrchestrator, "_validate_local_dir", return_value=None)
+    mocker.patch.object(
+        MetaLearningOrchestrator, "_validate_local_dir", return_value=None
+    )
     mocker.patch.object(
         MetaLearningOrchestrator,
         "_get_local_file_records_count",
@@ -277,7 +287,9 @@ async def orchestrator(
                         while orchestrator._running:
                             await asyncio.sleep(1)
 
-                    orchestrator._training_check_task = asyncio.create_task(dummy_task())
+                    orchestrator._training_check_task = asyncio.create_task(
+                        dummy_task()
+                    )
                 await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 break
@@ -285,7 +297,9 @@ async def orchestrator(
                 pass
 
     # Patch the method on the instance
-    mocker.patch.object(orchestrator, "_run_leader_election", new=mock_run_leader_election)
+    mocker.patch.object(
+        orchestrator, "_run_leader_election", new=mock_run_leader_election
+    )
 
     yield orchestrator
 
@@ -431,10 +445,14 @@ async def test_data_cleanup_core_local(orchestrator, tmp_path):
 
     # Write old and new records
     old_record = (
-        json.dumps({"timestamp": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()})
+        json.dumps(
+            {"timestamp": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()}
+        )
         + "\n"
     )
-    new_record = json.dumps({"timestamp": datetime.now(timezone.utc).isoformat()}) + "\n"
+    new_record = (
+        json.dumps({"timestamp": datetime.now(timezone.utc).isoformat()}) + "\n"
+    )
     async with aiofiles.open(data_lake_path, "w") as f:
         await f.write(old_record + new_record)
 
@@ -493,7 +511,9 @@ async def test_is_ready(orchestrator, mocker: MockerFixture):
     async def mock_verify():
         return True
 
-    mocker.patch.object(orchestrator, "_verify_leadership_and_fencing", side_effect=mock_verify)
+    mocker.patch.object(
+        orchestrator, "_verify_leadership_and_fencing", side_effect=mock_verify
+    )
 
     # Create proper mock responses for aiohttp
     mock_response = mocker.MagicMock()

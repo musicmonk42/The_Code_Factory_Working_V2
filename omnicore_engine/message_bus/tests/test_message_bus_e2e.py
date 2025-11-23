@@ -143,7 +143,9 @@ class MessageBusE2ETest(unittest.TestCase):
         await bus._subscribe_async("test.topic", handler)
 
         # Publish
-        result = await bus.publish(topic="test.topic", payload={"data": "test_value"}, priority=1)
+        result = await bus.publish(
+            topic="test.topic", payload={"data": "test_value"}, priority=1
+        )
 
         self.assertTrue(result)
 
@@ -332,7 +334,9 @@ class MessageBusE2ETest(unittest.TestCase):
         # Create multiple publisher tasks
         async def publisher(publisher_id, count):
             for i in range(count):
-                await bus.publish("concurrent.topic", {"publisher": publisher_id, "seq": i})
+                await bus.publish(
+                    "concurrent.topic", {"publisher": publisher_id, "seq": i}
+                )
                 await asyncio.sleep(random.uniform(0.001, 0.01))
 
         # Run publishers concurrently
@@ -384,7 +388,9 @@ class MessageBusE2ETest(unittest.TestCase):
         )
 
         # Publish messages that will succeed
-        await bus.publish("error.topic", {"should_fail": False, "id": "success_1"}, priority=10)
+        await bus.publish(
+            "error.topic", {"should_fail": False, "id": "success_1"}, priority=10
+        )
 
         # Wait for processing
         await asyncio.sleep(0.5)

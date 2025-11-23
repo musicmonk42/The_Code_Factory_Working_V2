@@ -49,7 +49,9 @@ if RICH_AVAILABLE:
     except ImportError:
         # Downgrade availability if import fails
         RICH_AVAILABLE = False
-        Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (Mock(),) * 5
+        Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (
+            Mock(),
+        ) * 5
 
         # Use simple dummy classes so isinstance(...) is always safe
         class _Dummy:
@@ -102,7 +104,9 @@ else:
             output = " ".join(str(arg) for arg in args)
             self.buf.write(output + "\n")
 
-    Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (Mock(),) * 5
+    Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (
+        Mock(),
+    ) * 5
 
     class _Dummy:
         pass
@@ -341,7 +345,10 @@ def configure_logging(
             raise ValueError("Invalid logging_config schema: missing 'handlers'.")
 
         handlers = logging_config["handlers"]
-        if audit_handler_name in handlers and "filename" in handlers[audit_handler_name]:
+        if (
+            audit_handler_name in handlers
+            and "filename" in handlers[audit_handler_name]
+        ):
             audit_log_dir = os.path.dirname(audit_log_file)
             if audit_log_dir:
                 os.makedirs(audit_log_dir, exist_ok=True)

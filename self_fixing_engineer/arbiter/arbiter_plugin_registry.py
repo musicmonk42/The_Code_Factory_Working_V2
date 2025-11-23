@@ -33,7 +33,12 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion
 from packaging.version import parse as version_parse
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +87,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -179,7 +186,9 @@ try:
             if metric in REGISTRY._names_to_collectors:
                 REGISTRY.unregister(REGISTRY._names_to_collectors[metric])
 
-    plugin_loads = Counter("arbiter_plugin_loads_total", "Total plugin loads", ["kind", "name"])
+    plugin_loads = Counter(
+        "arbiter_plugin_loads_total", "Total plugin loads", ["kind", "name"]
+    )
     plugin_unloads = Counter(
         "arbiter_plugin_unloads_total", "Total plugin unloads", ["kind", "name"]
     )
@@ -256,17 +265,23 @@ class PluginRegistry:
                 cls._instance = super().__new__(cls)
                 cls._instance._plugins = {}
                 cls._instance._meta = {}
-                cls._instance._kind_locks = {kind: threading.RLock() for kind in PlugInKind}
+                cls._instance._kind_locks = {
+                    kind: threading.RLock() for kind in PlugInKind
+                }
 
                 # Check for test mode and use a temp file if testing
                 if os.getenv("TESTING", "false").lower() == "true":
                     import tempfile
 
                     temp_dir = tempfile.gettempdir()
-                    persist_path = os.path.join(temp_dir, f"test_plugins_{os.getpid()}.json")
+                    persist_path = os.path.join(
+                        temp_dir, f"test_plugins_{os.getpid()}.json"
+                    )
                     # Don't load any existing plugins in test mode
                     cls._instance._persist_path = persist_path
-                    logger.info(f"Test mode: Using temporary plugin file: {persist_path}")
+                    logger.info(
+                        f"Test mode: Using temporary plugin file: {persist_path}"
+                    )
                 else:
                     cls._instance._persist_path = persist_path
                     cls._instance._load_persisted_plugins()
@@ -339,7 +354,9 @@ class PluginRegistry:
         with self._lock:
             try:
                 serialized = {
-                    kind.value: {name: self._meta_to_dict(meta) for name, meta in plugins.items()}
+                    kind.value: {
+                        name: self._meta_to_dict(meta) for name, meta in plugins.items()
+                    }
                     for kind, plugins in self._meta.items()
                 }
                 with open(self._persist_path, "w") as f:
@@ -384,7 +401,9 @@ class PluginRegistry:
         try:
             v = version_parse(version_str)
             if len(v.release) != 3:
-                raise InvalidVersion(f"Version '{version_str}' must have exactly three components.")
+                raise InvalidVersion(
+                    f"Version '{version_str}' must have exactly three components."
+                )
         except InvalidVersion as e:
             raise ValueError(
                 f"Invalid version '{version_str}': Must follow semantic versioning (e.g., 1.2.3)"
@@ -411,12 +430,16 @@ class PluginRegistry:
             dep_name = dep.get("name")
             dep_version_str = dep.get("version", ">=0.0.0")
             if not dep_kind_str or not dep_name:
-                raise PluginDependencyError("Dependency must specify 'kind' and 'name'.")
+                raise PluginDependencyError(
+                    "Dependency must specify 'kind' and 'name'."
+                )
 
             try:
                 dep_kind = PlugInKind(dep_kind_str)
             except ValueError:
-                raise PluginDependencyError(f"Invalid dependency kind: '{dep_kind_str}'")
+                raise PluginDependencyError(
+                    f"Invalid dependency kind: '{dep_kind_str}'"
+                )
 
             # Check for circular dependencies
             dep_node = f"{dep_kind.value}:{dep_name}"
@@ -428,7 +451,9 @@ class PluginRegistry:
 
             existing = self.get_metadata(dep_kind, dep_name)
             if not existing:
-                raise PluginDependencyError(f"Dependency [{dep_kind.value}:{dep_name}] not found")
+                raise PluginDependencyError(
+                    f"Dependency [{dep_kind.value}:{dep_name}] not found"
+                )
 
             if not self._satisfies_version(existing.version, dep_version_str):
                 raise PluginDependencyError(
@@ -466,7 +491,9 @@ class PluginRegistry:
             )
             logger.info(f"Registered plugin [{kind.value}:{name}] with OmniCore.")
         except (ImportError, SyntaxError) as e:
-            logger.warning(f"Failed to register plugin [{kind.value}:{name}] with OmniCore: {e}")
+            logger.warning(
+                f"Failed to register plugin [{kind.value}:{name}] with OmniCore: {e}"
+            )
             try:
                 plugin_errors_total.labels(
                     kind=kind.value, name=name, error_type="omnicore_registration"
@@ -485,7 +512,9 @@ class PluginRegistry:
             except Exception:
                 pass
 
-    def _validate_plugin_class(self, plugin: Type[PluginBase], meta: PluginMeta) -> None:
+    def _validate_plugin_class(
+        self, plugin: Type[PluginBase], meta: PluginMeta
+    ) -> None:
         """Validate plugin compliance and interface."""
         if not meta.author:
             raise ValueError(
@@ -599,7 +628,9 @@ class PluginRegistry:
                             )
                         )
                     except RuntimeError:
-                        logger.info("No running event loop; skipping OmniCore registration.")
+                        logger.info(
+                            "No running event loop; skipping OmniCore registration."
+                        )
                 return plugin_class
 
         return decorator
@@ -640,7 +671,9 @@ class PluginRegistry:
                 )
 
             existing_meta = self.get_metadata(kind, name)
-            if existing_meta and version_parse(version) <= version_parse(existing_meta.version):
+            if existing_meta and version_parse(version) <= version_parse(
+                existing_meta.version
+            ):
                 raise ValueError(
                     f"Plugin [{kind.value}:{name}] version {version} is not newer than existing version {existing_meta.version}."
                 )
@@ -660,7 +693,9 @@ class PluginRegistry:
 
             try:
                 asyncio.create_task(
-                    self.register_with_omnicore(kind, name, instance, version, meta.author)
+                    self.register_with_omnicore(
+                        kind, name, instance, version, meta.author
+                    )
                 )
             except RuntimeError:
                 logger.info("No running event loop; skipping OmniCore registration.")
@@ -713,7 +748,9 @@ class PluginRegistry:
             self.get_metadata(kind, name)
 
             if plugin is None:
-                logger.warning(f"Plugin [{kind.value}:{name}] not found for unregistration.")
+                logger.warning(
+                    f"Plugin [{kind.value}:{name}] not found for unregistration."
+                )
                 try:
                     plugin_ops_total.labels(operation="unregister").inc()
                 except Exception as e:
@@ -796,9 +833,13 @@ class PluginRegistry:
             module_name = plugin_class_or_instance.__module__
             module = importlib.import_module(module_name)
             importlib.reload(module)
-            reloaded_plugin_class = getattr(module, plugin_class_or_instance.__name__, None)
+            reloaded_plugin_class = getattr(
+                module, plugin_class_or_instance.__name__, None
+            )
             if not reloaded_plugin_class:
-                logger.error(f"Plugin [{kind.value}:{name}] not found in reloaded module")
+                logger.error(
+                    f"Plugin [{kind.value}:{name}] not found in reloaded module"
+                )
                 try:
                     plugin_errors_total.labels(
                         kind=kind.value, name=name, error_type="reload_module_fail"
@@ -849,7 +890,9 @@ class PluginRegistry:
                 logger.debug(f"Metrics error: {e}")
             return True
         except Exception as e:
-            logger.error(f"Failed to reload plugin [{kind.value}:{name}]: {e}", exc_info=True)
+            logger.error(
+                f"Failed to reload plugin [{kind.value}:{name}]: {e}", exc_info=True
+            )
             try:
                 plugin_errors_total.labels(
                     kind=kind.value, name=name, error_type="reload_fail"
@@ -864,7 +907,9 @@ class PluginRegistry:
         if plugin is None:
             logger.warning(f"Plugin [{kind.value}:{name}] not found for health check")
             try:
-                plugin_health_checks.labels(kind=kind.value, name=name, status="not_found").inc()
+                plugin_health_checks.labels(
+                    kind=kind.value, name=name, status="not_found"
+                ).inc()
             except Exception as e:
                 logger.debug(f"Metrics error: {e}")
             return False
@@ -899,7 +944,9 @@ class PluginRegistry:
                     exc_info=True,
                 )
                 try:
-                    plugin_health_checks.labels(kind=kind.value, name=name, status="error").inc()
+                    plugin_health_checks.labels(
+                        kind=kind.value, name=name, status="error"
+                    ).inc()
                 except Exception as ee:
                     logger.debug(f"Metrics error: {ee}")
                 raise
@@ -909,7 +956,9 @@ class PluginRegistry:
             )
             is_healthy = True
             try:
-                plugin_health_checks.labels(kind=kind.value, name=name, status="unknown").inc()
+                plugin_health_checks.labels(
+                    kind=kind.value, name=name, status="unknown"
+                ).inc()
             except Exception as e:
                 logger.debug(f"Metrics error: {e}")
 
@@ -982,7 +1031,9 @@ class PluginRegistry:
                                 f"Discovered plugin [{kind.value}:{meta['name']}] in {module_name}"
                             )
             except Exception as e:
-                logger.error(f"Failed to discover plugins in {module_name}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to discover plugins in {module_name}: {e}", exc_info=True
+                )
                 try:
                     plugin_errors_total.labels(
                         kind="n/a", name=module_name, error_type="discover_fail"
@@ -991,7 +1042,9 @@ class PluginRegistry:
                     pass
         return discovered
 
-    async def load_from_package(self, package_url: str, signature: Optional[str] = None):
+    async def load_from_package(
+        self, package_url: str, signature: Optional[str] = None
+    ):
         """
         Placeholder for a true marketplace feature.
         """
@@ -1029,14 +1082,18 @@ class PluginRegistry:
 
         process.join(timeout=5)
         if process.is_alive():
-            logger.error(f"Plugin [{kind.value}:{name}] timed out in sandbox, terminating.")
+            logger.error(
+                f"Plugin [{kind.value}:{name}] timed out in sandbox, terminating."
+            )
             process.terminate()
             process.join()
 
         if not queue.empty():
             status, result = queue.get()
             if status == "error":
-                logger.error(f"Plugin [{kind.value}:{name}] failed in sandbox: {result}")
+                logger.error(
+                    f"Plugin [{kind.value}:{name}] failed in sandbox: {result}"
+                )
             else:
                 logger.info(f"Plugin [{kind.value}:{name}] executed successfully")
 
@@ -1065,7 +1122,9 @@ class PluginRegistry:
             except Exception as e:
                 logger.debug(f"Metrics error: {e}")
         except Exception as e:
-            logger.error(f"Failed to initialize plugin [{kind.value}:{name}]: {e}", exc_info=True)
+            logger.error(
+                f"Failed to initialize plugin [{kind.value}:{name}]: {e}", exc_info=True
+            )
             try:
                 plugin_errors_total.labels(
                     kind=kind.value, name=name, error_type="initialize"
@@ -1093,7 +1152,9 @@ class PluginRegistry:
             except Exception as e:
                 logger.debug(f"Metrics error: {e}")
         except Exception as e:
-            logger.error(f"Failed to start plugin [{kind.value}:{name}]: {e}", exc_info=True)
+            logger.error(
+                f"Failed to start plugin [{kind.value}:{name}]: {e}", exc_info=True
+            )
             try:
                 plugin_errors_total.labels(
                     kind=kind.value, name=name, error_type="start_fail"
@@ -1120,9 +1181,13 @@ class PluginRegistry:
             except Exception as e:
                 logger.debug(f"Metrics error: {e}")
         except Exception as e:
-            logger.error(f"Failed to stop plugin [{kind.value}:{name}]: {e}", exc_info=True)
+            logger.error(
+                f"Failed to stop plugin [{kind.value}:{name}]: {e}", exc_info=True
+            )
             try:
-                plugin_errors_total.labels(kind=kind.value, name=name, error_type="stop_fail").inc()
+                plugin_errors_total.labels(
+                    kind=kind.value, name=name, error_type="stop_fail"
+                ).inc()
             except Exception:
                 pass
 

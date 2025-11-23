@@ -140,7 +140,9 @@ class TestRedactPII:
         redacted = redact_pii(data)
         assert redacted["config"]["credentials"]["password"] == "[REDACTED]"
         assert redacted["history"][0]["ip_address"] == "[REDACTED]"
-        assert redacted["history"][1] == "logout"  # Non-sensitive strings in lists are untouched
+        assert (
+            redacted["history"][1] == "logout"
+        )  # Non-sensitive strings in lists are untouched
 
     def test_ignores_non_sensitive_data(self):
         data = {
@@ -186,7 +188,9 @@ class TestSettingsValidation:
 
         # Should fail with an incorrect type
         valid_settings.SLACK_WEBHOOK_URL = 123
-        with pytest.raises(ValueError, match="Setting 'SLACK_WEBHOOK_URL' has incorrect type."):
+        with pytest.raises(
+            ValueError, match="Setting 'SLACK_WEBHOOK_URL' has incorrect type."
+        ):
             apply_settings_validation(valid_settings)
 
 
@@ -221,7 +225,9 @@ class TestErrorClasses:
         assert "Test message" in str(error)
 
     def test_subclass_properties(self):
-        notif_error = NotificationError("Failed", channel="slack", error_code="API_ERROR")
+        notif_error = NotificationError(
+            "Failed", channel="slack", error_code="API_ERROR"
+        )
         assert notif_error.channel == "slack"
         assert notif_error.error_code == "API_ERROR"
 

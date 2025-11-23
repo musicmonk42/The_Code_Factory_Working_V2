@@ -151,7 +151,11 @@ def _default_feedback_path() -> str:
         base = os.path.join(xdg, DIST_NAME)
     elif os.name == "nt":
         appdata = os.getenv("APPDATA")
-        base = os.path.join(appdata, DIST_NAME) if appdata else os.path.join(os.getcwd(), DIST_NAME)
+        base = (
+            os.path.join(appdata, DIST_NAME)
+            if appdata
+            else os.path.join(os.getcwd(), DIST_NAME)
+        )
     else:
         base = os.path.join(os.path.expanduser("~"), ".local", "state", DIST_NAME)
 
@@ -242,7 +246,9 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
         shutdown_event = asyncio.Event()
 
         def _shutdown_handler(signum, frame):
-            logger.warning("Received signal %s, initiating graceful shutdown...", signum)
+            logger.warning(
+                "Received signal %s, initiating graceful shutdown...", signum
+            )
             shutdown_event.set()
 
         install_default_handlers(_shutdown_handler)
@@ -289,7 +295,9 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
         return 1
     except Exception:
         logger.exception("CLI command failed")
-        err_console.print("[bold red]An unexpected error occurred during execution.[/bold red]")
+        err_console.print(
+            "[bold red]An unexpected error occurred during execution.[/bold red]"
+        )
         return 1
 
 
@@ -316,7 +324,9 @@ async def _run_async_command(coro: Awaitable[Any]) -> int:
     help="Enable debug logging and rich tracebacks.",
 )
 @click.pass_context
-def cli(ctx: click.Context, config_file: Optional[str], project_root: str, debug: bool) -> None:
+def cli(
+    ctx: click.Context, config_file: Optional[str], project_root: str, debug: bool
+) -> None:
     """
     Autonomous Multi-Agent Test Generation System
     """
@@ -369,7 +379,9 @@ def cli(ctx: click.Context, config_file: Optional[str], project_root: str, debug
 # (The tests patch these symbols in this module, so reference
 # them by their module-level names imported above.)
 # ------------------------------------------------------------
-async def _generate_async(session: str, output: str | None, ci: bool, project_root: Path) -> int:
+async def _generate_async(
+    session: str, output: str | None, ci: bool, project_root: Path
+) -> int:
     """
     Orchestrates a single end-to-end generation run:
       - loads/creates the session state
@@ -455,7 +467,11 @@ async def _generate_async(session: str, output: str | None, ci: bool, project_ro
 @click.pass_context
 def generate(ctx: click.Context, session: str, output: str | None, ci: bool) -> None:
     # Kick off the async workflow; exceptions are handled by the wrapper.
-    run_coro_sync(_run_async_command(_generate_async(session, output, ci, ctx.obj["project_root"])))
+    run_coro_sync(
+        _run_async_command(
+            _generate_async(session, output, ci, ctx.obj["project_root"])
+        )
+    )
 
 
 @cli.command()
@@ -489,7 +505,9 @@ def serve(host: str, port: int) -> None:
     default=FEEDBACK_LOG_FILE,
     help="Path to the feedback log file.",
 )
-@click.option("--json-out", is_flag=True, default=False, help="Output JSON for CI integration.")
+@click.option(
+    "--json-out", is_flag=True, default=False, help="Output JSON for CI integration."
+)
 def feedback(action: str, log_file: str, json_out: bool) -> None:
     """
     Manages feedback logs.
@@ -544,7 +562,9 @@ def feedback(action: str, log_file: str, json_out: bool) -> None:
 
 @cli.command()
 @click.pass_context
-@click.option("--json-out", is_flag=True, default=False, help="Output JSON for CI integration.")
+@click.option(
+    "--json-out", is_flag=True, default=False, help="Output JSON for CI integration."
+)
 def status(ctx: click.Context, json_out: bool) -> None:
     """
     Returns a status payload.

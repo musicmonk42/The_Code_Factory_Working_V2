@@ -72,13 +72,18 @@ def mock_history_manager(temp_db_path):
 async def reasoner_with_shutdown(mock_config, mock_settings):
     """Fixture to create and properly shut down an ExplainableReasoner instance."""
     # Patch run_in_executor to work without a real model/tokenizer
-    with patch("simulation.explain.AutoTokenizer.from_pretrained", MagicMock()), patch(
-        "simulation.explain.AutoModelForCausalLM.from_pretrained", MagicMock()
-    ), patch(
-        "simulation.explain.pipeline",
-        MagicMock(return_value=MagicMock(tokenizer=MagicMock(pad_token_id=0, eos_token_id=1))),
-    ), patch(
-        "simulation.explain.psutil.__spec__", MagicMock()
+    with (
+        patch("simulation.explain.AutoTokenizer.from_pretrained", MagicMock()),
+        patch("simulation.explain.AutoModelForCausalLM.from_pretrained", MagicMock()),
+        patch(
+            "simulation.explain.pipeline",
+            MagicMock(
+                return_value=MagicMock(
+                    tokenizer=MagicMock(pad_token_id=0, eos_token_id=1)
+                )
+            ),
+        ),
+        patch("simulation.explain.psutil.__spec__", MagicMock()),
     ):
 
         reasoner = ExplainableReasoner(mock_settings, mock_config)
@@ -90,8 +95,10 @@ async def reasoner_with_shutdown(mock_config, mock_settings):
             def side_effect(func, *args, **kwargs):
                 return func(*args, **kwargs)
 
-            mock_submit.side_effect = lambda func, *args, **kwargs: reasoner.executor.submit(
-                partial(func, **kwargs) if kwargs else func, *args
+            mock_submit.side_effect = (
+                lambda func, *args, **kwargs: reasoner.executor.submit(
+                    partial(func, **kwargs) if kwargs else func, *args
+                )
             )
             await reasoner.async_init()
             try:
@@ -136,7 +143,9 @@ def test_explanation_result_dataclass():
 def test_sanitize_input(input_text, expected):
     """Test input sanitization."""
     if expected is None:
-        with pytest.raises(ReasonerError, match="Input is empty or invalid after sanitization"):
+        with pytest.raises(
+            ReasonerError, match="Input is empty or invalid after sanitization"
+        ):
             _sanitize_input(input_text)
     else:
         assert _sanitize_input(input_text) == expected
@@ -169,7 +178,9 @@ def test_sanitize_context(input_context, expected):
 
 def test_rule_based_fallback():
     """Test rule-based fallback explanation."""
-    fallback = _rule_based_fallback("test_query", {"summary": "test_summary"}, "explain")
+    fallback = _rule_based_fallback(
+        "test_query", {"summary": "test_summary"}, "explain"
+    )
     assert "Fallback" in fallback
     assert "test_query" in fallback
 
@@ -183,7 +194,9 @@ async def test_history_manager_init_db(mock_history_manager):
     await mock_history_manager.init_db()
     conn = sqlite3.connect(mock_history_manager.db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='reasoner_history'")
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='reasoner_history'"
+    )
     assert cursor.fetchone() is not None
     conn.close()
 
@@ -247,7 +260,9 @@ async def test_history_manager_clear(mock_history_manager):
 @pytest.mark.asyncio
 async def test_explainable_reasoner_explain(reasoner_with_shutdown):
     """Test explain method of ExplainableReasoner."""
-    explanation = await reasoner_with_shutdown.explain("test_query", {"summary": "test_summary"})
+    explanation = await reasoner_with_shutdown.explain(
+        "test_query", {"summary": "test_summary"}
+    )
     assert isinstance(explanation, ExplanationResult)
     assert "Fallback" in explanation.explanation
 
@@ -255,7 +270,9 @@ async def test_explainable_reasoner_explain(reasoner_with_shutdown):
 @pytest.mark.asyncio
 async def test_explainable_reasoner_reason(reasoner_with_shutdown):
     """Test reason method of ExplainableReasoner."""
-    reasoning = await reasoner_with_shutdown.reason("test_query", {"summary": "test_summary"})
+    reasoning = await reasoner_with_shutdown.reason(
+        "test_query", {"summary": "test_summary"}
+    )
     assert isinstance(reasoning, ReasoningResult)
     assert "Fallback" in reasoning.reasoning
 
@@ -285,5 +302,7 @@ async def test_explainable_reasoner_plugin_execute(
     plugin = ExplainableReasonerPlugin(settings=mock_settings)
     plugin.config = mock_config
     await plugin.initialize()
-    result = await plugin.execute("explain", result={"id": "test_id", "status": "COMPLETED"})
+    result = await plugin.execute(
+        "explain", result={"id": "test_id", "status": "COMPLETED"}
+    )
     assert isinstance(result, str)

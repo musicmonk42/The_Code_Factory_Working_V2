@@ -96,7 +96,8 @@ class SecurityAuditor:
                         "severity": "medium",
                         "issue": "Debug mode enabled",
                         "file": str(filepath.relative_to(self.base_path)),
-                        "line": content.index("debug") // len(content.split("\n")[0]) + 1,
+                        "line": content.index("debug") // len(content.split("\n")[0])
+                        + 1,
                         "context": "DEBUG=True",
                     }
                 )
@@ -157,7 +158,9 @@ class SecurityAuditor:
                         "severity": "high",
                         "issue": "Permissive CORS configuration",
                         "file": str(filepath.relative_to(self.base_path)),
-                        "line": content.index("allow_origins") // len(content.split("\n")[0]) + 1,
+                        "line": content.index("allow_origins")
+                        // len(content.split("\n")[0])
+                        + 1,
                         "context": 'allow_origins=["*"]',
                     }
                 )
@@ -325,7 +328,9 @@ class SecurityAuditor:
                     report.append("")
 
                 if len(self.findings[severity]) > 10:
-                    report.append(f"   ... and {len(self.findings[severity]) - 10} more findings")
+                    report.append(
+                        f"   ... and {len(self.findings[severity]) - 10} more findings"
+                    )
                     report.append("")
 
         report.append("\n" + "=" * 80)

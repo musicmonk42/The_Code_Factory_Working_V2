@@ -62,7 +62,9 @@ def test_security_project(tmp_path):
     return str(root)
 
 
-def test_init_success_with_available_tools(test_security_project, mock_audit_logger_security):
+def test_init_success_with_available_tools(
+    test_security_project, mock_audit_logger_security
+):
     analyzer = SecurityAnalyzer(test_security_project)
     assert analyzer.project_root == os.path.abspath(test_security_project)
 
@@ -281,7 +283,9 @@ def test_run_pip_audit_with_vulnerabilities(
         analyzer._run_pip_audit()
 
 
-def test_security_health_check_success(test_security_project, mock_audit_logger_security):
+def test_security_health_check_success(
+    test_security_project, mock_audit_logger_security
+):
     analyzer = SecurityAnalyzer(test_security_project)
     is_healthy = analyzer.security_health_check(check_only=True)
     assert is_healthy is True

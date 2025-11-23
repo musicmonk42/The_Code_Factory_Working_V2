@@ -45,7 +45,12 @@ except ImportError:
 TENACITY_AVAILABLE = False
 try:
     import tenacity
-    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
 
     try:
         from tenacity import RetriesExceeded as _RetriesExceeded
@@ -76,7 +81,9 @@ except Exception:
     class RetriesExceeded(Exception):
         pass
 
-    logger.warning("Warning: tenacity library not found or incompatible. Retries disabled.")
+    logger.warning(
+        "Warning: tenacity library not found or incompatible. Retries disabled."
+    )
 
 
 # Resource limits for subprocesses (Unix-only).
@@ -187,7 +194,9 @@ class ATCOBackendsConfig:
     max_llm_output_bytes: int = 256_000
 
     def __post_init__(self):
-        if any(getattr(self.backend_timeouts, k) <= 0 for k in vars(self.backend_timeouts)):
+        if any(
+            getattr(self.backend_timeouts, k) <= 0 for k in vars(self.backend_timeouts)
+        ):
             raise ValueError("All backend timeouts must be positive")
 
 
@@ -232,7 +241,9 @@ class BackendRegistry:
         """Registers a test generation backend for a given language."""
         with self._lock:
             if language in self._backends:
-                logger.warning("Backend for %s already registered. Overwriting.", language)
+                logger.warning(
+                    "Backend for %s already registered. Overwriting.", language
+                )
             self._backends[language] = backend_class
             (self._builtin_keys if is_builtin else self._user_keys).add(language)
             logger.info(
@@ -299,7 +310,9 @@ class BackendRegistry:
                     module.__file__,
                     config.get("backend_module_hashes", {}),
                 ):
-                    raise ImportError(f"Integrity check failed for module '{module_path}'.")
+                    raise ImportError(
+                        f"Integrity check failed for module '{module_path}'."
+                    )
                 backend_class = getattr(module, class_name)
                 self.register_backend(lang, backend_class)
             except Exception as e:
@@ -316,7 +329,9 @@ class BackendRegistry:
     ) -> bool:
         ref = reference_hashes.get(module_path)
         if not ref:
-            logger.warning("No reference hash for %s; skipping integrity check", module_path)
+            logger.warning(
+                "No reference hash for %s; skipping integrity check", module_path
+            )
             return True
         try:
             h = hashlib.sha256()
@@ -508,7 +523,9 @@ class PynguinBackend:
                     # Try Windows path
                     pip_path = os.path.join(venv_path, "Scripts", "pip.exe")
                     if not os.path.exists(pip_path):
-                        raise FileNotFoundError(f"pip executable not found in venv at {venv_path}")
+                        raise FileNotFoundError(
+                            f"pip executable not found in venv at {venv_path}"
+                        )
 
                 subprocess.run(
                     [
@@ -557,7 +574,9 @@ class PynguinBackend:
             if RESOURCE_AVAILABLE:
                 try:
                     resource.setrlimit(resource.RLIMIT_CPU, (timeout, timeout))
-                    resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
+                    resource.setrlimit(
+                        resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024)
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to set resource limits: {e}")
 
@@ -583,7 +602,9 @@ class PynguinBackend:
                 cwd=self.project_root,
                 preexec_fn=preexec_fn,
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout + 10)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=timeout + 10
+            )
 
             stdout_str = stdout.decode("utf-8", "ignore").strip()
             stderr_str = stderr.decode("utf-8", "ignore").strip()
@@ -618,7 +639,9 @@ class PynguinBackend:
 
                 return True, "", dest_rel.replace(os.sep, "/")
             else:
-                error_msg = stderr_str or f"Pynguin failed with exit code {process.returncode}."
+                error_msg = (
+                    stderr_str or f"Pynguin failed with exit code {process.returncode}."
+                )
                 logger.warning(
                     f"Pynguin failed for '{target_module}': {error_msg}",
                     extra={"correlation_id": correlation_id},
@@ -639,7 +662,9 @@ class PynguinBackend:
                     await process.wait()
             return False, error_msg, None
         except asyncio.CancelledError:
-            logger.warning("Pynguin task cancelled", extra={"correlation_id": correlation_id})
+            logger.warning(
+                "Pynguin task cancelled", extra={"correlation_id": correlation_id}
+            )
             if process and process.returncode is None:
                 try:
                     process.terminate()
@@ -649,10 +674,10 @@ class PynguinBackend:
                     await process.wait()
             raise
         except Exception as e:
-            error_msg = (
-                f"Unexpected error running Pynguin for '{target_module}': {type(e).__name__}: {e}"
+            error_msg = f"Unexpected error running Pynguin for '{target_module}': {type(e).__name__}: {e}"
+            logger.error(
+                error_msg, exc_info=True, extra={"correlation_id": correlation_id}
             )
-            logger.error(error_msg, exc_info=True, extra={"correlation_id": correlation_id})
             await _log_event_safe(
                 event_type="test_generation_failure",
                 details={
@@ -808,7 +833,9 @@ class JestLLMBackend:
     async def generate_tests(
         self, target_file_path: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
-        _validate_inputs(target_file_path, output_path_relative, params, self.project_root)
+        _validate_inputs(
+            target_file_path, output_path_relative, params, self.project_root
+        )
 
         timeout = int(params.get("timeout", _get_timeout(self.config, "jest_llm", 90)))
         correlation_id = params.get("correlation_id", "N/A")
@@ -828,7 +855,9 @@ class JestLLMBackend:
         generated_test_path_relative = os.path.join(
             output_path_relative, f"{original_file_name}.test.{test_ext}"
         ).replace(os.sep, "/")
-        full_generated_test_path = os.path.join(self.project_root, generated_test_path_relative)
+        full_generated_test_path = os.path.join(
+            self.project_root, generated_test_path_relative
+        )
 
         logger.info(
             f"Jest/LLM: Generating tests for '{target_file_path}' "
@@ -865,7 +894,9 @@ class JestLLMBackend:
                 if not isinstance(generated, str):
                     try:
                         rv = getattr(self.llm.ainvoke, "return_value", None)
-                        if rv is not None and isinstance(getattr(rv, "content", None), str):
+                        if rv is not None and isinstance(
+                            getattr(rv, "content", None), str
+                        ):
                             generated = rv.content
                     except Exception:
                         pass
@@ -905,7 +936,9 @@ class JestLLMBackend:
 
             except (ValueError, GenerationPermanentError) as e:
                 msg = f"Permanent error during generation: {e}"
-                logger.error(msg, exc_info=True, extra={"correlation_id": correlation_id})
+                logger.error(
+                    msg, exc_info=True, extra={"correlation_id": correlation_id}
+                )
                 return False, msg, None
 
             except Exception as e:
@@ -915,7 +948,9 @@ class JestLLMBackend:
                 )
                 if i == max_attempts:
                     msg = f"Jest/LLM generation attempts exhausted. Last error: {type(e).__name__}: {e}"
-                    logger.error(msg, exc_info=True, extra={"correlation_id": correlation_id})
+                    logger.error(
+                        msg, exc_info=True, extra={"correlation_id": correlation_id}
+                    )
                     raise RetriesExceeded(msg)
 
         return False, "Unexpected termination", None
@@ -943,14 +978,18 @@ class DiffblueBackend:
     async def generate_tests(
         self, target_class_name: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
-        _validate_inputs(target_class_name, output_path_relative, params, self.project_root)
+        _validate_inputs(
+            target_class_name, output_path_relative, params, self.project_root
+        )
 
         timeout = int(params.get("timeout", _get_timeout(self.config, "diffblue", 180)))
         correlation_id = params.get("correlation_id", "N/A")
 
         fail_rate = 0.0
         try:
-            fail_rate = float(self.config.get("simulated_failure_rates", {}).get("diffblue", 0.0))
+            fail_rate = float(
+                self.config.get("simulated_failure_rates", {}).get("diffblue", 0.0)
+            )
         except Exception:
             fail_rate = 0.0
 
@@ -1041,15 +1080,21 @@ class CargoBackend:
     async def generate_tests(
         self, target_file_path: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
-        _validate_inputs(target_file_path, output_path_relative, params, self.project_root)
-        timeout = int(params.get("timeout", _get_timeout(self.config, "cargo_llm", 120)))
+        _validate_inputs(
+            target_file_path, output_path_relative, params, self.project_root
+        )
+        timeout = int(
+            params.get("timeout", _get_timeout(self.config, "cargo_llm", 120))
+        )
 
         out_dir = os.path.join(self.project_root, output_path_relative)
         os.makedirs(out_dir, exist_ok=True)
 
         base = os.path.basename(target_file_path)
         base_no_ext, _ = os.path.splitext(base)
-        rel_out = os.path.join(output_path_relative, f"{base_no_ext}_test.rs").replace(os.sep, "/")
+        rel_out = os.path.join(output_path_relative, f"{base_no_ext}_test.rs").replace(
+            os.sep, "/"
+        )
         abs_out = os.path.join(self.project_root, rel_out)
 
         # read source
@@ -1075,7 +1120,9 @@ class CargoBackend:
             )
             return False, msg, None
 
-        fn_names = re.findall(r"(?m)^\s*(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", source_code)
+        fn_names = re.findall(
+            r"(?m)^\s*(?:pub\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", source_code
+        )
         prompt = self._build_test_prompt(fn_names)
         try:
             test_code = await self._invoke_llm(prompt, timeout=timeout)
@@ -1144,9 +1191,7 @@ class GoBackend:
 
     def _build_test_prompt(self, functions: List[str]) -> str:
         functions_str = "\n".join(functions)
-        return (
-            f"Generate comprehensive Go unit tests for the following functions:\n\n{functions_str}"
-        )
+        return f"Generate comprehensive Go unit tests for the following functions:\n\n{functions_str}"
 
     async def _invoke_llm(self, prompt: str, timeout: int) -> str:
         return await self._llm_client.ainvoke(prompt, timeout=timeout)
@@ -1154,7 +1199,9 @@ class GoBackend:
     async def generate_tests(
         self, target_file_path: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
-        _validate_inputs(target_file_path, output_path_relative, params, self.project_root)
+        _validate_inputs(
+            target_file_path, output_path_relative, params, self.project_root
+        )
 
         timeout = int(params.get("timeout", _get_timeout(self.config, "go_llm", 120)))
         correlation_id = params.get("correlation_id", "N/A")
@@ -1169,7 +1216,9 @@ class GoBackend:
         generated_test_path_relative = os.path.join(
             output_path_relative, generated_test_file_name
         ).replace(os.sep, "/")
-        full_generated_test_path = os.path.join(self.project_root, generated_test_path_relative)
+        full_generated_test_path = os.path.join(
+            self.project_root, generated_test_path_relative
+        )
 
         logger.info(
             f"Go/LLM: Generating tests for '{target_file_path}' [Correlation ID: {correlation_id}, Attempt: {retry_count + 1}]"
@@ -1191,7 +1240,9 @@ class GoBackend:
                     source_code = f.read()
         except Exception as e:
             error_msg = f"Failed to read source file {source_code_path}: {e}"
-            logger.error(error_msg, exc_info=True, extra={"correlation_id": correlation_id})
+            logger.error(
+                error_msg, exc_info=True, extra={"correlation_id": correlation_id}
+            )
             await _log_event_safe(
                 event_type="test_generation_failure",
                 details={
@@ -1208,7 +1259,9 @@ class GoBackend:
         functions = re.findall(r"func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", source_code)
 
         if not functions:
-            error_msg = f"No functions found in '{target_file_path}' for test generation."
+            error_msg = (
+                f"No functions found in '{target_file_path}' for test generation."
+            )
             logger.warning(error_msg, extra={"correlation_id": correlation_id})
             return False, error_msg, None
 
@@ -1236,7 +1289,9 @@ class GoBackend:
             return False, error_msg, None
         except Exception as e:
             error_msg = f"Test generation failed: {e}"
-            logger.error(error_msg, exc_info=True, extra={"correlation_id": correlation_id})
+            logger.error(
+                error_msg, exc_info=True, extra={"correlation_id": correlation_id}
+            )
             await _log_event_safe(
                 event_type="test_generation_failure",
                 details={
@@ -1256,15 +1311,21 @@ class GoBackend:
         generated_test_path_relative = os.path.join(
             output_path_relative, generated_test_file_name
         ).replace(os.sep, "/")
-        full_generated_test_path = os.path.join(self.project_root, generated_test_path_relative)
+        full_generated_test_path = os.path.join(
+            self.project_root, generated_test_path_relative
+        )
 
         try:
-            async with aiofiles.open(full_generated_test_path, "w", encoding="utf-8") as f:
+            async with aiofiles.open(
+                full_generated_test_path, "w", encoding="utf-8"
+            ) as f:
                 await f.write(test_code)
             logger.info(f"Generated Go tests written to {full_generated_test_path}")
         except OSError as e:
             error_msg = f"Failed to write tests to file: {e}"
-            logger.error(error_msg, exc_info=True, extra={"correlation_id": correlation_id})
+            logger.error(
+                error_msg, exc_info=True, extra={"correlation_id": correlation_id}
+            )
             return False, error_msg, None
 
         # Optional: Run `go fmt` to keep the code idiomatic

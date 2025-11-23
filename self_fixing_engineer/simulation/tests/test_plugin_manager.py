@@ -13,7 +13,9 @@ import pytest
 from prometheus_client import CollectorRegistry
 
 # Corrected path logic
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
+)
 from plugin_manager import (
     PLUGIN_ERRORS_TOTAL,
     PLUGIN_HEALTH_STATUS,
@@ -61,7 +63,9 @@ def add_health_method_to_plugin_manager():
 
             try:
                 # For wrapper instances (WASM, gRPC, PythonSubprocessProxy)
-                if hasattr(instance, "health") and callable(getattr(instance, "health")):
+                if hasattr(instance, "health") and callable(
+                    getattr(instance, "health")
+                ):
                     health_fn = getattr(instance, "health")
                     if asyncio.iscoroutinefunction(health_fn):
                         result = await health_fn()
@@ -96,11 +100,16 @@ def add_health_method_to_plugin_manager():
 
                 # Update Prometheus health metric if available
                 try:
-                    from plugin_manager import PLUGIN_HEALTH_STATUS, prometheus_available
+                    from plugin_manager import (
+                        PLUGIN_HEALTH_STATUS,
+                        prometheus_available,
+                    )
 
                     if prometheus_available:
                         health_value = (
-                            1.0 if result.get("status") in ["ok", "serving", "healthy"] else 0.0
+                            1.0
+                            if result.get("status") in ["ok", "serving", "healthy"]
+                            else 0.0
                         )
                         PLUGIN_HEALTH_STATUS.labels(plugin_name=name).set(health_value)
                 except:
@@ -147,22 +156,23 @@ def mock_external_dependencies():
     MockWasmWrapper.return_value.close = AsyncMock()
     MockGrpcWrapper.return_value.close = AsyncMock()
 
-    with patch("plugin_manager.os.makedirs"), patch("plugin_manager.shutil.rmtree"), patch(
-        "plugin_manager.importlib.util.spec_from_file_location"
-    ), patch("plugin_manager.importlib.util.module_from_spec") as mock_module_from_spec, patch(
-        "plugin_manager.tenacity_available", True
-    ), patch(
-        "plugin_manager.prometheus_available", True
-    ), patch(
-        "plugin_manager.pydantic_available", True
-    ), patch(
-        "plugin_manager.restricted_python_available", True
-    ), patch(
-        "plugin_manager.detect_secrets_available", False
-    ), patch.dict(
-        "plugin_manager.HANDLERS",
-        {"wasm": MockWasmWrapper, "grpc": MockGrpcWrapper},
-        clear=True,
+    with (
+        patch("plugin_manager.os.makedirs"),
+        patch("plugin_manager.shutil.rmtree"),
+        patch("plugin_manager.importlib.util.spec_from_file_location"),
+        patch(
+            "plugin_manager.importlib.util.module_from_spec"
+        ) as mock_module_from_spec,
+        patch("plugin_manager.tenacity_available", True),
+        patch("plugin_manager.prometheus_available", True),
+        patch("plugin_manager.pydantic_available", True),
+        patch("plugin_manager.restricted_python_available", True),
+        patch("plugin_manager.detect_secrets_available", False),
+        patch.dict(
+            "plugin_manager.HANDLERS",
+            {"wasm": MockWasmWrapper, "grpc": MockGrpcWrapper},
+            clear=True,
+        ),
     ):  # clear=True ensures only our mocks exist
 
         # Mock a generic module that can be loaded
@@ -187,7 +197,9 @@ def mock_external_dependencies():
         mock_module_from_spec.return_value = mock_module
 
         # Mock Prometheus registry to ensure metrics are fresh for each test
-        with patch("plugin_manager.REGISTRY", new=CollectorRegistry(auto_describe=True)):
+        with patch(
+            "plugin_manager.REGISTRY", new=CollectorRegistry(auto_describe=True)
+        ):
             yield {
                 "mock_module_from_spec": mock_module_from_spec,
                 "MockWasmWrapper": MockWasmWrapper,
@@ -243,7 +255,9 @@ async def test_load_plugin_success_python(mock_plugin_and_manifest_files):
     pm = PluginManager(str(mock_plugin_and_manifest_files["temp_dir"]))
 
     # Get initial metric value
-    initial_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="python", status="success")._value.get()
+    initial_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="python", status="success"
+    )._value.get()
 
     pm.load_plugin(mock_plugin_and_manifest_files["python_plugin_path"])
 
@@ -252,7 +266,9 @@ async def test_load_plugin_success_python(mock_plugin_and_manifest_files):
     assert "instance" in pm.registry["python_plugin"]
 
     # Check metric increased by 1
-    final_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="python", status="success")._value.get()
+    final_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="python", status="success"
+    )._value.get()
     assert final_count - initial_count == 1
 
 
@@ -262,7 +278,9 @@ async def test_load_plugin_failure_invalid_syntax(mock_plugin_and_manifest_files
     pm = PluginManager(str(mock_plugin_and_manifest_files["temp_dir"]))
 
     # Get initial metric value
-    initial_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="unknown", status="error")._value.get()
+    initial_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="unknown", status="error"
+    )._value.get()
 
     # This mocks reading the content of the file, forcing a syntax error during manifest extraction
     with patch("pathlib.Path.read_text", return_value="invalid python syntax = "):
@@ -274,7 +292,9 @@ async def test_load_plugin_failure_invalid_syntax(mock_plugin_and_manifest_files
     assert "Missing or invalid manifest" in pm.registry["invalid_plugin"]["error"]
 
     # Check metric increased by 1
-    final_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="unknown", status="error")._value.get()
+    final_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="unknown", status="error"
+    )._value.get()
     assert final_count - initial_count == 1
 
 
@@ -301,7 +321,9 @@ async def test_load_plugin_with_dangerous_permission(mock_plugin_and_manifest_fi
     pm = PluginManager(str(mock_plugin_and_manifest_files["temp_dir"]))
 
     # Get initial metric value
-    initial_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="python", status="error")._value.get()
+    initial_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="python", status="error"
+    )._value.get()
 
     # Mock the manifest loading to inject our dangerous manifest
     with patch("plugin_manager.PluginManager.load_manifest", return_value=manifest):
@@ -310,10 +332,14 @@ async def test_load_plugin_with_dangerous_permission(mock_plugin_and_manifest_fi
     assert "dangerous_plugin" in pm.registry
     assert pm.registry["dangerous_plugin"]["status"] == "error"
     # The schema validation fails, which raises a generic ValueError
-    assert "Manifest schema validation failed" in pm.registry["dangerous_plugin"]["error"]
+    assert (
+        "Manifest schema validation failed" in pm.registry["dangerous_plugin"]["error"]
+    )
 
     # Check metric increased by 1
-    final_count = PLUGIN_LOADS_TOTAL.labels(plugin_type="python", status="error")._value.get()
+    final_count = PLUGIN_LOADS_TOTAL.labels(
+        plugin_type="python", status="error"
+    )._value.get()
     assert final_count - initial_count == 1
 
 
@@ -396,7 +422,9 @@ async def test_health_check_workflow(mock_plugin_and_manifest_files):
     pm = PluginManager(str(mock_plugin_and_manifest_files["temp_dir"]))
 
     # Load without health check first to ensure it loads properly
-    pm.load_plugin(mock_plugin_and_manifest_files["python_plugin_path"], check_health=False)
+    pm.load_plugin(
+        mock_plugin_and_manifest_files["python_plugin_path"], check_health=False
+    )
 
     # Verify plugin loaded successfully
     assert "python_plugin" in pm.registry

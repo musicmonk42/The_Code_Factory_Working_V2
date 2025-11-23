@@ -102,8 +102,12 @@ logger = logging.getLogger("simulation.crew_manager")
 logger.setLevel(logging.INFO)
 # C. Logging/Tracing: Don't call logging.basicConfig()
 if not logger.hasHandlers():
-    handler = RotatingFileHandler("crew_manager.log", maxBytes=10 * 1024 * 1024, backupCount=5)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler = RotatingFileHandler(
+        "crew_manager.log", maxBytes=10 * 1024 * 1024, backupCount=5
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
 
 # A. Security & Secrets: Input validation regex
@@ -262,7 +266,9 @@ class CrewManager:
         agent_health_poller: Optional[
             Callable[[str, Dict[str, Any]], Awaitable[Dict[str, Any]]]
         ] = None,
-        agent_stop_commander: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
+        agent_stop_commander: Optional[
+            Callable[[str, Dict[str, Any]], Awaitable[None]]
+        ] = None,
     ):
         self.agents: Dict[str, Dict[str, Any]] = {}
         self.agent_classes: Dict[str, Type[CrewAgentBase]] = {}
@@ -294,9 +300,13 @@ class CrewManager:
         self._max_agents = MAX_AGENTS
 
         if not self._sandbox_runner:
-            logger.warning("No sandbox_runner provided. Agents will not be launched in isolation.")
+            logger.warning(
+                "No sandbox_runner provided. Agents will not be launched in isolation."
+            )
         if not self._agent_health_poller:
-            logger.warning("No agent_health_poller provided. Heartbeat monitoring will be limited.")
+            logger.warning(
+                "No agent_health_poller provided. Heartbeat monitoring will be limited."
+            )
         if not self._agent_stop_commander:
             logger.warning(
                 "No agent_stop_commander provided. Agent graceful stopping will not be possible."
@@ -323,7 +333,9 @@ class CrewManager:
         # A. Security & Secrets: Integrate with policy if available
         if self.policy and hasattr(self.policy, "can_perform"):
             if not await self.policy.can_perform(operation, caller_role):
-                logger.warning(f"Policy denied {operation} attempt by role {caller_role}")
+                logger.warning(
+                    f"Policy denied {operation} attempt by role {caller_role}"
+                )
                 return False
 
         if caller_role not in allowed_roles:
@@ -398,8 +410,12 @@ class CrewManager:
             raise ValueError(
                 f"Invalid agent name '{name}'. Must be alphanumeric with - or _ and 1-50 characters."
             )
-        if config and (not isinstance(config, dict) or len(json.dumps(config)) > MAX_CONFIG_SIZE):
-            raise ValueError(f"Invalid config. Must be a dict and under {MAX_CONFIG_SIZE} bytes.")
+        if config and (
+            not isinstance(config, dict) or len(json.dumps(config)) > MAX_CONFIG_SIZE
+        ):
+            raise ValueError(
+                f"Invalid config. Must be a dict and under {MAX_CONFIG_SIZE} bytes."
+            )
 
         async with self._lock:
             # A. Security & Secrets: Cap max agents
@@ -409,7 +425,9 @@ class CrewManager:
                 and not replace
                 and name not in self.agents
             ):
-                raise ResourceError(f"Maximum number of agents ({self._max_agents}) reached.")
+                raise ResourceError(
+                    f"Maximum number of agents ({self._max_agents}) reached."
+                )
 
             if isinstance(agent_class, str):
                 agent_class_name = agent_class
@@ -419,7 +437,9 @@ class CrewManager:
                 agent_class_type = agent_class
 
             if name in self.agents and not replace:
-                raise ValueError(f"Agent '{name}' already exists (use replace=True to overwrite).")
+                raise ValueError(
+                    f"Agent '{name}' already exists (use replace=True to overwrite)."
+                )
 
             if name in self._agent_sandboxes:
                 await self._stop_agent_sandbox(name)
@@ -436,7 +456,9 @@ class CrewManager:
             }
             self.agents[name] = agent_info
             self.agent_classes[name] = agent_class_type
-            structured_log("agent_added", agent=name, class_name=agent_class_name, tags=tags)
+            structured_log(
+                "agent_added", agent=name, class_name=agent_class_name, tags=tags
+            )
             await self._maybe_audit(
                 "agent_added",
                 {
@@ -486,7 +508,9 @@ class CrewManager:
         needs_stop = False
         async with self._lock:
             agent_info = self.agents.get(name)
-            if agent_info and (agent_info.get("sandbox") or name in self._agent_sandboxes):
+            if agent_info and (
+                agent_info.get("sandbox") or name in self._agent_sandboxes
+            ):
                 needs_stop = True
 
         # Stop the agent if needed (without holding lock)
@@ -561,7 +585,9 @@ class CrewManager:
 
         async with self._lock:
             if agent_info.get("sandbox"):
-                logger.info(f"CrewManager: Agent '{name}' already running in a sandbox.")
+                logger.info(
+                    f"CrewManager: Agent '{name}' already running in a sandbox."
+                )
                 return
 
             try:
@@ -582,11 +608,17 @@ class CrewManager:
                     asyncio.create_task(self._monitor_agent_sandbox(name))
 
             except (Exception, RetryError) as e:
-                logger.critical(f"CrewManager: Failed to launch agent '{name}' in sandbox: {e}")
+                logger.critical(
+                    f"CrewManager: Failed to launch agent '{name}' in sandbox: {e}"
+                )
                 agent_info["status"] = "FAILED"
                 agent_info["failures"].append({"error": str(e), "ts": time.time()})
-                await self._emit("on_agent_fail", name=name, agent_info=agent_info, error=e)
-                await self._maybe_audit("agent_launch_failed", {"name": name, "error": str(e)})
+                await self._emit(
+                    "on_agent_fail", name=name, agent_info=agent_info, error=e
+                )
+                await self._maybe_audit(
+                    "agent_launch_failed", {"name": name, "error": str(e)}
+                )
 
     async def _monitor_agent_sandbox(self, name: str):
         agent_info = self.agents.get(name)
@@ -618,7 +650,9 @@ class CrewManager:
                     logger.warning(
                         f"CrewManager: Agent '{name}' sandbox exited with code {exit_code}. Restarting..."
                     )
-                    agent_info["failures"].append({"exit_code": exit_code, "ts": time.time()})
+                    agent_info["failures"].append(
+                        {"exit_code": exit_code, "ts": time.time()}
+                    )
                     await self._emit(
                         "on_agent_fail",
                         name=name,
@@ -703,13 +737,19 @@ class CrewManager:
                             self._agent_stop_commander(name, agent_info),
                             timeout=timeout,
                         )
-                        logger.info(f"CrewManager: Sent graceful stop command to agent '{name}'.")
+                        logger.info(
+                            f"CrewManager: Sent graceful stop command to agent '{name}'."
+                        )
                     else:
-                        logger.info(f"CrewManager: Directly stopping sandbox for agent '{name}'.")
+                        logger.info(
+                            f"CrewManager: Directly stopping sandbox for agent '{name}'."
+                        )
 
                     if hasattr(sandbox, "stop") and callable(sandbox.stop):
                         try:
-                            await asyncio.wait_for(asyncio.to_thread(sandbox.stop), timeout=timeout)
+                            await asyncio.wait_for(
+                                asyncio.to_thread(sandbox.stop), timeout=timeout
+                            )
                         except asyncio.TimeoutError:
                             logger.warning(
                                 f"CrewManager: Sandbox for agent '{name}' did not stop gracefully within {timeout}s. Killing."
@@ -720,7 +760,9 @@ class CrewManager:
                         await asyncio.to_thread(sandbox.remove)
 
                 except Exception as e:
-                    logger.critical(f"CrewManager: Error stopping sandbox for agent '{name}': {e}")
+                    logger.critical(
+                        f"CrewManager: Error stopping sandbox for agent '{name}': {e}"
+                    )
                 finally:
                     self._agent_sandboxes.pop(name, None)
                     agent_info["sandbox"] = None
@@ -752,13 +794,17 @@ class CrewManager:
             if sandbox:
                 try:
                     if hasattr(sandbox, "stop") and callable(sandbox.stop):
-                        await asyncio.wait_for(asyncio.to_thread(sandbox.stop), timeout=timeout)
+                        await asyncio.wait_for(
+                            asyncio.to_thread(sandbox.stop), timeout=timeout
+                        )
                     if hasattr(sandbox, "remove") and callable(sandbox.remove):
                         await asyncio.to_thread(sandbox.remove)
                     structured_log("agent_sandbox_cleaned_up", agent=name)
                     logger.debug(f"CrewManager: Cleaned up sandbox for agent '{name}'.")
                 except Exception as e:
-                    logger.error(f"CrewManager: Failed to clean up sandbox for agent '{name}': {e}")
+                    logger.error(
+                        f"CrewManager: Failed to clean up sandbox for agent '{name}': {e}"
+                    )
 
     async def terminate_all(self, timeout: float = 10.0, caller_role: str = "user"):
         """
@@ -778,7 +824,9 @@ class CrewManager:
         # Terminate each agent (without holding lock)
         for name in agents_to_terminate:
             try:
-                await self.stop_agent(name, timeout=timeout, force=True, caller_role=caller_role)
+                await self.stop_agent(
+                    name, timeout=timeout, force=True, caller_role=caller_role
+                )
             except Exception as e:
                 logger.error(f"Failed to terminate agent {name}: {e}")
 
@@ -822,15 +870,21 @@ class CrewManager:
             if config:
                 agent_info["config"].update(config)
 
-            logger.info(f"CrewManager: Reloading agent '{name}' by restarting its sandbox.")
+            logger.info(
+                f"CrewManager: Reloading agent '{name}' by restarting its sandbox."
+            )
             await self.stop_agent(name, force=True, caller_role=caller_role)
             await self.start_agent(name, caller_role=caller_role)
 
-            await self._maybe_audit("agent_reloaded", {"name": name, "new_config": config})
+            await self._maybe_audit(
+                "agent_reloaded", {"name": name, "new_config": config}
+            )
             structured_log("agent_reloaded", agent=name, config=config)
             logger.info(f"CrewManager: Reloaded agent '{name}'.")
 
-    async def start_all(self, tags: Optional[List[str]] = None, caller_role: str = "user"):
+    async def start_all(
+        self, tags: Optional[List[str]] = None, caller_role: str = "user"
+    ):
         """
         Starts all agents that match the given tags.
 
@@ -848,7 +902,10 @@ class CrewManager:
 
         # Start each agent (without holding lock)
         await self._throttled_bulk_op(
-            [self.start_agent(name, caller_role=caller_role) for name in filtered_names],
+            [
+                self.start_agent(name, caller_role=caller_role)
+                for name in filtered_names
+            ],
             op="start_all",
         )
 
@@ -882,7 +939,9 @@ class CrewManager:
         # Stop each agent (without holding lock)
         await self._throttled_bulk_op(
             [
-                self.stop_agent(name, timeout=timeout, force=force, caller_role=caller_role)
+                self.stop_agent(
+                    name, timeout=timeout, force=force, caller_role=caller_role
+                )
                 for name in filtered_names
             ],
             op="stop_all",
@@ -942,7 +1001,9 @@ class CrewManager:
             async with sem:
                 return await coro
 
-        results = await asyncio.gather(*(sem_task(coro) for coro in coros), return_exceptions=True)
+        results = await asyncio.gather(
+            *(sem_task(coro) for coro in coros), return_exceptions=True
+        )
         for res in results:
             if isinstance(res, Exception):
                 logger.error(f"A coroutine in bulk op '{op}' failed: {res}")
@@ -964,7 +1025,9 @@ class CrewManager:
                         agent_info.update(agent_status)
                         report[name] = agent_status
                     except Exception as e:
-                        report[name] = {"error": f"Failed to get health from sandbox: {e}"}
+                        report[name] = {
+                            "error": f"Failed to get health from sandbox: {e}"
+                        }
                         agent_info["status"] = "UNKNOWN_HEALTH"
                         agent_info["failures"].append(
                             {
@@ -973,7 +1036,9 @@ class CrewManager:
                                 "type": "health_poll_failure",
                             }
                         )
-                        logger.warning(f"CrewManager: Failed to get health for agent '{name}': {e}")
+                        logger.warning(
+                            f"CrewManager: Failed to get health for agent '{name}': {e}"
+                        )
                 else:
                     report[name] = {
                         "name": name,
@@ -991,7 +1056,9 @@ class CrewManager:
             health_meta = {}
             if self.policy:
                 health_meta["policy"] = (
-                    await self.policy.health() if hasattr(self.policy, "health") else "OK"
+                    await self.policy.health()
+                    if hasattr(self.policy, "health")
+                    else "OK"
                 )
 
             if self.state_backend == "redis" and _AIOREDIS_AVAILABLE:
@@ -1020,7 +1087,9 @@ class CrewManager:
                 ):  # Iterate over a copy to allow modification
                     if agent_info.get("sandbox") and self._agent_health_poller:
                         try:
-                            agent_status = await self._agent_health_poller(name, agent_info)
+                            agent_status = await self._agent_health_poller(
+                                name, agent_info
+                            )
                             agent_info.update(agent_status)
 
                             last_hb = agent_info.get("last_heartbeat", 0)
@@ -1038,11 +1107,15 @@ class CrewManager:
                                 logger.warning(
                                     f"CrewManager: Agent '{name}' heartbeat missed ({now - last_hb:.1f}s ago). Forcing stop and restart."
                                 )
-                                await self.stop_agent(name, force=True, caller_role="system")
+                                await self.stop_agent(
+                                    name, force=True, caller_role="system"
+                                )
                                 if self.auto_restart:
                                     await self.start_agent(name, caller_role="system")
                         except Exception as e:
-                            logger.error(f"Error polling heartbeat for agent '{name}': {e}")
+                            logger.error(
+                                f"Error polling heartbeat for agent '{name}': {e}"
+                            )
                             agent_info["failures"].append(
                                 {
                                     "error": str(e),
@@ -1051,7 +1124,9 @@ class CrewManager:
                                 }
                             )
                             if self.auto_restart:
-                                await self.stop_agent(name, force=True, caller_role="system")
+                                await self.stop_agent(
+                                    name, force=True, caller_role="system"
+                                )
                                 await self.start_agent(name, caller_role="system")
                     elif agent_info.get("sandbox") and not self._agent_health_poller:
                         logger.warning(
@@ -1097,7 +1172,9 @@ class CrewManager:
                             "agent_class_name"
                         ):
                             agent_class_name = agent_info["agent_class_name"]
-                            agent_class_type = CrewManager.get_agent_class_by_name(agent_class_name)
+                            agent_class_type = CrewManager.get_agent_class_by_name(
+                                agent_class_name
+                            )
                             break
                     if not agent_class_type:
                         raise ValueError(
@@ -1121,7 +1198,9 @@ class CrewManager:
             # Prepare lists of operations to perform
             if to_add > 0:
                 for i in range(to_add):
-                    name_prefix = agent_class_name.lower() if agent_class_name else "agent"
+                    name_prefix = (
+                        agent_class_name.lower() if agent_class_name else "agent"
+                    )
                     name = f"{name_prefix}_{int(time.time())}_{i}"
                     agents_to_add.append((name, agent_class_type, config, tags))
             elif to_add < 0:
@@ -1130,7 +1209,9 @@ class CrewManager:
         # Phase 2: Perform operations (without lock - each operation will acquire its own lock)
         for name, cls, cfg, tgs in agents_to_add:
             try:
-                await self.add_agent(name, cls, config=cfg, tags=tgs, caller_role=caller_role)
+                await self.add_agent(
+                    name, cls, config=cfg, tags=tgs, caller_role=caller_role
+                )
                 await self.start_agent(name, caller_role=caller_role)
             except Exception as e:
                 logger.error(f"Failed to add or start agent {name} during scaling: {e}")
@@ -1198,7 +1279,9 @@ class CrewManager:
         if self.state_backend == "redis" and _AIOREDIS_AVAILABLE:
             try:
                 # D. Plugin/Integrations: Use connection pooling
-                self.redis_pool = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost"))
+                self.redis_pool = redis.from_url(
+                    os.environ.get("REDIS_URL", "redis://localhost")
+                )
                 await self.redis_pool.ping()
                 logger.info("Redis connection pool established.")
             except Exception as e:
@@ -1208,7 +1291,9 @@ class CrewManager:
         if not self._heartbeat_monitor_task and (
             self._sandbox_runner and self._agent_health_poller
         ):
-            self._heartbeat_monitor_task = asyncio.create_task(self.monitor_heartbeats())
+            self._heartbeat_monitor_task = asyncio.create_task(
+                self.monitor_heartbeats()
+            )
         elif not (self._sandbox_runner and self._agent_health_poller):
             logger.warning(
                 "Heartbeat monitor not started as sandbox_runner or agent_health_poller are not configured."
@@ -1268,12 +1353,16 @@ class CrewManager:
             names = list(self.agents.keys())
             dups = [name for name in set(names) if names.count(name) > 1]
             unused = [
-                name for name, agent_info in self.agents.items() if not agent_info.get("sandbox")
+                name
+                for name, agent_info in self.agents.items()
+                if not agent_info.get("sandbox")
             ]
 
             issues = {"duplicates": dups, "configured_but_not_running": unused}
             if not self.policy:
-                issues["policy_missing"] = "No policy store configured, RBAC is simplified."
+                issues["policy_missing"] = (
+                    "No policy store configured, RBAC is simplified."
+                )
 
             return issues
 
@@ -1288,12 +1377,17 @@ class CrewManager:
             return {
                 "agent_count": len(self.agents),
                 "agent_types_configured": {
-                    name: agent_info["agent_class_name"] for name, agent_info in self.agents.items()
+                    name: agent_info["agent_class_name"]
+                    for name, agent_info in self.agents.items()
                 },
                 "tags_configured": {
-                    name: list(agent_info["tags"]) for name, agent_info in self.agents.items()
+                    name: list(agent_info["tags"])
+                    for name, agent_info in self.agents.items()
                 },
-                "configs": {name: agent_info["config"] for name, agent_info in self.agents.items()},
+                "configs": {
+                    name: agent_info["config"]
+                    for name, agent_info in self.agents.items()
+                },
                 "running_sandboxes": list(self._agent_sandboxes.keys()),
             }
 
@@ -1352,7 +1446,9 @@ class CrewManager:
                             )
                             await self.start_agent(agent_name, caller_role="system")
                     except Exception as e:
-                        logger.error(f"Failed to load agent '{agent_name}' from Redis state: {e}")
+                        logger.error(
+                            f"Failed to load agent '{agent_name}' from Redis state: {e}"
+                        )
 
 
 # Example agent subclass for testing/demo (only used for class registration)

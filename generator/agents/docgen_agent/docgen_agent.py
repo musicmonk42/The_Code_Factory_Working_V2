@@ -47,7 +47,10 @@ import tiktoken  # Used for token counting
 # from aiohttp import ClientError  # For retry logic - causes tenacity issues
 # Use Exception instead for broader catch
 from aiohttp import ClientError  # *** FIX: ADDED MISSING IMPORT ***
-from opentelemetry.trace.status import Status, StatusCode  # *** FIX: Added missing import ***
+from opentelemetry.trace.status import (
+    Status,
+    StatusCode,
+)  # *** FIX: Added missing import ***
 
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
@@ -73,7 +76,12 @@ from runner.summarize_utils import (
     ensemble_summarizers,
     refine_from_feedback,
 )
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from omnicore_engine.plugin_registry import PlugInKind, plugin
 
@@ -96,7 +104,9 @@ try:
     from plantuml import PlantUML
 except ImportError:
     PlantUML = None
-    logging.warning("PlantUML library not found. Diagram generation in enrichment will be skipped.")
+    logging.warning(
+        "PlantUML library not found. Diagram generation in enrichment will be skipped."
+    )
 
 # Sphinx (For RST generation)
 try:
@@ -106,7 +116,9 @@ try:
     SPHINX_AVAILABLE = True
 except ImportError:
     SPHINX_AVAILABLE = False
-    logging.warning("Sphinx not found. RST documentation generation will use fallback format.")
+    logging.warning(
+        "Sphinx not found. RST documentation generation will use fallback format."
+    )
 
 
 # --- Observability ---
@@ -152,7 +164,9 @@ def scrub_text(text: str) -> str:
         ).text
         return anonymized_text
     except Exception as e:
-        logger.error(f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True)
+        logger.error(
+            f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True
+        )
         raise RuntimeError(
             f"Critical error during sensitive data scrubbing with Presidio: {e}"
         ) from e
@@ -194,10 +208,11 @@ class LicenseCompliance(CompliancePlugin):
             r"License ([A-Za-z0-9\s-]+) Version \d\.\d",
             r"All Rights Reserved",
         ]
-        if not any(re.search(pattern, docs_content, re.IGNORECASE) for pattern in license_patterns):
-            issue_text = (
-                "Missing recognized open-source license statement or clear licensing information."
-            )
+        if not any(
+            re.search(pattern, docs_content, re.IGNORECASE)
+            for pattern in license_patterns
+        ):
+            issue_text = "Missing recognized open-source license statement or clear licensing information."
             logger.warning(
                 f"Docgen compliance issue: doc_type=any, issue_type=missing_license, details: {issue_text}"
             )
@@ -214,8 +229,12 @@ class CopyrightCompliance(CompliancePlugin):
 
     def check(self, docs_content: str) -> List[str]:
         issues = []
-        if not re.search(r"Copyright\s+\(c\)\s+\d{4}\s+[\w\s,.]+", docs_content, re.IGNORECASE):
-            issue_text = "Missing copyright notice in format 'Copyright (c) YYYY Owner'."
+        if not re.search(
+            r"Copyright\s+\(c\)\s+\d{4}\s+[\w\s,.]+", docs_content, re.IGNORECASE
+        ):
+            issue_text = (
+                "Missing copyright notice in format 'Copyright (c) YYYY Owner'."
+            )
             logger.warning(
                 f"Docgen compliance issue: doc_type=any, issue_type=missing_copyright, details: {issue_text}"
             )
@@ -245,7 +264,9 @@ class PluginRegistry:
     def register(self, plugin: CompliancePlugin):
         """Register a plugin instance."""
         if not isinstance(plugin, CompliancePlugin):
-            raise TypeError(f"Plugin must be an instance of CompliancePlugin, got {type(plugin)}")
+            raise TypeError(
+                f"Plugin must be an instance of CompliancePlugin, got {type(plugin)}"
+            )
 
         plugin_name = plugin.name
         if plugin_name in self.plugins:
@@ -310,7 +331,9 @@ class PluginRegistry:
                             )
 
             except Exception as e:
-                logger.error(f"Failed to load plugin from {plugin_file}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to load plugin from {plugin_file}: {e}", exc_info=True
+                )
 
 
 # --- Sphinx Integration ---
@@ -412,7 +435,9 @@ class SphinxDocGenerator:
             result = build_main(args)
 
             if result == 0:
-                logger.info(f"Successfully built Sphinx documentation at {self.build_dir / 'html'}")
+                logger.info(
+                    f"Successfully built Sphinx documentation at {self.build_dir / 'html'}"
+                )
                 return True
             else:
                 logger.error(f"Sphinx build failed with code {result}")
@@ -598,7 +623,9 @@ class DocGenAgent:
         self.repo_path = repo_path
         repo_path_obj = Path(repo_path)
         if not repo_path_obj.exists() or not repo_path_obj.is_dir():
-            raise ValueError(f"Repository path does not exist or is not a directory: {repo_path}")
+            raise ValueError(
+                f"Repository path does not exist or is not a directory: {repo_path}"
+            )
 
         self.languages_supported = languages_supported or [
             "python",
@@ -702,7 +729,9 @@ class DocGenAgent:
                     context["file_metadata"][file_path_str] = {
                         "size_bytes": stat.st_size,
                         "lines": len(content.splitlines()),
-                        "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "modified_time": datetime.fromtimestamp(
+                            stat.st_mtime
+                        ).isoformat(),
                         "language": self._detect_language(file_path),
                     }
 
@@ -710,9 +739,13 @@ class DocGenAgent:
                     context["total_size_bytes"] += stat.st_size
 
                 except Exception as e:
-                    logger.warning(f"Could not read file {file_path_str} for context: {e}")
+                    logger.warning(
+                        f"Could not read file {file_path_str} for context: {e}"
+                    )
             else:
-                logger.warning(f"Target file not found in repository: {file_path_str}. Skipping.")
+                logger.warning(
+                    f"Target file not found in repository: {file_path_str}. Skipping."
+                )
 
         logger.info(
             f"Context gathered: {len(context['file_contents'])} files, "
@@ -744,7 +777,9 @@ class DocGenAgent:
         }
         return extension_map.get(file_path.suffix.lower(), "unknown")
 
-    async def _human_approval(self, result: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    async def _human_approval(
+        self, result: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
         """
         Manages the human-in-the-loop approval process.
         FULLY IMPLEMENTED: Sends to webhook, waits for response with timeout.
@@ -771,12 +806,16 @@ class DocGenAgent:
             "doc_type": doc_type,
             "validation_report": result.get("validation"),
             "compliance_issues": result.get("compliance_issues"),
-            "documentation_preview": result.get("documentation", {}).get("content", "")[:2000],
+            "documentation_preview": result.get("documentation", {}).get("content", "")[
+                :2000
+            ],
         }
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(approval_webhook, json=payload, timeout=300) as resp:
+                async with session.post(
+                    approval_webhook, json=payload, timeout=300
+                ) as resp:
                     if resp.status == 200:
                         response_data = await resp.json()
                         approved = response_data.get("approved", False)
@@ -885,7 +924,9 @@ class DocGenAgent:
         self,
         target_files: List[str],
         doc_type: Optional[str] = None,
-        doc_format: Optional[Union[str, List[str]]] = None,  # Integration test compatibility
+        doc_format: Optional[
+            Union[str, List[str]]
+        ] = None,  # Integration test compatibility
         instructions: Optional[str] = None,
         human_approval: bool = False,
         llm_model: str = "gpt-4o",
@@ -964,7 +1005,9 @@ class DocGenAgent:
                 )
                 start_llm = time.monotonic()
 
-                llm_response = await call_llm_api(prompt=prompt, model=llm_model, stream=False)
+                llm_response = await call_llm_api(
+                    prompt=prompt, model=llm_model, stream=False
+                )
 
                 # Log LLM metrics
                 llm_latency = time.monotonic() - start_llm
@@ -1017,12 +1060,14 @@ class DocGenAgent:
                     output_format = "md"
 
                 response_validator = ResponseValidator(schema={})
-                validator_result = await response_validator.process_and_validate_response(
-                    raw_response=llm_response,
-                    output_format=output_format,  # Use the mapped format
-                    lang="en",
-                    auto_correct=True,
-                    repo_path=self.repo_path,
+                validator_result = (
+                    await response_validator.process_and_validate_response(
+                        raw_response=llm_response,
+                        output_format=output_format,  # Use the mapped format
+                        lang="en",
+                        auto_correct=True,
+                        repo_path=self.repo_path,
+                    )
                 )
 
                 # 6. Run Compliance Checks (using plugin registry)
@@ -1079,12 +1124,16 @@ class DocGenAgent:
                             max_length=300,
                             llm_model=llm_model,
                         )
-                        logger.info("Generated documentation summaries.", extra=log_extra)
+                        logger.info(
+                            "Generated documentation summaries.", extra=log_extra
+                        )
                         add_provenance(
                             {
                                 "action": "Doc Summary Generated",
                                 "run_id": run_id,
-                                "summary_hash": hashlib.sha256(summary.encode()).hexdigest(),
+                                "summary_hash": hashlib.sha256(
+                                    summary.encode()
+                                ).hexdigest(),
                                 "ensemble_summary_hash": hashlib.sha256(
                                     ensemble_summary.encode()
                                 ).hexdigest(),
@@ -1094,8 +1143,12 @@ class DocGenAgent:
                         summary = "No content to summarize."
                         ensemble_summary = "No content to summarize."
                 except Exception as e:
-                    logger.error(f"Summarization failed: {e}", exc_info=True, extra=log_extra)
-                    UTIL_ERRORS.labels(util_name="summarizer", error_type=type(e).__name__).inc()
+                    logger.error(
+                        f"Summarization failed: {e}", exc_info=True, extra=log_extra
+                    )
+                    UTIL_ERRORS.labels(
+                        util_name="summarizer", error_type=type(e).__name__
+                    ).inc()
                     summary = f"Summarization failed: {e}"
                     ensemble_summary = f"Summarization failed: {e}"
                 # --- End Summarization ---
@@ -1134,7 +1187,9 @@ class DocGenAgent:
                         f"Documentation validation failed: {validator_result['issues']}",
                         extra=log_extra,
                     )
-                    logger.warning(f"Docgen validation status: doc_type={doc_type}, status=failed")
+                    logger.warning(
+                        f"Docgen validation status: doc_type={doc_type}, status=failed"
+                    )
 
                 # 10. Human Approval & Refinement (User Request)
                 if human_approval:
@@ -1158,7 +1213,9 @@ class DocGenAgent:
                         return final_result
 
                     # Second, get feedback rating (stubbed)
-                    rating = await self.get_human_feedback(final_result["documentation"]["content"])
+                    rating = await self.get_human_feedback(
+                        final_result["documentation"]["content"]
+                    )
                     final_result["approval"]["rating"] = rating
 
                     if rating < 0.5:  # Refinement threshold
@@ -1168,7 +1225,9 @@ class DocGenAgent:
                         )
                         try:
                             refined_docs = await refine_from_feedback(
-                                original_content=final_result["documentation"]["content"],
+                                original_content=final_result["documentation"][
+                                    "content"
+                                ],
                                 summary=final_result["summary"],
                                 rating=rating,
                                 feedback_text=comments or "Low rating, please improve.",
@@ -1307,7 +1366,9 @@ class DocGenAgent:
             yield {"stage": "llm_generation", "status": "in_progress", "run_id": run_id}
 
             start_llm = time.monotonic()
-            llm_response_stream = await call_llm_api(prompt=prompt, model=llm_model, stream=True)
+            llm_response_stream = await call_llm_api(
+                prompt=prompt, model=llm_model, stream=True
+            )
 
             full_content = ""
             chunk_count = 0
@@ -1406,7 +1467,8 @@ class DocGenAgent:
                     logger.error(f"Compliance plugin '{plugin.name}' failed: {e}")
 
             all_compliance_issues = (
-                validator_result["issues"].get("compliance_issues", []) + agent_compliance_issues
+                validator_result["issues"].get("compliance_issues", [])
+                + agent_compliance_issues
             )
 
             yield {
@@ -1436,7 +1498,9 @@ class DocGenAgent:
                     exc_info=True,
                     extra=log_extra,
                 )
-                UTIL_ERRORS.labels(util_name="summarizer_stream", error_type=type(e).__name__).inc()
+                UTIL_ERRORS.labels(
+                    util_name="summarizer_stream", error_type=type(e).__name__
+                ).inc()
                 summary = f"Summarization failed: {e}"
 
             yield {
@@ -1753,7 +1817,9 @@ if __name__ == "__main__":
         agent = DocGenAgent(repo_path=temp_repo_path)
 
         # Mock the LLM client to return predictable content
-        with patch("runner.llm_client.call_llm_api", new_callable=AsyncMock) as mock_llm:
+        with patch(
+            "runner.llm_client.call_llm_api", new_callable=AsyncMock
+        ) as mock_llm:
             # Mock for generate_documentation
             mock_llm.side_effect = [
                 {

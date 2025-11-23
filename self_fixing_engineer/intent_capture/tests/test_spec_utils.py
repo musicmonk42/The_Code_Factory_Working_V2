@@ -40,8 +40,12 @@ def mock_requests():
     mock_post = MagicMock()
 
     # Patch both requests.get and requests.post
-    with patch("intent_capture.spec_utils.requests.get", return_value=mock_resp) as mock_get:
-        with patch("intent_capture.spec_utils.requests.post", mock_post) as mock_post_patch:
+    with patch(
+        "intent_capture.spec_utils.requests.get", return_value=mock_resp
+    ) as mock_get:
+        with patch(
+            "intent_capture.spec_utils.requests.post", mock_post
+        ) as mock_post_patch:
             yield {"get": mock_get, "post": mock_post_patch, "response": mock_resp}
 
 
@@ -93,10 +97,18 @@ def mock_tracer():
     mock_span.set_status = MagicMock()
 
     mock_tracer_instance = MagicMock()
-    mock_tracer_instance.start_as_current_span.return_value.__enter__.return_value = mock_span
-    mock_tracer_instance.start_as_current_span.return_value.__aenter__.return_value = mock_span
-    mock_tracer_instance.start_as_current_span.return_value.__exit__.return_value = False
-    mock_tracer_instance.start_as_current_span.return_value.__aexit__.return_value = False
+    mock_tracer_instance.start_as_current_span.return_value.__enter__.return_value = (
+        mock_span
+    )
+    mock_tracer_instance.start_as_current_span.return_value.__aenter__.return_value = (
+        mock_span
+    )
+    mock_tracer_instance.start_as_current_span.return_value.__exit__.return_value = (
+        False
+    )
+    mock_tracer_instance.start_as_current_span.return_value.__aexit__.return_value = (
+        False
+    )
 
     with patch("intent_capture.spec_utils.tracer", mock_tracer_instance):
         yield mock_tracer_instance
@@ -115,10 +127,11 @@ def mock_prometheus():
         labels=MagicMock(return_value=MagicMock(observe=MagicMock())),
     )
 
-    with patch("intent_capture.spec_utils.SPEC_GEN_TOTAL", mock_counter), patch(
-        "intent_capture.spec_utils.SPEC_GEN_LATENCY_SECONDS", mock_histogram
-    ), patch("intent_capture.spec_utils.SPEC_VALIDATION_TOTAL", mock_counter), patch(
-        "intent_capture.spec_utils.SPEC_AUTO_FIX_TOTAL", mock_counter
+    with (
+        patch("intent_capture.spec_utils.SPEC_GEN_TOTAL", mock_counter),
+        patch("intent_capture.spec_utils.SPEC_GEN_LATENCY_SECONDS", mock_histogram),
+        patch("intent_capture.spec_utils.SPEC_VALIDATION_TOTAL", mock_counter),
+        patch("intent_capture.spec_utils.SPEC_AUTO_FIX_TOTAL", mock_counter),
     ):
         yield
 
@@ -227,7 +240,9 @@ def test_load_ambiguous_words_file(tmp_path):
     file_path.write_text(json.dumps({"en": ["word1", "word2"]}))
     with patch(
         "intent_capture.spec_utils.os.environ.get",
-        side_effect=lambda k, d=None: (str(file_path) if k == "AMBIGUOUS_WORDS_PATH" else d),
+        side_effect=lambda k, d=None: (
+            str(file_path) if k == "AMBIGUOUS_WORDS_PATH" else d
+        ),
     ):
         words = load_ambiguous_words("en")
     assert words == ["word1", "word2"]
@@ -237,7 +252,9 @@ def test_load_ambiguous_words_url(mock_requests):
     """Test loading ambiguous words from URL."""
     with patch(
         "intent_capture.spec_utils.os.environ.get",
-        side_effect=lambda k, d=None: ("http://test" if k == "AMBIGUOUS_WORDS_URL" else d),
+        side_effect=lambda k, d=None: (
+            "http://test" if k == "AMBIGUOUS_WORDS_URL" else d
+        ),
     ):
         words = load_ambiguous_words("en")
     assert words == ["word1"]
@@ -255,7 +272,9 @@ def test_load_ambiguous_words_retry():
     ) as mock_get:
         with patch(
             "intent_capture.spec_utils.os.environ.get",
-            side_effect=lambda k, d=None: ("http://test" if k == "AMBIGUOUS_WORDS_URL" else d),
+            side_effect=lambda k, d=None: (
+                "http://test" if k == "AMBIGUOUS_WORDS_URL" else d
+            ),
         ):
             words = load_ambiguous_words("en")
     assert words == ["word1"]
@@ -264,10 +283,14 @@ def test_load_ambiguous_words_retry():
 
 def test_load_ambiguous_words_failure():
     """Test ambiguous words loading failure."""
-    with patch("intent_capture.spec_utils.requests.get", side_effect=Exception("Mock failure")):
+    with patch(
+        "intent_capture.spec_utils.requests.get", side_effect=Exception("Mock failure")
+    ):
         with patch(
             "intent_capture.spec_utils.os.environ.get",
-            side_effect=lambda k, d=None: ("http://test" if k == "AMBIGUOUS_WORDS_URL" else d),
+            side_effect=lambda k, d=None: (
+                "http://test" if k == "AMBIGUOUS_WORDS_URL" else d
+            ),
         ):
             words = load_ambiguous_words("en")
     assert words == []
@@ -376,7 +399,9 @@ def test_migrate_spec():
 # --- Tests for Ambiguity Detection ---
 def test_detect_ambiguity(mock_nltk):
     """Test ambiguity detection."""
-    with patch("intent_capture.spec_utils.load_ambiguous_words", return_value=["ambiguous"]):
+    with patch(
+        "intent_capture.spec_utils.load_ambiguous_words", return_value=["ambiguous"]
+    ):
         text = "This is ambiguous text"
         ambiguities = detect_ambiguity(text, "en")
         assert len(ambiguities) > 0
@@ -419,7 +444,9 @@ async def test_auto_fix_spec_success(mock_tracer, mock_prometheus, temp_locales)
         # When prompt | llm is called, return our mock chain
         mock_prompt.__or__ = MagicMock(return_value=mock_chain)
 
-        with patch("intent_capture.spec_utils.validate_spec", return_value=(True, "valid")):
+        with patch(
+            "intent_capture.spec_utils.validate_spec", return_value=(True, "valid")
+        ):
             spec, notes = await auto_fix_spec(
                 "original",
                 mock_llm,
@@ -447,7 +474,9 @@ async def test_auto_fix_spec_failure(mock_llm, temp_locales):
     mock_chain.ainvoke = AsyncMock(side_effect=custom_ainvoke)
     mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
-    with patch("intent_capture.spec_utils.validate_spec", return_value=(False, "invalid")):
+    with patch(
+        "intent_capture.spec_utils.validate_spec", return_value=(False, "invalid")
+    ):
         spec, notes = await auto_fix_spec(
             "original",
             mock_llm,
@@ -509,7 +538,9 @@ async def test_generate_spec_from_memory_success(
 ):
     """Test successful spec generation."""
     # Create a custom response with valid Gherkin
-    gherkin_spec = "Feature: Test\nScenario: Test\n  Given test\n  When test\n  Then test"
+    gherkin_spec = (
+        "Feature: Test\nScenario: Test\n  Given test\n  When test\n  Then test"
+    )
 
     class MockResponse:
         def __init__(self):
@@ -538,7 +569,9 @@ async def test_generate_spec_from_memory_auto_fix(
 ):
     """Test spec generation with auto-fix."""
     # Set up mock to return valid gherkin after auto-fix
-    gherkin_spec = "Feature: Test\nScenario: Test\n  Given test\n  When test\n  Then test"
+    gherkin_spec = (
+        "Feature: Test\nScenario: Test\n  Given test\n  When test\n  Then test"
+    )
 
     class MockResponse:
         def __init__(self):
@@ -556,9 +589,14 @@ async def test_generate_spec_from_memory_auto_fix(
     mock_llm.ainvoke = AsyncMock(side_effect=custom_ainvoke)
 
     # Mock validate_spec to return False initially, triggering auto-fix
-    with patch("intent_capture.spec_utils.validate_spec", return_value=(False, "invalid")), patch(
-        "intent_capture.spec_utils.auto_fix_spec",
-        AsyncMock(return_value=("fixed", "notes")),
+    with (
+        patch(
+            "intent_capture.spec_utils.validate_spec", return_value=(False, "invalid")
+        ),
+        patch(
+            "intent_capture.spec_utils.auto_fix_spec",
+            AsyncMock(return_value=("fixed", "notes")),
+        ),
     ):
         result = await generate_spec_from_memory(mock_memory, mock_llm)
     assert result is not None

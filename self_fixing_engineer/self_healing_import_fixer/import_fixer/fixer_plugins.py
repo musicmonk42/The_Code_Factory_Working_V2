@@ -32,7 +32,12 @@ logger = logging.getLogger(__name__)
 
 # --- Required Core Dependencies ---
 try:
-    from .compat_core import SECRETS_MANAGER, alert_operator, audit_logger, scrub_secrets
+    from .compat_core import (
+        SECRETS_MANAGER,
+        alert_operator,
+        audit_logger,
+        scrub_secrets,
+    )
 except ImportError as e:
     logger.critical(f"Missing core dependency for fixer_plugins: {e}")
     raise RuntimeError(f"[CRITICAL][PLUGINS] Missing core dependency: {e}")
@@ -111,13 +116,17 @@ def _get_plugin_signature_key(production_mode: bool) -> bytes:
     """
     global _plugin_signature_key, _plugin_key_source
     if _plugin_signature_key is None:
-        key_str = SECRETS_MANAGER.get_secret(PLUGIN_SIGNATURE_KEY_ENV, required=production_mode)
+        key_str = SECRETS_MANAGER.get_secret(
+            PLUGIN_SIGNATURE_KEY_ENV, required=production_mode
+        )
         if key_str:
             _plugin_signature_key = key_str.encode("utf-8")
             _plugin_key_source = "secret"
         else:
             if production_mode:
-                raise AnalyzerCriticalError("Plugin signature key not found for production.")
+                raise AnalyzerCriticalError(
+                    "Plugin signature key not found for production."
+                )
             _plugin_signature_key = os.urandom(32)
             _plugin_key_source = "random"
             logger.warning(
@@ -146,19 +155,25 @@ async def _verify_plugin_signature_async(
             raise AnalyzerCriticalError(f"No read access to plugin {file_path}")
 
         file_stat = file_path.stat()
-        cache_key = f"plugin_signature:{file_path}:{file_stat.st_mtime_ns}:{file_stat.st_size}"
+        cache_key = (
+            f"plugin_signature:{file_path}:{file_stat.st_mtime_ns}:{file_stat.st_size}"
+        )
 
         cache = await _get_plugin_cache()
         cached_signature = await cache.get(cache_key)
 
-        if cached_signature and hmac.compare_digest(cached_signature, expected_signature):
+        if cached_signature and hmac.compare_digest(
+            cached_signature, expected_signature
+        ):
             logger.debug(f"Plugin signature verified from cache for {file_path}.")
             return True
 
         with open(file_path, "rb") as f:
             file_content = f.read()
 
-        h = hmac.new(_get_plugin_signature_key(production_mode), file_content, hashlib.sha256)
+        h = hmac.new(
+            _get_plugin_signature_key(production_mode), file_content, hashlib.sha256
+        )
         calculated_signature = h.hexdigest()
 
         if hmac.compare_digest(calculated_signature, expected_signature):
@@ -166,7 +181,9 @@ async def _verify_plugin_signature_async(
             await cache.setex(cache_key, 86400, calculated_signature)
             return True
         else:
-            logger.error(f"Plugin signature MISMATCH for {file_path}. Possible tampering detected!")
+            logger.error(
+                f"Plugin signature MISMATCH for {file_path}. Possible tampering detected!"
+            )
             audit_logger.log_event(
                 "plugin_signature_mismatch",
                 file=str(file_path),
@@ -364,7 +381,9 @@ class PluginManager:
             try:
                 func(*args, **kwargs)
             except Exception as e:
-                logger.exception("Hook '%s' function '%s' failed.", hook_name, func.__name__)
+                logger.exception(
+                    "Hook '%s' function '%s' failed.", hook_name, func.__name__
+                )
                 audit_logger.log_event(
                     "plugin_hook_failure",
                     hook_name=hook_name,
@@ -392,7 +411,9 @@ class PluginManager:
                 return
 
             if not self._SAFE_MOD_RE.match(module_name):
-                raise PluginValidationError(f"Invalid plugin module name: {module_name!r}")
+                raise PluginValidationError(
+                    f"Invalid plugin module name: {module_name!r}"
+                )
 
             plugin_found = False
             for plugin_dir in self.whitelisted_plugin_dirs:
@@ -416,7 +437,9 @@ class PluginManager:
                     except (AnalyzerCriticalError, PluginValidationError):
                         raise
                     except Exception as e:
-                        raise PluginLoadError(f"Failed to load plugin '{module_name}': {e}") from e
+                        raise PluginLoadError(
+                            f"Failed to load plugin '{module_name}': {e}"
+                        ) from e
 
             if not plugin_found:
                 raise NonCriticalError(
@@ -452,12 +475,16 @@ class PluginManager:
         self.diff_viewers = _filter(self.diff_viewers)
         removed += before - len(self.diff_viewers)
 
-        logger.info("Unloaded plugin %s and unregistered %d components.", module_name, removed)
+        logger.info(
+            "Unloaded plugin %s and unregistered %d components.", module_name, removed
+        )
         audit_logger.log_event(
             "plugin_unloaded", module_name=module_name, components_unregistered=removed
         )
 
-    async def _load_plugin_file_async(self, module_name: str, full_plugin_path: Path) -> None:
+    async def _load_plugin_file_async(
+        self, module_name: str, full_plugin_path: Path
+    ) -> None:
         if module_name in self._loaded_modules:
             return
 
@@ -541,7 +568,11 @@ class PluginManager:
             plugins = []
             for name in dir(module):
                 obj = getattr(module, name)
-                if isinstance(obj, type) and issubclass(obj, Plugin) and obj is not Plugin:
+                if (
+                    isinstance(obj, type)
+                    and issubclass(obj, Plugin)
+                    and obj is not Plugin
+                ):
                     plugins.append(obj)
 
             if not plugins:
@@ -588,7 +619,9 @@ def _reset_plugin_key_for_tests() -> None:
 # Example usage (for testing this module independently)
 if __name__ == "__main__":
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logging.getLogger(__name__).setLevel(logging.DEBUG)
 
     # --- Setup Test Environment ---
@@ -682,7 +715,9 @@ class MyValidatorPlugin(Plugin):
 
         print("\n--- Running Healers ---")
         if plugin_manager.healers:
-            healer_result = plugin_manager.healers[0]("test_file.py", {"type": "syntax_error"})
+            healer_result = plugin_manager.healers[0](
+                "test_file.py", {"type": "syntax_error"}
+            )
             print(f"Healer Result: {healer_result}")
         else:
             print("No healers registered.")
@@ -750,7 +785,9 @@ class MyValidatorPlugin(Plugin):
             plugin_manager_tampered = make_plugin_manager(
                 config={
                     "whitelisted_plugin_dirs": [str(tampered_plugin_dir)],
-                    "approved_plugins": {"plugin_tampered_healer": tampered_signature_original},
+                    "approved_plugins": {
+                        "plugin_tampered_healer": tampered_signature_original
+                    },
                     "production_mode": True,
                 }
             )

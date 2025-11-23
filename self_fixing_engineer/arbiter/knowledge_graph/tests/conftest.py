@@ -25,7 +25,9 @@ sys.path.insert(0, str(project_root))
 def mock_agent_metrics(monkeypatch):
     """Automatically mock AGENT_METRICS for all tests"""
     mock_metrics = {
-        "agent_predict_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "agent_predict_total": MagicMock(
+            labels=MagicMock(return_value=MagicMock(inc=MagicMock()))
+        ),
         "agent_predict_success": MagicMock(
             labels=MagicMock(return_value=MagicMock(inc=MagicMock()))
         ),
@@ -43,8 +45,12 @@ def mock_agent_metrics(monkeypatch):
             labels=MagicMock(return_value=MagicMock(inc=MagicMock()))
         ),
         "agent_creation_duration_seconds": MagicMock(observe=MagicMock()),
-        "llm_calls_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
-        "llm_errors_total": MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
+        "llm_calls_total": MagicMock(
+            labels=MagicMock(return_value=MagicMock(inc=MagicMock()))
+        ),
+        "llm_errors_total": MagicMock(
+            labels=MagicMock(return_value=MagicMock(inc=MagicMock()))
+        ),
         "llm_call_latency_seconds": MagicMock(
             labels=MagicMock(return_value=MagicMock(observe=MagicMock()))
         ),
@@ -111,7 +117,9 @@ def mock_config(monkeypatch):
     monkeypatch.setattr(config.Config, "POSTGRES_DB_URL", None)
     monkeypatch.setattr(config.Config, "MAX_MM_DATA_SIZE_MB", 100)
     monkeypatch.setattr(config.Config, "CACHE_EXPIRATION_SECONDS", 3600)
-    monkeypatch.setattr(config.Config, "PII_SENSITIVE_KEYS", ["password", "email", "ssn"])
+    monkeypatch.setattr(
+        config.Config, "PII_SENSITIVE_KEYS", ["password", "email", "ssn"]
+    )
     monkeypatch.setattr(config.Config, "GDPR_MODE", True)
     monkeypatch.setattr(config.Config, "DEFAULT_PROVIDER", "openai")
     monkeypatch.setattr(config.Config, "DEFAULT_LLM_MODEL", "gpt-3.5-turbo")
@@ -127,7 +135,9 @@ def mock_config(monkeypatch):
     monkeypatch.setattr(
         config.Config, "FALLBACK_LLM_CONFIG", {"model": "claude-2", "temperature": 0.7}
     )
-    monkeypatch.setattr(config.Config, "AUDIT_LEDGER_URL", "http://localhost:8000/audit")
+    monkeypatch.setattr(
+        config.Config, "AUDIT_LEDGER_URL", "http://localhost:8000/audit"
+    )
     monkeypatch.setattr(config.Config, "AUDIT_SIGNING_PUBLIC_KEY", None)
 
     return config.Config
@@ -157,8 +167,12 @@ def mock_external_clients(monkeypatch):
     mock_audit_client.return_value = mock_audit_instance
 
     monkeypatch.setattr("arbiter.knowledge_graph.core.RedisClient", mock_redis_client)
-    monkeypatch.setattr("arbiter.knowledge_graph.core.PostgresClient", mock_postgres_client)
-    monkeypatch.setattr("arbiter.knowledge_graph.core.AuditLedgerClient", mock_audit_client)
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.PostgresClient", mock_postgres_client
+    )
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.AuditLedgerClient", mock_audit_client
+    )
 
     return {
         "redis": mock_redis_client,
@@ -184,7 +198,9 @@ def mock_llm_providers(monkeypatch):
 
     monkeypatch.setattr("arbiter.knowledge_graph.core.ChatOpenAI", mock_openai)
     monkeypatch.setattr("arbiter.knowledge_graph.core.ChatAnthropic", mock_anthropic)
-    monkeypatch.setattr("arbiter.knowledge_graph.core.ChatGoogleGenerativeAI", mock_google)
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.ChatGoogleGenerativeAI", mock_google
+    )
     monkeypatch.setattr("arbiter.knowledge_graph.core.ChatXAI", mock_xai)
 
     return {
@@ -204,7 +220,9 @@ def mock_multimodal_processors(monkeypatch):
 
     mock_default_strategy = MagicMock()
     mock_default_strategy.return_value = MagicMock()
-    mock_default_strategy.return_value.create_agent_prompt = AsyncMock(return_value="Prompt")
+    mock_default_strategy.return_value.create_agent_prompt = AsyncMock(
+        return_value="Prompt"
+    )
 
     mock_concise_strategy = MagicMock()
     mock_concise_strategy.return_value = MagicMock()
@@ -216,8 +234,12 @@ def mock_multimodal_processors(monkeypatch):
         "arbiter.knowledge_graph.core.DefaultMultiModalProcessor",
         mock_default_processor,
     )
-    monkeypatch.setattr("arbiter.knowledge_graph.core.DefaultPromptStrategy", mock_default_strategy)
-    monkeypatch.setattr("arbiter.knowledge_graph.core.ConcisePromptStrategy", mock_concise_strategy)
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.DefaultPromptStrategy", mock_default_strategy
+    )
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.ConcisePromptStrategy", mock_concise_strategy
+    )
 
     return {
         "processor": mock_default_processor,
@@ -229,7 +251,9 @@ def mock_multimodal_processors(monkeypatch):
 @pytest.fixture
 def mock_langchain_components(monkeypatch):
     """Mock langchain components"""
-    monkeypatch.setattr("arbiter.knowledge_graph.core.messages_to_dict", MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        "arbiter.knowledge_graph.core.messages_to_dict", MagicMock(return_value=[])
+    )
     monkeypatch.setattr(
         "arbiter.knowledge_graph.core.messages_from_dict", MagicMock(return_value=[])
     )

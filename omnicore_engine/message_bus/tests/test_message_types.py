@@ -110,11 +110,17 @@ class TestMessage(unittest.TestCase):
 
     def test_dataclass_methods(self):
         """Test dataclass methods like equality and representation."""
-        msg1 = Message(topic="test", payload="data", trace_id="fixed_id", timestamp=100.0)
+        msg1 = Message(
+            topic="test", payload="data", trace_id="fixed_id", timestamp=100.0
+        )
 
-        msg2 = Message(topic="test", payload="data", trace_id="fixed_id", timestamp=100.0)
+        msg2 = Message(
+            topic="test", payload="data", trace_id="fixed_id", timestamp=100.0
+        )
 
-        msg3 = Message(topic="different", payload="data", trace_id="fixed_id", timestamp=100.0)
+        msg3 = Message(
+            topic="different", payload="data", trace_id="fixed_id", timestamp=100.0
+        )
 
         # Test equality
         self.assertEqual(msg1, msg2)
@@ -241,7 +247,9 @@ class TestMessageSchema(unittest.TestCase):
         """Test type validation for fields."""
         # Invalid priority type
         with self.assertRaises(ValidationError):
-            MessageSchema(topic="test", payload={"data": "test"}, priority="high")  # Should be int
+            MessageSchema(
+                topic="test", payload={"data": "test"}, priority="high"
+            )  # Should be int
 
         # Invalid context type
         with self.assertRaises(ValidationError):
@@ -318,7 +326,9 @@ class TestMessageSchema(unittest.TestCase):
 
     def test_optional_fields_none(self):
         """Test that optional fields can be explicitly set to None."""
-        schema = MessageSchema(topic="test", payload={}, trace_id=None, idempotency_key=None)
+        schema = MessageSchema(
+            topic="test", payload={}, trace_id=None, idempotency_key=None
+        )
 
         self.assertIsNone(schema.trace_id)
         self.assertIsNone(schema.idempotency_key)

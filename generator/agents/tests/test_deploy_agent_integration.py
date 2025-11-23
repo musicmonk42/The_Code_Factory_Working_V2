@@ -230,7 +230,9 @@ def mock_external_tools():
 @pytest.fixture
 def mock_llm_calls():
     """Mock all LLM API calls."""
-    with patch("generator.agents.deploy_agent.deploy_agent.call_llm_api") as mock_agent_llm, patch(
+    with patch(
+        "generator.agents.deploy_agent.deploy_agent.call_llm_api"
+    ) as mock_agent_llm, patch(
         "generator.agents.deploy_agent.deploy_agent.call_ensemble_api"
     ) as mock_agent_ensemble, patch(
         "generator.agents.deploy_agent.deploy_prompt.call_ensemble_api"
@@ -402,7 +404,9 @@ class TestFullDeploymentPipeline:
             mock_validator.fix = AsyncMock(
                 return_value="FROM python:3.9\nWORKDIR /app\nCMD python app.py"
             )
-            mock_validator_registry.return_value.get_validator.return_value = mock_validator
+            mock_validator_registry.return_value.get_validator.return_value = (
+                mock_validator
+            )
 
             agent = DeployAgent(str(full_test_repo))
             await agent._init_db()  # FIX: Initialize database
@@ -443,7 +447,9 @@ class TestPromptResponseValidationFlow:
         """
         # Step 1: Build prompt
         # FIX: DeployPromptAgent doesn't take repo_path in __init__, only few_shot_dir
-        prompt_agent = DeployPromptAgent(few_shot_dir=str(full_test_repo / "few_shot_examples"))
+        prompt_agent = DeployPromptAgent(
+            few_shot_dir=str(full_test_repo / "few_shot_examples")
+        )
 
         prompt = await prompt_agent.build_deploy_prompt(
             target="docker",
@@ -638,7 +644,9 @@ class TestErrorRecovery:
         2. System retries or provides fallback
         3. Continues operation
         """
-        with patch("generator.agents.deploy_agent.deploy_agent.call_llm_api") as mock_llm:
+        with patch(
+            "generator.agents.deploy_agent.deploy_agent.call_llm_api"
+        ) as mock_llm:
             # First call fails, second succeeds
             mock_llm.side_effect = [
                 Exception("LLM API timeout"),
@@ -667,7 +675,9 @@ class TestErrorRecovery:
                 assert "LLM" in str(e) or "timeout" in str(e)
 
     @pytest.mark.asyncio
-    async def test_validation_tool_failure_recovery(self, full_test_repo, mock_llm_calls):
+    async def test_validation_tool_failure_recovery(
+        self, full_test_repo, mock_llm_calls
+    ):
         """
         Test recovery when validation tools fail:
         1. Docker/Helm not available
@@ -692,7 +702,8 @@ class TestErrorRecovery:
             if "validations" in result:
                 assert (
                     "tool_not_found" in str(result["validations"]).lower()
-                    or result["validations"]["docker"].get("build_status") == "tool_not_found"
+                    or result["validations"]["docker"].get("build_status")
+                    == "tool_not_found"
                 )
 
 
@@ -817,7 +828,9 @@ class TestHistoryRollback:
         )
 
         # Rollback to v1
-        with patch.object(agent.registry.get_plugin("docker"), "rollback") as mock_rollback:
+        with patch.object(
+            agent.registry.get_plugin("docker"), "rollback"
+        ) as mock_rollback:
             mock_rollback.return_value = AsyncMock(return_value=True)
 
             success = await agent.rollback(run_id_v1)
@@ -894,7 +907,9 @@ class TestPluginSystemIntegration:
 
         class CustomPlugin(TargetPlugin):
             # FIX: Implement correct abstract methods from TargetPlugin
-            async def generate_config(self, target_files, instructions, context, previous_configs):
+            async def generate_config(
+                self, target_files, instructions, context, previous_configs
+            ):
                 return {"config": "# Custom config\ncustom_setting: true"}
 
             async def validate_config(self, config):

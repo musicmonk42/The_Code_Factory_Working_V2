@@ -59,25 +59,28 @@ def mock_external_dependencies():
     # Use absolute paths for patching targets
     plugin_path = "simulation.plugins.siem_integration_plugin"
 
-    with patch(f"{plugin_path}.SIEM_CLIENTS_AVAILABLE", True), patch(
-        f"{plugin_path}.SIEM_CLIENT_REGISTRY", mock_registry
-    ), patch(f"{plugin_path}.get_siem_client", side_effect=lambda t, c: mock_registry[t]), patch(
-        f"{plugin_path}.redis"
-    ) as mock_redis, patch(
-        f"{plugin_path}.QUERY_PARSER_AVAILABLE", True
-    ), patch(
-        f"{plugin_path}.SiemQueryLanguageParser"
-    ), patch(
-        f"{plugin_path}._sfe_audit_logger.add_entry", new=AsyncMock()
-    ) as mock_audit_add_entry, patch.dict(
-        os.environ,
-        {
-            "SIEM_DEFAULT_TYPE": "splunk",
-            "SIEM_SPLUNK_HEC_URL": "http://mock-splunk.com",
-            "SIEM_SPLUNK_HEC_TOKEN": "mock-token",
-            "SIEM_ELASTIC_APM_URL": "http://mock-elastic.com",
-            "SIEM_ELASTIC_API_KEY": "mock-api-key",
-        },
+    with (
+        patch(f"{plugin_path}.SIEM_CLIENTS_AVAILABLE", True),
+        patch(f"{plugin_path}.SIEM_CLIENT_REGISTRY", mock_registry),
+        patch(
+            f"{plugin_path}.get_siem_client", side_effect=lambda t, c: mock_registry[t]
+        ),
+        patch(f"{plugin_path}.redis") as mock_redis,
+        patch(f"{plugin_path}.QUERY_PARSER_AVAILABLE", True),
+        patch(f"{plugin_path}.SiemQueryLanguageParser"),
+        patch(
+            f"{plugin_path}._sfe_audit_logger.add_entry", new=AsyncMock()
+        ) as mock_audit_add_entry,
+        patch.dict(
+            os.environ,
+            {
+                "SIEM_DEFAULT_TYPE": "splunk",
+                "SIEM_SPLUNK_HEC_URL": "http://mock-splunk.com",
+                "SIEM_SPLUNK_HEC_TOKEN": "mock-token",
+                "SIEM_ELASTIC_APM_URL": "http://mock-elastic.com",
+                "SIEM_ELASTIC_API_KEY": "mock-api-key",
+            },
+        ),
     ):
 
         # Mock Redis
@@ -88,8 +91,9 @@ def mock_external_dependencies():
         mock_redis_client.delete = AsyncMock()
 
         # Use a fresh Prometheus registry for each test
-        with patch(f"{plugin_path}.prometheus_available", True), patch(
-            f"{plugin_path}.REGISTRY", new=CollectorRegistry(auto_describe=True)
+        with (
+            patch(f"{plugin_path}.prometheus_available", True),
+            patch(f"{plugin_path}.REGISTRY", new=CollectorRegistry(auto_describe=True)),
         ):
 
             # This is crucial: we must also patch the config model loaded by the module
@@ -127,7 +131,9 @@ def test_config_model_validation_success():
         "policy": {
             "rules": [
                 {
-                    "conditions": [{"field": "event_type", "operator": "equals", "value": "alert"}],
+                    "conditions": [
+                        {"field": "event_type", "operator": "equals", "value": "alert"}
+                    ],
                     "action": "block",
                 }
             ]
@@ -156,7 +162,9 @@ def test_policy_enforcer_mask_rule_enforcement():
         rules=[
             PolicyRule(
                 conditions=[
-                    PolicyCondition(field="event_type", operator="equals", value="sensitive_event")
+                    PolicyCondition(
+                        field="event_type", operator="equals", value="sensitive_event"
+                    )
                 ],
                 action="mask",
                 target_field="details.sensitive_info",
@@ -183,7 +191,9 @@ def test_policy_enforcer_block_rule_enforcement():
         rules=[
             PolicyRule(
                 conditions=[
-                    PolicyCondition(field="event_type", operator="equals", value="blocked_event")
+                    PolicyCondition(
+                        field="event_type", operator="equals", value="blocked_event"
+                    )
                 ],
                 action="block",
             )
@@ -221,7 +231,10 @@ async def test_send_siem_event_success(mock_external_dependencies):
     assert mock_external_dependencies["mock_splunk_client"].send_log.call_count == 1
     # Re-import metrics locally as they are patched per-test
 
-    assert SIEM_EVENTS_SENT_TOTAL.labels(siem_type="splunk", status="success")._value.get() == 1
+    assert (
+        SIEM_EVENTS_SENT_TOTAL.labels(siem_type="splunk", status="success")._value.get()
+        == 1
+    )
     assert (
         SIEM_SEND_ERRORS_TOTAL.labels(
             siem_type="splunk", error_type="backend_not_found"
@@ -261,7 +274,9 @@ async def test_send_siem_event_policy_blocked(mock_external_dependencies):
     assert mock_external_dependencies["mock_splunk_client"].send_log.call_count == 0
 
     assert (
-        SIEM_SEND_ERRORS_TOTAL.labels(siem_type="splunk", error_type="policy_blocked")._value.get()
+        SIEM_SEND_ERRORS_TOTAL.labels(
+            siem_type="splunk", error_type="policy_blocked"
+        )._value.get()
         == 1
     )
 
@@ -315,5 +330,8 @@ async def test_query_siem_logs_success(mock_external_dependencies):
     assert query_result["results"][0]["result"] == "mock"
 
     assert (
-        SIEM_EVENTS_SENT_TOTAL.labels(siem_type="splunk", status="query_success")._value.get() == 1
+        SIEM_EVENTS_SENT_TOTAL.labels(
+            siem_type="splunk", status="query_success"
+        )._value.get()
+        == 1
     )

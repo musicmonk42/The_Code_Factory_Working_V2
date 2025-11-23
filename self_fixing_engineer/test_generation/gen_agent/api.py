@@ -52,7 +52,9 @@ try:
     LIMITER_AVAILABLE = True
     logging.info("Flask extension 'flask_limiter' is available.")
 except ImportError:
-    logging.warning("Flask extension 'flask_limiter' not installed. Rate limiting disabled.")
+    logging.warning(
+        "Flask extension 'flask_limiter' not installed. Rate limiting disabled."
+    )
     pass
 
 JWT_AVAILABLE = False
@@ -82,7 +84,9 @@ try:
 
     logging.info("Flask extension 'flask_swagger_ui' is available.")
 except ImportError:
-    logging.warning("Flask extension 'flask_swagger_ui' not installed. Swagger UI disabled.")
+    logging.warning(
+        "Flask extension 'flask_swagger_ui' not installed. Swagger UI disabled."
+    )
     pass
 
 try:
@@ -96,7 +100,11 @@ from pydantic import BaseModel, Field, ValidationError
 from test_generation.gen_agent.graph import build_graph, invoke_graph
 
 # Using a single, consistent source for runtime imports
-from test_generation.gen_agent.runtime import AUDIT_LOGGER_AVAILABLE, FLASK_AVAILABLE, audit_logger
+from test_generation.gen_agent.runtime import (
+    AUDIT_LOGGER_AVAILABLE,
+    FLASK_AVAILABLE,
+    audit_logger,
+)
 from test_generation.gen_agent.runtime import init_llm as runtime_init_llm
 from test_generation.gen_agent.runtime import validate_session_inputs
 
@@ -105,10 +113,14 @@ logger = logging.getLogger(__name__)
 
 class GenerateTestsRequest(BaseModel):
     model_config = {"extra": "forbid"}
-    spec: str = Field(min_length=1, max_length=int(os.getenv("SPEC_MAX_CHARS", "20000")))
+    spec: str = Field(
+        min_length=1, max_length=int(os.getenv("SPEC_MAX_CHARS", "20000"))
+    )
     session: Optional[str] = None
     language: Literal["Python", "JavaScript", "TypeScript", "Java", "Rust"] = "Python"
-    framework: Literal["pytest", "jest", "junit", "cargo", "unittest", "go test"] = "pytest"
+    framework: Literal["pytest", "jest", "junit", "cargo", "unittest", "go test"] = (
+        "pytest"
+    )
     spec_format: Literal["gherkin", "openapi", "user_story"] = "gherkin"
 
 
@@ -167,7 +179,9 @@ async def _generate_tests_logic(data: GenerateTestsRequest) -> Dict[str, Any]:
     }
     try:
         graph = current_app.config["_GRAPH"]
-        config = {"configurable": {"thread_id": f"api-thread-{datetime.now().timestamp()}"}}
+        config = {
+            "configurable": {"thread_id": f"api-thread-{datetime.now().timestamp()}"}
+        }
         final_state = await invoke_graph(graph, initial_state, config=config)
         return final_state
     except Exception as e:
@@ -185,7 +199,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
     if os.getenv("BEHIND_PROXY", "false").lower() == "true":
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 2 * 1024 * 1024))
+    app.config["MAX_CONTENT_LENGTH"] = int(
+        os.getenv("MAX_CONTENT_LENGTH", 2 * 1024 * 1024)
+    )
     app.config.setdefault("JSONIFY_PRETTYPRINT_REGULAR", False)
 
     # --- LLM + graph initialization (resilient) ---
@@ -206,7 +222,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
     app.config["_GRAPH"] = graph
 
     # --- Swagger spec + docs ---
-    swagger_path = app.config.get("swagger_path") or str(Path(__file__).with_name("swagger.json"))
+    swagger_path = app.config.get("swagger_path") or str(
+        Path(__file__).with_name("swagger.json")
+    )
 
     def _load_swagger() -> Dict[str, Any]:
         if os.path.exists(swagger_path):
@@ -256,7 +274,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
         origins_env = os.getenv("CORS_ORIGINS")
         if origins_env:
             origins = [o.strip() for o in origins_env.split(",") if o.strip()]
-            supports_credentials = os.getenv("CORS_SUPPORTS_CREDENTIALS", "false").lower() == "true"
+            supports_credentials = (
+                os.getenv("CORS_SUPPORTS_CREDENTIALS", "false").lower() == "true"
+            )
             CORS(
                 app,
                 resources={
@@ -310,7 +330,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
         return response
 
     @app.before_request
@@ -318,7 +340,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
         g.request_start_time = time.time()
         g.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         client_ip = request.remote_addr
-        logger.info(f"rid={g.request_id} {request.method} {request.path} from {client_ip}")
+        logger.info(
+            f"rid={g.request_id} {request.method} {request.path} from {client_ip}"
+        )
 
     @app.after_request
     def after_request_log(response):
@@ -446,7 +470,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
                 )
 
             data = GenerateTestsRequest(**json_data)
-            session_name = data.session or f"api-session-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            session_name = (
+                data.session or f"api-session-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
             validate_session_inputs(session_name, data.language, data.framework)
         except BadRequest:
             return (
@@ -553,7 +579,9 @@ def create_app(config: Dict[str, Any]) -> Flask:
 
 def serve_api(host: str, port: int) -> int:
     if not Flask or not FLASK_AVAILABLE:
-        logging.critical("CRITICAL: Cannot serve API: 'flask' package is not installed. Aborting.")
+        logging.critical(
+            "CRITICAL: Cannot serve API: 'flask' package is not installed. Aborting."
+        )
         if AUDIT_LOGGER_AVAILABLE:
             asyncio.run(
                 audit_logger.log_event(
@@ -569,8 +597,12 @@ def serve_api(host: str, port: int) -> int:
         return 1
 
     config = {
-        "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "a-strong-default-secret-key-CHANGE-ME"),
-        "JWT_SECRET_KEY": os.getenv("JWT_SECRET_KEY", "another-strong-secret-CHANGE-ME"),
+        "SECRET_KEY": os.getenv(
+            "FLASK_SECRET_KEY", "a-strong-default-secret-key-CHANGE-ME"
+        ),
+        "JWT_SECRET_KEY": os.getenv(
+            "JWT_SECRET_KEY", "another-strong-secret-CHANGE-ME"
+        ),
     }
 
     if os.getenv("ENV", "dev") == "prod":

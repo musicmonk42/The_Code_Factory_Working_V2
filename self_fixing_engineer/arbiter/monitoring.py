@@ -92,7 +92,9 @@ except ImportError:
 
 # Constants for robust logging
 MAX_IN_MEMORY_LOG_SIZE_MB = 10
-JSON_LOG_WRITE_LIMIT = 500  # Max number of actions to write in JSON format before raising a warning
+JSON_LOG_WRITE_LIMIT = (
+    500  # Max number of actions to write in JSON format before raising a warning
+)
 
 
 class LogFormat(Enum):
@@ -105,14 +107,20 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
 # Prometheus Metrics
-monitor_ops_total = Counter("monitor_ops_total", "Total monitor operations", ["operation"])
-monitor_errors_total = Counter("monitor_errors_total", "Total monitor errors", ["operation"])
+monitor_ops_total = Counter(
+    "monitor_ops_total", "Total monitor operations", ["operation"]
+)
+monitor_errors_total = Counter(
+    "monitor_errors_total", "Total monitor errors", ["operation"]
+)
 
 
 class ActionLog(Base):
@@ -177,7 +185,9 @@ class Monitor:
         self._lock = threading.Lock()  # Lock for thread-safe operations
         self.config = ArbiterConfig()
         self.db_client = (
-            PostgresClient(self.config.DATABASE_URL) if kwargs.get("use_db", False) else None
+            PostgresClient(self.config.DATABASE_URL)
+            if kwargs.get("use_db", False)
+            else None
         )
         self._rotation_count = 0  # Track how many times we've rotated
 
@@ -187,7 +197,10 @@ class Monitor:
         self.logger.info(
             f"Monitor initialized. Log file: {self.log_file}, Format: {self.format.name}"
         )
-        if self.format == LogFormat.JSON and self.max_actions_in_memory > JSON_LOG_WRITE_LIMIT:
+        if (
+            self.format == LogFormat.JSON
+            and self.max_actions_in_memory > JSON_LOG_WRITE_LIMIT
+        ):
             self.logger.warning(
                 f"Log format is JSON. Performance will degrade significantly with {self.max_actions_in_memory} actions. "
                 f"Consider using JSONL for high-volume logging."
@@ -227,7 +240,9 @@ class Monitor:
         logger.setLevel(logging.INFO)
         if not logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         return logger
@@ -283,7 +298,9 @@ class Monitor:
                     try:
                         self._write_log(action_with_meta)
                     except Exception as e:
-                        self.logger.error(f"Failed to write action to log file: {e}", exc_info=True)
+                        self.logger.error(
+                            f"Failed to write action to log file: {e}", exc_info=True
+                        )
 
                 if self.db_client:
                     asyncio.create_task(self.log_to_database(action_with_meta))
@@ -326,7 +343,9 @@ class Monitor:
                 import sys
 
                 current_module = sys.modules[__name__]
-                limit = getattr(current_module, "JSON_LOG_WRITE_LIMIT", JSON_LOG_WRITE_LIMIT)
+                limit = getattr(
+                    current_module, "JSON_LOG_WRITE_LIMIT", JSON_LOG_WRITE_LIMIT
+                )
 
                 if len(self.action_logs) > limit:
                     # Use the actual logger instance to ensure it gets captured
@@ -353,9 +372,13 @@ class Monitor:
         """Logs an action to the database asynchronously."""
         try:
             async with self.db_client.get_session() as session:
-                action_id = sha256(json.dumps(action, sort_keys=True).encode()).hexdigest()
+                action_id = sha256(
+                    json.dumps(action, sort_keys=True).encode()
+                ).hexdigest()
                 session.add(
-                    ActionLog(id=action_id, data=action, timestamp=datetime.now(timezone.utc))
+                    ActionLog(
+                        id=action_id, data=action, timestamp=datetime.now(timezone.utc)
+                    )
                 )
                 await session.commit()
                 monitor_ops_total.labels(operation="log_to_database").inc()
@@ -369,7 +392,9 @@ class Monitor:
         Returns a list of actions tagged as an error, anomaly, or suspicious.
         """
         try:
-            threshold_time = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+            threshold_time = datetime.now(timezone.utc) - timedelta(
+                minutes=window_minutes
+            )
             anomalies = []
             with self._lock:
                 action_counts = collections.defaultdict(int)
@@ -379,13 +404,17 @@ class Monitor:
                         continue
                     try:
                         # Fixed: Add timezone info to parsed timestamp
-                        ts = datetime.fromisoformat(ts_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+                        ts = datetime.fromisoformat(ts_str.rstrip("Z")).replace(
+                            tzinfo=timezone.utc
+                        )
                         if ts < threshold_time:
                             continue
                         action_type = action.get("event", "unknown")
                         action_counts[action_type] += 1
                     except ValueError:
-                        self.logger.warning(f"Skipping action with invalid timestamp: {ts_str}")
+                        self.logger.warning(
+                            f"Skipping action with invalid timestamp: {ts_str}"
+                        )
 
                 for action_type, count in action_counts.items():
                     # This threshold is a placeholder for a more sophisticated model
@@ -452,7 +481,9 @@ class Monitor:
                 if a.get("decision_id") == decision_id:
                     return {
                         "decision_id": decision_id,
-                        "description": a.get("description", "No description available."),
+                        "description": a.get(
+                            "description", "No description available."
+                        ),
                         "details": a,
                         "why": a.get("why", "No explicit cause/reason recorded."),
                         "parent_id": a.get("parent_id"),
@@ -537,7 +568,9 @@ class Monitor:
                             await f.write(encrypted_action + "\n")
                     elif fmt == LogFormat.JSON:
                         encrypted_data = fernet.encrypt(
-                            json.dumps(self.action_logs, ensure_ascii=False, indent=2).encode()
+                            json.dumps(
+                                self.action_logs, ensure_ascii=False, indent=2
+                            ).encode()
                         ).decode()
                         await f.write(encrypted_data)
                     elif fmt == LogFormat.PLAINTEXT:
@@ -552,7 +585,9 @@ class Monitor:
                 monitor_errors_total.labels(operation="export_log").inc()
                 # Log to both instance logger and module logger for test compatibility
                 self.logger.error(f"Failed to export log to {path}: {e}")
-                logging.getLogger(__name__).error(f"Failed to export log to {path}: {e}")
+                logging.getLogger(__name__).error(
+                    f"Failed to export log to {path}: {e}"
+                )
                 raise
 
     async def health_check(self) -> Dict[str, Any]:

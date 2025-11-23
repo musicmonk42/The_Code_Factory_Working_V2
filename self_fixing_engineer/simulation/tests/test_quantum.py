@@ -127,7 +127,9 @@ async def test_check_backend_health_dwave_success(monkeypatch):
         "simulation.quantum.backend_client_pool.get_client",
         AsyncMock(
             return_value=MagicMock(
-                sampler=MagicMock(client=MagicMock(is_solvent=MagicMock(return_value=True)))
+                sampler=MagicMock(
+                    client=MagicMock(is_solvent=MagicMock(return_value=True))
+                )
             )
         ),
     )
@@ -187,7 +189,9 @@ async def test_run_quantum_mutation_success(monkeypatch):
                     return_value=MagicMock(
                         result=MagicMock(
                             return_value=MagicMock(
-                                get_counts=MagicMock(return_value={"000": 512, "111": 512})
+                                get_counts=MagicMock(
+                                    return_value={"000": 512, "111": 512}
+                                )
                             )
                         )
                     )
@@ -195,7 +199,9 @@ async def test_run_quantum_mutation_success(monkeypatch):
             )
         ),
     )
-    monkeypatch.setattr("simulation.quantum.transpile", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        "simulation.quantum.transpile", MagicMock(return_value=MagicMock())
+    )
     monkeypatch.setattr("simulation.quantum.audit_logger", AsyncMock())
 
     with patch("os.path.isfile", return_value=True):
@@ -234,7 +240,9 @@ async def test_quantum_forecast_failure_success(monkeypatch):
                     return_value=MagicMock(
                         result=MagicMock(
                             return_value=MagicMock(
-                                get_counts=MagicMock(return_value={"000": 128, "111": 128})
+                                get_counts=MagicMock(
+                                    return_value={"000": 128, "111": 128}
+                                )
                             )
                         )
                     )
@@ -242,7 +250,9 @@ async def test_quantum_forecast_failure_success(monkeypatch):
             )
         ),
     )
-    monkeypatch.setattr("simulation.quantum.transpile", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        "simulation.quantum.transpile", MagicMock(return_value=MagicMock())
+    )
     monkeypatch.setattr("simulation.quantum.audit_logger", AsyncMock())
 
     result = await quantum_forecast_failure([1.0, 2.0, 3.0])
@@ -293,5 +303,7 @@ async def test_quantum_plugin_api_perform_quantum_operation(monkeypatch):
     )
     api = QuantumPluginAPI()
     api._initialized = True  # Manually initialize for this test
-    result = await api.perform_quantum_operation("run_mutation_circuit", {"code_file": "test.py"})
+    result = await api.perform_quantum_operation(
+        "run_mutation_circuit", {"code_file": "test.py"}
+    )
     assert result["status"] == "COMPLETED"

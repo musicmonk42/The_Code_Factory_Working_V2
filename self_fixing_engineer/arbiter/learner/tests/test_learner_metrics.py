@@ -47,7 +47,9 @@ class TestGlobalLabels:
 
     def test_custom_global_labels(self):
         """Test global labels with custom environment variables."""
-        with patch.dict(os.environ, {"ENVIRONMENT": "staging", "INSTANCE_NAME": "learner-test-2"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "staging", "INSTANCE_NAME": "learner-test-2"}
+        ):
             from importlib import reload
 
             import arbiter.learner.metrics as metrics_module
@@ -106,7 +108,9 @@ class TestGetOrCreateMetric:
         """Test retrieving an existing metric of the same type."""
         existing_counter = Counter("existing_metric", "Existing metric", ["label1"])
 
-        with patch.object(REGISTRY, "_names_to_collectors", {"existing_metric": existing_counter}):
+        with patch.object(
+            REGISTRY, "_names_to_collectors", {"existing_metric": existing_counter}
+        ):
             metric = _get_or_create_metric(
                 Counter, "existing_metric", "Existing metric", ("label1",)
             )

@@ -147,7 +147,9 @@ async def test_retry_and_jitter_bounds(
 
     with pytest.raises(RuntimeError):
         # FIX: Correct the typo from `temporary_venv` to `temporary_env`
-        async with venvs.temporary_env(str(project), language="python", required_deps=["a==1"]):
+        async with venvs.temporary_env(
+            str(project), language="python", required_deps=["a==1"]
+        ):
             pass
 
     # 1 initial + 2 retries = 3 create attempts
@@ -206,7 +208,9 @@ async def test_cancel_during_backoff_sleep(
 
     with pytest.raises(asyncio.CancelledError):
         # FIX: Correct the typo from `temporary_venv` to `temporary_env`
-        async with venvs.temporary_env(str(project), language="python", required_deps=["x"]):
+        async with venvs.temporary_env(
+            str(project), language="python", required_deps=["x"]
+        ):
             pass
 
     assert any("venv_creation_cancelled" in str(r) for r in records)
@@ -216,7 +220,9 @@ async def test_cancel_during_backoff_sleep(
 # Persist vs cleanup
 # -----------------------------
 @pytest.mark.asyncio
-async def test_persist_vs_cleanup(monkeypatch: pytest.MonkeyPatch, venvs, project: pathlib.Path):
+async def test_persist_vs_cleanup(
+    monkeypatch: pytest.MonkeyPatch, venvs, project: pathlib.Path
+):
     # Mock venv.create to succeed
     def mock_venv_create(path, *args, **kwargs):
         pathlib.Path(path, "Scripts").mkdir(parents=True)
@@ -289,7 +295,9 @@ async def test_keep_on_failure_prevents_cleanup(
     monkeypatch.setattr(
         subprocess,
         "run",
-        Mock(side_effect=subprocess.CalledProcessError(1, "cmd", stderr="mocked failure")),
+        Mock(
+            side_effect=subprocess.CalledProcessError(1, "cmd", stderr="mocked failure")
+        ),
     )
 
     # `keep_on_failure=True`

@@ -35,7 +35,9 @@ class TestRunnerContracts(unittest.TestCase):
         mock_span = MagicMock()
         mock_span.is_recording.return_value = True
         mock_span.get_span_context.return_value = MagicMock(trace_id=123, span_id=456)
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         self.mock_tracer_patch = patch(
             "runner.runner_logging.trace.get_tracer", return_value=mock_tracer
@@ -101,8 +103,12 @@ class TestRunnerContracts(unittest.TestCase):
         self.assertIn("error", data)
 
     def test_batch_task_payload(self):
-        task1 = TaskPayload(test_files={"a.py": "pass"}, code_files={}, output_path="/out")
-        task2 = TaskPayload(test_files={"b.py": "pass"}, code_files={}, output_path="/out")
+        task1 = TaskPayload(
+            test_files={"a.py": "pass"}, code_files={}, output_path="/out"
+        )
+        task2 = TaskPayload(
+            test_files={"b.py": "pass"}, code_files={}, output_path="/out"
+        )
         batch = BatchTaskPayload(tasks=[task1, task2])
         self.assertTrue(batch.batch_id.startswith("batch_"))
         self.assertEqual(len(batch.tasks), 2)
@@ -113,7 +119,9 @@ class TestRunnerContracts(unittest.TestCase):
             BatchTaskPayload(tasks=[])
 
     def test_task_payload_defaults(self):
-        payload = TaskPayload(test_files={"test.py": "pass"}, code_files={}, output_path="/out")
+        payload = TaskPayload(
+            test_files={"test.py": "pass"}, code_files={}, output_path="/out"
+        )
         self.assertEqual(payload.dry_run, False)
         self.assertEqual(payload.priority, 0)
         self.assertEqual(payload.environment, "production")

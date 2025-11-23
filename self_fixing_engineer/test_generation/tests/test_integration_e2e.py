@@ -56,7 +56,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     mock_scanner = Mock(
         spec=SecurityScanner, scan_test_file=AsyncMock(return_value=(False, [], "NONE"))
     )
-    mock_pr = Mock(spec=PRCreator, create_pr=AsyncMock(return_value=(True, "http://pr")))
+    mock_pr = Mock(
+        spec=PRCreator, create_pr=AsyncMock(return_value=(True, "http://pr"))
+    )
     mock_tester = Mock(
         spec=MutationTester,
         run_mutations=AsyncMock(return_value=(True, 80.0, "Passed")),
@@ -65,7 +67,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     # Happy path: successful integration
     # Mock the function before the orchestrator is created and calls it
     mock_run_pytest = AsyncMock(return_value=(True, 10.0, "Passed"))
-    monkeypatch.setattr("test_generation.utils.run_pytest_and_coverage", mock_run_pytest)
+    monkeypatch.setattr(
+        "test_generation.utils.run_pytest_and_coverage", mock_run_pytest
+    )
 
     # We must also mock venv creation, which is a dependency of run_pytest
     monkeypatch.setattr(
@@ -103,7 +107,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     assert (project / "atco_artifacts/quarantined_tests").exists()
 
     # Verify audit logs
-    audit_log_path = project / sanitize_path("atco_artifacts/atco_audit.log", str(project))
+    audit_log_path = project / sanitize_path(
+        "atco_artifacts/atco_audit.log", str(project)
+    )
     assert audit_log_path.exists()
     with audit_log_path.open("r") as f:
         logs = [json.loads(line) for line in f if line.strip()]

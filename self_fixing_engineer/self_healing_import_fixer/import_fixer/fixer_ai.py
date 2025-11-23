@@ -71,13 +71,17 @@ async def _get_cache_client():
 def _redis_alert_on_failure(e):
     global _redis_failure_count, _redis_failure_alerted
     _redis_failure_count += 1
-    logger.warning(f"Redis cache operation failed: {e} (failure count: {_redis_failure_count})")
+    logger.warning(
+        f"Redis cache operation failed: {e} (failure count: {_redis_failure_count})"
+    )
     if _redis_failure_count >= REDIS_ALERT_THRESHOLD and not _redis_failure_alerted:
         alert_operator(
             "WARNING: Redis cache is persistently failing. Caching is degraded and performance/costs may suffer.",
             level="WARNING",
         )
-        audit_logger.log_event("redis_persistent_failure_alert", failure_count=_redis_failure_count)
+        audit_logger.log_event(
+            "redis_persistent_failure_alert", failure_count=_redis_failure_count
+        )
         _redis_failure_alerted = True
 
 
@@ -102,7 +106,9 @@ def _sanitize_prompt(prompt: str) -> str:
     # Excessive prompt length
     if len(prompt) > 4096:
         logger.warning(
-            "Prompt length is unusually long (>{} chars). Truncating for safety.".format(4096)
+            "Prompt length is unusually long (>{} chars). Truncating for safety.".format(
+                4096
+            )
         )
         prompt = prompt[:4096]
     # Too many newlines (overflow attack)
@@ -186,7 +192,9 @@ class AIManager:
         self.temperature = self.config.get("temperature", 0.7)
         self.max_tokens = self.config.get("max_tokens", 500)
         self.proxy_url = self.config.get("proxy_url")
-        self.allow_auto_apply_patches = self.config.get("allow_auto_apply_patches", False)
+        self.allow_auto_apply_patches = self.config.get(
+            "allow_auto_apply_patches", False
+        )
 
         # Mandatory production checks
         if PRODUCTION_MODE:
@@ -195,7 +203,9 @@ class AIManager:
                     "LLM API key is not configured. AI features cannot function."
                 )
             if not self.llm_endpoint or not self.llm_endpoint.startswith("https://"):
-                raise AnalyzerCriticalError("LLM endpoint must use HTTPS in production.")
+                raise AnalyzerCriticalError(
+                    "LLM endpoint must use HTTPS in production."
+                )
             if not self.proxy_url:
                 raise AnalyzerCriticalError(
                     "In PRODUCTION_MODE, 'proxy_url' for LLM traffic is required but not configured."
@@ -212,7 +222,9 @@ class AIManager:
         try:
             self.token_encoder = tiktoken.encoding_for_model(self.model_name)
         except Exception:
-            logger.warning("Failed to get specific tiktoken encoder. Falling back to cl100k_base.")
+            logger.warning(
+                "Failed to get specific tiktoken encoder. Falling back to cl100k_base."
+            )
             self.token_encoder = tiktoken.get_encoding("cl100k_base")
 
         self.api_concurrency_limit = self.config.get("api_concurrency_limit", 5)
@@ -221,7 +233,9 @@ class AIManager:
         self._token_usage_history: List[Tuple[float, int]] = []
         self._token_usage_lock = asyncio.Lock()
 
-        self.http_client = httpx.AsyncClient(proxies=self.proxy_url, verify=True, timeout=90)
+        self.http_client = httpx.AsyncClient(
+            proxies=self.proxy_url, verify=True, timeout=90
+        )
         self.llm_client = AsyncOpenAI(
             api_key=self.llm_api_key,
             base_url=self.llm_endpoint,
@@ -259,9 +273,13 @@ class AIManager:
         async with self._token_usage_lock:
             current_time = time.time()
             self._token_usage_history = [
-                (ts, tokens) for ts, tokens in self._token_usage_history if current_time - ts < 60
+                (ts, tokens)
+                for ts, tokens in self._token_usage_history
+                if current_time - ts < 60
             ]
-            current_minute_usage = sum(tokens for _, tokens in self._token_usage_history)
+            current_minute_usage = sum(
+                tokens for _, tokens in self._token_usage_history
+            )
             if current_minute_usage + tokens_to_use > self.token_quota_per_minute:
                 oldest_timestamp = (
                     self._token_usage_history[0][0]
@@ -293,7 +311,9 @@ class AIManager:
                     for ts, tokens in self._token_usage_history
                     if time.time() - ts < 60
                 ]
-                current_minute_usage = sum(tokens for _, tokens in self._token_usage_history)
+                current_minute_usage = sum(
+                    tokens for _, tokens in self._token_usage_history
+                )
                 if current_minute_usage + tokens_to_use > self.token_quota_per_minute:
                     logger.critical(
                         f"CRITICAL: LLM token quota overrun after waiting. Current usage: {current_minute_usage}, requested: {tokens_to_use}. Aborting API call.",
@@ -355,7 +375,9 @@ class AIManager:
                     timeout=60,
                 )
                 response_content = (
-                    response.choices[0].message.content.strip() if response.choices else None
+                    response.choices[0].message.content.strip()
+                    if response.choices
+                    else None
                 )
                 if response_content:
                     logger.debug("Successfully received response from LLM.")
@@ -373,7 +395,9 @@ class AIManager:
                         try:
                             await cache.setex(cache_key, 3600, response_content)
                             _reset_redis_failure_counter()
-                            audit_logger.log_event("llm_api_cache_set", cache_key=cache_key)
+                            audit_logger.log_event(
+                                "llm_api_cache_set", cache_key=cache_key
+                            )
                         except Exception as e:
                             _redis_alert_on_failure(e)
                 else:
@@ -432,10 +456,14 @@ class AIManager:
             logger.warning("No AI refactoring suggestion generated.")
             return "No refactoring suggestion could be generated by AI."
         except NonCriticalError as e:
-            logger.error(f"Refactoring suggestion generation failed due to LLM API issue: {e}")
+            logger.error(
+                f"Refactoring suggestion generation failed due to LLM API issue: {e}"
+            )
             return f"Refactoring suggestion generation failed due to LLM API issue: {e}"
         except RetryError:
-            logger.error("Refactoring suggestion generation failed after multiple retries.")
+            logger.error(
+                "Refactoring suggestion generation failed after multiple retries."
+            )
             return "Refactoring suggestion generation failed after multiple retries."
 
     async def get_cycle_breaking_suggestion(
@@ -469,10 +497,16 @@ class AIManager:
             logger.warning("No AI cycle-breaking suggestion generated.")
             return "No cycle-breaking suggestion could be generated by AI."
         except NonCriticalError as e:
-            logger.error(f"Cycle-breaking suggestion generation failed due to LLM API issue: {e}")
-            return f"Cycle-breaking suggestion generation failed due to LLM API issue: {e}"
+            logger.error(
+                f"Cycle-breaking suggestion generation failed due to LLM API issue: {e}"
+            )
+            return (
+                f"Cycle-breaking suggestion generation failed due to LLM API issue: {e}"
+            )
         except RetryError:
-            logger.error("Cycle-breaking suggestion generation failed after multiple retries.")
+            logger.error(
+                "Cycle-breaking suggestion generation failed after multiple retries."
+            )
             return "Cycle-breaking suggestion generation failed after multiple retries."
 
 
@@ -505,7 +539,9 @@ def _run_async_in_sync(coro):
         return asyncio.run(coro)
 
 
-def get_ai_suggestions(codebase_context: str, config: Optional[Dict[str, Any]] = None) -> List[str]:
+def get_ai_suggestions(
+    codebase_context: str, config: Optional[Dict[str, Any]] = None
+) -> List[str]:
     async def _async_suggestions():
         manager = await _get_ai_manager_instance(config)
         suggestions_str = await manager.get_refactoring_suggestion(codebase_context)
@@ -549,7 +585,9 @@ def get_ai_patch(
 
 # Example usage (for testing this module independently)
 async def main_test():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.setLevel(logging.DEBUG)
 
     class DummySecretsManager:

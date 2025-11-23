@@ -51,7 +51,9 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         # Reset mocks before each test
-        MockLLMProvider.mock_call_implementation = AsyncMock(return_value={"content": "OK"})
+        MockLLMProvider.mock_call_implementation = AsyncMock(
+            return_value={"content": "OK"}
+        )
         MockLLMProvider.mock_count_tokens_implementation = AsyncMock(return_value=42)
         MockLLMProvider.mock_health_check_implementation = AsyncMock(return_value=True)
         self.provider = MockLLMProvider()
@@ -87,7 +89,9 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
     async def test_call_method_execution(self):
         result = await self.provider.call("p", "m", False, temp=0.5)
         self.assertEqual(result["content"], "OK")
-        self.provider.mock_call_implementation.assert_awaited_once_with("p", "m", False, temp=0.5)
+        self.provider.mock_call_implementation.assert_awaited_once_with(
+            "p", "m", False, temp=0.5
+        )
 
     async def test_count_tokens_method_execution(self):
         tokens = await self.provider.count_tokens("text data", "model-id")

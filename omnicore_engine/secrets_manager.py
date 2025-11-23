@@ -106,7 +106,9 @@ class AWSSecretsManager(SecretManagerBase):
             try:
                 import boto3
 
-                self._client = boto3.client("secretsmanager", region_name=self.region_name)
+                self._client = boto3.client(
+                    "secretsmanager", region_name=self.region_name
+                )
             except ImportError:
                 logger.error(
                     "boto3 is required for AWS Secrets Manager. Install with: pip install boto3"
@@ -156,7 +158,9 @@ class AWSSecretsManager(SecretManagerBase):
         try:
             try:
                 # Try to update existing secret
-                self.client.put_secret_value(SecretId=secret_name, SecretString=secret_value)
+                self.client.put_secret_value(
+                    SecretId=secret_name, SecretString=secret_value
+                )
             except self.client.exceptions.ResourceNotFoundException:
                 # Create new secret if it doesn't exist
                 self.client.create_secret(Name=secret_name, SecretString=secret_value)
@@ -234,7 +238,9 @@ class VaultSecretManager(SecretManagerBase):
                     logger.error("Vault authentication failed")
                     raise Exception("Vault authentication failed")
             except ImportError:
-                logger.error("hvac is required for Vault. Install with: pip install hvac")
+                logger.error(
+                    "hvac is required for Vault. Install with: pip install hvac"
+                )
                 raise
         return self._client
 
@@ -317,7 +323,9 @@ class VaultSecretManager(SecretManagerBase):
             List of secret paths
         """
         try:
-            response = self.client.secrets.kv.v2.list_secrets(path="", mount_point=self.mount_point)
+            response = self.client.secrets.kv.v2.list_secrets(
+                path="", mount_point=self.mount_point
+            )
             return response.get("data", {}).get("keys", [])
         except Exception as e:
             logger.error(f"Error listing secrets from Vault: {e}")
@@ -470,7 +478,9 @@ class AzureKeyVaultManager(SecretManagerBase):
                 from azure.keyvault.secrets import SecretClient
 
                 credential = DefaultAzureCredential()
-                self._client = SecretClient(vault_url=self.vault_url, credential=credential)
+                self._client = SecretClient(
+                    vault_url=self.vault_url, credential=credential
+                )
             except ImportError:
                 logger.error(
                     "azure-keyvault-secrets and azure-identity are required. Install with: pip install azure-keyvault-secrets azure-identity"

@@ -160,10 +160,14 @@ class MetaLearningConfig(BaseSettings):
     DEPLOYMENT_RETRY_DELAY_SECONDS: int = Field(
         default=60, ge=1, description="Delay between deployment retries."
     )
-    DATA_RETENTION_DAYS: int = Field(default=30, ge=1, description="Number of days to retain data.")
+    DATA_RETENTION_DAYS: int = Field(
+        default=30, ge=1, description="Number of days to retain data."
+    )
 
     # PII Redaction
-    REDACT_PII_IN_LOGS: bool = Field(default=True, description="Enable PII redaction in logs.")
+    REDACT_PII_IN_LOGS: bool = Field(
+        default=True, description="Enable PII redaction in logs."
+    )
 
     # Dynamic Configuration Reloading
     CONFIG_RELOAD_INTERVAL_SECONDS: int = Field(
@@ -188,7 +192,9 @@ class MetaLearningConfig(BaseSettings):
         description="Etcd key prefix for dynamic configuration.",
     )
 
-    @field_validator("DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before")
+    @field_validator(
+        "DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before"
+    )
     def validate_file_paths(cls, v: Optional[str]) -> Optional[str]:
         """Ensures that parent directories exist for file paths."""
         if v:
@@ -203,13 +209,17 @@ class MetaLearningConfig(BaseSettings):
                     if not os.access(parent_dir, os.W_OK):
                         raise ValueError(f"Directory {parent_dir} is not writable")
             except OSError as e:
-                raise ValueError(f"Invalid file path or cannot create directory for {v}: {e}")
+                raise ValueError(
+                    f"Invalid file path or cannot create directory for {v}: {e}"
+                )
         return v
 
     @field_validator(
         "AUDIT_ENCRYPTION_KEY", "AUDIT_SIGNING_PRIVATE_KEY", "AUDIT_SIGNING_PUBLIC_KEY"
     )
-    def validate_security_keys(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+    def validate_security_keys(
+        cls, v: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
         """Ensures sensitive keys are set if SECURE_MODE is enabled."""
         field_name = info.field_name
         secure_mode = info.data.get("SECURE_MODE", False)
@@ -217,7 +227,9 @@ class MetaLearningConfig(BaseSettings):
         if secure_mode and not v:
             raise ValueError(f"{field_name} must be set when SECURE_MODE is enabled.")
         if not v:
-            logger.warning(f"{field_name} is not set. Related security features will be disabled.")
+            logger.warning(
+                f"{field_name} is not set. Related security features will be disabled."
+            )
         return v
 
     @field_validator("KAFKA_BOOTSTRAP_SERVERS")
@@ -228,7 +240,9 @@ class MetaLearningConfig(BaseSettings):
 
         if use_kafka_ingestion or use_kafka_audit:
             if not v:
-                raise ValueError("KAFKA_BOOTSTRAP_SERVERS must be set if Kafka is enabled.")
+                raise ValueError(
+                    "KAFKA_BOOTSTRAP_SERVERS must be set if Kafka is enabled."
+                )
             # Basic validation of broker format
             brokers = v.split(",")
             for broker in brokers:
@@ -343,7 +357,9 @@ class MetaLearningConfig(BaseSettings):
                         self.config._reload_from_file()
 
             observer = Observer()
-            observer.schedule(ConfigFileEventHandler(self), os.path.dirname(self.CONFIG_FILE_PATH))
+            observer.schedule(
+                ConfigFileEventHandler(self), os.path.dirname(self.CONFIG_FILE_PATH)
+            )
             await loop.run_in_executor(None, observer.start)
             logger.info(f"Started file watcher for {self.CONFIG_FILE_PATH}")
 
@@ -361,7 +377,9 @@ class MetaLearningConfig(BaseSettings):
                 etcd_client.add_watch_prefix_callback(self.ETCD_PREFIX, watch_callback)
                 logger.info(f"Started Etcd watcher for prefix {self.ETCD_PREFIX}")
             except Exception as e:
-                logger.error(f"Failed to initialize Etcd client or watcher: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to initialize Etcd client or watcher: {e}", exc_info=True
+                )
 
     def _load_from_etcd(self, client):
         """Helper to load config from Etcd."""
@@ -397,7 +415,9 @@ class MetaLearningConfig(BaseSettings):
                 try:
                     s3 = boto3.client("s3")
                     s3.head_bucket(Bucket=self.DATA_LAKE_S3_BUCKET)
-                    logger.info(f"✅ S3 bucket '{self.DATA_LAKE_S3_BUCKET}' accessible.")
+                    logger.info(
+                        f"✅ S3 bucket '{self.DATA_LAKE_S3_BUCKET}' accessible."
+                    )
                 except Exception as e:
                     logger.error(f"❌ S3 health check failed: {e}")
                     healthy = False
@@ -434,4 +454,6 @@ if __name__ == "__main__":
     except ValidationError as e:
         logger.critical(f"Configuration validation failed: {e}")
     except Exception as e:
-        logger.critical(f"An unexpected error occurred during setup: {e}", exc_info=True)
+        logger.critical(
+            f"An unexpected error occurred during setup: {e}", exc_info=True
+        )

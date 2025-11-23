@@ -29,7 +29,11 @@ except ImportError:
     TransportError = None
     # No warning here, as it's optional for the Kafka backend
 
-from prometheus_client import Counter, Gauge, Histogram  # Added missing prometheus imports
+from prometheus_client import (
+    Counter,
+    Gauge,
+    Histogram,
+)  # Added missing prometheus imports
 
 # Import core backend components
 from .audit_backend_core import tracer  # <-- ADDED
@@ -67,7 +71,9 @@ class _ResponseACM:
 
     async def __aexit__(self, exc_type, exc, tb):
         # politely close/release if present
-        closer = getattr(self._resp, "release", None) or getattr(self._resp, "close", None)
+        closer = getattr(self._resp, "release", None) or getattr(
+            self._resp, "close", None
+        )
         if asyncio.iscoroutinefunction(closer):
             await closer()
         elif callable(closer):
@@ -82,7 +88,11 @@ async def _as_async_cm(awaitable_or_cm):
     - If the result has __aenter__, it's an async CM already—return it.
     - Otherwise, wrap the result in an async CM adapter.
     """
-    obj = await awaitable_or_cm if asyncio.iscoroutine(awaitable_or_cm) else awaitable_or_cm
+    obj = (
+        await awaitable_or_cm
+        if asyncio.iscoroutine(awaitable_or_cm)
+        else awaitable_or_cm
+    )
     return obj if hasattr(obj, "__aenter__") else _ResponseACM(obj)
 
 
@@ -99,7 +109,9 @@ class HTTPBackend(LogBackend):
     Supports secure communication implicitly via aiohttp.
     """
 
-    DEFAULT_MAX_HTTP_PAYLOAD_BYTES = 1 * 1024 * 1024  # 1 MB - Typical default max body size
+    DEFAULT_MAX_HTTP_PAYLOAD_BYTES = (
+        1 * 1024 * 1024
+    )  # 1 MB - Typical default max body size
 
     # Metrics specific to HTTP Backend
     HTTP_REQUEST_DURATION = Histogram(
@@ -164,7 +176,9 @@ class HTTPBackend(LogBackend):
         # --- FIX: Removed self._background_tasks definition (handled by base class) ---
         super().__init__(params)
         # --- START (A) Change 1: Disable core retries ---
-        self.core_retries_enabled = False  # Avoid multiple DLQ enqueues for the same batch
+        self.core_retries_enabled = (
+            False  # Avoid multiple DLQ enqueues for the same batch
+        )
         # --- END (A) Change 1 ---
         self.session: Optional[aiohttp.ClientSession] = None
 
@@ -182,7 +196,9 @@ class HTTPBackend(LogBackend):
         self._async_tasks.add(self._init_task)
         self._init_task.add_done_callback(self._async_tasks.discard)
 
-        self._internal_retry_processor_task = loop.create_task(self._process_internal_retry_queue())
+        self._internal_retry_processor_task = loop.create_task(
+            self._process_internal_retry_queue()
+        )
         self._async_tasks.add(self._internal_retry_processor_task)
         self._internal_retry_processor_task.add_done_callback(self._async_tasks.discard)
 
@@ -245,7 +261,9 @@ class HTTPBackend(LogBackend):
                     "operation": "init_session_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="InitError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="InitError"
+            ).inc()
             asyncio.create_task(
                 send_alert(
                     f"HTTPBackend session initialization failed: {e}",
@@ -307,9 +325,13 @@ class HTTPBackend(LogBackend):
         """
         HTTPBackend uses batch writes via _atomic_context only.
         """
-        raise NotImplementedError("HTTPBackend uses batch writes via _atomic_context only.")
+        raise NotImplementedError(
+            "HTTPBackend uses batch writes via _atomic_context only."
+        )
 
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         """
         Queries HTTP endpoint with structured parameters.
         Note: Assumes the remote endpoint supports these query parameters and returns JSON.
@@ -411,7 +433,9 @@ class HTTPBackend(LogBackend):
                 backend=self.__class__.__name__, operation="http_get_query"
             ).inc()
             self._circuit_breaker.record_failure(e)
-            asyncio.create_task(send_alert(f"HTTPBackend query failed: {e}", severity="high"))
+            asyncio.create_task(
+                send_alert(f"HTTPBackend query failed: {e}", severity="high")
+            )
             raise
         except (json.JSONDecodeError, aiohttp.ContentTypeError) as parse_e:
             request_status = "parse_error"
@@ -437,9 +461,13 @@ class HTTPBackend(LogBackend):
                     "operation": "query_single_unexpected_error",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="QueryError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="QueryError"
+            ).inc()
             self._circuit_breaker.record_failure(e)
-            asyncio.create_task(send_alert(f"HTTPBackend query failed: {e}", severity="high"))
+            asyncio.create_task(
+                send_alert(f"HTTPBackend query failed: {e}", severity="high")
+            )
             raise
         finally:
             duration = time.perf_counter() - start_req_time
@@ -493,7 +521,9 @@ class HTTPBackend(LogBackend):
             )
             async with cm as response:
                 # --- END FIX ---
-                if response.status < 500:  # Allow 4xx (auth errors) but fail on 5xx (server errors)
+                if (
+                    response.status < 500
+                ):  # Allow 4xx (auth errors) but fail on 5xx (server errors)
                     return True
                 logger.warning(
                     f"HTTPBackend health check failed with status {response.status}.",
@@ -548,7 +578,9 @@ class HTTPBackend(LogBackend):
                     "operation": "circuit_breaker_open",
                 },
             )
-            raise ConnectionRefusedError("Circuit breaker is OPEN. Endpoint is deemed unhealthy.")
+            raise ConnectionRefusedError(
+                "Circuit breaker is OPEN. Endpoint is deemed unhealthy."
+            )
 
         current_chunk_size = 0
         current_chunk_entries = []
@@ -625,7 +657,9 @@ class HTTPBackend(LogBackend):
                 # mark span ok for the test’s assertion
                 try:
                     if tracer is not None:
-                        with tracer.start_as_current_span("http_post_chunk_success") as span:
+                        with tracer.start_as_current_span(
+                            "http_post_chunk_success"
+                        ) as span:
                             span.set_status(_STATUS_OK)
                 except Exception:
                     # tracing should never break writes
@@ -647,7 +681,9 @@ class HTTPBackend(LogBackend):
                 # --- FIX: Add OTel span status ERROR ---
                 try:
                     if tracer is not None:
-                        with tracer.start_as_current_span("http_post_chunk_network_error") as span:
+                        with tracer.start_as_current_span(
+                            "http_post_chunk_network_error"
+                        ) as span:
                             span.set_status(_STATUS_ERROR, description=str(e))
                 except Exception:
                     pass  # Tracing should never break error handling
@@ -672,7 +708,9 @@ class HTTPBackend(LogBackend):
                 # --- FIX: Add OTel span status ERROR ---
                 try:
                     if tracer is not None:
-                        with tracer.start_as_current_span("http_post_chunk_internal_error") as span:
+                        with tracer.start_as_current_span(
+                            "http_post_chunk_internal_error"
+                        ) as span:
                             span.set_status(_STATUS_ERROR, description=str(e))
                 except Exception:
                     pass  # Tracing should never break error handling
@@ -686,7 +724,9 @@ class HTTPBackend(LogBackend):
                         "chunk_num": i + 1,
                     },
                 )
-                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="ChunkSendError").inc()
+                BACKEND_ERRORS.labels(
+                    backend=self.__class__.__name__, type="ChunkSendError"
+                ).inc()
                 self._circuit_breaker.record_failure(e)
                 all_chunks_successful = False
                 raise  # Re-raise to fail the whole batch
@@ -725,7 +765,9 @@ class HTTPBackend(LogBackend):
     # --- END (A) Change 2 ---
 
     @asynccontextmanager
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         """
         Atomicity for HTTP batch. Attempts to send the batch via chunks.
         On persistent failure, enqueues to internal retry queue, then to DLQ.
@@ -786,7 +828,9 @@ class HTTPBackend(LogBackend):
                     "operation": "atomic_http_write_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="AtomicWriteError"
+            ).inc()
 
             try:
                 self._internal_retry_queue.put_nowait(prepared_entries)
@@ -826,7 +870,9 @@ class HTTPBackend(LogBackend):
                     },
                 )
                 if self._mark_dlq_once(prepared_entries):
-                    await self._dlq.enqueue(prepared_entries, failure_reason=str(enqueue_e))
+                    await self._dlq.enqueue(
+                        prepared_entries, failure_reason=str(enqueue_e)
+                    )
                 # --- END (A) Change 2 ---
 
             asyncio.create_task(
@@ -982,13 +1028,17 @@ class KafkaBackend(LogBackend):
         self._internal_retry_queue = asyncio.Queue(
             maxsize=self.params.get("internal_retry_queue_max_size", 1000)
         )
-        self.KAFKA_PRODUCER_BUFFER_FILL_RATIO.labels(backend=self.__class__.__name__).set(0)
+        self.KAFKA_PRODUCER_BUFFER_FILL_RATIO.labels(
+            backend=self.__class__.__name__
+        ).set(0)
 
     def __init__(self, params: Dict[str, Any]):
         # --- FIX: Removed self._background_tasks definition (handled by base class) ---
         super().__init__(params)
         # --- START (B) Change 1: Disable core retries ---
-        self.core_retries_enabled = False  # Transaction should be attempted once per flush
+        self.core_retries_enabled = (
+            False  # Transaction should be attempted once per flush
+        )
         # --- END (B) Change 1 ---
         self.producer: Optional[aiokafka.AIOKafkaProducer] = None
         self._es_init_task: Optional[asyncio.Task] = None
@@ -999,7 +1049,9 @@ class KafkaBackend(LogBackend):
 
         # --- FIX: Removed all asyncio.create_task calls. Moved to start() ---
 
-        self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(backend=self.__class__.__name__).set(0)
+        self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(
+            backend=self.__class__.__name__
+        ).set(0)
 
         # --- START FIX 3: DLQ Dedupe Set with memory management ---
         # Using collections.deque with maxlen to prevent unbounded memory growth
@@ -1028,7 +1080,9 @@ class KafkaBackend(LogBackend):
             self._es_init_task.add_done_callback(self._async_tasks.discard)
 
         # Start internal retry queue processor
-        self._internal_retry_processor_task = loop.create_task(self._process_internal_retry_queue())
+        self._internal_retry_processor_task = loop.create_task(
+            self._process_internal_retry_queue()
+        )
         self._async_tasks.add(self._internal_retry_processor_task)
         self._internal_retry_processor_task.add_done_callback(self._async_tasks.discard)
 
@@ -1092,14 +1146,20 @@ class KafkaBackend(LogBackend):
             "retries": BACKEND_RETRY_ATTEMPTS,  # Use core retry attempts
             "retry_backoff_ms": int(1 * 1000),  # Use core backoff factor
             "max_block_ms": self.params.get("producer_max_block_ms", 60 * 1000),
-            "buffer_memory": self.params.get("producer_buffer_memory", 32 * 1024 * 1024),
+            "buffer_memory": self.params.get(
+                "producer_buffer_memory", 32 * 1024 * 1024
+            ),
             "linger_ms": self.params.get("producer_linger_ms", 5),
         }
 
         if self.security_protocol != "PLAINTEXT":
             producer_configs["security_protocol"] = self.security_protocol
             if self.security_protocol.startswith("SASL"):
-                if not self.sasl_mechanism or not self.sasl_username or not self.sasl_password:
+                if (
+                    not self.sasl_mechanism
+                    or not self.sasl_username
+                    or not self.sasl_password
+                ):
                     raise ValueError(
                         "SASL parameters (mechanism, username, password) are required for SASL security protocol."
                     )
@@ -1142,7 +1202,9 @@ class KafkaBackend(LogBackend):
                     "operation": "init_producer_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="KafkaInitError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="KafkaInitError"
+            ).inc()
             asyncio.create_task(
                 send_alert(
                     f"Kafka producer initialization failed: {kafka_e}",
@@ -1159,9 +1221,13 @@ class KafkaBackend(LogBackend):
                     "operation": "init_producer_unexpected_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="KafkaInitError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="KafkaInitError"
+            ).inc()
             asyncio.create_task(
-                send_alert(f"Kafka producer initialization failed: {e}", severity="critical")
+                send_alert(
+                    f"Kafka producer initialization failed: {e}", severity="critical"
+                )
             )
             raise
 
@@ -1229,8 +1295,11 @@ class KafkaBackend(LogBackend):
         while True:
             try:
                 batch_data = await self._internal_retry_queue.get()
-                self.KAFKA_PRODUCER_BUFFER_FILL_RATIO.labels(backend=self.__class__.__name__).set(
-                    self._internal_retry_queue.qsize() / self._internal_retry_queue.maxsize
+                self.KAFKA_PRODUCER_BUFFER_FILL_RATIO.labels(
+                    backend=self.__class__.__name__
+                ).set(
+                    self._internal_retry_queue.qsize()
+                    / self._internal_retry_queue.maxsize
                 )
 
                 logger.info(
@@ -1288,7 +1357,9 @@ class KafkaBackend(LogBackend):
                 self.topic, value, key=prepared_entry["entry_id"].encode("utf-8")
             )
         except aiokafka.errors.ProducerFenced as e:
-            self.KAFKA_FENCED_PRODUCER_COUNTER.labels(backend=self.__class__.__name__).inc()
+            self.KAFKA_FENCED_PRODUCER_COUNTER.labels(
+                backend=self.__class__.__name__
+            ).inc()
             logger.critical(
                 f"KafkaBackend: Producer fenced by broker. This producer instance is no longer valid. Error: {e}",
                 exc_info=True,
@@ -1321,7 +1392,9 @@ class KafkaBackend(LogBackend):
             # --- START FIX 2: Coerce StopAsyncIteration ---
             # Convert mock iterator exhaustion into a KafkaError so callers see the expected type
             if isinstance(e, StopAsyncIteration):
-                wrapped = aiokafka.errors.KafkaError("Producer send iterator exhausted (test/mock)")
+                wrapped = aiokafka.errors.KafkaError(
+                    "Producer send iterator exhausted (test/mock)"
+                )
                 logger.error(
                     "KafkaBackend: Unexpected StopAsyncIteration during producer send; coercing to KafkaError.",
                     exc_info=True,
@@ -1345,11 +1418,15 @@ class KafkaBackend(LogBackend):
                     "operation": "producer_send_unexpected_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="ProducerSendError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="ProducerSendError"
+            ).inc()
             raise
             # --- END FIX 2 ---
 
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         """Queries Kafka audit logs via Elasticsearch sink."""
         if not self.es_client:
             logger.warning(
@@ -1424,7 +1501,9 @@ class KafkaBackend(LogBackend):
                 backend=self.__class__.__name__, type="ElasticsearchQueryError"
             ).inc()
             asyncio.create_task(
-                send_alert(f"KafkaBackend Elasticsearch query failed: {e}", severity="high")
+                send_alert(
+                    f"KafkaBackend Elasticsearch query failed: {e}", severity="high"
+                )
             )
             raise
 
@@ -1465,7 +1544,9 @@ class KafkaBackend(LogBackend):
                     },
                 )
                 return []
-            topic_partitions = [aiokafka.TopicPartition(self.topic, p) for p in partitions]
+            topic_partitions = [
+                aiokafka.TopicPartition(self.topic, p) for p in partitions
+            ]
             consumer.assign(topic_partitions)
             await consumer.seek_to_beginning()
 
@@ -1558,7 +1639,9 @@ class KafkaBackend(LogBackend):
                 backend=self.__class__.__name__, type="KafkaDirectQueryError"
             ).inc()
             asyncio.create_task(
-                send_alert(f"KafkaBackend direct consumer query failed: {e}", severity="medium")
+                send_alert(
+                    f"KafkaBackend direct consumer query failed: {e}", severity="medium"
+                )
             )
             raise
         finally:
@@ -1600,7 +1683,9 @@ class KafkaBackend(LogBackend):
 
             # Send a non-transactional message to check connectivity
             await retry_operation(
-                lambda: self.producer.send_and_wait(self.topic, b"health_check_ping", timeout=1),
+                lambda: self.producer.send_and_wait(
+                    self.topic, b"health_check_ping", timeout=1
+                ),
                 backend_name=self.__class__.__name__,
                 op_name="kafka_producer_health",
             )
@@ -1663,7 +1748,9 @@ class KafkaBackend(LogBackend):
         return self.schema_version
 
     @asynccontextmanager
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         """
         Manages Kafka transactions for a batch of messages.
         """
@@ -1687,7 +1774,9 @@ class KafkaBackend(LogBackend):
                 "Circuit breaker is OPEN. Kafka endpoint deemed unhealthy."
             )
 
-        self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(backend=self.__class__.__name__).set(1)
+        self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(
+            backend=self.__class__.__name__
+        ).set(1)
         commit_start_time = time.perf_counter()
         commit_status = "failed"
         try:
@@ -1713,7 +1802,9 @@ class KafkaBackend(LogBackend):
             self._circuit_breaker.record_success()
             yield
         except aiokafka.errors.ProducerFenced as e:
-            self.KAFKA_FENCED_PRODUCER_COUNTER.labels(backend=self.__class__.__name__).inc()
+            self.KAFKA_FENCED_PRODUCER_COUNTER.labels(
+                backend=self.__class__.__name__
+            ).inc()
             logger.critical(
                 f"Kafka transaction failed: Producer fenced by broker. This producer instance is no longer valid. Error: {e}",
                 exc_info=True,
@@ -1752,7 +1843,9 @@ class KafkaBackend(LogBackend):
             ).inc()
             self._circuit_breaker.record_failure(kafka_e)
             # --- START FIX 3: Use DLQ Dedupe Helper ---
-            await asyncio.create_task(self._enqueue_to_dlq_once(prepared_entries, str(kafka_e)))
+            await asyncio.create_task(
+                self._enqueue_to_dlq_once(prepared_entries, str(kafka_e))
+            )
             # --- END FIX 3 ---
             await asyncio.create_task(
                 send_alert(
@@ -1772,10 +1865,14 @@ class KafkaBackend(LogBackend):
             )
             commit_status = "unexpected_error"
             await self.producer.abort_transaction()
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="TransactionAbort").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="TransactionAbort"
+            ).inc()
             self._circuit_breaker.record_failure(e)
             # --- START FIX 3: Use DLQ Dedupe Helper ---
-            await asyncio.create_task(self._enqueue_to_dlq_once(prepared_entries, str(e)))
+            await asyncio.create_task(
+                self._enqueue_to_dlq_once(prepared_entries, str(e))
+            )
             # --- END FIX 3 ---
             await asyncio.create_task(
                 send_alert(
@@ -1789,7 +1886,9 @@ class KafkaBackend(LogBackend):
             # after commit/abort or on exception, clear the flag for the next flush call
             self._txn_started_for_current_flush = False
             # --- END (B) Change 2 ---
-            self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(backend=self.__class__.__name__).set(0)
+            self.KAFKA_PRODUCER_TRANSACTION_STATUS.labels(
+                backend=self.__class__.__name__
+            ).set(0)
             commit_duration = time.perf_counter() - commit_start_time
             self.KAFKA_TRANSACTION_COMMIT_DURATION.labels(
                 backend=self.__class__.__name__, status=commit_status
@@ -2049,7 +2148,9 @@ class SplunkBackend(LogBackend):
                     "operation": "init_session_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="InitError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="InitError"
+            ).inc()
             asyncio.create_task(
                 send_alert(
                     f"SplunkBackend session initialization failed: {e}",
@@ -2062,9 +2163,13 @@ class SplunkBackend(LogBackend):
         """
         SplunkBackend uses batch writes via _atomic_context only.
         """
-        raise NotImplementedError("SplunkBackend uses batch writes via _atomic_context only.")
+        raise NotImplementedError(
+            "SplunkBackend uses batch writes via _atomic_context only."
+        )
 
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         """
         Queries Splunk using Search API with robust pagination and error handling.
         """
@@ -2149,7 +2254,9 @@ class SplunkBackend(LogBackend):
                         "operation": "splunk_start_job_no_sid",
                     },
                 )
-                raise RuntimeError(f"Splunk search job creation failed: {response_json_job}")
+                raise RuntimeError(
+                    f"Splunk search job creation failed: {response_json_job}"
+                )
             logger.debug(
                 f"SplunkBackend: Started search job with SID: {job_id}",
                 extra={
@@ -2261,9 +2368,9 @@ class SplunkBackend(LogBackend):
                     current_batch.append(parsed_item)
 
                 all_results.extend(current_batch)
-                self.SPLUNK_SEARCH_RESULTS_COUNT.labels(backend=self.__class__.__name__).inc(
-                    len(current_batch)
-                )
+                self.SPLUNK_SEARCH_RESULTS_COUNT.labels(
+                    backend=self.__class__.__name__
+                ).inc(len(current_batch))
                 offset += len(current_batch)
 
                 if len(current_batch) < count_per_request:
@@ -2311,9 +2418,13 @@ class SplunkBackend(LogBackend):
                     "operation": "splunk_query_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="SplunkQueryError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="SplunkQueryError"
+            ).inc()
             self._circuit_breaker.record_failure(e)
-            asyncio.create_task(send_alert(f"SplunkBackend query failed: {e}", severity="high"))
+            asyncio.create_task(
+                send_alert(f"SplunkBackend query failed: {e}", severity="high")
+            )
             raise
         finally:
             job_duration = time.perf_counter() - search_job_start_time
@@ -2461,7 +2572,9 @@ class SplunkBackend(LogBackend):
         return self.schema_version
 
     @asynccontextmanager
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         """
         Atomicity for Splunk batch via one or more HEC requests for multiple events.
         Handles chunking for large payloads and reports errors for each chunk.
@@ -2503,7 +2616,8 @@ class SplunkBackend(LogBackend):
             event_json_bytes = json.dumps(hec_event, sort_keys=True).encode("utf-8")
 
             if (
-                current_chunk_bytes + len(event_json_bytes) + 1 > self.MAX_HEC_PAYLOAD_BYTES
+                current_chunk_bytes + len(event_json_bytes) + 1
+                > self.MAX_HEC_PAYLOAD_BYTES
                 and current_chunk_events_json_bytes
             ):
                 chunks_to_send.append(b"\n".join(current_chunk_events_json_bytes))
@@ -2524,7 +2638,9 @@ class SplunkBackend(LogBackend):
             async def http_post_op():
                 nonlocal chunk_send_status
                 # --- FIX: Apply _as_async_cm wrapper ---
-                cm = await _as_async_cm(self.session.post(self.hec_url, data=payload_chunk))
+                cm = await _as_async_cm(
+                    self.session.post(self.hec_url, data=payload_chunk)
+                )
                 async with cm as response:
                     # --- END FIX ---
                     if response.status >= 400:
@@ -2629,8 +2745,12 @@ class SplunkBackend(LogBackend):
                     "operation": "atomic_hec_write_fail_post",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
-            await asyncio.create_task(self._dlq.enqueue(prepared_entries, failure_reason=str(e)))
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="AtomicWriteError"
+            ).inc()
+            await asyncio.create_task(
+                self._dlq.enqueue(prepared_entries, failure_reason=str(e))
+            )
             await asyncio.create_task(
                 send_alert(
                     "SplunkBackend atomic HEC batch write failed post-yield. Data might be lost.",
@@ -2800,12 +2920,12 @@ class InMemoryBackend(LogBackend):
                                 json.dumps(entry, sort_keys=True).encode("utf-8")
                             )
 
-                    self.INMEMORY_SIZE_GAUGE.labels(backend=self.__class__.__name__).set(
-                        len(self.logs)
-                    )
-                    self.INMEMORY_MEMORY_BYTES_GAUGE.labels(backend=self.__class__.__name__).set(
-                        self.current_memory_bytes
-                    )
+                    self.INMEMORY_SIZE_GAUGE.labels(
+                        backend=self.__class__.__name__
+                    ).set(len(self.logs))
+                    self.INMEMORY_MEMORY_BYTES_GAUGE.labels(
+                        backend=self.__class__.__name__
+                    ).set(self.current_memory_bytes)
                 logger.info(
                     f"InMemoryBackend: Loaded {len(loaded_entries)} entries from snapshot.",
                     extra={
@@ -2839,15 +2959,22 @@ class InMemoryBackend(LogBackend):
         """
         No-op. All appending logic is within _atomic_context to ensure atomicity and proper locking/eviction.
         """
-        raise NotImplementedError("InMemoryBackend uses batch writes via _atomic_context only.")
+        raise NotImplementedError(
+            "InMemoryBackend uses batch writes via _atomic_context only."
+        )
 
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         """Queries in-memory list with basic filtering on top-level stored fields."""
         async with self.lock:
             filtered_logs = []
             for stored_entry in reversed(self.logs):
                 match = True
-                if "entry_id" in filters and stored_entry.get("entry_id") != filters["entry_id"]:
+                if (
+                    "entry_id" in filters
+                    and stored_entry.get("entry_id") != filters["entry_id"]
+                ):
                     match = False
                 if (
                     "timestamp >=" in filters
@@ -2893,7 +3020,9 @@ class InMemoryBackend(LogBackend):
         return self.schema_version
 
     @asynccontextmanager
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         """
         Atomicity for in-memory batch via a lock, with memory limits and eviction.
         """
@@ -2902,7 +3031,9 @@ class InMemoryBackend(LogBackend):
             async with self.lock:
                 for entry in prepared_entries:
                     if entry["entry_id"] not in {e["entry_id"] for e in self.logs}:
-                        entry_size_bytes = len(json.dumps(entry, sort_keys=True).encode("utf-8"))
+                        entry_size_bytes = len(
+                            json.dumps(entry, sort_keys=True).encode("utf-8")
+                        )
 
                         if (
                             self.max_memory_bytes is not None
@@ -2916,7 +3047,9 @@ class InMemoryBackend(LogBackend):
                             ):
                                 evicted_entry = self.logs.pop(0)
                                 evicted_size_bytes = len(
-                                    json.dumps(evicted_entry, sort_keys=True).encode("utf-8")
+                                    json.dumps(evicted_entry, sort_keys=True).encode(
+                                        "utf-8"
+                                    )
                                 )
                                 self.current_memory_bytes -= evicted_size_bytes
                                 self.INMEMORY_EVICTIONS_COUNTER.labels(
@@ -2964,7 +3097,9 @@ class InMemoryBackend(LogBackend):
                                 break
                             evicted_entry = self.logs.pop(0)
                             self.current_memory_bytes -= len(
-                                json.dumps(evicted_entry, sort_keys=True).encode("utf-8")
+                                json.dumps(evicted_entry, sort_keys=True).encode(
+                                    "utf-8"
+                                )
                             )
                             self.INMEMORY_EVICTIONS_COUNTER.labels(
                                 backend=self.__class__.__name__
@@ -2988,10 +3123,12 @@ class InMemoryBackend(LogBackend):
                             },
                         )
 
-                self.INMEMORY_SIZE_GAUGE.labels(backend=self.__class__.__name__).set(len(self.logs))
-                self.INMEMORY_MEMORY_BYTES_GAUGE.labels(backend=self.__class__.__name__).set(
-                    self.current_memory_bytes
+                self.INMEMORY_SIZE_GAUGE.labels(backend=self.__class__.__name__).set(
+                    len(self.logs)
                 )
+                self.INMEMORY_MEMORY_BYTES_GAUGE.labels(
+                    backend=self.__class__.__name__
+                ).set(self.current_memory_bytes)
                 logger.debug(
                     f"InMemoryBackend: Atomically flushed {len(prepared_entries)} entries into memory. Current size: {len(self.logs)} entries, {self.current_memory_bytes} bytes.",
                     extra={
@@ -3013,16 +3150,20 @@ class InMemoryBackend(LogBackend):
                     "operation": "atomic_write_fail",
                 },
             )
-            BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="AtomicWriteError").inc()
+            BACKEND_ERRORS.labels(
+                backend=self.__class__.__name__, type="AtomicWriteError"
+            ).inc()
             asyncio.create_task(
-                send_alert("InMemoryBackend atomic batch write failed.", severity="high")
+                send_alert(
+                    "InMemoryBackend atomic batch write failed.", severity="high"
+                )
             )
             raise
         finally:
             flush_duration = time.perf_counter() - start_flush_time
-            self.INMEMORY_FLUSH_DURATION.labels(backend=self.__class__.__name__).observe(
-                flush_duration
-            )
+            self.INMEMORY_FLUSH_DURATION.labels(
+                backend=self.__class__.__name__
+            ).observe(flush_duration)
 
     async def close(self):
         """
@@ -3051,7 +3192,9 @@ class InMemoryBackend(LogBackend):
                     async with aiofiles.open(temp_snapshot_file, "wb") as f:
                         await f.write(compressed_data)
                     # --- END FIX ---
-                    await asyncio.to_thread(os.replace, temp_snapshot_file, self.snapshot_file)
+                    await asyncio.to_thread(
+                        os.replace, temp_snapshot_file, self.snapshot_file
+                    )
                 logger.info(
                     "InMemoryBackend: Snapshot saved successfully.",
                     extra={
@@ -3086,7 +3229,9 @@ class InMemoryBackend(LogBackend):
             self.logs.clear()
             self.current_memory_bytes = 0
             self.INMEMORY_SIZE_GAUGE.labels(backend=self.__class__.__name__).set(0)
-            self.INMEMORY_MEMORY_BYTES_GAUGE.labels(backend=self.__class__.__name__).set(0)
+            self.INMEMORY_MEMORY_BYTES_GAUGE.labels(
+                backend=self.__class__.__name__
+            ).set(0)
 
         # --- FIX: Call super().close() to cancel all tasks in _async_tasks ---
         await super().close()

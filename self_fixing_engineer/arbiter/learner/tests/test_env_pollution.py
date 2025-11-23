@@ -43,5 +43,7 @@ def test_decision_optimizer_settings_env_pollution(monkeypatch):
         "GEMINI_API_KEY",
         "LLM_API_KEY",
     ]
-    polluted = [k for k in config.DECISION_OPTIMIZER_SETTINGS.keys() if k in pollution_keys]
+    polluted = [
+        k for k in config.DECISION_OPTIMIZER_SETTINGS.keys() if k in pollution_keys
+    ]
     assert not polluted, f"DECISION_OPTIMIZER_SETTINGS polluted with: {polluted}"

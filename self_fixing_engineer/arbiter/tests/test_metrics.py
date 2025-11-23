@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 import starlette
 from fastapi import HTTPException, Response
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary, generate_latest
+from prometheus_client import (
+    REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    Summary,
+    generate_latest,
+)
 
 # PATCH: Resolve metaclass conflict between starlette and aiohttp
 starlette.testclient.WebSocketTestSession = None
@@ -37,9 +44,11 @@ def clear_registry():
 # Fixture for mocking logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(_metrics_logger, "info") as mock_info, patch.object(
-        _metrics_logger, "error"
-    ) as mock_error, patch.object(_metrics_logger, "critical") as mock_critical:
+    with (
+        patch.object(_metrics_logger, "info") as mock_info,
+        patch.object(_metrics_logger, "error") as mock_error,
+        patch.object(_metrics_logger, "critical") as mock_critical,
+    ):
         yield mock_info, mock_error, mock_critical
 
 
@@ -233,7 +242,9 @@ def test_register_dynamic_metric(metric_type, kwargs):
     name = f"dynamic_{metric_type.__name__.lower()}"
     doc = f"Dynamic {metric_type.__name__}"
     labels = ("dyn_label",)
-    metric = register_dynamic_metric(metric_type, name, doc, labelnames=labels, **kwargs)
+    metric = register_dynamic_metric(
+        metric_type, name, doc, labelnames=labels, **kwargs
+    )
     assert isinstance(metric, metric_type)
     assert metric._name == f"arbiter_{name}"
     assert metric._documentation == doc

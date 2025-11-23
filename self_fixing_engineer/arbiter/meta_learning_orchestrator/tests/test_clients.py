@@ -10,7 +10,10 @@ from aiohttp import ClientError, ClientResponse
 from aiohttp.client_exceptions import ClientResponseError
 
 # Import the clients and related components
-from arbiter.meta_learning_orchestrator.clients import AgentConfigurationService, MLPlatformClient
+from arbiter.meta_learning_orchestrator.clients import (
+    AgentConfigurationService,
+    MLPlatformClient,
+)
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
@@ -24,7 +27,9 @@ try:
 except ImportError:
 
     class PIIRedactorFilter:
-        def _redact_dict(self, data: Dict[str, Any], seen=None, depth=0) -> Dict[str, Any]:
+        def _redact_dict(
+            self, data: Dict[str, Any], seen=None, depth=0
+        ) -> Dict[str, Any]:
             """Mock redactor with matching signature"""
             return data.copy()  # No redaction for tests if not available
 
@@ -63,7 +68,9 @@ async def mock_response(mocker: MockerFixture):
     _mock_response = mocker.MagicMock(spec=ClientResponse)
     _mock_response.status = 200
     _mock_response.raise_for_status = mocker.MagicMock()
-    _mock_response.json = mocker.AsyncMock(return_value={"success": True, "job_id": "mock_job_id"})
+    _mock_response.json = mocker.AsyncMock(
+        return_value={"success": True, "job_id": "mock_job_id"}
+    )
     _mock_response.headers = {"Content-Type": "application/json"}
     _mock_response.text = mocker.AsyncMock(return_value='{"success": true}')
     _mock_response.ok = True
@@ -92,7 +99,9 @@ async def mock_session(mocker: MockerFixture, mock_response):
             return None
 
     # Make request return the context manager
-    mock_session.request = mocker.MagicMock(return_value=MockRequestContext(mock_response))
+    mock_session.request = mocker.MagicMock(
+        return_value=MockRequestContext(mock_response)
+    )
     mock_session.close = mocker.AsyncMock()
     mock_session.closed = False
 
@@ -102,7 +111,9 @@ async def mock_session(mocker: MockerFixture, mock_response):
 @pytest_asyncio.fixture
 async def ml_client(mock_session):
     """Fixture for MLPlatformClient with mocked session."""
-    client = MLPlatformClient(endpoint="http://mock-ml-platform.com", session=mock_session)
+    client = MLPlatformClient(
+        endpoint="http://mock-ml-platform.com", session=mock_session
+    )
     yield client
     if hasattr(client, "close"):
         await client.close()
@@ -143,7 +154,9 @@ async def clear_metrics_and_traces():
     import arbiter.meta_learning_orchestrator.clients as clients_module
 
     original_calls_total = getattr(clients_module, "HTTP_CALLS_TOTAL", None)
-    original_latency_seconds = getattr(clients_module, "HTTP_CALL_LATENCY_SECONDS", None)
+    original_latency_seconds = getattr(
+        clients_module, "HTTP_CALL_LATENCY_SECONDS", None
+    )
 
     clients_module.HTTP_CALLS_TOTAL = test_http_calls_total
     clients_module.HTTP_CALL_LATENCY_SECONDS = test_http_call_latency_seconds
@@ -185,14 +198,18 @@ async def test_ml_client_train_model_success(ml_client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_ml_client_train_model_failure(ml_client, mocker: MockerFixture, mock_session):
+async def test_ml_client_train_model_failure(
+    ml_client, mocker: MockerFixture, mock_session
+):
     """Test train_model failure with retry."""
     # Configure mock_session.request to raise ClientError for all attempts
     mock_session.request.side_effect = ClientError("Simulated HTTP error")
 
     # Tenacity will wrap the exception in RetryError after all retries fail
     with pytest.raises(RetryError) as exc_info:
-        await ml_client.train_model({"data_path": "/path/to/data", "params": {"epochs": 10}})
+        await ml_client.train_model(
+            {"data_path": "/path/to/data", "params": {"epochs": 10}}
+        )
 
     # Verify the underlying exception is our ClientError
     assert isinstance(exc_info.value.last_attempt.exception(), ClientError)
@@ -244,7 +261,9 @@ async def test_ml_client_deploy_model_success(ml_client, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_agent_client_update_prioritization_weights_success(agent_client, mock_session):
+async def test_agent_client_update_prioritization_weights_success(
+    agent_client, mock_session
+):
     """Test successful update_prioritization_weights."""
     weights = {"weight1": 0.5}
     version = "v1"
@@ -353,9 +372,14 @@ async def test_timeout_handling(ml_client, mocker: MockerFixture, caplog):
 
     with caplog.at_level(logging.ERROR):
         with pytest.raises(asyncio.TimeoutError):
-            await ml_client.train_model({"data_path": "/path/to/data", "params": {"epochs": 10}})
+            await ml_client.train_model(
+                {"data_path": "/path/to/data", "params": {"epochs": 10}}
+            )
 
-    assert "Timeout in train_model for endpoint: http://mock-ml-platform.com" in caplog.text
+    assert (
+        "Timeout in train_model for endpoint: http://mock-ml-platform.com"
+        in caplog.text
+    )
 
 
 @pytest.mark.asyncio
@@ -418,7 +442,9 @@ async def test_session_close(mocker: MockerFixture):
     mock_external_session.close = mocker.AsyncMock()
     mock_external_session.closed = False
 
-    client_external = MLPlatformClient(endpoint="http://mock.com", session=mock_external_session)
+    client_external = MLPlatformClient(
+        endpoint="http://mock.com", session=mock_external_session
+    )
     async with client_external:
         pass
     mock_external_session.close.assert_not_called()

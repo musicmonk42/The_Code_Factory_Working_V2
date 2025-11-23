@@ -53,7 +53,9 @@ def test_get_or_create_counter_new(isolated_registry):
 
 def test_get_or_create_gauge_new(isolated_registry):
     """Tests creating a new Gauge metric."""
-    metric = get_or_create_metric(Gauge, "test_gauge", "Test gauge", registry=isolated_registry)
+    metric = get_or_create_metric(
+        Gauge, "test_gauge", "Test gauge", registry=isolated_registry
+    )
     assert isinstance(metric, Gauge)
     assert metric._name == "test_gauge"
 
@@ -116,14 +118,18 @@ def test_get_or_create_handles_conflicting_metric_type(isolated_registry):
     assert isinstance(counter, Counter)
 
     # Try to create a Gauge with the same name
-    gauge = get_or_create_metric(Gauge, "test_metric", "Test metric", registry=isolated_registry)
+    gauge = get_or_create_metric(
+        Gauge, "test_metric", "Test metric", registry=isolated_registry
+    )
 
     # Should have replaced the Counter with a Gauge
     assert isinstance(gauge, Gauge)
     assert gauge._name == "test_metric"
 
 
-def test_get_or_create_uses_custom_labels_from_config(mock_config_store, isolated_registry):
+def test_get_or_create_uses_custom_labels_from_config(
+    mock_config_store, isolated_registry
+):
     """Tests that custom labels are correctly applied from the ConfigStore."""
     metric = get_or_create_metric(
         Counter,
@@ -138,7 +144,9 @@ def test_get_or_create_uses_custom_labels_from_config(mock_config_store, isolate
     assert set(metric._labelnames) == {"arbiter", "extra_label"}
 
 
-def test_get_or_create_uses_custom_buckets_from_config(mock_config_store, isolated_registry):
+def test_get_or_create_uses_custom_buckets_from_config(
+    mock_config_store, isolated_registry
+):
     """Tests that custom histogram buckets are correctly applied from the ConfigStore."""
     # Configure mock to return specific buckets
     custom_buckets = [0.1, 0.5, 1.0, 5.0, 10.0]
@@ -172,10 +180,14 @@ def test_get_or_create_uses_custom_buckets_from_config(mock_config_store, isolat
 def test_get_or_create_handles_unregister_failure(isolated_registry):
     """Tests that unregister failures are handled gracefully."""
     # Create a Counter
-    get_or_create_metric(Counter, "test_metric", "Test metric", registry=isolated_registry)
+    get_or_create_metric(
+        Counter, "test_metric", "Test metric", registry=isolated_registry
+    )
 
     # Mock the unregister to raise an exception
-    with patch.object(isolated_registry, "unregister", side_effect=Exception("Unregister failed")):
+    with patch.object(
+        isolated_registry, "unregister", side_effect=Exception("Unregister failed")
+    ):
         # Should still create the new metric type
         gauge = get_or_create_metric(
             Gauge, "test_metric", "Test metric", registry=isolated_registry
@@ -384,7 +396,9 @@ async def test_concurrent_metric_updates(isolated_registry):
     )
 
     # Use asyncio.run_in_executor to simulate concurrent updates from different threads
-    tasks = [asyncio.get_event_loop().run_in_executor(None, counter.inc) for _ in range(10)]
+    tasks = [
+        asyncio.get_event_loop().run_in_executor(None, counter.inc) for _ in range(10)
+    ]
 
     # Await all tasks to complete
     await asyncio.gather(*tasks)

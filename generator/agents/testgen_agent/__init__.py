@@ -78,7 +78,9 @@ except ImportError as e:
 # Package metadata
 __version__ = "1.0.0"
 __author__ = "TestGen Agent Team"
-__description__ = "Intelligent test generation agent with validation and refinement capabilities"
+__description__ = (
+    "Intelligent test generation agent with validation and refinement capabilities"
+)
 
 # If no imports succeeded, provide helpful error message
 if not __all__:

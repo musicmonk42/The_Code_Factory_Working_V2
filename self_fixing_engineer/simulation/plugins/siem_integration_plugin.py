@@ -20,7 +20,9 @@ if not logger.handlers:
     import sys
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -136,7 +138,12 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 try:
-    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+    from tenacity import (
+        retry,
+        retry_if_exception_type,
+        stop_after_attempt,
+        wait_exponential,
+    )
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -181,7 +188,9 @@ try:
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
-    logger.error("Pydantic not found. Schema validation will be disabled.", exc_info=True)
+    logger.error(
+        "Pydantic not found. Schema validation will be disabled.", exc_info=True
+    )
     PYDANTIC_V2 = False
 
     class BaseModel:
@@ -222,7 +231,9 @@ try:
     TRACER = get_tracer(__name__)
     logger.info("OpenTelemetry configured via centralized config.")
 except ImportError:
-    logger.warning("Could not import centralized OTel config. Tracing will be disabled.")
+    logger.warning(
+        "Could not import centralized OTel config. Tracing will be disabled."
+    )
 
     class DummySpan:
         def __enter__(self):
@@ -276,7 +287,9 @@ try:
 
 except ImportError:
     prometheus_available = False
-    logger.warning("Prometheus client not found. Metrics for Generic SIEM plugin will be disabled.")
+    logger.warning(
+        "Prometheus client not found. Metrics for Generic SIEM plugin will be disabled."
+    )
 
     class DummyMetric:
         def inc(self, amount: float = 1.0):
@@ -662,11 +675,15 @@ if PYDANTIC_AVAILABLE:
             default_factory=list,
             description="List of conditions that must ALL be true for this rule to apply.",
         )
-        action: str = Field(..., description="Action to take: 'mask', 'block', 'allow'.")
+        action: str = Field(
+            ..., description="Action to take: 'mask', 'block', 'allow'."
+        )
         target_field: Optional[str] = Field(
             None, description="Field to apply action to if action is 'mask'."
         )
-        mask_with: str = Field("[MASKED]", description="Value to replace with if action is 'mask'.")
+        mask_with: str = Field(
+            "[MASKED]", description="Value to replace with if action is 'mask'."
+        )
         if PYDANTIC_V2:
             model_config = ConfigDict(extra="forbid")
         else:
@@ -732,8 +749,8 @@ if PYDANTIC_AVAILABLE:
                 if "pii_masking_patterns" in raw_config and isinstance(
                     raw_config["pii_masking_patterns"], list
                 ):
-                    raw_config.setdefault("policy", {})["default_pii_patterns"] = raw_config.pop(
-                        "pii_masking_patterns"
+                    raw_config.setdefault("policy", {})["default_pii_patterns"] = (
+                        raw_config.pop("pii_masking_patterns")
                     )
                 raw_config["_CONFIG_VERSION"] = 1
             return raw_config
@@ -742,18 +759,30 @@ if PYDANTIC_AVAILABLE:
         raw_config_from_env = _load_raw_config_from_env()
         migrated_config = PluginGlobalConfig.migrate_config(raw_config_from_env)
         migrated_config.pop("_CONFIG_VERSION", None)
-        final_config_to_parse = {k: v for k, v in migrated_config.items() if v is not None}
+        final_config_to_parse = {
+            k: v for k, v in migrated_config.items() if v is not None
+        }
         SIEM_CONFIG_MODEL = PluginGlobalConfig.parse_obj(final_config_to_parse)
 
-        logger.info("SIEM_CONFIG_MODEL validated and migrated successfully with Pydantic.")
+        logger.info(
+            "SIEM_CONFIG_MODEL validated and migrated successfully with Pydantic."
+        )
     except ValidationError as e:
-        logger.critical(f"SIEM Configuration Validation Error: {e.errors()}", exc_info=True)
+        logger.critical(
+            f"SIEM Configuration Validation Error: {e.errors()}", exc_info=True
+        )
         SIEM_CONFIG_MODEL = PluginGlobalConfig()
-        logger.warning("Falling back to default SIEM configuration due to validation errors.")
+        logger.warning(
+            "Falling back to default SIEM configuration due to validation errors."
+        )
     except Exception as e:
-        logger.critical(f"Failed to load or parse SIEM configuration: {e}", exc_info=True)
+        logger.critical(
+            f"Failed to load or parse SIEM configuration: {e}", exc_info=True
+        )
         SIEM_CONFIG_MODEL = PluginGlobalConfig()
-        logger.warning("Falling back to default SIEM configuration due to unexpected error.")
+        logger.warning(
+            "Falling back to default SIEM configuration due to unexpected error."
+        )
 else:
     logger.warning(
         "Pydantic is not available, using raw dictionary for SIEM_CONFIG. Schema validation is disabled."
@@ -766,7 +795,9 @@ else:
         "enable_batching": os.getenv("SIEM_ENABLE_BATCHING", "false").lower() == "true",
         "batch_size": int(os.getenv("SIEM_BATCH_SIZE", "100")),
         "batch_interval_seconds": int(os.getenv("SIEM_BATCH_INTERVAL_SECONDS", "5")),
-        "distributed_queue_enabled": os.getenv("SIEM_DISTRIBUTED_QUEUE_ENABLED", "false").lower()
+        "distributed_queue_enabled": os.getenv(
+            "SIEM_DISTRIBUTED_QUEUE_ENABLED", "false"
+        ).lower()
         == "true",
         "distributed_queue_url": os.getenv("SIEM_DISTRIBUTED_QUEUE_URL"),
         "splunk": {
@@ -817,7 +848,9 @@ else:
         },
         "aws_cloudwatch": {
             "region_name": os.getenv("AWS_REGION", "us-east-1"),
-            "log_group_name": os.getenv("AWS_CLOUDWATCH_LOG_GROUP_NAME", "sfe-audit-logs"),
+            "log_group_name": os.getenv(
+                "AWS_CLOUDWATCH_LOG_GROUP_NAME", "sfe-audit-logs"
+            ),
             "log_stream_name": os.getenv("AWS_CLOUDWATCH_LOG_STREAM_NAME", "default"),
         },
         "gcp_logging": {
@@ -828,22 +861,38 @@ else:
         "policy": {
             "rules": json.loads(os.getenv("SIEM_POLICY_RULES", "[]")),
             "default_pii_patterns": (
-                [p.strip() for p in os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS", "").split(",")]
+                [
+                    p.strip()
+                    for p in os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS", "").split(
+                        ","
+                    )
+                ]
                 if os.getenv("SIEM_POLICY_DEFAULT_PII_PATTERNS")
                 else []
             ),
             "allowed_event_types": (
-                [t.strip() for t in os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES", "").split(",")]
+                [
+                    t.strip()
+                    for t in os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES", "").split(",")
+                ]
                 if os.getenv("SIEM_POLICY_ALLOWED_EVENT_TYPES")
                 else None
             ),
             "disallowed_event_types": (
-                [t.strip() for t in os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES", "").split(",")]
+                [
+                    t.strip()
+                    for t in os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES", "").split(
+                        ","
+                    )
+                ]
                 if os.getenv("SIEM_POLICY_DISALLOWED_EVENT_TYPES")
                 else None
             ),
             "compliance_flags": (
-                [f.strip() for f in os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS", "").split(",")]
+                [
+                    f.strip()
+                    for f in os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS", "").split(",")
+                ]
                 if os.getenv("SIEM_POLICY_COMPLIANCE_FLAGS")
                 else []
             ),
@@ -860,7 +909,9 @@ except ImportError:
     )
 
     class MockAuditLogger:
-        async def add_entry(self, kind: str, name: str, detail: Dict[str, Any], **kwargs: Any):
+        async def add_entry(
+            self, kind: str, name: str, detail: Dict[str, Any], **kwargs: Any
+        ):
             logger.info(f"[AUDIT_MOCK] Kind: {kind}, Name: {name}, Detail: {detail}")
 
     _sfe_audit_logger = MockAuditLogger()
@@ -885,7 +936,9 @@ def _scrub_secrets(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
 
 async def _audit_event(kind: str, name: str, details: Dict[str, Any], **kwargs: Any):
     with TRACER.start_as_current_span(f"sfe.audit.{kind}.{name}"):
-        await _sfe_audit_logger.add_entry(kind=kind, name=name, detail=details, **kwargs)
+        await _sfe_audit_logger.add_entry(
+            kind=kind, name=name, detail=details, **kwargs
+        )
 
 
 class PolicyEnforcer:
@@ -895,15 +948,20 @@ class PolicyEnforcer:
         else:
             self.policy_config = policy_config
         self.default_pii_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.policy_config.default_pii_patterns
+            re.compile(p, re.IGNORECASE)
+            for p in self.policy_config.default_pii_patterns
         ]
         # Store compiled regexes separately instead of modifying Pydantic models
         self._compiled_regexes: Dict[Tuple[int, int], re.Pattern] = {}
         for rule_idx, rule in enumerate(self.policy_config.rules):
             for cond_idx, condition in enumerate(rule.conditions):
-                if condition.operator == "matches_regex" and isinstance(condition.value, str):
+                if condition.operator == "matches_regex" and isinstance(
+                    condition.value, str
+                ):
                     key = (rule_idx, cond_idx)
-                    self._compiled_regexes[key] = re.compile(condition.value, re.IGNORECASE)
+                    self._compiled_regexes[key] = re.compile(
+                        condition.value, re.IGNORECASE
+                    )
         logger.info(
             f"Policy Enforcer initialized with {len(self.policy_config.rules)} rules and {len(self.default_pii_patterns)} default PII patterns."
         )
@@ -934,7 +992,11 @@ class PolicyEnforcer:
                     return bool(compiled_regex.search(field_value))
             return False
         elif condition.operator == "is_in":
-            return field_value in condition.value if isinstance(condition.value, list) else False
+            return (
+                field_value in condition.value
+                if isinstance(condition.value, list)
+                else False
+            )
         elif condition.operator == "greater_than":
             return (
                 field_value > condition.value
@@ -998,9 +1060,13 @@ class PolicyEnforcer:
                         event,
                     )
                 elif rule.action == "mask" and rule.target_field:
-                    field_to_mask_value = self._get_field_value(modified_event, rule.target_field)
+                    field_to_mask_value = self._get_field_value(
+                        modified_event, rule.target_field
+                    )
                     if field_to_mask_value is not None:
-                        self._set_field_value(modified_event, rule.target_field, rule.mask_with)
+                        self._set_field_value(
+                            modified_event, rule.target_field, rule.mask_with
+                        )
                         logger.debug(
                             f"Applied masking for field '{rule.target_field}' by rule {rule_idx}."
                         )
@@ -1033,7 +1099,9 @@ class RedisQueuePersistence:
             )
         self.redis_client = redis.from_url(redis_url, decode_responses=False)
         self.queue_key = "siem:retry_queue"
-        logger.info(f"RedisQueuePersistence initialized for key '{self.queue_key}' at {redis_url}.")
+        logger.info(
+            f"RedisQueuePersistence initialized for key '{self.queue_key}' at {redis_url}."
+        )
 
     async def enqueue(self, item: Dict[str, Any]):
         await asyncio.to_thread(
@@ -1074,7 +1142,9 @@ class SelfHealingManager:
                 self.config.distributed_queue_enabled = False
         if not self.config.distributed_queue_enabled:
             self.in_memory_queue: Deque[Dict[str, Any]] = deque(
-                maxlen=(self.config.batch_size * 10 if self.config.enable_batching else 1000)
+                maxlen=(
+                    self.config.batch_size * 10 if self.config.enable_batching else 1000
+                )
             )
             logger.info("Using in-memory queue for retry persistence.")
         else:
@@ -1095,7 +1165,10 @@ class SelfHealingManager:
         logger.warning(
             f"Recorded failure for {siem_type}. Consecutive failures: {self.disabled_backends[siem_type]['consecutive_failures']}."
         )
-        if self.disabled_backends[siem_type]["consecutive_failures"] >= self.failure_threshold:
+        if (
+            self.disabled_backends[siem_type]["consecutive_failures"]
+            >= self.failure_threshold
+        ):
             re_enable_at = current_time + self.re_enable_interval_seconds
             self.disabled_backends[siem_type]["disabled_until"] = re_enable_at
             logger.error(
@@ -1159,7 +1232,9 @@ class SelfHealingManager:
             else len(self.in_memory_queue)
         )
 
-    async def process_retry_queue(self, siem_plugin_instance: "GenericSIEMIntegrationPlugin"):
+    async def process_retry_queue(
+        self, siem_plugin_instance: "GenericSIEMIntegrationPlugin"
+    ):
         current_queue_size = await self.get_queue_size()
         if not self.config.enable_batching or current_queue_size == 0:
             return
@@ -1176,7 +1251,9 @@ class SelfHealingManager:
                 + self.config.batch_interval_seconds
             ):
                 return
-            logger.info(f"Attempting to process retry queue. Current size: {current_queue_size}")
+            logger.info(
+                f"Attempting to process retry queue. Current size: {current_queue_size}"
+            )
             self._last_retry_attempt_time["all_queues"] = time.monotonic()
             events_to_retry = [
                 await self.dequeue_for_retry()
@@ -1250,9 +1327,13 @@ class GenericSIEMIntegrationPlugin:
             else self.config.get("default_siem_type", "splunk")
         )
         self._hostname = socket.gethostname()
-        self.policy_enforcer = PolicyEnforcer(self.config.policy) if PYDANTIC_AVAILABLE else None
+        self.policy_enforcer = (
+            PolicyEnforcer(self.config.policy) if PYDANTIC_AVAILABLE else None
+        )
         self.self_healing_manager = SelfHealingManager(self.config)
-        self._query_parser = SiemQueryLanguageParser() if QUERY_PARSER_AVAILABLE else None
+        self._query_parser = (
+            SiemQueryLanguageParser() if QUERY_PARSER_AVAILABLE else None
+        )
         self._init_active_backends()
         self._retry_task: Optional[asyncio.Task] = None
 
@@ -1269,14 +1350,18 @@ class GenericSIEMIntegrationPlugin:
         else:
             raw_siem_cfg = self.config.get(siem_type, {})
             return raw_siem_cfg | {
-                "default_timeout_seconds": self.config.get("default_timeout_seconds", 10),
+                "default_timeout_seconds": self.config.get(
+                    "default_timeout_seconds", 10
+                ),
                 "retry_attempts": self.config.get("retry_attempts", 3),
                 "retry_backoff_factor": self.config.get("retry_backoff_factor", 2.0),
             }
 
     def _init_active_backends(self):
         if not SIEM_CLIENTS_AVAILABLE:
-            logger.error("SIEM client classes are not available. No backends can be initialized.")
+            logger.error(
+                "SIEM client classes are not available. No backends can be initialized."
+            )
             return
         for siem_type, client_class in SIEM_CLIENT_REGISTRY.items():
             siem_sub_config_data = self._get_config_for_client(siem_type)
@@ -1290,7 +1375,9 @@ class GenericSIEMIntegrationPlugin:
                 self.active_backends[siem_type] = client_instance
                 logger.info(f"Initialized SIEM backend client: {siem_type}.")
                 asyncio.create_task(
-                    _audit_event("siem_backend_init", "success", {"siem_type": siem_type})
+                    _audit_event(
+                        "siem_backend_init", "success", {"siem_type": siem_type}
+                    )
                 )
             except SIEMClientConfigurationError as e:
                 logger.warning(
@@ -1382,7 +1469,9 @@ class GenericSIEMIntegrationPlugin:
                     status_summary = "degraded"
             span.set_attribute("health.status", status_summary)
             logger.info(f"Generic SIEM Plugin health check: {status_summary}")
-            await _audit_event("plugin_health_check", status_summary, {"backends_status": details})
+            await _audit_event(
+                "plugin_health_check", status_summary, {"backends_status": details}
+            )
             return {"status": status_summary, "details": details}
 
     async def _check_backend_health(
@@ -1392,7 +1481,9 @@ class GenericSIEMIntegrationPlugin:
             try:
                 is_healthy, message = await backend_instance.health_check()
                 if not is_healthy:
-                    self.self_healing_manager.record_failure(siem_type, Exception(message))
+                    self.self_healing_manager.record_failure(
+                        siem_type, Exception(message)
+                    )
                 else:
                     self.self_healing_manager.record_success(siem_type)
                 span.set_attribute(f"siem.{siem_type}.health", is_healthy)
@@ -1401,7 +1492,9 @@ class GenericSIEMIntegrationPlugin:
             except SIEMClientError as e:
                 self.self_healing_manager.record_failure(siem_type, e)
                 span.set_attribute(f"siem.{siem_type}.health", False)
-                span.set_attribute(f"siem.{siem_type}.health.error.type", type(e).__name__)
+                span.set_attribute(
+                    f"siem.{siem_type}.health.error.type", type(e).__name__
+                )
                 span.set_attribute(f"siem.{siem_type}.health.error.message", str(e))
                 logger.error(f"Health check for {siem_type} failed: {e}", exc_info=True)
                 return (
@@ -1412,7 +1505,9 @@ class GenericSIEMIntegrationPlugin:
             except Exception as e:
                 self.self_healing_manager.record_failure(siem_type, e)
                 span.set_attribute(f"siem.{siem_type}.health", False)
-                span.set_attribute(f"siem.{siem_type}.health.error.type", type(e).__name__)
+                span.set_attribute(
+                    f"siem.{siem_type}.health.error.type", type(e).__name__
+                )
                 span.set_attribute(f"siem.{siem_type}.health.error.message", str(e))
                 logger.error(
                     f"Health check for {siem_type} failed with unexpected error: {e}",
@@ -1439,14 +1534,18 @@ class GenericSIEMIntegrationPlugin:
             siem_type_to_use = siem_type_override or self.default_siem_type
             backend = self.active_backends.get(siem_type_to_use)
             if not backend:
-                reason = f"No active SIEM backend configured for type '{siem_type_to_use}'."
+                reason = (
+                    f"No active SIEM backend configured for type '{siem_type_to_use}'."
+                )
                 logger.warning(reason)
                 if prometheus_available:
                     SIEM_SEND_ERRORS_TOTAL.labels(
                         siem_type=siem_type_to_use, error_type="backend_not_found"
                     ).inc()
                 if trace:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, description=reason)
+                    )
                 await _audit_event(
                     "siem_event_send",
                     "backend_not_found",
@@ -1466,7 +1565,9 @@ class GenericSIEMIntegrationPlugin:
                         siem_type=siem_type_to_use, error_type="backend_disabled"
                     ).inc()
                 if trace:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, description=reason)
+                    )
                 await self.self_healing_manager.enqueue_for_retry(
                     {
                         "event_type": event_type,
@@ -1496,11 +1597,13 @@ class GenericSIEMIntegrationPlugin:
                 **(metadata or {}),
             }
             if self.policy_enforcer:
-                is_allowed, policy_reason, processed_event = self.policy_enforcer.enforce(
-                    full_event_payload
+                is_allowed, policy_reason, processed_event = (
+                    self.policy_enforcer.enforce(full_event_payload)
                 )
                 if not is_allowed:
-                    logger.warning(f"Event '{event_type}' blocked by policy: {policy_reason}")
+                    logger.warning(
+                        f"Event '{event_type}' blocked by policy: {policy_reason}"
+                    )
                     if prometheus_available:
                         SIEM_SEND_ERRORS_TOTAL.labels(
                             siem_type=siem_type_to_use, error_type="policy_blocked"
@@ -1530,9 +1633,9 @@ class GenericSIEMIntegrationPlugin:
             try:
                 is_success, message = await backend.send_log(full_event_payload)
                 if prometheus_available:
-                    SIEM_SEND_LATENCY_SECONDS.labels(siem_type=siem_type_to_use).observe(
-                        time.monotonic() - start_time
-                    )
+                    SIEM_SEND_LATENCY_SECONDS.labels(
+                        siem_type=siem_type_to_use
+                    ).observe(time.monotonic() - start_time)
                 if is_success:
                     if prometheus_available:
                         SIEM_EVENTS_SENT_TOTAL.labels(
@@ -1540,7 +1643,9 @@ class GenericSIEMIntegrationPlugin:
                         ).inc()
                         EVENT_TYPES_SENT.labels(event_type=event_type).inc()
                     self.self_healing_manager.record_success(siem_type_to_use)
-                    logger.info(f"Event '{event_type}' sent to {siem_type_to_use}: {message}")
+                    logger.info(
+                        f"Event '{event_type}' sent to {siem_type_to_use}: {message}"
+                    )
                     if trace:
                         span.set_status(trace.Status(trace.StatusCode.OK))
                     await _audit_event(
@@ -1556,7 +1661,9 @@ class GenericSIEMIntegrationPlugin:
                     )
                     return {"success": True, "reason": message}
                 else:
-                    reason = message or "Failed to send event without explicit exception."
+                    reason = (
+                        message or "Failed to send event without explicit exception."
+                    )
                     if prometheus_available:
                         SIEM_EVENTS_SENT_TOTAL.labels(
                             siem_type=siem_type_to_use, status="failed"
@@ -1565,9 +1672,13 @@ class GenericSIEMIntegrationPlugin:
                             siem_type=siem_type_to_use,
                             error_type="send_failed_no_exception",
                         ).inc()
-                    self.self_healing_manager.record_failure(siem_type_to_use, Exception(reason))
+                    self.self_healing_manager.record_failure(
+                        siem_type_to_use, Exception(reason)
+                    )
                     if trace:
-                        span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                        span.set_status(
+                            trace.Status(trace.StatusCode.ERROR, description=reason)
+                        )
                     await self.self_healing_manager.enqueue_for_retry(
                         {
                             "event_type": event_type,
@@ -1593,7 +1704,9 @@ class GenericSIEMIntegrationPlugin:
                     return {"success": False, "reason": reason}
             except SIEMClientError as e:
                 if prometheus_available:
-                    SIEM_EVENTS_SENT_TOTAL.labels(siem_type=siem_type_to_use, status="failed").inc()
+                    SIEM_EVENTS_SENT_TOTAL.labels(
+                        siem_type=siem_type_to_use, status="failed"
+                    ).inc()
                     SIEM_SEND_ERRORS_TOTAL.labels(
                         siem_type=siem_type_to_use, error_type=type(e).__name__
                     ).inc()
@@ -1638,7 +1751,9 @@ class GenericSIEMIntegrationPlugin:
                 }
             except Exception as e:
                 if prometheus_available:
-                    SIEM_EVENTS_SENT_TOTAL.labels(siem_type=siem_type_to_use, status="failed").inc()
+                    SIEM_EVENTS_SENT_TOTAL.labels(
+                        siem_type=siem_type_to_use, status="failed"
+                    ).inc()
                     SIEM_SEND_ERRORS_TOTAL.labels(
                         siem_type=siem_type_to_use, error_type="unexpected_exception"
                     ).inc()
@@ -1701,14 +1816,18 @@ class GenericSIEMIntegrationPlugin:
             siem_type_to_use = siem_type_override or self.default_siem_type
             backend = self.active_backends.get(siem_type_to_use)
             if not backend:
-                reason = f"No active SIEM backend configured for type '{siem_type_to_use}'."
+                reason = (
+                    f"No active SIEM backend configured for type '{siem_type_to_use}'."
+                )
                 logger.warning(reason)
                 if prometheus_available:
                     SIEM_QUERY_ERRORS_TOTAL.labels(
                         siem_type=siem_type_to_use, error_type="backend_not_found"
                     ).inc()
                 if trace:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, description=reason)
+                    )
                 await _audit_event(
                     "siem_log_query",
                     "backend_not_found",
@@ -1728,7 +1847,9 @@ class GenericSIEMIntegrationPlugin:
                         siem_type=siem_type_to_use, error_type="query_not_supported"
                     ).inc()
                 if trace:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, description=reason)
+                    )
                 await _audit_event(
                     "siem_log_query",
                     "query_not_supported",
@@ -1763,7 +1884,9 @@ class GenericSIEMIntegrationPlugin:
                             siem_type=siem_type_to_use, error_type="query_parse_error"
                         ).inc()
                     if trace:
-                        span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                        span.set_status(
+                            trace.Status(trace.StatusCode.ERROR, description=reason)
+                        )
                         span.record_exception(e)
                     await _audit_event(
                         "siem_log_query",
@@ -1777,16 +1900,16 @@ class GenericSIEMIntegrationPlugin:
                     )
                     return {"success": False, "reason": reason, "results": []}
             elif generic_query_format and not self._query_parser:
-                reason = (
-                    "Generic query format requested but SiemQueryLanguageParser is not available."
-                )
+                reason = "Generic query format requested but SiemQueryLanguageParser is not available."
                 logger.warning(reason)
                 if prometheus_available:
                     SIEM_QUERY_ERRORS_TOTAL.labels(
                         siem_type=siem_type_to_use, error_type="parser_unavailable"
                     ).inc()
                 if trace:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, description=reason))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, description=reason)
+                    )
                 await _audit_event(
                     "siem_log_query",
                     "parser_unavailable",
@@ -1800,11 +1923,13 @@ class GenericSIEMIntegrationPlugin:
                 return {"success": False, "reason": reason, "results": []}
             start_time = time.monotonic()
             try:
-                results = await backend.query_logs(actual_query_string, time_range, limit)
+                results = await backend.query_logs(
+                    actual_query_string, time_range, limit
+                )
                 if prometheus_available:
-                    SIEM_QUERY_LATENCY_SECONDS.labels(siem_type=siem_type_to_use).observe(
-                        time.monotonic() - start_time
-                    )
+                    SIEM_QUERY_LATENCY_SECONDS.labels(
+                        siem_type=siem_type_to_use
+                    ).observe(time.monotonic() - start_time)
                     SIEM_EVENTS_SENT_TOTAL.labels(
                         siem_type=siem_type_to_use, status="query_success"
                     ).inc()
@@ -1910,11 +2035,15 @@ class GenericSIEMIntegrationPlugin:
         ]
         await asyncio.gather(*tasks)
 
-    async def _close_backend_safely(self, siem_type: str, backend_instance: BaseSIEMClient):
+    async def _close_backend_safely(
+        self, siem_type: str, backend_instance: BaseSIEMClient
+    ):
         try:
             await backend_instance.close()
             logger.info(f"Closed session for SIEM backend: {siem_type}.")
-            await _audit_event("siem_backend_close", "success", {"siem_type": siem_type})
+            await _audit_event(
+                "siem_backend_close", "success", {"siem_type": siem_type}
+            )
         except Exception as e:
             logger.error(
                 f"Error closing session for SIEM backend '{siem_type}': {e}",
@@ -1951,7 +2080,9 @@ async def _monitor_config_changes():
                 if _siem_plugin_instance:
                     await _siem_plugin_instance.close_all_backends()
                 if PYDANTIC_AVAILABLE:
-                    migrated_new_config = PluginGlobalConfig.migrate_config(current_config_dict)
+                    migrated_new_config = PluginGlobalConfig.migrate_config(
+                        current_config_dict
+                    )
                     migrated_new_config.pop("_CONFIG_VERSION", None)
                     new_config_model = PluginGlobalConfig.parse_obj(migrated_new_config)
                 else:
@@ -2004,7 +2135,9 @@ def register_plugin_entrypoints(register_func: Callable):
     )
     if _config_reload_task is None:
         _config_reload_task = asyncio.create_task(_monitor_config_changes())
-        logger.info("Started background task for monitoring SIEM configuration changes.")
+        logger.info(
+            "Started background task for monitoring SIEM configuration changes."
+        )
 
 
 def shutdown_plugin():
@@ -2012,7 +2145,9 @@ def shutdown_plugin():
     if _config_reload_task:
         _config_reload_task.cancel()
         _config_reload_task = None
-        logger.info("Stopped background task for monitoring SIEM configuration changes.")
+        logger.info(
+            "Stopped background task for monitoring SIEM configuration changes."
+        )
     if _siem_plugin_instance:
         try:
             loop = asyncio.get_running_loop()
@@ -2053,11 +2188,15 @@ if __name__ == "__main__":
             title="SIEM Plugin Test API",
             description="API for testing Generic SIEM Integration Plugin capabilities.",
         )
-        register_plugin_entrypoints(lambda name, executor_func, capabilities, is_async: None)
+        register_plugin_entrypoints(
+            lambda name, executor_func, capabilities, is_async: None
+        )
 
         class SiemEventRequest(BaseModel):
             event_type: str = Field(..., description="Type of the SIEM event.")
-            event_details: Dict[str, Any] = Field(..., description="Detailed payload of the event.")
+            event_details: Dict[str, Any] = Field(
+                ..., description="Detailed payload of the event."
+            )
             siem_type_override: Optional[str] = Field(
                 None, description="Optional: specific SIEM type to send to."
             )
@@ -2102,7 +2241,9 @@ if __name__ == "__main__":
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
                 )
 
-        @app.post("/query_siem_logs", response_model=Dict[str, Any], summary="Query SIEM logs")
+        @app.post(
+            "/query_siem_logs", response_model=Dict[str, Any], summary="Query SIEM logs"
+        )
         async def query_logs_api(request: SiemQueryRequest):
             if not _siem_plugin_instance:
                 raise HTTPException(
@@ -2124,7 +2265,9 @@ if __name__ == "__main__":
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
                 )
 
-        @app.get("/health", response_model=Dict[str, Any], summary="Get plugin health status")
+        @app.get(
+            "/health", response_model=Dict[str, Any], summary="Get plugin health status"
+        )
         async def health_check_api():
             if not _siem_plugin_instance:
                 raise HTTPException(
@@ -2136,7 +2279,9 @@ if __name__ == "__main__":
         @app.on_event("shutdown")
         async def shutdown_event_hook():
             shutdown_plugin()
-            logger.info("SIEM Plugin FastAPI server shutting down: shutdown hook triggered.")
+            logger.info(
+                "SIEM Plugin FastAPI server shutting down: shutdown hook triggered."
+            )
 
         print("\n--- Starting SIEM Plugin Test API (Uvicorn) ---")
         print("API endpoint: POST http://localhost:8000/send_siem_event")
@@ -2152,12 +2297,16 @@ if __name__ == "__main__":
             )
             return
         app_cli = typer.Typer(help="Generic SIEM Integration Plugin CLI.")
-        register_plugin_entrypoints(lambda name, executor_func, capabilities, is_async: None)
+        register_plugin_entrypoints(
+            lambda name, executor_func, capabilities, is_async: None
+        )
 
         @app_cli.command(name="send")
         def send_command(
             event_type: str = typer.Argument(..., help="Type of the SIEM event."),
-            details_json: str = typer.Argument(..., help="JSON string of event details."),
+            details_json: str = typer.Argument(
+                ..., help="JSON string of event details."
+            ),
             siem_type: Optional[str] = typer.Option(
                 None,
                 "--siem-type",
@@ -2200,14 +2349,18 @@ if __name__ == "__main__":
 
         @app_cli.command(name="query")
         def query_command(
-            query_string: str = typer.Argument(..., help="The query string to execute."),
+            query_string: str = typer.Argument(
+                ..., help="The query string to execute."
+            ),
             siem_type: Optional[str] = typer.Option(
                 None, "--siem-type", "-s", help="Specific SIEM type to query."
             ),
             time_range: str = typer.Option(
                 "24h", "--time-range", "-t", help="Relative time range."
             ),
-            limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results."),
+            limit: int = typer.Option(
+                100, "--limit", "-l", help="Maximum number of results."
+            ),
             generic_format: bool = typer.Option(
                 False,
                 "--generic-format",
@@ -2249,7 +2402,9 @@ if __name__ == "__main__":
 
     async def _default_standalone_test():
         print("\n--- Generic SIEM Integration Plugin Standalone Test ---")
-        register_plugin_entrypoints(lambda name, executor_func, capabilities, is_async: None)
+        register_plugin_entrypoints(
+            lambda name, executor_func, capabilities, is_async: None
+        )
         print("\n--- Running Plugin Health Check ---")
         health_status = await _siem_plugin_instance.plugin_health()
         print(f"Health Status: {health_status['status']}")
@@ -2326,8 +2481,12 @@ if __name__ == "__main__":
                     action="block",
                 )
             )
-            _siem_plugin_instance.config.policy.default_pii_patterns.append(r"\d{3}-\d{2}-\d{4}")
-            _siem_plugin_instance.config.policy.compliance_flags.append("GDPR_Compliant")
+            _siem_plugin_instance.config.policy.default_pii_patterns.append(
+                r"\d{3}-\d{2}-\d{4}"
+            )
+            _siem_plugin_instance.config.policy.compliance_flags.append(
+                "GDPR_Compliant"
+            )
             _siem_plugin_instance.policy_enforcer = PolicyEnforcer(
                 _siem_plugin_instance.config.policy
             )
@@ -2339,13 +2498,17 @@ if __name__ == "__main__":
         print("\nSend Result (Test 2 - Elasticsearch attempt with policy):")
         print(json.dumps(send_result_2, indent=2))
         if send_result_2["success"]:
-            print("Test 2 PASSED: Sample audit log sent successfully to Elasticsearch with policy.")
+            print(
+                "Test 2 PASSED: Sample audit log sent successfully to Elasticsearch with policy."
+            )
         else:
             print(
                 f"Test 2 FAILED (expected if Elastic not configured or policy blocked): {send_result_2['reason']}"
             )
         print("-" * 50)
-        print("\n--- Test 3: Querying a SIEM (Attempt to default SIEM with generic query) ---")
+        print(
+            "\n--- Test 3: Querying a SIEM (Attempt to default SIEM with generic query) ---"
+        )
         default_siem_for_query = _siem_plugin_instance.default_siem_type
         if (
             _siem_plugin_instance.active_backends.get(default_siem_for_query)
@@ -2369,7 +2532,9 @@ if __name__ == "__main__":
             print("\nQuery Result (Test 3 - Default SIEM with Generic Query):")
             print(json.dumps(query_result_1, indent=2))
             if query_result_1["success"]:
-                print(f"Test 3 PASSED: Query returned {len(query_result_1['results'])} results.")
+                print(
+                    f"Test 3 PASSED: Query returned {len(query_result_1['results'])} results."
+                )
             else:
                 print(f"Test 3 FAILED: {query_result_1['reason']}")
         else:
@@ -2391,7 +2556,9 @@ if __name__ == "__main__":
         )
         original_default_siem = _siem_plugin_instance.default_siem_type
         print(f"Original default SIEM: {original_default_siem}")
-        print("Waiting for 70 seconds to allow for potential config reload detection...")
+        print(
+            "Waiting for 70 seconds to allow for potential config reload detection..."
+        )
         await asyncio.sleep(70)
         current_default_siem = _siem_plugin_instance.default_siem_type
         if current_default_siem != original_default_siem:
@@ -2410,7 +2577,9 @@ if __name__ == "__main__":
                 "type": "test_queue_event",
                 "data": "This is a test from distributed queue.",
             }
-            await _siem_plugin_instance.self_healing_manager.enqueue_for_retry(test_event_queue)
+            await _siem_plugin_instance.self_healing_manager.enqueue_for_retry(
+                test_event_queue
+            )
             print(
                 f"Enqueued test event. Queue size: {await _siem_plugin_instance.self_healing_manager.get_queue_size()}"
             )

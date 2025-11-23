@@ -57,7 +57,9 @@ def cli(verbose: bool):
     required=True,
     type=click.Choice(DLTFactory.list_available_dlt_clients()),
 )
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option(
     "--correlation-id",
     required=False,
@@ -116,7 +118,9 @@ def health_check_command(dlt_type, config_file, correlation_id):
             click.echo(f"Error: {e}")
             return 1
         except DLTClientError as e:
-            CLI_LOGGER.error(f"DLT Client Error: {e}", extra={"correlation_id": correlation_id})
+            CLI_LOGGER.error(
+                f"DLT Client Error: {e}", extra={"correlation_id": correlation_id}
+            )
             click.echo(f"DLT Client Error: {e}")
             return 1
         except FileNotFoundError:
@@ -157,9 +161,13 @@ def health_check_command(dlt_type, config_file, correlation_id):
     required=True,
     type=click.Choice(DLTFactory.list_available_dlt_clients()),
 )
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
-@click.option("--hash", "hash_val", required=True, help="Cryptographic hash of the state.")
+@click.option(
+    "--hash", "hash_val", required=True, help="Cryptographic hash of the state."
+)
 @click.option(
     "--prev-hash",
     required=False,
@@ -275,7 +283,9 @@ def write_checkpoint_command(
     required=True,
     type=click.Choice(DLTFactory.list_available_dlt_clients()),
 )
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
 @click.option(
     "--version",
@@ -377,9 +387,13 @@ def read_checkpoint_command(
     required=True,
     type=click.Choice(DLTFactory.list_available_dlt_clients()),
 )
-@click.option("--config-file", required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--config-file", required=True, type=click.Path(exists=True, dir_okay=False)
+)
 @click.option("--checkpoint-name", required=True, help="Name of the checkpoint chain.")
-@click.option("--rollback-hash", required=True, help="Hash of the state to roll back to.")
+@click.option(
+    "--rollback-hash", required=True, help="Hash of the state to roll back to."
+)
 @click.option(
     "--correlation-id",
     required=False,

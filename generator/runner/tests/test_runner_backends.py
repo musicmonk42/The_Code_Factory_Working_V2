@@ -183,7 +183,9 @@ class TestRunnerBackends(unittest.IsolatedAsyncioTestCase):
         backend = LocalBackend(self.config)
         health = backend.health()
         self.assertEqual(health["status"], "healthy")
-        self.assertIn("uptime", health["details"])  # Test now passes with new health structure
+        self.assertIn(
+            "uptime", health["details"]
+        )  # Test now passes with new health structure
 
     async def test_check_all_backends(self):
         health_status = check_all_backends(self.config)

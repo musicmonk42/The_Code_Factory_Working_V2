@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -169,7 +171,9 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
             ValueError: If any import path is invalid or malformed.
         """
         with tracer.start_as_current_span("validate_plugin_registry"):
-            plugins = cls._PLUGINS if hasattr(cls, "_PLUGINS") else cls.__ORIGINAL_PLUGINS
+            plugins = (
+                cls._PLUGINS if hasattr(cls, "_PLUGINS") else cls.__ORIGINAL_PLUGINS
+            )
             for key, value in plugins.items():
                 if not isinstance(key, str) or not isinstance(value, str):
                     plugin_config_errors_total.labels(operation="validate").inc()
@@ -183,7 +187,9 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
                     # Just validate that it's a dotted path with at least 2 parts
                     parts = value.split(".")
                     if len(parts) < 2:
-                        raise ValueError("Import path must have at least module.name format")
+                        raise ValueError(
+                            "Import path must have at least module.name format"
+                        )
                     # Check if it looks like a valid Python identifier path
                     for part in parts:
                         if (

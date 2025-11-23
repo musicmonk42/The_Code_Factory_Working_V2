@@ -144,7 +144,9 @@ class TestOllamaAdapter:
     def test_circuit_breaker_check_transitions_to_half_open(self, adapter):
         """Test circuit breaker transitions to half-open after timeout."""
         adapter._circuit_breaker_state = "open"
-        adapter._circuit_breaker_last_failure_time = asyncio.get_event_loop().time() - 31
+        adapter._circuit_breaker_last_failure_time = (
+            asyncio.get_event_loop().time() - 31
+        )
         adapter._circuit_breaker_timeout = 30
 
         adapter._check_circuit_breaker()
@@ -373,7 +375,9 @@ class TestOllamaAdapter:
         adapter.requests_total.labels.assert_called_with(
             status="success", correlation_id="metrics-test"
         )
-        adapter.processing_latency_seconds.labels.assert_called_with(correlation_id="metrics-test")
+        adapter.processing_latency_seconds.labels.assert_called_with(
+            correlation_id="metrics-test"
+        )
 
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_failure(self, adapter):

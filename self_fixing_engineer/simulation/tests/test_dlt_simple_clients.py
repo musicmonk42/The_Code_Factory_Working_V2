@@ -89,7 +89,9 @@ class TestConfiguration:
 
     def test_valid_config(self):
         """Test valid configuration."""
-        config = SimpleDLTConfig(log_format="json", temp_file_ttl=3600.0, cleanup_interval=300.0)
+        config = SimpleDLTConfig(
+            log_format="json", temp_file_ttl=3600.0, cleanup_interval=300.0
+        )
         assert config.log_format == "json"
         assert config.temp_file_ttl == 3600.0
 

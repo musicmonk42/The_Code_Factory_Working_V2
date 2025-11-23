@@ -36,7 +36,9 @@ def setup_langchain_mocks():
 
     conversation_module = types.ModuleType("langchain.chains.conversation")
     conversation_base_module = types.ModuleType("langchain.chains.conversation.base")
-    conversation_prompt_module = types.ModuleType("langchain.chains.conversation.prompt")
+    conversation_prompt_module = types.ModuleType(
+        "langchain.chains.conversation.prompt"
+    )
     conversation_prompt_module.PROMPT = MagicMock()
 
     conversation_module.base = conversation_base_module
@@ -108,7 +110,9 @@ def mock_all_external_services():
     with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_openai:
         with patch("arbiter.knowledge_graph.core.RedisClient") as mock_redis:
             with patch("arbiter.knowledge_graph.core.PostgresClient") as mock_postgres:
-                with patch("arbiter.knowledge_graph.core.AuditLedgerClient") as mock_audit:
+                with patch(
+                    "arbiter.knowledge_graph.core.AuditLedgerClient"
+                ) as mock_audit:
                     with patch(
                         "arbiter.knowledge_graph.core.DefaultMultiModalProcessor"
                     ) as mock_mm:
@@ -152,7 +156,9 @@ def mock_all_external_services():
                                         ),
                                         "state_backend_latency_seconds": MagicMock(
                                             labels=MagicMock(
-                                                return_value=MagicMock(observe=MagicMock())
+                                                return_value=MagicMock(
+                                                    observe=MagicMock()
+                                                )
                                             )
                                         ),
                                         "state_backend_errors_total": MagicMock(
@@ -275,7 +281,9 @@ class TestStateBackends:
         backend.client.get.assert_called_once_with(f"agent_state:{session_id}")
 
     @pytest.mark.asyncio
-    async def test_postgres_state_backend_initialization(self, mock_all_external_services):
+    async def test_postgres_state_backend_initialization(
+        self, mock_all_external_services
+    ):
         """Test PostgresStateBackend initialization"""
         backend = PostgresStateBackend("postgresql://localhost/testdb")
         assert backend.client is not None
@@ -301,8 +309,12 @@ class TestMetaLearning:
         with patch("builtins.open", side_effect=FileNotFoundError):
             ml = MetaLearning()
 
-        with patch("arbiter.knowledge_graph.core.Config.MAX_META_LEARNING_CORRECTIONS", 5):
-            with patch("arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 1000):
+        with patch(
+            "arbiter.knowledge_graph.core.Config.MAX_META_LEARNING_CORRECTIONS", 5
+        ):
+            with patch(
+                "arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 1000
+            ):
                 # Log corrections
                 ml.log_correction("input1", "response1", "corrected1")
                 ml.log_correction("input2", "response2", "corrected2")
@@ -312,7 +324,9 @@ class TestMetaLearning:
 
                 # Test FIFO when max corrections reached
                 for i in range(4):
-                    ml.log_correction(f"input{i+3}", f"response{i+3}", f"corrected{i+3}")
+                    ml.log_correction(
+                        f"input{i+3}", f"response{i+3}", f"corrected{i+3}"
+                    )
 
                 assert len(ml.corrections) == 5
                 assert ml.corrections[0][0] == "input2"  # First one should be removed
@@ -324,7 +338,9 @@ class TestMetaLearning:
 
         with patch("arbiter.knowledge_graph.core.Config.MAX_CORRECTION_ENTRY_SIZE", 10):
             # This should be skipped due to size
-            ml.log_correction("very long input", "very long response", "very long correction")
+            ml.log_correction(
+                "very long input", "very long response", "very long correction"
+            )
             assert len(ml.corrections) == 0
 
     def test_train_model(self):
@@ -495,7 +511,9 @@ class TestCollaborativeAgent:
             agent.state_backend.save_state.assert_called()
 
     @pytest.mark.asyncio
-    async def test_agent_predict_timeout(self, mock_llm_config, mock_all_external_services):
+    async def test_agent_predict_timeout(
+        self, mock_llm_config, mock_all_external_services
+    ):
         """Test agent prediction timeout"""
         with patch("builtins.open", side_effect=FileNotFoundError):
             agent = CollaborativeAgent(
@@ -559,7 +577,9 @@ class TestAgentTeam:
         assert "required for AgentTeam" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_team_delegate_task(self, mock_team_config, mock_all_external_services):
+    async def test_team_delegate_task(
+        self, mock_team_config, mock_all_external_services
+    ):
         """Test delegating task to agent team"""
         state_backend = AsyncMock(spec=StateBackend)
         meta_learning = Mock(spec=MetaLearning)
@@ -592,7 +612,9 @@ class TestAgentTeam:
                 },
             }
 
-            team.agents["requirements"].predict = AsyncMock(return_value=mock_req_response)
+            team.agents["requirements"].predict = AsyncMock(
+                return_value=mock_req_response
+            )
             team.agents["refiner"].predict = AsyncMock(return_value=mock_ref_response)
             team.agents["requirements"].audit_ledger = AsyncMock()
             team.agents["refiner"].audit_ledger = AsyncMock()
@@ -627,8 +649,12 @@ class TestFactoryFunctions:
     @pytest.mark.asyncio
     async def test_get_or_create_agent_with_redis(self, mock_all_external_services):
         """Test get_or_create_agent with Redis backend"""
-        with patch("arbiter.knowledge_graph.core.Config.REDIS_URL", "redis://localhost:6379"):
-            with patch("arbiter.knowledge_graph.core.RedisStateBackend") as mock_redis_backend:
+        with patch(
+            "arbiter.knowledge_graph.core.Config.REDIS_URL", "redis://localhost:6379"
+        ):
+            with patch(
+                "arbiter.knowledge_graph.core.RedisStateBackend"
+            ) as mock_redis_backend:
                 mock_backend_instance = AsyncMock()
                 mock_redis_backend.return_value = mock_backend_instance
                 mock_backend_instance.init_client = AsyncMock()
@@ -646,7 +672,9 @@ class TestFactoryFunctions:
             "postgresql://localhost/testdb",
         ):
             with patch("arbiter.knowledge_graph.core.Config.REDIS_URL", None):
-                with patch("arbiter.knowledge_graph.core.PostgresStateBackend") as mock_pg_backend:
+                with patch(
+                    "arbiter.knowledge_graph.core.PostgresStateBackend"
+                ) as mock_pg_backend:
                     mock_backend_instance = AsyncMock()
                     mock_pg_backend.return_value = mock_backend_instance
                     mock_backend_instance.init_client = AsyncMock()
@@ -666,7 +694,9 @@ class TestFactoryFunctions:
         mock_agent.set_persona = AsyncMock()
         mock_agent.language = "en"
 
-        with patch("arbiter.knowledge_graph.core.get_or_create_agent", return_value=mock_agent):
+        with patch(
+            "arbiter.knowledge_graph.core.get_or_create_agent", return_value=mock_agent
+        ):
             # Create a mock LLM object with __class__.__name__
             mock_llm = MagicMock()
             mock_llm.__class__.__name__ = "ChatOpenAI"
@@ -687,7 +717,9 @@ class TestUtilityFunctions:
     def test_get_transcript(self):
         """Test get_transcript function"""
         memory = MagicMock()
-        memory.load_memory_variables.return_value = {"history": ["Message 1", "Message 2"]}
+        memory.load_memory_variables.return_value = {
+            "history": ["Message 1", "Message 2"]
+        }
 
         with patch(
             "arbiter.knowledge_graph.core._sanitize_user_input",

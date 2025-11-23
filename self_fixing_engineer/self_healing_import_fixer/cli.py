@@ -70,7 +70,9 @@ def _bootstrap_import_paths():
     ]
     for c in candidates:
         # If the conventional package layout exists, prefer that
-        if (c / "self_healing_import_fixer" / "import_fixer").exists() and str(c) not in sys.path:
+        if (c / "self_healing_import_fixer" / "import_fixer").exists() and str(
+            c
+        ) not in sys.path:
             sys.path.insert(0, str(c))
             break
         # Or if running from within the package dir already (no outer package folder)
@@ -149,7 +151,9 @@ class NonCriticalError(Exception):
 
 
 # --- Centralized Utilities and Audit Logging (prod-safe via compat layer) ---
-from import_fixer.compat_core import alert_operator  # real core in prod, safe fallback elsewhere
+from import_fixer.compat_core import (
+    alert_operator,
+)  # real core in prod, safe fallback elsewhere
 from import_fixer.compat_core import (
     audit_logger,  # unified logger (exposes .info/.error/.log_event)
 )
@@ -157,7 +161,10 @@ from import_fixer.compat_core import SECRETS_MANAGER, scrub_secrets
 
 
 def is_ci_environment() -> bool:
-    return any(os.environ.get(key) for key in ["CI", "GITHUB_ACTIONS", "JENKINS_URL", "GITLAB_CI"])
+    return any(
+        os.environ.get(key)
+        for key in ["CI", "GITHUB_ACTIONS", "JENKINS_URL", "GITLAB_CI"]
+    )
 
 
 def setup_logging(verbose: bool, log_format: str) -> None:
@@ -188,9 +195,13 @@ def setup_logging(verbose: bool, log_format: str) -> None:
 def _validate_output_path(path: str):
     abs_path = os.path.abspath(path)
     if os.path.islink(abs_path):
-        raise AnalyzerCriticalError(f"Audit log path {abs_path} is a symlink. Aborting for safety.")
+        raise AnalyzerCriticalError(
+            f"Audit log path {abs_path} is a symlink. Aborting for safety."
+        )
     if not os.path.isdir(os.path.dirname(abs_path)):
-        raise AnalyzerCriticalError(f"Audit log directory does not exist for {abs_path}")
+        raise AnalyzerCriticalError(
+            f"Audit log directory does not exist for {abs_path}"
+        )
     if os.path.exists(abs_path) and not os.access(abs_path, os.W_OK):
         raise AnalyzerCriticalError(f"No write access to audit log at {abs_path}")
     return abs_path
@@ -257,7 +268,9 @@ def _verify_plugin_integrity(file_path: str, expected_signature: str) -> bool:
             f"Error during plugin integrity verification for {file_path}: {e}",
             exc_info=True,
         )
-        cli_audit_logger.log_event("plugin_integrity_error", file=file_path, error=str(e))
+        cli_audit_logger.log_event(
+            "plugin_integrity_error", file=file_path, error=str(e)
+        )
         alert_operator(
             f"CRITICAL: Plugin integrity verification failed for {file_path}: {e}. Aborting.",
             level="CRITICAL",
@@ -283,7 +296,9 @@ class PluginManager:
         self.docs: Dict[str, str] = {}
         self.examples: Dict[str, List[str]] = {}
         self.hooks: Dict[str, List[Callable]] = defaultdict(list)
-        self.whitelisted_plugin_dirs: List[str] = [os.path.abspath(d) for d in self.plugin_dirs]
+        self.whitelisted_plugin_dirs: List[str] = [
+            os.path.abspath(d) for d in self.plugin_dirs
+        ]
         if PRODUCTION_MODE and not self.whitelisted_plugin_dirs:
             logger.critical(
                 "CRITICAL: In PRODUCTION_MODE, 'whitelisted_plugin_dirs' must be configured for PluginManager. Aborting startup."
@@ -295,7 +310,9 @@ class PluginManager:
             sys.exit(1)
         self.plugin_versions: Dict[str, str] = {}  # For versioning
 
-    async def _load_plugin_file_async(self, full_plugin_path: str, parser: argparse.ArgumentParser):
+    async def _load_plugin_file_async(
+        self, full_plugin_path: str, parser: argparse.ArgumentParser
+    ):
         module_name = Path(full_plugin_path).stem
         if module_name in self.plugins:
             return
@@ -335,7 +352,9 @@ class PluginManager:
                 self.plugins[module_name] = module
                 self.docs[module_name] = getattr(module, "__doc__", None)
                 self.examples[module_name] = getattr(module, "EXAMPLES", [])
-                self.plugin_versions[module_name] = getattr(module, "__version__", "unknown")
+                self.plugin_versions[module_name] = getattr(
+                    module, "__version__", "unknown"
+                )
                 if hasattr(module, "register_command"):
                     try:
                         await asyncio.to_thread(module.register_command, parser)
@@ -382,7 +401,9 @@ class PluginManager:
             sys.exit(1)
 
     async def discover_and_load(self, parser: argparse.ArgumentParser):
-        cli_audit_logger.log_event("plugin_discovery_start", plugin_dirs=self.plugin_dirs)
+        cli_audit_logger.log_event(
+            "plugin_discovery_start", plugin_dirs=self.plugin_dirs
+        )
         plugin_files_to_load = []
         for plugin_dir in self.plugin_dirs:
             abs_plugin_dir = os.path.abspath(plugin_dir)
@@ -404,7 +425,9 @@ class PluginManager:
                 )
                 sys.exit(1)
             if not os.path.isdir(abs_plugin_dir):
-                logger.warning(f"Plugin directory '{abs_plugin_dir}' does not exist. Skipping.")
+                logger.warning(
+                    f"Plugin directory '{abs_plugin_dir}' does not exist. Skipping."
+                )
                 cli_audit_logger.log_event(
                     "plugin_load_skipped",
                     dir=abs_plugin_dir,
@@ -436,7 +459,9 @@ class PluginManager:
                     scrubbed_args = scrub_secrets(args)
                     scrubbed_kwargs = scrub_secrets(kwargs)
                     getattr(plugin, hook_name)(*scrubbed_args, **scrubbed_kwargs)
-                    cli_audit_logger.log_event("hook_run_success", hook_name=hook_name, plugin=name)
+                    cli_audit_logger.log_event(
+                        "hook_run_success", hook_name=hook_name, plugin=name
+                    )
                 except Exception as e:
                     logger.critical(
                         f"CRITICAL: Error in hook '{hook_name}' for plugin '{name}': {e}. Unloading plugin and aborting.",
@@ -494,7 +519,9 @@ class PluginManager:
                 examples or "(no examples)",
             )
         console.print(table)
-        cli_audit_logger.log_event("list_plugins_command", format=log_format, count=len(self.docs))
+        cli_audit_logger.log_event(
+            "list_plugins_command", format=log_format, count=len(self.docs)
+        )
 
 
 # --- Module Loaders (with Dependency Gating) ---
@@ -502,11 +529,15 @@ def load_analyzer():
     global ImportGraphAnalyzer
     if ImportGraphAnalyzer is None:
         try:
-            from import_fixer.analyzer import ImportGraphAnalyzer as ActualImportGraphAnalyzer
+            from import_fixer.analyzer import (
+                ImportGraphAnalyzer as ActualImportGraphAnalyzer,
+            )
 
             ImportGraphAnalyzer = ActualImportGraphAnalyzer
             logger.debug("Analyzer module loaded.")
-            cli_audit_logger.log_event("module_load", module="analyzer", status="success")
+            cli_audit_logger.log_event(
+                "module_load", module="analyzer", status="success"
+            )
         except ImportError as e:
             logger.critical(
                 f"CRITICAL: Analyzer module not found: {e}. Aborting startup.",
@@ -515,7 +546,9 @@ def load_analyzer():
             cli_audit_logger.log_event(
                 "module_load", module="analyzer", status="failure", error=str(e)
             )
-            alert_operator("CRITICAL: Analyzer module missing. Aborting.", level="CRITICAL")
+            alert_operator(
+                "CRITICAL: Analyzer module missing. Aborting.", level="CRITICAL"
+            )
             sys.exit(1)
 
 
@@ -536,7 +569,9 @@ def load_fixer():
             cli_audit_logger.log_event(
                 "module_load", module="fixer", status="failure", error=str(e)
             )
-            alert_operator("CRITICAL: Fixer module missing. Aborting.", level="CRITICAL")
+            alert_operator(
+                "CRITICAL: Fixer module missing. Aborting.", level="CRITICAL"
+            )
             sys.exit(1)
 
 
@@ -548,7 +583,9 @@ def load_requests():
 
             requests = actual_requests
             logger.debug("Requests module loaded.")
-            cli_audit_logger.log_event("module_load", module="requests", status="success")
+            cli_audit_logger.log_event(
+                "module_load", module="requests", status="success"
+            )
         except ImportError as e:
             logger.critical(
                 f"CRITICAL: 'requests' library not found: {e}. Required for network operations. Aborting startup.",
@@ -557,7 +594,9 @@ def load_requests():
             cli_audit_logger.log_event(
                 "module_load", module="requests", status="failure", error=str(e)
             )
-            alert_operator("CRITICAL: 'requests' library missing. Aborting.", level="CRITICAL")
+            alert_operator(
+                "CRITICAL: 'requests' library missing. Aborting.", level="CRITICAL"
+            )
             sys.exit(1)
 
 
@@ -726,14 +765,18 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
         description="The All-Powerful Conductor for Code Analysis and Healing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
         help="Enable verbose, debug-level logging.",
     )
-    parser.add_argument("--config", help="Path to a YAML config file for global settings.")
+    parser.add_argument(
+        "--config", help="Path to a YAML config file for global settings."
+    )
     parser.add_argument(
         "--log-format",
         choices=["text", "json"],
@@ -750,7 +793,9 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
         action="store_true",
         help="List all installed plugins and their docs/examples.",
     )
-    parser.add_argument("--list-hooks", action="store_true", help="List all registered hooks.")
+    parser.add_argument(
+        "--list-hooks", action="store_true", help="List all registered hooks."
+    )
     parser.add_argument(
         "--undo",
         type=int,
@@ -767,7 +812,9 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
     analyze_parser = subparsers.add_parser(
         "analyze", help="Perform deep analysis of import and call graphs."
     )
-    analyze_parser.add_argument("root", help="The root directory of the Python project to analyze.")
+    analyze_parser.add_argument(
+        "root", help="The root directory of the Python project to analyze."
+    )
     analyze_parser.add_argument(
         "--output-format",
         choices=["text", "json-ide", "markdown", "html"],
@@ -862,13 +909,17 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
     visualize_parser = subparsers.add_parser(
         "visualize", help="Export the dependency graph to various formats."
     )
-    visualize_parser.add_argument("root", help="The root directory of the Python project.")
+    visualize_parser.add_argument(
+        "root", help="The root directory of the Python project."
+    )
     visualize_parser.add_argument(
         "format",
         choices=["dot", "json", "mermaid", "graphml"],
         help="The desired output format.",
     )
-    visualize_parser.add_argument("output_file", help="The path to write the output file to.")
+    visualize_parser.add_argument(
+        "output_file", help="The path to write the output file to."
+    )
     visualize_parser.add_argument(
         "--graph-type",
         choices=["import", "call"],
@@ -880,7 +931,9 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
         "serve", help="Serve an interactive web dashboard for analysis."
     )
     serve_parser.add_argument("root", help="The project root directory to analyze.")
-    serve_parser.add_argument("--host", default="127.0.0.1", help="Host for the dashboard server.")
+    serve_parser.add_argument(
+        "--host", default="127.0.0.1", help="Host for the dashboard server."
+    )
     serve_parser.add_argument(
         "--port", type=int, default=5000, help="Port for the dashboard server."
     )
@@ -889,13 +942,19 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
         action="store_true",
         help="Require authentication for dashboard access.",
     )
-    serve_parser.add_argument("--https-cert", help="Path to HTTPS certificate for secure serving.")
-    serve_parser.add_argument("--https-key", help="Path to HTTPS private key for secure serving.")
+    serve_parser.add_argument(
+        "--https-cert", help="Path to HTTPS certificate for secure serving."
+    )
+    serve_parser.add_argument(
+        "--https-key", help="Path to HTTPS private key for secure serving."
+    )
 
     trigger_parser = subparsers.add_parser(
         "trigger", help="Send a webhook-style trigger to a running dashboard."
     )
-    trigger_parser.add_argument("event", choices=["rescan"], help="The event to trigger.")
+    trigger_parser.add_argument(
+        "event", choices=["rescan"], help="The event to trigger."
+    )
     trigger_parser.add_argument(
         "--target",
         default="http://127.0.0.1:5000/api/trigger",
@@ -912,7 +971,9 @@ def create_parser(plugin_manager: PluginManager) -> CustomArgumentParser:
 async def main_async():
     temp_parser = argparse.ArgumentParser(add_help=False)
     temp_parser.add_argument("--plugins-dir", help=argparse.SUPPRESS, action="append")
-    temp_parser.add_argument("--production-mode", action="store_true", help=argparse.SUPPRESS)
+    temp_parser.add_argument(
+        "--production-mode", action="store_true", help=argparse.SUPPRESS
+    )
     temp_args, remaining_args = temp_parser.parse_known_args()
     global PRODUCTION_MODE
     if temp_args.production_mode:
@@ -948,18 +1009,26 @@ async def main_async():
     )
     allowlist = plugin_manager.whitelisted_plugin_dirs
     if args.config:
-        _validate_path_argument(args.config, "config", is_dir=False, allowlist=allowlist)
+        _validate_path_argument(
+            args.config, "config", is_dir=False, allowlist=allowlist
+        )
     if args.plugins_dir:
         for p_dir in args.plugins_dir:
-            _validate_path_argument(p_dir, "plugins-dir", is_dir=True, allowlist=allowlist)
+            _validate_path_argument(
+                p_dir, "plugins-dir", is_dir=True, allowlist=allowlist
+            )
     if PRODUCTION_MODE and os.getenv("PRODUCTION_MODE", "false").lower() != "true":
         logger.critical(
             "CRITICAL: PRODUCTION_MODE is ON but not set via environment variable. Aborting for consistency."
         )
-        alert_operator("CRITICAL: PRODUCTION_MODE mismatch. Aborting.", level="CRITICAL")
+        alert_operator(
+            "CRITICAL: PRODUCTION_MODE mismatch. Aborting.", level="CRITICAL"
+        )
         sys.exit(1)
     try:
-        plugin_manager.run_hook("pre_command_execution", args=args, config=global_config)
+        plugin_manager.run_hook(
+            "pre_command_execution", args=args, config=global_config
+        )
         if getattr(args, "list_plugins", False):
             plugin_manager.list_plugins(log_format=args.log_format)
             cli_audit_logger.log_event(
@@ -978,9 +1047,13 @@ async def main_async():
             )
             sys.exit(0)
         if args.command == "analyze":
-            root_path = _validate_path_argument(args.root, "root", is_dir=True, allowlist=allowlist)
+            root_path = _validate_path_argument(
+                args.root, "root", is_dir=True, allowlist=allowlist
+            )
             load_analyzer()
-            analyzer = ImportGraphAnalyzer(root_path, config=global_config.get("analyzer", {}))
+            analyzer = ImportGraphAnalyzer(
+                root_path, config=global_config.get("analyzer", {})
+            )
             if args.output_format == "json-ide":
                 report = {
                     "cycles": analyzer.detect_cycles(),
@@ -1000,7 +1073,9 @@ async def main_async():
             )
         elif args.command == "heal":
             for root_path in args.roots:
-                _validate_path_argument(root_path, "roots", is_dir=True, allowlist=allowlist)
+                _validate_path_argument(
+                    root_path, "roots", is_dir=True, allowlist=allowlist
+                )
             if PRODUCTION_MODE and not args.dry_run and not args.interactive:
                 logger.critical(
                     "CRITICAL: In PRODUCTION_MODE, 'heal' command requires '--interactive' flag for explicit operator approval when not in dry-run. Aborting."
@@ -1033,12 +1108,16 @@ async def main_async():
                 "command_executed", command="heal", args=scrub_secrets(vars(args))
             )
         elif args.command == "visualize":
-            root_path = _validate_path_argument(args.root, "root", is_dir=True, allowlist=allowlist)
+            root_path = _validate_path_argument(
+                args.root, "root", is_dir=True, allowlist=allowlist
+            )
             _validate_path_argument(
                 args.output_file, "output_file", is_dir=False, allowlist=allowlist
             )
             load_analyzer()
-            analyzer = ImportGraphAnalyzer(root_path, config=global_config.get("analyzer", {}))
+            analyzer = ImportGraphAnalyzer(
+                root_path, config=global_config.get("analyzer", {})
+            )
             export_map = {
                 "dot": analyzer.visualize_graph,
                 "json": analyzer.export_json,
@@ -1055,7 +1134,9 @@ async def main_async():
                 "command_executed", command="visualize", args=scrub_secrets(vars(args))
             )
         elif args.command == "serve":
-            root_path = _validate_path_argument(args.root, "root", is_dir=True, allowlist=allowlist)
+            root_path = _validate_path_argument(
+                args.root, "root", is_dir=True, allowlist=allowlist
+            )
 
             # Load the analyzer module BEFORE production security gates so tests (and ops)
             # can verify it initializes even when we abort on missing flags.
@@ -1106,7 +1187,9 @@ async def main_async():
                     sys.exit(1)
 
             # Only construct and run the analyzer after passing security checks.
-            analyzer = ImportGraphAnalyzer(root_path, config=global_config.get("analyzer", {}))
+            analyzer = ImportGraphAnalyzer(
+                root_path, config=global_config.get("analyzer", {})
+            )
             analyzer.serve_dashboard(
                 args.host,
                 args.port,
@@ -1152,7 +1235,9 @@ async def main_async():
                 )
                 sys.exit(1)
             except ValueError as e:
-                logger.critical(f"CRITICAL: Invalid target URL for trigger: {e}", exc_info=True)
+                logger.critical(
+                    f"CRITICAL: Invalid target URL for trigger: {e}", exc_info=True
+                )
                 cli_audit_logger.log_event(
                     "command_executed",
                     command="trigger",
@@ -1189,11 +1274,15 @@ async def main_async():
                             logger.error(f"Required tool '{tool}' is missing.")
                             test_passed = False
             except SystemExit:
-                logger.error("Analyzer self-test failed critically and attempted to exit.")
+                logger.error(
+                    "Analyzer self-test failed critically and attempted to exit."
+                )
                 test_passed = False
             except Exception as e:
                 logger.error(f"Analyzer self-test failed: {e}", exc_info=True)
-                alert_operator(f"CRITICAL: Analyzer self-test failed: {e}.", level="CRITICAL")
+                alert_operator(
+                    f"CRITICAL: Analyzer self-test failed: {e}.", level="CRITICAL"
+                )
                 test_passed = False
             try:
                 load_fixer()
@@ -1203,7 +1292,9 @@ async def main_async():
                 test_passed = False
             except Exception as e:
                 logger.error(f"Fixer self-test failed: {e}", exc_info=True)
-                alert_operator(f"CRITICAL: Fixer self-test failed: {e}.", level="CRITICAL")
+                alert_operator(
+                    f"CRITICAL: Fixer self-test failed: {e}.", level="CRITICAL"
+                )
                 test_passed = False
             if not plugin_manager.plugins:
                 logger.warning(
@@ -1216,7 +1307,9 @@ async def main_async():
                 logger.info("Audit logger is functional.")
             except Exception as e:
                 logger.error(f"Audit logger self-test failed: {e}", exc_info=True)
-                alert_operator(f"CRITICAL: Audit logger self-test failed: {e}.", level="CRITICAL")
+                alert_operator(
+                    f"CRITICAL: Audit logger self-test failed: {e}.", level="CRITICAL"
+                )
                 test_passed = False
             if test_passed:
                 logger.info("Self-test passed.")
@@ -1226,9 +1319,13 @@ async def main_async():
                 logger.error("Self-test FAILED. Check logs for details.")
                 cli_audit_logger.log_event("selftest_complete", status="failed")
                 sys.exit(1)
-        plugin_manager.run_hook("post_command_execution", args=args, config=global_config)
+        plugin_manager.run_hook(
+            "post_command_execution", args=args, config=global_config
+        )
     except SystemExit:
-        cli_audit_logger.log_event("cli_execution_aborted", reason="system_exit_from_submodule")
+        cli_audit_logger.log_event(
+            "cli_execution_aborted", reason="system_exit_from_submodule"
+        )
         pass
     except Exception as e:
         logger.critical(

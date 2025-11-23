@@ -52,9 +52,9 @@ def _register_metric(factory, *args, **kwargs):
     metric_name = args[0] if args else "<unknown>"
     # Fixed: Use safer approach to check for existing metrics
     try:
-        if hasattr(REGISTRY, "_names_to_collectors") and REGISTRY._names_to_collectors.get(
-            metric_name
-        ):
+        if hasattr(
+            REGISTRY, "_names_to_collectors"
+        ) and REGISTRY._names_to_collectors.get(metric_name):
             # FIX: Directly return the existing metric to prevent registration warnings.
             if metric_name not in _warned_metrics:
                 logger.debug(
@@ -195,7 +195,11 @@ def _active_log_path(resolved_path: str) -> str:
         if not os.path.exists(resolved_path):
             return gz
         # both exist → prefer the newer (usually gz after migration)
-        return gz if os.path.getmtime(gz) >= os.path.getmtime(resolved_path) else resolved_path
+        return (
+            gz
+            if os.path.getmtime(gz) >= os.path.getmtime(resolved_path)
+            else resolved_path
+        )
     return resolved_path
 
 
@@ -270,11 +274,16 @@ async def append_to_feedback_log(
         os.makedirs(dirpath, exist_ok=True)
 
     redacted = redact_sensitive(feedback_data)
-    line = json.dumps(redacted, ensure_ascii=False, default=str, separators=(",", ":")) + "\n"
+    line = (
+        json.dumps(redacted, ensure_ascii=False, default=str, separators=(",", ":"))
+        + "\n"
+    )
     line_bytes = len(line.encode("utf-8"))
 
     conf = config or {}
-    size_trigger = int(os.getenv("FEEDBACK_COMPRESS_BYTES", str(FEEDBACK_COMPRESS_BYTES)))
+    size_trigger = int(
+        os.getenv("FEEDBACK_COMPRESS_BYTES", str(FEEDBACK_COMPRESS_BYTES))
+    )
     compress_requested = bool(conf.get("enable_compression", False))
 
     current_size = os.path.getsize(target) if os.path.exists(target) else 0
@@ -288,7 +297,9 @@ async def append_to_feedback_log(
 
     lock_timeout = float(os.getenv("IO_LOCK_TIMEOUT", "10"))
     lock = (
-        filelock.FileLock(lock_path, timeout=lock_timeout) if filelock is not None else _noop_lock()
+        filelock.FileLock(lock_path, timeout=lock_timeout)
+        if filelock is not None
+        else _noop_lock()
     )
     if filelock is None:
         logger.warning("Filelock not available. Concurrent writes may race.")
@@ -302,11 +313,16 @@ async def append_to_feedback_log(
                     if os.path.exists(original):
                         tmp_gz = gz_path + ".tmp"
                         try:
-                            with open(original, "rb") as fi, gzip.open(tmp_gz, "wb") as fo:
+                            with (
+                                open(original, "rb") as fi,
+                                gzip.open(tmp_gz, "wb") as fo,
+                            ):
                                 shutil.copyfileobj(fi, fo)
                             os.replace(tmp_gz, gz_path)
                             os.remove(original)
-                            logger.info(f"Successfully migrated {original} to {gz_path}")
+                            logger.info(
+                                f"Successfully migrated {original} to {gz_path}"
+                            )
                         except Exception as e:
                             logger.error(
                                 f"Migration failed from {original} to {gz_path}: {e}",
@@ -326,7 +342,9 @@ async def append_to_feedback_log(
                         try:
                             with gzip.open(p, "ab") as f:
                                 f.write(b)
-                                io_write_bytes.labels(file=os.path.basename(p)).inc(len(b))
+                                io_write_bytes.labels(file=os.path.basename(p)).inc(
+                                    len(b)
+                                )
                                 try:
                                     f.flush()
                                     fileobj = getattr(f, "fileobj", None)
@@ -346,7 +364,9 @@ async def append_to_feedback_log(
                     if aiofiles is not None:
                         async with aiofiles.open(target, "a", encoding="utf-8") as f:
                             await f.write(line)
-                            io_write_bytes.labels(file=os.path.basename(target)).inc(line_bytes)
+                            io_write_bytes.labels(file=os.path.basename(target)).inc(
+                                line_bytes
+                            )
                     else:
 
                         def _write_text(p: str, t: str) -> None:
@@ -360,7 +380,9 @@ async def append_to_feedback_log(
 
                         await asyncio.to_thread(_write_text, target, line)
             except Exception as e:
-                logger.error("Failed to write feedback log %s: %s", target, e, exc_info=True)
+                logger.error(
+                    "Failed to write feedback log %s: %s", target, e, exc_info=True
+                )
                 raise
 
     logger.info("Feedback logged → %s", target)
@@ -462,7 +484,9 @@ async def summarize_feedback(feedback_log_path: str) -> Optional[Dict[str, Any]]
         return None
 
     cache_token = (path, os.path.getmtime(path))
-    return await asyncio.to_thread(_summarize_feedback_cached, feedback_log_path, cache_token)
+    return await asyncio.to_thread(
+        _summarize_feedback_cached, feedback_log_path, cache_token
+    )
 
 
 @lru_cache(maxsize=128)
@@ -514,7 +538,11 @@ def _summarize_feedback_cached(
                     cov = chunk.get("final_scores")
                     if cov is not None:
                         c_series = cov.apply(
-                            lambda x: ((x or {}).get("coverage") if isinstance(x, dict) else None)
+                            lambda x: (
+                                (x or {}).get("coverage")
+                                if isinstance(x, dict)
+                                else None
+                            )
                         )
                         c_series = c_series.dropna()
 
@@ -523,7 +551,9 @@ def _summarize_feedback_cached(
                             cov_cnt += c_series.count()
 
                 avg_coverage = (cov_sum / cov_cnt) if cov_cnt else 0.0
-                success_rate = (status_counts.get("PASS", 0) / tot) * 100 if tot else 0.0
+                success_rate = (
+                    (status_counts.get("PASS", 0) / tot) * 100 if tot else 0.0
+                )
 
                 for k in ("PASS", "FAIL", "FLAKY", "skipped", "error"):
                     status_counts.setdefault(k, 0)
@@ -535,7 +565,9 @@ def _summarize_feedback_cached(
                     "status_counts": status_counts,
                 }
         except Exception as e:
-            logger.warning("Pandas read failed; falling back to manual parse: %s", e, exc_info=True)
+            logger.warning(
+                "Pandas read failed; falling back to manual parse: %s", e, exc_info=True
+            )
 
     total_runs = 0
     status_counts = {"PASS": 0, "FAIL": 0, "FLAKY": 0, "skipped": 0, "error": 0}
@@ -567,8 +599,12 @@ def _summarize_feedback_cached(
             logger.error("Failed to summarize %s: %s", path, e, exc_info=True)
             return None
 
-    avg_coverage = (sum(coverage_scores) / len(coverage_scores)) if coverage_scores else 0.0
-    success_rate = (status_counts.get("PASS", 0) / total_runs) * 100 if total_runs else 0.0
+    avg_coverage = (
+        (sum(coverage_scores) / len(coverage_scores)) if coverage_scores else 0.0
+    )
+    success_rate = (
+        (status_counts.get("PASS", 0) / total_runs) * 100 if total_runs else 0.0
+    )
 
     for k in ("PASS", "FAIL", "FLAKY", "skipped", "error"):
         status_counts.setdefault(k, 0)

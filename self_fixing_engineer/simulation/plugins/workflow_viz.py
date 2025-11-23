@@ -169,7 +169,9 @@ if PYDANTIC_AVAILABLE:
 
     class WorkflowVizConfig(BaseModel):
         results_dir: str = Field(default="./simulation_results")
-        default_backend: str = Field(default="streamlit", pattern="^(streamlit|dash|jupyter)$")
+        default_backend: str = Field(
+            default="streamlit", pattern="^(streamlit|dash|jupyter)$"
+        )
         colorblind_palette: List[str] = Field(
             default=[
                 "#0072B2",
@@ -274,7 +276,9 @@ class DashboardAPI:
         if self.backend == "streamlit":
             return st.button(label, key=key)
 
-    def download_button(self, label: str, data: bytes, file_name: str, mime: str) -> None:
+    def download_button(
+        self, label: str, data: bytes, file_name: str, mime: str
+    ) -> None:
         if self.backend == "streamlit":
             st.download_button(label, data, file_name, mime)
 
@@ -372,7 +376,9 @@ def render_workflow_viz(
         dashboard_api.warning("No result data available to visualize.")
         if PROMETHEUS_AVAILABLE:
             VIZ_RENDER_TOTAL.labels(backend=dashboard_api.backend).inc()
-            VIZ_RENDER_ERRORS.labels(backend=dashboard_api.backend, error_type="no_data").inc()
+            VIZ_RENDER_ERRORS.labels(
+                backend=dashboard_api.backend, error_type="no_data"
+            ).inc()
         return None
 
     scrubbed_result = _scrub_secrets(result)
@@ -389,7 +395,9 @@ def render_workflow_viz(
         try:
             phases.extend(validate_custom_phases(custom_phases))
         except ValueError as e:
-            dashboard_api.warning(f"Invalid custom phases: {e}. Skipping custom phases.")
+            dashboard_api.warning(
+                f"Invalid custom phases: {e}. Skipping custom phases."
+            )
             viz_logger.error(f"Invalid custom phases: {e}", exc_info=True)
 
     if colorblind_mode:
@@ -436,7 +444,9 @@ def render_workflow_viz(
             try:
                 pos = get_graphviz_layout(edges)
             except Exception:
-                viz_logger.warning("Graphviz layout failed, falling back to spring layout.")
+                viz_logger.warning(
+                    "Graphviz layout failed, falling back to spring layout."
+                )
                 pos = nx.spring_layout(G, seed=42)
 
             node_x, node_y, hover_texts = [], [], []
@@ -500,7 +510,9 @@ def render_workflow_viz(
                         "Kaleido is not installed. Install with 'pip install kaleido' for PNG export."
                     )
                     if PROMETHEUS_AVAILABLE:
-                        VIZ_EXPORT_TOTAL.labels(format="png", status="failed_dependency").inc()
+                        VIZ_EXPORT_TOTAL.labels(
+                            format="png", status="failed_dependency"
+                        ).inc()
                 else:
                     export_png_path = validate_export_path(
                         RESULTS_DIR / f"workflow_plotly_{int(time.time())}.png"
@@ -512,7 +524,9 @@ def render_workflow_viz(
 
             if PROMETHEUS_AVAILABLE:
                 VIZ_RENDER_TOTAL.labels(backend="plotly").inc()
-                VIZ_RENDER_LATENCY.labels(backend="plotly").observe(time.monotonic() - start_time)
+                VIZ_RENDER_LATENCY.labels(backend="plotly").observe(
+                    time.monotonic() - start_time
+                )
             return fig
 
         except Exception as e:
@@ -522,7 +536,9 @@ def render_workflow_viz(
             )
             if PROMETHEUS_AVAILABLE:
                 VIZ_RENDER_TOTAL.labels(backend="plotly").inc()
-                VIZ_RENDER_ERRORS.labels(backend="plotly", error_type="runtime_error").inc()
+                VIZ_RENDER_ERRORS.labels(
+                    backend="plotly", error_type="runtime_error"
+                ).inc()
             prefer_plotly = False  # Fallback
 
     if not prefer_plotly and MATPLOTLIB_AVAILABLE:
@@ -530,7 +546,9 @@ def render_workflow_viz(
             try:
                 pos = get_graphviz_layout(edges)
             except Exception as e:
-                viz_logger.warning(f"Advanced layout unavailable ({e}). Using fallback.")
+                viz_logger.warning(
+                    f"Advanced layout unavailable ({e}). Using fallback."
+                )
                 pos = nx.spring_layout(nx.DiGraph(edges))
 
             fig, ax = plt.subplots(figsize=(13, 7))
@@ -574,7 +592,9 @@ def render_workflow_viz(
             dashboard_api.caption(
                 "This diagram shows the workflow of the self-fixing engine from specification to output, highlighting phases and counts of findings and actions. All colors and labels are chosen for clarity and accessibility."
             )
-            if dashboard_api.button("Export Matplotlib as PNG", key="export_matplotlib_png"):
+            if dashboard_api.button(
+                "Export Matplotlib as PNG", key="export_matplotlib_png"
+            ):
                 export_png_path = validate_export_path(
                     RESULTS_DIR / f"workflow_matplotlib_{int(time.time())}.png"
                 )
@@ -596,15 +616,21 @@ def render_workflow_viz(
             )
             if PROMETHEUS_AVAILABLE:
                 VIZ_RENDER_TOTAL.labels(backend="matplotlib").inc()
-                VIZ_RENDER_ERRORS.labels(backend="matplotlib", error_type="runtime_error").inc()
-            dashboard_api.warning("Matplotlib rendering failed. Displaying text summary.")
+                VIZ_RENDER_ERRORS.labels(
+                    backend="matplotlib", error_type="runtime_error"
+                ).inc()
+            dashboard_api.warning(
+                "Matplotlib rendering failed. Displaying text summary."
+            )
             dashboard_api.markdown("\n".join(f"- {label}" for label, _ in phases))
             return None
 
     return None
 
 
-def _default_summary_and_details(result: Dict[str, Any], dashboard_api: DashboardAPI) -> None:
+def _default_summary_and_details(
+    result: Dict[str, Any], dashboard_api: DashboardAPI
+) -> None:
     findings = result.get("findings", [])
     actions = result.get("actions", [])
     status = result.get("status", "UNKNOWN")
@@ -650,7 +676,9 @@ if __name__ == "__main__":
             print(f"Graph building test failed: {e}")
         custom_phases = [("Custom Phase", "#FFFFFF")]
         try:
-            render_workflow_viz(dummy_result, prefer_plotly=False, custom_phases=custom_phases)
+            render_workflow_viz(
+                dummy_result, prefer_plotly=False, custom_phases=custom_phases
+            )
             print("Custom phases test passed (no errors).")
         except Exception as e:
             print(f"Custom phases test failed: {e}")

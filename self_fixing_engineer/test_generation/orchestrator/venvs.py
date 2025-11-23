@@ -115,7 +115,9 @@ def _cfg_bool(key: str, default: bool, *aliases: str) -> bool:
     return default
 
 
-async def create_and_install_venv(project_root: str, deps: list[str]) -> tuple[bool, str]:
+async def create_and_install_venv(
+    project_root: str, deps: list[str]
+) -> tuple[bool, str]:
     """
     Create a venv and install deps. Returns (success, python_exec_path).
     Designed to be monkeypatched in tests.
@@ -177,9 +179,13 @@ async def temporary_env(
 
     provider = lang_strategies.get(isolation_strategy)
     if not provider:
-        raise ValueError(f"Unknown isolation strategy for {language}: {isolation_strategy}")
+        raise ValueError(
+            f"Unknown isolation strategy for {language}: {isolation_strategy}"
+        )
 
-    async with provider(project_root, deps, persist, keep_on_failure, env_subdir) as handle:
+    async with provider(
+        project_root, deps, persist, keep_on_failure, env_subdir
+    ) as handle:
         yield handle
 
 
@@ -366,7 +372,9 @@ async def _create_and_manage_python_env(
             log(f"Cleaning up virtual environment at {venv_dir}", level="INFO")
             # Ensure removal even if cleanup hook is mocked in tests
             with suppress(Exception):
-                await asyncio.to_thread(shutil.rmtree, str(venv_dir), ignore_errors=True)
+                await asyncio.to_thread(
+                    shutil.rmtree, str(venv_dir), ignore_errors=True
+                )
             # Still invoke shared cleanup hook for metrics/logging parity
             await asyncio.shield(utils.cleanup_temp_dir(str(venv_dir)))
 
@@ -401,7 +409,9 @@ async def _create_and_manage_npm_env(
         pkg_json = work_dir / "package.json"
         if not pkg_json.exists():
             pkg_json.write_text(
-                json.dumps({"name": "atco-temp-env", "version": "1.0.0", "dependencies": {}})
+                json.dumps(
+                    {"name": "atco-temp-env", "version": "1.0.0", "dependencies": {}}
+                )
             )
 
         if required_deps:
@@ -620,7 +630,9 @@ async def _create_and_manage_go_env(
         work_dir = Path(tempfile.mkdtemp(dir=base_dir, prefix="go_"))
 
         # go mod init
-        await utils.run_command(["go", "mod", "init", "temp-module"], cwd=str(work_dir), check=True)
+        await utils.run_command(
+            ["go", "mod", "init", "temp-module"], cwd=str(work_dir), check=True
+        )
 
         if required_deps:
             log(f"Installing Go dependencies: {required_deps}", level="INFO")

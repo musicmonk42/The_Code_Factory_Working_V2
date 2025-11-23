@@ -31,7 +31,9 @@ class SecurityAnalysisError(RuntimeError):
     Custom exception for errors during security tool execution.
     """
 
-    def __init__(self, message: str, tool: str, original_exception: Optional[Exception] = None):
+    def __init__(
+        self, message: str, tool: str, original_exception: Optional[Exception] = None
+    ):
         super().__init__(f"[SECURITY] {message}")
         self.tool = tool
         self.original_exception = original_exception
@@ -58,7 +60,9 @@ try:
     from .core_secrets import SECRETS_MANAGER
     from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
-    logger.critical(f"CRITICAL: Missing core dependency for core_security: {e}. Aborting startup.")
+    logger.critical(
+        f"CRITICAL: Missing core dependency for core_security: {e}. Aborting startup."
+    )
     try:
         from .core_utils import alert_operator
 
@@ -81,7 +85,9 @@ if REDIS_AVAILABLE:
             decode_responses=True,
         )
     except Exception as e:
-        logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
+        logger.warning(
+            f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
+        )
         REDIS_CLIENT = None
 else:
     logger.info("Redis not available - caching disabled")
@@ -169,7 +175,9 @@ class SecurityAnalyzer:
             "Snyk": ["snyk", "--version"],
         }
         required_versions = {
-            "Bandit": os.getenv("BANDIT_VERSION"),  # Optional: Pin versions with env vars
+            "Bandit": os.getenv(
+                "BANDIT_VERSION"
+            ),  # Optional: Pin versions with env vars
             "pip-audit": os.getenv("PIP_AUDIT_VERSION"),
             "Snyk": os.getenv("SNYK_VERSION"),
         }
@@ -189,7 +197,10 @@ class SecurityAnalyzer:
                         f"Command '{' '.join(command)}' failed with exit code {result.returncode}. Output: {result.stdout.strip() + result.stderr.strip()}"
                     )
                 version = result.stdout.strip()
-                if required_versions.get(tool) and required_versions[tool] not in version:
+                if (
+                    required_versions.get(tool)
+                    and required_versions[tool] not in version
+                ):
                     tools_missing.append(f"{tool} (Unexpected version: {version})")
                     logger.critical(
                         f"CRITICAL: {tool} tool version mismatch. Expected: {required_versions[tool]}, Got: {version}",
@@ -220,9 +231,13 @@ class SecurityAnalyzer:
                 f"CRITICAL: Security Analyzer: Missing or incorrect tools: {', '.join(tools_missing)}. Aborting.",
                 level="CRITICAL",
             )
-            raise RuntimeError("[CRITICAL][SECURITY] Missing or incorrect security tools")
+            raise RuntimeError(
+                "[CRITICAL][SECURITY] Missing or incorrect security tools"
+            )
 
-    def _run_subprocess_safely(self, command: List[str], description: str) -> Tuple[bool, str]:
+    def _run_subprocess_safely(
+        self, command: List[str], description: str
+    ) -> Tuple[bool, str]:
         logger.info(f"Running {description}: {command}")
         sanitized_command = [quote(c) for c in command]
         tool_path = _tool_path(command[0])
@@ -235,7 +250,9 @@ class SecurityAnalyzer:
                 f"CRITICAL: Security tool '{command[0]}' not found during {description}.",
                 level="CRITICAL",
             )
-            raise SecurityAnalysisError(f"Security tool '{command[0]}' not found.", tool=command[0])
+            raise SecurityAnalysisError(
+                f"Security tool '{command[0]}' not found.", tool=command[0]
+            )
 
         argv = [tool_path] + command[1:]
 
@@ -248,9 +265,7 @@ class SecurityAnalyzer:
                 )
                 return True, result.stdout.strip()
             else:
-                full_output = (
-                    f"stdout:\n{result.stdout.strip()}\n\nstderr:\n{result.stderr.strip()}"
-                )
+                full_output = f"stdout:\n{result.stdout.strip()}\n\nstderr:\n{result.stderr.strip()}"
                 logger.error(
                     f"{description} failed (exit code {result.returncode}):\n{full_output}",
                     extra={"command": " ".join(sanitized_command)},
@@ -265,7 +280,9 @@ class SecurityAnalyzer:
                 f"CRITICAL: Security tool '{command[0]}' timed out during {description}.",
                 level="CRITICAL",
             )
-            raise SecurityAnalysisError(f"Security tool '{command[0]}' timed out.", tool=command[0])
+            raise SecurityAnalysisError(
+                f"Security tool '{command[0]}' timed out.", tool=command[0]
+            )
         except Exception as e:
             logger.error(
                 f"Unexpected error running {description}: {e}",
@@ -318,7 +335,9 @@ class SecurityAnalyzer:
                 description="Bandit static analysis",
             )
             if not success:
-                raise SecurityAnalysisError(f"Bandit scan failed: {output}", tool="Bandit")
+                raise SecurityAnalysisError(
+                    f"Bandit scan failed: {output}", tool="Bandit"
+                )
             bandit_output = json.loads(output)
             issues = bandit_output.get("results", [])
             logger.info(f"Bandit scan complete. Found {len(issues)} issues.")
@@ -329,7 +348,9 @@ class SecurityAnalyzer:
             )
             return issues
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Bandit JSON output: {e}. Raw output: {output[:500]}...")
+            logger.error(
+                f"Failed to parse Bandit JSON output: {e}. Raw output: {output[:500]}..."
+            )
             raise SecurityAnalysisError(
                 f"Failed to parse Bandit output: {e}",
                 tool="Bandit",
@@ -367,7 +388,9 @@ class SecurityAnalyzer:
                     )
             pip_audit_output = json.loads(output)
             vulnerabilities = pip_audit_output.get("vulnerabilities", [])
-            logger.info(f"pip-audit complete. Found {len(vulnerabilities)} vulnerabilities.")
+            logger.info(
+                f"pip-audit complete. Found {len(vulnerabilities)} vulnerabilities."
+            )
             audit_logger.log_event(
                 "pip_audit_scan_complete",
                 project_root=self.project_root,
@@ -401,11 +424,15 @@ class SecurityAnalyzer:
             "SNYK_TOKEN", required=True if PRODUCTION_MODE else False
         )
         if not snyk_token:
-            logger.error("SNYK_TOKEN environment variable is not set. Snyk scan will be skipped.")
+            logger.error(
+                "SNYK_TOKEN environment variable is not set. Snyk scan will be skipped."
+            )
             return []
         snyk_file = os.path.join(self.project_root, "requirements.txt")
         if not os.path.exists(snyk_file):
-            logger.warning(f"Snyk scan skipped: requirements.txt not found in {self.project_root}")
+            logger.warning(
+                f"Snyk scan skipped: requirements.txt not found in {self.project_root}"
+            )
             return []
         try:
             success, output = self._run_subprocess_safely(
@@ -421,10 +448,14 @@ class SecurityAnalyzer:
                     )
                     return vulnerabilities
                 except json.JSONDecodeError:
-                    raise SecurityAnalysisError(f"Snyk scan failed: {output}", tool="Snyk")
+                    raise SecurityAnalysisError(
+                        f"Snyk scan failed: {output}", tool="Snyk"
+                    )
             snyk_output = json.loads(output)
             vulnerabilities = snyk_output.get("vulnerabilities", [])
-            logger.info(f"Snyk scan complete. Found {len(vulnerabilities)} vulnerabilities.")
+            logger.info(
+                f"Snyk scan complete. Found {len(vulnerabilities)} vulnerabilities."
+            )
             audit_logger.log_event(
                 "snyk_scan_complete",
                 project_root=self.project_root,
@@ -432,7 +463,9 @@ class SecurityAnalyzer:
             )
             return vulnerabilities
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Snyk JSON output: {e}. Raw output: {output[:500]}...")
+            logger.error(
+                f"Failed to parse Snyk JSON output: {e}. Raw output: {output[:500]}..."
+            )
             raise SecurityAnalysisError(
                 f"Failed to parse Snyk output: {e}", tool="Snyk", original_exception=e
             )
@@ -520,7 +553,9 @@ class SecurityAnalyzer:
                 results["snyk_vulnerabilities"] = snyk_vulnerabilities
                 results["overall_status"] = "FAIL"
                 results["summary"] = "Vulnerabilities detected by Snyk."
-                logger.warning(f"Snyk detected {len(snyk_vulnerabilities)} vulnerabilities.")
+                logger.warning(
+                    f"Snyk detected {len(snyk_vulnerabilities)} vulnerabilities."
+                )
                 critical_snyk_vulns = [
                     vuln
                     for vuln in snyk_vulnerabilities
@@ -564,7 +599,9 @@ class SecurityAnalyzer:
                     await REDIS_CLIENT.setex(
                         cache_key, 86400, json.dumps(results)
                     )  # Cache for 24 hours
-                    logger.info(f"Security scan results cached for {self.project_root}.")
+                    logger.info(
+                        f"Security scan results cached for {self.project_root}."
+                    )
                     audit_logger.log_event(
                         "security_scan_cache_set", project_root=self.project_root
                     )
@@ -588,7 +625,9 @@ class SecurityAnalyzer:
                 tool=e.tool,
             )
         except Exception as e:
-            logger.critical(f"CRITICAL: Unexpected error during security scan: {e}", exc_info=True)
+            logger.critical(
+                f"CRITICAL: Unexpected error during security scan: {e}", exc_info=True
+            )
             alert_operator(
                 f"CRITICAL: Unexpected error during security scan for {self.project_root}: {e}.",
                 level="CRITICAL",
@@ -687,7 +726,9 @@ class SecurityAnalyzer:
 
 
 # Public facing function (used by analyzer.py)
-async def security_health_check(project_root: str = ".", check_only: bool = False) -> bool:
+async def security_health_check(
+    project_root: str = ".", check_only: bool = False
+) -> bool:
     analyzer = SecurityAnalyzer(project_root)
     if check_only:
         return analyzer.security_health_check(check_only=True)
@@ -700,7 +741,9 @@ async def security_health_check(project_root: str = ".", check_only: bool = Fals
 if __name__ == "__main__":
     import shutil
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.setLevel(logging.DEBUG)
 
     def alert_operator(message: str, level: str = "CRITICAL"):
@@ -754,7 +797,9 @@ if __name__ == "__main__":
                 return subprocess.CompletedProcess(
                     command,
                     0,
-                    json.dumps({"results": [{"issue_severity": "HIGH", "file": "bad_code.py"}]}),
+                    json.dumps(
+                        {"results": [{"issue_severity": "HIGH", "file": "bad_code.py"}]}
+                    ),
                     "",
                 )
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -763,7 +808,9 @@ if __name__ == "__main__":
                 return subprocess.CompletedProcess(
                     command,
                     1,
-                    json.dumps({"vulnerabilities": [{"vulnerability_id": "CVE-1234-5678"}]}),
+                    json.dumps(
+                        {"vulnerabilities": [{"vulnerability_id": "CVE-1234-5678"}]}
+                    ),
                     "",
                 )
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -773,7 +820,11 @@ if __name__ == "__main__":
                     command,
                     1,
                     json.dumps(
-                        {"vulnerabilities": [{"id": "SNYK-PYTHON-FLASK-12345", "severity": "high"}]}
+                        {
+                            "vulnerabilities": [
+                                {"id": "SNYK-PYTHON-FLASK-12345", "severity": "high"}
+                            ]
+                        }
                     ),
                     "",
                 )

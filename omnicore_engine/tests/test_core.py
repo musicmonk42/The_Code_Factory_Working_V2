@@ -155,7 +155,9 @@ class TestMetricsFunctions:
         mock_metrics_func = Mock(return_value={"metric1": 10, "metric2": 20})
         mock_metrics_module = Mock(get_plugin_metrics=mock_metrics_func)
 
-        with patch.dict("sys.modules", {"omnicore_engine.metrics": mock_metrics_module}):
+        with patch.dict(
+            "sys.modules", {"omnicore_engine.metrics": mock_metrics_module}
+        ):
             result = get_plugin_metrics()
             assert result == {"metric1": 10, "metric2": 20}
 
@@ -171,7 +173,9 @@ class TestMetricsFunctions:
         mock_metrics_func = Mock(return_value={"tests_run": 100, "tests_passed": 95})
         mock_metrics_module = Mock(get_test_metrics=mock_metrics_func)
 
-        with patch.dict("sys.modules", {"omnicore_engine.metrics": mock_metrics_module}):
+        with patch.dict(
+            "sys.modules", {"omnicore_engine.metrics": mock_metrics_module}
+        ):
             result = get_test_metrics()
             assert result == {"tests_run": 100, "tests_passed": 95}
 
@@ -187,7 +191,9 @@ class TestExplainableAI:
         mock_reasoner_class = Mock(return_value=mock_reasoner)
         mock_module = Mock(ExplainableReasonerPlugin=mock_reasoner_class)
 
-        with patch.dict("sys.modules", {"omnicore_engine.explainable_reasoner": mock_module}):
+        with patch.dict(
+            "sys.modules", {"omnicore_engine.explainable_reasoner": mock_module}
+        ):
             ai = ExplainableAI()
             await ai.initialize()
 
@@ -224,7 +230,9 @@ class TestExplainableAI:
         ai = ExplainableAI()
         ai.is_initialized = True
         ai.reasoner = Mock()
-        ai.reasoner.explain = AsyncMock(return_value={"explanation": "Test explanation"})
+        ai.reasoner.explain = AsyncMock(
+            return_value={"explanation": "Test explanation"}
+        )
 
         result = await ai.explain_event({"query": "test", "context": {}})
 
@@ -372,7 +380,9 @@ class TestOmniCoreEngine:
 
         mock_component_class = Mock()
 
-        await engine._initialize_component_instance("test_component", mock_component_class)
+        await engine._initialize_component_instance(
+            "test_component", mock_component_class
+        )
 
         # Should not create new instance
         mock_component_class.assert_not_called()

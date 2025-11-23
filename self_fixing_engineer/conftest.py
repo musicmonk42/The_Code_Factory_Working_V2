@@ -60,7 +60,9 @@ try:
 
     # Patch both the class and the default registry instance
     CollectorRegistry.register = _safe_register  # class-level
-    REGISTRY.register = _safe_register.__get__(REGISTRY, REGISTRY.__class__)  # instance-level
+    REGISTRY.register = _safe_register.__get__(
+        REGISTRY, REGISTRY.__class__
+    )  # instance-level
 except Exception:
     pass
 # ---- end hardening

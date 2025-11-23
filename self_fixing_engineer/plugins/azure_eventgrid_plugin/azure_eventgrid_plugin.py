@@ -72,7 +72,9 @@ from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 # --- OpenTelemetry/Tracing (REQUIRED in prod) ---
 try:
     from opentelemetry import trace
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # noqa: F401
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        OTLPSpanExporter,
+    )  # noqa: F401
     from opentelemetry.sdk.resources import Resource  # noqa: F401
     from opentelemetry.sdk.trace import TracerProvider  # noqa: F401 (used by main app)
     from opentelemetry.sdk.trace.export import BatchSpanProcessor  # noqa: F401
@@ -123,7 +125,9 @@ try:
         decode_responses=True,
     )
 except Exception as e:
-    logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
+    logger.warning(
+        f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
+    )
     REDIS_CLIENT = None
 
 
@@ -249,7 +253,9 @@ class AzureEventGridAuditHook:
         - Disallow dummy/test endpoints in PROD.
         """
         if not url:
-            raise AnalyzerCriticalError("Event Grid Endpoint URL is empty. Aborting startup.")
+            raise AnalyzerCriticalError(
+                "Event Grid Endpoint URL is empty. Aborting startup."
+            )
 
         allowed_endpoints_str = SECRETS_MANAGER.get_secret(
             "EVENTGRID_ALLOWED_ENDPOINTS", required=PRODUCTION_MODE
@@ -294,7 +300,9 @@ class AzureEventGridAuditHook:
 
     def _sign_event(self, event: Dict[str, Any]) -> str:
         """Generates an HMAC signature for an event payload."""
-        event_json_str = json.dumps(event, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        event_json_str = json.dumps(event, sort_keys=True, ensure_ascii=False).encode(
+            "utf-8"
+        )
         eventgrid_hmac_key = SECRETS_MANAGER.get_secret(
             "EVENTGRID_HMAC_KEY", required=True if PRODUCTION_MODE else False
         )
@@ -327,7 +335,9 @@ class AzureEventGridAuditHook:
         self._shutdown_event.set()  # Signal the sender to drain the queue.
 
         try:
-            await asyncio.wait_for(self._event_queue.join(), timeout=self.flush_interval * 2 + 5)
+            await asyncio.wait_for(
+                self._event_queue.join(), timeout=self.flush_interval * 2 + 5
+            )
             logger.info("AzureEventGridAuditHook queue drained successfully.")
             audit_logger.log_event(
                 "eventgrid_hook_queue_drained",
@@ -377,9 +387,13 @@ class AzureEventGridAuditHook:
         if self._own_session and self._session:
             await self._session.close()
         logger.info("AzureEventGridAuditHook shutdown complete.")
-        audit_logger.log_event("eventgrid_hook_shutdown_complete", plugin=PLUGIN_MANIFEST["name"])
+        audit_logger.log_event(
+            "eventgrid_hook_shutdown_complete", plugin=PLUGIN_MANIFEST["name"]
+        )
 
-    async def audit_hook(self, event: str, details: dict, event_id: Optional[str] = None):
+    async def audit_hook(
+        self, event: str, details: dict, event_id: Optional[str] = None
+    ):
         """
         Queues an event to be sent to Azure Event Grid.
         Context/PII Scrubbing: scrub payloads for PII/secrets before enqueue.
@@ -433,7 +447,9 @@ class AzureEventGridAuditHook:
             try:
                 span_name = "eventgrid_send_batch"
                 # FIX: clean context when tracing is unavailable
-                with tracer.start_as_current_span(span_name) if tracer else nullcontext():
+                with (
+                    tracer.start_as_current_span(span_name) if tracer else nullcontext()
+                ):
                     # Optionally set attributes (works with real tracer; no-op with mock/null)
                     try:
                         span = trace.get_current_span()
@@ -498,7 +514,9 @@ class AzureEventGridAuditHook:
                 EventGridRetriableError,
             ) as e:
                 last_exc = e
-                logger.warning(f"Event Grid send failed (attempt {attempt}/{self.retries}): {e}")
+                logger.warning(
+                    f"Event Grid send failed (attempt {attempt}/{self.retries}): {e}"
+                )
                 audit_logger.log_event(
                     "eventgrid_retry_attempt",
                     count=len(batch),
@@ -514,7 +532,9 @@ class AzureEventGridAuditHook:
                     break
             except EventGridPermanentError as e:
                 last_exc = e
-                logger.error(f"Event Grid audit event dropped due to permanent error: {e}")
+                logger.error(
+                    f"Event Grid audit event dropped due to permanent error: {e}"
+                )
                 break
 
         # If all retries failed or a permanent error occurred
@@ -550,10 +570,14 @@ class AzureEventGridAuditHook:
         while not self._shutdown_event.is_set() or not self._event_queue.empty():
             batch: List[Dict[str, Any]] = []
             try:
-                timeout = self.flush_interval if not self._shutdown_event.is_set() else 0.1
+                timeout = (
+                    self.flush_interval if not self._shutdown_event.is_set() else 0.1
+                )
 
                 try:
-                    first_event = await asyncio.wait_for(self._event_queue.get(), timeout=timeout)
+                    first_event = await asyncio.wait_for(
+                        self._event_queue.get(), timeout=timeout
+                    )
                     batch.append(first_event)
                 except asyncio.TimeoutError:
                     if self._shutdown_event.is_set() and self._event_queue.empty():
@@ -609,7 +633,9 @@ if not PRODUCTION_MODE:
         async def mock_eventgrid_server(request):
             request_body = await request.text()
             if "fail_permanently" in request_body:
-                return aiohttp.web.Response(status=400, text="Bad Request - Invalid Event Schema")
+                return aiohttp.web.Response(
+                    status=400, text="Bad Request - Invalid Event Schema"
+                )
             if "fail_transiently" in request_body:
                 if not hasattr(mock_eventgrid_server, "fail_count"):
                     mock_eventgrid_server.fail_count = 0
@@ -665,7 +691,9 @@ if not PRODUCTION_MODE:
 
             asyncio.run(main())
         except ImportError:
-            print("Please install aiohttp (`pip install aiohttp`) to run the usage example.")
+            print(
+                "Please install aiohttp (`pip install aiohttp`) to run the usage example."
+            )
 else:
     if __name__ == "__main__":
         logger.critical(

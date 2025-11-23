@@ -76,10 +76,14 @@ except ImportError:
         # Minimal redaction simulation for testing redaction failure
         if isinstance(text, str):
             # This logic mimics the actual redaction logic for the test to pass
-            return text.replace("secret123", "[REDACTED]").replace("API key", "[REDACTED]")
+            return text.replace("secret123", "[REDACTED]").replace(
+                "API key", "[REDACTED]"
+            )
         return text
 
-    async def scan_for_vulnerabilities(filepath: Path, scan_type: str = "data") -> Dict[str, Any]:
+    async def scan_for_vulnerabilities(
+        filepath: Path, scan_type: str = "data"
+    ) -> Dict[str, Any]:
         # In production this should run real scanning; here we degrade gracefully.
         return {
             "vulnerabilities_found": 1,
@@ -154,7 +158,9 @@ try:
     HAS_OCR = True
 except ImportError:
     HAS_OCR = False
-    logger.warning("Pillow or pytesseract not found. OCR capabilities will be disabled.")
+    logger.warning(
+        "Pillow or pytesseract not found. OCR capabilities will be disabled."
+    )
 
 try:
     import PyPDF2  # For PDF text (add to reqs: PyPDF2)
@@ -203,7 +209,9 @@ try:
     HAS_MAGIC = True
 except ImportError:
     HAS_MAGIC = False
-    logger.warning("python-magic not found. Binary file type detection will be limited.")
+    logger.warning(
+        "python-magic not found. Binary file type detection will be limited."
+    )
 
 
 # --- File Integrity and Provenance Store ---
@@ -284,7 +292,9 @@ async def verify_file_integrity(filepath: Path) -> bool:
     return True
 
 
-async def store_file_integrity(filepath: Path, version: str = "latest"):  # Added default for test
+async def store_file_integrity(
+    filepath: Path, version: str = "latest"
+):  # Added default for test
     """Stores the current hash and version of a file."""
     filepath_str = str(filepath.resolve())
     current_hash = await compute_file_hash(filepath)
@@ -413,7 +423,9 @@ if HAS_PDF:
 
             return await asyncio.to_thread(_extract_pdf_text_sync)
         except Exception as e:
-            logger.error(f"Failed to extract text from PDF {filepath}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to extract text from PDF {filepath}: {e}", exc_info=True
+            )
             UTIL_ERRORS.labels("load_pdf_file", type(e).__name__).inc()
             return f"[Error: Failed to extract text from PDF: {e}]"
 
@@ -425,7 +437,9 @@ if HAS_OCR:
         """Loads text from an image file using OCR (Tesseract)."""
         try:
             # pytesseract is synchronous, run in thread pool
-            text = await asyncio.to_thread(pytesseract.image_to_string, Image.open(filepath))
+            text = await asyncio.to_thread(
+                pytesseract.image_to_string, Image.open(filepath)
+            )
             return text
         except Exception as e:
             logger.error(f"OCR failed for image {filepath}: {e}", exc_info=True)
@@ -570,7 +584,9 @@ async def load_file_content(
         )
         # Raise exception to stop loading compromised file
         # *** FIX: REMOVED local class definition ***
-        raise SecurityException(f"File integrity check FAILED for {filepath}. Halting load.")
+        raise SecurityException(
+            f"File integrity check FAILED for {filepath}. Halting load."
+        )
 
     # 2. Find Handler
     mime_type, _ = mimetypes.guess_type(filepath)
@@ -596,7 +612,9 @@ async def load_file_content(
                 handler = FILE_HANDLERS.get("application/octet-stream")
                 mime_type = "application/octet-stream"
             else:
-                logger.error(f"No file handler found for {filepath} (Mime: {mime_type}).")
+                logger.error(
+                    f"No file handler found for {filepath} (Mime: {mime_type})."
+                )
                 UTIL_ERRORS.labels("load_file_content", "no_handler_found").inc()
                 raise TypeError(f"No file handler found for {filepath}")
 
@@ -622,9 +640,9 @@ async def load_file_content(
             and "secret123" in content
             and "[REDACTED]" not in redacted_content
         ):
-            redacted_content = redacted_content.replace("secret123", "[REDACTED]").replace(
-                "API key", "[REDACTED]"
-            )
+            redacted_content = redacted_content.replace(
+                "secret123", "[REDACTED]"
+            ).replace("API key", "[REDACTED]")
 
     else:
         redacted_content = content  # Cannot redact non-text/binary
@@ -639,7 +657,9 @@ async def load_file_content(
         ),
     )
     if scan_results["vulnerabilities_found"] > 0:
-        logger.warning(f"Vulnerabilities found in {filepath}: {scan_results['details']}")
+        logger.warning(
+            f"Vulnerabilities found in {filepath}: {scan_results['details']}"
+        )
         # Optionally, raise exception in high-security mode
         # raise SecurityException(f"Vulnerabilities found in {filepath}. Halting.")
 
@@ -693,7 +713,9 @@ async def rollback_to_version(filepath: Path, version_hash: str) -> bool:
     # to find the backup corresponding to the `version_hash`.
     # For now, we find the *most recent* backup.
 
-    backups = sorted(BACKUP_DIR.glob(f"{filepath.name}.*.bak"), key=os.path.getmtime, reverse=True)
+    backups = sorted(
+        BACKUP_DIR.glob(f"{filepath.name}.*.bak"), key=os.path.getmtime, reverse=True
+    )
     if not backups:
         logger.warning(f"No backups found for {filepath}. Cannot rollback.")
         return False
@@ -743,7 +765,9 @@ async def rollback_to_version(filepath: Path, version_hash: str) -> bool:
                 os.close(temp_fd)  # Close file descriptor if still open
             raise e
 
-        logger.info(f"Successfully rolled back {filepath} to backup version: {latest_backup.name}")
+        logger.info(
+            f"Successfully rolled back {filepath} to backup version: {latest_backup.name}"
+        )
         await store_file_integrity(filepath, version=latest_backup.name)
         # B. Fix add_provenance (use data dict as positional argument)
         await add_provenance(
@@ -798,7 +822,9 @@ async def save_file_content(
             content_bytes = yaml.dump(content, indent=2).encode(encoding)
         else:  # Default to JSON
             # Ensure sort_keys=True for reproducible hashing in integrity checks
-            content_bytes = json.dumps(content, indent=2, sort_keys=True).encode(encoding)
+            content_bytes = json.dumps(content, indent=2, sort_keys=True).encode(
+                encoding
+            )
     elif isinstance(content, str):
         content_bytes = content.encode(encoding)
     elif isinstance(content, bytes):
@@ -819,7 +845,9 @@ async def save_file_content(
         # It's binary data, don't redact
         redacted_content_bytes = content_bytes
     except Exception as e:
-        logger.warning(f"Redaction failed: {e}. Proceeding with potentially unredacted data.")
+        logger.warning(
+            f"Redaction failed: {e}. Proceeding with potentially unredacted data."
+        )
         redacted_content_bytes = content_bytes  # Fallback on redaction error
 
     # 4. Encrypt if requested
@@ -868,7 +896,9 @@ async def save_file_content(
     temp_path = None
     try:
         # Use tempfile in the same directory for atomic os.replace
-        temp_fd, temp_path_str = tempfile.mkstemp(dir=filepath.parent, prefix=f"{filepath.name}.")
+        temp_fd, temp_path_str = tempfile.mkstemp(
+            dir=filepath.parent, prefix=f"{filepath.name}."
+        )
         temp_path = Path(temp_path_str)
 
         if aiofiles is None:
@@ -888,7 +918,9 @@ async def save_file_content(
         os.replace(temp_path, filepath)  # Atomic rename/replace
 
     except Exception as e:
-        logger.error(f"Failed to write file atomically to {filepath}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to write file atomically to {filepath}: {e}", exc_info=True
+        )
         if temp_path and temp_path.exists():
             os.remove(temp_path)  # Clean up temp file on failure
         if temp_fd is not None:
@@ -906,7 +938,9 @@ async def save_file_content(
                     expiry = (
                         datetime.now() + timedelta(days=metadata["retention_days"])
                     ).isoformat()
-                    attrs.set("user.compliance.retention_expiry", expiry.encode("utf-8"))
+                    attrs.set(
+                        "user.compliance.retention_expiry", expiry.encode("utf-8")
+                    )
                 if "data_subject_id" in metadata:
                     attrs.set(
                         "user.compliance.data_subject_id",
@@ -971,7 +1005,9 @@ async def delete_compliant_data(
         delete_log["details"] = "Deletion logged but not executed (log_only=True)."
         # FIX: Passes delete_log (which contains no 'action') as data
         await add_provenance("data_delete_log_only", delete_log)
-        logger.info(f"Deletion request {request_id} for {filepath} logged.", extra=delete_log)
+        logger.info(
+            f"Deletion request {request_id} for {filepath} logged.", extra=delete_log
+        )
         return delete_log
 
     # *** FIX FOR FILE NOT FOUND ERROR ***
@@ -980,7 +1016,9 @@ async def delete_compliant_data(
     # The correct logic is to copy the *source* (filepath) to the *destination*.
     try:
         # 1. Create a final backup/snapshot before deletion if required by policy
-        backup_destination_path = filepath.parent / f"{filepath.name}.PRE_DELETE.{request_id}"
+        backup_destination_path = (
+            filepath.parent / f"{filepath.name}.PRE_DELETE.{request_id}"
+        )
         await asyncio.to_thread(shutil.copy, filepath, backup_destination_path)
 
         # 2. Perform deletion
@@ -1099,7 +1137,9 @@ class TestFileUtils(unittest.TestCase):
         # [FIX] Patch redact_secrets (now sync) to return a fixed redacted string for assertion
         self.patcher = patch(
             "runner.runner_security_utils.redact_secrets",
-            new=MagicMock(side_effect=lambda t, **kw: str(t).replace("secret123", "[REDACTED]")),
+            new=MagicMock(
+                side_effect=lambda t, **kw: str(t).replace("secret123", "[REDACTED]")
+            ),
         )
         self.patcher.start()
 
@@ -1120,7 +1160,9 @@ class TestFileUtils(unittest.TestCase):
         file_path = await self._create_test_file("test.txt", "Hello World")
         content = await load_file_content(file_path, version="v1")
         self.assertEqual(content, "Hello World")
-        self.assertIn(str(file_path.resolve()), FILE_INTEGRITY_STORE)  # Check integrity stored
+        self.assertIn(
+            str(file_path.resolve()), FILE_INTEGRITY_STORE
+        )  # Check integrity stored
 
     async def test_load_json_file(self):
         file_path = await self._create_test_file("test.json", '{"key": "value"}')
@@ -1166,7 +1208,9 @@ class TestFileUtils(unittest.TestCase):
             # Re-import decrypt_data which should be mocked by the fallback at the top of the file
             from runner.runner_security_utils import decrypt_data
 
-            decrypted_content_bytes = await decrypt_data(raw_content, key, algorithm="fernet")
+            decrypted_content_bytes = await decrypt_data(
+                raw_content, key, algorithm="fernet"
+            )
         except Exception:
             # Fallback decryption for the mock test
             f = Fernet(key)
@@ -1222,7 +1266,9 @@ class TestFileUtils(unittest.TestCase):
         self.assertTrue(file_to_delete_path.exists())  # File should still exist
 
         # Test actual deletion
-        result_delete = await delete_compliant_data(file_to_delete_path, request_id, log_only=False)
+        result_delete = await delete_compliant_data(
+            file_to_delete_path, request_id, log_only=False
+        )
         self.assertEqual(result_delete["status"], "success")
         self.assertFalse(file_to_delete_path.exists())  # File should be deleted
 
@@ -1233,7 +1279,9 @@ class TestFileUtils(unittest.TestCase):
         self.assertEqual(result_non_existent["status"], "skipped")
 
     async def test_file_integrity_check(self):
-        file_path = await self._create_test_file("integrity_test.txt", "Original content.")
+        file_path = await self._create_test_file(
+            "integrity_test.txt", "Original content."
+        )
         await compute_file_hash(file_path)
 
         # Load the file to store its integrity data
@@ -1262,7 +1310,9 @@ class TestFileUtils(unittest.TestCase):
         with self.assertLogs(logger.name, level="DEBUG") as cm_debug:
             await load_file_content(file_path)
             # Check for the presence of a PASS
-            self.assertTrue(any("File integrity check PASSED" in log for log in cm_debug.output))
+            self.assertTrue(
+                any("File integrity check PASSED" in log for log in cm_debug.output)
+            )
 
     # FIX: Add a test to ensure permission failure is skipped on Windows
     @pytest.mark.skipif(

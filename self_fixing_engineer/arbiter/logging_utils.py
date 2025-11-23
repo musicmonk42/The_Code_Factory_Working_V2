@@ -51,7 +51,9 @@ class PIIRedactorFilter(logging.Filter):
     DEFAULT_PATTERNS: List[Tuple[Pattern, str, str]] = [
         # Email addresses
         (
-            re.compile(r"\b(?P<email>[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b"),
+            re.compile(
+                r"\b(?P<email>[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b"
+            ),
             "[EMAIL_REDACTED]",
             "email",
         ),
@@ -61,7 +63,9 @@ class PIIRedactorFilter(logging.Filter):
         (re.compile(r"\b(?P<cc>(?:\d[ -]?){13,19})\b"), "[CC_REDACTED]", "credit_card"),
         # Phone numbers (international and US formats)
         (
-            re.compile(r"\b(?P<phone>(?:\+?1[ .-]?)?\(?[0-9]{3}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4})\b"),
+            re.compile(
+                r"\b(?P<phone>(?:\+?1[ .-]?)?\(?[0-9]{3}\)?[ .-]?[0-9]{3}[ .-]?[0-9]{4})\b"
+            ),
             "[PHONE_REDACTED]",
             "phone",
         ),
@@ -118,7 +122,9 @@ class PIIRedactorFilter(logging.Filter):
         ),
         # JWT tokens
         (
-            re.compile(r"(?P<jwt>eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)"),
+            re.compile(
+                r"(?P<jwt>eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)"
+            ),
             "[JWT_REDACTED]",
             "jwt",
         ),
@@ -218,7 +224,9 @@ class PIIRedactorFilter(logging.Filter):
 
         except Exception as e:
             # Never fail logging due to redaction errors
-            logging.getLogger(__name__).error(f"Redaction filter error: {e}", exc_info=False)
+            logging.getLogger(__name__).error(
+                f"Redaction filter error: {e}", exc_info=False
+            )
             return True
 
     def _redact_text(self, text: str) -> str:
@@ -262,7 +270,9 @@ class PIIRedactorFilter(logging.Filter):
                         (match.start(), match.end(), replacement_with_hash, pii_type)
                     )
                 else:
-                    replacements.append((match.start(), match.end(), replacement, pii_type))
+                    replacements.append(
+                        (match.start(), match.end(), replacement, pii_type)
+                    )
 
         # Apply replacements in reverse order to maintain correct indices
         replacements.sort(key=lambda x: x[0], reverse=True)
@@ -314,7 +324,9 @@ class PIIRedactorFilter(logging.Filter):
             self.redaction_stats["redactions_by_type"][pii_type] = (
                 self.redaction_stats["redactions_by_type"].get(pii_type, 0) + 1
             )
-            self.redaction_stats["last_redaction_time"] = datetime.now(timezone.utc).isoformat()
+            self.redaction_stats["last_redaction_time"] = datetime.now(
+                timezone.utc
+            ).isoformat()
 
     def _audit_redaction(self, record: logging.LogRecord, original: str, redacted: str):
         """Create audit trail of redaction."""
@@ -361,7 +373,9 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         log_obj = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

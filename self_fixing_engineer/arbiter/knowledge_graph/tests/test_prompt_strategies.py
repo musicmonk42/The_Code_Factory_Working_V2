@@ -31,8 +31,12 @@ class TestPromptTemplateLoading:
         }
 
         with patch("builtins.open", mock_open(read_data=json.dumps(test_templates))):
-            with patch("arbiter.knowledge_graph.prompt_strategies.logger") as mock_logger:
-                with patch.dict("arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}):
+            with patch(
+                "arbiter.knowledge_graph.prompt_strategies.logger"
+            ) as mock_logger:
+                with patch.dict(
+                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                ):
                     _load_templates()
 
                     mock_logger.info.assert_called_once()
@@ -41,8 +45,12 @@ class TestPromptTemplateLoading:
     def test_load_templates_file_not_found(self):
         """Test fallback when template file is not found"""
         with patch("builtins.open", side_effect=FileNotFoundError()):
-            with patch("arbiter.knowledge_graph.prompt_strategies.logger") as mock_logger:
-                with patch.dict("arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}):
+            with patch(
+                "arbiter.knowledge_graph.prompt_strategies.logger"
+            ) as mock_logger:
+                with patch.dict(
+                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                ):
                     _load_templates()
 
                     mock_logger.warning.assert_called_once()
@@ -51,8 +59,12 @@ class TestPromptTemplateLoading:
     def test_load_templates_json_decode_error(self):
         """Test fallback when JSON file is malformed"""
         with patch("builtins.open", mock_open(read_data="invalid json {")):
-            with patch("arbiter.knowledge_graph.prompt_strategies.logger") as mock_logger:
-                with patch.dict("arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}):
+            with patch(
+                "arbiter.knowledge_graph.prompt_strategies.logger"
+            ) as mock_logger:
+                with patch.dict(
+                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                ):
                     _load_templates()
 
                     mock_logger.error.assert_called()
@@ -61,8 +73,12 @@ class TestPromptTemplateLoading:
     def test_load_templates_unexpected_error(self):
         """Test fallback on unexpected errors"""
         with patch("builtins.open", side_effect=PermissionError("No permission")):
-            with patch("arbiter.knowledge_graph.prompt_strategies.logger") as mock_logger:
-                with patch.dict("arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}):
+            with patch(
+                "arbiter.knowledge_graph.prompt_strategies.logger"
+            ) as mock_logger:
+                with patch.dict(
+                    "arbiter.knowledge_graph.prompt_strategies.PROMPT_TEMPLATES", {}
+                ):
                     _load_templates()
 
                     mock_logger.error.assert_called()
@@ -88,7 +104,9 @@ class TestPromptTemplateLoading:
             ) as mock_file:
                 with patch("arbiter.knowledge_graph.prompt_strategies.logger"):
                     # Import and call the function to reload templates
-                    from arbiter.knowledge_graph.prompt_strategies import _load_templates
+                    from arbiter.knowledge_graph.prompt_strategies import (
+                        _load_templates,
+                    )
 
                     _load_templates()
 
@@ -96,7 +114,10 @@ class TestPromptTemplateLoading:
                     # Verify templates were loaded
                     import arbiter.knowledge_graph.prompt_strategies as ps
 
-                    assert ps.PROMPT_TEMPLATES["BASE_AGENT_PROMPT_TEMPLATE"] == "Custom template"
+                    assert (
+                        ps.PROMPT_TEMPLATES["BASE_AGENT_PROMPT_TEMPLATE"]
+                        == "Custom template"
+                    )
 
     def test_template_constants_are_set(self):
         """Test that template constants are properly set after loading"""
@@ -205,7 +226,9 @@ class TestDefaultPromptStrategy:
         mock_logger.debug.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_agent_prompt_with_multimodal(self, mock_logger, mock_multimodal_data):
+    async def test_create_agent_prompt_with_multimodal(
+        self, mock_logger, mock_multimodal_data
+    ):
         """Test prompt creation with multimodal context"""
         strategy = DefaultPromptStrategy(mock_logger)
 
@@ -349,7 +372,9 @@ class TestConcisePromptStrategy:
         assert result.endswith("a" * 100)
 
     @pytest.mark.asyncio
-    async def test_create_agent_prompt_with_multimodal(self, mock_logger, mock_multimodal_data):
+    async def test_create_agent_prompt_with_multimodal(
+        self, mock_logger, mock_multimodal_data
+    ):
         """Test concise prompt with multimodal context"""
         strategy = ConcisePromptStrategy(mock_logger)
 

@@ -46,11 +46,15 @@ logger.setLevel(logging.INFO)
 # -----------------------------------------------------------------------------------
 # Configuration (env with sane defaults)
 # -----------------------------------------------------------------------------------
-SCALA_RUNNER_TIMEOUT_SEC = int(os.getenv("SCALA_RUNNER_TIMEOUT_SEC", "600"))  # 10 minutes default
+SCALA_RUNNER_TIMEOUT_SEC = int(
+    os.getenv("SCALA_RUNNER_TIMEOUT_SEC", "600")
+)  # 10 minutes default
 SCALA_TEMP_COPY_LIMIT_MB = int(
     os.getenv("SCALA_TEMP_COPY_LIMIT_MB", "20")
 )  # Max MB to copy for temp project
-SCALA_TEMP_COPY_MAX_FILES = int(os.getenv("SCALA_TEMP_COPY_MAX_FILES", "2000"))  # Max files to copy
+SCALA_TEMP_COPY_MAX_FILES = int(
+    os.getenv("SCALA_TEMP_COPY_MAX_FILES", "2000")
+)  # Max files to copy
 SCALA_DEFAULT_SCALA_VERSION = os.getenv("SCALA_DEFAULT_SCALA_VERSION", "2.13.12")
 SCALATEST_VERSION = os.getenv("SCALATEST_VERSION", "3.2.17")
 SCOVERAGE_PLUGIN_VERSION = os.getenv("SCOVERAGE_PLUGIN_VERSION", "2.0.9")
@@ -130,11 +134,15 @@ async def plugin_health() -> Dict[str, Any]:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
             java_out = (stderr or b"").decode() or (stdout or b"").decode()
-            line = next((ln for ln in java_out.splitlines() if "version" in ln.lower()), "").strip()
+            line = next(
+                (ln for ln in java_out.splitlines() if "version" in ln.lower()), ""
+            ).strip()
             if line:
                 details.append(f"Java detected: {line}")
             else:
-                details.append("Java detected: version info not clearly found in output.")
+                details.append(
+                    "Java detected: version info not clearly found in output."
+                )
         except Exception as e:
             status = "degraded"
             details.append(f"Error running java -version: {e}")
@@ -264,7 +272,9 @@ def _create_plugins_sbt(scoverage_version: str) -> str:
     return f'addSbtPlugin("org.scoverage" % "sbt-scoverage" % "{scoverage_version}")\n'
 
 
-def _copy_tree_limited(src_dir: str, dest_dir: str, max_mb: int, max_files: int) -> Tuple[int, int]:
+def _copy_tree_limited(
+    src_dir: str, dest_dir: str, max_mb: int, max_files: int
+) -> Tuple[int, int]:
     """Copy .scala files from src_dir to dest_dir up to limits; returns (files_copied, bytes_copied)."""
     bytes_copied = 0
     files_copied = 0
@@ -282,7 +292,9 @@ def _copy_tree_limited(src_dir: str, dest_dir: str, max_mb: int, max_files: int)
                 size = os.path.getsize(src_path)
             except Exception:
                 continue
-            if files_copied + 1 > max_files or (bytes_copied + size) > (max_mb * 1024 * 1024):
+            if files_copied + 1 > max_files or (bytes_copied + size) > (
+                max_mb * 1024 * 1024
+            ):
                 return files_copied, bytes_copied
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             try:
@@ -294,7 +306,9 @@ def _copy_tree_limited(src_dir: str, dest_dir: str, max_mb: int, max_files: int)
     return files_copied, bytes_copied
 
 
-def _find_scoverage_xml(sbt_project_root: str, override_dir: Optional[str] = None) -> Optional[str]:
+def _find_scoverage_xml(
+    sbt_project_root: str, override_dir: Optional[str] = None
+) -> Optional[str]:
     """Find scoverage XML report path dynamically."""
     # If override dir provided, prefer it
     if override_dir:
@@ -389,9 +403,13 @@ async def run_scala_tests(
         # Write build.sbt and project/plugins.sbt
         with open(os.path.join(temp_sbt_dir, "build.sbt"), "w", encoding="utf-8") as f:
             f.write(_create_minimal_build_sbt(scala_version, scalatest_version))
-        with open(os.path.join(temp_sbt_dir, "project", "plugins.sbt"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(temp_sbt_dir, "project", "plugins.sbt"), "w", encoding="utf-8"
+        ) as f:
             f.write(_create_plugins_sbt(scoverage_version))
-        logger.debug("Wrote minimal build.sbt and project/plugins.sbt for temp SBT project.")
+        logger.debug(
+            "Wrote minimal build.sbt and project/plugins.sbt for temp SBT project."
+        )
 
         # Copy source tree bounded by limits if original target is a .scala file
         if target_identifier.endswith(".scala"):
@@ -411,8 +429,12 @@ async def run_scala_tests(
                 # Best effort: copy only the single target file into corresponding package path
                 rel_path = target_identifier
                 if "src/main/scala" in target_identifier:
-                    rel_path = target_identifier.split("src/main/scala", 1)[1].lstrip(os.sep)
-                target_file_in_temp = os.path.join(temp_sbt_dir, "src", "main", "scala", rel_path)
+                    rel_path = target_identifier.split("src/main/scala", 1)[1].lstrip(
+                        os.sep
+                    )
+                target_file_in_temp = os.path.join(
+                    temp_sbt_dir, "src", "main", "scala", rel_path
+                )
                 os.makedirs(os.path.dirname(target_file_in_temp), exist_ok=True)
                 full_original_target_path = os.path.abspath(
                     os.path.join(project_root, target_identifier)
@@ -443,7 +465,9 @@ async def run_scala_tests(
         sbt_project_root = temp_sbt_dir
 
     # Report directories (configurable)
-    junit_report_dir = kwargs.get("junit_report_dir") or os.path.join("target", "test-reports")
+    junit_report_dir = kwargs.get("junit_report_dir") or os.path.join(
+        "target", "test-reports"
+    )
     junit_report_dir_abs = os.path.join(sbt_project_root, junit_report_dir)
     scoverage_report_dir_override = kwargs.get(
         "scoverage_report_dir"
@@ -540,7 +564,9 @@ async def run_scala_tests(
         if os.path.exists(junit_report_dir_abs):
             for fname in os.listdir(junit_report_dir_abs):
                 if fname.startswith("TEST-") and fname.endswith(".xml"):
-                    summary = _parse_junit_xml(os.path.join(junit_report_dir_abs, fname))
+                    summary = _parse_junit_xml(
+                        os.path.join(junit_report_dir_abs, fname)
+                    )
                     for k in test_summary:
                         test_summary[k] += summary.get(k, 0)
         result["test_summary"] = test_summary
@@ -567,7 +593,9 @@ async def run_scala_tests(
             sbt_project_root, scoverage_report_dir_override
         )
         coverage_percent = (
-            _parse_scoverage_xml(scoverage_xml_report_path) if scoverage_xml_report_path else 0.0
+            _parse_scoverage_xml(scoverage_xml_report_path)
+            if scoverage_xml_report_path
+            else 0.0
         )
         result["coverage_increase_percent"] = coverage_percent
         logger.info(f"Scoverage coverage: {coverage_percent:.2f}%")
@@ -582,7 +610,9 @@ async def run_scala_tests(
             result["reason"] += " Scoverage XML report not found."
 
     except FileNotFoundError:
-        result["reason"] = "SBT not found in PATH. Please ensure Java and SBT are installed."
+        result["reason"] = (
+            "SBT not found in PATH. Please ensure Java and SBT are installed."
+        )
         logger.error(result["reason"])
     except Exception as e:
         result["reason"] = f"An unexpected error occurred during SBT execution: {e}"
@@ -646,9 +676,15 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a dummy Scala source file (e.g., com.example.app.Calculator.scala)
             dummy_src_pkg = os.path.join("com", "example", "app")
-            dummy_src_rel = os.path.join("src", "main", "scala", dummy_src_pkg, "Calculator.scala")
-            os.makedirs(os.path.join(temp_dir, os.path.dirname(dummy_src_rel)), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_src_rel), "w", encoding="utf-8") as f:
+            dummy_src_rel = os.path.join(
+                "src", "main", "scala", dummy_src_pkg, "Calculator.scala"
+            )
+            os.makedirs(
+                os.path.join(temp_dir, os.path.dirname(dummy_src_rel)), exist_ok=True
+            )
+            with open(
+                os.path.join(temp_dir, dummy_src_rel), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     """
 package com.example.app
@@ -662,8 +698,12 @@ class Calculator {
             dummy_test_rel = os.path.join(
                 "src", "test", "scala", dummy_src_pkg, "CalculatorSpec.scala"
             )
-            os.makedirs(os.path.join(temp_dir, os.path.dirname(dummy_test_rel)), exist_ok=True)
-            with open(os.path.join(temp_dir, dummy_test_rel), "w", encoding="utf-8") as f:
+            os.makedirs(
+                os.path.join(temp_dir, os.path.dirname(dummy_test_rel)), exist_ok=True
+            )
+            with open(
+                os.path.join(temp_dir, dummy_test_rel), "w", encoding="utf-8"
+            ) as f:
                 f.write(
                     """
 package com.example.app

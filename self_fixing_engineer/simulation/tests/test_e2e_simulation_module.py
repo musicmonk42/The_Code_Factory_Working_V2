@@ -204,7 +204,9 @@ def create_mock_core_functions():
                     "enabled": True,
                 }
             ],
-            "notifications": {"slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"},
+            "notifications": {
+                "slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"
+            },
         }
 
     if not hasattr(core, "load_rbac_policy"):
@@ -253,23 +255,27 @@ async def test_simulation_module_end_to_end(setup_test_environment):
             print(f"Could not copy plugins: {e}")
 
     # Mock external services locally
-    with patch("simulation.runners.process.os.execve", new=AsyncMock()), patch(
-        "simulation.explain.psutil.__spec__", new=MagicMock()
+    with (
+        patch("simulation.runners.process.os.execve", new=AsyncMock()),
+        patch("simulation.explain.psutil.__spec__", new=MagicMock()),
     ):
 
         # Patch getpass.getuser to return test_user BEFORE loading configs
         with patch("getpass.getuser", return_value="test_user"):
             # Patch core module paths
-            with patch.object(
-                core,
-                "CONFIG_FILE",
-                str(setup_test_environment["configs_dir"] / "config.yaml"),
-                create=True,
-            ), patch.object(
-                core,
-                "RBAC_POLICY_FILE",
-                str(setup_test_environment["configs_dir"] / "rbac_policy.yaml"),
-                create=True,
+            with (
+                patch.object(
+                    core,
+                    "CONFIG_FILE",
+                    str(setup_test_environment["configs_dir"] / "config.yaml"),
+                    create=True,
+                ),
+                patch.object(
+                    core,
+                    "RBAC_POLICY_FILE",
+                    str(setup_test_environment["configs_dir"] / "rbac_policy.yaml"),
+                    create=True,
+                ),
             ):
 
                 # Load configurations

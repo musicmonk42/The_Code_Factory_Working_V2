@@ -35,9 +35,12 @@ try:  # Prefer real runner logging if available
     from ...runner.runner_logging import log_audit_event as _runner_log_audit_event
 except ImportError:  # Fallback stub
 
-    def _runner_log_audit_event(event_type: str, payload: Dict[str, Any] | None = None) -> None:
+    def _runner_log_audit_event(
+        event_type: str, payload: Dict[str, Any] | None = None
+    ) -> None:
         logger.warning(
-            "Using dummy log_audit_event (runner not available). " "event_type=%s payload=%s",
+            "Using dummy log_audit_event (runner not available). "
+            "event_type=%s payload=%s",
             event_type,
             payload,
         )
@@ -466,10 +469,16 @@ def add_traceability_comments(
             This file implements:
               - REQ-001: ...
     """
-    features = [f for f in (requirements.get("features") or []) if isinstance(f, str) and f.strip()]
+    features = [
+        f
+        for f in (requirements.get("features") or [])
+        if isinstance(f, str) and f.strip()
+    ]
 
     # Build stable IDs for each feature
-    req_map: Dict[str, str] = {f"REQ-{i+1:03d}": text for i, text in enumerate(features)}
+    req_map: Dict[str, str] = {
+        f"REQ-{i+1:03d}": text for i, text in enumerate(features)
+    }
 
     updated: Dict[str, str] = {}
 

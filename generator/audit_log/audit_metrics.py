@@ -127,14 +127,20 @@ WRITE_LATENCY = Histogram("audit_write_latency_seconds", "Write operation latenc
 APPEND_SIZE = Histogram("audit_append_size_bytes", "Size of appended entries")
 LOG_GROWTH = Gauge("audit_log_growth_bytes_per_min", "Log growth rate")
 ERROR_TYPES = safe_counter("audit_error_types_total", "Errors by type", ["type"])
-PLUGIN_INVOCATIONS = safe_counter("audit_plugin_invocations_total", "Plugin calls", ["plugin"])
-CRYPTO_FAILURES = safe_counter("audit_crypto_failures_total", "Crypto operation failures", ["op"])
+PLUGIN_INVOCATIONS = safe_counter(
+    "audit_plugin_invocations_total", "Plugin calls", ["plugin"]
+)
+CRYPTO_FAILURES = safe_counter(
+    "audit_crypto_failures_total", "Crypto operation failures", ["op"]
+)
 VULN_COUNT = Gauge(
     "audit_security_vulnerability_count",
     "Current count of detected vulnerabilities",
     ["level"],
 )
-PERF_SCORE = Gauge("audit_system_performance_score", "Overall system performance score (0-100)")
+PERF_SCORE = Gauge(
+    "audit_system_performance_score", "Overall system performance score (0-100)"
+)
 LOG_ERRORS = safe_counter(
     "audit_log_errors_total", "Total number of errors encountered in the log system."
 )
@@ -278,7 +284,9 @@ class AuditMetrics:
         if running_tasks:
             # Gather tasks with a reasonable timeout (e.g., 5 seconds)
             # This should allow cancellation to proceed without hanging the test runner.
-            await asyncio.wait(running_tasks, timeout=5.0, return_when=asyncio.ALL_COMPLETED)
+            await asyncio.wait(
+                running_tasks, timeout=5.0, return_when=asyncio.ALL_COMPLETED
+            )
 
         # Flush metrics once more before final exit
         await self.export_metrics(system="all")
@@ -310,7 +318,9 @@ class AuditMetrics:
             "gauge",
             "histogram",
         ]:
-            raise ValueError("Unsupported metric type. Must be 'counter', 'gauge', or 'histogram'.")
+            raise ValueError(
+                "Unsupported metric type. Must be 'counter', 'gauge', or 'histogram'."
+            )
         labels = labels or []
         if not isinstance(labels, list) or not all(isinstance(l, str) for l in labels):
             raise TypeError("Labels must be a list of strings.")
@@ -323,7 +333,9 @@ class AuditMetrics:
                 f"Metric {full_metric_name} already registered. Returning existing instance."
             )
             # Priority to custom registry, then default
-            return custom_metrics.get(name) or REGISTRY._names_to_collectors.get(full_metric_name)
+            return custom_metrics.get(name) or REGISTRY._names_to_collectors.get(
+                full_metric_name
+            )
 
         # Use safe_counter for custom counter definition as well
         if type_ == "counter":
@@ -410,7 +422,9 @@ class AuditMetrics:
                     series.append(
                         {
                             "metric": f"audit.{metric_name}",
-                            "points": [(now, float(value))],  # FIX: Correct Datadog payload
+                            "points": [
+                                (now, float(value))
+                            ],  # FIX: Correct Datadog payload
                             "tags": tags,
                             "type": datadog_type,
                         }
@@ -436,7 +450,9 @@ class AuditMetrics:
                     if sample.name.endswith("_bucket"):
                         continue  # Skip histogram buckets for simplicity
 
-                    dimensions = [{"Name": k, "Value": v} for k, v in sample.labels.items()]
+                    dimensions = [
+                        {"Name": k, "Value": v} for k, v in sample.labels.items()
+                    ]
                     metric_data.append(
                         {
                             "MetricName": sample.name,
@@ -450,7 +466,9 @@ class AuditMetrics:
             # FIX: Ensure loop slices the real list correctly
             for i in range(0, len(metric_data), 20):
                 batch = metric_data[i : i + 20]
-                self.cloudwatch.put_metric_data(Namespace=CLOUDWATCH_NAMESPACE, MetricData=batch)
+                self.cloudwatch.put_metric_data(
+                    Namespace=CLOUDWATCH_NAMESPACE, MetricData=batch
+                )
 
             logger.info(
                 f"Metrics sent to CloudWatch in {len(metric_data)} total points in {len(range(0, len(metric_data), 20))} batches."
@@ -504,7 +522,9 @@ class AuditMetrics:
                 # Anomaly detection check (done in self-test, but run here too for responsiveness)
                 anomalies = self._detect_anomalies()
                 if anomalies:
-                    alert_message = "Anomalies detected in audit metrics:\n" + "\n".join(anomalies)
+                    alert_message = (
+                        "Anomalies detected in audit metrics:\n" + "\n".join(anomalies)
+                    )
                     await self._send_alert(
                         subject="Audit Metrics Anomaly Alert",
                         message=alert_message,
@@ -543,7 +563,9 @@ class AuditMetrics:
                 if channel in ("email", "all"):
                     await loop.run_in_executor(
                         None,
-                        functools.partial(self._send_email_alert_sync, subject, message),
+                        functools.partial(
+                            self._send_email_alert_sync, subject, message
+                        ),
                     )
                     success = True
                 if channel in ("slack", "all"):
@@ -554,7 +576,9 @@ class AuditMetrics:
                     success = True
             except Exception as e:
                 success = False
-                logger.error(f"Attempt {attempt + 1} to send alert via '{channel}' failed: {e}")
+                logger.error(
+                    f"Attempt {attempt + 1} to send alert via '{channel}' failed: {e}"
+                )
 
             if not success:
                 # Exponential backoff
@@ -645,7 +669,9 @@ class AuditMetrics:
 
             anomalies = self._detect_anomalies()
             if anomalies:
-                alert_message = "Anomalies detected in audit metrics:\n" + "\n".join(anomalies)
+                alert_message = "Anomalies detected in audit metrics:\n" + "\n".join(
+                    anomalies
+                )
                 await self._send_alert(
                     subject="Audit Metrics Anomaly Alert (Self-Test)",
                     message=alert_message,
@@ -674,7 +700,9 @@ class AuditMetrics:
                 mean = np.mean(values)
                 std = np.std(values)
             except Exception as e:
-                logger.warning(f"Could not compute mean/std for '{name}': {e}. Skipping.")
+                logger.warning(
+                    f"Could not compute mean/std for '{name}': {e}. Skipping."
+                )
                 continue
 
             recent_value = values[-1]
@@ -762,7 +790,9 @@ async def main():
 
     for i in range(50):
         await example_write()
-        await example_append({"id": i, "data": f"log_entry_{i}", "timestamp": time.time()})
+        await example_append(
+            {"id": i, "data": f"log_entry_{i}", "timestamp": time.time()}
+        )
         if i % 3 == 0:
             ERROR_TYPES.labels(type="network_issue").inc()
             LOG_ERRORS.inc()

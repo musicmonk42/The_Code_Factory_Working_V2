@@ -61,7 +61,9 @@ def mock_dependencies(monkeypatch):
 
     # Mock serialization
     mock_serialization = MagicMock()
-    mock_serialization.load_pem_private_key = MagicMock(return_value=MockEd25519PrivateKey())
+    mock_serialization.load_pem_private_key = MagicMock(
+        return_value=MockEd25519PrivateKey()
+    )
     mock_serialization.Encoding.PEM = MagicMock()
     mock_serialization.Encoding.Raw = MagicMock()
     mock_serialization.PrivateFormat.PKCS8 = MagicMock()
@@ -226,7 +228,9 @@ async def test_audit_log_event_async(mock_env, temp_log_path):
         mock_instance.add_entry = AsyncMock()
         mock_instance.close = AsyncMock()
         mock_logger.return_value = mock_instance
-        await audit_log.audit_log_event_async("system:test", "test_msg", agent_id="test_agent")
+        await audit_log.audit_log_event_async(
+            "system:test", "test_msg", agent_id="test_agent"
+        )
         mock_instance.add_entry.assert_called()
 
 

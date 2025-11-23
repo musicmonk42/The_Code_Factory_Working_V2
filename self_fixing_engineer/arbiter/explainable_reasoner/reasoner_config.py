@@ -5,7 +5,14 @@ from typing import Any, Dict, List, Optional, Union
 
 import structlog
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    ValidationError,
+    model_validator,
+)
 
 # Configure structlog for consistency with other modules
 structlog.configure(
@@ -157,5 +164,7 @@ class ReasonerConfig(BaseModel):
             logger.error(f"Failed to validate config from file {file_path}: {e}")
             raise
         except Exception as e:
-            logger.critical(f"Failed to load config from file {file_path}: {e}", exc_info=True)
+            logger.critical(
+                f"Failed to load config from file {file_path}: {e}", exc_info=True
+            )
             raise

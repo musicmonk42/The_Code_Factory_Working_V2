@@ -22,7 +22,9 @@ def mock_dependencies():
     """Mock all external dependencies."""
     with patch("generator.main.main.Runner") as mock_runner, patch(
         "generator.main.main.load_config"
-    ) as mock_config, patch("generator.main.main.get_metrics_dict") as mock_metrics, patch(
+    ) as mock_config, patch(
+        "generator.main.main.get_metrics_dict"
+    ) as mock_metrics, patch(
         "generator.main.main.MainApp"
     ) as mock_app, patch(
         "generator.main.main.main_cli"
@@ -192,7 +194,9 @@ class TestInterfaceLaunching:
         # FIX: Patch 'generator.main.main.X'
         with patch("generator.main.main.uvicorn") as mock_uvicorn, patch(
             "generator.main.main.fastapi_app"
-        ) as mock_app, patch("generator.main.main.api_create_db_tables") as mock_create_db, patch(
+        ) as mock_app, patch(
+            "generator.main.main.api_create_db_tables"
+        ) as mock_create_db, patch(
             "generator.main.main.FastAPIInstrumentor"
         ) as mock_instrumentor, patch(
             "generator.main.main.setup_signals"
@@ -351,7 +355,9 @@ class TestLogScrubbing:
 
             # FIX: Patch 'generator.main.main.X'
             with patch("generator.main.main.runner_logger_instance") as mock_logger:
-                mock_logger.redact_secrets.return_value = "API_KEY=[REDACTED] PASSWORD=[REDACTED]"
+                mock_logger.redact_secrets.return_value = (
+                    "API_KEY=[REDACTED] PASSWORD=[REDACTED]"
+                )
 
                 result = filter_instance.filter(record)
 
@@ -475,14 +481,16 @@ class TestErrorHandling:
     async def test_import_error_handling(self):
         """Test handling of import errors."""
         # FIX: Patch 'generator.main.main.IMPORT_ERROR'
-        with patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")), patch(
-            "generator.main.main.logger"
-        ) as mock_logger:
+        with patch(
+            "generator.main.main.IMPORT_ERROR", Exception("Import failed")
+        ), patch("generator.main.main.logger") as mock_logger:
 
             # Simulate main execution with import error
             import_error = Exception("Import failed")
             if import_error:
-                mock_logger.critical(f"Exiting due to critical import error: {import_error}")
+                mock_logger.critical(
+                    f"Exiting due to critical import error: {import_error}"
+                )
                 # Should exit with code 1
                 assert True
 
@@ -519,7 +527,11 @@ class TestErrorHandling:
                 app.run()
             except Exception:
                 # Should log and alert
-                (mock_logger.critical.assert_called_once() if mock_logger.critical.called else None)
+                (
+                    mock_logger.critical.assert_called_once()
+                    if mock_logger.critical.called
+                    else None
+                )
 
 
 class TestOpenTelemetry:
@@ -537,7 +549,9 @@ class TestOpenTelemetry:
 
     def test_otlp_exporter_configuration(self):
         """Test OTLP exporter configuration when endpoint is set."""
-        with patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"}):
+        with patch.dict(
+            os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"}
+        ):
             # FIX: Patch 'generator.main.main.OTLPSpanExporter'
             with patch("generator.main.main.OTLPSpanExporter") as MockExporter:
 
@@ -551,14 +565,16 @@ class TestMainEntryPoint:
     def test_main_entry_point_with_import_error(self):
         """Test main entry point handles import errors."""
         # FIX: Patch 'generator.main.main.X'
-        with patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")), patch(
-            "generator.main.main.logger"
-        ) as mock_logger:
+        with patch(
+            "generator.main.main.IMPORT_ERROR", Exception("Import failed")
+        ), patch("generator.main.main.logger") as mock_logger:
 
             # Simulate main execution with import error
             import_error = Exception("Import failed")
             if import_error:
-                mock_logger.critical(f"Exiting due to critical import error: {import_error}")
+                mock_logger.critical(
+                    f"Exiting due to critical import error: {import_error}"
+                )
                 # Should exit with code 1
                 assert True
 

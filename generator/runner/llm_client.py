@@ -135,14 +135,18 @@ class CacheManager:
         try:
             value_json = json.dumps(value)
         except TypeError as e:
-            logger.error(f"CacheManager: Failed to serialize value for cache key {key}. Error: {e}")
+            logger.error(
+                f"CacheManager: Failed to serialize value for cache key {key}. Error: {e}"
+            )
             return
 
         if self.redis:
             try:
                 await self.redis.set(key, value_json, ex=ttl)
             except Exception as e:
-                logger.error(f"CacheManager: Redis SET failed. Saving to in-memory. Error: {e}")
+                logger.error(
+                    f"CacheManager: Redis SET failed. Saving to in-memory. Error: {e}"
+                )
                 self.in_memory[key] = value  # Fallback to in-memory on error
         else:
             self.in_memory[key] = value
@@ -154,7 +158,9 @@ class CacheManager:
 
 # --- Rate Limiter ---
 class DistributedRateLimiter:
-    def __init__(self, redis_url: Optional[str] = None, limit: int = 100, window: int = 60):
+    def __init__(
+        self, redis_url: Optional[str] = None, limit: int = 100, window: int = 60
+    ):
         self.redis = aioredis.from_url(redis_url) if redis_url else None
         self.limit = limit
         self.window = window
@@ -172,11 +178,15 @@ class DistributedRateLimiter:
             # Use a pipeline for atomic incr/expire
             pipe = self.redis.pipeline()
             await pipe.incr(key)
-            await pipe.expire(key, self.window, nx=True)  # NX = only set expire if it doesn't exist
+            await pipe.expire(
+                key, self.window, nx=True
+            )  # NX = only set expire if it doesn't exist
             await pipe.execute()
             return True
         except Exception as e:
-            logger.error(f"RateLimiter: Redis acquire failed. Allowing request. Error: {e}")
+            logger.error(
+                f"RateLimiter: Redis acquire failed. Allowing request. Error: {e}"
+            )
             return True  # Fail open
 
     async def close(self):
@@ -198,7 +208,9 @@ class CircuitBreaker:
         self.last_failure[provider] = time.time()
         if self.failure_count[provider] >= self.failure_threshold:
             if self.state.get(provider, "CLOSED") != "OPEN":
-                logger.warning(f"CircuitBreaker: Tripped to OPEN for provider {provider}")
+                logger.warning(
+                    f"CircuitBreaker: Tripped to OPEN for provider {provider}"
+                )
             self.state[provider] = "OPEN"
             metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(1)
 
@@ -264,7 +276,9 @@ class LLMClient:
         prompt: str,
         model: Optional[str] = None,
         stream: bool = False,
-        provider: Optional[Literal["openai", "claude", "grok", "gemini", "local"]] = None,
+        provider: Optional[
+            Literal["openai", "claude", "grok", "gemini", "local"]
+        ] = None,
         **kwargs,
     ) -> Dict[str, Any] | AsyncGenerator[str, None]:
         await self._is_initialized.wait()
@@ -302,17 +316,27 @@ class LLMClient:
                     detail="SDK or API key may be missing",
                 )
 
-            response = await plugin.call(prompt=prompt, model=model, stream=stream, **kwargs)
+            response = await plugin.call(
+                prompt=prompt, model=model, stream=stream, **kwargs
+            )
             latency = time.time() - start_time
-            metrics.LLM_LATENCY_SECONDS.labels(provider=provider, model=model).observe(latency)
+            metrics.LLM_LATENCY_SECONDS.labels(provider=provider, model=model).observe(
+                latency
+            )
             metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
             self.circuit_breaker.record_success(provider)  # Record success here
 
             if isinstance(response, dict):
                 input_tokens = await self.count_tokens(prompt, model)
-                output_tokens = await self.count_tokens(response.get("content", ""), model)
-                metrics.LLM_TOKENS_INPUT.labels(provider=provider, model=model).inc(input_tokens)
-                metrics.LLM_TOKENS_OUTPUT.labels(provider=provider, model=model).inc(output_tokens)
+                output_tokens = await self.count_tokens(
+                    response.get("content", ""), model
+                )
+                metrics.LLM_TOKENS_INPUT.labels(provider=provider, model=model).inc(
+                    input_tokens
+                )
+                metrics.LLM_TOKENS_OUTPUT.labels(provider=provider, model=model).inc(
+                    output_tokens
+                )
                 # [FIX] Replace add_provenance with log_audit_event
                 await log_audit_event(
                     action="llm_call",
@@ -336,12 +360,12 @@ class LLMClient:
                     finally:
                         input_tokens = await self.count_tokens(prompt, model)
                         output_tokens = await self.count_tokens(total_output, model)
-                        metrics.LLM_TOKENS_INPUT.labels(provider=provider, model=model).inc(
-                            input_tokens
-                        )
-                        metrics.LLM_TOKENS_OUTPUT.labels(provider=provider, model=model).inc(
-                            output_tokens
-                        )
+                        metrics.LLM_TOKENS_INPUT.labels(
+                            provider=provider, model=model
+                        ).inc(input_tokens)
+                        metrics.LLM_TOKENS_OUTPUT.labels(
+                            provider=provider, model=model
+                        ).inc(output_tokens)
                         # [FIX] Log audit event for streaming call
                         await log_audit_event(
                             action="llm_stream_call",
@@ -378,7 +402,9 @@ class LLMClient:
         # Create tasks for all models
         for m in models:
             tasks.append(
-                self.call_llm_api(prompt, model=m["model"], provider=m["provider"], **kwargs)
+                self.call_llm_api(
+                    prompt, model=m["model"], provider=m["provider"], **kwargs
+                )
             )
 
         # Run all calls in parallel
@@ -388,7 +414,9 @@ class LLMClient:
             if isinstance(result, Dict):
                 results.append(result)
             elif isinstance(result, Exception):
-                logger.warning(f"Ensemble call failed for one provider: {result}", exc_info=result)
+                logger.warning(
+                    f"Ensemble call failed for one provider: {result}", exc_info=result
+                )
 
         if not results:
             raise LLMError("All ensemble calls failed")
@@ -410,7 +438,9 @@ class LLMClient:
             if not plugin:
                 return False
             is_healthy = await plugin.health_check()
-            metrics.LLM_PROVIDER_HEALTH.labels(provider=provider_name).set(1 if is_healthy else 0)
+            metrics.LLM_PROVIDER_HEALTH.labels(provider=provider_name).set(
+                1 if is_healthy else 0
+            )
             return is_healthy
         except:
             metrics.LLM_PROVIDER_HEALTH.labels(provider=provider or "unknown").set(0)

@@ -15,7 +15,9 @@ class CircuitBreakerConfig(BaseModel):
 
     enabled: bool = Field(True, description="Enable/disable circuit breaker.")
     threshold: int = Field(5, description="Max consecutive failures before opening.")
-    timeout_seconds: int = Field(300, description="Seconds before resetting to half-open.")
+    timeout_seconds: int = Field(
+        300, description="Seconds before resetting to half-open."
+    )
     modalities: List[str] = Field(
         default_factory=lambda: ["image", "audio", "video", "text"],
         description="List of modalities to apply circuit breaker to.",
@@ -28,7 +30,9 @@ class CircuitBreakerConfig(BaseModel):
 class ProcessorConfig(BaseModel):
     """Configuration for a specific modality's processing."""
 
-    enabled: bool = Field(False, description="Enable or disable processing for this modality.")
+    enabled: bool = Field(
+        False, description="Enable or disable processing for this modality."
+    )
     default_provider: str = Field(
         "default", description="The default provider to use for this modality."
     )
@@ -53,7 +57,9 @@ class SecurityConfig(BaseModel):
         default_factory=dict,
         description="Rules for validating output from the models (e.g., min confidence, required fields).",
     )
-    mask_pii_in_logs: bool = Field(True, description="Mask PII data in logs to enhance privacy.")
+    mask_pii_in_logs: bool = Field(
+        True, description="Mask PII data in logs to enhance privacy."
+    )
     compliance_frameworks: List[str] = Field(
         default_factory=lambda: ["NIST", "ISO27001"],
         description="List of compliance frameworks to which the plugin adheres.",
@@ -111,15 +117,21 @@ class AuditLogConfig(BaseModel):
         """Validate that the log destination is one of the allowed options."""
         allowed_destinations = ["console", "file", "kafka"]
         if v not in allowed_destinations:
-            raise ValueError(f"Invalid destination: '{v}'. Must be one of {allowed_destinations}.")
+            raise ValueError(
+                f"Invalid destination: '{v}'. Must be one of {allowed_destinations}."
+            )
         return v
 
 
 class MetricsConfig(BaseModel):
     """Configuration for the Prometheus metrics system."""
 
-    enabled: bool = Field(True, description="Enable or disable Prometheus metric collection.")
-    exporter_port: int = Field(9090, description="The port to expose Prometheus metrics on.")
+    enabled: bool = Field(
+        True, description="Enable or disable Prometheus metric collection."
+    )
+    exporter_port: int = Field(
+        9090, description="The port to expose Prometheus metrics on."
+    )
 
 
 class CacheConfig(BaseModel):
@@ -129,7 +141,9 @@ class CacheConfig(BaseModel):
     type: str = Field("redis", description="The type of cache to use ('redis').")
     host: str = Field("localhost", description="The host for the cache server.")
     port: int = Field(6379, description="The port for the cache server.")
-    ttl_seconds: int = Field(3600, description="The time-to-live for cache entries in seconds.")
+    ttl_seconds: int = Field(
+        3600, description="The time-to-live for cache entries in seconds."
+    )
 
 
 class ComplianceConfig(BaseModel):
@@ -247,7 +261,9 @@ class MultiModalConfig(BaseModel):
                 with open(config_file, "r") as f:
                     config_data = yaml.safe_load(f)
             except yaml.YAMLError as e:
-                logging.error(f"Error loading YAML configuration file {config_file}: {e}")
+                logging.error(
+                    f"Error loading YAML configuration file {config_file}: {e}"
+                )
                 raise
 
         # Map environment variables to a dictionary structure

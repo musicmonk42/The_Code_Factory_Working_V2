@@ -58,13 +58,16 @@ def dummy_multimodal_data():
 @pytest.fixture(autouse=True)
 def mock_metrics():
     """Mock METRICS to avoid real increments and allow for assertions."""
-    with patch("arbiter.explainable_reasoner.adapters.INFERENCE_LATENCY") as mock_latency, patch(
-        "arbiter.explainable_reasoner.adapters.INFERENCE_ERRORS"
-    ) as mock_errors, patch(
-        "arbiter.explainable_reasoner.adapters.STREAM_CHUNKS"
-    ) as mock_chunks, patch(
-        "arbiter.explainable_reasoner.adapters.HEALTH_CHECK_ERRORS"
-    ) as mock_health:
+    with (
+        patch(
+            "arbiter.explainable_reasoner.adapters.INFERENCE_LATENCY"
+        ) as mock_latency,
+        patch("arbiter.explainable_reasoner.adapters.INFERENCE_ERRORS") as mock_errors,
+        patch("arbiter.explainable_reasoner.adapters.STREAM_CHUNKS") as mock_chunks,
+        patch(
+            "arbiter.explainable_reasoner.adapters.HEALTH_CHECK_ERRORS"
+        ) as mock_health,
+    ):
 
         # Configure metric mocks
         for metric in [mock_latency, mock_errors, mock_chunks, mock_health]:
@@ -149,7 +152,9 @@ async def test_retry_with_rate_limit():
             response = MagicMock()
             response.status_code = 429
             response.headers = {"Retry-After": "0.01"}
-            raise httpx.HTTPStatusError("Rate limited", request=MagicMock(), response=response)
+            raise httpx.HTTPStatusError(
+                "Rate limited", request=MagicMock(), response=response
+            )
 
     instance = DummyRetrier()
     result = await instance.rate_limited_func()
@@ -233,7 +238,9 @@ def test_factory_unknown_adapter():
 # Test OpenAIGPTAdapter
 @pytest.mark.asyncio
 async def test_openai_adapter_init(mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
     assert adapter.model_name == "gpt-4"
     assert adapter.base_url == "https://api.openai.com/v1"
     assert adapter._client is None
@@ -241,9 +248,13 @@ async def test_openai_adapter_init(mock_sensitive_value):
 
 @pytest.mark.asyncio
 async def test_openai_adapter_get_client(mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
-    with patch("arbiter.explainable_reasoner.adapters.httpx.AsyncClient") as mock_client_class:
+    with patch(
+        "arbiter.explainable_reasoner.adapters.httpx.AsyncClient"
+    ) as mock_client_class:
         mock_client = AsyncMock()
         mock_client.is_closed = False
         mock_client_class.return_value = mock_client
@@ -257,12 +268,16 @@ async def test_openai_adapter_get_client(mock_sensitive_value):
 async def test_openai_adapter_generate_success(
     mock_httpx_client, mock_sensitive_value, mock_metrics
 ):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"choices": [{"message": {"content": "Generated text"}}]}
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Generated text"}}]
+        }
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
@@ -277,7 +292,9 @@ async def test_openai_adapter_generate_success(
 async def test_openai_adapter_generate_with_multimodal(
     mock_httpx_client, mock_sensitive_value, dummy_multimodal_data
 ):
-    adapter = OpenAIGPTAdapter("gpt-4-vision", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4-vision", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_response = MagicMock()
@@ -287,7 +304,9 @@ async def test_openai_adapter_generate_with_multimodal(
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        result = await adapter.generate("Describe this", multi_modal_data=dummy_multimodal_data)
+        result = await adapter.generate(
+            "Describe this", multi_modal_data=dummy_multimodal_data
+        )
         assert result == "Image description"
 
         call_args = mock_httpx_client.post.call_args
@@ -299,7 +318,9 @@ async def test_openai_adapter_generate_with_multimodal(
 async def test_openai_adapter_generate_error_handling(
     mock_httpx_client, mock_sensitive_value, mock_metrics
 ):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_response = MagicMock()
@@ -317,7 +338,9 @@ async def test_openai_adapter_generate_error_handling(
 
 @pytest.mark.asyncio
 async def test_openai_adapter_stream_generate(mock_httpx_client, mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     # Mock streaming response
     async def mock_aiter_bytes():
@@ -361,7 +384,9 @@ async def test_openai_adapter_stream_generate(mock_httpx_client, mock_sensitive_
 
 @pytest.mark.asyncio
 async def test_openai_adapter_health_check(mock_httpx_client, mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_response = MagicMock()
@@ -400,7 +425,9 @@ async def test_gemini_adapter_generate_success(
 async def test_anthropic_adapter_generate_success(
     mock_httpx_client, mock_sensitive_value, mock_metrics
 ):
-    adapter = AnthropicAdapter("claude-3", mock_sensitive_value, "https://api.anthropic.com/v1")
+    adapter = AnthropicAdapter(
+        "claude-3", mock_sensitive_value, "https://api.anthropic.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_response = MagicMock()
@@ -414,7 +441,9 @@ async def test_anthropic_adapter_generate_success(
 
 @pytest.mark.asyncio
 async def test_adapter_rotate_key(mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     initial_client = AsyncMock()
     initial_client.is_closed = False
@@ -430,7 +459,9 @@ async def test_adapter_rotate_key(mock_sensitive_value):
 
 @pytest.mark.asyncio
 async def test_adapter_aclose(mock_httpx_client, mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
     adapter._client = mock_httpx_client
 
     await adapter.aclose()
@@ -446,7 +477,9 @@ async def test_adapter_custom_base_url(mock_sensitive_value):
 
 @pytest.mark.asyncio
 async def test_adapter_timeout_handling(mock_httpx_client, mock_sensitive_value):
-    adapter = OpenAIGPTAdapter("gpt-4", mock_sensitive_value, "https://api.openai.com/v1")
+    adapter = OpenAIGPTAdapter(
+        "gpt-4", mock_sensitive_value, "https://api.openai.com/v1"
+    )
 
     with patch.object(adapter, "_get_client", return_value=mock_httpx_client):
         mock_httpx_client.post.side_effect = httpx.TimeoutException("Request timed out")

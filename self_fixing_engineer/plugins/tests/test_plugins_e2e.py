@@ -180,7 +180,9 @@ def test_plugin_import(plugin_name):
         else:
             # Log the errors but don't fail - plugin might have dependencies
             logger.warning(f"Could not import {plugin_name}: {import_errors}")
-            pytest.skip(f"Plugin {plugin_name} cannot be imported (may have missing dependencies)")
+            pytest.skip(
+                f"Plugin {plugin_name} cannot be imported (may have missing dependencies)"
+            )
 
     except Exception as e:
         logger.error(f"Unexpected error importing {plugin_name}: {e}")
@@ -304,8 +306,12 @@ async def test_grpc_runner_functions():
 
         # Calculate the signature using the same key
         hmac_key = os.environ.get("MANIFEST_HMAC_KEY", "test-manifest-key")
-        manifest_str = json.dumps(test_manifest, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        signature = hmac.new(hmac_key.encode("utf-8"), manifest_str, hashlib.sha256).hexdigest()
+        manifest_str = json.dumps(
+            test_manifest, sort_keys=True, ensure_ascii=False
+        ).encode("utf-8")
+        signature = hmac.new(
+            hmac_key.encode("utf-8"), manifest_str, hashlib.sha256
+        ).hexdigest()
 
         # Add the signature to the manifest
         test_manifest["signature"] = signature

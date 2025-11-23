@@ -19,7 +19,9 @@ logger = logging.getLogger("arbiter.plugins.multi_modal_plugin")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 # Import docker with try-except for graceful degradation
@@ -63,7 +65,9 @@ def get_or_create_counter(name: str, description: str, labels: List[str]) -> Cou
     return Counter(name, description, labels)
 
 
-def get_or_create_histogram(name: str, description: str, labels: List[str]) -> Histogram:
+def get_or_create_histogram(
+    name: str, description: str, labels: List[str]
+) -> Histogram:
     """Get or create a Prometheus histogram metric."""
     if Histogram is None:
         return None
@@ -90,7 +94,9 @@ class AuditLogger:
                 handler.setFormatter(formatter)
                 self.audit_log.addHandler(handler)
             # Add other destinations (e.g., Kafka) here
-        self.audit_log.setLevel(getattr(logging, self.config.log_level.upper(), logging.INFO))
+        self.audit_log.setLevel(
+            getattr(logging, self.config.log_level.upper(), logging.INFO)
+        )
 
     def log_event(
         self,
@@ -147,9 +153,9 @@ class MetricsCollector:
                 "multimodal_cache_misses_total", "Total cache misses", ["modality"]
             )
         else:
-            self.requests_total = self.processing_latency_seconds = self.cache_hits_total = (
-                self.cache_misses_total
-            ) = None
+            self.requests_total = self.processing_latency_seconds = (
+                self.cache_hits_total
+            ) = self.cache_misses_total = None
 
     def increment_successful_requests(self, modality: str):
         if self.requests_total:
@@ -206,7 +212,9 @@ class CacheManager:
                 self._connected = True
                 logger.info("Connected to Redis cache.")
             except Exception as e:
-                logger.error(f"Failed to connect to Redis cache: {e}. Caching will be disabled.")
+                logger.error(
+                    f"Failed to connect to Redis cache: {e}. Caching will be disabled."
+                )
                 self.config.enabled = False
 
     async def disconnect(self):
@@ -222,7 +230,9 @@ class CacheManager:
             value = await self.redis_client.get(key)
             return json.loads(value) if value else None
         except Exception as e:
-            logger.error(f"Error getting from cache for key '{key}': {e}", exc_info=True)
+            logger.error(
+                f"Error getting from cache for key '{key}': {e}", exc_info=True
+            )
             return None
 
     async def set(self, key: str, value: Dict[str, Any], ttl_seconds: int):
@@ -326,12 +336,16 @@ class OutputValidator:
             )
 
         if rules.get("require_success_flag") and not result.get("success"):
-            raise MultiModalException(f"Output for {modality} processing did not indicate success.")
+            raise MultiModalException(
+                f"Output for {modality} processing did not indicate success."
+            )
 
         if "model_confidence" in result and result["model_confidence"] < rules.get(
             "min_confidence", 0.0
         ):
-            raise MultiModalException(f"Model confidence for {modality} below threshold.")
+            raise MultiModalException(
+                f"Model confidence for {modality} below threshold."
+            )
 
         logger.debug(f"Output validated for {modality}.")
 
@@ -357,19 +371,25 @@ class SandboxExecutor:
                 else:
                     loop = asyncio.get_running_loop()
                     with ThreadPoolExecutor(max_workers=1) as executor:
-                        return await loop.run_in_executor(executor, func, *args, **kwargs)
+                        return await loop.run_in_executor(
+                            executor, func, *args, **kwargs
+                        )
             except Exception as e:
                 raise MultiModalException(f"Error during execution: {e}") from e
 
         # Real sandboxing implementation using docker-py
         if not DOCKER_AVAILABLE:
-            raise ConfigurationError("Docker library not available. Sandboxing cannot be enabled.")
+            raise ConfigurationError(
+                "Docker library not available. Sandboxing cannot be enabled."
+            )
 
         try:
             client = docker.from_env()
 
             # Serialize inputs to a JSON string for passing to the container
-            input_data = json.dumps({"func_name": func.__name__, "args": args, "kwargs": kwargs})
+            input_data = json.dumps(
+                {"func_name": func.__name__, "args": args, "kwargs": kwargs}
+            )
 
             # The Docker command will execute a Python one-liner to deserialize input,
             # run the function, and serialize the output.
@@ -427,9 +447,13 @@ class SandboxExecutor:
                 "Docker image for sandboxing not found. Please ensure 'python:3.9-slim' is available."
             )
         except docker.errors.ContainerError as e:
-            raise ProcessingError(f"Container error during sandboxed execution: {e}") from e
+            raise ProcessingError(
+                f"Container error during sandboxed execution: {e}"
+            ) from e
         except docker.errors.APIError as e:
-            raise MultiModalException(f"Docker API error during sandboxed execution: {e}") from e
+            raise MultiModalException(
+                f"Docker API error during sandboxed execution: {e}"
+            ) from e
         except Exception as e:
             raise MultiModalException(
                 f"An unexpected error occurred during sandboxed execution: {e}"
@@ -455,7 +479,9 @@ class MultiModalProcessor:
         """
         provider_instance = self.providers.get(modality)
         if not provider_instance:
-            raise ProviderNotAvailableError(f"No provider registered for modality: {modality}")
+            raise ProviderNotAvailableError(
+                f"No provider registered for modality: {modality}"
+            )
 
         # Call the provider's process method, which is assumed to be async
         if asyncio.iscoroutinefunction(provider_instance.process):
@@ -464,7 +490,9 @@ class MultiModalProcessor:
             # Run synchronous provider process in a thread pool
             loop = asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=1) as executor:
-                result = await loop.run_in_executor(executor, provider_instance.process, data)
+                result = await loop.run_in_executor(
+                    executor, provider_instance.process, data
+                )
         return result
 
 
@@ -486,7 +514,9 @@ class MultiModalPlugin:
         """
         logger.info("Initializing MultiModalPlugin.")
         try:
-            self.config: MultiModalConfig = MultiModalConfig.model_validate(config or {})
+            self.config: MultiModalConfig = MultiModalConfig.model_validate(
+                config or {}
+            )
         except Exception as e:
             raise ConfigurationError(f"Invalid plugin configuration: {e}") from e
 
@@ -502,7 +532,8 @@ class MultiModalPlugin:
 
         # Circuit Breaker state
         self._circuit_breaker_states: Dict[str, str] = {
-            modality: "closed" for modality in self.config.circuit_breaker_config.modalities
+            modality: "closed"
+            for modality in self.config.circuit_breaker_config.modalities
         }
         self._circuit_breaker_failures: Dict[str, int] = {
             modality: 0 for modality in self.config.circuit_breaker_config.modalities
@@ -647,11 +678,17 @@ class MultiModalPlugin:
             self.post_hooks[modality].append(hook_fn)
             logger.info(f"Registered post-processing hook for {modality}")
         else:
-            raise ValueError(f"Invalid hook_type: {hook_type}. Must be 'pre' or 'post'.")
+            raise ValueError(
+                f"Invalid hook_type: {hook_type}. Must be 'pre' or 'post'."
+            )
 
     async def _execute_hooks(self, modality: str, data: Any, hook_type: str) -> Any:
         """Executes registered hooks for a given modality and hook type."""
-        hooks = self.pre_hooks[modality] if hook_type == "pre" else self.post_hooks[modality]
+        hooks = (
+            self.pre_hooks[modality]
+            if hook_type == "pre"
+            else self.post_hooks[modality]
+        )
         processed_data = data
         for hook_fn in hooks:
             try:
@@ -659,19 +696,25 @@ class MultiModalPlugin:
                     processed_data = await hook_fn(processed_data)
                 else:
                     loop = asyncio.get_running_loop()
-                    processed_data = await loop.run_in_executor(None, hook_fn, processed_data)
+                    processed_data = await loop.run_in_executor(
+                        None, hook_fn, processed_data
+                    )
             except Exception as e:
                 logger.error(
                     f"Error executing {hook_type} hook for {modality}: {e}",
                     exc_info=True,
                 )
-                raise MultiModalException(f"Hook execution failed for {modality}") from e
+                raise MultiModalException(
+                    f"Hook execution failed for {modality}"
+                ) from e
 
     def _check_circuit_breaker(self, modality: str):
         """Checks the circuit breaker state and raises an error if it's open."""
         state = self._circuit_breaker_states.get(modality, "closed")
         if state == "open":
-            last_failure_time = self._circuit_breaker_last_failure_time.get(modality, 0.0)
+            last_failure_time = self._circuit_breaker_last_failure_time.get(
+                modality, 0.0
+            )
             timeout = self.config.circuit_breaker_config.timeout_seconds
             # Use time.monotonic() for consistent monotonic time measurement
             if time.monotonic() - last_failure_time > timeout:
@@ -710,7 +753,9 @@ class MultiModalPlugin:
                     f"Circuit breaker for {modality} is now 'open' after {self._circuit_breaker_failures.get(modality)} consecutive failures."
                 )
 
-    async def _process_data(self, modality: str, data: Any, processor: Any) -> ProcessingResult:
+    async def _process_data(
+        self, modality: str, data: Any, processor: Any
+    ) -> ProcessingResult:
         """
         Internal method to handle the full processing pipeline for a single modality.
         Includes validation, circuit breaking, caching, sandboxing, hook execution, metrics, and auditing.
@@ -759,7 +804,9 @@ class MultiModalPlugin:
                     success = True
                 else:
                     self.metrics_collector.increment_cache_misses(modality)
-                    logger.info(f"Processing {modality} data. Operation ID: {operation_id}")
+                    logger.info(
+                        f"Processing {modality} data. Operation ID: {operation_id}"
+                    )
                     processing_start_time = time.monotonic()
 
                     # 5. Core Processing (with optional Sandboxing)
@@ -769,7 +816,9 @@ class MultiModalPlugin:
                         )
                     else:
                         if asyncio.iscoroutinefunction(processor.process):
-                            raw_result = await processor.process(processed_data_for_hooks)
+                            raw_result = await processor.process(
+                                processed_data_for_hooks
+                            )
                         else:
                             loop = asyncio.get_running_loop()
                             raw_result = await loop.run_in_executor(
@@ -815,7 +864,9 @@ class MultiModalPlugin:
                     exc_info=True,
                 )
                 success = False
-                result = ProcessingResult(success=False, error=str(e), operation_id=operation_id)
+                result = ProcessingResult(
+                    success=False, error=str(e), operation_id=operation_id
+                )
             except Exception as e:
                 # Catch-all for any other unexpected errors
                 logger.critical(
@@ -840,18 +891,26 @@ class MultiModalPlugin:
                 self.audit_logger.log_event(
                     user_id=self.config.user_id_for_auditing,
                     event_type=(
-                        f"{modality}_processing" if success else f"{modality}_processing_failed"
+                        f"{modality}_processing"
+                        if success
+                        else f"{modality}_processing_failed"
                     ),
                     timestamp=event_start_time.isoformat(),
                     success=success,
                     input_hash=input_hash,
                     output_summary=result.summary,
                     error_message=result.error,
-                    model_version=self.config.current_model_version.get(modality, "unknown"),
-                    latency_ms=(datetime.now(timezone.utc) - event_start_time).total_seconds()
+                    model_version=self.config.current_model_version.get(
+                        modality, "unknown"
+                    ),
+                    latency_ms=(
+                        datetime.now(timezone.utc) - event_start_time
+                    ).total_seconds()
                     * 1000,
                     operation_id=operation_id,
-                    compliance_info=self.config.compliance_config.mapping.get(modality, []),
+                    compliance_info=self.config.compliance_config.mapping.get(
+                        modality, []
+                    ),
                 )
                 return result
 
@@ -988,7 +1047,9 @@ class MultiModalPlugin:
         logger.info("Exiting MultiModalPlugin async context. Performing cleanup.")
         await self.stop()  # Perform async cleanup
         if exc_val:
-            logger.error(f"MultiModalPlugin exited with an exception: {exc_val}", exc_info=True)
+            logger.error(
+                f"MultiModalPlugin exited with an exception: {exc_val}", exc_info=True
+            )
         logger.info("MultiModalPlugin cleanup complete.")
 
 
@@ -1014,7 +1075,9 @@ async def main():
         "text_processing": {
             "enabled": True,
             "default_provider": "default",
-            "provider_config": {"default": {"mock_min_latency_ms": 5, "max_length": 5000}},
+            "provider_config": {
+                "default": {"mock_min_latency_ms": 5, "max_length": 5000}
+            },
         },
         "security_config": {
             "sandbox_enabled": False,
@@ -1062,16 +1125,22 @@ async def main():
         text_error_result = await plugin.process_text(
             ""
         )  # Example of invalid input (empty string might fail validation)
-        logger.info(f"Text processing error result: {text_error_result.model_dump_json(indent=2)}")
+        logger.info(
+            f"Text processing error result: {text_error_result.model_dump_json(indent=2)}"
+        )
 
         logger.info("\n--- Testing Image Processing ---")
         # Need a simple way to get some valid image bytes for a test
         # A simple black and white 1x1 png
         png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90\x77\x53\xde\x00\x00\x00\x0cIDATx\x9c\x63\x00\x01\x00\x00\x05\x00\x01\x0d\x0a\x2d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
         image_result = await plugin.process_image(png_bytes)
-        logger.info(f"Image processing result: {image_result.model_dump_json(indent=2)}")
+        logger.info(
+            f"Image processing result: {image_result.model_dump_json(indent=2)}"
+        )
 
-        image_error_result = await plugin.process_image(None)  # Example of invalid input
+        image_error_result = await plugin.process_image(
+            None
+        )  # Example of invalid input
         logger.info(
             f"Image processing error result: {image_error_result.model_dump_json(indent=2)}"
         )
@@ -1088,7 +1157,9 @@ async def main():
 
         # Example of adding a custom hook
         def custom_text_post_hook(result_data: Dict[str, Any]) -> Dict[str, Any]:
-            if result_data.get("success") and "processed_text" in result_data.get("data", {}):
+            if result_data.get("success") and "processed_text" in result_data.get(
+                "data", {}
+            ):
                 result_data["data"]["custom_tag"] = "processed_by_hook"
                 result_data["summary"] += " (Hooked!)"
             return result_data
@@ -1107,4 +1178,6 @@ if __name__ == "__main__":
     except ConfigurationError as e:
         logger.critical(f"Configuration Error: {e}")
     except Exception as e:
-        logger.critical(f"An unexpected error occurred during main execution: {e}", exc_info=True)
+        logger.critical(
+            f"An unexpected error occurred during main execution: {e}", exc_info=True
+        )

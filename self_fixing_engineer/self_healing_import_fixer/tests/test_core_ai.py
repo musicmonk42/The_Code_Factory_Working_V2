@@ -124,7 +124,9 @@ async def test_ai_manager_init_success(
 
     assert manager.llm_api_key == "mock-api-key"
     assert manager.llm_endpoint == valid_ai_config["llm_endpoint"]
-    mock_secrets_manager.get_secret.assert_called_once_with("LLM_API_KEY", required=False)
+    mock_secrets_manager.get_secret.assert_called_once_with(
+        "LLM_API_KEY", required=False
+    )
     mock_audit_logger_ai.log_event.assert_called_once_with(
         "ai_manager_init",
         model="gpt-3.5-turbo",
@@ -173,9 +175,15 @@ async def test_ai_manager_init_no_https_in_prod_exits(
     valid_ai_config["llm_endpoint"] = "http://api.openai.com"
     with patch.dict(os.environ, {"PRODUCTION_MODE": "true"}):
         # The actual error happens because httpx doesn't accept 'proxies', but we expect RuntimeError for HTTPS check
-        with pytest.raises(RuntimeError, match="LLM endpoint must use HTTPS in production"):
-            with patch("analyzer.core_ai.httpx.AsyncClient"):  # Mock to avoid the proxies error
-                with patch("analyzer.core_ai.AsyncOpenAI"):  # Mock OpenAI to avoid isinstance issue
+        with pytest.raises(
+            RuntimeError, match="LLM endpoint must use HTTPS in production"
+        ):
+            with patch(
+                "analyzer.core_ai.httpx.AsyncClient"
+            ):  # Mock to avoid the proxies error
+                with patch(
+                    "analyzer.core_ai.AsyncOpenAI"
+                ):  # Mock OpenAI to avoid isinstance issue
                     AIManager(valid_ai_config)
 
 
@@ -188,8 +196,12 @@ async def test_ai_manager_init_no_proxy_in_prod_exits(
     pytest.skip("Proxy check in production mode not implemented in core_ai.py")
     with patch.dict(os.environ, {"PRODUCTION_MODE": "true"}):
         with pytest.raises(RuntimeError, match="proxy_url.*is required"):
-            with patch("analyzer.core_ai.httpx.AsyncClient"):  # Mock to avoid the proxies error
-                with patch("analyzer.core_ai.AsyncOpenAI"):  # Mock OpenAI to avoid isinstance issue
+            with patch(
+                "analyzer.core_ai.httpx.AsyncClient"
+            ):  # Mock to avoid the proxies error
+                with patch(
+                    "analyzer.core_ai.AsyncOpenAI"
+                ):  # Mock OpenAI to avoid isinstance issue
                     AIManager(valid_ai_config)
 
 
@@ -199,13 +211,23 @@ async def test_ai_manager_init_auto_apply_in_prod_exits(
     """Tests that AIManager initialization fails and exits if auto_apply_patches is enabled in production."""
     # NOTE: The actual core_ai.py doesn't check for auto_apply_patches in production mode
     # This test is commented out as the functionality isn't implemented
-    pytest.skip("Auto-apply patches check in production mode not implemented in core_ai.py")
+    pytest.skip(
+        "Auto-apply patches check in production mode not implemented in core_ai.py"
+    )
     valid_ai_config["allow_auto_apply_patches"] = True
-    valid_ai_config["proxy_url"] = "http://proxy.example.com"  # Add proxy to pass that check
+    valid_ai_config["proxy_url"] = (
+        "http://proxy.example.com"  # Add proxy to pass that check
+    )
     with patch.dict(os.environ, {"PRODUCTION_MODE": "true"}):
-        with pytest.raises(RuntimeError, match="allow_auto_apply_patches.*is forbidden"):
-            with patch("analyzer.core_ai.httpx.AsyncClient"):  # Mock to avoid the proxies error
-                with patch("analyzer.core_ai.AsyncOpenAI"):  # Mock OpenAI to avoid isinstance issue
+        with pytest.raises(
+            RuntimeError, match="allow_auto_apply_patches.*is forbidden"
+        ):
+            with patch(
+                "analyzer.core_ai.httpx.AsyncClient"
+            ):  # Mock to avoid the proxies error
+                with patch(
+                    "analyzer.core_ai.AsyncOpenAI"
+                ):  # Mock OpenAI to avoid isinstance issue
                     AIManager(valid_ai_config)
 
 
@@ -253,7 +275,9 @@ async def test_call_llm_api_failure_and_retry(
         with patch("analyzer.core_ai.AsyncOpenAI") as mock_openai:
             mock_client = MagicMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API failed"))
+            mock_client.chat.completions.create = AsyncMock(
+                side_effect=Exception("API failed")
+            )
 
             manager = AIManager(valid_ai_config)
 
@@ -305,7 +329,9 @@ async def test_token_quota_overrun_aborts(
 
 
 # --- Public Interface Tests (get_ai_suggestions, get_ai_patch) ---
-async def test_get_ai_suggestions_success(mock_llm_client, mock_secrets_manager, valid_ai_config):
+async def test_get_ai_suggestions_success(
+    mock_llm_client, mock_secrets_manager, valid_ai_config
+):
     """Tests the public function get_ai_suggestions."""
     # Mock the manager to bypass the broken sanitization
     with patch("analyzer.core_ai.get_ai_manager_instance") as mock_get_manager:
@@ -325,7 +351,9 @@ async def test_get_ai_suggestions_success(mock_llm_client, mock_secrets_manager,
         mock_manager.get_refactoring_suggestion.assert_called_once()
 
 
-async def test_get_ai_patch_success(mock_llm_client, mock_secrets_manager, valid_ai_config):
+async def test_get_ai_patch_success(
+    mock_llm_client, mock_secrets_manager, valid_ai_config
+):
     """Tests the public function get_ai_patch."""
     # Mock the manager to bypass the broken sanitization
     with patch("analyzer.core_ai.get_ai_manager_instance") as mock_get_manager:
@@ -335,7 +363,9 @@ async def test_get_ai_patch_success(mock_llm_client, mock_secrets_manager, valid
         # Make the async method return a coroutine
         from unittest.mock import AsyncMock
 
-        mock_manager.get_cycle_breaking_suggestion = AsyncMock(return_value="Patch A\nPatch B")
+        mock_manager.get_cycle_breaking_suggestion = AsyncMock(
+            return_value="Patch A\nPatch B"
+        )
 
         patches = await get_ai_patch("Problem", "Code", ["S1"], valid_ai_config)
 

@@ -257,7 +257,9 @@ def test_run_hook_with_exception_raises_and_alerts(monkeypatch):
         alerted["msg"] = msg
         alerted["level"] = level
 
-    monkeypatch.setattr("import_fixer.fixer_plugins.alert_operator", _alert, raising=True)
+    monkeypatch.setattr(
+        "import_fixer.fixer_plugins.alert_operator", _alert, raising=True
+    )
 
     mgr = PluginManager({"stop_on_hook_error": True})  # default True
 

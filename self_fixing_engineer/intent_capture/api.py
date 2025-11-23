@@ -55,7 +55,12 @@ import redis.asyncio as aredis
 import sentry_sdk
 
 # --- Local Application Imports ---
-from agent_core import AgentError, ConfigurationError, InvalidSessionError, get_or_create_agent
+from agent_core import (
+    AgentError,
+    ConfigurationError,
+    InvalidSessionError,
+    get_or_create_agent,
+)
 from bleach import clean
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,7 +113,9 @@ class AppConfig(BaseSettings):
     VAULT_TOKEN: Optional[str] = os.getenv("VAULT_TOKEN")
     USE_VAULT: bool = os.getenv("USE_VAULT", "false").lower() == "true"
 
-    def _get_secret(self, key: str, vault_path: str, default: Optional[str] = None) -> str:
+    def _get_secret(
+        self, key: str, vault_path: str, default: Optional[str] = None
+    ) -> str:
         """
         UPGRADE: Fetches a secret from HashiCorp Vault with a fallback to environment variables.
         - [Date: August 19, 2025]
@@ -117,18 +124,24 @@ class AppConfig(BaseSettings):
             try:
                 client = hvac.Client(url=self.VAULT_URL, token=self.VAULT_TOKEN)
                 if client.is_authenticated():
-                    secret_data = client.secrets.kv.v2.read_secret_version(path=vault_path)
+                    secret_data = client.secrets.kv.v2.read_secret_version(
+                        path=vault_path
+                    )
                     value = secret_data["data"]["data"][key]
                     logging.info(f"Successfully fetched secret '{key}' from Vault.")
                     return value
             except Exception as e:
-                logging.error(f"Failed to fetch secret '{key}' from Vault: {e}. Falling back.")
+                logging.error(
+                    f"Failed to fetch secret '{key}' from Vault: {e}. Falling back."
+                )
 
         value = os.getenv(key.upper())
         if value is None:
             if default is not None:
                 return default
-            raise ConfigurationError(f"Required secret '{key}' not found in Vault or environment.")
+            raise ConfigurationError(
+                f"Required secret '{key}' not found in Vault or environment."
+            )
         return value
 
     def __init__(self, **values: Any):
@@ -149,8 +162,12 @@ tracer = trace.get_tracer(__name__)
 
 # RECONSTRUCTED: Pydantic models with validation
 class PredictRequest(BaseModel):
-    user_input: str = Field(..., max_length=10000, description="The user's query for the agent.")
-    timeout: int = Field(30, ge=5, le=120, description="Timeout for the prediction in seconds.")
+    user_input: str = Field(
+        ..., max_length=10000, description="The user's query for the agent."
+    )
+    timeout: int = Field(
+        30, ge=5, le=120, description="Timeout for the prediction in seconds."
+    )
     session_token: str = Field(..., description="The JWT session token for the user.")
 
     @field_validator("user_input")
@@ -185,10 +202,14 @@ class SafetyViolationError(HTTPException):
 
 
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception for {request.method} {request.url}: {exc}", exc_info=True)
+    logger.error(
+        f"Unhandled exception for {request.method} {request.url}: {exc}", exc_info=True
+    )
     if os.getenv("SENTRY_DSN"):
         sentry_sdk.capture_exception(exc)
-    return JSONResponse(content={"detail": "An internal server error occurred."}, status_code=500)
+    return JSONResponse(
+        content={"detail": "An internal server error occurred."}, status_code=500
+    )
 
 
 # FIX: Add specific handler for AgentError if you want 500 instead of 400
@@ -209,7 +230,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 
 async def get_redis_client() -> aredis.Redis:
-    return await aredis.from_url(config.REDIS_URL, max_connections=100, decode_responses=True)
+    return await aredis.from_url(
+        config.REDIS_URL, max_connections=100, decode_responses=True
+    )
 
 
 async def get_current_user(
@@ -247,7 +270,9 @@ async def set_user_state_for_limiter(
 def anonymize_pii(text: str) -> str:
     if not isinstance(text, str):
         return text
-    text = re.sub(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]", text)
+    text = re.sub(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]", text
+    )
     text = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[REDACTED_IP]", text)
     text = re.sub(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[REDACTED_CC]", text)
     return text
@@ -266,7 +291,9 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
                 "statusCode": response.status_code,
             }
             # s3_client = boto3.client('s3'); s3_client.put_object(Bucket=os.getenv('AUDIT_BUCKET'), Key=f"logs/{request.state.request_id}.json", Body=anonymize_pii(json.dumps(log_data)))
-            logger.info(f"Audit log for {request.state.request_id} sent to S3 (simulated).")
+            logger.info(
+                f"Audit log for {request.state.request_id} sent to S3 (simulated)."
+            )
         return response
 
 
@@ -278,7 +305,9 @@ async def lifespan(app: FastAPI):
     redis_client = await get_redis_client()
     await FastAPICache.init(RedisBackend(redis_client), prefix="api-cache")
     if hf_pipeline:
-        app.state.safety_pipeline = hf_pipeline("text-classification", model="unitaryai/toxic-bert")
+        app.state.safety_pipeline = hf_pipeline(
+            "text-classification", model="unitaryai/toxic-bert"
+        )
 
     # UPGRADE: Secret rotation task - [Date: August 19, 2025]
     async def refresh_secrets_loop():
@@ -409,8 +438,13 @@ def create_app() -> FastAPI:
 
                 # UPGRADE: Response Safety Check - [Date: August 19, 2025]
                 if hasattr(app.state, "safety_pipeline") and app.state.safety_pipeline:
-                    safety_result = app.state.safety_pipeline(prediction_result["response"])
-                    if any(r["label"] == "toxic" and r["score"] > 0.8 for r in safety_result):
+                    safety_result = app.state.safety_pipeline(
+                        prediction_result["response"]
+                    )
+                    if any(
+                        r["label"] == "toxic" and r["score"] > 0.8
+                        for r in safety_result
+                    ):
                         raise SafetyViolationError()
                 return prediction_result
         except (AgentError, ConfigurationError, InvalidSessionError) as e:
@@ -431,7 +465,9 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "User has not consented to data pruning."
             )
-        logger.info(f"Data pruning request for user {current_user.get('sub')} (logic placeholder).")
+        logger.info(
+            f"Data pruning request for user {current_user.get('sub')} (logic placeholder)."
+        )
         return Response(status_code=204)
 
     return app

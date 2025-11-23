@@ -31,7 +31,9 @@ required_envs = [
 ]  # Add more as needed
 missing = [var for var in required_envs if not os.getenv(var)]
 if missing:
-    warnings.warn(f"Missing env vars: {', '.join(missing)}. Using defaults for testing.")
+    warnings.warn(
+        f"Missing env vars: {', '.join(missing)}. Using defaults for testing."
+    )
     for var in missing:
         os.environ[var] = "test_default"
 

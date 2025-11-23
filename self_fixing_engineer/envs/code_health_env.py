@@ -114,7 +114,9 @@ class EnvironmentConfig:
         if not 0 <= self.critical_threshold <= 1:
             raise ValueError("critical_threshold must be between 0 and 1")
         if self.critical_threshold >= self.unacceptable_threshold:
-            raise ValueError("critical_threshold must be less than unacceptable_threshold")
+            raise ValueError(
+                "critical_threshold must be less than unacceptable_threshold"
+            )
         if self.max_steps <= 0:
             raise ValueError("max_steps must be positive")
         if self.max_action_history <= 0:
@@ -339,7 +341,9 @@ class CodeHealthEnv(gym.Env):
                 elif isinstance(metrics, (list, tuple, np.ndarray)):
                     # Convert array to SystemMetrics
                     metrics_dict = {}
-                    for i, key in enumerate(self.config.observation_keys[: len(metrics)]):
+                    for i, key in enumerate(
+                        self.config.observation_keys[: len(metrics)]
+                    ):
                         metrics_dict[key] = float(metrics[i])
 
                     # Fill missing metrics with defaults
@@ -450,7 +454,9 @@ class CodeHealthEnv(gym.Env):
 
             return self.state, reward, self.done, info
 
-    def _check_and_handle_rollback(self, current_action: int) -> Optional[Dict[str, Any]]:
+    def _check_and_handle_rollback(
+        self, current_action: int
+    ) -> Optional[Dict[str, Any]]:
         """Check if automatic rollback is needed and handle it"""
         pass_rate_idx = (
             self.config.observation_keys.index("pass_rate")
@@ -526,12 +532,17 @@ class CodeHealthEnv(gym.Env):
             if "pass_rate" in self.config.observation_keys
             else -1
         )
-        if pass_rate_idx != -1 and self.state[pass_rate_idx] < self.config.critical_threshold:
+        if (
+            pass_rate_idx != -1
+            and self.state[pass_rate_idx] < self.config.critical_threshold
+        ):
             return True
 
         return False
 
-    def _compute_reward(self, state: np.ndarray, action: int, result: Dict[str, Any]) -> float:
+    def _compute_reward(
+        self, state: np.ndarray, action: int, result: Dict[str, Any]
+    ) -> float:
         """Compute reward based on state, action, and result"""
         reward = 0.0
 
@@ -569,7 +580,9 @@ class CodeHealthEnv(gym.Env):
 
         return float(reward)
 
-    def _record_step(self, action: int, action_name: str, reward: float, info: Dict[str, Any]):
+    def _record_step(
+        self, action: int, action_name: str, reward: float, info: Dict[str, Any]
+    ):
         """Record step in action history"""
         step_record = {
             "step": self.steps,
@@ -614,7 +627,10 @@ class CodeHealthEnv(gym.Env):
                 if "pass_rate" in self.config.observation_keys
                 else -1
             )
-            if pass_rate_idx != -1 and self.state[pass_rate_idx] < self.config.critical_threshold:
+            if (
+                pass_rate_idx != -1
+                and self.state[pass_rate_idx] < self.config.critical_threshold
+            ):
                 reason = "critical_state"
             else:
                 reason = "unknown"
@@ -676,7 +692,9 @@ class CodeHealthEnv(gym.Env):
         """Render the environment state"""
         if mode == "human":
             print(f"\n[Session {self.session_id[:8]}...] Step: {self.steps}")
-            print(f"State: {dict(zip(self.config.observation_keys, self.state.round(3)))}")
+            print(
+                f"State: {dict(zip(self.config.observation_keys, self.state.round(3)))}"
+            )
             print(f"Cumulative Reward: {self.cumulative_reward:.2f}")
             return None
 
@@ -698,9 +716,13 @@ class CodeHealthEnv(gym.Env):
         for i, key in enumerate(self.config.observation_keys):
             val = self.state[i]
             if key in ["pass_rate", "code_coverage"]:
-                colors.append("green" if val > 0.8 else "yellow" if val > 0.5 else "red")
+                colors.append(
+                    "green" if val > 0.8 else "yellow" if val > 0.5 else "red"
+                )
             elif key in ["latency", "alert_ratio", "complexity"]:
-                colors.append("green" if val < 0.3 else "yellow" if val < 0.6 else "red")
+                colors.append(
+                    "green" if val < 0.3 else "yellow" if val < 0.6 else "red"
+                )
             else:
                 colors.append("blue")
 
@@ -756,7 +778,9 @@ class CodeHealthEnv(gym.Env):
     def _render_ansi(self) -> None:
         """Render state with colored terminal output"""
         output = colored("\n" + "=" * 60 + "\n", "blue")
-        output += colored(f"Code Health Monitor - Step {self.steps}\n", "white", attrs=["bold"])
+        output += colored(
+            f"Code Health Monitor - Step {self.steps}\n", "white", attrs=["bold"]
+        )
         output += colored(f"Session: {self.session_id[:8]}...\n", "cyan")
         output += colored("=" * 60 + "\n", "blue")
 
@@ -775,20 +799,30 @@ class CodeHealthEnv(gym.Env):
             bar_length = int(val * 20)
             bar = "█" * bar_length + "░" * (20 - bar_length)
 
-            output += f"  {key:15s}: {colored(bar, color)} {colored(f'{val:.3f}', color)}\n"
+            output += (
+                f"  {key:15s}: {colored(bar, color)} {colored(f'{val:.3f}', color)}\n"
+            )
 
-        output += colored(f"\nCumulative Reward: {self.cumulative_reward:.2f}\n", "magenta")
+        output += colored(
+            f"\nCumulative Reward: {self.cumulative_reward:.2f}\n", "magenta"
+        )
 
         # Show cooldowns if any
         active_cooldowns = []
         for action_id, cooldown_step in self.action_cooldowns.items():
             if action_id in self.config.action_cooldowns:
-                remaining = self.config.action_cooldowns[action_id] - (self.steps - cooldown_step)
+                remaining = self.config.action_cooldowns[action_id] - (
+                    self.steps - cooldown_step
+                )
                 if remaining > 0:
-                    active_cooldowns.append(f"{self.action_map[action_id]}: {remaining}")
+                    active_cooldowns.append(
+                        f"{self.action_map[action_id]}: {remaining}"
+                    )
 
         if active_cooldowns:
-            output += colored(f"Active Cooldowns: {', '.join(active_cooldowns)}\n", "yellow")
+            output += colored(
+                f"Active Cooldowns: {', '.join(active_cooldowns)}\n", "yellow"
+            )
 
         print(output)
         return None
@@ -898,7 +932,9 @@ def run_code_health_simulation():
             self.metrics.pass_rate = max(
                 0, self.metrics.pass_rate - np.random.uniform(0.005, 0.015)
             )
-            self.metrics.latency = min(1, self.metrics.latency + np.random.uniform(0.002, 0.008))
+            self.metrics.latency = min(
+                1, self.metrics.latency + np.random.uniform(0.002, 0.008)
+            )
             self.metrics.alert_ratio = min(
                 1, self.metrics.alert_ratio + np.random.uniform(0.001, 0.003)
             )
@@ -908,7 +944,9 @@ def run_code_health_simulation():
 
         def apply_action_effects(self, action_id: int) -> Dict[str, Any]:
             """Apply action effects to metrics"""
-            action_name = ActionType(action_id).name if action_id < len(ActionType) else "unknown"
+            action_name = (
+                ActionType(action_id).name if action_id < len(ActionType) else "unknown"
+            )
             result = {"action": action_name, "success": True, "timestamp": time.time()}
 
             if action_id in self.action_effects:

@@ -128,7 +128,9 @@ class OpenAIProvider(LLMProvider):
                 provider=self.name,
             ) from e
         except OpenAIError as e:
-            raise LLMError(detail=f"OpenAI API error: {str(e)}", provider=self.name) from e
+            raise LLMError(
+                detail=f"OpenAI API error: {str(e)}", provider=self.name
+            ) from e
         except Exception as e:
             raise LLMError(
                 detail=f"Unexpected error in OpenAI SDK: {str(e)}", provider=self.name
@@ -150,14 +152,18 @@ class OpenAIProvider(LLMProvider):
         if stream:
 
             async def gen():
-                api_response = await self._api_call(model, messages, stream=True, **kwargs)
+                api_response = await self._api_call(
+                    model, messages, stream=True, **kwargs
+                )
 
                 try:
                     async for chunk in api_response:
                         content = chunk.choices[0].delta.content or ""
                         yield content
                 except Exception as e:
-                    raise LLMError(detail=f"Error during streaming: {e}", provider=self.name) from e
+                    raise LLMError(
+                        detail=f"Error during streaming: {e}", provider=self.name
+                    ) from e
 
             return gen()
         else:

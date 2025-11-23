@@ -141,7 +141,9 @@ _global_secret_patterns = [
     # NOTE: Removed generic domain scrubber to reduce false positives
 ]
 # Pre-compile the global patterns for efficiency
-_compiled_global_secret_patterns = [re.compile(p, re.IGNORECASE) for p in _global_secret_patterns]
+_compiled_global_secret_patterns = [
+    re.compile(p, re.IGNORECASE) for p in _global_secret_patterns
+]
 
 # A set to hold patterns for environment variable scrubbing on init
 _env_secret_patterns_on_init = [
@@ -160,7 +162,9 @@ _env_secret_patterns_on_init = [
     r"AZURE_CLIENT_SECRET",
     r"GCP_CREDENTIALS",
 ]
-_compiled_env_secret_patterns = [re.compile(p, re.IGNORECASE) for p in _env_secret_patterns_on_init]
+_compiled_env_secret_patterns = [
+    re.compile(p, re.IGNORECASE) for p in _env_secret_patterns_on_init
+]
 
 
 def scrub_secrets(data: Any, patterns: Optional[List[str]] = None) -> Any:
@@ -314,7 +318,9 @@ SECRETS_MANAGER = SecretsManager()
 class GenericLogEvent(BaseModel):
     """Generic log event structure for SIEM clients."""
 
-    timestamp: str = Field(default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z")
+    timestamp: str = Field(
+        default_factory=lambda: datetime.datetime.utcnow().isoformat() + "Z"
+    )
     level: str = "INFO"
     message: str
     source: str = "siem_client"
@@ -389,7 +395,9 @@ class BaseSIEMClient(ABC):
         start_ms = end_ms - (seconds * 1000)
         return start_ms, end_ms
 
-    def _parse_relative_time_range_to_timedelta(self, time_range: str) -> datetime.timedelta:
+    def _parse_relative_time_range_to_timedelta(
+        self, time_range: str
+    ) -> datetime.timedelta:
         """Parse relative time range string to timedelta."""
         match = re.match(r"(\d+)([smhd])", time_range.lower())
         if not match:

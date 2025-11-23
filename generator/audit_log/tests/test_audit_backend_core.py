@@ -31,7 +31,9 @@ def _find_core_file() -> Path:
     # Search for audit_backend_core.py anywhere under the repo root
     candidates = [p for p in REPO_ROOT.rglob("audit_backend_core.py") if p.is_file()]
     if not candidates:
-        raise FileNotFoundError(f"Could not find audit_backend_core.py under {REPO_ROOT}")
+        raise FileNotFoundError(
+            f"Could not find audit_backend_core.py under {REPO_ROOT}"
+        )
     # Prefer a path that contains '/audit_log/' in it
     for p in candidates:
         if "audit_log" in str(p).replace("\\", "/"):
@@ -186,7 +188,9 @@ async def test_backend(secure_encryption_env, mock_send_alert):
         async def _append_single(self, prepared_entry: Dict[str, Any]) -> None:
             self.storage.append(prepared_entry)
 
-        async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+        async def _query_single(
+            self, filters: Dict[str, Any], limit: int
+        ) -> List[Dict[str, Any]]:
             results: List[Dict[str, Any]] = []
             for entry in reversed(self.storage):
                 if all(entry.get(k) == v for k, v in filters.items()):
@@ -243,13 +247,17 @@ async def test_append_and_query_round_trip(test_backend):
 
 
 @pytest.mark.asyncio
-async def test_tamper_detection_flags_and_skips(test_backend, monkeypatch, mock_send_alert):
+async def test_tamper_detection_flags_and_skips(
+    test_backend, monkeypatch, mock_send_alert
+):
     await test_backend.append({"event_type": "x"})
     await test_backend.flush_batch()
     assert len(test_backend.storage) == 1
 
     backend_label = test_backend.__class__.__name__
-    before = _counter_total_for_labels(BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label)
+    before = _counter_total_for_labels(
+        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+    )
 
     original_compute = core.compute_hash
 
@@ -264,7 +272,9 @@ async def test_tamper_detection_flags_and_skips(test_backend, monkeypatch, mock_
     # Give scheduled tasks (send_alert via create_task) time to execute
     await asyncio.sleep(0.1)
 
-    after = _counter_total_for_labels(BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label)
+    after = _counter_total_for_labels(
+        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+    )
     assert after > before
 
     if mock_send_alert is not None:
@@ -286,7 +296,9 @@ async def test_retry_operation_respects_limits(monkeypatch):
     if hasattr(core, "RETRY_MAX_ATTEMPTS"):
         monkeypatch.setattr(core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
 
-    before = _counter_total_for_labels(BACKEND_ERRORS, backend="TestBackend", type="ValueError")
+    before = _counter_total_for_labels(
+        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+    )
 
     with pytest.raises(ValueError, match="expected failure"):
         await retry_operation(
@@ -298,12 +310,16 @@ async def test_retry_operation_respects_limits(monkeypatch):
         )
 
     assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
-    after = _counter_total_for_labels(BACKEND_ERRORS, backend="TestBackend", type="ValueError")
+    after = _counter_total_for_labels(
+        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+    )
     assert after > before
 
 
 @pytest.mark.asyncio
-async def test_inmemory_backend_basic_integration(secure_encryption_env, mock_send_alert):
+async def test_inmemory_backend_basic_integration(
+    secure_encryption_env, mock_send_alert
+):
     backend = InMemoryBackend(params={"name": "inmemory-test"})
     try:
         await backend.append({"event_type": "ping"})

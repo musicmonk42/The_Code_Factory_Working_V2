@@ -81,7 +81,9 @@ def mock_tracing():
 def mock_metrics():
     """Mock Prometheus metrics."""
     with patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", True):
-        with patch("mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT") as mock_count:
+        with patch(
+            "mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT"
+        ) as mock_count:
             mock_count.labels.return_value = mock_count
             yield mock_count
 
@@ -120,7 +122,10 @@ class TestCheckpointError:
 
     def test_initialization(self, mock_tracing, mock_metrics):
         """Test basic exception initialization."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError, CheckpointErrorCode
+        from mesh.checkpoint.checkpoint_exceptions import (
+            CheckpointError,
+            CheckpointErrorCode,
+        )
 
         mock_trace, span = mock_tracing
 
@@ -260,7 +265,9 @@ class TestCheckpointError:
         mock_alert_cache.get.return_value = 10
 
         with pytest.raises(CheckpointError):
-            await CheckpointError.raise_with_alert(TestConstants.MESSAGE, {"test": "context"})
+            await CheckpointError.raise_with_alert(
+                TestConstants.MESSAGE, {"test": "context"}
+            )
 
         # Alert should be suppressed
         mock_alert_callback.assert_not_called()
@@ -274,7 +281,10 @@ class TestExceptionSubclasses:
 
     def test_audit_error(self):
         """Test CheckpointAuditError for security incidents."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointAuditError, CheckpointErrorCode
+        from mesh.checkpoint.checkpoint_exceptions import (
+            CheckpointAuditError,
+            CheckpointErrorCode,
+        )
 
         with patch("mesh.checkpoint.checkpoint_exceptions.audit_logger") as mock_audit:
             error = CheckpointAuditError(
@@ -448,7 +458,10 @@ class TestSecurity:
             assert error.context["jwt"] == "[MASKED]"
         else:
             # If it's been partially scrubbed and shortened
-            assert "[REDACTED]" in error.context["jwt"] or error.context["jwt"] == "[MASKED]"
+            assert (
+                "[REDACTED]" in error.context["jwt"]
+                or error.context["jwt"] == "[MASKED]"
+            )
 
         # Short strings should be preserved
         assert error.context["short"] == "abc"
@@ -484,7 +497,10 @@ class TestEdgeCases:
 
     def test_custom_error_code(self):
         """Test custom error code handling."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError, CheckpointErrorCode
+        from mesh.checkpoint.checkpoint_exceptions import (
+            CheckpointError,
+            CheckpointErrorCode,
+        )
 
         # Test with enum
         error1 = CheckpointError(
@@ -498,9 +514,13 @@ class TestEdgeCases:
 
     def test_missing_dependencies(self):
         """Test behavior with missing optional dependencies."""
-        with patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False), patch(
-            "mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
-        ), patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False):
+        with (
+            patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False),
+            patch(
+                "mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
+            ),
+            patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False),
+        ):
 
             from mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
@@ -529,7 +549,9 @@ class TestPerformance:
         from mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         def create_exception():
-            return CheckpointError(TestConstants.MESSAGE, TestConstants.SENSITIVE_CONTEXT)
+            return CheckpointError(
+                TestConstants.MESSAGE, TestConstants.SENSITIVE_CONTEXT
+            )
 
         result = benchmark(create_exception)
         assert result is not None
@@ -541,8 +563,12 @@ class TestPerformance:
 
         # Create a large context but not so large it exceeds the size limit
         # Reduce the number of fields to stay under the 2048 byte limit
-        large_context = {f"password_{i}": f"secret_{i}" for i in range(20)}  # Reduced from 100
-        large_context.update({f"safe_{i}": f"data_{i}" for i in range(20)})  # Reduced from 100
+        large_context = {
+            f"password_{i}": f"secret_{i}" for i in range(20)
+        }  # Reduced from 100
+        large_context.update(
+            {f"safe_{i}": f"data_{i}" for i in range(20)}
+        )  # Reduced from 100
 
         def create_with_scrubbing():
             return CheckpointError(TestConstants.MESSAGE, large_context)

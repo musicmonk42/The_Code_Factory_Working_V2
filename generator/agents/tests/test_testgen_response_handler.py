@@ -177,7 +177,9 @@ def test_another():
 
     def test_parse_malformed_json(self, parser):
         """Test parsing malformed JSON that triggers fallback."""
-        response = '{ "test_file.py": "def test():\n    assert True", }'  # Trailing comma
+        response = (
+            '{ "test_file.py": "def test():\n    assert True", }'  # Trailing comma
+        )
 
         # Should fall back to single file mode without raising exception
         result = parser.parse(response, "python")
@@ -265,7 +267,9 @@ def test_another():
 
             result = await parser._run_tool(["flake8"], "test.py", "linter")
 
-            assert "error" in result.lower() or "timeout" in result.lower() or result == ""
+            assert (
+                "error" in result.lower() or "timeout" in result.lower() or result == ""
+            )
 
     @pytest.mark.asyncio
     async def test_run_tool_not_found(self, parser):
@@ -297,7 +301,9 @@ def test_another():
         # Mock external tool execution to avoid actual tool calls
         # Use AsyncMock for async methods
         with patch.object(parser, "_run_external_tool", new=AsyncMock(return_value="")):
-            with patch.object(parser, "_scan_for_security_issues", new=AsyncMock(return_value="")):
+            with patch.object(
+                parser, "_scan_for_security_issues", new=AsyncMock(return_value="")
+            ):
                 # validate is now async, so await it
                 await parser.validate(test_files, "python")
 
@@ -359,7 +365,9 @@ class TestPublicAPI:
                 "agents.testgen_agent.testgen_response_handler.DefaultResponseParser._scan_for_security_issues",
                 return_value="",
             ):
-                result = await parse_llm_response(response, "python", parser_type="default")
+                result = await parse_llm_response(
+                    response, "python", parser_type="default"
+                )
 
                 assert isinstance(result, dict)
                 assert "test_file.py" in result
@@ -394,7 +402,9 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_tool_execution_file_creation_error(self, parser):
         """Test handling of file creation errors during tool execution."""
-        with patch("tempfile.NamedTemporaryFile", side_effect=OSError("Permission denied")):
+        with patch(
+            "tempfile.NamedTemporaryFile", side_effect=OSError("Permission denied")
+        ):
             result = await parser._run_tool(["flake8"], "test.py", "linter")
 
             # Should handle error gracefully
@@ -414,7 +424,9 @@ class TestErrorHandling:
 
     def test_xml_parsing_malformed(self, parser):
         """Test XML parsing with malformed XML."""
-        malformed_xml = '<tests><file name="test.py">content</file>'  # Missing closing tag
+        malformed_xml = (
+            '<tests><file name="test.py">content</file>'  # Missing closing tag
+        )
 
         # Should fall back to single file mode
         result = parser.parse(malformed_xml, "python")
@@ -436,7 +448,9 @@ class TestComplianceMode:
         filename = "test.py"
 
         # Use _scan_for_security_issues which exists
-        result = await parser._scan_for_security_issues(filename, sensitive_code, "python")
+        result = await parser._scan_for_security_issues(
+            filename, sensitive_code, "python"
+        )
 
         # Should detect sensitive data
         assert isinstance(result, str)

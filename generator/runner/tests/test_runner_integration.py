@@ -92,7 +92,9 @@ class TestRunnerIntegration(unittest.IsolatedAsyncioTestCase):
         self.patch_metric_pass_rate = patch("runner.runner_core.RUN_PASS_RATE.set")
         self.mock_run_pass_rate = self.patch_metric_pass_rate.start()
 
-        self.patch_metric_coverage = patch("runner.runner_core.RUN_COVERAGE_PERCENT.set")
+        self.patch_metric_coverage = patch(
+            "runner.runner_core.RUN_COVERAGE_PERCENT.set"
+        )
         self.mock_run_coverage = self.patch_metric_coverage.start()
 
         self.patch_metric_task_status = patch("runner.runner_core.RUNNER_TASK_STATUS")
@@ -231,7 +233,9 @@ class TestRunnerIntegration(unittest.IsolatedAsyncioTestCase):
 
         # Check that the audit log was called
         self.mock_log_audit_event.assert_called()
-        self.assertEqual(self.mock_log_audit_event.call_args[1]["action"], "TestRunCompleted")
+        self.assertEqual(
+            self.mock_log_audit_event.call_args[1]["action"], "TestRunCompleted"
+        )
 
     async def test_backend_abstraction_conflict(self):
         """

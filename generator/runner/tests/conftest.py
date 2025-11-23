@@ -44,7 +44,9 @@ import asyncio
 
 # === 4. Pytest config & Fixtures ===
 import pytest
-from runner import llm_client  # Import the module namespace to access the global variable
+from runner import (
+    llm_client,
+)  # Import the module namespace to access the global variable
 
 
 def pytest_configure(config):

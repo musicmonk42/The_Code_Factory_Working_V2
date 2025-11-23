@@ -56,7 +56,9 @@ except ImportError:
         extra={"operation": "audit_log_import_fail"},
     )
 
-    async def log_action(*args, **kwargs):  # Make dummy async to match expected signature
+    async def log_action(
+        *args, **kwargs
+    ):  # Make dummy async to match expected signature
         logging.info(
             f"Dummy log_action: {args}, {kwargs}",
             extra={"operation": "dummy_log_action"},
@@ -145,7 +147,9 @@ class AWSSecretsManager(SecretManager):
 
     async def get_secret(self, secret_name: str) -> Optional[bytes]:
         try:
-            response = await asyncio.to_thread(self._client.get_secret_value, SecretId=secret_name)
+            response = await asyncio.to_thread(
+                self._client.get_secret_value, SecretId=secret_name
+            )
 
             secret_value: Optional[bytes] = None
             if "SecretString" in response:
@@ -154,7 +158,9 @@ class AWSSecretsManager(SecretManager):
                 secret_value = response["SecretBinary"]
 
             if secret_value:
-                self.logger.debug(f"Secret '{secret_name}' retrieved from AWS Secrets Manager.")
+                self.logger.debug(
+                    f"Secret '{secret_name}' retrieved from AWS Secrets Manager."
+                )
                 await log_action(
                     "secret_access",
                     secret_name=secret_name,
@@ -279,7 +285,9 @@ class GCPSecretManager(SecretManager):
             secret_value = response.payload.data
 
             if secret_value:
-                self.logger.debug(f"Secret '{secret_name}' retrieved from GCP Secret Manager.")
+                self.logger.debug(
+                    f"Secret '{secret_name}' retrieved from GCP Secret Manager."
+                )
                 await log_action(
                     "secret_access",
                     secret_name=secret_name,
@@ -288,7 +296,9 @@ class GCPSecretManager(SecretManager):
                 )
                 return secret_value
             else:
-                self.logger.warning(f"Secret '{secret_name}' from GCP Secret Manager is empty.")
+                self.logger.warning(
+                    f"Secret '{secret_name}' from GCP Secret Manager is empty."
+                )
                 await log_action(
                     "secret_access",
                     secret_name=secret_name,
@@ -363,7 +373,9 @@ class VaultSecretManager(SecretManager):
                 "hvac library not found, cannot use VaultSecretManager."
             )
         if not url or not token:
-            raise SecretManagerConfigurationError("Vault URL and token must be provided.")
+            raise SecretManagerConfigurationError(
+                "Vault URL and token must be provided."
+            )
         self._client = hvac.Client(url=url, token=token)
         self._mount_point = mount_point
         self._prod_ready = True
@@ -384,7 +396,9 @@ class VaultSecretManager(SecretManager):
             if secret_value:
                 # Vault returns strings, convert to bytes
                 secret_value = secret_value.encode("utf-8")
-                self.logger.debug(f"Secret '{secret_name}' retrieved from HashiCorp Vault.")
+                self.logger.debug(
+                    f"Secret '{secret_name}' retrieved from HashiCorp Vault."
+                )
                 await log_action(
                     "secret_access",
                     secret_name=secret_name,
@@ -476,7 +490,9 @@ class DummySecretManager(SecretManager):
             source="dummy_secret_manager",
             status="not_available",
         )
-        raise SecretNotFoundError(f"Dummy secret manager: secret '{secret_name}' not available.")
+        raise SecretNotFoundError(
+            f"Dummy secret manager: secret '{secret_name}' not available."
+        )
 
     @property
     def is_production_ready(self) -> bool:
@@ -488,7 +504,9 @@ class DummySecretManager(SecretManager):
 _secret_manager: SecretManager
 
 # Parse rate limit settings from environment variables with defaults
-SECRET_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("SECRET_RATE_LIMIT_WINDOW_SECONDS", "60"))
+SECRET_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("SECRET_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
 SECRET_MAX_ATTEMPTS_PER_WINDOW = int(os.getenv("SECRET_MAX_ATTEMPTS_PER_WINDOW", "10"))
 SECRET_BURST_LIMIT = int(os.getenv("SECRET_BURST_LIMIT", "5"))
 
@@ -496,7 +514,9 @@ if os.getenv("USE_AWS_SECRETS", "false").lower() == "true":
     aws_region = os.getenv("AWS_REGION")
     try:
         _secret_manager = AWSSecretsManager(region_name=aws_region)
-        logger.info(f"Configured to use AWSSecretsManager in region: {aws_region or 'default'}.")
+        logger.info(
+            f"Configured to use AWSSecretsManager in region: {aws_region or 'default'}."
+        )
     except SecretManagerConfigurationError as e:
         logger.critical(
             f"Failed to configure AWSSecretsManager: {e}. Falling back to DummySecretManager.",
@@ -535,7 +555,9 @@ else:
 
 # --- Production Guardrail with Dev Mode Bypass ---
 # Check for explicit dev mode bypass
-DEV_MODE_BYPASS = os.getenv("AUDIT_DEV_MODE_ALLOW_INSECURE_SECRETS", "false").lower() == "true"
+DEV_MODE_BYPASS = (
+    os.getenv("AUDIT_DEV_MODE_ALLOW_INSECURE_SECRETS", "false").lower() == "true"
+)
 PYTHON_ENV = os.getenv("PYTHON_ENV", "development").lower()
 
 if PYTHON_ENV == "production" and not _secret_manager.is_production_ready:
@@ -591,7 +613,9 @@ async def _get_secret_with_retries_and_rate_limit(
             status="rate_limited",
             reason="too_many_attempts",
         )
-        raise SecretAccessRateLimitExceeded(f"Rate limit exceeded for secret '{secret_name}'.")
+        raise SecretAccessRateLimitExceeded(
+            f"Rate limit exceeded for secret '{secret_name}'."
+        )
 
     attempt = 0
     while attempt < max_retries:
@@ -617,7 +641,9 @@ async def _get_secret_with_retries_and_rate_limit(
                     status="failed_after_retries",
                     error=str(e),
                 )
-                raise SecretError(f"Failed to retrieve secret '{secret_name}': {e}") from e
+                raise SecretError(
+                    f"Failed to retrieve secret '{secret_name}': {e}"
+                ) from e
 
             delay = initial_delay * (2 ** (attempt - 1))
             logger.warning(
@@ -653,7 +679,9 @@ async def aget_hsm_pin() -> str:
     Raises SecretError if the PIN cannot be retrieved.
     """
     try:
-        hsm_pin_bytes = await _get_secret_with_retries_and_rate_limit("AUDIT_CRYPTO_HSM_PIN")
+        hsm_pin_bytes = await _get_secret_with_retries_and_rate_limit(
+            "AUDIT_CRYPTO_HSM_PIN"
+        )
         if not hsm_pin_bytes:
             logger.critical(
                 "HSM PIN (AUDIT_CRYPTO_HSM_PIN) is missing or could not be retrieved. HSM operations will fail."
@@ -663,7 +691,9 @@ async def aget_hsm_pin() -> str:
         return hsm_pin_bytes.decode("utf-8")
     # --- FIX: Swapped SecretError and Exception blocks ---
     except SecretError as e:
-        logger.critical(f"Failed to get HSM PIN: {e}. HSM operations will fail.", exc_info=True)
+        logger.critical(
+            f"Failed to get HSM PIN: {e}. HSM operations will fail.", exc_info=True
+        )
         raise ValueError(f"HSM PIN not found or accessible: {e}") from e
     except Exception as e:
         logger.critical(
@@ -691,7 +721,9 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
     try:
         secret_bytes = base64.b64decode(fallback_secret_bytes)
         if len(secret_bytes) < 16:  # Ensure a reasonable minimum length for HMAC
-            logger.error("Decoded fallback HMAC secret is too short. Must be at least 16 bytes.")
+            logger.error(
+                "Decoded fallback HMAC secret is too short. Must be at least 16 bytes."
+            )
             await log_action(
                 "secret_access",
                 secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64",
@@ -712,7 +744,9 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
             status="decoding_error",
             error=str(e),
         )
-        raise SecretDecodingError(f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}") from e
+        raise SecretDecodingError(
+            f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}"
+        ) from e
 
 
 async def aget_kms_master_key_ciphertext_blob() -> bytes:
@@ -729,14 +763,18 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
         logger.critical(
             "Software key master encryption key (AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64) is missing or could not be retrieved."
         )
-        raise SecretNotFoundError("Software key master encryption key not found or accessible.")
+        raise SecretNotFoundError(
+            "Software key master encryption key not found or accessible."
+        )
 
     try:
         ciphertext_blob = base64.b64decode(encrypted_data_key_bytes)
         logger.debug("KMS master key ciphertext blob successfully retrieved.")
         return ciphertext_blob
     except Exception as e:
-        logger.critical(f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True)
+        logger.critical(
+            f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True
+        )
         await log_action(
             "secret_access",
             secret_name="AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64",
@@ -764,7 +802,9 @@ def get_hsm_pin() -> str:
         return loop.run_until_complete(aget_hsm_pin())
     # --- FIX 4: Only catch RuntimeError, let SecretError propagate ---
     except RuntimeError as e:
-        logger.critical(f"Error in sync get_hsm_pin (no event loop?): {e}", exc_info=True)
+        logger.critical(
+            f"Error in sync get_hsm_pin (no event loop?): {e}", exc_info=True
+        )
         raise SecretError(f"Failed to run async get_hsm_pin: {e}") from e
 
 
@@ -819,4 +859,6 @@ def get_kms_master_key_ciphertext_blob() -> bytes:
             f"Error in sync get_kms_master_key_ciphertext_blob (no event loop?): {e}",
             exc_info=True,
         )
-        raise SecretError(f"Failed to run async get_kms_master_key_ciphertext_blob: {e}") from e
+        raise SecretError(
+            f"Failed to run async get_kms_master_key_ciphertext_blob: {e}"
+        ) from e

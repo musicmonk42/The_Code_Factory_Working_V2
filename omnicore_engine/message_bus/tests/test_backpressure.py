@@ -361,7 +361,9 @@ if __name__ == "__main__":
     print("Running Async Integration Tests")
     print("=" * 70)
 
-    integration_suite = unittest.TestLoader().loadTestsFromTestCase(TestBackpressureIntegration)
+    integration_suite = unittest.TestLoader().loadTestsFromTestCase(
+        TestBackpressureIntegration
+    )
     for test in integration_suite:
         test_method = getattr(test, test._testMethodName)
         if asyncio.iscoroutinefunction(test_method):

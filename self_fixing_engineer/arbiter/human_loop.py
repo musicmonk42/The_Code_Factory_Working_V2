@@ -86,7 +86,9 @@ except ImportError:
             if "timestamp" not in entry_copy:
                 entry_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
             self.feedback_entries.append(entry_copy)
-            logger.debug(f"DummyDBClient: Saved entry. Total entries: {len(self.feedback_entries)}")
+            logger.debug(
+                f"DummyDBClient: Saved entry. Total entries: {len(self.feedback_entries)}"
+            )
 
         async def get_feedback_entries(
             self, query: Optional[Dict[str, Any]] = None
@@ -151,7 +153,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
@@ -185,11 +189,15 @@ class HumanInLoopConfig(BaseModel):
     EMAIL_ENABLED: bool = Field(False, description="Enable email notifications.")
     EMAIL_SMTP_SERVER: Optional[str] = Field(None, description="SMTP server address.")
     EMAIL_SMTP_PORT: int = Field(587, description="SMTP server port.")
-    EMAIL_SMTP_USER: Optional[str] = Field(None, description="SMTP user for authentication.")
+    EMAIL_SMTP_USER: Optional[str] = Field(
+        None, description="SMTP user for authentication."
+    )
     EMAIL_SMTP_PASSWORD: Optional[str] = Field(
         None, description="SMTP password for authentication."
     )
-    EMAIL_SENDER: str = Field("no-reply@yourdomain.com", description="Email sender address.")
+    EMAIL_SENDER: str = Field(
+        "no-reply@yourdomain.com", description="Email sender address."
+    )
     EMAIL_USE_TLS: bool = Field(True, description="Use TLS for SMTP connection.")
     EMAIL_RECIPIENTS: Dict[str, str] = Field(
         default_factory=dict, description="Map of roles to email addresses."
@@ -197,13 +205,19 @@ class HumanInLoopConfig(BaseModel):
     SLACK_WEBHOOK_URL: Optional[str] = Field(
         None, description="Slack webhook URL for notifications."
     )
-    DEFAULT_TIMEOUT_SECONDS: int = Field(300, description="Default timeout for approval requests.")
+    DEFAULT_TIMEOUT_SECONDS: int = Field(
+        300, description="Default timeout for approval requests."
+    )
     IS_PRODUCTION: bool = Field(False, description="Flag for production environment.")
-    RETRY_DELAY_SECONDS: int = Field(5, description="Delay between notification retries.")
+    RETRY_DELAY_SECONDS: int = Field(
+        5, description="Delay between notification retries."
+    )
     MAX_NOTIFICATION_RETRIES: int = Field(
         3, description="Maximum number of retries for a notification."
     )
-    SLACK_AUTH_TOKEN: Optional[str] = Field(None, description="Slack OAuth token for API calls.")
+    SLACK_AUTH_TOKEN: Optional[str] = Field(
+        None, description="Slack OAuth token for API calls."
+    )
 
     @model_validator(mode="before")
     def validate_production_email_config(cls, values):
@@ -261,13 +275,17 @@ class WebSocketManager:
     """A minimal stub for a WebSocket manager to allow for dependency injection."""
 
     async def send_json(self, data: Dict[str, Any]) -> None:
-        logger.info(f"WebSocketManager: Sending JSON to UI: {json.dumps(data)[:150]}...")
+        logger.info(
+            f"WebSocketManager: Sending JSON to UI: {json.dumps(data)[:150]}..."
+        )
         await asyncio.sleep(0.05)
 
 
 # --- FeedbackManager ---
 class FeedbackManager:
-    def __init__(self, db_client: Union[DummyDBClient, PostgresClient, SQLiteClient]) -> None:
+    def __init__(
+        self, db_client: Union[DummyDBClient, PostgresClient, SQLiteClient]
+    ) -> None:
         self.db_client = db_client
         logger.info(f"FeedbackManager initialized with {type(db_client).__name__}.")
 
@@ -283,9 +301,13 @@ class FeedbackManager:
             "request_start_time_utc": datetime.now(timezone.utc).isoformat(),
         }
         await self.db_client.save_feedback_entry(log_entry)
-        logger.info(f"Logged approval request for decision_id: {decision_id}. Status: pending.")
+        logger.info(
+            f"Logged approval request for decision_id: {decision_id}. Status: pending."
+        )
 
-    async def log_approval_response(self, decision_id: str, response: Dict[str, Any]) -> None:
+    async def log_approval_response(
+        self, decision_id: str, response: Dict[str, Any]
+    ) -> None:
         ts = datetime.now(timezone.utc).isoformat()
         await self.db_client.save_feedback_entry(
             {
@@ -308,7 +330,9 @@ class FeedbackManager:
                 "response_details": response,
             },
         )
-        logger.info(f"Logged approval response for decision_id: {decision_id}. Status: resolved.")
+        logger.info(
+            f"Logged approval response for decision_id: {decision_id}. Status: resolved."
+        )
 
     async def record_metric(
         self,
@@ -365,10 +389,14 @@ class HumanInLoop:
         if db_url:
             if db_url.startswith("postgresql") and DB_CLIENTS_AVAILABLE:
                 self._db_client = PostgresClient(db_url=db_url)
-                self.logger.info("HumanInLoop: Using PostgresClient for database interactions.")
+                self.logger.info(
+                    "HumanInLoop: Using PostgresClient for database interactions."
+                )
             elif db_url.startswith("sqlite") and DB_CLIENTS_AVAILABLE:
                 self._db_client = SQLiteClient(db_file=db_url.replace("sqlite:///", ""))
-                self.logger.info("HumanInLoop: Using SQLiteClient for database interactions.")
+                self.logger.info(
+                    "HumanInLoop: Using SQLiteClient for database interactions."
+                )
             else:
                 if self.config.IS_PRODUCTION:
                     raise RuntimeError(
@@ -391,7 +419,9 @@ class HumanInLoop:
                 )
 
         self.feedback_manager = (
-            feedback_manager if feedback_manager else FeedbackManager(db_client=self._db_client)
+            feedback_manager
+            if feedback_manager
+            else FeedbackManager(db_client=self._db_client)
         )
         self.websocket_manager = websocket_manager
         self.audit_hook = audit_hook
@@ -533,14 +563,18 @@ class HumanInLoop:
         if self.config.EMAIL_ENABLED and isinstance(email_recipients, dict):
             target_email = email_recipients.get(role)
             if target_email:
-                tasks.append(self._send_email_approval(decision_id, context, target_email))
+                tasks.append(
+                    self._send_email_approval(decision_id, context, target_email)
+                )
         if self.config.SLACK_WEBHOOK_URL:
             tasks.append(self._post_slack_approval(decision_id, context))
         if self.websocket_manager:
             tasks.append(self._notify_ui_approval(decision_id, context))
         return tasks
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
     async def receive_human_feedback(self, feedback: Dict[str, Any]) -> None:
         """
         Validates and processes human feedback for an approval request.
@@ -659,9 +693,7 @@ class HumanInLoop:
             )
             return
 
-        subject = (
-            f"Approval Required: {context.get('action', 'Unknown Action')} (ID: {decision_id})"
-        )
+        subject = f"Approval Required: {context.get('action', 'Unknown Action')} (ID: {decision_id})"
         body = f"""
 An automated action requires your review.
  
@@ -697,7 +729,9 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
                     await loop.run_in_executor(
                         None, lambda: self._send_sync_email(self.config, recipient, msg)
                     )
-                self.logger.info(f"Email notification for {decision_id} sent to {recipient}.")
+                self.logger.info(
+                    f"Email notification for {decision_id} sent to {recipient}."
+                )
                 await self._handle_hook(
                     self.audit_hook,
                     {
@@ -740,14 +774,18 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
             },
         )
 
-    def _send_sync_email(self, config: HumanInLoopConfig, recipient: str, msg: MIMEText):
+    def _send_sync_email(
+        self, config: HumanInLoopConfig, recipient: str, msg: MIMEText
+    ):
         """Helper for synchronous email sending in a thread pool executor."""
         with smtplib.SMTP(config.EMAIL_SMTP_SERVER, config.EMAIL_SMTP_PORT) as server:
             server.starttls()
             server.login(config.EMAIL_SMTP_USER, config.EMAIL_SMTP_PASSWORD)
             server.send_message(msg)
 
-    async def _post_slack_approval(self, decision_id: str, context: Dict[str, Any]) -> None:
+    async def _post_slack_approval(
+        self, decision_id: str, context: Dict[str, Any]
+    ) -> None:
         """Posts a rich, interactive approval request to a Slack channel."""
         if not self.config.SLACK_WEBHOOK_URL:
             self.logger.debug("Slack webhook URL not configured.")
@@ -806,7 +844,9 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
                         self.config.SLACK_WEBHOOK_URL, json=payload, timeout=10
                     ) as response:
                         response.raise_for_status()
-                        self.logger.info(f"Slack notification for {decision_id} sent successfully.")
+                        self.logger.info(
+                            f"Slack notification for {decision_id} sent successfully."
+                        )
                         await self._handle_hook(
                             self.audit_hook,
                             {
@@ -854,7 +894,9 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
             },
         )
 
-    async def _notify_ui_approval(self, decision_id: str, context: Dict[str, Any]) -> None:
+    async def _notify_ui_approval(
+        self, decision_id: str, context: Dict[str, Any]
+    ) -> None:
         """Sends a real-time approval request to connected WebSocket clients."""
         if not self.websocket_manager:
             self.logger.debug("WebSocket manager not configured.")
@@ -876,7 +918,9 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
         while retries < self.config.MAX_NOTIFICATION_RETRIES:
             try:
                 await self.websocket_manager.send_json(payload)
-                self.logger.info(f"UI notification for {decision_id} sent via WebSocket.")
+                self.logger.info(
+                    f"UI notification for {decision_id} sent via WebSocket."
+                )
                 await self._handle_hook(
                     self.audit_hook,
                     {
@@ -904,12 +948,18 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
             },
         )
 
-    async def _mock_user_approval(self, decision_id: str, decision_context: Dict[str, Any]) -> None:
+    async def _mock_user_approval(
+        self, decision_id: str, decision_context: Dict[str, Any]
+    ) -> None:
         """Simulates human approval with secure mock signature and delay."""
         await self.sleeper(self.mock_approval_delay_seconds)
         approved = self.choice([True, False])
         user = f"simulated_user_{random.randint(1000,9999)}"
-        comment = "Simulated approval looks fine." if approved else "Simulated denial for safety."
+        comment = (
+            "Simulated approval looks fine."
+            if approved
+            else "Simulated denial for safety."
+        )
         timestamp = datetime.now(timezone.utc).isoformat()
         signature = hashlib.sha256(
             f"{decision_id}{user}{approved}{comment}{timestamp}{SECRET_SALT}".encode()
@@ -935,7 +985,9 @@ mock_registry.register(
 )(HumanInLoop)
 
 
-async def get_human_approval(decision_id: str, decision_context: Dict[str, Any]) -> Dict[str, Any]:
+async def get_human_approval(
+    decision_id: str, decision_context: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Plugin entry point to request human approval via the HumanInLoop manager.
     """

@@ -18,7 +18,10 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, ParamSpec, Un
 from arbiter.explainable_reasoner.reasoner_config import ReasonerConfig, SensitiveValue
 
 # Import ReasonerError and ReasonerErrorCode for consistent error handling
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from arbiter.explainable_reasoner.reasoner_errors import (
+    ReasonerError,
+    ReasonerErrorCode,
+)
 from pydantic import BaseModel
 
 
@@ -83,7 +86,9 @@ except ImportError:
             if self.data_type == "image" and self.data:
                 import base64
 
-                data_snippet = f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
+                data_snippet = (
+                    f"base64_preview:{base64.b64encode(self.data).decode()[:50]}..."
+                )
             else:
                 data_snippet = f"bytes_len:{len(self.data)}"
             return {
@@ -135,7 +140,11 @@ def _format_multimodal_for_prompt(
             and data.captioning_result.caption
         ):
             parts.append(f"[Image Caption]: {data.captioning_result.caption}")
-        if data.ocr_result and hasattr(data.ocr_result, "text") and data.ocr_result.text:
+        if (
+            data.ocr_result
+            and hasattr(data.ocr_result, "text")
+            and data.ocr_result.text
+        ):
             truncated_ocr = (
                 data.ocr_result.text[:500] + "..."
                 if len(data.ocr_result.text) > 500
@@ -147,7 +156,11 @@ def _format_multimodal_for_prompt(
     elif isinstance(data, AudioAnalysisResult):
         if hasattr(data, "audio_id"):
             parts.append(f"--- Audio Analysis (ID: {data.audio_id}) ---")
-        if data.transcription and hasattr(data.transcription, "text") and data.transcription.text:
+        if (
+            data.transcription
+            and hasattr(data.transcription, "text")
+            and data.transcription.text
+        ):
             truncated_transcript = (
                 data.transcription.text[:1000] + "..."
                 if len(data.transcription.text) > 1000
@@ -163,14 +176,19 @@ def _format_multimodal_for_prompt(
             parts.append(f"--- Video Analysis (ID: {data.video_id}) ---")
         if hasattr(data, "summary_result") and data.summary_result:
             parts.append(f"[Video Summary]: {data.summary_result}")
-        if hasattr(data, "audio_transcription_result") and data.audio_transcription_result:
+        if (
+            hasattr(data, "audio_transcription_result")
+            and data.audio_transcription_result
+        ):
             parts.append(f"[Audio Transcription]: {data.audio_transcription_result}")
         if hasattr(data, "main_entities") and data.main_entities:
             parts.append(f"[Main Entities]: {', '.join(data.main_entities)}")
     return "\n".join(parts) + "\n" if parts else ""
 
 
-async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> Dict[str, Any]:
+async def _sanitize_context(
+    context: Dict[str, Any], config: ReasonerConfig
+) -> Dict[str, Any]:
     """
     Sanitizes context, handling circular references, multi-modal data, JSON serialization,
     and sensitive information redaction.
@@ -185,7 +203,9 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
         r"[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}",  # Common JWT format
     ]
 
-    redact_keys_lower = [k.lower() for k in config.sanitization_options.get("redact_keys", [])]
+    redact_keys_lower = [
+        k.lower() for k in config.sanitization_options.get("redact_keys", [])
+    ]
     redact_patterns = config.sanitization_options.get("redact_patterns", [])
     compiled_patterns = [
         re.compile(p, re.IGNORECASE) for p in redact_patterns + default_redact_patterns
@@ -200,12 +220,16 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
         if isinstance(value, str):
             for pattern in compiled_patterns:
                 if pattern.search(value):
-                    METRICS["sensitive_data_redaction_total"].labels(redaction_type="pattern").inc()
+                    METRICS["sensitive_data_redaction_total"].labels(
+                        redaction_type="pattern"
+                    ).inc()
                     return "[REDACTED]"
 
         return value
 
-    def _json_serializable_converter(obj: Any, current_depth: int = 0, visited: set = None) -> Any:
+    def _json_serializable_converter(
+        obj: Any, current_depth: int = 0, visited: set = None
+    ) -> Any:
         """
         Recursively converts objects to JSON-serializable types, handling nesting
         depth and circular references.
@@ -247,11 +271,14 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
             sanitized_dict = {}
             for k, v in obj.items():
                 v = _redact_value(k, v)
-                sanitized_dict[k] = _json_serializable_converter(v, current_depth + 1, new_visited)
+                sanitized_dict[k] = _json_serializable_converter(
+                    v, current_depth + 1, new_visited
+                )
             return sanitized_dict
         if isinstance(obj, list):
             return [
-                _json_serializable_converter(elem, current_depth + 1, new_visited) for elem in obj
+                _json_serializable_converter(elem, current_depth + 1, new_visited)
+                for elem in obj
             ]
 
         if MULTI_MODAL_SCHEMAS_AVAILABLE and isinstance(
@@ -260,9 +287,13 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
             return _format_multimodal_for_prompt(obj)
 
         if isinstance(obj, BaseModel):
-            return _json_serializable_converter(obj.model_dump(), current_depth + 1, new_visited)
+            return _json_serializable_converter(
+                obj.model_dump(), current_depth + 1, new_visited
+            )
 
-        _utils_logger.warning(f"Unsupported type {type(obj)} found during sanitization.")
+        _utils_logger.warning(
+            f"Unsupported type {type(obj)} found during sanitization."
+        )
         METRICS["context_validation_errors"].labels(
             error_code=ReasonerErrorCode.CONTEXT_UNSUPPORTED_TYPE
         ).inc()
@@ -288,16 +319,22 @@ async def _sanitize_context(context: Dict[str, Any], config: ReasonerConfig) -> 
 
         max_size_bytes = config.sanitization_options.get("max_size_bytes", 4096)
         if len(context_json.encode("utf-8")) > max_size_bytes:
-            _utils_logger.warning(f"Context size exceeds max_size ({max_size_bytes} bytes).")
+            _utils_logger.warning(
+                f"Context size exceeds max_size ({max_size_bytes} bytes)."
+            )
             return {"_truncated_context_error": "Original context too large."}
 
-        METRICS["reasoner_sanitization_latency_seconds"].observe(time.monotonic() - start_time)
+        METRICS["reasoner_sanitization_latency_seconds"].observe(
+            time.monotonic() - start_time
+        )
         return json.loads(context_json)
 
     except ReasonerError:
         raise
     except Exception as e:
-        _utils_logger.error(f"Unexpected error during context sanitization: {e}", exc_info=True)
+        _utils_logger.error(
+            f"Unexpected error during context sanitization: {e}", exc_info=True
+        )
         raise ReasonerError(
             f"Failed to sanitize context: {e}",
             code=ReasonerErrorCode.CONTEXT_SANITIZATION_FAILED,
@@ -433,13 +470,17 @@ def redact_pii(data):
         for k, v in data.items():
             if isinstance(v, str):
                 # Redact email
-                v = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", v)
+                v = re.sub(
+                    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", v
+                )
                 # Redact phone
                 v = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", v)
             result[k] = v
         return result
     elif isinstance(data, str):
-        data = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", data)
+        data = re.sub(
+            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", data
+        )
         data = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", data)
         return data
     return data

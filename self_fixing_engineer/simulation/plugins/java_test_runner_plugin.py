@@ -130,7 +130,9 @@ def _is_path_under(base: Path, child: Path) -> bool:
     try:
         base_res = base.resolve()
         child_res = child.resolve()
-        return str(child_res).startswith(str(base_res) + os.sep) or child_res == base_res
+        return (
+            str(child_res).startswith(str(base_res) + os.sep) or child_res == base_res
+        )
     except Exception:
         return False
 
@@ -503,7 +505,9 @@ async def run_java_tests(
     """
     project_root_path = Path(project_root).resolve()
     full_test_file_path = (project_root_path / test_file_path).resolve()
-    full_coverage_report_path = (project_root_path / temp_coverage_report_path_relative).resolve()
+    full_coverage_report_path = (
+        project_root_path / temp_coverage_report_path_relative
+    ).resolve()
 
     result: Dict[str, Any] = {
         "success": False,
@@ -519,7 +523,9 @@ async def run_java_tests(
 
     # Path safety
     if not _is_path_under(project_root_path, full_test_file_path):
-        error_msg = f"Invalid test_file_path outside project_root: {full_test_file_path}"
+        error_msg = (
+            f"Invalid test_file_path outside project_root: {full_test_file_path}"
+        )
         logger.error(error_msg)
         result["reason"] = error_msg
         return result
@@ -532,15 +538,15 @@ async def run_java_tests(
 
     # Output path safety (coverage)
     if not _is_path_under(project_root_path, full_coverage_report_path):
-        error_msg = (
-            f"Invalid coverage output path outside project_root: {full_coverage_report_path}"
-        )
+        error_msg = f"Invalid coverage output path outside project_root: {full_coverage_report_path}"
         logger.error(error_msg)
         result["reason"] = error_msg
         return result
 
     # Determine Maven project root (nearest pom.xml upwards from test file), bounded by project_root
-    nearest_pom_root = _find_nearest_pom(full_test_file_path.parent, stop_at=project_root_path)
+    nearest_pom_root = _find_nearest_pom(
+        full_test_file_path.parent, stop_at=project_root_path
+    )
     maven_project_root = nearest_pom_root if nearest_pom_root else project_root_path
     result["maven_project_root"] = str(maven_project_root)
 
@@ -567,7 +573,9 @@ async def run_java_tests(
     enable_pl = bool(kwargs.get("enable_module_selection", True))
     log_max_bytes = int(kwargs.get("log_max_bytes", 262144))
     strict_extra_args = bool(kwargs.get("strict_extra_args", True))
-    java_release = str(kwargs.get("java_release", os.getenv("JAVA_TEST_RUNNER_JAVA_RELEASE", "17")))
+    java_release = str(
+        kwargs.get("java_release", os.getenv("JAVA_TEST_RUNNER_JAVA_RELEASE", "17"))
+    )
 
     extra_args = kwargs.get("extra_maven_args", []) or []
     extra_args = _filter_maven_args(list(extra_args), strict=strict_extra_args)
@@ -600,7 +608,9 @@ async def run_java_tests(
         # Degraded fallback
         artifacts_dir = project_root_path / "atco_artifacts"
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir_obj = tempfile.TemporaryDirectory(prefix="maven_run_", dir=str(artifacts_dir))
+        temp_dir_obj = tempfile.TemporaryDirectory(
+            prefix="maven_run_", dir=str(artifacts_dir)
+        )
         temp_maven_dir = Path(temp_dir_obj.name)
         temp_maven_dir_context = temp_dir_obj
         result["temp_dirs_used"].append(str(temp_maven_dir))
@@ -623,15 +633,23 @@ async def run_java_tests(
         if src_main_java.exists():
             _copytree_compat(src_main_java, temp_maven_dir / "src" / "main" / "java")
         if src_main_resources.exists():
-            _copytree_compat(src_main_resources, temp_maven_dir / "src" / "main" / "resources")
+            _copytree_compat(
+                src_main_resources, temp_maven_dir / "src" / "main" / "resources"
+            )
 
         # Copy test file into standard test location
         try:
-            try_rel = full_test_file_path.relative_to(project_root_path / "src" / "test" / "java")
+            try_rel = full_test_file_path.relative_to(
+                project_root_path / "src" / "test" / "java"
+            )
             dest_test_path = temp_maven_dir / "src" / "test" / "java" / try_rel
         except Exception:
             dest_test_path = (
-                temp_maven_dir / "src" / "test" / "java" / Path(full_test_file_path.name)
+                temp_maven_dir
+                / "src"
+                / "test"
+                / "java"
+                / Path(full_test_file_path.name)
             )
         dest_test_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(full_test_file_path), str(dest_test_path))
@@ -639,15 +657,15 @@ async def run_java_tests(
 
         used_root_for_build = temp_maven_dir
         reports_root_for_readback = temp_maven_dir
-        degraded_note = (
-            " No pom.xml detected; used temporary minimal Maven project. Results may be limited."
-        )
+        degraded_note = " No pom.xml detected; used temporary minimal Maven project. Results may be limited."
     else:
         # Multi-module selection: if a parent pom exists above nearest module within project_root, use -pl
         module_root = nearest_pom_root
         # Search for a parent (aggregator) pom above module_root but not above project_root
         parent_search_start = module_root.parent
-        aggregator_root = _find_nearest_pom(parent_search_start, stop_at=project_root_path)
+        aggregator_root = _find_nearest_pom(
+            parent_search_start, stop_at=project_root_path
+        )
         if enable_pl and aggregator_root and aggregator_root != module_root:
             used_root_for_build = aggregator_root
             # Compute -pl path relative to aggregator
@@ -698,7 +716,9 @@ async def run_java_tests(
                 proc.communicate(), timeout=timeout_seconds
             )
         except asyncio.TimeoutError:
-            logger.warning(f"Maven process timed out after {timeout_seconds}s; terminating...")
+            logger.warning(
+                f"Maven process timed out after {timeout_seconds}s; terminating..."
+            )
             if proc.returncode is None:
                 try:
                     proc.terminate()
@@ -727,9 +747,13 @@ async def run_java_tests(
                 try:
                     artifact_path.write_text(full_log, encoding="utf-8")
                 except Exception as e:
-                    logger.warning(f"Failed to write log artifact to {artifact_path}: {e}")
+                    logger.warning(
+                        f"Failed to write log artifact to {artifact_path}: {e}"
+                    )
             else:
-                logger.error(f"Invalid log artifact path outside project_root: {artifact_path}")
+                logger.error(
+                    f"Invalid log artifact path outside project_root: {artifact_path}"
+                )
 
         # Cap logs in result
         result["raw_log"] = _cap_text_tail(full_log, log_max_bytes)
@@ -779,13 +803,21 @@ async def run_java_tests(
         try:
             full_coverage_report_path.parent.mkdir(parents=True, exist_ok=True)
             if jacoco_xml_candidate.exists():
-                shutil.copyfile(str(jacoco_xml_candidate), str(full_coverage_report_path))
-                logger.info(f"JaCoCo coverage XML report saved to {full_coverage_report_path}")
+                shutil.copyfile(
+                    str(jacoco_xml_candidate), str(full_coverage_report_path)
+                )
+                logger.info(
+                    f"JaCoCo coverage XML report saved to {full_coverage_report_path}"
+                )
             else:
-                logger.warning(f"JaCoCo XML report not found at {jacoco_xml_candidate}.")
+                logger.warning(
+                    f"JaCoCo XML report not found at {jacoco_xml_candidate}."
+                )
                 result["reason"] += " JaCoCo XML report not found."
         except Exception as e:
-            logger.warning(f"Failed to write coverage XML to {full_coverage_report_path}: {e}")
+            logger.warning(
+                f"Failed to write coverage XML to {full_coverage_report_path}: {e}"
+            )
             result["reason"] += f" Failed to write coverage XML: {e}"
 
     except asyncio.CancelledError:
@@ -797,7 +829,9 @@ async def run_java_tests(
                 pass
         raise
     except FileNotFoundError:
-        result["reason"] = "Maven (mvn/mvnw) not found. Please ensure Java and Maven are installed."
+        result["reason"] = (
+            "Maven (mvn/mvnw) not found. Please ensure Java and Maven are installed."
+        )
         logger.error(result["reason"])
     except Exception as e:
         result["reason"] = f"An unexpected error occurred during Maven execution: {e}"
@@ -846,7 +880,9 @@ def register_plugin_entrypoints(register_func: Callable):
 
 if __name__ == "__main__":
 
-    async def _mock_register_test_runner(lang_or_framework: str, runner_info: Dict[str, Any]):
+    async def _mock_register_test_runner(
+        lang_or_framework: str, runner_info: Dict[str, Any]
+    ):
         print(f"Mocked registration for {lang_or_framework}: {runner_info}")
 
     register_plugin_entrypoints(_mock_register_test_runner)
@@ -889,7 +925,9 @@ public class CalculatorTest {
             )
 
             # Coverage output location
-            coverage_rel = Path("atco_artifacts") / "coverage_reports" / "java_coverage_output.xml"
+            coverage_rel = (
+                Path("atco_artifacts") / "coverage_reports" / "java_coverage_output.xml"
+            )
             (temp_root / coverage_rel).parent.mkdir(parents=True, exist_ok=True)
 
             result = await run_java_tests(
@@ -904,7 +942,9 @@ public class CalculatorTest {
                 quiet=False,
                 include_integration_tests=True,
                 timeout_seconds=600,
-                log_artifact_path_relative=str(Path("atco_artifacts") / "logs" / "maven_run.log"),
+                log_artifact_path_relative=str(
+                    Path("atco_artifacts") / "logs" / "maven_run.log"
+                ),
             )
 
             print(f"\nTest Result: {'PASS' if result['success'] else 'FAIL'}")

@@ -27,11 +27,19 @@ from simulation.plugins.dlt_clients.dlt_base import (
 def mock_external_deps(mocker):
     mocker.patch.object(os, "getenv", return_value="false")
     mocker.patch("simulation.plugins.dlt_clients.dlt_base._base_logger")
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.alert_operator", new=AsyncMock())
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531200.0)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.alert_operator", new=AsyncMock()
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531200.0
+    )
     mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.makedirs")
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=False)
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.path.dirname", return_value=".")
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=False
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.os.path.dirname", return_value="."
+    )
     mocker.patch(
         "simulation.plugins.dlt_clients.dlt_base.os.path.abspath",
         side_effect=lambda x: f"/mock/path/{x}",
@@ -97,7 +105,9 @@ async def test_circuit_breaker_trip_and_recovery(mocker):
     assert mock_operation.call_count == 2  # No new call made
 
     # Stage 3: Advance time and verify HALF_OPEN state
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531202.0)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.time.time", return_value=1672531202.0
+    )
     mock_operation.side_effect = None  # Reset mock for successful call
     mock_operation.return_value = "Success"
 
@@ -125,13 +135,17 @@ async def test_audit_manager_integrity_check_success(mocker):
         "timestamp": "2025-01-01T00:00:00.000000",
     }
     event_json_str = json.dumps(event_data, sort_keys=True, ensure_ascii=False)
-    signature = hmac.new(mock_hmac_key, event_json_str.encode("utf-8"), hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        mock_hmac_key, event_json_str.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
     signed_event = {"event": event_data, "signature": signature}
 
     # Mock file reading
     mock_file = mock_open(read_data=json.dumps(signed_event) + "\n")
     mocker.patch("builtins.open", mock_file)
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
+    )
 
     # Create AuditManager instance
     am = AuditManager()
@@ -165,7 +179,9 @@ async def test_audit_manager_integrity_check_failure(mocker):
     # Mock file reading
     mock_file = mock_open(read_data=json.dumps(signed_event) + "\n")
     mocker.patch("builtins.open", mock_file)
-    mocker.patch("simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_base.os.path.exists", return_value=True
+    )
 
     # Mock logger
     mock_logger = MagicMock()

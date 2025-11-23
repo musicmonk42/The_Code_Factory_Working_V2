@@ -24,7 +24,9 @@ try:
 
     AWS_AVAILABLE = True
 except ImportError:
-    logging.warning("boto3 not found. AWS CloudWatch Logs integration will be disabled.")
+    logging.warning(
+        "boto3 not found. AWS CloudWatch Logs integration will be disabled."
+    )
 
 try:
     from google.api_core.exceptions import GoogleAPIError
@@ -209,7 +211,9 @@ class BaseCloudLogger:
         else:
             return 24 * 3600 * 1000
 
-    def _parse_relative_time_range_to_timedelta(self, time_range_str: str) -> datetime.timedelta:
+    def _parse_relative_time_range_to_timedelta(
+        self, time_range_str: str
+    ) -> datetime.timedelta:
         if not time_range_str or len(time_range_str) < 2:
             return datetime.timedelta(hours=24)
         unit = time_range_str[-1].lower()
@@ -237,14 +241,18 @@ class CloudWatchLogger(BaseCloudLogger):
         super().__init__(config)
         self.cloud_type = "AWSCloudWatch"
         aws_config = config.get("aws_cloudwatch", {})
-        self.region_name = aws_config.get("region_name", os.getenv("AWS_REGION", "us-east-1"))
+        self.region_name = aws_config.get(
+            "region_name", os.getenv("AWS_REGION", "us-east-1")
+        )
         self.log_group_name = aws_config.get("log_group_name", "sfe-audit-logs")
         self.log_stream_name = aws_config.get("log_stream_name", "default")
         self.batch_size = aws_config.get("batch_size", 100)
         self.max_query_wait_seconds = int(aws_config.get("max_query_wait_seconds", 90))
 
         if not AWS_AVAILABLE:
-            raise CloudLoggingConfigurationError("boto3 is not installed for AWS.", self.cloud_type)
+            raise CloudLoggingConfigurationError(
+                "boto3 is not installed for AWS.", self.cloud_type
+            )
         if not self.log_group_name:
             raise CloudLoggingConfigurationError(
                 "AWS Log Group Name must be configured.", self.cloud_type
@@ -259,10 +267,14 @@ class CloudWatchLogger(BaseCloudLogger):
             event_str = json.dumps(event)
             # AWS CloudWatch max event size is 256KB, minus a small overhead.
             if len(event_str.encode("utf-8")) > (256 * 1024 - 26):
-                raise CloudLoggingError("Log event size exceeds 256KB limit", self.cloud_type)
+                raise CloudLoggingError(
+                    "Log event size exceeds 256KB limit", self.cloud_type
+                )
             self._log_buffer.append(event)
         except TypeError as e:
-            raise CloudLoggingError(f"Log event is not JSON serializable: {e}", self.cloud_type, e)
+            raise CloudLoggingError(
+                f"Log event is not JSON serializable: {e}", self.cloud_type, e
+            )
 
     async def _get_aws_client(self):
         if self._cw_logs_client is None:
@@ -346,7 +358,9 @@ class CloudWatchLogger(BaseCloudLogger):
         try:
             client = await self._get_aws_client()
             await self._to_thread(
-                lambda: client.describe_log_groups(logGroupNamePrefix=self.log_group_name, limit=1)
+                lambda: client.describe_log_groups(
+                    logGroupNamePrefix=self.log_group_name, limit=1
+                )
             )
             return True, "Successfully connected to AWS CloudWatch Logs."
         except AWSClientError as e:
@@ -373,7 +387,9 @@ class CloudWatchLogger(BaseCloudLogger):
     ) -> List[Dict[str, Any]]:
         client = await self._get_aws_client()
         end_time_s = int(time.time())
-        start_time_s = end_time_s - int(self._parse_relative_time_range_to_ms(time_range) / 1000)
+        start_time_s = end_time_s - int(
+            self._parse_relative_time_range_to_ms(time_range) / 1000
+        )
 
         try:
             query_id = (
@@ -405,7 +421,9 @@ class CloudWatchLogger(BaseCloudLogger):
                         for row in results_response.get("results", [])
                     ]
                 if status in ["Failed", "Cancelled"]:
-                    raise CloudLoggingQueryError(f"Query {status.lower()}", self.cloud_type)
+                    raise CloudLoggingQueryError(
+                        f"Query {status.lower()}", self.cloud_type
+                    )
                 if time.time() - started > self.max_query_wait_seconds:
                     await self._to_thread(lambda: client.stop_query(queryId=query_id))
                     raise CloudLoggingQueryError("Query timed out", self.cloud_type)
@@ -476,8 +494,12 @@ class GCPLogger(BaseCloudLogger):
         except GoogleAPIError as e:
             code = getattr(e, "code", 500)
             if code == 403:
-                raise CloudLoggingAuthError(f"GCP permission denied: {e}", self.cloud_type, e)
-            raise CloudLoggingConnectivityError(f"GCP API Error: {e}", self.cloud_type, e)
+                raise CloudLoggingAuthError(
+                    f"GCP permission denied: {e}", self.cloud_type, e
+                )
+            raise CloudLoggingConnectivityError(
+                f"GCP API Error: {e}", self.cloud_type, e
+            )
         except Exception as e:
             raise CloudLoggingError(
                 f"Unexpected error during GCP health check: {e}", self.cloud_type, e
@@ -521,9 +543,15 @@ class AzureMonitorLogger(BaseCloudLogger):
         self.data_collection_endpoint = azure_config.get(
             "data_collection_endpoint", os.getenv("AZURE_DCE")
         )
-        self.dcr_immutable_id = azure_config.get("dcr_immutable_id", os.getenv("AZURE_DCR_ID"))
-        self.stream_name = azure_config.get("stream_name", os.getenv("AZURE_STREAM_NAME"))
-        self.workspace_id = azure_config.get("workspace_id", os.getenv("AZURE_WORKSPACE_ID"))
+        self.dcr_immutable_id = azure_config.get(
+            "dcr_immutable_id", os.getenv("AZURE_DCR_ID")
+        )
+        self.stream_name = azure_config.get(
+            "stream_name", os.getenv("AZURE_STREAM_NAME")
+        )
+        self.workspace_id = azure_config.get(
+            "workspace_id", os.getenv("AZURE_WORKSPACE_ID")
+        )
         self.batch_size = azure_config.get("batch_size", 500)
 
         if not all(
@@ -536,7 +564,9 @@ class AzureMonitorLogger(BaseCloudLogger):
             raise CloudLoggingConfigurationError(
                 "Required Azure libraries not installed.", self.cloud_type
             )
-        if not all([self.data_collection_endpoint, self.dcr_immutable_id, self.stream_name]):
+        if not all(
+            [self.data_collection_endpoint, self.dcr_immutable_id, self.stream_name]
+        ):
             raise CloudLoggingConfigurationError(
                 "Azure config requires DCE, DCR_ID, and stream_name.", self.cloud_type
             )
@@ -642,5 +672,7 @@ CLOUD_LOGGER_REGISTRY: Dict[str, Type[BaseCloudLogger]] = {
 def get_cloud_logger(cloud_type: str, config: Dict[str, Any]) -> BaseCloudLogger:
     logger_class = CLOUD_LOGGER_REGISTRY.get(cloud_type)
     if not logger_class:
-        raise CloudLoggingConfigurationError(f"Unknown logger type: {cloud_type}", cloud_type)
+        raise CloudLoggingConfigurationError(
+            f"Unknown logger type: {cloud_type}", cloud_type
+        )
     return logger_class(config)

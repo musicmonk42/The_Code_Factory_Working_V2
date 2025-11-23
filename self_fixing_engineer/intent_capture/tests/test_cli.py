@@ -11,7 +11,9 @@ import psutil
 import pytest
 
 # Import what's actually available from the cli module
-from intent_capture.cli import SessionState  # Changed from session_state to SessionState
+from intent_capture.cli import (
+    SessionState,
+)  # Changed from session_state to SessionState
 from intent_capture.cli import (  # These don't appear to exist in the new cli.py:; COMMAND_HELP,; _capture_state,; _save_for_undo,; _restore_from_state,; undo_last_action,; redo_last_undo,; collab_client_listener,; display_markdown,; colored_diff,; process_agent_response,; handle_error,; parse_command,; playback_mode,; show_help_cmd,; display_security_best_practices,; _local_input_worker,; maybe_start_input_thread,
     CollabServer,
     CommandDispatcher,
@@ -89,17 +91,22 @@ def mock_websockets():
     )
     mock_ws.close = AsyncMock()
 
-    with patch(
-        "intent_capture.cli.websockets.serve",
-        AsyncMock(return_value=MagicMock(wait_closed=AsyncMock())),
-    ), patch("intent_capture.cli.websockets.connect", AsyncMock(return_value=mock_ws)):
+    with (
+        patch(
+            "intent_capture.cli.websockets.serve",
+            AsyncMock(return_value=MagicMock(wait_closed=AsyncMock())),
+        ),
+        patch("intent_capture.cli.websockets.connect", AsyncMock(return_value=mock_ws)),
+    ):
         yield mock_ws
 
 
 @pytest.fixture
 def mock_logger():
     """Mock logger to capture logs."""
-    with patch("intent_capture.cli.logging.root.handlers", new=[MagicMock()]) as mock_handlers:
+    with patch(
+        "intent_capture.cli.logging.root.handlers", new=[MagicMock()]
+    ) as mock_handlers:
         yield mock_handlers
 
 

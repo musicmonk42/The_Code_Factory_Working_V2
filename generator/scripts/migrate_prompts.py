@@ -42,7 +42,11 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from jinja2 import Environment, TemplateSyntaxError, select_autoescape  # meta for template parsing
+from jinja2 import (
+    Environment,
+    TemplateSyntaxError,
+    select_autoescape,
+)  # meta for template parsing
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
@@ -199,7 +203,9 @@ class PromptReplacer(ast.NodeTransformer):
         return node
 
 
-def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_code: str) -> str:
+def replace_prompt_dict_in_code(
+    original_code: str, dict_node: ast.Dict, loader_code: str
+) -> str:
     """
     Replaces the PROMPT_TEMPLATES dict in the original code with generated loader code.
     Args:
@@ -215,7 +221,9 @@ def replace_prompt_dict_in_code(original_code: str, dict_node: ast.Dict, loader_
     transformer = PromptReplacer(loader_code)
     new_tree = transformer.visit(tree)
     if not transformer.replaced:
-        raise PromptMigrationError("Failed to find and replace PROMPT_TEMPLATES dict in the code.")
+        raise PromptMigrationError(
+            "Failed to find and replace PROMPT_TEMPLATES dict in the code."
+        )
 
     # ast.unparse requires Python 3.9+
     return ast.unparse(new_tree)
@@ -229,7 +237,9 @@ def lint_template(prompt_content: str) -> Optional[str]:
     Returns:
         Optional[str]: An error message if a syntax error is found, otherwise None.
     """
-    env = Environment(autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]))
+    env = Environment(
+        autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"])
+    )
     try:
         env.parse(prompt_content)
         return None
@@ -294,7 +304,9 @@ def migrate_file(
             fpath = dest_dir / fname
             lint_error = lint_template(value)
             if lint_error:
-                error_msg = f"Syntax error in Jinja2 template for prompt '{key}': {lint_error}"
+                error_msg = (
+                    f"Syntax error in Jinja2 template for prompt '{key}': {lint_error}"
+                )
                 report["errors"].append(error_msg)
                 logger.error(error_msg)
                 continue  # Skip this prompt if it has syntax errors
@@ -347,7 +359,9 @@ def migrate_file(
             except Exception as e:
                 error_msg = f"Failed to write updated code to {source_file}: {e}"
                 report["errors"].append(error_msg)
-                logger.critical(error_msg)  # Critical error as original file could be corrupted
+                logger.critical(
+                    error_msg
+                )  # Critical error as original file could be corrupted
                 raise PromptMigrationError(
                     error_msg
                 )  # Re-raise to stop process if file write fails
@@ -457,7 +471,8 @@ def generate_summary_report(reports: List[Dict[str, Any]]) -> str:
     no_prompts_found: int = sum(
         1
         for r in reports
-        if r["status"] in ["no_prompts_found", "no_prompts_extracted", "no_valid_prompts_extracted"]
+        if r["status"]
+        in ["no_prompts_found", "no_prompts_extracted", "no_valid_prompts_extracted"]
     )
     total_prompts_migrated: int = sum(r["prompts_migrated"] for r in reports)
     total_errors_encountered: int = sum(len(r["errors"]) for r in reports)
@@ -555,7 +570,9 @@ if __name__ == "__main__":
                 self.test_dir.mkdir(exist_ok=True)
                 self.dest_dir = self.test_dir / "prompts"
                 self.test_file = self.test_dir / "test_prompts.py"
-                self.test_file_bak = self.test_file.with_suffix(self.test_file.suffix + ".bak")
+                self.test_file_bak = self.test_file.with_suffix(
+                    self.test_file.suffix + ".bak"
+                )
                 self.initial_content = """
 import os
 from jinja2 import Environment, FileSystemLoader
@@ -633,7 +650,9 @@ def some_other_function():
                 self.assertTrue(self.test_file_bak.exists())
                 self.assertTrue((self.dest_dir / "key_one.j2").exists())
                 self.assertTrue((self.dest_dir / "key_two.j2").exists())
-                self.assertIn("load_prompt_templates_from_disk()", self.test_file.read_text())
+                self.assertIn(
+                    "load_prompt_templates_from_disk()", self.test_file.read_text()
+                )
                 self.assertNotIn("PROMPT_TEMPLATES = {", self.test_file.read_text())
 
             def test_migrate_file_dry_run(self):
@@ -686,7 +705,9 @@ PROMPT_TEMPLATES = {
                 )
                 self.assertEqual(report["status"], "partial_success")
                 self.assertIn("Syntax error in Jinja2 template", report["errors"][0])
-                self.assertEqual(report["prompts_migrated"], 0)  # No prompts migrated due to error
+                self.assertEqual(
+                    report["prompts_migrated"], 0
+                )  # No prompts migrated due to error
 
             if HAS_HYPOTHESIS_TESTS:
                 from hypothesis import given
@@ -711,7 +732,8 @@ PROMPT_TEMPLATES = {
                 async def test_fuzz_extract_and_lint(self, prompts_dict_raw):
                     # Ensure keys are valid Python identifiers for AST unparsing
                     prompts_dict_valid_keys = {
-                        re.sub(r"[^a-zA-Z0-9_]", "_", k): v for k, v in prompts_dict_raw.items()
+                        re.sub(r"[^a-zA-Z0-9_]", "_", k): v
+                        for k, v in prompts_dict_raw.items()
                     }
 
                     # Create content that simulates PROMPT_TEMPLATES

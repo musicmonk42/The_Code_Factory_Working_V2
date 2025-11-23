@@ -144,7 +144,9 @@ def _observe_check(duration: float) -> None:
 def _set_component(component: str, healthy: bool) -> None:
     if METRIC_GUARDIAN_COMPONENT_STATUS:
         try:
-            METRIC_GUARDIAN_COMPONENT_STATUS.labels(component=component).set(1 if healthy else 0)
+            METRIC_GUARDIAN_COMPONENT_STATUS.labels(component=component).set(
+                1 if healthy else 0
+            )
         except Exception:
             pass
 
@@ -184,13 +186,23 @@ class MessageBusGuardian:
         # ------------------------------------------------------------------- #
         #  Configurable thresholds / behaviour
         # ------------------------------------------------------------------- #
-        self.failure_threshold = getattr(settings, "MESSAGE_BUS_GUARDIAN_FAILURE_THRESHOLD", 5)
-        self.healing_timeout = getattr(settings, "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT", 300)
+        self.failure_threshold = getattr(
+            settings, "MESSAGE_BUS_GUARDIAN_FAILURE_THRESHOLD", 5
+        )
+        self.healing_timeout = getattr(
+            settings, "MESSAGE_BUS_GUARDIAN_HEALING_TIMEOUT", 300
+        )
         self.alert_retries = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_RETRIES", 3)
-        self.alert_base_delay = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_BASE_DELAY", 0.5)
-        self.alert_max_delay = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_MAX_DELAY", 10.0)
+        self.alert_base_delay = getattr(
+            settings, "MESSAGE_BUS_GUARDIAN_ALERT_BASE_DELAY", 0.5
+        )
+        self.alert_max_delay = getattr(
+            settings, "MESSAGE_BUS_GUARDIAN_ALERT_MAX_DELAY", 10.0
+        )
         self.alert_jitter = getattr(settings, "MESSAGE_BUS_GUARDIAN_ALERT_JITTER", 0.3)
-        self.enable_critical_failures = getattr(settings, "ENABLE_CRITICAL_FAILURES", True)
+        self.enable_critical_failures = getattr(
+            settings, "ENABLE_CRITICAL_FAILURES", True
+        )
         self.enable_metrics = getattr(settings, "ENABLE_METRICS", True)
 
         logger.info(
@@ -341,7 +353,9 @@ class MessageBusGuardian:
 
         if self.message_bus.redis_bridge:
             health = await self.message_bus.redis_bridge.health()
-            if not health.get("running", False) or not health.get("redis_connected", False):
+            if not health.get("running", False) or not health.get(
+                "redis_connected", False
+            ):
                 report["overall_healthy"] = False
                 report["unhealthy_bridges"] += 1
                 report["critical_errors"].append("Redis bridge unhealthy")
@@ -436,7 +450,9 @@ class MessageBusGuardian:
                 import aiohttp
 
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(webhook_url, json=payload, timeout=5) as resp:
+                    async with session.post(
+                        webhook_url, json=payload, timeout=5
+                    ) as resp:
                         if resp.status == 200:
                             logger.info("Critical alert sent successfully.")
                             if self.enable_metrics:
@@ -458,7 +474,9 @@ class MessageBusGuardian:
                 )
                 if attempt >= self.alert_retries:
                     return
-                jitter = random.uniform(-self.alert_jitter * delay, self.alert_jitter * delay)
+                jitter = random.uniform(
+                    -self.alert_jitter * delay, self.alert_jitter * delay
+                )
                 await asyncio.sleep(max(delay + jitter, 0))
                 delay = min(delay * 2, self.alert_max_delay)
 
@@ -471,6 +489,8 @@ class MessageBusGuardian:
             "running": self.running,
             "failure_counter": self._critical_failure_counter,
             "registered_components": list(self._component_statuses.keys()),
-            "unhealthy_components": [n for n, ok in self._component_statuses.items() if not ok],
+            "unhealthy_components": [
+                n for n, ok in self._component_statuses.items() if not ok
+            ],
             "last_check_timestamp": getattr(self, "_last_check_time", None),
         }

@@ -158,7 +158,9 @@ class TestDeployAgentInit:
         assert db_path.exists()
 
         async with aiosqlite.connect(db_path) as db:
-            async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cursor:
+            async with db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ) as cursor:
                 tables = [row[0] for row in await cursor.fetchall()]
                 assert "history" in tables
 
@@ -445,7 +447,9 @@ class TestHumanApproval:
         """Test human approval when approved via webhook."""
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={"approved": True, "comments": "Looks good!"})
+        mock_response.json = AsyncMock(
+            return_value={"approved": True, "comments": "Looks good!"}
+        )
 
         mock_session_instance = MagicMock()
         mock_session_instance.post = AsyncMock(return_value=mock_response)
@@ -483,8 +487,12 @@ class TestHumanApproval:
         # Patch the instance attribute 'prompt_agent' directly on the 'agent' fixture
         agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
 
-        with patch.object(agent, "request_human_approval", new=AsyncMock(return_value=False)):
-            with pytest.raises(ValueError, match="Configuration rejected by human reviewer"):
+        with patch.object(
+            agent, "request_human_approval", new=AsyncMock(return_value=False)
+        ):
+            with pytest.raises(
+                ValueError, match="Configuration rejected by human reviewer"
+            ):
                 await agent.generate_documentation(
                     target_files=["src/main.py"],
                     targets=["docker"],
@@ -508,7 +516,9 @@ class TestReportGeneration:
             "run_id": "test-123",
             "timestamp": datetime.now().isoformat(),
             "configs": {"docker": "FROM python:3.9\nCMD python app.py"},
-            "validations": {"docker": {"build_status": "success", "lint_status": "passed"}},
+            "validations": {
+                "docker": {"build_status": "success", "lint_status": "passed"}
+            },
             "compliances": {"docker": []},
             "simulations": {"docker": {"status": "success"}},
             "explanations": {"docker": "This is a Python application container"},
@@ -702,11 +712,17 @@ class TestEdgeCases:
             }
             mock_validator = MagicMock()
             mock_validator.validate = AsyncMock(return_value=mock_validation_success)
-            new_agent.validator_registry.get_validator = Mock(return_value=mock_validator)
+            new_agent.validator_registry.get_validator = Mock(
+                return_value=mock_validator
+            )
 
-            new_agent.validate_configs_final = AsyncMock(return_value=mock_validation_success)
+            new_agent.validate_configs_final = AsyncMock(
+                return_value=mock_validation_success
+            )
             new_agent.compliance_check_final = AsyncMock(return_value=[])
-            new_agent.simulate_deployment_final = AsyncMock(return_value={"status": "success"})
+            new_agent.simulate_deployment_final = AsyncMock(
+                return_value={"status": "success"}
+            )
             new_agent.generate_explanation_final = AsyncMock(return_value="Explanation")
             new_agent.prompt_agent = AsyncMock(return_value="Mocked Prompt")
 

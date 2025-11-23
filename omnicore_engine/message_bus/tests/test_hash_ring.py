@@ -42,7 +42,9 @@ class TestConsistentHashRing(unittest.TestCase):
         self.assertEqual(len(ring.ring), 0)
 
         # Should log warning
-        mock_logger.warning.assert_called_with("Initializing ConsistentHashRing with no nodes.")
+        mock_logger.warning.assert_called_with(
+            "Initializing ConsistentHashRing with no nodes."
+        )
 
     def test_initialization_default_replicas(self):
         """Test default replicas value."""

@@ -57,7 +57,9 @@ from generator.audit_log.audit_crypto.secrets import (
 @pytest.fixture(autouse=True)
 def mock_log_action(mocker):
     """Auto-mock the log_action import in the secrets module."""
-    mocker.patch("generator.audit_log.audit_crypto.secrets.log_action", new_callable=AsyncMock)
+    mocker.patch(
+        "generator.audit_log.audit_crypto.secrets.log_action", new_callable=AsyncMock
+    )
 
 
 @pytest.fixture
@@ -71,7 +73,9 @@ def mock_boto3(mocker):
     class MockClientError(Exception):
         def __init__(self, response, operation_name):
             self.response = response
-            super().__init__(f"An error occurred ({response.get('Error', {}).get('Code')})")
+            super().__init__(
+                f"An error occurred ({response.get('Error', {}).get('Code')})"
+            )
 
     mocker.patch.object(secrets, "ClientError", MockClientError)
     mocker.patch.object(secrets, "BotoCoreError", Exception)
@@ -170,19 +174,29 @@ class TestSecretManagerConfiguration:
         # Force reload with default env
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager
+        )
 
     def test_selects_aws(self, mocker, reload_secrets_module, mock_boto3):
-        mocker.patch.dict(os.environ, {"USE_AWS_SECRETS": "true", "AWS_REGION": "us-test-1"})
+        mocker.patch.dict(
+            os.environ, {"USE_AWS_SECRETS": "true", "AWS_REGION": "us-test-1"}
+        )
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.AWSSecretsManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.AWSSecretsManager
+        )
 
     def test_selects_gcp(self, mocker, reload_secrets_module, mock_gcp):
-        mocker.patch.dict(os.environ, {"USE_GCP_SECRETS": "true", "GCP_PROJECT_ID": "test-project"})
+        mocker.patch.dict(
+            os.environ, {"USE_GCP_SECRETS": "true", "GCP_PROJECT_ID": "test-project"}
+        )
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.GCPSecretManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.GCPSecretManager
+        )
 
     def test_selects_vault(self, mocker, reload_secrets_module, mock_hvac):
         mocker.patch.dict(
@@ -195,10 +209,14 @@ class TestSecretManagerConfiguration:
         )
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.VaultSecretManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.VaultSecretManager
+        )
 
     def test_production_guardrail_fails(self, mocker, reload_secrets_module):
-        mocker.patch.dict(os.environ, {"PYTHON_ENV": "production", "AUDIT_LOG_DEV_MODE": "false"})
+        mocker.patch.dict(
+            os.environ, {"PYTHON_ENV": "production", "AUDIT_LOG_DEV_MODE": "false"}
+        )
 
         # --- FIX: Must catch by string match. ---
         # The reloaded module raises a *new* InsecureSecretManagerError class,
@@ -219,9 +237,13 @@ class TestSecretManagerConfiguration:
         )
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager
+        )
 
-    def test_production_guardrail_passes_with_aws(self, mocker, reload_secrets_module, mock_boto3):
+    def test_production_guardrail_passes_with_aws(
+        self, mocker, reload_secrets_module, mock_boto3
+    ):
         mocker.patch.dict(
             os.environ,
             {
@@ -233,7 +255,9 @@ class TestSecretManagerConfiguration:
         )
         reloaded_secrets = reload_secrets_module()
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.AWSSecretsManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.AWSSecretsManager
+        )
 
     def test_aws_init_fails_gracefully(self, mocker, reload_secrets_module):
         # --- FIX: Patch sys.modules to simulate boto3 NOT being installed ---
@@ -244,7 +268,9 @@ class TestSecretManagerConfiguration:
 
         # Falls back to Dummy
         # --- FIX: Assert against the reloaded module's class ---
-        assert isinstance(reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager)
+        assert isinstance(
+            reloaded_secrets._secret_manager, reloaded_secrets.DummySecretManager
+        )
 
 
 # --- FIX: Removed @pytest.mark.asyncio from class ---
@@ -254,7 +280,9 @@ class TestAWSSecretsManager:
     @pytest.mark.asyncio
     async def test_init_fails_without_boto3(self, mocker):
         mocker.patch.object(secrets, "HAS_BOTO3", False)
-        with pytest.raises(SecretManagerConfigurationError, match="boto3 library not found"):
+        with pytest.raises(
+            SecretManagerConfigurationError, match="boto3 library not found"
+        ):
             AWSSecretsManager()
 
     # --- FIX: Added @pytest.mark.asyncio to async test ---
@@ -324,7 +352,9 @@ class TestGCPSecretManager:
     @pytest.mark.asyncio
     async def test_init_fails_without_project_id(self, mocker):
         mocker.patch.object(secrets, "HAS_GCP_SECRET_MANAGER", True)
-        with pytest.raises(SecretManagerConfigurationError, match="project_id must be provided"):
+        with pytest.raises(
+            SecretManagerConfigurationError, match="project_id must be provided"
+        ):
             GCPSecretManager()
 
     # --- FIX: Added @pytest.mark.asyncio to async test ---
@@ -339,7 +369,9 @@ class TestGCPSecretManager:
 
         assert secret == b"gcp_secret"
         mock_gcp.access_secret_version.assert_called_with(
-            request={"name": "projects/test-project/secrets/test_secret/versions/latest"}
+            request={
+                "name": "projects/test-project/secrets/test_secret/versions/latest"
+            }
         )
 
     # --- FIX: Added @pytest.mark.asyncio to async test ---
@@ -370,7 +402,9 @@ class TestVaultSecretManager:
     @pytest.mark.asyncio
     async def test_init_fails_without_hvac(self, mocker):
         mocker.patch.object(secrets, "HAS_HVAC", False)
-        with pytest.raises(SecretManagerConfigurationError, match="hvac library not found"):
+        with pytest.raises(
+            SecretManagerConfigurationError, match="hvac library not found"
+        ):
             VaultSecretManager(url="http://test", token="tok")
 
     # --- FIX: Added @pytest.mark.asyncio to async test ---
@@ -386,8 +420,8 @@ class TestVaultSecretManager:
     # --- FIX: Added @pytest.mark.asyncio to async test ---
     @pytest.mark.asyncio
     async def test_get_secret_not_found(self, mock_hvac):
-        mock_hvac.secrets.kv.v2.read_secret_version.side_effect = secrets.InvalidRequest(
-            "not found"
+        mock_hvac.secrets.kv.v2.read_secret_version.side_effect = (
+            secrets.InvalidRequest("not found")
         )
         manager = VaultSecretManager(url="http://test", token="tok")
         with pytest.raises(SecretNotFoundError):
@@ -396,14 +430,19 @@ class TestVaultSecretManager:
     # --- FIX: Added @pytest.mark.asyncio to async test ---
     @pytest.mark.asyncio
     async def test_get_secret_forbidden(self, mock_hvac):
-        mock_hvac.secrets.kv.v2.read_secret_version.side_effect = secrets.Forbidden("access denied")
+        mock_hvac.secrets.kv.v2.read_secret_version.side_effect = secrets.Forbidden(
+            "access denied"
+        )
         manager = VaultSecretManager(url="http://test", token="tok")
         with pytest.raises(SecretError, match="Vault permission denied"):
             await manager.get_secret("denied")
 
     # --- FIX: Removed @pytest.mark.asyncio from sync test ---
     def test_is_production_ready(self):
-        assert VaultSecretManager(url="http://test", token="tok").is_production_ready is True
+        assert (
+            VaultSecretManager(url="http://test", token="tok").is_production_ready
+            is True
+        )
 
 
 # --- FIX: Removed @pytest.mark.asyncio from class ---
@@ -437,7 +476,9 @@ class TestGetSecretWithRetries:
 
     async def test_success_first_try(self):
         self.mock_manager.get_secret.return_value = b"success"
-        result = await _get_secret_with_retries_and_rate_limit("my_secret", max_retries=3)
+        result = await _get_secret_with_retries_and_rate_limit(
+            "my_secret", max_retries=3
+        )
         assert result == b"success"
         self.mock_manager.get_secret.assert_called_once_with("my_secret")
 
@@ -445,7 +486,9 @@ class TestGetSecretWithRetries:
         mocker.patch.object(asyncio, "sleep", AsyncMock())  # Speed up retry
         self.mock_manager.get_secret.side_effect = [SecretError("fail 1"), b"success"]
 
-        result = await _get_secret_with_retries_and_rate_limit("my_secret", max_retries=3)
+        result = await _get_secret_with_retries_and_rate_limit(
+            "my_secret", max_retries=3
+        )
 
         assert result == b"success"
         assert self.mock_manager.get_secret.call_count == 2
@@ -508,7 +551,9 @@ class TestPublicAsyncAPI:
 
     async def test_aget_hsm_pin_secret_error(self):
         self.mock_manager.get_secret.side_effect = SecretError("AWS fail")
-        with pytest.raises(ValueError, match="HSM PIN not found or accessible: .*AWS fail"):
+        with pytest.raises(
+            ValueError, match="HSM PIN not found or accessible: .*AWS fail"
+        ):
             await aget_hsm_pin()
 
     # --- aget_fallback_hmac_secret ---
@@ -517,7 +562,9 @@ class TestPublicAsyncAPI:
         self.mock_manager.get_secret.return_value = b64_secret
         secret = await aget_fallback_hmac_secret()
         assert secret == b"a_very_long_secret_key_16_bytes"
-        self.mock_manager.get_secret.assert_called_with("AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64")
+        self.mock_manager.get_secret.assert_called_with(
+            "AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64"
+        )
 
     async def test_aget_fallback_hmac_secret_not_found(self):
         self.mock_manager.get_secret.return_value = None
@@ -587,7 +634,9 @@ class TestPublicSyncAPI:
 
     @pytest.mark.asyncio
     async def test_get_hsm_pin_fails_in_async_context(self):
-        with pytest.raises(SecretError, match="Cannot call sync get_hsm_pin from an async context"):
+        with pytest.raises(
+            SecretError, match="Cannot call sync get_hsm_pin from an async context"
+        ):
             get_hsm_pin()
 
     @pytest.mark.asyncio

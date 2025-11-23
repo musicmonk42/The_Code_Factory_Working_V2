@@ -73,7 +73,9 @@ def mock_crypto_provider():
     provider = MagicMock(name="MockCryptoProvider")
     provider.sign = AsyncMock(name="sign", return_value=b"mock-signature-bytes")
     provider.verify = AsyncMock(name="verify", return_value=True)
-    provider.rotate_key = AsyncMock(name="rotate_key", return_value="new-mock-key-id-123")
+    provider.rotate_key = AsyncMock(
+        name="rotate_key", return_value="new-mock-key-id-123"
+    )
     return provider
 
 
@@ -127,7 +129,9 @@ def mock_crypto_provider_factory(monkeypatch, mock_crypto_provider):
 def mock_log_action(monkeypatch):
     """Mocks the 'log_action' async function from the factory."""
     mock = AsyncMock(name="log_action")
-    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_ops.log_action", mock)
+    monkeypatch.setattr(
+        "generator.audit_log.audit_crypto.audit_crypto_ops.log_action", mock
+    )
     return mock
 
 
@@ -135,7 +139,9 @@ def mock_log_action(monkeypatch):
 def mock_send_alert(monkeypatch):
     """Mocks the 'send_alert' async function from the factory."""
     mock = AsyncMock(name="send_alert")
-    monkeypatch.setattr("generator.audit_log.audit_crypto.audit_crypto_ops.send_alert", mock)
+    monkeypatch.setattr(
+        "generator.audit_log.audit_crypto.audit_crypto_ops.send_alert", mock
+    )
     return mock
 
 
@@ -219,7 +225,9 @@ class TestUtilityFunctions:
         from generator.audit_log.audit_crypto.audit_crypto_ops import compute_hash
 
         data = b"hello world"
-        expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        expected_hash = (
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        )
         assert compute_hash(data) == expected_hash
 
     def test_compute_hash_invalid_type(self, caplog):
@@ -231,24 +239,34 @@ class TestUtilityFunctions:
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_success(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_compute_hash,
+        )
 
         data = [b"hello", b" ", b"world"]
-        expected_hash = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        expected_hash = (
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        )
         result = await stream_compute_hash(async_gen(data))
         assert result == expected_hash
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_invalid_chunk_type(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_compute_hash,
+        )
 
         data = [b"good", "bad", b"chunk"]
-        with pytest.raises(TypeError, match="All chunks yielded by data_chunks must be bytes"):
+        with pytest.raises(
+            TypeError, match="All chunks yielded by data_chunks must be bytes"
+        ):
             await stream_compute_hash(async_gen(data))
 
     @pytest.mark.asyncio
     async def test_stream_compute_hash_stream_error(self):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_compute_hash
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_compute_hash,
+        )
 
         data = [b"good", b"chunk", RuntimeError("Stream failed")]
         with pytest.raises(RuntimeError, match="Stream failed"):
@@ -285,7 +303,10 @@ class TestSigning:
     async def test_sign_entry_success(
         self, mock_crypto_provider, mock_log_action, sample_entry_data
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import compute_hash, sign_entry
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            compute_hash,
+            sign_entry,
+        )
 
         entry = sample_entry_data
         key_id = "key-1"
@@ -299,7 +320,9 @@ class TestSigning:
         # Check that the provider was called with the correctly serialized data
         expected_signed_dict = entry.copy()
         expected_signed_dict["prev_hash"] = prev_hash
-        expected_signed_data = json.dumps(expected_signed_dict, sort_keys=True).encode("utf-8")
+        expected_signed_data = json.dumps(expected_signed_dict, sort_keys=True).encode(
+            "utf-8"
+        )
 
         mock_crypto_provider.sign.assert_called_once_with(expected_signed_data, key_id)
 
@@ -324,7 +347,9 @@ class TestSigning:
             ({}, "key-1", 123, TypeError),
         ],
     )
-    async def test_sign_entry_invalid_types(self, invalid_entry, key, p_hash, expected_error):
+    async def test_sign_entry_invalid_types(
+        self, invalid_entry, key, p_hash, expected_error
+    ):
         from generator.audit_log.audit_crypto.audit_crypto_ops import sign_entry
 
         with pytest.raises(expected_error):
@@ -377,7 +402,9 @@ class TestSigning:
 
         mock_crypto_provider.sign.side_effect = Exception("boom")
 
-        with pytest.raises(CryptoOperationError, match="Unexpected error during signing: boom"):
+        with pytest.raises(
+            CryptoOperationError, match="Unexpected error during signing: boom"
+        ):
             await sign_entry(sample_entry_data, "key-1", "hash")
 
         # Check error metric
@@ -398,7 +425,9 @@ class TestSigning:
         key_id = "key-stream"
         prev_hash = "prev-hash-stream"
 
-        result = await stream_sign_entry(async_gen(stream_data), metadata, key_id, prev_hash)
+        result = await stream_sign_entry(
+            async_gen(stream_data), metadata, key_id, prev_hash
+        )
 
         assert result == base64.b64encode(b"mock-signature-bytes").decode("utf-8")
 
@@ -407,7 +436,9 @@ class TestSigning:
         expected_signed_dict = metadata.copy()
         expected_signed_dict["data_hash"] = data_hash
         expected_signed_dict["prev_hash"] = prev_hash
-        expected_signed_data = json.dumps(expected_signed_dict, sort_keys=True).encode("utf-8")
+        expected_signed_data = json.dumps(expected_signed_dict, sort_keys=True).encode(
+            "utf-8"
+        )
 
         mock_crypto_provider.sign.assert_called_once_with(expected_signed_data, key_id)
 
@@ -424,13 +455,17 @@ class TestSigning:
         )
 
     @pytest.mark.asyncio
-    async def test_stream_sign_entry_hash_failure(self, mock_metrics, sample_stream_metadata):
+    async def test_stream_sign_entry_hash_failure(
+        self, mock_metrics, sample_stream_metadata
+    ):
         from generator.audit_log.audit_crypto.audit_crypto_ops import stream_sign_entry
 
         stream_data = [b"chunk1", TypeError("invalid chunk")]
 
         with pytest.raises(CryptoOperationError, match="Failed to hash data stream"):
-            await stream_sign_entry(async_gen(stream_data), sample_stream_metadata, "key-1", "hash")
+            await stream_sign_entry(
+                async_gen(stream_data), sample_stream_metadata, "key-1", "hash"
+            )
 
         mock_metrics.labels.assert_called_once_with(
             type="StreamingHashFail", provider_type="utility", operation="stream_sign"
@@ -582,7 +617,9 @@ class TestVerification:
     async def test_stream_verify_entry_success(
         self, mock_crypto_provider, mock_log_action, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_verify_entry,
+        )
 
         stream_data = [b"chunk1", b"chunk2"]
         metadata = sample_stream_metadata.copy()
@@ -597,9 +634,13 @@ class TestVerification:
         # This is the entry that gets verified
         expected_verified_dict = metadata.copy()
         expected_verified_dict["data_hash"] = data_hash
-        expected_verified_data = json.dumps(expected_verified_dict, sort_keys=True).encode("utf-8")
+        expected_verified_data = json.dumps(
+            expected_verified_dict, sort_keys=True
+        ).encode("utf-8")
 
-        result = await stream_verify_entry(async_gen(stream_data), metadata, signature_b64, key_id)
+        result = await stream_verify_entry(
+            async_gen(stream_data), metadata, signature_b64, key_id
+        )
 
         assert result is True
         mock_crypto_provider.verify.assert_called_once_with(
@@ -620,7 +661,9 @@ class TestVerification:
     async def test_stream_verify_entry_hash_fail(
         self, mock_metrics, mock_crypto_provider, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_verify_entry,
+        )
 
         stream_data = [b"chunk1", RuntimeError("stream read error")]
 
@@ -638,7 +681,9 @@ class TestVerification:
     async def test_stream_verify_entry_invalid_signature(
         self, mock_crypto_provider, mock_metrics, sample_stream_metadata
     ):
-        from generator.audit_log.audit_crypto.audit_crypto_ops import stream_verify_entry
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            stream_verify_entry,
+        )
 
         mock_crypto_provider.verify.side_effect = InvalidSignature("sig mismatch")
 
@@ -848,7 +893,9 @@ class TestRotation:
         result = await rotate_key(algo="ed25519", old_key_id="key-to-retire")
 
         assert result == "new-mock-key-id-123"
-        mock_crypto_provider.rotate_key.assert_called_once_with("key-to-retire", "ed25519")
+        mock_crypto_provider.rotate_key.assert_called_once_with(
+            "key-to-retire", "ed25519"
+        )
 
         mock_log_action.assert_called_once_with(
             "crypto_key_operation",
@@ -875,7 +922,9 @@ class TestRotation:
     ):
         from generator.audit_log.audit_crypto.audit_crypto_ops import rotate_key
 
-        mock_crypto_provider.rotate_key.side_effect = HSMError("HSM key destruction failed")
+        mock_crypto_provider.rotate_key.side_effect = HSMError(
+            "HSM key destruction failed"
+        )
 
         with pytest.raises(HSMError):
             await rotate_key(algo="rsa", old_key_id="key-1")
@@ -944,7 +993,9 @@ class TestFallbackLogic:
         mock_log_action.assert_not_called()  # No log_action on success path for safe_sign
 
         # Check that fallback counters were reset
-        from generator.audit_log.audit_crypto.audit_crypto_ops import _FALLBACK_ATTEMPT_COUNT
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            _FALLBACK_ATTEMPT_COUNT,
+        )
 
         assert _FALLBACK_ATTEMPT_COUNT.get("total") == 0
         assert _FALLBACK_ATTEMPT_COUNT.get("since_alert") == 0
@@ -975,7 +1026,9 @@ class TestFallbackLogic:
         assert result == expected_hmac
 
         # 4. Check state
-        from generator.audit_log.audit_crypto.audit_crypto_ops import _FALLBACK_ATTEMPT_COUNT
+        from generator.audit_log.audit_crypto.audit_crypto_ops import (
+            _FALLBACK_ATTEMPT_COUNT,
+        )
 
         assert _FALLBACK_ATTEMPT_COUNT == {"total": 1, "since_alert": 1}
 
@@ -1029,7 +1082,9 @@ class TestFallbackLogic:
             None,
         )
 
-        with pytest.raises(CryptoOperationError, match="Both primary and fallback signing failed"):
+        with pytest.raises(
+            CryptoOperationError, match="Both primary and fallback signing failed"
+        ):
             await safe_sign(sample_entry_data, "key-1", "hash")
 
         # Check metrics
@@ -1087,7 +1142,9 @@ class TestFallbackLogic:
 
         # 5. Fourth attempt (immediately after): no alert, interval not passed
         mock_send_alert.reset_mock()
-        await safe_sign(sample_entry_data, "key-1", "hash")  # count = 4, since_alert = 1
+        await safe_sign(
+            sample_entry_data, "key-1", "hash"
+        )  # count = 4, since_alert = 1
         mock_send_alert.assert_not_called()
         assert _FALLBACK_ATTEMPT_COUNT == {"total": 4, "since_alert": 1}
 
@@ -1095,8 +1152,12 @@ class TestFallbackLogic:
         mock_time.return_value += 500
 
         # 7. Next 2 attempts: no alert
-        await safe_sign(sample_entry_data, "key-1", "hash")  # count = 5, since_alert = 2
-        await safe_sign(sample_entry_data, "key-1", "hash")  # count = 6, since_alert = 3
+        await safe_sign(
+            sample_entry_data, "key-1", "hash"
+        )  # count = 5, since_alert = 2
+        await safe_sign(
+            sample_entry_data, "key-1", "hash"
+        )  # count = 6, since_alert = 3
 
         # 8. Alert fires again on 3rd attempt *after* interval
         mock_send_alert.assert_called_once_with(ANY, severity="high")
@@ -1113,7 +1174,9 @@ class TestFallbackLogic:
 
         # 1. Configure settings for the test
         mock_settings[1]["MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE"] = 5
-        mock_settings[1]["MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT"] = 100  # Disable noisy alerts
+        mock_settings[1][
+            "MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT"
+        ] = 100  # Disable noisy alerts
 
         # 2. Make primary provider fail
         mock_crypto_provider.sign.side_effect = HSMError("HSM is offline")

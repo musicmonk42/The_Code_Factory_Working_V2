@@ -79,9 +79,10 @@ async def mock_kafka_adapter():
     """Create MeshPubSub with mocked Kafka backend."""
     from mesh.mesh_adapter import MeshPubSub
 
-    with patch("mesh.mesh_adapter.AIOKafkaProducer") as mock_producer, patch(
-        "mesh.mesh_adapter.AIOKafkaConsumer"
-    ) as mock_consumer:
+    with (
+        patch("mesh.mesh_adapter.AIOKafkaProducer") as mock_producer,
+        patch("mesh.mesh_adapter.AIOKafkaConsumer") as mock_consumer,
+    ):
 
         # Setup mocks
         mock_producer_instance = AsyncMock()
@@ -350,9 +351,9 @@ class TestSubscription:
         test_data = {"test": "data"}
         payload = json.dumps(test_data).encode("utf-8")
         signature = adapter._sign_payload(payload) if adapter.hmac_key else ""
-        signed_payload = json.dumps({"sig": signature, "data": payload.decode("utf-8")}).encode(
-            "utf-8"
-        )
+        signed_payload = json.dumps(
+            {"sig": signature, "data": payload.decode("utf-8")}
+        ).encode("utf-8")
 
         if adapter.multi_fernet:
             final_payload = adapter.multi_fernet.encrypt(signed_payload)
@@ -393,7 +394,9 @@ class TestSubscription:
         mock_consumer_instance.__aiter__ = lambda self: ConsumerIterator()
 
         # Patch at module level where it's imported
-        with patch("mesh.mesh_adapter.AIOKafkaConsumer", return_value=mock_consumer_instance):
+        with patch(
+            "mesh.mesh_adapter.AIOKafkaConsumer", return_value=mock_consumer_instance
+        ):
             received = []
 
             # Run the subscription - it will naturally stop after one message
@@ -675,7 +678,10 @@ class TestPerformance:
         await asyncio.sleep(0.1)
 
         # Concurrent publishes
-        tasks = [redis_adapter.publish("concurrent_test", {"id": i}) for i in range(message_count)]
+        tasks = [
+            redis_adapter.publish("concurrent_test", {"id": i})
+            for i in range(message_count)
+        ]
 
         await asyncio.gather(*tasks)
 

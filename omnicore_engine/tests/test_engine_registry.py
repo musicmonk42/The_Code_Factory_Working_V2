@@ -388,7 +388,9 @@ class TestOmniCoreOmega:
         omega = OmniCoreOmega(**mock_components, num_arbiters=1)
 
         mock_components["import_fixer_engine"].initialize = AsyncMock()
-        mock_components["database"].initialize = AsyncMock(side_effect=Exception("DB Error"))
+        mock_components["database"].initialize = AsyncMock(
+            side_effect=Exception("DB Error")
+        )
         mock_components["crew_manager"].start_all = AsyncMock()
 
         with patch.object(omega, "_initialize_arbiters"):
@@ -416,7 +418,9 @@ class TestOmniCoreOmega:
         """Test get_esg delegation"""
         omega = OmniCoreOmega(**mock_components)
 
-        mock_components["plugin_service"].get_esg = AsyncMock(return_value={"score": 85})
+        mock_components["plugin_service"].get_esg = AsyncMock(
+            return_value={"score": 85}
+        )
 
         result = await omega.get_esg("AAPL")
 
@@ -435,7 +439,9 @@ class TestOmniCoreOmega:
         result = await omega.run_sim(["AAPL", "GOOGL"])
 
         assert result == {"simulation": "results"}
-        mock_components["plugin_service"].run_sim.assert_called_once_with(["AAPL", "GOOGL"])
+        mock_components["plugin_service"].run_sim.assert_called_once_with(
+            ["AAPL", "GOOGL"]
+        )
 
 
 class TestCrewConfigLoading:

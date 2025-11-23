@@ -167,7 +167,9 @@ def policy_file_with_signature(tmp_path):
 
     test_key = b"test_hmac_key_12345"
     policy_content_str = json.dumps(policy_data, sort_keys=True, ensure_ascii=False)
-    signature = hmac.new(test_key, policy_content_str.encode("utf-8"), hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        test_key, policy_content_str.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
     policy_data["signature"] = signature
     policy_file = tmp_path / "test_policy.json"
     with open(policy_file, "w") as f:
@@ -263,7 +265,9 @@ def test_init_with_tampered_policy_fails(tmp_path, mock_alert_operator_policy):
     assert "integrity check failed" in str(excinfo.value).lower()
 
 
-def test_enforce_import_restriction_violations(policy_file_with_signature, mock_codebase_data):
+def test_enforce_import_restriction_violations(
+    policy_file_with_signature, mock_codebase_data
+):
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         core_policy_module._last_good_policy = None
         manager = PolicyManager(policy_file_with_signature, enable_hot_reload=False)
@@ -278,7 +282,9 @@ def test_enforce_import_restriction_violations(policy_file_with_signature, mock_
         assert any("core_logic.processor" in v.offending_item for v in core_violations)
 
 
-def test_enforce_dependency_limit_violations(policy_file_with_signature, mock_codebase_data):
+def test_enforce_dependency_limit_violations(
+    policy_file_with_signature, mock_codebase_data
+):
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         core_policy_module._last_good_policy = None
         manager = PolicyManager(policy_file_with_signature, enable_hot_reload=False)
@@ -289,7 +295,9 @@ def test_enforce_dependency_limit_violations(policy_file_with_signature, mock_co
         assert any("exceeding the limit" in v.message for v in dep_violations)
 
 
-def test_enforce_cycle_prevention_violations(policy_file_with_signature, mock_codebase_data):
+def test_enforce_cycle_prevention_violations(
+    policy_file_with_signature, mock_codebase_data
+):
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         core_policy_module._last_good_policy = None
         manager = PolicyManager(policy_file_with_signature, enable_hot_reload=False)
@@ -299,7 +307,9 @@ def test_enforce_cycle_prevention_violations(policy_file_with_signature, mock_co
         assert any("cycle" in v.message.lower() for v in cycle_violations)
 
 
-def test_enforce_naming_convention_violations(policy_file_with_signature, mock_codebase_data):
+def test_enforce_naming_convention_violations(
+    policy_file_with_signature, mock_codebase_data
+):
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         core_policy_module._last_good_policy = None
         manager = PolicyManager(policy_file_with_signature, enable_hot_reload=False)
@@ -319,7 +329,9 @@ def test_enforcement_error_handling(
             manager, "_enforce_import_restriction", side_effect=Exception("Test error")
         ):
             violations = manager.check_architectural_policies(**mock_codebase_data)
-            error_violations = [v for v in violations if "Enforcement error" in v.message]
+            error_violations = [
+                v for v in violations if "Enforcement error" in v.message
+            ]
             assert len(error_violations) > 0
             assert mock_alert_operator_policy.called
 

@@ -35,7 +35,10 @@ try:
     from cryptography.exceptions import InvalidTag
 
     # --- FIX: Import the factory to get mock handles ---
-    from generator.audit_log.audit_crypto import audit_crypto_factory, audit_crypto_provider
+    from generator.audit_log.audit_crypto import (
+        audit_crypto_factory,
+        audit_crypto_provider,
+    )
     from generator.audit_log.audit_crypto.audit_keystore import (
         FileSystemKeyStorageBackend,
         KeyStore,
@@ -493,7 +496,9 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
 
         # Flip a bit in the ciphertext (after nonce, before tag)
         tampered_payload = payload_bytes[:15] + b"\x00" + payload_bytes[16:]
-        data["encrypted_payload_b64"] = base64.b64encode(tampered_payload).decode("utf-8")
+        data["encrypted_payload_b64"] = base64.b64encode(tampered_payload).decode(
+            "utf-8"
+        )
 
         with open(filepath, "w") as f:
             json.dump(data, f)
@@ -559,13 +564,19 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
             self.key_id, self.key_data_bytes, self.algo, self.creation_time, self.status
         )
 
-        self.assertTrue(os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json")))
+        self.assertTrue(
+            os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json"))
+        )
 
         result = await self.keystore.delete_key_file(self.key_id)
 
         self.assertTrue(result)
-        self.assertFalse(os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json")))
-        self.mock_log_action.assert_called_with("key_delete", key_id=self.key_id, success=True)
+        self.assertFalse(
+            os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json"))
+        )
+        self.mock_log_action.assert_called_with(
+            "key_delete", key_id=self.key_id, success=True
+        )
 
     async def test_10_store_key_handles_backend_error(self):
         # Mock the backend to raise an error
@@ -597,7 +608,9 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
             success=False,
             error="Disk full",
         )
-        self.mock_key_store_count.labels.assert_called_with(provider_type="software", status="fail")
+        self.mock_key_store_count.labels.assert_called_with(
+            provider_type="software", status="fail"
+        )
 
 
 if __name__ == "__main__":

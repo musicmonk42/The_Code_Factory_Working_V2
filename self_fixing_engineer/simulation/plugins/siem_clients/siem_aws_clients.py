@@ -12,7 +12,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
 
 import aiohttp
-from pydantic import BaseModel, Field, ValidationError, validator  # Re-import for local schemas
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationError,
+    validator,
+)  # Re-import for local schemas
 
 # Import base classes and utilities from siem_base
 from .siem_base import (
@@ -53,15 +58,27 @@ class AwsCloudWatchConfig(BaseModel):
     """Configuration schema for AWS CloudWatch Logs client."""
 
     region_name: str = Field(..., description="AWS region.")
-    log_group_name: str = Field(..., min_length=1, description="CloudWatch Log Group name.")
+    log_group_name: str = Field(
+        ..., min_length=1, description="CloudWatch Log Group name."
+    )
     log_stream_name: str = Field("default", description="CloudWatch Log Stream name.")
     # New: Explicit control for resource creation in production
-    auto_create_log_group: bool = Field(False, description="Allow auto-creation of log group.")
-    auto_create_log_stream: bool = Field(False, description="Allow auto-creation of log stream.")
+    auto_create_log_group: bool = Field(
+        False, description="Allow auto-creation of log group."
+    )
+    auto_create_log_stream: bool = Field(
+        False, description="Allow auto-creation of log stream."
+    )
     # Secrets for explicit AWS credentials (if not using IAM roles)
-    aws_access_key_id: Optional[str] = None  # Should come from secrets manager/IAM role in prod
-    aws_secret_access_key: Optional[str] = None  # Should come from secrets manager/IAM role in prod
-    aws_credentials_secret_id: Optional[str] = None  # Secret ID for AWS credentials (JSON string)
+    aws_access_key_id: Optional[str] = (
+        None  # Should come from secrets manager/IAM role in prod
+    )
+    aws_secret_access_key: Optional[str] = (
+        None  # Should come from secrets manager/IAM role in prod
+    )
+    aws_credentials_secret_id: Optional[str] = (
+        None  # Secret ID for AWS credentials (JSON string)
+    )
     secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
         default_factory=list
     )  # Prioritized list of secrets backends
@@ -148,7 +165,9 @@ async def alert_operator_http(message: str, level: str = "CRITICAL"):
                 }
                 payload = {
                     "event_action": "trigger",
-                    "routing_key": await SECRETS_MANAGER.get_secret("PAGERDUTY_ROUTING_KEY"),
+                    "routing_key": await SECRETS_MANAGER.get_secret(
+                        "PAGERDUTY_ROUTING_KEY"
+                    ),
                     "payload": {
                         "summary": f"[SIEM ALERT - {level}] {message}",
                         "source": "siem-aws-client",
@@ -208,7 +227,9 @@ class AWSSecretsBackend(SecretsBackend):
     async def get_secret(self, secret_id: str) -> str:
         try:
             # boto3 client methods are typically blocking, run in executor
-            response = await asyncio.to_thread(self.client.get_secret_value, SecretId=secret_id)
+            response = await asyncio.to_thread(
+                self.client.get_secret_value, SecretId=secret_id
+            )
             return response["SecretString"]
         except AWSClientError as e:
             raise SIEMClientConfigurationError(
@@ -232,7 +253,9 @@ class AwsKmsBackend(SecretsBackend):
         try:
             # Decrypts a Base64-encoded ciphertext blob.
             encrypted_data = base64.b64decode(secret_id)
-            response = await asyncio.to_thread(self.client.decrypt, CiphertextBlob=encrypted_data)
+            response = await asyncio.to_thread(
+                self.client.decrypt, CiphertextBlob=encrypted_data
+            )
             return response["Plaintext"].decode("utf-8")
         except AWSClientError as e:
             raise SIEMClientConfigurationError(
@@ -271,7 +294,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
             # The async loading of secrets is moved to _get_aws_client
             # We validate the configuration *as provided*.
 
-            validated_config = AwsCloudWatchConfig(**aws_config_data).dict(exclude_unset=True)
+            validated_config = AwsCloudWatchConfig(**aws_config_data).dict(
+                exclude_unset=True
+            )
         except ValidationError as e:
             _base_logger.critical(
                 f"CRITICAL: Invalid AWS CloudWatch client configuration: {e}. Aborting startup.",
@@ -303,7 +328,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
         self.aws_secret_access_key = validated_config.get("aws_secret_access_key")
 
         # --- FIX: Store secret config for lazy loading ---
-        self.aws_credentials_secret_id = validated_config.get("aws_credentials_secret_id")
+        self.aws_credentials_secret_id = validated_config.get(
+            "aws_credentials_secret_id"
+        )
         self.secrets_providers = validated_config.get("secrets_providers", [])
         self.secrets_provider_config = validated_config.get("secrets_provider_config")
         # --- END FIX ---
@@ -349,7 +376,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
 
                         credentials = json.loads(credentials_json)
                         self.aws_access_key_id = credentials.get("aws_access_key_id")
-                        self.aws_secret_access_key = credentials.get("aws_secret_access_key")
+                        self.aws_secret_access_key = credentials.get(
+                            "aws_secret_access_key"
+                        )
                         if not self.aws_access_key_id or not self.aws_secret_access_key:
                             raise ValueError(
                                 "AWS credentials JSON missing 'aws_access_key_id' or 'aws_secret_access_key'."
@@ -514,7 +543,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
                     )
                 )
             )
-            self.logger.debug(f"Log group {self.log_group_name} exists.", extra=self.logger.extra)
+            self.logger.debug(
+                f"Log group {self.log_group_name} exists.", extra=self.logger.extra
+            )
         except AWSClientError as e:
             if e.response["Error"]["Code"] == "ResourceNotFoundException":
                 if self.auto_create_log_group:
@@ -524,7 +555,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
                     )
                     await asyncio.shield(
                         self._run_blocking_in_executor(
-                            lambda: client.create_log_group(logGroupName=self.log_group_name)
+                            lambda: client.create_log_group(
+                                logGroupName=self.log_group_name
+                            )
                         )
                     )
                     self.logger.info(
@@ -565,7 +598,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
                     )
                 )
             )
-            self.logger.debug(f"Log stream {self.log_stream_name} exists.", extra=self.logger.extra)
+            self.logger.debug(
+                f"Log stream {self.log_stream_name} exists.", extra=self.logger.extra
+            )
         except AWSClientError as e:
             if e.response["Error"]["Code"] == "ResourceNotFoundException":
                 if self.auto_create_log_stream:
@@ -608,10 +643,14 @@ class AwsCloudWatchClient(BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         """Internal logic for sending a log to AWS CloudWatch Logs."""
         # Use the batch logic for a single log to avoid code duplication
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
+            [log_entry]
+        )
         if success:
             return True, "Log sent to AWS CloudWatch Logs."
         else:
@@ -633,7 +672,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
         # The `PutLogEvents` API requires events to be in chronological order.
         sorted_log_events = []
         for entry in log_entries:
-            ts_iso = entry.get("timestamp_utc", datetime.datetime.utcnow().isoformat() + "Z")
+            ts_iso = entry.get(
+                "timestamp_utc", datetime.datetime.utcnow().isoformat() + "Z"
+            )
             try:
                 ts_dt = datetime.datetime.fromisoformat(ts_iso.replace("Z", "+00:00"))
                 ts_ms = int(ts_dt.timestamp() * 1000)
@@ -697,7 +738,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
                     )
                 )
                 if response and response["logStreams"]:
-                    next_sequence_token = response["logStreams"][0].get("uploadSequenceToken")
+                    next_sequence_token = response["logStreams"][0].get(
+                        "uploadSequenceToken"
+                    )
             except AWSClientError as e:
                 self.logger.warning(
                     f"Could not get sequence token for {self.log_stream_name}: {e}. Attempting without it.",
@@ -754,7 +797,10 @@ class AwsCloudWatchClient(BaseSIEMClient):
                 )
                 # Add all logs from this batch to the failed list
                 failed_logs.extend(
-                    [{"error": str(e), "details": "Failed to send batch."} for _ in batch]
+                    [
+                        {"error": str(e), "details": "Failed to send batch."}
+                        for _ in batch
+                    ]
                 )
 
         if failed_logs:
@@ -776,7 +822,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
         """Internal logic for querying logs from AWS CloudWatch Logs Insights."""
         client = await self._get_aws_client()
 
-        end_time_ms = int(datetime.datetime.utcnow().timestamp() * 1000)  # Use UTC timestamp
+        end_time_ms = int(
+            datetime.datetime.utcnow().timestamp() * 1000
+        )  # Use UTC timestamp
         start_time_ms = end_time_ms - self._parse_relative_time_range_to_ms(time_range)
 
         try:
@@ -812,7 +860,8 @@ class AwsCloudWatchClient(BaseSIEMClient):
             )  # Max polling attempts based on client timeout
             attempts = 0
             while (
-                status not in ["Complete", "Failed", "Cancelled"] and attempts < max_poll_attempts
+                status not in ["Complete", "Failed", "Cancelled"]
+                and attempts < max_poll_attempts
             ):
                 await asyncio.sleep(poll_interval)
                 query_results_response = await asyncio.shield(
@@ -848,7 +897,9 @@ class AwsCloudWatchClient(BaseSIEMClient):
                 # Attempt to stop the query to clean up resources
                 try:
                     await asyncio.shield(
-                        self._run_blocking_in_executor(lambda: client.stop_query(queryId=query_id))
+                        self._run_blocking_in_executor(
+                            lambda: client.stop_query(queryId=query_id)
+                        )
                     )
                     self.logger.warning(
                         f"CloudWatch Logs query timed out and was stopped. Query ID: {query_id}",

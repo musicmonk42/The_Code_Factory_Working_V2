@@ -55,11 +55,15 @@ def isolated_metrics():
         "inference_duration_seconds": mock_metric,
     }
 
-    with patch(
-        "arbiter.explainable_reasoner.metrics.METRICS_REGISTRY", new=CollectorRegistry()
-    ) as registry, patch(
-        "arbiter.explainable_reasoner.metrics.METRICS", new=mock_metrics_dict
-    ) as metrics_dict:
+    with (
+        patch(
+            "arbiter.explainable_reasoner.metrics.METRICS_REGISTRY",
+            new=CollectorRegistry(),
+        ) as registry,
+        patch(
+            "arbiter.explainable_reasoner.metrics.METRICS", new=mock_metrics_dict
+        ) as metrics_dict,
+    ):
         # Re-initialize the default metrics into the new, empty dictionary
         # This fixes the KeyError in tests that rely on pre-populated metrics.
         initialize_metrics()

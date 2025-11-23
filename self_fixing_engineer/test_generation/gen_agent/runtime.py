@@ -55,7 +55,9 @@ with contextlib.suppress(ImportError):
             env_file_encoding="utf-8",
             env_prefix="TEST_AGENT_",
         )
-        sessions_dir: Path = Field(default=Path(__file__).parent.parent.resolve() / "sessions")
+        sessions_dir: Path = Field(
+            default=Path(__file__).parent.parent.resolve() / "sessions"
+        )
         tests_output_dir: Path = Field(
             default=Path(__file__).parent.parent.resolve() / "generated_tests"
         )
@@ -85,7 +87,9 @@ if not config:
         _config_source = "Dynaconf"
 
 if not config:
-    logging.warning("Pydantic-settings and Dynaconf not found. Using a simple config class.")
+    logging.warning(
+        "Pydantic-settings and Dynaconf not found. Using a simple config class."
+    )
     config = types.SimpleNamespace(
         llm_provider=os.getenv("TEST_AGENT_LLM_PROVIDER", "openai"),
         llm_model=os.getenv("TEST_AGENT_LLM_MODEL", "gpt-4o"),
@@ -100,7 +104,9 @@ if not config:
         tests_output_dir=Path(
             os.getenv(
                 "TEST_AGENT_TESTS_OUTPUT_DIR",
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), "generated_tests"),
+                os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)), "generated_tests"
+                ),
             )
         ).resolve(),
         test_run_timeout=int(os.getenv("TEST_AGENT_TEST_RUN_TIMEOUT", "120")),
@@ -155,7 +161,9 @@ def _load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
 
     if _Dynaconf:
         try:
-            dc = _Dynaconf(settings_files=[config_file] if config_file else None, environments=True)
+            dc = _Dynaconf(
+                settings_files=[config_file] if config_file else None, environments=True
+            )
             if hasattr(dc, "as_dict"):
                 loaded = dict(dc.as_dict())  # type: ignore
         except Exception:
@@ -196,12 +204,16 @@ def _load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
                 continue
             raw_key = k[5:]  # keep original casing from the env var (after prefix)
             # Find an existing key whose lowercase matches the env key lowercase
-            match = next((ek for ek in existing_keys if ek.lower() == raw_key.lower()), None)
+            match = next(
+                (ek for ek in existing_keys if ek.lower() == raw_key.lower()), None
+            )
             target_key = match if match is not None else raw_key
             # Avoid logging secrets verbatim
             redacted = (
                 "***"
-                if any(s in target_key.lower() for s in ("api_key", "token", "password"))
+                if any(
+                    s in target_key.lower() for s in ("api_key", "token", "password")
+                )
                 else v
             )
             logger.info("Overriding config from env: %s=%s", target_key, redacted)
@@ -388,12 +400,17 @@ def redact_sensitive(data: Any, extra_keys: Optional[set[str]] = None) -> Any:
         redacted_str = re.sub(
             r'("Authorization"\s*:\s*)"Bearer [^"]+"', r'\1"[REDACTED]"', redacted_str
         )
-        redacted_str = re.sub(r'("type"\s*:\s*"service_account")', r'\1"[REDACTED]"', redacted_str)
+        redacted_str = re.sub(
+            r'("type"\s*:\s*"service_account")', r'\1"[REDACTED]"', redacted_str
+        )
         return redacted_str
     if isinstance(data, dict):
         redacted_dict = {}
         for k, v in data.items():
-            if any(sk in k.lower() for sk in sensitive_key_names) or k.lower() in SENSITIVE_KEYS:
+            if (
+                any(sk in k.lower() for sk in sensitive_key_names)
+                or k.lower() in SENSITIVE_KEYS
+            ):
                 redacted_dict[k] = "[REDACTED]"
             elif isinstance(v, str):
                 redacted_dict[k] = redaction_regex.sub("[REDACTED]", v)
@@ -437,7 +454,9 @@ def setup_logging(
             import colorama
 
             colorama.init()
-        console_formatter = logging.Formatter("\033[1;34m[%(levelname)s]\033[0m %(message)s")
+        console_formatter = logging.Formatter(
+            "\033[1;34m[%(levelname)s]\033[0m %(message)s"
+        )
     console_handler.setFormatter(console_formatter)
     console_handler.setLevel(log_level)
     root_logger.addHandler(console_handler)
@@ -479,7 +498,11 @@ def install_package(package_name: str) -> bool:
             [sys.executable, "-m", "pip", "show", package_name]
         ).decode()
         version_line = next(
-            (line for line in version_output.splitlines() if line.startswith("Version:")),
+            (
+                line
+                for line in version_output.splitlines()
+                if line.startswith("Version:")
+            ),
             None,
         )
         version = version_line.split(":")[1].strip() if version_line else "unknown"
@@ -540,7 +563,10 @@ async def ensure_package(package_name: str, is_ci: bool) -> bool:
             return False
         else:
             if install_package(package_name):
-                return importlib.util.find_spec(_normalize_pkg_name(package_name)) is not None
+                return (
+                    importlib.util.find_spec(_normalize_pkg_name(package_name))
+                    is not None
+                )
             else:
                 return False
     return True
@@ -574,7 +600,9 @@ async def run_dependency_check_async(is_ci: bool) -> None:
         else:
             status = "Enabled" if is_installed else "Disabled"
             color = "\033[92m" if is_installed else "\033[91m"
-            summary_messages.append(f"- {pkg.capitalize()} features: {color}{status}\033[0m")
+            summary_messages.append(
+                f"- {pkg.capitalize()} features: {color}{status}\033[0m"
+            )
         if not is_installed:
             logging.warning(
                 f"Required feature dependency '{pkg}' is missing. Functionality will be disabled."
@@ -646,7 +674,8 @@ async def interactive_session_creator(session_name: str) -> Optional[Dict[str, A
     print("\n--- Session Bootstrapper ---")
     print(f"No session file '{session_name}.json' found. Let's create one.")
     spec_format = (
-        input("Enter spec format (e.g., gherkin, openapi, user_story): ").strip() or "gherkin"
+        input("Enter spec format (e.g., gherkin, openapi, user_story): ").strip()
+        or "gherkin"
     )
     print(
         "Paste your specification below. Press Ctrl+D (Unix) or Ctrl+Z then Enter (Windows) when done."
@@ -677,7 +706,9 @@ async def interactive_session_creator(session_name: str) -> Optional[Dict[str, A
                 temp_path.replace(session_path)
                 break
             except PermissionError:
-                logging.warning("Permission error on replacing file. Retrying in 0.5s...")
+                logging.warning(
+                    "Permission error on replacing file. Retrying in 0.5s..."
+                )
                 time.sleep(0.5)
         session_path.chmod(0o600)
         logging.info(f"Successfully created new session file at {session_path}")
@@ -687,7 +718,9 @@ async def interactive_session_creator(session_name: str) -> Optional[Dict[str, A
         return None
 
 
-async def ensure_session_file(session_name: str, is_ci: bool) -> Optional[Dict[str, Any]]:
+async def ensure_session_file(
+    session_name: str, is_ci: bool
+) -> Optional[Dict[str, Any]]:
     """Ensures a session file exists. If not, handles creation based on mode."""
     if "/" in session_name or "\\" in session_name or ".." in session_name:
         raise ValueError("Invalid session name: path traversal attempt.")
@@ -704,7 +737,9 @@ async def ensure_session_file(session_name: str, is_ci: bool) -> Optional[Dict[s
                     session_data = json.load(f)
             return session_data
         except (IOError, json.JSONDecodeError) as e:
-            logging.critical(f"CRITICAL: Error reading session file {session_path}: {e}. Aborting.")
+            logging.critical(
+                f"CRITICAL: Error reading session file {session_path}: {e}. Aborting."
+            )
             if is_ci:
                 sys.exit(1)
             else:
@@ -717,18 +752,24 @@ async def ensure_session_file(session_name: str, is_ci: bool) -> Optional[Dict[s
                     sys.exit(1)
     logging.warning(f"Session file not found: {session_path}")
     if is_ci:
-        logging.critical("CRITICAL: Cannot create session in non-interactive CI mode. Aborting.")
+        logging.critical(
+            "CRITICAL: Cannot create session in non-interactive CI mode. Aborting."
+        )
         sys.exit(1)
     else:
         return await interactive_session_creator(session_name)
 
 
-def ensure_session_file_sync(session_name: str, is_ci: bool) -> Optional[Dict[str, Any]]:
+def ensure_session_file_sync(
+    session_name: str, is_ci: bool
+) -> Optional[Dict[str, Any]]:
     """Synchronous wrapper for ensure_session_file."""
     return asyncio.run(ensure_session_file(session_name, is_ci))
 
 
-async def load_or_create_session_spec(session_path: str, language: str, environment: str):
+async def load_or_create_session_spec(
+    session_path: str, language: str, environment: str
+):
     """Minimal wrapper used by tests; delegates to ensure_session_file()."""
     is_ci = str(environment).lower() in ("ci", "true", "1")
     session_name = Path(session_path).stem
@@ -770,7 +811,9 @@ def init_llm(provider: Optional[str] = None, model: Optional[str] = None) -> Any
         val = getattr(config, key, None)
         return val or os.getenv(env)
 
-    @tenacity.retry(stop=tenacity.stop_after_attempt(2), wait=tenacity.wait_fixed(2), reraise=True)
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(2), wait=tenacity.wait_fixed(2), reraise=True
+    )
     def _init_llm_with_retry(provider: str, model: str) -> Any:
         llm_instance = None
         provider = (provider or "").lower()
@@ -824,7 +867,9 @@ def init_llm(provider: Optional[str] = None, model: Optional[str] = None) -> Any
                 raise ImportError(
                     "Missing 'langchain-community'. Install with: pip install langchain-community"
                 ) from e
-            base_url = _cfg("ollama_base_url", "OLLAMA_BASE_URL") or "http://localhost:11434"
+            base_url = (
+                _cfg("ollama_base_url", "OLLAMA_BASE_URL") or "http://localhost:11434"
+            )
             llm_instance = ChatOllama(model=model, base_url=base_url)
 
         if llm_instance is None:
@@ -860,7 +905,9 @@ def init_llm(provider: Optional[str] = None, model: Optional[str] = None) -> Any
                 return _R()
 
         llm_instance = _Mock()
-        logger.warning("No LLM provider could be initialized. Falling back to a mock LLM.")
+        logger.warning(
+            "No LLM provider could be initialized. Falling back to a mock LLM."
+        )
     elapsed_time = time.perf_counter() - start_time
     logger.debug(f"LLM initialization took {elapsed_time:.4f} seconds.")
     return llm_instance

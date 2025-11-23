@@ -135,7 +135,9 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -177,9 +179,15 @@ def mock_secrets_manager():
 def mock_grpc_channel(monkeypatch):
     """Mock gRPC channel and related components."""
     mock_channel = AsyncMock()
-    mock_secure_channel = patch("grpc.aio.secure_channel", return_value=mock_channel).start()
-    mock_insecure_channel = patch("grpc.aio.insecure_channel", return_value=mock_channel).start()
-    mock_channel_ready = patch.object(mock_channel, "channel_ready", new_callable=AsyncMock).start()
+    mock_secure_channel = patch(
+        "grpc.aio.secure_channel", return_value=mock_channel
+    ).start()
+    mock_insecure_channel = patch(
+        "grpc.aio.insecure_channel", return_value=mock_channel
+    ).start()
+    mock_channel_ready = patch.object(
+        mock_channel, "channel_ready", new_callable=AsyncMock
+    ).start()
     yield mock_channel, mock_secure_channel, mock_insecure_channel, mock_channel_ready
     patch.stopall()
 
@@ -198,9 +206,11 @@ def mock_health_stub(mock_grpc_channel):
 @pytest.fixture
 def mock_prometheus():
     """Mock Prometheus metrics."""
-    with patch("grpc_runner.PLUGIN_HEALTH_GAUGE") as mock_gauge, patch(
-        "grpc_runner.PLUGIN_OPERATION_COUNTER"
-    ) as mock_counter, patch("grpc_runner.CollectorRegistry", MagicMock()) as mock_registry:
+    with (
+        patch("grpc_runner.PLUGIN_HEALTH_GAUGE") as mock_gauge,
+        patch("grpc_runner.PLUGIN_OPERATION_COUNTER") as mock_counter,
+        patch("grpc_runner.CollectorRegistry", MagicMock()) as mock_registry,
+    ):
         yield mock_gauge, mock_counter, mock_registry
 
 
@@ -222,7 +232,9 @@ def temp_dir(tmp_path):
 
 
 # --- Production Mode Tests ---
-def test_production_mode_block(monkeypatch, mock_audit_logger, mock_alert_operator, set_env):
+def test_production_mode_block(
+    monkeypatch, mock_audit_logger, mock_alert_operator, set_env
+):
     """Test that certain operations abort in PRODUCTION_MODE."""
     set_env({"PRODUCTION_MODE": "true"})
     with pytest.raises(SystemExit) as exc:
@@ -238,7 +250,9 @@ def test_get_tls_credentials_production_missing(
 ):
     """Test TLS credentials loading fails in production if missing."""
     set_env({"PRODUCTION_MODE": "true"})
-    mock_secrets_manager.get_secret.side_effect = AnalyzerCriticalError("Missing secret")
+    mock_secrets_manager.get_secret.side_effect = AnalyzerCriticalError(
+        "Missing secret"
+    )
     with pytest.raises(SystemExit) as exc:
         _get_tls_credentials()
     assert exc.value.code == 1
@@ -256,7 +270,9 @@ def test_get_tls_credentials_non_production_insecure(mock_secrets_manager, set_e
     assert creds is None
 
 
-def test_get_tls_credentials_load_failure(mock_secrets_manager, mock_alert_operator, set_env):
+def test_get_tls_credentials_load_failure(
+    mock_secrets_manager, mock_alert_operator, set_env
+):
     """Test failure to load TLS files."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.side_effect = lambda x, **kw: "/nonexistent/path"
@@ -270,7 +286,9 @@ def test_get_tls_credentials_load_failure(mock_secrets_manager, mock_alert_opera
 
 
 # --- Endpoint Allowlist Tests ---
-def test_is_endpoint_allowed_production_missing(mock_secrets_manager, mock_alert_operator, set_env):
+def test_is_endpoint_allowed_production_missing(
+    mock_secrets_manager, mock_alert_operator, set_env
+):
     """Test endpoint allowlist fails in production if missing."""
     set_env({"PRODUCTION_MODE": "true"})
     mock_secrets_manager.get_secret.return_value = None
@@ -318,7 +336,9 @@ async def test_plugin_health_success(mock_health_stub, mock_prometheus):
     assert status == "SERVING"
     mock_gauge.labels.assert_called_with(plugin_name="test_plugin")
     mock_gauge.labels().set.assert_called_with(1)
-    mock_counter.labels.assert_called_with(plugin_name="test_plugin", operation_type="health_check")
+    mock_counter.labels.assert_called_with(
+        plugin_name="test_plugin", operation_type="health_check"
+    )
     mock_counter.labels().inc.assert_called_once()
 
 
@@ -371,7 +391,11 @@ async def test_connect_success_secure(mock_secrets_manager, mock_grpc_channel, s
     mock_secrets_manager.get_secret.side_effect = lambda x, **kw: (
         "/path/to/cert"
         if "CERT" in x
-        else ("/path/to/key" if "KEY" in x else "/path/to/ca" if "CA" in x else "allowed_endpoint")
+        else (
+            "/path/to/key"
+            if "KEY" in x
+            else "/path/to/ca" if "CA" in x else "allowed_endpoint"
+        )
     )
     mock_channel, mock_secure, mock_insecure, mock_ready = mock_grpc_channel
     mock_ready.return_value = None
@@ -382,7 +406,9 @@ async def test_connect_success_secure(mock_secrets_manager, mock_grpc_channel, s
 
 
 @pytest.mark.asyncio
-async def test_connect_insecure_non_prod(mock_secrets_manager, mock_grpc_channel, set_env):
+async def test_connect_insecure_non_prod(
+    mock_secrets_manager, mock_grpc_channel, set_env
+):
     """Test insecure connection in non-production."""
     set_env({"PRODUCTION_MODE": "false"})
     mock_secrets_manager.get_secret.return_value = None
@@ -407,7 +433,9 @@ async def test_connect_forbidden_endpoint(mock_secrets_manager, mock_alert_opera
 
 
 @pytest.mark.asyncio
-async def test_connect_retry_failure(mock_secrets_manager, mock_grpc_channel, mock_alert_operator):
+async def test_connect_retry_failure(
+    mock_secrets_manager, mock_grpc_channel, mock_alert_operator
+):
     """Test connection failure after retries."""
     mock_secrets_manager.get_secret.return_value = "test_endpoint"
     mock_channel, _, _, mock_ready = mock_grpc_channel
@@ -446,7 +474,9 @@ async def test_run_method_timeout(mock_grpc_channel):
 async def test_run_method_grpc_error(mock_grpc_channel, mock_alert_operator):
     """Test run_method with gRPC error."""
     mock_method = AsyncMock(
-        side_effect=grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, "details", "trailers")
+        side_effect=grpc.aio.AioRpcError(
+            grpc.StatusCode.UNAVAILABLE, "details", "trailers"
+        )
     )
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
@@ -491,7 +521,9 @@ def test_emit_metric_operations_counter(mock_prometheus):
         {"plugin_name": "test_plugin", "operation_type": "test_op"},
         "counter",
     )
-    mock_counter.labels.assert_called_with(plugin_name="test_plugin", operation_type="test_op")
+    mock_counter.labels.assert_called_with(
+        plugin_name="test_plugin", operation_type="test_op"
+    )
     mock_counter.labels().inc.assert_called_with(1.0)
     mock_gauge.assert_not_called()
 
@@ -615,13 +647,16 @@ async def test_start_prometheus_exporter_success():
 @pytest.mark.asyncio
 async def test_start_prometheus_exporter_failure(mock_alert_operator):
     """Test failure to start Prometheus exporter."""
-    with patch("prometheus_client.start_http_server", side_effect=Exception("Bind error")):
+    with patch(
+        "prometheus_client.start_http_server", side_effect=Exception("Bind error")
+    ):
         with pytest.raises(SystemExit) as exc:
             await start_prometheus_exporter("127.0.0.1", 9090)
         assert exc.value.code == 1
         mock_alert_operator.assert_called_once()
         assert (
-            "CRITICAL: Failed to start Prometheus exporter" in mock_alert_operator.call_args[0][0]
+            "CRITICAL: Failed to start Prometheus exporter"
+            in mock_alert_operator.call_args[0][0]
         )
 
 

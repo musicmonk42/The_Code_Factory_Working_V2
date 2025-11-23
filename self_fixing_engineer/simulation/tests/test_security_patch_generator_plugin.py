@@ -12,7 +12,9 @@ import pytest
 
 # Import the plugin from the correct directory
 plugin_paths = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
+    ),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -35,7 +37,9 @@ try:
         plugin_health,
     )
 except ImportError as e:
-    print(f"Failed to import security_patch_generator_plugin. Searched in: {plugin_paths}")
+    print(
+        f"Failed to import security_patch_generator_plugin. Searched in: {plugin_paths}"
+    )
     print(f"Error: {e}")
     raise
 
@@ -49,12 +53,12 @@ def mock_external_dependencies():
     """
     Mocks external libraries and environment variables for complete isolation.
     """
-    with patch("security_patch_generator_plugin.aiohttp.ClientSession") as mock_aiohttp, patch(
-        "security_patch_generator_plugin.Redis"
-    ) as mock_redis, patch("security_patch_generator_plugin.LANGCHAIN_AVAILABLE", True), patch(
-        "security_patch_generator_plugin.PYDANTIC_AVAILABLE", True
-    ), patch(
-        "security_patch_generator_plugin.TENACITY_AVAILABLE", True
+    with (
+        patch("security_patch_generator_plugin.aiohttp.ClientSession") as mock_aiohttp,
+        patch("security_patch_generator_plugin.Redis") as mock_redis,
+        patch("security_patch_generator_plugin.LANGCHAIN_AVAILABLE", True),
+        patch("security_patch_generator_plugin.PYDANTIC_AVAILABLE", True),
+        patch("security_patch_generator_plugin.TENACITY_AVAILABLE", True),
     ):
 
         # Mock LLM API call
@@ -82,7 +86,9 @@ def mock_external_dependencies():
         ]
 
         mock_llm_client = MagicMock()
-        mock_llm_client.generate_text = AsyncMock(return_value=("mocked response", {"tokens": 15}))
+        mock_llm_client.generate_text = AsyncMock(
+            return_value=("mocked response", {"tokens": 15})
+        )
 
         with patch(
             "security_patch_generator_plugin._get_llm_client",
@@ -121,7 +127,9 @@ def mock_config_path():
         mock_path.return_value = mock_path_instance
 
         # Also patch __file__ to ensure correct path resolution
-        with patch("security_patch_generator_plugin.__file__", str(temp_dir / "plugin.py")):
+        with patch(
+            "security_patch_generator_plugin.__file__", str(temp_dir / "plugin.py")
+        ):
             yield config_path
 
     shutil.rmtree(temp_dir)
@@ -189,7 +197,9 @@ Explanation: This is a fix for CVE-123.
 +    print('hello world safely')
 ```
 """
-    patch_content, explanation, error_msg, is_diff = _parse_llm_output(diff_output, "python")
+    patch_content, explanation, error_msg, is_diff = _parse_llm_output(
+        diff_output, "python"
+    )
 
     assert patch_content is not None
     assert "--- a/src/app.py" in patch_content
@@ -210,7 +220,9 @@ def safe_query(user_input):
 ```
 This prevents SQL injection.
 """
-    patch_content, explanation, error_msg, is_diff = _parse_llm_output(code_output, "python")
+    patch_content, explanation, error_msg, is_diff = _parse_llm_output(
+        code_output, "python"
+    )
 
     assert patch_content is not None
     assert "def safe_query" in patch_content
@@ -224,11 +236,11 @@ This prevents SQL injection.
 
 def test_parse_llm_output_refusal():
     """Test that LLM refusal is correctly detected."""
-    refusal_output = (
-        "I cannot generate a safe and effective fix for this issue. Manual review required."
-    )
+    refusal_output = "I cannot generate a safe and effective fix for this issue. Manual review required."
 
-    patch_content, explanation, error_msg, is_diff = _parse_llm_output(refusal_output, "python")
+    patch_content, explanation, error_msg, is_diff = _parse_llm_output(
+        refusal_output, "python"
+    )
 
     assert patch_content is None
     assert "manual" in explanation.lower()
@@ -330,7 +342,9 @@ async def test_generate_security_patch_llm_refusal(mock_external_dependencies):
 @pytest.mark.asyncio
 async def test_generate_security_patch_empty_response(mock_external_dependencies):
     """Test handling of empty LLM response."""
-    mock_external_dependencies["mock_llm_client"].generate_text = AsyncMock(return_value=("", {}))
+    mock_external_dependencies["mock_llm_client"].generate_text = AsyncMock(
+        return_value=("", {})
+    )
 
     vuln_details = {"type": "XSS", "severity": "Medium"}
     vulnerable_code = "element.innerHTML = userInput"

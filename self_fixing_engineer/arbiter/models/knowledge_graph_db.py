@@ -55,7 +55,9 @@ except ImportError:
     boto3 = None
     BotoClientError = Exception
     BOTO3_AVAILABLE = False
-    logging.getLogger(__name__).warning("Boto3 not found. Secrets Manager integration unavailable.")
+    logging.getLogger(__name__).warning(
+        "Boto3 not found. Secrets Manager integration unavailable."
+    )
 
 # Neo4j imports with proper fallback
 try:
@@ -83,7 +85,9 @@ except ImportError:
             self._query = query
             self._params = params
             normalized_query = re.sub(r"\s+", " ", query.lower())
-            if re.search(r"create\s+\(n:?`?.*?`?\)\s+set\s+n\s+=\s+\$", normalized_query):
+            if re.search(
+                r"create\s+\(n:?`?.*?`?\)\s+set\s+n\s+=\s+\$", normalized_query
+            ):
                 self._data = [{"nodeId": "mock_node_id"}]
             elif re.search(
                 r"create\s+\(a\)-\[r:?`?.*?`?\]->\(b\)\s+set\s+r\s+=\s+\$",
@@ -94,7 +98,9 @@ except ImportError:
                 self._data = [{"node_count": 1}]
             elif re.search(r"return\s+count\(r\)\s+as\s+count", normalized_query):
                 self._data = [{"count": 1}]
-            elif re.search(r"match\s+\(n\)\s+return\s+elementid\(n\)", normalized_query):
+            elif re.search(
+                r"match\s+\(n\)\s+return\s+elementid\(n\)", normalized_query
+            ):
                 self._data = [
                     {
                         "eid": "nid-1",
@@ -144,12 +150,16 @@ except ImportError:
             pass
 
         async def execute_write(self, query_function, *args, **kwargs):
-            logging.getLogger(__name__).warning("Mock AsyncSession: execute_write called.")
+            logging.getLogger(__name__).warning(
+                "Mock AsyncSession: execute_write called."
+            )
             await asyncio.sleep(0.01)
             return await query_function(MockTx(), *args, **kwargs)
 
         async def execute_read(self, query_function, *args, **kwargs):
-            logging.getLogger(__name__).warning("Mock AsyncSession: execute_read called.")
+            logging.getLogger(__name__).warning(
+                "Mock AsyncSession: execute_read called."
+            )
             await asyncio.sleep(0.01)
             return await query_function(MockTx(), *args, **kwargs)
 
@@ -163,7 +173,9 @@ except ImportError:
             self._url = url
 
         async def verify_connectivity(self):
-            logging.getLogger(__name__).debug("Mock AsyncGraphDatabase connectivity verified.")
+            logging.getLogger(__name__).debug(
+                "Mock AsyncGraphDatabase connectivity verified."
+            )
 
         def session(self, *args, **kwargs):
             return MockSession(self)
@@ -296,7 +308,9 @@ def _get_or_create_metric(
             registry=KG_REGISTRY,
         )
     else:
-        metric = metric_class(name, documentation, labelnames=labelnames, registry=KG_REGISTRY)
+        metric = metric_class(
+            name, documentation, labelnames=labelnames, registry=KG_REGISTRY
+        )
     _METRIC_CACHE[name] = metric
     return metric
 
@@ -362,12 +376,17 @@ class ImmutableAuditLogger:
                 with open(self.file_path, "a", encoding="utf-8") as f:
                     f.write(json.dumps(event_data) + "\n")
             except Exception as e:
-                logger.error(f"Failed to write to immutable audit log: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to write to immutable audit log: {e}", exc_info=True
+                )
             self.queue.task_done()
 
     async def _rotate_log(self):
         async with self._lock:
-            if os.path.exists(self.file_path) and os.path.getsize(self.file_path) >= self.max_bytes:
+            if (
+                os.path.exists(self.file_path)
+                and os.path.getsize(self.file_path) >= self.max_bytes
+            ):
                 logger.info("Rotating audit log file...")
                 if self.backup_count > 0:
                     for i in range(self.backup_count - 1, 0, -1):
@@ -381,7 +400,9 @@ class ImmutableAuditLogger:
     async def log_event(self, event: str, details: Dict[str, Any]):
         """Logs a structured audit event to an append-only file."""
         if self._is_closing:
-            logger.warning("Attempted to log event while audit logger is closing. Event dropped.")
+            logger.warning(
+                "Attempted to log event while audit logger is closing. Event dropped."
+            )
             return
 
         if self._worker_task is None:
@@ -416,7 +437,9 @@ class ImmutableAuditLogger:
 # --- Correctness: Pydantic for Validation and Type Safety ---
 class KGNode(BaseModel):
     label: str = Field(..., description="The primary label of the node.")
-    properties: Dict[str, Any] = Field(..., description="A dictionary of properties for the node.")
+    properties: Dict[str, Any] = Field(
+        ..., description="A dictionary of properties for the node."
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -516,7 +539,9 @@ class Neo4jKnowledgeGraph:
                     "secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1")
                 )
                 secret_id = os.getenv("NEO4J_SECRET_ID", "neo4j/password")
-                secret_value = client.get_secret_value(SecretId=secret_id)["SecretString"]
+                secret_value = client.get_secret_value(SecretId=secret_id)[
+                    "SecretString"
+                ]
 
                 secret_json_key = os.getenv("NEO4J_SECRET_JSON_KEY")
                 if secret_json_key:
@@ -618,7 +643,9 @@ class Neo4jKnowledgeGraph:
                 logger.error(f"Health check failed: {e}", exc_info=True)
                 return False
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def connect(self):
         op = "connect"
@@ -641,12 +668,16 @@ class Neo4jKnowledgeGraph:
                     {"url": self.url, "user": self.user, "error": str(e)},
                 )
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to establish connection: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to establish connection: {e}")
+                )
                 raise ConnectionError(
                     f"Failed to establish connection to Neo4j at {self.url}"
                 ) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def disconnect(self):
         op = "disconnect"
@@ -688,7 +719,9 @@ class Neo4jKnowledgeGraph:
             finally:
                 if self.audit_logger:
                     await self.audit_logger.close()
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def _execute_tx(
         self,
@@ -702,15 +735,21 @@ class Neo4jKnowledgeGraph:
         sanitized_params = {
             k: (
                 "<REDACTED>"
-                if "password" in k.lower() or "secret" in k.lower() or "token" in k.lower()
+                if "password" in k.lower()
+                or "secret" in k.lower()
+                or "token" in k.lower()
                 else v
             )
             for k, v in params.items()
         }
-        logger.debug(f"Executing {op_type} query: {query} with params: {sanitized_params}")
+        logger.debug(
+            f"Executing {op_type} query: {query} with params: {sanitized_params}"
+        )
         with tracer.start_as_current_span(f"neo4j_execute_{op_type}_tx") as span:
             span.set_attribute("db.statement", query)
-            span.set_attribute("db.statement.parameters", json.dumps(sanitized_params, default=str))
+            span.set_attribute(
+                "db.statement.parameters", json.dumps(sanitized_params, default=str)
+            )
             span.set_attribute("db.operation.type", op_type)
             result = await tx.run(query, params, timeout=float(self.statement_timeout))
             if write:
@@ -729,7 +768,9 @@ class Neo4jKnowledgeGraph:
                 hashed_properties = {}
                 for key, value in properties.items():
                     if "id" in key.lower() or "email" in key.lower():
-                        hashed_properties[key] = hashlib.sha256(str(value).encode()).hexdigest()
+                        hashed_properties[key] = hashlib.sha256(
+                            str(value).encode()
+                        ).hexdigest()
                     else:
                         hashed_properties[key] = value
 
@@ -774,8 +815,12 @@ class Neo4jKnowledgeGraph:
                 KG_ERRORS.labels(operation=op, error_type="ValidationError").inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Validation failed: {e}"))
-                logger.error(f"Pydantic validation failed for add_node: {e}", exc_info=True)
-                raise SchemaValidationError(f"Invalid input for node creation: {e}") from e
+                logger.error(
+                    f"Pydantic validation failed for add_node: {e}", exc_info=True
+                )
+                raise SchemaValidationError(
+                    f"Invalid input for node creation: {e}"
+                ) from e
             except Exception as e:
                 KG_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
@@ -784,7 +829,9 @@ class Neo4jKnowledgeGraph:
                 logger.error(f"Failed to add_node: {e}", exc_info=True)
                 raise QueryError("Failed to create node.", original_error=e) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def add_relationship(
         self,
@@ -823,7 +870,9 @@ class Neo4jKnowledgeGraph:
                 sanitized_rel_props = {}
                 for k, v in rel.properties.items():
                     if "id" in k.lower() or "email" in k.lower():
-                        sanitized_rel_props[k] = hashlib.sha256(str(v).encode()).hexdigest()
+                        sanitized_rel_props[k] = hashlib.sha256(
+                            str(v).encode()
+                        ).hexdigest()
                     else:
                         sanitized_rel_props[k] = v
                 sanitized_rel_data = rel.model_dump()
@@ -860,18 +909,28 @@ class Neo4jKnowledgeGraph:
                     f"Pydantic validation failed for add_relationship: {e}",
                     exc_info=True,
                 )
-                raise SchemaValidationError(f"Invalid input for relationship creation: {e}") from e
+                raise SchemaValidationError(
+                    f"Invalid input for relationship creation: {e}"
+                ) from e
             except Exception as e:
                 KG_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to add relationship: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to add relationship: {e}")
+                )
                 logger.error(f"Failed to add_relationship: {e}", exc_info=True)
-                raise QueryError("Failed to create relationship.", original_error=e) from e
+                raise QueryError(
+                    "Failed to create relationship.", original_error=e
+                ) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
-    async def find_related_facts(self, domain: str, key: str, value: Any) -> List[Dict[str, Any]]:
+    async def find_related_facts(
+        self, domain: str, key: str, value: Any
+    ) -> List[Dict[str, Any]]:
         op = "find_related_facts"
         with tracer.start_as_current_span(f"neo4j_{op}") as span:
             KG_OPS_TOTAL.labels(operation=op, status="attempt").inc()
@@ -914,13 +973,21 @@ class Neo4jKnowledgeGraph:
                 KG_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to find related facts: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to find related facts: {e}")
+                )
                 logger.error(f"Failed to find_related_facts: {e}", exc_info=True)
-                raise QueryError("Failed to find related facts.", original_error=e) from e
+                raise QueryError(
+                    "Failed to find related facts.", original_error=e
+                ) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
-    async def check_consistency(self, domain: str, key: str, value: Any) -> Optional[str]:
+    async def check_consistency(
+        self, domain: str, key: str, value: Any
+    ) -> Optional[str]:
         op = "check_consistency"
         with tracer.start_as_current_span(f"neo4j_{op}") as span:
             KG_OPS_TOTAL.labels(operation=op, status="attempt").inc()
@@ -946,13 +1013,13 @@ class Neo4jKnowledgeGraph:
                 node_count = result[0]["node_count"] if result and result[0] else 0
 
                 if node_count == 0:
-                    consistency_message = (
-                        f"No nodes found for {domain}.{key}={value}. Possible inconsistency."
-                    )
+                    consistency_message = f"No nodes found for {domain}.{key}={value}. Possible inconsistency."
                     logger.warning(consistency_message)
                     return consistency_message
 
-                logger.info(f"Consistency check: {domain}.{key}={value}. Found {node_count} nodes.")
+                logger.info(
+                    f"Consistency check: {domain}.{key}={value}. Found {node_count} nodes."
+                )
                 await self.audit_logger.log_event(
                     op,
                     {
@@ -969,11 +1036,15 @@ class Neo4jKnowledgeGraph:
                 KG_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Consistency check failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Consistency check failed: {e}")
+                )
                 logger.error(f"Failed to check_consistency: {e}", exc_info=True)
                 return f"Inconsistency check failed due to a system error: {e}"
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def _export_nodes(
         self, session: AsyncSession, filename: str, chunk_size: int, node_total: int
@@ -1001,7 +1072,9 @@ class Neo4jKnowledgeGraph:
         self, session: AsyncSession, filename: str, chunk_size: int, rel_total: int
     ):
         rels_query_template = "MATCH (a)-[r]->(b) RETURN elementId(r) AS rid, type(r) AS type, elementId(startNode(r)) AS start_eid, elementId(endNode(r)) AS end_eid, properties(r) AS props ORDER BY rid SKIP $skip LIMIT $limit"
-        logger.info(f"Exporting {rel_total} relationships to {filename}.rels.jsonl.gz...")
+        logger.info(
+            f"Exporting {rel_total} relationships to {filename}.rels.jsonl.gz..."
+        )
         with gzip.open(f"{filename}.rels.jsonl.gz", "wt", encoding="utf-8") as f:
             skip = 0
             while skip < rel_total:
@@ -1049,7 +1122,9 @@ class Neo4jKnowledgeGraph:
                     )
 
                     await self._export_nodes(session, filename, chunk_size, node_total)
-                    await self._export_relationships(session, filename, chunk_size, rel_total)
+                    await self._export_relationships(
+                        session, filename, chunk_size, rel_total
+                    )
 
                 logger.info(
                     f"Graph export to {filename}.nodes.jsonl.gz and {filename}.rels.jsonl.gz complete."
@@ -1070,10 +1145,14 @@ class Neo4jKnowledgeGraph:
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Graph export failed: {e}"))
-                logger.error(f"Failed to export graph to {filename}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to export graph to {filename}: {e}", exc_info=True
+                )
                 raise QueryError("Failed to export graph.", original_error=e) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def _import_nodes(
         self, session: AsyncSession, filename: str, chunk_size: int, validate: bool
@@ -1090,7 +1169,9 @@ class Neo4jKnowledgeGraph:
                 node_data = json.loads(line)
                 if validate:
                     node = KGNode(
-                        label=(node_data["labels"][0] if node_data["labels"] else "Generic"),
+                        label=(
+                            node_data["labels"][0] if node_data["labels"] else "Generic"
+                        ),
                         properties=node_data["props"],
                     )
                     node.properties[self._temp_import_id_key] = node_data["eid"]
@@ -1099,7 +1180,11 @@ class Neo4jKnowledgeGraph:
                         "Node",
                         (object,),
                         {
-                            "label": (node_data["labels"][0] if node_data["labels"] else "Generic"),
+                            "label": (
+                                node_data["labels"][0]
+                                if node_data["labels"]
+                                else "Generic"
+                            ),
                             "properties": node_data["props"],
                         },
                     )()
@@ -1163,7 +1248,9 @@ class Neo4jKnowledgeGraph:
         logger.info(f"Finished importing {rels_imported} relationships.")
         return rels_imported
 
-    async def import_graph(self, filename: str, chunk_size: int = 1000, validate: bool = True):
+    async def import_graph(
+        self, filename: str, chunk_size: int = 1000, validate: bool = True
+    ):
         op = "import_graph"
         with tracer.start_as_current_span(f"neo4j_{op}") as span:
             KG_OPS_TOTAL.labels(operation=op, status="attempt").inc()
@@ -1208,10 +1295,14 @@ class Neo4jKnowledgeGraph:
                 KG_ERRORS.labels(operation=op, error_type=type(e).__name__).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Graph import failed: {e}"))
-                logger.error(f"Failed to import graph from {filename}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to import graph from {filename}: {e}", exc_info=True
+                )
                 raise QueryError("Failed to import graph.", original_error=e) from e
             finally:
-                KG_OPS_LATENCY.labels(operation=op).observe(time.monotonic() - start_time)
+                KG_OPS_LATENCY.labels(operation=op).observe(
+                    time.monotonic() - start_time
+                )
 
     async def _import_nodes_batch(self, session: AsyncSession, nodes: List[KGNode]):
         query_parts = []
@@ -1222,7 +1313,9 @@ class Neo4jKnowledgeGraph:
             params[f"props{i}"] = node.properties
 
         query = " ".join(query_parts)
-        await self._with_retry(session.execute_write, self._execute_tx, query, params, write=True)
+        await self._with_retry(
+            session.execute_write, self._execute_tx, query, params, write=True
+        )
         logger.debug(f"Batch imported {len(nodes)} nodes.")
 
     async def _import_relationships_batch(
@@ -1242,5 +1335,7 @@ class Neo4jKnowledgeGraph:
             params[f"props{i}"] = rel.properties
 
         query = " ".join(query_parts)
-        await self._with_retry(session.execute_write, self._execute_tx, query, params, write=True)
+        await self._with_retry(
+            session.execute_write, self._execute_tx, query, params, write=True
+        )
         logger.debug(f"Batch imported {len(relationships)} relationships.")

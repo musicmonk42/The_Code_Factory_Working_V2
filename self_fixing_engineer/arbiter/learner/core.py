@@ -34,7 +34,12 @@ from arbiter.plugins.llm_client import LLMClient
 from arbiter.policy.core import should_auto_learn
 from pydantic import BaseModel
 
-from .audit import CircuitBreaker, MerkleTree, persist_knowledge, persist_knowledge_batch
+from .audit import (
+    CircuitBreaker,
+    MerkleTree,
+    persist_knowledge,
+    persist_knowledge_batch,
+)
 from .encryption import ArbiterConfig, decrypt_value, encrypt_value
 from .explanations import generate_explanation, record_explanation_quality
 from .fuzzy import FuzzyParser
@@ -84,7 +89,9 @@ except ImportError:
             details: Dict[str, Any],
             user_id: str = "system",
         ):
-            logger.info(f"DummyAuditLog: Event '{event}' in component '{component}' logged.")
+            logger.info(
+                f"DummyAuditLog: Event '{event}' in component '{component}' logged."
+            )
             await asyncio.sleep(0)  # Make it properly async
 
         async def add_entry(
@@ -177,7 +184,11 @@ class Learner:
         self.merkle_tree_class = merkle_tree_class or MerkleTree
         try:
             self.ciphers = {
-                key_id: (Fernet(key) if isinstance(key, bytes) else Fernet(key.encode("utf-8")))
+                key_id: (
+                    Fernet(key)
+                    if isinstance(key, bytes)
+                    else Fernet(key.encode("utf-8"))
+                )
                 for key_id, key in ArbiterConfig.ENCRYPTION_KEYS.items()
             }
         except Exception as e:
@@ -193,7 +204,9 @@ class Learner:
             "on_schema_reload": [],
         }
         self.db_circuit_breaker = CircuitBreaker(name="db_operations")
-        self.audit_circuit_breaker = CircuitBreaker(name="audit_operations", failure_threshold=10)
+        self.audit_circuit_breaker = CircuitBreaker(
+            name="audit_operations", failure_threshold=10
+        )
         self.fuzzy_parser_hooks: List[FuzzyParser] = []
         self.explanation_feedback_log: List[Dict[str, Any]] = []
         self._self_audit_task: Optional[asyncio.Task] = None
@@ -206,7 +219,9 @@ class Learner:
         self.audit_logger = AuditLogger.from_environment()
         self.meta_data_store_config = MetaLearningDataStoreConfig()
         self.meta_data_store = get_meta_learning_data_store(self.meta_data_store_config)
-        self.learn_semaphore = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_LEARNS", 50)))
+        self.learn_semaphore = asyncio.Semaphore(
+            int(os.getenv("MAX_CONCURRENT_LEARNS", 50))
+        )
 
     async def start(self):
         """Performs all necessary async initialization tasks."""
@@ -223,7 +238,9 @@ class Learner:
             try:
                 # FIX: `audit_log` is now a real object, not an async function
                 audit_log_path = (
-                    self.audit_logger.log_path if hasattr(self.audit_logger, "log_path") else None
+                    self.audit_logger.log_path
+                    if hasattr(self.audit_logger, "log_path")
+                    else None
                 )
                 if not audit_log_path or not os.path.exists(audit_log_path):
                     logger.warning(
@@ -294,7 +311,10 @@ class Learner:
                 )
 
             await asyncio.sleep(ArbiterConfig.SELF_AUDIT_INTERVAL_SECONDS)
-            if self.arbiter.is_running_self_audit and self._self_audit_stop_event.is_set():
+            if (
+                self.arbiter.is_running_self_audit
+                and self._self_audit_stop_event.is_set()
+            ):
                 break
 
         self.arbiter.is_running_self_audit = False
@@ -335,7 +355,9 @@ class Learner:
                     "system",
                 )
             except Exception as e:
-                logger.error("Error stopping self-audit task", error=str(e), exc_info=True)
+                logger.error(
+                    "Error stopping self-audit task", error=str(e), exc_info=True
+                )
                 await self.audit_logger.log_event(
                     "self_audit_control",
                     f"Error stopping self-audit task: {e}",
@@ -386,7 +408,9 @@ class Learner:
                             "reason": f"invalid_domain: {domain}",
                         }
 
-                    allowed, reason = await should_auto_learn(domain, key, user_id, value)
+                    allowed, reason = await should_auto_learn(
+                        domain, key, user_id, value
+                    )
                     if not allowed:
                         logger.info(
                             "Auto-learning blocked by policy",
@@ -436,7 +460,9 @@ class Learner:
                         }
 
                     lock_key = f"knowledge_lock:{domain}:{key}"
-                    async with self.redis.lock(lock_key, timeout=10, blocking_timeout=5):
+                    async with self.redis.lock(
+                        lock_key, timeout=10, blocking_timeout=5
+                    ):
                         for hook in self.event_hooks["pre_learn"]:
                             await (
                                 hook(domain, key, value)
@@ -462,7 +488,9 @@ class Learner:
                                 await (
                                     hook(domain, key, value, result)
                                     if asyncio.iscoroutinefunction(hook)
-                                    else asyncio.to_thread(hook, domain, key, value, result)
+                                    else asyncio.to_thread(
+                                        hook, domain, key, value, result
+                                    )
                                 )
                             await self.audit_logger.log_event(
                                 "knowledge_learn",
@@ -483,7 +511,9 @@ class Learner:
                                     agent_id=agent_id or "unknown_agent",
                                     session_id=session_id or "unknown_session",
                                     decision_trace=decision_trace or {},
-                                    user_feedback=result.get("explanation_quality_score_feedback"),
+                                    user_feedback=result.get(
+                                        "explanation_quality_score_feedback"
+                                    ),
                                     event_type=event_type,
                                     learned_domain=domain,
                                     learned_key=key,
@@ -622,10 +652,15 @@ class Learner:
         if is_encrypted and "v1" not in self.ciphers:
             raise ValueError("Encryption key 'v1' not available")
         stored_value = (
-            await encrypt_value(value, self.ciphers["v1"], "v1") if is_encrypted else value
+            await encrypt_value(value, self.ciphers["v1"], "v1")
+            if is_encrypted
+            else value
         )
 
-        if previous_entry.get("value") == stored_value and previous_entry.get("source") == source:
+        if (
+            previous_entry.get("value") == stored_value
+            and previous_entry.get("source") == source
+        ):
             logger.debug("No change", domain=domain, key=key)
             return {
                 "status": "unchanged",
@@ -634,7 +669,9 @@ class Learner:
             }
 
         value_diff = self._compute_diff(previous_value, value)
-        current_version = previous_entry.get("version", 0) + 1 if previous_entry.get("value") else 1
+        current_version = (
+            previous_entry.get("version", 0) + 1 if previous_entry.get("value") else 1
+        )
         value_with_metadata = {
             "value": stored_value,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -653,7 +690,9 @@ class Learner:
             source=source,
         )
 
-        leaf_data_for_merkle = json.dumps(value, sort_keys=True, default=str).encode("utf-8")
+        leaf_data_for_merkle = json.dumps(value, sort_keys=True, default=str).encode(
+            "utf-8"
+        )
         leaf = hashlib.sha256(leaf_data_for_merkle).digest()
         tree = self.merkle_tree_class([leaf])
         root = tree.get_root().hex()
@@ -678,7 +717,9 @@ class Learner:
                 learn_error_counter.labels(
                     **get_labels(domain=domain, error_type="db_persist_failure")
                 ).inc()
-                logger.error("Failed to persist knowledge", domain=domain, key=key, error=str(e))
+                logger.error(
+                    "Failed to persist knowledge", domain=domain, key=key, error=str(e)
+                )
                 await self.audit_logger.log_event(
                     "learn_error",
                     f"Failed to persist knowledge: {e}",
@@ -770,7 +811,9 @@ class Learner:
                     validate_data(self, fact.get("domain", ""), fact.get("value", None))
                     for fact in chunk
                 ]
-                validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+                validation_results = await asyncio.gather(
+                    *validation_tasks, return_exceptions=True
+                )
 
                 individual_learn_tasks = []
 
@@ -781,7 +824,10 @@ class Learner:
                     decision_trace = fact.get("decision_trace", {})
                     validation_res = validation_results[j]
 
-                    if isinstance(validation_res, Exception) or not validation_res["is_valid"]:
+                    if (
+                        isinstance(validation_res, Exception)
+                        or not validation_res["is_valid"]
+                    ):
                         reason_code = (
                             validation_res["reason_code"]
                             if isinstance(validation_res, dict)
@@ -841,7 +887,9 @@ class Learner:
                         )
                         continue
 
-                    allowed, reason = await should_auto_learn(domain, key, user_id, value)
+                    allowed, reason = await should_auto_learn(
+                        domain, key, user_id, value
+                    )
                     if not allowed:
                         all_results.append(
                             {
@@ -932,7 +980,9 @@ class Learner:
                             try:
                                 meta_learning_records.append(
                                     LearningRecord(
-                                        timestamp=res["value_with_metadata"]["timestamp"],
+                                        timestamp=res["value_with_metadata"][
+                                            "timestamp"
+                                        ],
                                         agent_id=agent_id or "unknown_agent",
                                         session_id=session_id or "unknown_session",
                                         decision_trace=res.get("decision_trace", {}),
@@ -1009,7 +1059,9 @@ class Learner:
                             )
                             raise e
                     else:
-                        logger.info("Batch persistence skipped: No valid entries to persist.")
+                        logger.info(
+                            "Batch persistence skipped: No valid entries to persist."
+                        )
                         await self.audit_logger.log_event(
                             "knowledge_learn_batch_skipped",
                             "Batch persistence skipped: No valid entries to persist.",
@@ -1017,9 +1069,13 @@ class Learner:
                             user_id or "system",
                         )
                 else:
-                    logger.warning("Batch persistence skipped due to open DB circuit breaker.")
+                    logger.warning(
+                        "Batch persistence skipped due to open DB circuit breaker."
+                    )
                     learn_error_counter.labels(
-                        **get_labels(domain="batch", error_type="circuit_breaker_open_db_batch")
+                        **get_labels(
+                            domain="batch", error_type="circuit_breaker_open_db_batch"
+                        )
                     ).inc()
                     await self.audit_logger.log_event(
                         "knowledge_learn_batch_skipped",
@@ -1046,7 +1102,9 @@ class Learner:
                         exc_info=True,
                     )
                     learn_error_counter.labels(
-                        **get_labels(domain="batch", error_type="meta_learning_batch_write_error")
+                        **get_labels(
+                            domain="batch", error_type="meta_learning_batch_write_error"
+                        )
                     ).inc()
                     await self.audit_logger.log_event(
                         "meta_learning_batch_error",
@@ -1078,10 +1136,15 @@ class Learner:
         if is_encrypted and "v1" not in self.ciphers:
             raise ValueError("Encryption key 'v1' not available")
         stored_value = (
-            await encrypt_value(value, self.ciphers["v1"], "v1") if is_encrypted else value
+            await encrypt_value(value, self.ciphers["v1"], "v1")
+            if is_encrypted
+            else value
         )
 
-        if previous_entry.get("value") == stored_value and previous_entry.get("source") == source:
+        if (
+            previous_entry.get("value") == stored_value
+            and previous_entry.get("source") == source
+        ):
             logger.debug("No change for batch fact", domain=domain, key=key)
             return {
                 "result": {
@@ -1097,7 +1160,9 @@ class Learner:
             }
 
         value_diff = self._compute_diff(previous_value, value)
-        current_version = previous_entry.get("version", 0) + 1 if previous_entry.get("value") else 1
+        current_version = (
+            previous_entry.get("version", 0) + 1 if previous_entry.get("value") else 1
+        )
         value_with_metadata = {
             "value": stored_value,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1122,7 +1187,9 @@ class Learner:
             self, domain, key, value, previous_value, value_diff
         )
 
-        leaf_data_for_merkle = json.dumps(value, sort_keys=True, default=str).encode("utf-8")
+        leaf_data_for_merkle = json.dumps(value, sort_keys=True, default=str).encode(
+            "utf-8"
+        )
         leaf = hashlib.sha256(leaf_data_for_merkle).digest()
         tree = self.merkle_tree_class([leaf])
         root = tree.get_root().hex()
@@ -1187,9 +1254,13 @@ class Learner:
                         else asyncio.to_thread(hook, domain, key)
                     )
 
-                fact_to_forget = await self.retrieve_knowledge(domain, key, decrypt=False)
+                fact_to_forget = await self.retrieve_knowledge(
+                    domain, key, decrypt=False
+                )
                 if not fact_to_forget:
-                    logger.info("Fact not found for forgetting.", domain=domain, key=key)
+                    logger.info(
+                        "Fact not found for forgetting.", domain=domain, key=key
+                    )
                     await self.audit_logger.log_event(
                         "knowledge_forget_skipped",
                         f"Fact not found for forgetting: {domain}:{key}",
@@ -1248,7 +1319,9 @@ class Learner:
                         leaf_data_for_merkle_audit = json.dumps(
                             decrypted_value_for_audit, sort_keys=True, default=str
                         ).encode("utf-8")
-                        leaf_hash_for_audit = hashlib.sha256(leaf_data_for_merkle_audit).hexdigest()
+                        leaf_hash_for_audit = hashlib.sha256(
+                            leaf_data_for_merkle_audit
+                        ).hexdigest()
                         tree_for_audit = self.merkle_tree_class(
                             [hashlib.sha256(leaf_data_for_merkle_audit).digest()]
                         )
@@ -1310,7 +1383,9 @@ class Learner:
                             key=key,
                         )
                         learn_error_counter.labels(
-                            **get_labels(domain=domain, error_type="db_circuit_open_forget")
+                            **get_labels(
+                                domain=domain, error_type="db_circuit_open_forget"
+                            )
                         ).inc()
                         await self.audit_logger.log_event(
                             "forget_skipped",
@@ -1344,7 +1419,9 @@ class Learner:
                             diff_applied=None,
                             explanation=f"Fact forgotten due to: {reason}",
                         )
-                        await self.meta_data_store.write_record(learning_record.model_dump())
+                        await self.meta_data_store.write_record(
+                            learning_record.model_dump()
+                        )
                         logger.info(
                             "Meta-learning record written for forgetting",
                             domain=domain,
@@ -1379,7 +1456,9 @@ class Learner:
                     forget_counter.labels(**get_labels(domain=domain)).inc()
                     return {"status": "forgotten", "reason": "success"}
                 except Exception as e:
-                    logger.error("Error forgetting fact", domain=domain, key=key, error=str(e))
+                    logger.error(
+                        "Error forgetting fact", domain=domain, key=key, error=str(e)
+                    )
                     learn_error_counter.labels(
                         **get_labels(domain=domain, error_type="forget_error")
                     ).inc()
@@ -1412,7 +1491,9 @@ class Learner:
 
         mem_data = self.arbiter.state.get("memory", {}).get(domain, {}).get(key)
         if mem_data:
-            retrieve_hit_miss.labels(**get_labels(domain=domain, cache_status="memory_hit")).inc()
+            retrieve_hit_miss.labels(
+                **get_labels(domain=domain, cache_status="memory_hit")
+            ).inc()
             return await self._process_retrieved_data(mem_data.copy(), domain, decrypt)
 
         redis_key = f"knowledge:{domain}:{key}"
@@ -1430,15 +1511,21 @@ class Learner:
                 retrieve_hit_miss.labels(
                     **get_labels(domain=domain, cache_status="redis_hit")
                 ).inc()
-                return await self._process_retrieved_data(cached_data.copy(), domain, decrypt)
+                return await self._process_retrieved_data(
+                    cached_data.copy(), domain, decrypt
+                )
             except (json.JSONDecodeError, ValueError, InvalidToken) as e:
-                logger.error("Corrupted Redis entry", domain=domain, key=key, error=str(e))
+                logger.error(
+                    "Corrupted Redis entry", domain=domain, key=key, error=str(e)
+                )
                 await self.redis.delete(redis_key)
                 learn_error_counter.labels(
                     **get_labels(domain=domain, error_type="redis_corrupted_entry")
                 ).inc()
 
-        retrieve_hit_miss.labels(**get_labels(domain=domain, cache_status="db_fetch")).inc()
+        retrieve_hit_miss.labels(
+            **get_labels(domain=domain, cache_status="db_fetch")
+        ).inc()
         if not await self.db_circuit_breaker.can_proceed():
             logger.warning(
                 "Database read skipped due to open DB circuit breaker.",
@@ -1469,7 +1556,9 @@ class Learner:
                 self.arbiter.state.setdefault("memory", {}).setdefault(domain, {})[
                     key
                 ] = db_data.copy()
-                return await self._process_retrieved_data(db_data.copy(), domain, decrypt)
+                return await self._process_retrieved_data(
+                    db_data.copy(), domain, decrypt
+                )
         except Exception as e:
             logger.error("Failed to load from DB", domain=domain, key=key, error=str(e))
             await self.db_circuit_breaker.record_failure()
@@ -1499,16 +1588,22 @@ class Learner:
                 data["decryption_error"] = f"Decryption failed: {e}"
         return data
 
-    def _compute_diff(self, old_value: Any, new_value: Any) -> Optional[List[Dict[str, Any]]]:
+    def _compute_diff(
+        self, old_value: Any, new_value: Any
+    ) -> Optional[List[Dict[str, Any]]]:
         """Compute JSON Patch diff for auditing."""
         try:
             from jsonpatch import JsonPatch, JsonPointerException
 
             old_json = (
-                json.loads(json.dumps(old_value, default=str)) if old_value is not None else {}
+                json.loads(json.dumps(old_value, default=str))
+                if old_value is not None
+                else {}
             )
             new_json = (
-                json.loads(json.dumps(new_value, default=str)) if new_value is not None else {}
+                json.loads(json.dumps(new_value, default=str))
+                if new_value is not None
+                else {}
             )
             patch = JsonPatch.from_diff(old_json, new_json)
             return patch.patch if patch.patch else None
@@ -1522,5 +1617,7 @@ class Learner:
             learn_error_counter.labels(
                 **get_labels(domain="diff_computation", error_type="unexpected_error")
             ).inc()
-            logger.error("Unexpected error during diff computation", error=str(e), exc_info=True)
+            logger.error(
+                "Unexpected error during diff computation", error=str(e), exc_info=True
+            )
             return [{"op": "replace", "path": "/", "value": new_value}]

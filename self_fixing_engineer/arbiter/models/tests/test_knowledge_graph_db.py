@@ -114,7 +114,9 @@ async def kg_client(mocker: MockerFixture):
 
         # Patch AsyncGraphDatabase.driver in the knowledge_graph_db module
         mocker.patch.object(knowledge_graph_db, "AsyncGraphDatabase")
-        knowledge_graph_db.AsyncGraphDatabase.driver = mocker.MagicMock(return_value=mock_driver)
+        knowledge_graph_db.AsyncGraphDatabase.driver = mocker.MagicMock(
+            return_value=mock_driver
+        )
 
         # Create client with short retry settings for faster tests
         client = Neo4jKnowledgeGraph()
@@ -212,7 +214,12 @@ async def test_connect_failure(mocker: MockerFixture):
     client = Neo4jKnowledgeGraph()
     with pytest.raises(ConnectionError, match="Failed to establish connection"):
         await client.connect()
-    assert get_metric_value(KG_ERRORS, operation="connect", error_type="ServiceUnavailable") >= 1
+    assert (
+        get_metric_value(
+            KG_ERRORS, operation="connect", error_type="ServiceUnavailable"
+        )
+        >= 1
+    )
     assert get_metric_value(KG_OPS_TOTAL, operation="connect", status="failure") >= 1
     spans = in_memory_exporter.get_finished_spans()
     assert any(span.name == "neo4j_connect" and not span.status.is_ok for span in spans)
@@ -254,9 +261,13 @@ async def test_health_check_success(kg_client):
     await kg_client.connect()
     is_healthy = await kg_client.health_check()
     assert is_healthy
-    assert get_metric_value(KG_OPS_TOTAL, operation="health_check", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="health_check", status="success") == 1
+    )
     spans = in_memory_exporter.get_finished_spans()
-    assert any(span.name == "neo4j_health_check" and span.status.is_ok for span in spans)
+    assert any(
+        span.name == "neo4j_health_check" and span.status.is_ok for span in spans
+    )
 
 
 @pytest.mark.asyncio
@@ -264,7 +275,9 @@ async def test_health_check_not_connected(kg_client):
     """Test health check when not connected."""
     is_healthy = await kg_client.health_check()
     assert not is_healthy
-    assert get_metric_value(KG_OPS_TOTAL, operation="health_check", status="failure") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="health_check", status="failure") == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -281,9 +294,14 @@ async def test_health_check_failure(kg_client, mocker: MockerFixture):
     is_healthy = await kg_client.health_check()
     assert not is_healthy
     assert (
-        get_metric_value(KG_ERRORS, operation="health_check", error_type="ServiceUnavailable") >= 1
+        get_metric_value(
+            KG_ERRORS, operation="health_check", error_type="ServiceUnavailable"
+        )
+        >= 1
     )
-    assert get_metric_value(KG_OPS_TOTAL, operation="health_check", status="failure") >= 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="health_check", status="failure") >= 1
+    )
 
 
 @pytest.mark.asyncio
@@ -307,7 +325,10 @@ async def test_add_node_validation_failure(kg_client):
     await kg_client.connect()
     with pytest.raises(SchemaValidationError):
         await kg_client.add_node("TestLabel", [])  # Invalid properties type
-    assert get_metric_value(KG_ERRORS, operation="add_node", error_type="ValidationError") == 1
+    assert (
+        get_metric_value(KG_ERRORS, operation="add_node", error_type="ValidationError")
+        == 1
+    )
     assert get_metric_value(KG_OPS_TOTAL, operation="add_node", status="failure") == 1
 
 
@@ -340,12 +361,19 @@ async def test_add_relationship_success(kg_client):
     await kg_client.connect()
     from_id = "node1"
     to_id = "node2"
-    rel_id = await kg_client.add_relationship(from_id, to_id, "TEST_REL", {"prop": "value"})
+    rel_id = await kg_client.add_relationship(
+        from_id, to_id, "TEST_REL", {"prop": "value"}
+    )
     assert isinstance(rel_id, str)
     assert rel_id == "mock_rel_id"
-    assert get_metric_value(KG_OPS_TOTAL, operation="add_relationship", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="add_relationship", status="success")
+        == 1
+    )
     spans = in_memory_exporter.get_finished_spans()
-    rel_span = next((span for span in spans if span.name == "neo4j_add_relationship"), None)
+    rel_span = next(
+        (span for span in spans if span.name == "neo4j_add_relationship"), None
+    )
     assert rel_span is not None
     assert rel_span.attributes["db.relationship_id"] == rel_id
     assert rel_span.status.is_ok
@@ -363,7 +391,10 @@ async def test_find_related_facts_success(kg_client, mocker: MockerFixture):
     facts = await kg_client.find_related_facts("TestDomain", "key", "value")
     assert isinstance(facts, list)
     assert len(facts) == 1
-    assert get_metric_value(KG_OPS_TOTAL, operation="find_related_facts", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="find_related_facts", status="success")
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -376,7 +407,10 @@ async def test_check_consistency_success(kg_client, mocker: MockerFixture):
 
     status = await kg_client.check_consistency("TestDomain", "key", "value")
     assert status is None  # No inconsistency
-    assert get_metric_value(KG_OPS_TOTAL, operation="check_consistency", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="check_consistency", status="success")
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -389,7 +423,10 @@ async def test_check_consistency_no_node(kg_client, mocker: MockerFixture):
 
     status = await kg_client.check_consistency("NonExistent", "key", "value")
     assert "No nodes found" in status
-    assert get_metric_value(KG_OPS_TOTAL, operation="check_consistency", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="check_consistency", status="success")
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -428,7 +465,9 @@ async def test_export_graph_success(kg_client, tmp_path, mocker: MockerFixture):
     await kg_client.export_graph(str(export_file))
     assert os.path.exists(f"{export_file}.nodes.jsonl.gz")
     assert os.path.exists(f"{export_file}.rels.jsonl.gz")
-    assert get_metric_value(KG_OPS_TOTAL, operation="export_graph", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="export_graph", status="success") == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -440,7 +479,10 @@ async def test_import_graph_success(kg_client, tmp_path, mocker: MockerFixture):
 
     # Create dummy files for import
     with gzip.open(f"{import_file}.nodes.jsonl.gz", "wt") as f:
-        f.write(json.dumps({"eid": "node1", "labels": ["Test"], "props": {"prop": "value"}}) + "\n")
+        f.write(
+            json.dumps({"eid": "node1", "labels": ["Test"], "props": {"prop": "value"}})
+            + "\n"
+        )
     with gzip.open(f"{import_file}.rels.jsonl.gz", "wt") as f:
         f.write(
             json.dumps(
@@ -459,7 +501,9 @@ async def test_import_graph_success(kg_client, tmp_path, mocker: MockerFixture):
     mocker.patch.object(kg_client, "_execute_write", return_value=None)
 
     await kg_client.import_graph(str(import_file))
-    assert get_metric_value(KG_OPS_TOTAL, operation="import_graph", status="success") == 1
+    assert (
+        get_metric_value(KG_OPS_TOTAL, operation="import_graph", status="success") == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -481,7 +525,9 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
         return mock_driver
 
     mocker.patch.object(knowledge_graph_db, "AsyncGraphDatabase")
-    knowledge_graph_db.AsyncGraphDatabase.driver = mocker.MagicMock(side_effect=side_effect)
+    knowledge_graph_db.AsyncGraphDatabase.driver = mocker.MagicMock(
+        side_effect=side_effect
+    )
 
     client = Neo4jKnowledgeGraph()
     client.max_retries = 3
@@ -489,7 +535,12 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
 
     await client.connect()
     assert client._connected
-    assert get_metric_value(KG_ERRORS, operation="connect", error_type="ServiceUnavailable") == 2
+    assert (
+        get_metric_value(
+            KG_ERRORS, operation="connect", error_type="ServiceUnavailable"
+        )
+        == 2
+    )
     assert get_metric_value(KG_OPS_TOTAL, operation="connect", status="success") == 1
 
 

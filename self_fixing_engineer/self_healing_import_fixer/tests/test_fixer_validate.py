@@ -112,7 +112,9 @@ def project(tmp_path):
 # --------------------------- Initialization / Guards --------------------------
 
 
-def test_validator_init_auto_whitelists_project_root_in_prod_when_list_empty(monkeypatch, tmp_path):
+def test_validator_init_auto_whitelists_project_root_in_prod_when_list_empty(
+    monkeypatch, tmp_path
+):
     """
     Validator currently defaults empty whitelisted_paths to [project_root] even in PRODUCTION_MODE.
     Verify it does NOT raise and auto-whitelists the project root.
@@ -194,7 +196,9 @@ async def test_run_linting_missing_tools_is_graceful_even_in_prod(project, monke
     v = CodeValidator(str(project["root"]), project["whitelist"])
 
     # Both tools missing
-    monkeypatch.setattr("import_fixer.fixer_validate.shutil.which", lambda cmd: None, raising=False)
+    monkeypatch.setattr(
+        "import_fixer.fixer_validate.shutil.which", lambda cmd: None, raising=False
+    )
 
     res = await v.run_linting([project["ok"]])
     assert isinstance(res, StageResult)
@@ -205,7 +209,9 @@ async def test_run_linting_missing_tools_is_graceful_even_in_prod(project, monke
 
 
 @pytest.mark.asyncio
-async def test_validate_and_commit_file_no_write_access_raises_error(project, monkeypatch):
+async def test_validate_and_commit_file_no_write_access_raises_error(
+    project, monkeypatch
+):
     v = CodeValidator(str(project["root"]), project["whitelist"])
 
     original = project["no_write"].read_text(encoding="utf-8")
@@ -229,7 +235,9 @@ async def test_validate_and_commit_file_no_write_access_raises_error(project, mo
 
 
 @pytest.mark.asyncio
-async def test_validate_and_commit_file_pipeline_success(project, monkeypatch, tmp_path):
+async def test_validate_and_commit_file_pipeline_success(
+    project, monkeypatch, tmp_path
+):
     v = CodeValidator(str(project["root"]), project["whitelist"])
 
     original_content = project["ok"].read_text(encoding="utf-8")
@@ -239,7 +247,9 @@ async def test_validate_and_commit_file_pipeline_success(project, monkeypatch, t
     monkeypatch.setattr(
         "import_fixer.fixer_validate.shutil.copy", lambda *a, **k: None, raising=False
     )
-    monkeypatch.setattr("import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False)
+    monkeypatch.setattr(
+        "import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False
+    )
 
     # All stages pass
     ok_stage = StageResult(name="x", passed=True, duration_ms=1)
@@ -281,7 +291,9 @@ async def test_validate_and_commit_file_pipeline_success(project, monkeypatch, t
 
 
 @pytest.mark.asyncio
-async def test_validate_and_commit_file_pipeline_failure_rolls_back(project, monkeypatch):
+async def test_validate_and_commit_file_pipeline_failure_rolls_back(
+    project, monkeypatch
+):
     v = CodeValidator(str(project["root"]), project["whitelist"])
 
     original_content = project["ok"].read_text(encoding="utf-8")
@@ -290,7 +302,9 @@ async def test_validate_and_commit_file_pipeline_failure_rolls_back(project, mon
     monkeypatch.setattr(
         "import_fixer.fixer_validate.shutil.copy", lambda *a, **k: None, raising=False
     )
-    monkeypatch.setattr("import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False)
+    monkeypatch.setattr(
+        "import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False
+    )
 
     ok_stage = StageResult(name="x", passed=True, duration_ms=1)
     bad_stage = StageResult(name="lint", passed=False, duration_ms=1)
@@ -350,8 +364,12 @@ async def test_interactive_prompt_in_prod_commits_when_allowed(monkeypatch, proj
     new_content = "def my_function():\n    return 42\n"
 
     # Ensure we can go through the flow and avoid pytest stdin capture
-    monkeypatch.setattr("import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False)
-    monkeypatch.setattr("import_fixer.fixer_validate.input", lambda *a, **k: "y", raising=False)
+    monkeypatch.setattr(
+        "import_fixer.fixer_validate.os.access", lambda p, m: True, raising=False
+    )
+    monkeypatch.setattr(
+        "import_fixer.fixer_validate.input", lambda *a, **k: "y", raising=False
+    )
 
     report = await v.validate_and_commit_file(
         file_path=str(project["ok"]),

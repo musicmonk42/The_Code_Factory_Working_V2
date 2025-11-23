@@ -164,7 +164,9 @@ def _build_parser() -> argparse.ArgumentParser:
     reporting_group.add_argument(
         "--coverage-xml",
         type=str,
-        default=os.getenv("ATCO_COVERAGE_XML", "atco_artifacts/coverage_reports/coverage.xml"),
+        default=os.getenv(
+            "ATCO_COVERAGE_XML", "atco_artifacts/coverage_reports/coverage.xml"
+        ),
         help="Path to coverage XML output. Can be set with ATCO_COVERAGE_XML env var.",
     )
     reporting_group.add_argument(
@@ -251,7 +253,11 @@ async def _amain(
         CONFIG.get("generated_output_dir"),
         CONFIG.get("sarif_export_dir"),
         CONFIG.get("coverage_reports_dir"),
-        (os.path.dirname(CONFIG.get("audit_log_file")) if CONFIG.get("audit_log_file") else None),
+        (
+            os.path.dirname(CONFIG.get("audit_log_file"))
+            if CONFIG.get("audit_log_file")
+            else None
+        ),
         CONFIG.get("venv_temp_dir", ""),
     ]
 
@@ -307,8 +313,10 @@ async def _amain(
             generation_results = await orchestrator.generate_tests_for_targets(
                 targets, CONFIG.get("generated_output_dir", "atco_artifacts/generated")
             )
-            integration_results = await orchestrator.integrate_and_validate_generated_tests(
-                generation_results
+            integration_results = (
+                await orchestrator.integrate_and_validate_generated_tests(
+                    generation_results
+                )
             )
 
         integration_results = normalize_results(integration_results)

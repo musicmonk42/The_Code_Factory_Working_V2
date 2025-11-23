@@ -73,7 +73,9 @@ def alert_operator(monkeypatch, secrets):
     # Patch logging to avoid file/console IO.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
-    monkeypatch.setattr(logging, "getLogger", lambda name=None: logging.getLogger("dummy_logger"))
+    monkeypatch.setattr(
+        logging, "getLogger", lambda name=None: logging.getLogger("dummy_logger")
+    )
     secrets_mgr = DummySecretsManager(secrets)
     audit_logger = DummyAuditLogger(secrets_mgr)
     op = core_utils.AlertOperator(secrets_mgr, audit_logger)
@@ -222,9 +224,12 @@ def test_dispatch_slack_retries_on_failure(alert_operator):
     # Always fail first, then succeed
     fail_resp = MagicMock(status_code=502)
     success_resp = MagicMock(status_code=200)
-    with patch.object(
-        dispatcher._session, "post", side_effect=[fail_resp, success_resp]
-    ) as mock_post, patch("time.sleep", return_value=None):
+    with (
+        patch.object(
+            dispatcher._session, "post", side_effect=[fail_resp, success_resp]
+        ) as mock_post,
+        patch("time.sleep", return_value=None),
+    ):
         dispatcher._dispatch_slack({"level": "ERROR", "message": "test"})
         assert mock_post.call_count == 2
 
@@ -236,8 +241,9 @@ def test_dispatch_email_success(alert_operator):
     smtp_mock.has_extn.return_value = True
     context_mgr = MagicMock()
     context_mgr.__enter__.return_value = smtp_mock
-    with patch("smtplib.SMTP", return_value=context_mgr), patch(
-        "ssl.create_default_context", return_value=MagicMock()
+    with (
+        patch("smtplib.SMTP", return_value=context_mgr),
+        patch("ssl.create_default_context", return_value=MagicMock()),
     ):
         dispatcher._dispatch_email(
             {
@@ -315,8 +321,11 @@ def test_post_with_retry_retry_after_header(alert_operator):
     # Simulate 429 with Retry-After header
     resp = MagicMock(status_code=429, headers={"Retry-After": "2"})
     success = MagicMock(status_code=200)
-    with patch.object(dispatcher._session, "post", side_effect=[resp, success]) as mock_post, patch(
-        "time.sleep", return_value=None
+    with (
+        patch.object(
+            dispatcher._session, "post", side_effect=[resp, success]
+        ) as mock_post,
+        patch("time.sleep", return_value=None),
     ):
         dispatcher._post_with_retry("http://dummy", {}, (1, 1), 2)
         assert mock_post.call_count == 2
@@ -325,8 +334,9 @@ def test_post_with_retry_retry_after_header(alert_operator):
 def test_post_with_retry_raises_after_max_attempts(alert_operator):
     dispatcher = alert_operator._dispatcher
     fail_resp = MagicMock(status_code=502)
-    with patch.object(dispatcher._session, "post", return_value=fail_resp), patch(
-        "time.sleep", return_value=None
+    with (
+        patch.object(dispatcher._session, "post", return_value=fail_resp),
+        patch("time.sleep", return_value=None),
     ):
         with pytest.raises(Exception):
             dispatcher._post_with_retry("http://dummy", {}, 1, 2)

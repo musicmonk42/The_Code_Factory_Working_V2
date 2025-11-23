@@ -309,7 +309,9 @@ def test_visualize_graph_success(tmp_path, mock_graphviz, mock_shutil_which):
     assert mock_graphviz.render.called
 
 
-def test_visualize_graph_disabled_in_production(tmp_path, mock_graphviz, mock_alert_operator_graph):
+def test_visualize_graph_disabled_in_production(
+    tmp_path, mock_graphviz, mock_alert_operator_graph
+):
     """Tests that visualization is skipped in production when not allowed."""
     mock_alert_operator_graph.reset_mock()
 

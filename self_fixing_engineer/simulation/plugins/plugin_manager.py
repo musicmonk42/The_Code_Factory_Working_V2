@@ -264,7 +264,9 @@ try:
             try:
                 self.runner = WasmRunner(self.name, self.manifest, self.plugins_dir)
             except (WasmRuntimeError, FileNotFoundError) as e:
-                plugin_logger.error(f"[{self.name}] Failed to initialize WasmRunner: {e}")
+                plugin_logger.error(
+                    f"[{self.name}] Failed to initialize WasmRunner: {e}"
+                )
                 self.runner = None
                 raise
 
@@ -325,7 +327,9 @@ try:
             try:
                 self.runner = GrpcRunner(self.name, self.manifest)
             except GrpcRuntimeError as e:
-                plugin_logger.error(f"[{self.name}] Failed to initialize GrpcRunner: {e}")
+                plugin_logger.error(
+                    f"[{self.name}] Failed to initialize GrpcRunner: {e}"
+                )
                 self.runner = None
                 raise
 
@@ -348,7 +352,9 @@ try:
                     "message": f"gRPC plugin health check failed: {e}",
                 }
 
-        async def run(self, service_method: str, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        async def run(
+            self, service_method: str, request_data: Dict[str, Any]
+        ) -> Dict[str, Any]:
             if not self.runner:
                 raise RuntimeError("gRPC runner not initialized.")
             await self.runner.connect()
@@ -464,7 +470,9 @@ def _minimal_manifest_validate(manifest: Dict[str, Any]) -> Tuple[bool, str]:
         pass
     # manifest_version
     try:
-        if _parse_version(manifest["manifest_version"]) < _parse_version(MIN_MANIFEST_VERSION):
+        if _parse_version(manifest["manifest_version"]) < _parse_version(
+            MIN_MANIFEST_VERSION
+        ):
             return False, f"Manifest version too old (< {MIN_MANIFEST_VERSION})"
     except Exception:
         pass
@@ -477,7 +485,9 @@ class PythonSubprocessProxy:
     Executes operations (currently: health) in a short-lived subprocess to avoid in-proc code execution.
     """
 
-    def __init__(self, plugin_path: Path, manifest: Dict[str, Any], health_timeout: float):
+    def __init__(
+        self, plugin_path: Path, manifest: Dict[str, Any], health_timeout: float
+    ):
         self.plugin_path = plugin_path
         self.manifest = manifest
         self.health_timeout = health_timeout
@@ -541,7 +551,9 @@ asyncio.run(main())
             env=env,
         )
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=self.health_timeout)
+            out, err = await asyncio.wait_for(
+                proc.communicate(), timeout=self.health_timeout
+            )
         except asyncio.TimeoutError:
             try:
                 proc.kill()
@@ -599,7 +611,9 @@ class PluginManager:
             loop.run_forever()
 
         self._bg_loop = asyncio.new_event_loop()
-        self._bg_thread = threading.Thread(target=_loop_runner, args=(self._bg_loop,), daemon=True)
+        self._bg_thread = threading.Thread(
+            target=_loop_runner, args=(self._bg_loop,), daemon=True
+        )
         self._bg_thread.start()
 
     def stop_background_loop(self):
@@ -618,10 +632,16 @@ class PluginManager:
     async def discover_plugins(self) -> List[Path]:
         """Find all plugin files and WASM/manifest folders in plugins_dir asynchronously."""
         loop = asyncio.get_running_loop()
-        py_plugins_coro = loop.run_in_executor(None, glob.glob, str(self.plugins_dir / "*.py"))
-        manifest_dirs_coro = loop.run_in_executor(None, glob.glob, str(self.plugins_dir / "*"))
+        py_plugins_coro = loop.run_in_executor(
+            None, glob.glob, str(self.plugins_dir / "*.py")
+        )
+        manifest_dirs_coro = loop.run_in_executor(
+            None, glob.glob, str(self.plugins_dir / "*")
+        )
 
-        py_plugins, manifest_dirs = await asyncio.gather(py_plugins_coro, manifest_dirs_coro)
+        py_plugins, manifest_dirs = await asyncio.gather(
+            py_plugins_coro, manifest_dirs_coro
+        )
 
         all_plugins: List[Path] = []
         for p in py_plugins:
@@ -669,7 +689,9 @@ class PluginManager:
             pass
         return HEALTH_TIMEOUT_SEC
 
-    def _validate_manifest_schema(self, plugin_path: Path, manifest: Dict[str, Any]) -> bool:
+    def _validate_manifest_schema(
+        self, plugin_path: Path, manifest: Dict[str, Any]
+    ) -> bool:
         """Performs manifest validation including Pydantic and security checks."""
         # Structural validation
         if pydantic_available:
@@ -702,7 +724,9 @@ class PluginManager:
             perm in manifest.get("permissions", [])
             for perm in ["execute_arbitrary_code", "network_unrestricted"]
         ):
-            plugin_logger.error(f"[{manifest.get('name','?')}] Dangerous permissions detected.")
+            plugin_logger.error(
+                f"[{manifest.get('name','?')}] Dangerous permissions detected."
+            )
             return False
 
         if plugin_type == "python":
@@ -720,7 +744,9 @@ class PluginManager:
                 )
                 return False
             # For directory-based python plugins, enforce file-path entrypoint to avoid sys.path injection
-            if plugin_path.is_dir() and not manifest.get("entrypoint", "").endswith(".py"):
+            if plugin_path.is_dir() and not manifest.get("entrypoint", "").endswith(
+                ".py"
+            ):
                 plugin_logger.error(
                     f"Python plugin '{manifest['name']}' directory entrypoint must be a .py file path (not module path). Rejected."
                 )
@@ -744,7 +770,9 @@ class PluginManager:
                 if ep.endswith(".wasm"):
                     target = plugin_path / ep
                     if not target.exists():
-                        plugin_logger.error(f"WASM entrypoint file not found: {target}. Rejected.")
+                        plugin_logger.error(
+                            f"WASM entrypoint file not found: {target}. Rejected."
+                        )
                         return False
                 else:
                     if not any(plugin_path.glob("*.wasm")):
@@ -772,12 +800,16 @@ class PluginManager:
         min_version = manifest.get("min_core_version")
         max_version = manifest.get("max_core_version")
         try:
-            if min_version and _parse_version(current_core_version) < _parse_version(min_version):
+            if min_version and _parse_version(current_core_version) < _parse_version(
+                min_version
+            ):
                 plugin_logger.error(
                     f"Plugin requires core version >= {min_version}, current is {current_core_version}. Rejected."
                 )
                 return False
-            if max_version and _parse_version(current_core_version) > _parse_version(max_version):
+            if max_version and _parse_version(current_core_version) > _parse_version(
+                max_version
+            ):
                 plugin_logger.warning(
                     f"Plugin supports up to core version {max_version}, current is {current_core_version}. Compatibility issues may arise."
                 )
@@ -873,7 +905,9 @@ class PluginManager:
 
     def load_plugin(self, plugin_path: Path, check_health: bool = False):
         """Load a plugin by path, routing to the appropriate handler based on manifest 'type'."""
-        path_name = plugin_path.stem if plugin_path.suffix == ".py" else plugin_path.name
+        path_name = (
+            plugin_path.stem if plugin_path.suffix == ".py" else plugin_path.name
+        )
         plugin_type = "unknown"
         plugin_name = path_name  # default until manifest loaded
 
@@ -887,7 +921,9 @@ class PluginManager:
 
             # Detect duplicates by manifest name
             with self._registry_lock:
-                if plugin_name in self.registry and self.registry[plugin_name].get("status") in (
+                if plugin_name in self.registry and self.registry[plugin_name].get(
+                    "status"
+                ) in (
                     "loaded",
                     "warning",
                     "disabled",
@@ -901,7 +937,9 @@ class PluginManager:
                 raise ValueError("Manifest schema validation failed.")
 
             if plugin_type == "python":
-                instance, load_info = self._get_python_instance(plugin_name, plugin_path, manifest)
+                instance, load_info = self._get_python_instance(
+                    plugin_name, plugin_path, manifest
+                )
             elif plugin_type in HANDLERS:
                 handler_class = HANDLERS[plugin_type]
                 if plugin_type == "wasm":
@@ -926,7 +964,9 @@ class PluginManager:
                 f"[{plugin_name}] Loaded {plugin_type} plugin (isolation={ 'process' if plugin_type=='python' and isinstance(instance, PythonSubprocessProxy) else 'inproc' })."
             )
             if prometheus_available:
-                PLUGIN_LOADS_TOTAL.labels(plugin_type=plugin_type, status="success").inc()
+                PLUGIN_LOADS_TOTAL.labels(
+                    plugin_type=plugin_type, status="success"
+                ).inc()
 
             if check_health:
                 initial_health = self._run_coro_blocking(self.health(plugin_name))
@@ -938,7 +978,9 @@ class PluginManager:
                         )
                         self.registry[plugin_name]["status"] = "warning"
                     else:
-                        plugin_logger.info(f"[{plugin_name}] Initial health check: {status}.")
+                        plugin_logger.info(
+                            f"[{plugin_name}] Initial health check: {status}."
+                        )
 
         except Exception as e:
             with self._registry_lock:
@@ -947,11 +989,15 @@ class PluginManager:
                     "error": str(e),
                     "path": str(plugin_path),
                 }
-            plugin_logger.error(f"[{plugin_name}] Failed to load: {e}\n{traceback.format_exc()}")
+            plugin_logger.error(
+                f"[{plugin_name}] Failed to load: {e}\n{traceback.format_exc()}"
+            )
             self._audit_log_event(plugin_name, "load_failed", str(e))
             if prometheus_available:
                 PLUGIN_LOADS_TOTAL.labels(plugin_type=plugin_type, status="error").inc()
-                PLUGIN_ERRORS_TOTAL.labels(error_type="load_failure", plugin_name=plugin_name).inc()
+                PLUGIN_ERRORS_TOTAL.labels(
+                    error_type="load_failure", plugin_name=plugin_name
+                ).inc()
 
     def reload_plugin(self, name: str):
         """Reloads a plugin by re-initializing its runner or re-importing the module."""
@@ -987,7 +1033,9 @@ class PluginManager:
         try:
             if plugin_type == "python":
                 # Recreate according to isolation mode
-                new_instance, load_info = self._get_python_instance(name, plugin_path, manifest)
+                new_instance, load_info = self._get_python_instance(
+                    name, plugin_path, manifest
+                )
             elif plugin_type in HANDLERS:
                 handler_class = HANDLERS[plugin_type]
                 if plugin_type == "wasm":
@@ -1028,10 +1076,14 @@ class PluginManager:
                 entry = self.registry.get(name, {})
                 entry["status"] = "error"
                 entry["error"] = str(e)
-            plugin_logger.error(f"[{name}] Reload failed: {e}\n{traceback.format_exc()}")
+            plugin_logger.error(
+                f"[{name}] Reload failed: {e}\n{traceback.format_exc()}"
+            )
             self._audit_log_event(name, "reload_failed", str(e))
             if prometheus_available:
-                PLUGIN_ERRORS_TOTAL.labels(error_type="reload_failure", plugin_name=name).inc()
+                PLUGIN_ERRORS_TOTAL.labels(
+                    error_type="reload_failure", plugin_name=name
+                ).inc()
 
     def enable_plugin(self, name: str):
         """Enable a plugin (placeholder: in a real system, this would call hooks)."""
@@ -1061,7 +1113,9 @@ class PluginManager:
             elif plugin_type == "python":
                 # Recreate instance respecting isolation mode
                 plugin_path = Path(self.registry[name]["path"])
-                new_instance, load_info = self._get_python_instance(name, plugin_path, manifest)
+                new_instance, load_info = self._get_python_instance(
+                    name, plugin_path, manifest
+                )
                 with self._registry_lock:
                     self.registry[name]["instance"] = new_instance
                     self.registry[name]["load_info"] = load_info
@@ -1084,7 +1138,9 @@ class PluginManager:
             with self._registry_lock:
                 self.registry[name]["status"] = "error"
                 self.registry[name]["error"] = str(e)
-            plugin_logger.error(f"[{name}] Failed to enable: {e}\n{traceback.format_exc()}")
+            plugin_logger.error(
+                f"[{name}] Failed to enable: {e}\n{traceback.format_exc()}"
+            )
         self._audit_log_event(name, "enabled", "Plugin enabled")
 
     def disable_plugin(self, name: str):
@@ -1221,7 +1277,9 @@ class PluginManager:
 
             # Update Prometheus health metric
             if prometheus_available:
-                health_value = 1.0 if result.get("status") in ["ok", "serving", "healthy"] else 0.0
+                health_value = (
+                    1.0 if result.get("status") in ["ok", "serving", "healthy"] else 0.0
+                )
                 PLUGIN_HEALTH_STATUS.labels(plugin_name=name).set(health_value)
 
             return result
@@ -1234,7 +1292,9 @@ class PluginManager:
                 PLUGIN_HEALTH_STATUS.labels(plugin_name=name).set(0.0)
             return result
         except Exception as e:
-            plugin_logger.error(f"[{name}] Health check failed: {e}\n{traceback.format_exc()}")
+            plugin_logger.error(
+                f"[{name}] Health check failed: {e}\n{traceback.format_exc()}"
+            )
             result = {"status": "error", "message": f"Health check failed: {str(e)}"}
             if prometheus_available:
                 PLUGIN_HEALTH_STATUS.labels(plugin_name=name).set(0.0)
@@ -1263,7 +1323,9 @@ class PluginManager:
             try:
                 if hasattr(instance, "close"):
                     if asyncio.iscoroutinefunction(getattr(instance, "close")):
-                        plugin_logger.info(f"[{name}] Closing plugin resources (async).")
+                        plugin_logger.info(
+                            f"[{name}] Closing plugin resources (async)."
+                        )
                         await instance.close()  # type: ignore
                     else:
                         plugin_logger.info(f"[{name}] Closing plugin resources (sync).")
@@ -1274,7 +1336,9 @@ class PluginManager:
                     pass
                 with self._registry_lock:
                     entry = self.registry.get(name, {})
-                    entry["status"] = "closed" if plugin_type in HANDLERS else "unloaded"
+                    entry["status"] = (
+                        "closed" if plugin_type in HANDLERS else "unloaded"
+                    )
                     entry["instance"] = None
             except Exception as e:
                 plugin_logger.error(f"[{name}] Error during plugin close: {e}")
@@ -1314,7 +1378,9 @@ class PluginManager:
         self._ensure_background_loop()
         assert self._bg_loop is not None
         fut = asyncio.run_coroutine_threadsafe(coro, self._bg_loop)
-        return fut.result(timeout=max(HEALTH_TIMEOUT_SEC, 30.0))  # allow longer for non-health ops
+        return fut.result(
+            timeout=max(HEALTH_TIMEOUT_SEC, 30.0)
+        )  # allow longer for non-health ops
 
     def get_plugin_api_methods(self, name: str) -> Optional[List[str]]:
         """Returns a list of public API methods for a loaded plugin instance."""
@@ -1384,7 +1450,9 @@ class PLUGIN_API:
     def greet(self, name):
         return f"Hello from Python plugin, {name}!"
 """
-    with open(plugins_test_dir / "python_example_plugin.py", "w", encoding="utf-8") as f:
+    with open(
+        plugins_test_dir / "python_example_plugin.py", "w", encoding="utf-8"
+    ) as f:
         f.write(python_plugin_content)
 
     # Dummy WASM Plugin Directory (requires a .wasm file for WasmRunner)
@@ -1456,7 +1524,9 @@ class PLUGIN_API:
     py_dir = plugins_test_dir / "python_dir_plugin"
     os.makedirs(py_dir, exist_ok=True)
     with open(py_dir / "main.py", "w", encoding="utf-8") as f:
-        f.write("def plugin_health():\n    return {'status':'ok','message':'dir plugin ok'}\n")
+        f.write(
+            "def plugin_health():\n    return {'status':'ok','message':'dir plugin ok'}\n"
+        )
     with open(py_dir / "manifest.json", "w", encoding="utf-8") as f:
         f.write(
             json.dumps(
@@ -1502,7 +1572,9 @@ class PLUGIN_API:
 
         if status in ["loaded", "warning"]:
             health_status = await pm.health(name)
-            print(f"  Health Check: {health_status['status']} - {health_status.get('message', '')}")
+            print(
+                f"  Health Check: {health_status['status']} - {health_status.get('message', '')}"
+            )
         print("-" * 30)
 
     python_plugin = pm.get_plugin("python_example_plugin")
@@ -1511,22 +1583,36 @@ class PLUGIN_API:
             f"\nCalling Python plugin health (inproc): {await pm.health('python_example_plugin')}"
         )
         if hasattr(python_plugin, "PLUGIN_API"):
-            print(f"Calling Python plugin greet: {python_plugin.PLUGIN_API().greet('Alice')}")
-        print(f"Python plugin API methods: {pm.get_plugin_api_methods('python_example_plugin')}")
+            print(
+                f"Calling Python plugin greet: {python_plugin.PLUGIN_API().greet('Alice')}"
+            )
+        print(
+            f"Python plugin API methods: {pm.get_plugin_api_methods('python_example_plugin')}"
+        )
     else:
-        print("\nPython plugins are process-isolated; use manager.health() to check status.")
+        print(
+            "\nPython plugins are process-isolated; use manager.health() to check status."
+        )
 
     if "wasm" in HANDLERS:
         wasm_plugin = pm.get_plugin("wasm_example_plugin")
         if wasm_plugin:
-            print(f"\nCalling WASM plugin health: {await pm.health('wasm_example_plugin')}")
-            print(f"WASM plugin API methods: {pm.get_plugin_api_methods('wasm_example_plugin')}")
+            print(
+                f"\nCalling WASM plugin health: {await pm.health('wasm_example_plugin')}"
+            )
+            print(
+                f"WASM plugin API methods: {pm.get_plugin_api_methods('wasm_example_plugin')}"
+            )
 
     if "grpc" in HANDLERS:
         grpc_plugin = pm.get_plugin("grpc_example_plugin")
         if grpc_plugin:
-            print(f"\nCalling gRPC plugin health: {await pm.health('grpc_example_plugin')}")
-            print(f"gRPC plugin API methods: {pm.get_plugin_api_methods('grpc_example_plugin')}")
+            print(
+                f"\nCalling gRPC plugin health: {await pm.health('grpc_example_plugin')}"
+            )
+            print(
+                f"gRPC plugin API methods: {pm.get_plugin_api_methods('grpc_example_plugin')}"
+            )
 
     print("\n--- Testing enable/disable for python_example_plugin ---")
     pm.disable_plugin("python_example_plugin")

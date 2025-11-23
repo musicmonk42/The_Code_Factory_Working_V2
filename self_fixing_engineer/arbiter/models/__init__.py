@@ -56,7 +56,11 @@ except ImportError as e:
 # Neo4j Knowledge Graph
 try:
     from .knowledge_graph_db import ConnectionError as KGConnectionError
-    from .knowledge_graph_db import KnowledgeGraphError, Neo4jKnowledgeGraph, NodeNotFoundError
+    from .knowledge_graph_db import (
+        KnowledgeGraphError,
+        Neo4jKnowledgeGraph,
+        NodeNotFoundError,
+    )
     from .knowledge_graph_db import QueryError as KGQueryError
     from .knowledge_graph_db import SchemaValidationError as KGSchemaValidationError
 
@@ -146,7 +150,12 @@ except ImportError as e:
 
 # Merkle Tree
 try:
-    from .merkle_tree import MerkleProofError, MerkleTree, MerkleTreeEmptyError, MerkleTreeError
+    from .merkle_tree import (
+        MerkleProofError,
+        MerkleTree,
+        MerkleTreeEmptyError,
+        MerkleTreeError,
+    )
 
     __all__.extend(
         [
@@ -196,4 +205,6 @@ __version__ = "1.0.0"
 
 # Log summary of what's available
 if logger.isEnabledFor(logging.DEBUG):
-    logger.debug(f"Models package initialized. Available components: {', '.join(__all__)}")
+    logger.debug(
+        f"Models package initialized. Available components: {', '.join(__all__)}"
+    )

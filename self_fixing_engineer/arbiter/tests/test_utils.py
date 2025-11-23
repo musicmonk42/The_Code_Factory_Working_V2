@@ -114,7 +114,9 @@ async def test_check_service_health_non_json(mock_get_session):
     # Create mock response
     mock_response = AsyncMock()
     mock_response.raise_for_status = MagicMock()
-    mock_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError(MagicMock(), MagicMock()))
+    mock_response.json = AsyncMock(
+        side_effect=aiohttp.ContentTypeError(MagicMock(), MagicMock())
+    )
     mock_response.text = AsyncMock(return_value="Plain text")
 
     # Create mock session with proper async context manager
@@ -174,7 +176,9 @@ async def test_check_service_health_timeout(mock_get_session):
 async def test_check_service_health_unexpected_error(mock_get_session):
     # Create mock session that raises a generic exception
     mock_session = MagicMock()
-    mock_session.get.return_value.__aenter__ = AsyncMock(side_effect=Exception("Unexpected error"))
+    mock_session.get.return_value.__aenter__ = AsyncMock(
+        side_effect=Exception("Unexpected error")
+    )
 
     mock_get_session.return_value = mock_session
 

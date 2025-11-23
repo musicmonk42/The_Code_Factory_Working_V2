@@ -98,7 +98,9 @@ async def test_audit_logger_log_event_file(mock_audit_log_path, monkeypatch):
     monkeypatch.setenv("AUDIT_BACKEND", "file")
     monkeypatch.setenv("AUDIT_LOG_PATH", str(mock_audit_log_path["audit_log_path"]))
     monkeypatch.setenv("AUDIT_DLQ_PATH", str(mock_audit_log_path["dlq_path"]))
-    monkeypatch.setenv("AUDIT_INTEGRITY_FILE", str(mock_audit_log_path["integrity_file"]))
+    monkeypatch.setenv(
+        "AUDIT_INTEGRITY_FILE", str(mock_audit_log_path["integrity_file"])
+    )
 
     mock_file = mock_open()
     monkeypatch.setattr("builtins.open", mock_file)
@@ -196,7 +198,9 @@ async def test_ga_optimizer_evolve(monkeypatch):
 
     adapter = MockAdapter()
     optimizer = GAOptimizer()
-    monkeypatch.setattr("deap.algorithms.eaSimple", MagicMock(return_value=([1, 2, 3], {})))
+    monkeypatch.setattr(
+        "deap.algorithms.eaSimple", MagicMock(return_value=([1, 2, 3], {}))
+    )
     mock_hof = MagicMock()
     mock_hof.__getitem__.return_value = [1, 2, 3]
     monkeypatch.setattr(optimizer.tools, "HallOfFame", MagicMock(return_value=mock_hof))
@@ -211,7 +215,9 @@ async def test_run_simulation_swarm_success(mock_config):
     assert len(results["results"]) == 2
 
 
-@pytest.mark.skip(reason="OperatorAPI not available in self_fixing_engineer.simulation.agentic")
+@pytest.mark.skip(
+    reason="OperatorAPI not available in self_fixing_engineer.simulation.agentic"
+)
 async def test_operator_api_health_status(monkeypatch):
     pass
 

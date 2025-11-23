@@ -10,7 +10,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    from self_fixing_engineer.guardrails.audit_log import AuditLogger as _BaseAuditLogger
+    from self_fixing_engineer.guardrails.audit_log import (
+        AuditLogger as _BaseAuditLogger,
+    )
 
     # Re-export the AuditLogger for backward compatibility
     AuditLogger = _BaseAuditLogger
@@ -30,10 +32,14 @@ except ImportError:
             log_level = getattr(logging, level.upper(), logging.INFO)
             self.logger.log(log_level, f"AUDIT: {message}", extra=kwargs)
 
-        def emit_audit_event(self, event_type: str, details: dict, severity: str = "INFO"):
+        def emit_audit_event(
+            self, event_type: str, details: dict, severity: str = "INFO"
+        ):
             """Emit an audit event."""
             log_level = getattr(logging, severity.upper(), logging.INFO)
-            self.logger.log(log_level, f"AUDIT_EVENT: {event_type}", extra={"details": details})
+            self.logger.log(
+                log_level, f"AUDIT_EVENT: {event_type}", extra={"details": details}
+            )
 
 
 __all__ = ["AuditLogger"]

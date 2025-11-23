@@ -21,14 +21,24 @@ class TaskPayload(BaseModel):
     code_files: Dict[str, str] = Field(
         ..., description="Filenames mapped to their string content for source code."
     )
-    output_path: str = Field(..., description="The designated output directory for results.")
+    output_path: str = Field(
+        ..., description="The designated output directory for results."
+    )
 
     # --- ADD THIS LINE ---
-    command: Optional[List[str]] = Field(None, description="The command to execute in the backend.")
+    command: Optional[List[str]] = Field(
+        None, description="The command to execute in the backend."
+    )
 
-    timeout: Optional[int] = Field(None, description="Task-specific timeout in seconds.")
-    dry_run: bool = Field(False, description="If true, backend should simulate execution.")
-    priority: int = Field(0, description="Task priority (higher numbers = higher priority).")
+    timeout: Optional[int] = Field(
+        None, description="Task-specific timeout in seconds."
+    )
+    dry_run: bool = Field(
+        False, description="If true, backend should simulate execution."
+    )
+    priority: int = Field(
+        0, description="Task priority (higher numbers = higher priority)."
+    )
     tags: List[str] = Field(
         default_factory=list, description="Arbitrary tags for grouping/filtering."
     )
@@ -55,7 +65,9 @@ class TaskPayload(BaseModel):
         test_files or code_files to be populated.
         """
         if not self.test_files and not self.code_files:
-            raise ValueError("At least one of 'test_files' or 'code_files' must be provided.")
+            raise ValueError(
+                "At least one of 'test_files' or 'code_files' must be provided."
+            )
         return self
 
 
@@ -85,7 +97,9 @@ class TaskResult(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
     # These fields might be in the 'results' dict, but adding them here based on test mocks
-    pass_rate: Optional[float] = Field(None, description="Overall pass rate, if applicable.")
+    pass_rate: Optional[float] = Field(
+        None, description="Overall pass rate, if applicable."
+    )
     coverage_percentage: Optional[float] = Field(
         None, description="Overall coverage, if applicable."
     )

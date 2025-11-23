@@ -175,9 +175,15 @@ def mock_circuit_breaker(monkeypatch):
     mock_record_failure = Mock()
     mock_record_success = Mock()
 
-    monkeypatch.setattr("arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open)
-    monkeypatch.setattr("arbiter.policy.core.record_llm_policy_api_failure", mock_record_failure)
-    monkeypatch.setattr("arbiter.policy.core.record_llm_policy_api_success", mock_record_success)
+    monkeypatch.setattr(
+        "arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open
+    )
+    monkeypatch.setattr(
+        "arbiter.policy.core.record_llm_policy_api_failure", mock_record_failure
+    )
+    monkeypatch.setattr(
+        "arbiter.policy.core.record_llm_policy_api_success", mock_record_success
+    )
 
     return {
         "is_open": mock_is_open,
@@ -252,7 +258,9 @@ def arbiter_config(tmp_policy_file):
     config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL = 0.001
     config.CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL = 300.0
     config.CIRCUIT_BREAKER_MAX_PROVIDERS = 1000
-    config.POLICY_REFRESH_INTERVAL_SECONDS = 3600  # Long interval to prevent interference
+    config.POLICY_REFRESH_INTERVAL_SECONDS = (
+        3600  # Long interval to prevent interference
+    )
     config.LLM_API_FAILURE_THRESHOLD = 3
     config.LLM_API_BACKOFF_MAX_SECONDS = 60.0
     config.LLM_API_TIMEOUT_SECONDS = 30
@@ -399,7 +407,9 @@ class TestSQLiteClient:
         """Tests thread-safe concurrent database operations."""
 
         async def writer(i):
-            await sqlite_client.save_feedback_entry({"type": f"test_{i}", "data": {"index": i}})
+            await sqlite_client.save_feedback_entry(
+                {"type": f"test_{i}", "data": {"index": i}}
+            )
 
         tasks = [writer(i) for i in range(10)]
         await asyncio.gather(*tasks)
@@ -459,7 +469,9 @@ class TestBasicDecisionOptimizer:
                 {
                     "login_attempts": 5,
                     "device_trusted": False,
-                    "last_login": (datetime.now(timezone.utc) - timedelta(days=90)).isoformat(),
+                    "last_login": (
+                        datetime.now(timezone.utc) - timedelta(days=90)
+                    ).isoformat(),
                 },
                 "guestUser",
                 (0.0, 0.5),
@@ -476,16 +488,22 @@ class TestBasicDecisionOptimizer:
             ),
         ],
     )
-    async def test_trust_score_scenarios(self, context, user_id, expected_range, arbiter_config):
+    async def test_trust_score_scenarios(
+        self, context, user_id, expected_range, arbiter_config
+    ):
         """Tests various trust score calculation scenarios."""
-        optimizer = BasicDecisionOptimizer(settings=arbiter_config.DECISION_OPTIMIZER_SETTINGS)
+        optimizer = BasicDecisionOptimizer(
+            settings=arbiter_config.DECISION_OPTIMIZER_SETTINGS
+        )
         score = await optimizer.compute_trust_score(context, user_id)
         assert expected_range[0] <= score <= expected_range[1]
 
     @pytest.mark.asyncio
     async def test_invalid_context_types(self, arbiter_config):
         """Tests error handling for invalid context types."""
-        optimizer = BasicDecisionOptimizer(settings=arbiter_config.DECISION_OPTIMIZER_SETTINGS)
+        optimizer = BasicDecisionOptimizer(
+            settings=arbiter_config.DECISION_OPTIMIZER_SETTINGS
+        )
 
         with pytest.raises(ValueError):
             await optimizer.compute_trust_score("not a dict", "user")
@@ -514,7 +532,9 @@ class TestPolicyEngine:
     @pytest.mark.parametrize("domain,reason_fragment", INVALID_DOMAINS)
     async def test_invalid_domains(self, policy_engine, domain, reason_fragment):
         """Tests rejection of invalid domain names."""
-        result, reason = await policy_engine.should_auto_learn(domain, "key", "user", {})
+        result, reason = await policy_engine.should_auto_learn(
+            domain, "key", "user", {}
+        )
         assert not result
         assert reason_fragment in reason
 
@@ -530,21 +550,27 @@ class TestPolicyEngine:
     @pytest.mark.parametrize("user_id,reason_fragment", INVALID_USER_IDS)
     async def test_invalid_user_ids(self, policy_engine, user_id, reason_fragment):
         """Tests rejection of invalid user IDs."""
-        result, reason = await policy_engine.should_auto_learn("test", "key", user_id, {})
+        result, reason = await policy_engine.should_auto_learn(
+            "test", "key", user_id, {}
+        )
         assert not result
         assert reason_fragment in reason
 
     @pytest.mark.asyncio
     async def test_domain_restrictions(self, policy_engine):
         """Tests domain-level access restrictions."""
-        result, reason = await policy_engine.should_auto_learn("restricted", "key", "user", {})
+        result, reason = await policy_engine.should_auto_learn(
+            "restricted", "key", "user", {}
+        )
         assert not result
         assert "Restricted domain" in reason
 
     @pytest.mark.asyncio
     async def test_user_restrictions(self, policy_engine):
         """Tests user-level access restrictions."""
-        result, reason = await policy_engine.should_auto_learn("test", "key", "blocked_user", {})
+        result, reason = await policy_engine.should_auto_learn(
+            "test", "key", "blocked_user", {}
+        )
         assert not result
         assert "User blocked" in reason
 
@@ -554,7 +580,9 @@ class TestPolicyEngine:
         policy_engine._policies["domain_rules"]["test"]["max_size_kb"] = 0.001
         large_value = "x" * 2000
 
-        result, reason = await policy_engine.should_auto_learn("test", "key", "user", large_value)
+        result, reason = await policy_engine.should_auto_learn(
+            "test", "key", "user", large_value
+        )
         assert not result
         assert "exceeds max" in reason
 
@@ -607,7 +635,9 @@ class TestPolicyEngine:
 
         monkeypatch.setattr("arbiter.policy.core.LLMClient", mock_llm_class)
 
-        result, reason = await policy_engine.should_auto_learn("test", "key", "user", "test_value")
+        result, reason = await policy_engine.should_auto_learn(
+            "test", "key", "user", "test_value"
+        )
         assert result
         mock_llm.generate_text.assert_called_once()
 
@@ -627,7 +657,9 @@ class TestPolicyEngine:
 
         policy_engine.reload_policies()
 
-        result, reason = await policy_engine.should_auto_learn("new_domain", "key", "user", {})
+        result, reason = await policy_engine.should_auto_learn(
+            "new_domain", "key", "user", {}
+        )
         assert not result
         assert "New restriction" in reason
 
@@ -638,7 +670,9 @@ class TestPolicyEngine:
         policy_engine._custom_rules.clear()
 
         async def make_request(i):
-            return await policy_engine.should_auto_learn("test", f"key_{i}", "user", {"index": i})
+            return await policy_engine.should_auto_learn(
+                "test", f"key_{i}", "user", {"index": i}
+            )
 
         tasks = [make_request(i) for i in range(50)]
         results = await asyncio.gather(*tasks)
@@ -658,7 +692,9 @@ class TestPolicyEngine:
         new_policies = policy_engine._policies.copy()
         new_policies["domain_rules"]["evolved"]["reason"] = "Updated evolved rule"
 
-        success, message = await policy_engine.apply_policy_update_from_evolution(new_policies)
+        success, message = await policy_engine.apply_policy_update_from_evolution(
+            new_policies
+        )
         assert success
 
         # Clear custom rules to avoid interference
@@ -703,7 +739,9 @@ class TestPerformance:
         tracemalloc.start()
 
         for _ in range(100):
-            await policy_engine.should_auto_learn("test", "key", "user", {"data": "x" * 1000})
+            await policy_engine.should_auto_learn(
+                "test", "key", "user", {"data": "x" * 1000}
+            )
 
         snapshot = tracemalloc.take_snapshot()
         top_stats = snapshot.statistics("lineno")
@@ -825,7 +863,9 @@ class TestStress:
                 await policy_engine.should_auto_learn("test", "key", "user", {})
                 await asyncio.sleep(0.001)
 
-        await asyncio.gather(reloader(), requester(), requester(), return_exceptions=True)
+        await asyncio.gather(
+            reloader(), requester(), requester(), return_exceptions=True
+        )
 
     @pytest.mark.asyncio
     async def test_resource_cleanup(self, tmp_path):
@@ -895,10 +935,14 @@ if HYPOTHESIS_AVAILABLE:
             domain=st.text(min_size=1, max_size=100),
             key=st.text(min_size=1, max_size=100),
             user_id=st.text(min_size=0, max_size=100),
-            value=st.dictionaries(st.text(max_size=50), st.text(max_size=50), max_size=10),
+            value=st.dictionaries(
+                st.text(max_size=50), st.text(max_size=50), max_size=10
+            ),
         )
         @settings(max_examples=50, deadline=None)
-        async def test_fuzz_should_auto_learn(self, policy_engine, domain, key, user_id, value):
+        async def test_fuzz_should_auto_learn(
+            self, policy_engine, domain, key, user_id, value
+        ):
             """Fuzz tests the should_auto_learn method."""
             try:
                 result, reason = await policy_engine.should_auto_learn(

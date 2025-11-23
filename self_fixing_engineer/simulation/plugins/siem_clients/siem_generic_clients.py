@@ -60,7 +60,9 @@ class SplunkConfig(BaseModel):
         ...,
         description="Splunk HEC endpoint URL (usually .../services/collector/event).",
     )
-    token: str = Field(..., min_length=1, description="Splunk HEC authentication token.")
+    token: str = Field(
+        ..., min_length=1, description="Splunk HEC authentication token."
+    )
     source: str = Field("sfe_audit", description="Event source.")
     sourcetype: str = Field("_json", description="Event sourcetype.")
     index: Optional[str] = Field(None, description="Splunk index to send data to.")
@@ -72,7 +74,9 @@ class SplunkConfig(BaseModel):
             if not v_str.startswith("https"):
                 raise ValueError("Splunk URL must use HTTPS in PRODUCTION_MODE.")
             if any(s in v_str for s in ("dummy", "mock", "test", "example.com")):
-                raise ValueError(f"Dummy/test URL detected: {v}. Not allowed in production.")
+                raise ValueError(
+                    f"Dummy/test URL detected: {v}. Not allowed in production."
+                )
         return v
 
     @validator("token")
@@ -98,12 +102,18 @@ class ElasticConfig(BaseModel):
             if not v_str.startswith("https"):
                 raise ValueError("Elasticsearch URL must use HTTPS in PRODUCTION_MODE.")
             if any(s in v_str for s in ("dummy", "mock", "test", "example.com")):
-                raise ValueError(f"Dummy/test URL detected: {v}. Not allowed in production.")
+                raise ValueError(
+                    f"Dummy/test URL detected: {v}. Not allowed in production."
+                )
         return v
 
     @validator("api_key", "password")
     def validate_credentials_not_dummy(cls, v, field):
-        if PRODUCTION_MODE and v and any(s in v.lower() for s in ("dummy", "mock", "test")):
+        if (
+            PRODUCTION_MODE
+            and v
+            and any(s in v.lower() for s in ("dummy", "mock", "test"))
+        ):
             raise ValueError(
                 f"Dummy/test credential detected for {field.name}. Not allowed in production."
             )
@@ -111,7 +121,9 @@ class ElasticConfig(BaseModel):
 
     @validator("api_key", "username", "password", always=True)
     def validate_auth_method_presence(cls, v, values):
-        if not values.get("api_key") and not (values.get("username") and values.get("password")):
+        if not values.get("api_key") and not (
+            values.get("username") and values.get("password")
+        ):
             raise ValueError(
                 "Either 'api_key' or both 'username' and 'password' must be provided for authentication."
             )
@@ -137,7 +149,9 @@ class DatadogConfig(BaseModel):
     )
     service: str = Field("sfe-agent", description="Service name for logs.")
     source: str = Field("sfe-audit-plugin", description="Log source.")
-    tags: List[str] = Field(default_factory=list, description="List of global tags for logs.")
+    tags: List[str] = Field(
+        default_factory=list, description="List of global tags for logs."
+    )
 
     @validator("url", "query_url")
     def validate_urls_security_and_dummy(cls, v):
@@ -146,7 +160,9 @@ class DatadogConfig(BaseModel):
             if not v_str.startswith("https"):
                 raise ValueError("Datadog URLs must use HTTPS in PRODUCTION_MODE.")
             if any(s in v_str for s in ("dummy", "mock", "test", "example.com")):
-                raise ValueError(f"Dummy/test URL detected: {v}. Not allowed in production.")
+                raise ValueError(
+                    f"Dummy/test URL detected: {v}. Not allowed in production."
+                )
         return v
 
     @validator("api_key", "application_key")
@@ -199,14 +215,20 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
                 )
 
                 # Retrieve secrets from SECRETS_MANAGER (supports sync/async)
-                splunk_config_data["url"] = await _get_secret("SIEM_SPLUNK_HEC_URL", required=True)
+                splunk_config_data["url"] = await _get_secret(
+                    "SIEM_SPLUNK_HEC_URL", required=True
+                )
                 splunk_config_data["token"] = await _get_secret(
                     "SIEM_SPLUNK_HEC_TOKEN", required=True
                 )
 
-                validated_config = SplunkConfig(**splunk_config_data).dict(exclude_unset=True)
+                validated_config = SplunkConfig(**splunk_config_data).dict(
+                    exclude_unset=True
+                )
             except ValidationError as e:
-                _base_logger.critical(f"CRITICAL: Invalid Splunk client configuration: {e}.")
+                _base_logger.critical(
+                    f"CRITICAL: Invalid Splunk client configuration: {e}."
+                )
                 alert_operator(
                     f"CRITICAL: Invalid Splunk client configuration: {e}.",
                     level="CRITICAL",
@@ -242,7 +264,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
                 r"/services/collector(?:/event)?/?$", "/services/search", self.url
             )
             if not self.search_url_base.startswith("http"):
-                msg = f"Derived Splunk Search API URL is invalid: {self.search_url_base}"
+                msg = (
+                    f"Derived Splunk Search API URL is invalid: {self.search_url_base}"
+                )
                 _base_logger.critical(f"CRITICAL: {msg}")
                 alert_operator(f"CRITICAL: {msg}", level="CRITICAL")
                 raise SIEMClientConfigurationError(msg, self.client_type)
@@ -304,7 +328,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
         except Exception as e:
-            alert_operator(f"CRITICAL: Splunk health check failed: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: Splunk health check failed: {e}", level="CRITICAL"
+            )
             raise SIEMClientConnectivityError(
                 f"Splunk HEC health check failed: {e}",
                 self.client_type,
@@ -312,9 +338,13 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         """Internal logic for sending a log to Splunk HEC."""
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
+            [log_entry]
+        )
         if success:
             return True, "Log sent to Splunk HEC."
         raise SIEMClientPublishError(
@@ -337,7 +367,8 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_batch_size = 1000
         batches = [
-            log_entries[i : i + max_batch_size] for i in range(0, len(log_entries), max_batch_size)
+            log_entries[i : i + max_batch_size]
+            for i in range(0, len(log_entries), max_batch_size)
         ]
 
         failed_logs: List[Dict[str, Any]] = []
@@ -363,7 +394,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
 
             try:
                 async with asyncio.shield(
-                    session.post(self.url, headers=headers, data=full_body, timeout=self.timeout)
+                    session.post(
+                        self.url, headers=headers, data=full_body, timeout=self.timeout
+                    )
                 ) as response:
                     status_code = response.status
                     response_text = await response.text()
@@ -410,7 +443,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
             except Exception as e:
-                alert_operator(f"CRITICAL: Splunk batch send failed: {e}", level="CRITICAL")
+                alert_operator(
+                    f"CRITICAL: Splunk batch send failed: {e}", level="CRITICAL"
+                )
                 failed_logs.extend([{"log": log, "error": str(e)} for log in batch])
 
         if failed_logs:
@@ -444,7 +479,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
             else time_range
         )
         search_query = (
-            f"search index={self.index} {query_string}" if self.index else f"search {query_string}"
+            f"search index={self.index} {query_string}"
+            if self.index
+            else f"search {query_string}"
         )
 
         data = {
@@ -456,7 +493,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
 
         try:
             async with asyncio.shield(
-                session.post(search_url, headers=headers, json=data, timeout=self.timeout)
+                session.post(
+                    search_url, headers=headers, json=data, timeout=self.timeout
+                )
             ) as response:
                 status_code = response.status
                 response_text = await response.text()
@@ -555,7 +594,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                     else {}
                 )
 
-                elastic_config_data["url"] = await _get_secret("SIEM_ELASTIC_URL", required=True)
+                elastic_config_data["url"] = await _get_secret(
+                    "SIEM_ELASTIC_URL", required=True
+                )
                 elastic_config_data["api_key"] = await _get_secret(
                     "SIEM_ELASTIC_API_KEY", required=False
                 )
@@ -566,9 +607,13 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                     "SIEM_ELASTIC_PASSWORD", required=False
                 )
 
-                validated_config = ElasticConfig(**elastic_config_data).dict(exclude_unset=True)
+                validated_config = ElasticConfig(**elastic_config_data).dict(
+                    exclude_unset=True
+                )
             except ValidationError as e:
-                _base_logger.critical(f"CRITICAL: Invalid Elasticsearch client configuration: {e}.")
+                _base_logger.critical(
+                    f"CRITICAL: Invalid Elasticsearch client configuration: {e}."
+                )
                 alert_operator(
                     f"CRITICAL: Invalid Elasticsearch client configuration: {e}.",
                     level="CRITICAL",
@@ -676,7 +721,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
         except Exception as e:
-            alert_operator(f"CRITICAL: Elasticsearch health check failed: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: Elasticsearch health check failed: {e}", level="CRITICAL"
+            )
             raise SIEMClientConnectivityError(
                 f"Elasticsearch health check failed: {e}",
                 self.client_type,
@@ -684,9 +731,13 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         """Internal logic for sending a log to Elasticsearch."""
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
+            [log_entry]
+        )
         if success:
             return True, "Log sent to Elasticsearch."
         raise SIEMClientPublishError(
@@ -708,7 +759,8 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_bulk_size = 1000
         batches = [
-            log_entries[i : i + max_bulk_size] for i in range(0, len(log_entries), max_bulk_size)
+            log_entries[i : i + max_bulk_size]
+            for i in range(0, len(log_entries), max_bulk_size)
         ]
 
         failed_logs: List[Dict[str, Any]] = []
@@ -841,7 +893,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
 
         try:
             async with asyncio.shield(
-                session.post(search_url, headers=headers, json=query_body, timeout=self.timeout)
+                session.post(
+                    search_url, headers=headers, json=query_body, timeout=self.timeout
+                )
             ) as response:
                 status_code = response.status
                 response_text = await response.text()
@@ -882,7 +936,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
         except Exception as e:
-            alert_operator(f"CRITICAL: Elasticsearch query failed: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: Elasticsearch query failed: {e}", level="CRITICAL"
+            )
             raise SIEMClientQueryError(
                 f"Failed to query logs from Elasticsearch: {e}",
                 self.client_type,
@@ -949,9 +1005,13 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                     "SIEM_DATADOG_APPLICATION_KEY", required=True
                 )
 
-                validated_config = DatadogConfig(**datadog_config_data).dict(exclude_unset=True)
+                validated_config = DatadogConfig(**datadog_config_data).dict(
+                    exclude_unset=True
+                )
             except ValidationError as e:
-                _base_logger.critical(f"CRITICAL: Invalid Datadog client configuration: {e}.")
+                _base_logger.critical(
+                    f"CRITICAL: Invalid Datadog client configuration: {e}."
+                )
                 alert_operator(
                     f"CRITICAL: Invalid Datadog client configuration: {e}.",
                     level="CRITICAL",
@@ -1038,7 +1098,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
         except Exception as e:
-            alert_operator(f"CRITICAL: Datadog health check failed: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: Datadog health check failed: {e}", level="CRITICAL"
+            )
             raise SIEMClientConnectivityError(
                 f"Datadog Logs intake health check failed: {e}",
                 self.client_type,
@@ -1046,9 +1108,13 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         """Internal logic for sending a log to Datadog Logs intake."""
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
+            [log_entry]
+        )
         if success:
             return True, "Log sent to Datadog Logs."
         raise SIEMClientPublishError(
@@ -1068,7 +1134,8 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_batch_size = 1000
         batches = [
-            log_entries[i : i + max_batch_size] for i in range(0, len(log_entries), max_batch_size)
+            log_entries[i : i + max_batch_size]
+            for i in range(0, len(log_entries), max_batch_size)
         ]
 
         failed_logs: List[Dict[str, Any]] = []
@@ -1128,7 +1195,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                         response.raise_for_status()
                         total_sent += len(batch)
             except (ClientError, asyncio.TimeoutError) as e:
-                alert_operator(f"ERROR: Datadog connectivity error. Will retry: {e}", level="ERROR")
+                alert_operator(
+                    f"ERROR: Datadog connectivity error. Will retry: {e}", level="ERROR"
+                )
                 raise SIEMClientConnectivityError(
                     f"Datadog batch send failed: {e}",
                     self.client_type,
@@ -1136,7 +1205,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
             except Exception as e:
-                alert_operator(f"CRITICAL: Datadog batch send failed: {e}", level="CRITICAL")
+                alert_operator(
+                    f"CRITICAL: Datadog batch send failed: {e}", level="CRITICAL"
+                )
                 failed_logs.extend([{"log": log, "error": str(e)} for log in batch])
 
         if failed_logs:
@@ -1208,9 +1279,13 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                 response.raise_for_status()
                 query_results = await response.json()
                 return (
-                    [log.get("content", {}) for log in query_results.get("data", [])][:limit]
+                    [log.get("content", {}) for log in query_results.get("data", [])][
+                        :limit
+                    ]
                     if limit
-                    else [log.get("content", {}) for log in query_results.get("data", [])]
+                    else [
+                        log.get("content", {}) for log in query_results.get("data", [])
+                    ]
                 )
         except (ClientError, asyncio.TimeoutError) as e:
             alert_operator(

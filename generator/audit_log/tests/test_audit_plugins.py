@@ -33,7 +33,9 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode("utf-8")
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
+    "utf-8"
+)
 
 # Backend config envs
 os.environ["AUDIT_LOG_BACKEND_TYPE"] = "file"
@@ -284,7 +286,9 @@ class TestAuditPlugins:
         assert result["augmented_data"] == "Test augmentation"
         assert test_plugin.processed_entries_count == 1
         assert test_plugin.redacted_fields_count == 1
-        assert test_plugin.augmented_data_size == len("Test augmentation".encode("utf-8"))
+        assert test_plugin.augmented_data_size == len(
+            "Test augmentation".encode("utf-8")
+        )
 
         # Verify metrics (may be 0 if Counter was cleared between tests)
         # --- FIX: The plugin name is 'TestPlugin' (class name) or 'test_plugin' (registration name)
@@ -323,7 +327,9 @@ class TestAuditPlugins:
 
         try:
             # --- FIX: Patch PLUGIN_CONFIG path to point to our test dir ---
-            with patch("generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Mock importlib to return the container module holding our real mock class
                 with patch("importlib.import_module") as mock_import:
 
@@ -356,7 +362,9 @@ class TestAuditPlugins:
                 os.remove(TEST_PLUGIN_CONFIG)
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)  # Reduced timeout from 30, but needs more time for timeout test
+    @pytest.mark.timeout(
+        10
+    )  # Reduced timeout from 30, but needs more time for timeout test
     async def test_plugin_timeout(self, mock_audit_log, mock_compute_hash):
         """Test plugin execution timeout."""
         # Clear existing plugins
@@ -383,7 +391,9 @@ class TestAuditPlugins:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)  # Reduced timeout from 30
-    async def test_plugin_resource_limits(self, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_plugin_resource_limits(
+        self, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test plugin execution within resource limits."""
         if sys.platform != "win32":
             with patch("resource.setrlimit") as mock_setrlimit:
@@ -474,7 +484,9 @@ class TestAuditPlugins:
     @pytest.mark.timeout(5)  # Reduced timeout from 30
     async def test_invalid_plugin_config(self, cleanup_test_environment):
         """Test handling of invalid plugin configuration."""
-        config_data = {"plugins": {"test_plugin": {"enabled": "invalid"}}}  # Invalid type
+        config_data = {
+            "plugins": {"test_plugin": {"enabled": "invalid"}}
+        }  # Invalid type
 
         # --- FIX: Use synchronous file operations for test setup ---
         # Create the test config directory if it doesn't exist
@@ -486,7 +498,9 @@ class TestAuditPlugins:
 
         try:
             # Patch PLUGIN_CONFIG path to point to our test dir
-            with patch("generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Import and test discover_plugins (which loads the config)
                 import generator.audit_log.audit_plugins as audit_plugins_module
 

@@ -13,7 +13,12 @@ import aiofiles
 import yaml
 from aiohttp import web
 from prometheus_client import Counter
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Mock/Plausholder imports for a self-contained fix
 try:
@@ -112,7 +117,9 @@ except ImportError:
 try:
     trace.set_tracer_provider(TracerProvider())
     tracer = trace.get_tracer(__name__)
-    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    trace.get_tracer_provider().add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter())
+    )
 except Exception:
     pass
 
@@ -125,12 +132,18 @@ def setup_logging(log_file: str = "arbiter_system.log"):
     Args:
         log_file (str): The name of the log file to use.
     """
-    file_handler = RotatingFileHandler(log_file, maxBytes=2 * 1024 * 1024, backupCount=3)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=2 * 1024 * 1024, backupCount=3
+    )
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
     file_handler.addFilter(PIIRedactorFilter())
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
     console_handler.addFilter(PIIRedactorFilter())
 
     root_logger = logging.getLogger()
@@ -145,8 +158,12 @@ def setup_logging(log_file: str = "arbiter_system.log"):
 logger = logging.getLogger(__name__)
 
 # Prometheus metrics
-workflow_ops_total = Counter("workflow_ops_total", "Total workflow operations", ["operation"])
-workflow_errors_total = Counter("workflow_errors_total", "Total workflow errors", ["operation"])
+workflow_ops_total = Counter(
+    "workflow_ops_total", "Total workflow operations", ["operation"]
+)
+workflow_errors_total = Counter(
+    "workflow_errors_total", "Total workflow errors", ["operation"]
+)
 
 
 # ---- Config Loader ----
@@ -192,7 +209,9 @@ async def load_config(path: Optional[str] = None) -> Dict[str, Any]:
             ext = os.path.splitext(path)[-1].lower()
             if ext in (".yaml", ".yml"):
                 if yaml is None:
-                    logger.error("PyYAML is not installed. Cannot load YAML config file.")
+                    logger.error(
+                        "PyYAML is not installed. Cannot load YAML config file."
+                    )
                     raise SystemExit(1)
                 file_config = yaml.safe_load(content)
             else:
@@ -200,7 +219,9 @@ async def load_config(path: Optional[str] = None) -> Dict[str, Any]:
             if file_config:
                 config.update(file_config)
         except Exception as e:
-            logger.error(f"Error loading config from {path}: {e}. Exiting.", exc_info=True)
+            logger.error(
+                f"Error loading config from {path}: {e}. Exiting.", exc_info=True
+            )
             raise SystemExit(1)
     elif path:
         logger.error(f"Configuration file not found: {path}")
@@ -213,7 +234,9 @@ async def load_config(path: Optional[str] = None) -> Dict[str, Any]:
         "num_arbiters": int(os.getenv("ARB_NUM_ARBITERS", config["num_arbiters"])),
         "output_dir": os.getenv("OUTPUT_DIR", config["output_dir"]),
         "log_file": os.getenv("LOG_FILE", config["log_file"]),
-        "results_summary_file": os.getenv("RESULTS_SUMMARY_FILE", config["results_summary_file"]),
+        "results_summary_file": os.getenv(
+            "RESULTS_SUMMARY_FILE", config["results_summary_file"]
+        ),
         "health_port": int(os.getenv("HEALTH_PORT", config["health_port"])),
         "max_concurrent_arbiters": int(
             os.getenv("MAX_CONCURRENT_ARBITERS", config["max_concurrent_arbiters"])
@@ -237,7 +260,9 @@ async def load_config(path: Optional[str] = None) -> Dict[str, Any]:
 
     # Basic validation
     if not isinstance(config.get("num_arbiters"), int) or config["num_arbiters"] < 1:
-        logger.error("Config error: 'num_arbiters' must be a positive integer. Exiting.")
+        logger.error(
+            "Config error: 'num_arbiters' must be a positive integer. Exiting."
+        )
         raise SystemExit(1)
     if not isinstance(config.get("output_dir"), str) or not config["output_dir"]:
         logger.error("Config error: 'output_dir' must be a non-empty string. Exiting.")
@@ -249,7 +274,9 @@ async def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     # Validate each task in agent_tasks
     for i, task in enumerate(config["agent_tasks"]):
         if not isinstance(task, dict):
-            logger.error(f"Config error: agent_tasks[{i}] is not a dictionary. Exiting.")
+            logger.error(
+                f"Config error: agent_tasks[{i}] is not a dictionary. Exiting."
+            )
             raise SystemExit(1)
 
     workflow_ops_total.labels(operation="load_config").inc()
@@ -363,7 +390,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
         shutdown_event = asyncio.Event()
 
         def _handle_signal():
-            logger.warning("Received shutdown signal. Requesting agents to shut down gracefully...")
+            logger.warning(
+                "Received shutdown signal. Requesting agents to shut down gracefully..."
+            )
             shutdown_event.set()
 
         loop = asyncio.get_running_loop()
@@ -373,7 +402,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 try:
                     loop.add_signal_handler(sig, _handle_signal)
                 except (NotImplementedError, ValueError):
-                    logger.debug(f"Signal handler for {sig_name} not supported on this platform.")
+                    logger.debug(
+                        f"Signal handler for {sig_name} not supported on this platform."
+                    )
 
         try:
             logger.info("Initializing ArbiterArena (multi-agent system)...")
@@ -381,7 +412,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 base_port=config["base_port"],
                 num=config["num_arbiters"],
             )
-            logger.info(f"Starting arena services on HTTP port {config['http_port']}...")
+            logger.info(
+                f"Starting arena services on HTTP port {config['http_port']}..."
+            )
             await arena.start_arena_services(http_port=config["http_port"])
             logger.info("Arena services started.")
 
@@ -396,7 +429,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
             tasks = []
             agent_tasks = config.get("agent_tasks", [])
             if not agent_tasks:
-                logger.info("No agent tasks specified. Running a default no-op for each arbiter.")
+                logger.info(
+                    "No agent tasks specified. Running a default no-op for each arbiter."
+                )
                 agent_tasks = [{} for _ in range(config["num_arbiters"])]
 
             # Ensure agent tasks list is at least as long as the number of arbiters.
@@ -404,19 +439,25 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 logger.warning(
                     f"Number of tasks ({len(agent_tasks)}) is less than number of arbiters ({config['num_arbiters']}). Assigning a no-op task to remaining arbiters."
                 )
-                agent_tasks.extend([{} for _ in range(config["num_arbiters"] - len(agent_tasks))])
+                agent_tasks.extend(
+                    [{} for _ in range(config["num_arbiters"] - len(agent_tasks))]
+                )
 
             # Use a semaphore to limit concurrent Arbiter executions
             asyncio.Semaphore(config.get("max_concurrent_arbiters", 5))
 
             for i, arbiter in enumerate(arena.arbiters):
                 if shutdown_event.is_set():
-                    logger.info("Shutdown requested. Not launching additional agent tasks.")
+                    logger.info(
+                        "Shutdown requested. Not launching additional agent tasks."
+                    )
                     break
                 task_def = agent_tasks[i]
                 tasks.append(
                     asyncio.create_task(
-                        run_agent_task(arbiter, task_def, config["output_dir"], i + 1, results),
+                        run_agent_task(
+                            arbiter, task_def, config["output_dir"], i + 1, results
+                        ),
                         name=f"Arbiter-Task-{i+1}",
                     )
                 )
@@ -427,7 +468,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
             await asyncio.gather(*tasks, return_exceptions=False)
 
         except Exception as e:
-            logger.error(f"Unhandled critical error during agent workflow: {e}", exc_info=True)
+            logger.error(
+                f"Unhandled critical error during agent workflow: {e}", exc_info=True
+            )
             notify_critical_error("Critical error during agent workflow", e)
             # Re-raise to be caught by the main function's handler
             raise
@@ -441,7 +484,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
         print("\n--- Agentic Workflow Results Summary ---")
         print(json.dumps(results, indent=2))
         successful_runs = sum(1 for r in results if r.get("status") == "success")
-        failed_runs = sum(1 for r in results if r.get("status") in ["error", "cancelled"])
+        failed_runs = sum(
+            1 for r in results if r.get("status") in ["error", "cancelled"]
+        )
         print(
             f"Total Arbiters: {len(results)}, Successful: {successful_runs}, Failed/Cancelled: {failed_runs}"
         )
@@ -451,7 +496,9 @@ async def run_agentic_workflow(config: Dict[str, Any]):
             try:
                 with open(config["results_summary_file"], "w") as f:
                     json.dump(results, f, indent=2)
-                logger.info(f"Results summary written to '{config['results_summary_file']}'.")
+                logger.info(
+                    f"Results summary written to '{config['results_summary_file']}'."
+                )
             except IOError as e:
                 logger.error(f"Failed to write results summary: {e}")
                 workflow_errors_total.labels(operation="write_summary").inc()
@@ -481,7 +528,9 @@ async def main():
         logger.info("Starting agentic workflow entrypoint...")
         logger.info("Loaded Configuration:")
         for key, value in config.items():
-            if any(s in str(key).lower() for s in ["key", "token", "password", "secret"]):
+            if any(
+                s in str(key).lower() for s in ["key", "token", "password", "secret"]
+            ):
                 logger.info(f"  {key}: [HIDDEN]")
             else:
                 logger.info(f"  {key}: {value}")
@@ -531,7 +580,9 @@ async def start_health_server(config):
     health_host = os.getenv("HEALTH_HOST", "127.0.0.1")
     site = web.TCPSite(runner, health_host, config["health_port"])
     await site.start()
-    logger.info(f"Health server started at http://{health_host}:{config['health_port']}/health")
+    logger.info(
+        f"Health server started at http://{health_host}:{config['health_port']}/health"
+    )
     return runner
 
 

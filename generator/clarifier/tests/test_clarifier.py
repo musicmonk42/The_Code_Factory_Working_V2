@@ -9,7 +9,9 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+)
 
 # --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
 
@@ -69,8 +71,12 @@ mock_kms_client.generate_data_key.return_value = {
 patcher_dynaconf = patch(
     "generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance
 )
-patcher_boto3 = patch("generator.clarifier.clarifier.boto3.client", return_value=mock_kms_client)
-patcher_fernet = patch("generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance)
+patcher_boto3 = patch(
+    "generator.clarifier.clarifier.boto3.client", return_value=mock_kms_client
+)
+patcher_fernet = patch(
+    "generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance
+)
 patcher_sys_exit = patch("generator.clarifier.clarifier.sys.exit")
 
 patcher_dynaconf.start()
@@ -212,7 +218,9 @@ class TestCircuitBreaker(unittest.TestCase):
         self.assertFalse(self.cb.is_open())
 
 
-@unittest.skipIf(SQLiteContextManager is None, "SQLiteContextManager class not available")
+@unittest.skipIf(
+    SQLiteContextManager is None, "SQLiteContextManager class not available"
+)
 class TestSQLiteContextManager(unittest.IsolatedAsyncioTestCase):
     """Test SQLiteContextManager for storing and querying context."""
 
@@ -239,7 +247,9 @@ class TestSQLiteContextManager(unittest.IsolatedAsyncioTestCase):
     async def test_query_limit(self):
         """Test query limit parameter."""
         for i in range(5):
-            await self.manager.store({"key": f"value{i}", "description": f"test data {i}"})
+            await self.manager.store(
+                {"key": f"value{i}", "description": f"test data {i}"}
+            )
 
         results = await self.manager.query("test", limit=3)
         self.assertEqual(len(results), 3)
@@ -278,7 +288,9 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
         await self.context_manager_instance._init_db()
 
         # Mock logger setup to return our mock
-        with patch("generator.clarifier.clarifier.setup_logging", return_value=mock_logger):
+        with patch(
+            "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
+        ):
             # FIX: Pass mock dependencies directly to the constructor
             self.clarifier = Clarifier(
                 llm=mock_llm_instance,
@@ -432,7 +444,9 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
             f.write(encrypted)
 
         # Create new clarifier instance
-        with patch("generator.clarifier.clarifier.setup_logging", return_value=mock_logger):
+        with patch(
+            "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
+        ):
             new_clarifier = Clarifier(
                 llm=mock_llm_instance,
                 prioritizer=mock_prioritizer_instance,
@@ -458,7 +472,9 @@ class TestUtilityFunctions(unittest.TestCase):
         config = load_config()
         self.assertIsNotNone(config)
 
-    @unittest.skipIf(initialize_encryption is None, "initialize_encryption not available")
+    @unittest.skipIf(
+        initialize_encryption is None, "initialize_encryption not available"
+    )
     def test_initialize_encryption(self):
         """Test encryption initialization."""
         # This is mocked, so just verify it can be called

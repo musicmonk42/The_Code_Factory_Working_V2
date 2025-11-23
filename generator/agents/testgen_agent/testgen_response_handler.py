@@ -164,15 +164,23 @@ class ResponseParser(ABC):
         """
         pass
 
-    def _attempt_recovery(self, malformed_response: str, language: str) -> Optional[Dict[str, str]]:
+    def _attempt_recovery(
+        self, malformed_response: str, language: str
+    ) -> Optional[Dict[str, str]]:
         """
         Attempts to recover valid test files from a malformed LLM response using regex.
         REFACTORED: Uses central runner logging.
         """
-        logger.warning(f"Attempting basic recovery for malformed response in {language}.")
+        logger.warning(
+            f"Attempting basic recovery for malformed response in {language}."
+        )
         [re.escape(conf["ext"]) for conf in LANGUAGE_CONFIG.values()]
-        code_block_regex = rf'```(?:{language}|{"|".join(LANGUAGE_CONFIG.keys())})?\n(.*?)\n```'
-        code_blocks = re.findall(code_block_regex, malformed_response, re.DOTALL | re.IGNORECASE)
+        code_block_regex = (
+            rf'```(?:{language}|{"|".join(LANGUAGE_CONFIG.keys())})?\n(.*?)\n```'
+        )
+        code_blocks = re.findall(
+            code_block_regex, malformed_response, re.DOTALL | re.IGNORECASE
+        )
         logger.debug(f"Found {len(code_blocks)} code blocks during recovery.")
         if code_blocks:
             ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
@@ -207,7 +215,9 @@ class ResponseParser(ABC):
             logger.warning("LLM auto-healing disabled (MAX_HEAL_ATTEMPTS <= 0).")
             return None
 
-        logger.info(f"Attempting LLM auto-healing for malformed response in {language}.")
+        logger.info(
+            f"Attempting LLM auto-healing for malformed response in {language}."
+        )
         heal_prompt = f"""
 The following LLM response failed to parse with error: {error}
 
@@ -236,7 +246,9 @@ Return only the corrected response with proper file names and code structure.
                 try:
                     healed_files = self.parse(healed_content, language)
                     if healed_files:
-                        logger.info(f"LLM auto-healing successful on attempt {attempt + 1}.")
+                        logger.info(
+                            f"LLM auto-healing successful on attempt {attempt + 1}."
+                        )
 
                         add_provenance(
                             {
@@ -324,7 +336,9 @@ class DefaultResponseParser(ResponseParser):
 
         # Strategy 3: Extract markdown code blocks
         ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
-        code_block_pattern = rf"```(?:{language}|{ext})?\s*(?:\n# +(.*?))?(?:\n|\s)(.*?)```"
+        code_block_pattern = (
+            rf"```(?:{language}|{ext})?\s*(?:\n# +(.*?))?(?:\n|\s)(.*?)```"
+        )
         matches = re.findall(code_block_pattern, response, re.DOTALL | re.IGNORECASE)
 
         if matches:
@@ -344,9 +358,7 @@ class DefaultResponseParser(ResponseParser):
                 return parsed_files
 
         # Strategy 4: Extract by file markers
-        file_marker_pattern = (
-            r"(?:^|\n)#+\s*([\w\-_\.]+\.(?:py|js|ts|java|go|rs))\s*\n(.*?)(?=\n#+\s*[\w\-_\.]+\.|$)"
-        )
+        file_marker_pattern = r"(?:^|\n)#+\s*([\w\-_\.]+\.(?:py|js|ts|java|go|rs))\s*\n(.*?)(?=\n#+\s*[\w\-_\.]+\.|$)"
         file_matches = re.findall(file_marker_pattern, response, re.DOTALL)
 
         if file_matches:
@@ -355,7 +367,9 @@ class DefaultResponseParser(ResponseParser):
                 parsed_files[filename] = content.strip()
 
             if parsed_files:
-                logger.info(f"Successfully parsed {len(parsed_files)} files using file markers.")
+                logger.info(
+                    f"Successfully parsed {len(parsed_files)} files using file markers."
+                )
                 return parsed_files
 
         # Strategy 5: Treat entire response as a single file
@@ -490,7 +504,9 @@ class DefaultResponseParser(ResponseParser):
                     if not test_functions:
                         errors.append(f"{filename}: No test functions found")
                     else:
-                        logger.debug(f"{filename}: Found {len(test_functions)} test functions")
+                        logger.debug(
+                            f"{filename}: Found {len(test_functions)} test functions"
+                        )
 
                     # If code_files provided, verify test functions match source functions
                     if code_files:
@@ -500,7 +516,9 @@ class DefaultResponseParser(ResponseParser):
                                 source_functions = [
                                     node.name
                                     for node in ast.walk(code_tree)
-                                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                                    if isinstance(
+                                        node, (ast.FunctionDef, ast.AsyncFunctionDef)
+                                    )
                                 ]
                                 # Check if tests reference source functions
                                 logger.debug(
@@ -553,7 +571,9 @@ class DefaultResponseParser(ResponseParser):
             if language == "python":
                 file_issues.extend(self._validate_python_content(filename, content))
             elif language in ["javascript", "typescript"]:
-                file_issues.extend(self._validate_js_ts_content(filename, content, language))
+                file_issues.extend(
+                    self._validate_js_ts_content(filename, content, language)
+                )
             elif language == "java":
                 file_issues.extend(self._validate_java_content(filename, content))
             elif language == "go":
@@ -619,7 +639,9 @@ class DefaultResponseParser(ResponseParser):
                         critical_issues.append(f"{filename}: {issue}")
 
             if critical_issues:
-                raise ValueError(f"Critical validation issues found: {'; '.join(critical_issues)}")
+                raise ValueError(
+                    f"Critical validation issues found: {'; '.join(critical_issues)}"
+                )
         else:
             logger.info("All test files passed validation.")
 
@@ -645,15 +667,21 @@ class DefaultResponseParser(ResponseParser):
             ]
 
             if not test_functions:
-                issues.append("No test functions found (functions starting with 'test_')")
+                issues.append(
+                    "No test functions found (functions starting with 'test_')"
+                )
             else:
-                logger.debug(f"Found {len(test_functions)} test functions in {filename}")
+                logger.debug(
+                    f"Found {len(test_functions)} test functions in {filename}"
+                )
         except Exception as e:
             issues.append(f"Error analyzing Python AST: {e}")
 
         return issues
 
-    def _validate_js_ts_content(self, filename: str, content: str, language: str) -> List[str]:
+    def _validate_js_ts_content(
+        self, filename: str, content: str, language: str
+    ) -> List[str]:
         """Validate JavaScript/TypeScript content."""
         issues = []
 
@@ -664,7 +692,9 @@ class DefaultResponseParser(ResponseParser):
             r"expect\s*\(",
         ]
 
-        has_test_patterns = any(re.search(pattern, content) for pattern in test_patterns)
+        has_test_patterns = any(
+            re.search(pattern, content) for pattern in test_patterns
+        )
         if not has_test_patterns:
             issues.append("No test patterns found (describe, it, test, expect)")
 
@@ -703,7 +733,9 @@ class DefaultResponseParser(ResponseParser):
 
         return issues
 
-    async def _run_external_tool(self, cmd: List[str], filename: str, content: str) -> str:
+    async def _run_external_tool(
+        self, cmd: List[str], filename: str, content: str
+    ) -> str:
         """Run an external validation tool on the content using asyncio.to_thread."""
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=f'.{filename.split(".")[-1]}', delete=False
@@ -733,7 +765,9 @@ class DefaultResponseParser(ResponseParser):
             except:
                 pass
 
-    async def _scan_for_security_issues(self, filename: str, content: str, language: str) -> str:
+    async def _scan_for_security_issues(
+        self, filename: str, content: str, language: str
+    ) -> str:
         """Scan content for potential security issues."""
         scanner_cmd = LANGUAGE_CONFIG.get(language, {}).get("security_scanner")
 
@@ -763,7 +797,8 @@ class DefaultResponseParser(ResponseParser):
 
         try:
             is_json = any(
-                arg in " ".join(scanner_cmd) for arg in ["-f json", "--json", "-fmt=json"]
+                arg in " ".join(scanner_cmd)
+                for arg in ["-f json", "--json", "-fmt=json"]
             )
             return await self._run_tool(
                 scanner_cmd, tmp_path, "security scanner", json_output=is_json
@@ -798,7 +833,9 @@ class DefaultResponseParser(ResponseParser):
         except Exception as e:
             return f"{tool_name} error: {e}"
 
-    def extract_metadata(self, test_files: Dict[str, str], language: str) -> Dict[str, Any]:
+    def extract_metadata(
+        self, test_files: Dict[str, str], language: str
+    ) -> Dict[str, Any]:
         """
         Extracts metadata from test files (e.g., test names, dependencies).
         Enhanced to detect flakiness from attribute calls like time.sleep().
@@ -843,21 +880,25 @@ class DefaultResponseParser(ResponseParser):
                                     meta["potential_flakiness"] = True
                                 meta["coverage_targets"].append(node.func.attr)
                             # Check for assertions
-                            if isinstance(node.func, ast.Name) and node.func.id.startswith(
-                                "assert"
-                            ):
+                            if isinstance(
+                                node.func, ast.Name
+                            ) and node.func.id.startswith("assert"):
                                 meta["assertions_count"] += 1
-                            elif isinstance(node.func, ast.Attribute) and node.func.attr.startswith(
-                                "assert"
-                            ):
+                            elif isinstance(
+                                node.func, ast.Attribute
+                            ) and node.func.attr.startswith("assert"):
                                 meta["assertions_count"] += 1
                         elif isinstance(node, ast.Assert):
                             meta["assertions_count"] += 1
                 except SyntaxError as e:
-                    logger.warning(f"Syntax error during metadata extraction for {filename}: {e}")
+                    logger.warning(
+                        f"Syntax error during metadata extraction for {filename}: {e}"
+                    )
                     meta["parse_error"] = str(e)
                 except Exception as e:
-                    logger.warning(f"Metadata extraction failed for {filename}: {e}", exc_info=True)
+                    logger.warning(
+                        f"Metadata extraction failed for {filename}: {e}", exc_info=True
+                    )
                     meta["extraction_error"] = str(e)
             metadata[filename] = meta
 
@@ -963,7 +1004,9 @@ async def parse_llm_response(
     parser_name = parser_type
 
     if parser_name not in PARSERS:
-        logger.error(f"Unknown parser: {parser_name}. Available: {list(PARSERS.keys())}")
+        logger.error(
+            f"Unknown parser: {parser_name}. Available: {list(PARSERS.keys())}"
+        )
         raise KeyError(f"Unknown parser: {parser_name}")
 
     parser = PARSERS[parser_name]
@@ -1007,7 +1050,9 @@ async def parse_llm_response(
                     f"Failed to parse and heal response: {e}. Healing resulted in new error: {heal_e}"
                 )
         else:
-            raise ValueError(f"Failed to parse and heal response: {e}. No successful healing.")
+            raise ValueError(
+                f"Failed to parse and heal response: {e}. No successful healing."
+            )
 
 
 # Convenience function for backwards compatibility
@@ -1028,7 +1073,9 @@ async def startup():
     logger.info("Initializing TestGen Response Handler components...")
     asyncio.create_task(start_health_server())
     logger.info("TestGen Response Handler components initialized.")
-    add_provenance({"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()})
+    add_provenance(
+        {"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
 async def shutdown():
@@ -1036,4 +1083,6 @@ async def shutdown():
     logger.info("Shutting down TestGen Response Handler components...")
     await parser_registry.close()
     logger.info("TestGen Response Handler components shut down.")
-    add_provenance({"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()})
+    add_provenance(
+        {"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )

@@ -58,7 +58,9 @@ for key, value in TEST_ENV.items():
 class CheckpointTestData:
     """Standard test data for consistency."""
 
-    def __init__(self, name="test_checkpoint", state=None, metadata=None, user="test_user"):
+    def __init__(
+        self, name="test_checkpoint", state=None, metadata=None, user="test_user"
+    ):
         self.name = name
         self.user = user
         self.state = state or {
@@ -95,9 +97,11 @@ def mock_encryption():
 @pytest.fixture
 def mock_metrics():
     """Mock Prometheus metrics."""
-    with patch("mesh.checkpoint.checkpoint_backends.BACKEND_OPERATIONS") as ops, patch(
-        "mesh.checkpoint.checkpoint_backends.BACKEND_LATENCY"
-    ) as lat, patch("mesh.checkpoint.checkpoint_backends.BACKEND_ERRORS") as err:
+    with (
+        patch("mesh.checkpoint.checkpoint_backends.BACKEND_OPERATIONS") as ops,
+        patch("mesh.checkpoint.checkpoint_backends.BACKEND_LATENCY") as lat,
+        patch("mesh.checkpoint.checkpoint_backends.BACKEND_ERRORS") as err,
+    ):
         yield {"operations": ops, "latency": lat, "errors": err}
 
 
@@ -116,7 +120,9 @@ def mock_tracer():
             return mock_span
 
         mock_tracer.start_as_current_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__aenter__ = async_context_manager
+        mock_tracer.start_as_current_span.return_value.__aenter__ = (
+            async_context_manager
+        )
         mock_tracer.start_as_current_span.return_value.__aexit__ = AsyncMock()
 
         yield mock_tracer
@@ -165,7 +171,11 @@ class TestS3Backend:
 
         async def async_paginate(*args, **kwargs):
             for page in [
-                {"Contents": [{"Key": f"checkpoints/ab/test/v_{i}.json.gz"} for i in range(10)]}
+                {
+                    "Contents": [
+                        {"Key": f"checkpoints/ab/test/v_{i}.json.gz"} for i in range(10)
+                    ]
+                }
             ]:
                 yield page
 
@@ -182,7 +192,9 @@ class TestS3Backend:
 
         session.client.return_value = client_context
 
-        with patch("mesh.checkpoint.checkpoint_backends.aioboto3.Session", return_value=session):
+        with patch(
+            "mesh.checkpoint.checkpoint_backends.aioboto3.Session", return_value=session
+        ):
             # Also patch the registry.get_client to return our mock client directly
             with patch(
                 "mesh.checkpoint.checkpoint_backends.registry.get_client",
@@ -206,7 +218,9 @@ class TestS3Backend:
         manager._prev_hashes = {}
 
         # Mock helper functions directly to ensure they work
-        with patch("mesh.checkpoint.checkpoint_backends._s3_cleanup_versions", AsyncMock()):
+        with patch(
+            "mesh.checkpoint.checkpoint_backends._s3_cleanup_versions", AsyncMock()
+        ):
             # Execute save
             version_hash = await s3_save(
                 manager,
@@ -230,7 +244,9 @@ class TestS3Backend:
         # The actual code checks PROMETHEUS_AVAILABLE before recording metrics
 
     @pytest.mark.asyncio
-    async def test_s3_load(self, backend_registry, s3_client_mock, test_data, mock_encryption):
+    async def test_s3_load(
+        self, backend_registry, s3_client_mock, test_data, mock_encryption
+    ):
         """Test S3 load operation."""
         from mesh.checkpoint.checkpoint_backends import s3_load
 
@@ -252,7 +268,9 @@ class TestS3Backend:
         }
 
         # Mock signature verification to pass
-        with patch("mesh.checkpoint.checkpoint_backends._verify_signature", return_value=True):
+        with patch(
+            "mesh.checkpoint.checkpoint_backends._verify_signature", return_value=True
+        ):
             # Create mock manager
             manager = Mock()
             manager.backend_type = "s3"
@@ -277,7 +295,9 @@ class TestS3Backend:
         assert s3_client_mock.delete_object.call_count == 7
 
     @pytest.mark.asyncio
-    async def test_s3_key_rotation(self, backend_registry, s3_client_mock, mock_encryption):
+    async def test_s3_key_rotation(
+        self, backend_registry, s3_client_mock, mock_encryption
+    ):
         """Test S3 encryption key rotation."""
         from mesh.checkpoint.checkpoint_backends import _s3_rotate_key
 
@@ -285,7 +305,9 @@ class TestS3Backend:
         old_encrypted = b"encrypted_old_data"
 
         # Setup proper decryption/encryption behavior for rotation
-        mock_encryption.decrypt.side_effect = lambda x: (b"old_data" if x == old_encrypted else x)
+        mock_encryption.decrypt.side_effect = lambda x: (
+            b"old_data" if x == old_encrypted else x
+        )
         mock_encryption.encrypt.side_effect = lambda x: b"encrypted_new_" + x
 
         # Execute rotation
@@ -627,7 +649,9 @@ class TestReliability:
                 assert breaker.current_state == "open"
             else:
                 # If we haven't triggered enough failures, skip the test
-                pytest.skip(f"Circuit breaker didn't receive enough failures: {failure_count}")
+                pytest.skip(
+                    f"Circuit breaker didn't receive enough failures: {failure_count}"
+                )
         except ImportError:
             pytest.skip("pybreaker not available")
 
@@ -695,8 +719,12 @@ class TestPerformance:
 
         try:
             # Mock the Redis client initialization to avoid localhost issues
-            with patch("mesh.checkpoint.checkpoint_backends.aioredis.ConnectionPool.from_url"):
-                with patch("mesh.checkpoint.checkpoint_backends.aioredis.Redis") as mock_redis:
+            with patch(
+                "mesh.checkpoint.checkpoint_backends.aioredis.ConnectionPool.from_url"
+            ):
+                with patch(
+                    "mesh.checkpoint.checkpoint_backends.aioredis.Redis"
+                ) as mock_redis:
                     mock_client = AsyncMock()
                     mock_client.ping = AsyncMock()
                     mock_redis.return_value = mock_client
@@ -739,7 +767,9 @@ class TestEdgeCases:
     async def test_backend_initialization_failure(self, backend_registry):
         """Test backend initialization failure."""
         # Test the exception is raised directly without wrapping
-        with patch("mesh.checkpoint.checkpoint_backends.aioboto3.Session") as mock_session:
+        with patch(
+            "mesh.checkpoint.checkpoint_backends.aioboto3.Session"
+        ) as mock_session:
             mock_session.side_effect = Exception("Connection failed")
 
             with pytest.raises(Exception) as excinfo:

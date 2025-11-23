@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 class BackpressureManager:
     def __init__(self, message_bus: "ShardedMessageBus", threshold: float = 0.8):
         if not (0 < threshold <= 1):
-            raise ValueError("Backpressure threshold must be between 0 and 1 (exclusive of 0).")
+            raise ValueError(
+                "Backpressure threshold must be between 0 and 1 (exclusive of 0)."
+            )
         self.threshold = threshold
         self.message_bus = message_bus
         self.is_paused = [False] * self.message_bus.shard_count
@@ -55,7 +57,9 @@ class BackpressureManager:
                     hp_queue_size=current_hp_queue_size,
                 )
             except Exception as e:
-                logger.error(f"Failed to publish backpressure notification or pause publishes: {e}")
+                logger.error(
+                    f"Failed to publish backpressure notification or pause publishes: {e}"
+                )
 
         elif not should_pause and self.is_paused[shard_id]:
             self.is_paused[shard_id] = False

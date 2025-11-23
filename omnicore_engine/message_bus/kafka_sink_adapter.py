@@ -69,7 +69,9 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     _h = logging.StreamHandler()
-    _h.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    _h.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
     logger.addHandler(_h)
 logger.setLevel(logging.INFO)
 
@@ -347,7 +349,9 @@ class KafkaBusSink:
         Raises on the first error (fail-fast) to match emit() semantics.
         """
         if not self._started:
-            raise RuntimeError("KafkaBusSink must be started before calling emit_many()")
+            raise RuntimeError(
+                "KafkaBusSink must be started before calling emit_many()"
+            )
         sem = asyncio.Semaphore(concurrency or self._max_concurrency)
         common_kwargs = common_kwargs or {}
 

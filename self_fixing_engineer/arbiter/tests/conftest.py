@@ -476,7 +476,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line("markers", "unit: marks tests as unit tests")
     config.addinivalue_line("markers", "requires_redis: marks tests that require Redis")
-    config.addinivalue_line("markers", "requires_db: marks tests that require a database")
+    config.addinivalue_line(
+        "markers", "requires_db: marks tests that require a database"
+    )
 
 
 # -----------------------------------------------------------------------------

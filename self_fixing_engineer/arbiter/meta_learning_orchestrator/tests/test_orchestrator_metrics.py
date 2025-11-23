@@ -62,19 +62,27 @@ def parse_metrics_output(metrics_text: str) -> Dict[str, float]:
         (Counter, "test_labeled_counter", "Test labeled counter", ("label1",), None),
     ],
 )
-def test_get_or_create_metric_internal(metric_class, name, doc, labelnames, buckets, caplog):
+def test_get_or_create_metric_internal(
+    metric_class, name, doc, labelnames, buckets, caplog
+):
     """Test _get_or_create_metric_internal creates metrics correctly."""
-    from arbiter.meta_learning_orchestrator.metrics import _get_or_create_metric_internal
+    from arbiter.meta_learning_orchestrator.metrics import (
+        _get_or_create_metric_internal,
+    )
 
     caplog.set_level(logging.WARNING)
-    wrapped_metric = _get_or_create_metric_internal(metric_class, name, doc, labelnames, buckets)
+    wrapped_metric = _get_or_create_metric_internal(
+        metric_class, name, doc, labelnames, buckets
+    )
 
     # Check the underlying metric through the wrapper
     assert hasattr(wrapped_metric, "_metric")
     assert isinstance(wrapped_metric._metric, metric_class)
     assert wrapped_metric._name == name
     assert wrapped_metric._documentation == doc
-    assert set(wrapped_metric._labelnames) == set(labelnames + ("environment", "cluster"))
+    assert set(wrapped_metric._labelnames) == set(
+        labelnames + ("environment", "cluster")
+    )
 
 
 @pytest.mark.parametrize(
@@ -86,7 +94,9 @@ def test_get_or_create_metric_internal(metric_class, name, doc, labelnames, buck
 )
 def test_get_or_create_metric_type_mismatch(metric_class, name, doc, caplog):
     """Test _get_or_create_metric_internal handles type mismatches."""
-    from arbiter.meta_learning_orchestrator.metrics import _get_or_create_metric_internal
+    from arbiter.meta_learning_orchestrator.metrics import (
+        _get_or_create_metric_internal,
+    )
 
     caplog.set_level(logging.WARNING)
     # Create a Counter first
@@ -211,8 +221,12 @@ def test_histogram_metrics(metric_registry):
     metrics = parse_metrics_output(metrics_text)
 
     # Prometheus sorts labels alphabetically
-    sum_label = 'ml_training_latency_seconds_sum{cluster="test-cluster",environment="test"}'
-    count_label = 'ml_training_latency_seconds_count{cluster="test-cluster",environment="test"}'
+    sum_label = (
+        'ml_training_latency_seconds_sum{cluster="test-cluster",environment="test"}'
+    )
+    count_label = (
+        'ml_training_latency_seconds_count{cluster="test-cluster",environment="test"}'
+    )
 
     assert sum_label in metrics, f"Expected {sum_label} not found in metrics"
     assert metrics[sum_label] > 0
@@ -241,8 +255,12 @@ def test_histogram_buckets(metric_name):
     parsed_metrics = parse_metrics_output(metrics_text)
 
     # Check that bucket metrics exist (Prometheus sorts labels alphabetically)
-    bucket_label = f'{metric._name}_bucket{{cluster="test-cluster",environment="test",le="0.1"}}'
-    assert bucket_label in parsed_metrics, f"Expected {bucket_label} not found in metrics"
+    bucket_label = (
+        f'{metric._name}_bucket{{cluster="test-cluster",environment="test",le="0.1"}}'
+    )
+    assert (
+        bucket_label in parsed_metrics
+    ), f"Expected {bucket_label} not found in metrics"
     # The value should be 1.0 since we slept for 0.05 seconds which is < 0.1
     assert parsed_metrics[bucket_label] == 1.0
 
@@ -259,16 +277,16 @@ def test_metrics_with_no_env_vars(mocker: MockerFixture):
     import arbiter.meta_learning_orchestrator.metrics as metrics_module
 
     registry = metrics_module.MetricRegistry()
-    counter = registry.get_or_create(Counter, "test_default_labels_counter", "Test counter")
+    counter = registry.get_or_create(
+        Counter, "test_default_labels_counter", "Test counter"
+    )
     counter.inc()
 
     metrics_text = generate_latest().decode("utf-8")
     metrics = parse_metrics_output(metrics_text)
 
     # Should use default values (alphabetically sorted)
-    expected_label_string = (
-        'test_default_labels_counter_total{cluster="default-cluster",environment="development"}'
-    )
+    expected_label_string = 'test_default_labels_counter_total{cluster="default-cluster",environment="development"}'
     assert (
         expected_label_string in metrics
     ), f"Expected {expected_label_string} not found in metrics"
@@ -279,7 +297,9 @@ def test_metric_registry_thread_safety(metric_registry, mocker: MockerFixture):
     """Test thread-safety of MetricRegistry by simulating concurrent metric creation."""
 
     def create_metric(i):
-        metric_registry.get_or_create(Counter, f"test_thread_counter_{i}", f"Test counter {i}")
+        metric_registry.get_or_create(
+            Counter, f"test_thread_counter_{i}", f"Test counter {i}"
+        )
 
     from concurrent.futures import ThreadPoolExecutor
 
@@ -306,7 +326,9 @@ def test_invalid_label_names(metric_registry, caplog):
 
     # Test with empty label name
     with pytest.raises(ValueError):
-        metric_registry.get_or_create(Counter, "bad_empty_label_counter", "Bad counter", ("",))
+        metric_registry.get_or_create(
+            Counter, "bad_empty_label_counter", "Bad counter", ("",)
+        )
 
 
 def test_metrics_exposition_format():
@@ -359,9 +381,15 @@ def test_metrics_exposition_format():
         >= 1.0
     )
 
-    assert 'ml_current_model_version{cluster="test-cluster",environment="test"}' in metrics_after
     assert (
-        metrics_after['ml_current_model_version{cluster="test-cluster",environment="test"}'] == 1.5
+        'ml_current_model_version{cluster="test-cluster",environment="test"}'
+        in metrics_after
+    )
+    assert (
+        metrics_after[
+            'ml_current_model_version{cluster="test-cluster",environment="test"}'
+        ]
+        == 1.5
     )
 
     assert (

@@ -109,7 +109,12 @@ from runner.runner_contracts import TaskPayload
 from runner.runner_core import Runner  # FIX
 from runner.runner_logging import LOG_HISTORY, logger  # FIX (added LOG_HISTORY)
 from runner.runner_metrics import MetricsExporter  # Import MetricsExporter
-from runner.runner_metrics import HEALTH_STATUS, RUN_PASS_RATE, RUN_QUEUE, RUN_RESOURCE_USAGE
+from runner.runner_metrics import (
+    HEALTH_STATUS,
+    RUN_PASS_RATE,
+    RUN_QUEUE,
+    RUN_RESOURCE_USAGE,
+)
 
 # i18n setup (assuming translations in locale dir)
 gettext.bindtextdomain("runner", "locale")
@@ -124,7 +129,9 @@ class TuiLogHandler(logging.Handler):
     def __init__(self, log_widget: RichLog):
         super().__init__()
         self.log_widget = log_widget
-        self.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+        self.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
         # Attempt to capture the event loop, handling the case where it's not yet running
         try:
             self._loop = asyncio.get_running_loop()
@@ -354,8 +361,12 @@ class RunnerApp(_TextualAppBase):
         self.feedback_input = Input(placeholder=_("Rate (0-1)"), id="feedback-input")
         self.config_area = TextArea(id="config-area")
         self.health_label = Label(_("Health: Unknown"), id="health-label")
-        self.cpu_progress = ProgressBar(total=100, id="cpu-progress", show_percentage=True)
-        self.mem_progress = ProgressBar(total=100, id="mem-progress", show_percentage=True)
+        self.cpu_progress = ProgressBar(
+            total=100, id="cpu-progress", show_percentage=True
+        )
+        self.mem_progress = ProgressBar(
+            total=100, id="mem-progress", show_percentage=True
+        )
         self.coverage_tree = Tree(_("Coverage Heatmap"), id="coverage-tree")
         self.doc_markdown_viewer = Markdown(
             _("# Documentation Loading..."), id="doc-markdown-viewer"
@@ -468,7 +479,9 @@ class RunnerApp(_TextualAppBase):
             try:
                 self.runner.config = new_config  # type: ignore
             except Exception:
-                logger.warning("Runner did not accept new config object on reload.", exc_info=True)
+                logger.warning(
+                    "Runner did not accept new config object on reload.", exc_info=True
+                )
         # --- END FIX 1.2 ---
 
         # Update UI elements that depend on config
@@ -484,7 +497,9 @@ class RunnerApp(_TextualAppBase):
                 config_editor.text = new_config_json
                 # Cannot await in sync callback, must schedule or ignore
                 # We will log to logger, which TuiLogHandler will pick up
-                logger.info("[yellow]Config editor updated with reloaded config.[/yellow]")
+                logger.info(
+                    "[yellow]Config editor updated with reloaded config.[/yellow]"
+                )
         except Exception as e:
             logger.error(
                 f"Error updating config editor during reload UI refresh: {e}",
@@ -520,7 +535,9 @@ class RunnerApp(_TextualAppBase):
             logger.info("TuiLogHandler removed.")
 
         # Shutdown services in core runner
-        if hasattr(self.runner, "shutdown_services") and callable(self.runner.shutdown_services):
+        if hasattr(self.runner, "shutdown_services") and callable(
+            self.runner.shutdown_services
+        ):
             await self.runner.shutdown_services()
 
         # Shutdown the metrics exporter gracefully
@@ -588,7 +605,9 @@ class RunnerApp(_TextualAppBase):
                     f"Failed to read config file {self.config_path} into TextArea: {e}",
                     exc_info=True,
                 )
-                self.config_area.text = f"# Error: Could not load {self.config_path}\n# {e}"
+                self.config_area.text = (
+                    f"# Error: Could not load {self.config_path}\n# {e}"
+                )
 
         try:
             self.query_one(TabbedContent).active = self.active_tab_id
@@ -615,7 +634,9 @@ class RunnerApp(_TextualAppBase):
                 yield self.queue_table
                 yield Label(_("\n[b]Submit Feedback[/b]"))
                 yield self.feedback_input
-                yield Button(_("Submit Feedback"), id="submit-feedback", variant="default")
+                yield Button(
+                    _("Submit Feedback"), id="submit-feedback", variant="default"
+                )
                 yield Label(_("\n[b]System Health[/b]"))
                 yield self.health_label
 
@@ -639,10 +660,14 @@ class RunnerApp(_TextualAppBase):
                 # Plugin Management - Only show load button if not in strict production mode
                 if not self.production_mode:
                     yield Label(_("\n[b]Plugin Management (Dev)[/b]"))
-                    yield Button(_("Load Plugin (Dev)"), id="load-plugin", variant="default")
+                    yield Button(
+                        _("Load Plugin (Dev)"), id="load-plugin", variant="default"
+                    )
 
             # Main Content Area (Tabs)
-            with TabbedContent(initial_tab=self.active_tab_id, id="main-content-tabs") as tabs:
+            with TabbedContent(
+                initial_tab=self.active_tab_id, id="main-content-tabs"
+            ) as tabs:
                 tabs.set_class(True, self.current_theme + "-theme")
                 if self.current_high_contrast:
                     tabs.add_class("high-contrast")
@@ -666,11 +691,15 @@ class RunnerApp(_TextualAppBase):
                 with TabPane(_("Documentation"), id="docs-tab"):
                     with Vertical(id="docs-tab-content"):
                         yield self.doc_markdown_viewer
-                        yield Button(_("Reload Docs"), id="reload-docs", variant="default")
+                        yield Button(
+                            _("Reload Docs"), id="reload-docs", variant="default"
+                        )
 
                 with TabPane(_("Provenance Explorer"), id="provenance-tab"):
                     # *** FIX: Added id="provenance-tree" ***
-                    self.provenance_tree = Tree(_("[b]Provenance Chain[/b]"), id="provenance-tree")
+                    self.provenance_tree = Tree(
+                        _("[b]Provenance Chain[/b]"), id="provenance-tree"
+                    )
                     yield self.provenance_tree
                     yield Button(
                         _("Reload Provenance"),
@@ -686,7 +715,9 @@ class RunnerApp(_TextualAppBase):
                 for widget_name, widget_class in self._plugin_widgets.items():
                     try:
                         widget_instance = widget_class()
-                        with TabPane(_(widget_name), id=f"plugin-tab-{widget_name.lower()}"):
+                        with TabPane(
+                            _(widget_name), id=f"plugin-tab-{widget_name.lower()}"
+                        ):
                             yield widget_instance
                     except Exception as e:
                         logger.error(
@@ -721,13 +752,17 @@ class RunnerApp(_TextualAppBase):
 
         # Queue size from RUN_QUEUE gauge (safe under mocks)
         try:
-            gauge = RUN_QUEUE.labels(framework=self.config.framework, instance_id=instance_id)
+            gauge = RUN_QUEUE.labels(
+                framework=self.config.framework, instance_id=instance_id
+            )
             size = getattr(gauge, "_value", 0) or 0
         except Exception:
             size = 0
 
         self.queue_table.clear()
-        self.queue_table.add_row(str(uuid.uuid4()), "summary", f"Queue size: {int(size)}")
+        self.queue_table.add_row(
+            str(uuid.uuid4()), "summary", f"Queue size: {int(size)}"
+        )
 
         # Pass rate
         pr = getattr(RUN_PASS_RATE, "_value", None)
@@ -789,12 +824,16 @@ class RunnerApp(_TextualAppBase):
                 loaded_content = doc_file_path.read_text(encoding="utf-8")
                 self.doc_markdown_viewer.update(loaded_content)
                 # --- FIX 1.1: Use _log_async ---
-                await self._log_async(_(f"Loaded Markdown documentation from: {doc_file_path}"))
+                await self._log_async(
+                    _(f"Loaded Markdown documentation from: {doc_file_path}")
+                )
             except Exception as e:
                 loaded_content = _(
                     f"# Error Loading Documentation\n*Failed to load Markdown documentation from {doc_file_path}: {e}*"
                 )
-                logger.error(f"Error loading Markdown documentation: {e}", exc_info=True)
+                logger.error(
+                    f"Error loading Markdown documentation: {e}", exc_info=True
+                )
                 self.doc_markdown_viewer.update(loaded_content)
 
         elif html_doc_path.exists():
@@ -805,7 +844,9 @@ class RunnerApp(_TextualAppBase):
             self.doc_markdown_viewer.update(loaded_content)
             # --- FIX 1.1: Use _log_async ---
             await self._log_async(
-                _(f"HTML documentation found at: {html_doc_path} (not directly rendered in TUI).")
+                _(
+                    f"HTML documentation found at: {html_doc_path} (not directly rendered in TUI)."
+                )
             )
         else:
             loaded_content = _(
@@ -824,20 +865,29 @@ class RunnerApp(_TextualAppBase):
         root.set_label(_("[b]Workflow Provenance Chain[/b]"))
 
         try:
-            if hasattr(self.runner, "provenance_chain") and self.runner.provenance_chain:
+            if (
+                hasattr(self.runner, "provenance_chain")
+                and self.runner.provenance_chain
+            ):
                 for i, record in enumerate(self.runner.provenance_chain):
                     # Record is a dict, access directly
                     record_label = _(
                         f"[{i+1}] {record.get('data', {}).get('stage_name', 'Unknown Stage')} (Hash: {record.get('hash', 'N/A')[:8]})"
                     )
                     node = root.add(record_label)
-                    node.add_label(_(f"  Prev Hash: {record.get('prev_hash', 'N/A')[:8]}"))
-                    node.add_label(_(f"  Timestamp: {record.get('timestamp_utc', 'N/A')}"))
+                    node.add_label(
+                        _(f"  Prev Hash: {record.get('prev_hash', 'N/A')[:8]}")
+                    )
+                    node.add_label(
+                        _(f"  Timestamp: {record.get('timestamp_utc', 'N/A')}")
+                    )
                     result_summary = record.get("data", {}).get("result_summary", {})
                     if result_summary:
                         for key, val in result_summary.items():
                             if isinstance(val, (str, int, float, bool)):
-                                node.add_label(_(f"  {key.capitalize()}: {str(val)[:50]}"))
+                                node.add_label(
+                                    _(f"  {key.capitalize()}: {str(val)[:50]}")
+                                )
                     node.expand()
                 root.add_label(_("[dim]End of Provenance Chain.[/dim]"))
             else:
@@ -886,7 +936,9 @@ class RunnerApp(_TextualAppBase):
                 self.current_theme = workspace_state.get("theme", "dark")
                 self.current_language = workspace_state.get("language", "en")
                 self.current_high_contrast = workspace_state.get("high_contrast", False)
-                self.active_tab_id = workspace_state.get("active_tab_id", "dashboard-tab")
+                self.active_tab_id = workspace_state.get(
+                    "active_tab_id", "dashboard-tab"
+                )
 
                 logger.info("Workspace state loaded.")
             except Exception as e:
@@ -940,7 +992,9 @@ class RunnerApp(_TextualAppBase):
                 enqueue_mode = False
 
             if not callable(op):
-                raise RuntimeError("Runner is missing required method for task execution.")
+                raise RuntimeError(
+                    "Runner is missing required method for task execution."
+                )
 
             # Call, supporting both async and sync implementations (and mocks)
             result = op(payload)
@@ -949,9 +1003,13 @@ class RunnerApp(_TextualAppBase):
                 result = await result
 
             if enqueue_mode:
-                await self._log_async(_(f"[bold blue]Task {task_id} enqueued.[/bold blue]"))
+                await self._log_async(
+                    _(f"[bold blue]Task {task_id} enqueued.[/bold blue]")
+                )
             else:
-                await self._log_async(_(f"[bold green]Task {task_id} completed.[/bold green]"))
+                await self._log_async(
+                    _(f"[bold green]Task {task_id} completed.[/bold green]")
+                )
                 if getattr(result, "results", None):
                     self.pass_rate_label.update(
                         f"Pass Rate: {result.results.get('pass_rate', 0):.0%}"
@@ -984,7 +1042,9 @@ class RunnerApp(_TextualAppBase):
     @on(Button.Pressed, "#reload-provenance")
     async def reload_provenance(self):
         # --- FIX 1.1: Use _log_async ---
-        await self._log_async(_("[bold blue]Reloading provenance explorer...[/bold blue]"))
+        await self._log_async(
+            _("[bold blue]Reloading provenance explorer...[/bold blue]")
+        )
         await self._update_provenance_explorer()
 
     @on(Button.Pressed, "#save-config")
@@ -999,7 +1059,9 @@ class RunnerApp(_TextualAppBase):
                     "[green]Configuration saved to config.yaml. Reload will be triggered automatically.[/green]"
                 )
             )
-            logger.info(f"Config saved to {self.config_path}. ConfigWatcher should trigger reload.")
+            logger.info(
+                f"Config saved to {self.config_path}. ConfigWatcher should trigger reload."
+            )
         except Exception as e:
             # --- FIX 1.1: Use _log_async ---
             await self._log_async(_(f"[red]Error saving config: {e}[/red]"))
@@ -1010,7 +1072,9 @@ class RunnerApp(_TextualAppBase):
         feedback_value = self.feedback_input.value.strip()
         if not feedback_value:
             # --- FIX 1.1: Use _log_async ---
-            await self._log_async(_("[yellow]Feedback field is empty. Not submitting.[/yellow]"))
+            await self._log_async(
+                _("[yellow]Feedback field is empty. Not submitting.[/yellow]")
+            )
             logger.info("Feedback submission cancelled: empty input.")
             return
 
@@ -1032,12 +1096,18 @@ class RunnerApp(_TextualAppBase):
                 logger.info(f"Feedback rating submitted: {score}")
             else:
                 # --- FIX 1.1: Use _log_async ---
-                await self._log_async(_("[yellow]Engine feedback tuning not available.[/yellow]"))
-                logger.warning("Feedback tuning feature not available on runner instance.")
+                await self._log_async(
+                    _("[yellow]Engine feedback tuning not available.[/yellow]")
+                )
+                logger.warning(
+                    "Feedback tuning feature not available on runner instance."
+                )
         except ValueError as e:
             # --- FIX 1.1: Use _log_async ---
             await self._log_async(
-                _(f"[red]Invalid feedback: {e}. Please enter a number between 0 and 1.[/red]")
+                _(
+                    f"[red]Invalid feedback: {e}. Please enter a number between 0 and 1.[/red]"
+                )
             )
             logger.warning(f"Invalid feedback input: {feedback_value}. Error: {e}")
         except Exception as e:
@@ -1068,12 +1138,16 @@ class RunnerApp(_TextualAppBase):
                 # This is a sync handler, so we must schedule the async log call.
                 asyncio.create_task(
                     self._log_async(
-                        _(f"[bold blue]Language changed to {new_lang}. UI refreshed.[/bold blue]")
+                        _(
+                            f"[bold blue]Language changed to {new_lang}. UI refreshed.[/bold blue]"
+                        )
                     )
                 )
                 logger.info(f"Language changed to: {new_lang}")
             except Exception as e:
-                logger.error(f"Error changing language to '{new_lang}': {e}", exc_info=True)
+                logger.error(
+                    f"Error changing language to '{new_lang}': {e}", exc_info=True
+                )
                 asyncio.create_task(
                     self._log_async(
                         _(
@@ -1135,7 +1209,9 @@ class RunnerApp(_TextualAppBase):
             plugin_name = plugin_name.strip()
             if not plugin_name:
                 # --- FIX 1.1: Use _log_async ---
-                await self._log_async(_("[yellow]Plugin load cancelled. Input was empty.[/yellow]"))
+                await self._log_async(
+                    _("[yellow]Plugin load cancelled. Input was empty.[/yellow]")
+                )
                 logger.info("Plugin load cancelled: empty input.")
                 return
 
@@ -1161,7 +1237,9 @@ class RunnerApp(_TextualAppBase):
                     module.register_tui_widgets(register_tui_widget)
                     # --- FIX 1.1: Use _log_async ---
                     await self._log_async(
-                        _(f"[blue]Plugin '{plugin_name}' registered TUI widgets.[/blue]")
+                        _(
+                            f"[blue]Plugin '{plugin_name}' registered TUI widgets.[/blue]"
+                        )
                     )
                 else:
                     # --- FIX 1.1: Use _log_async ---
@@ -1171,7 +1249,9 @@ class RunnerApp(_TextualAppBase):
                         )
                     )
 
-                if hasattr(module, "register_tui_themes") and callable(module.register_tui_themes):
+                if hasattr(module, "register_tui_themes") and callable(
+                    module.register_tui_themes
+                ):
                     module.register_tui_themes(register_tui_theme)
                     # --- FIX 1.1: Use _log_async ---
                     await self._log_async(
@@ -1253,7 +1333,9 @@ class RunnerApp(_TextualAppBase):
                 logger.warning("No language options available to toggle via shortcut.")
                 # This is a sync handler, schedule the async log call
                 asyncio.create_task(
-                    self._log_async(_("[yellow]No theme options available to toggle.[/yellow]"))
+                    self._log_async(
+                        _("[yellow]No theme options available to toggle.[/yellow]")
+                    )
                 )
                 return
 
@@ -1266,7 +1348,9 @@ class RunnerApp(_TextualAppBase):
         except Exception as e:
             logger.error(f"Error toggling language via shortcut: {e}", exc_info=True)
             # This is a sync handler, schedule the async log call
-            asyncio.create_task(self._log_async(_(f"[red]Error toggling language: {e}[/red]")))
+            asyncio.create_task(
+                self._log_async(_(f"[red]Error toggling language: {e}[/red]"))
+            )
 
     def action_toggle_high_contrast(self) -> None:
         """Toggle high contrast mode."""
@@ -1277,9 +1361,13 @@ class RunnerApp(_TextualAppBase):
                 f"Toggled high contrast mode to {switch_widget.value} via keyboard shortcut."
             )
         except Exception as e:
-            logger.error(f"Error toggling high contrast via shortcut: {e}", exc_info=True)
+            logger.error(
+                f"Error toggling high contrast via shortcut: {e}", exc_info=True
+            )
             # This is a sync handler, schedule the async log call
-            asyncio.create_task(self._log_async(_(f"[red]Error toggling high contrast: {e}[/red]")))
+            asyncio.create_task(
+                self._log_async(_(f"[red]Error toggling high contrast: {e}[/red]"))
+            )
 
     def action_toggle_theme(self) -> None:
         """Toggle theme between dark, light, ocean."""
@@ -1294,7 +1382,9 @@ class RunnerApp(_TextualAppBase):
                 logger.warning("No theme options available to toggle via shortcut.")
                 # This is a sync handler, schedule the async log call
                 asyncio.create_task(
-                    self._log_async(_("[yellow]No theme options available to toggle.[/yellow]"))
+                    self._log_async(
+                        _("[yellow]No theme options available to toggle.[/yellow]")
+                    )
                 )
                 return
 
@@ -1307,7 +1397,9 @@ class RunnerApp(_TextualAppBase):
         except Exception as e:
             logger.error(f"Error toggling theme via shortcut: {e}", exc_info=True)
             # This is a sync handler, schedule the async log call
-            asyncio.create_task(self._log_async(_(f"[red]Error toggling theme: {e}[/red]")))
+            asyncio.create_task(
+                self._log_async(_(f"[red]Error toggling theme: {e}[/red]"))
+            )
 
     def action_save_workspace(self) -> None:
         """Save workspace state via key binding."""

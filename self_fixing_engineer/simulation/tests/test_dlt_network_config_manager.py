@@ -148,7 +148,9 @@ class TestDLTNetworkConfig:
         }
         config = dlt_module.DLTNetworkConfig.load_and_validate(config_data)
         assert config.evm.chain_id == 1
-        assert config.evm.contract_address == "0x1234567890abcdef1234567890abcdef12345678"
+        assert (
+            config.evm.contract_address == "0x1234567890abcdef1234567890abcdef12345678"
+        )
 
     def test_evm_invalid_contract_address(self):
         """Test EVM invalid contract address validation."""

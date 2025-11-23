@@ -21,7 +21,9 @@ VERSION = "1.0.0"
 # --- Python Version enforcement ---
 MIN_PYTHON = (3, 9)
 if sys.version_info < MIN_PYTHON:
-    sys.stderr.write(f"ERROR: Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or higher is required.\n")
+    sys.stderr.write(
+        f"ERROR: Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or higher is required.\n"
+    )
     sys.exit(1)
 
 # --- Global Production Mode Flag ---
@@ -52,7 +54,9 @@ if PRODUCTION_MODE:
     handler.setFormatter(JsonFormatter())
     logging.basicConfig(level=logging.INFO, handlers=[handler])
 else:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -117,9 +121,13 @@ class AnalyzerConfig(BaseModel):
         root = os.path.abspath(config_data["project_root"])
         # Optional: only allow project roots inside a predefined allowlist (compliance)
         allowed_roots = [
-            ar for ar in os.environ.get("ANALYZER_PROJECT_ALLOWLIST", "").split(":") if ar
+            ar
+            for ar in os.environ.get("ANALYZER_PROJECT_ALLOWLIST", "").split(":")
+            if ar
         ]
-        if allowed_roots and not any(root.startswith(os.path.abspath(ar)) for ar in allowed_roots):
+        if allowed_roots and not any(
+            root.startswith(os.path.abspath(ar)) for ar in allowed_roots
+        ):
             raise AnalyzerCriticalError(
                 f"Project root {root} not in allowed project allowlist {allowed_roots}."
             )
@@ -145,7 +153,9 @@ def load_config(config_path: str) -> AnalyzerConfig:
     config_data = {}
     try:
         if PRODUCTION_MODE:
-            logger.info(f"Attempting to fetch config from AWS SSM parameter store: {config_path}")
+            logger.info(
+                f"Attempting to fetch config from AWS SSM parameter store: {config_path}"
+            )
             ssm = boto3.client("ssm")
             try:
                 response = ssm.get_parameter(Name=config_path, WithDecryption=True)
@@ -155,10 +165,14 @@ def load_config(config_path: str) -> AnalyzerConfig:
                     f"CONFIG LOAD FAILURE: AWS SSM unavailable or misconfigured: {e}",
                     exc_info=True,
                 )
-                raise AnalyzerCriticalError(f"AWS SSM unavailable or misconfigured: {e}")
+                raise AnalyzerCriticalError(
+                    f"AWS SSM unavailable or misconfigured: {e}"
+                )
         else:
             if not os.path.exists(config_path):
-                logger.error(f"CONFIG LOAD FAILURE: File not found: {config_path}", exc_info=True)
+                logger.error(
+                    f"CONFIG LOAD FAILURE: File not found: {config_path}", exc_info=True
+                )
                 raise AnalyzerCriticalError(
                     f"Configuration file not found at: {config_path}. Aborting startup."
                 )
@@ -249,7 +263,9 @@ def _handle_analyze(project_root, app_config, output_dir):
             dead_nodes = graph_analyzer.detect_dead_nodes(graph)
         except NonCriticalError as e:
             logger.warning(f"Non-critical error in graph analysis: {e}")
-            audit_logger.log_event("non_critical_error", reason=str(e), action="analyze")
+            audit_logger.log_event(
+                "non_critical_error", reason=str(e), action="analyze"
+            )
             graph, cycles, dead_nodes = {}, [], []
         logger.info(
             f"Graph analysis complete. Cycles found: {len(cycles)}, Dead nodes: {len(dead_nodes)}"
@@ -304,7 +320,9 @@ def _handle_check_policy(project_root, app_config, output_dir):
             detected_cycles=temp_cycles,
             dead_nodes=temp_dead_nodes,
         )
-        logger.info(f"Policy check complete. Violations found: {len(policy_violations)}")
+        logger.info(
+            f"Policy check complete. Violations found: {len(policy_violations)}"
+        )
         audit_logger.log_event(
             "policy_check_complete",
             project_root=project_root,
@@ -378,15 +396,21 @@ def _handle_suggest_patch(project_root, app_config, output_dir, dry_run):
         audit_logger.log_event(
             "action_suggest_patch_start", project_root=project_root, dry_run=dry_run
         )
-        logger.info(f"Generating AI-driven suggestions and patches for {project_root}...")
+        logger.info(
+            f"Generating AI-driven suggestions and patches for {project_root}..."
+        )
         codebase_context = "Needs context from graph analysis or other sources."
         problem_description = "Describe the problem here."
         relevant_code = "print('Hello World')"
         ai_config = app_config.ai_config
         if PRODUCTION_MODE and ai_config.get("use_mock_ai_backend"):
-            raise AnalyzerCriticalError("Mock AI backend detected in production. Aborting.")
+            raise AnalyzerCriticalError(
+                "Mock AI backend detected in production. Aborting."
+            )
         suggestions = get_ai_suggestions(codebase_context, config=ai_config)
-        patches = get_ai_patch(problem_description, relevant_code, suggestions, config=ai_config)
+        patches = get_ai_patch(
+            problem_description, relevant_code, suggestions, config=ai_config
+        )
         logger.info(
             f"AI suggestions and patches generated. Suggestions: {len(suggestions)}, Patches: {len(patches)}"
         )
@@ -402,7 +426,9 @@ def _handle_suggest_patch(project_root, app_config, output_dir, dry_run):
                 level="WARNING",
             )
         if not dry_run:
-            logger.info("Patch application is not supported in production. Aborting apply.")
+            logger.info(
+                "Patch application is not supported in production. Aborting apply."
+            )
             raise AnalyzerCriticalError(
                 "Patch application is not implemented or is disabled for safety in production."
             )
@@ -436,10 +462,14 @@ async def _handle_health_check(project_root, app_config):
                     )
                 ),
                 asyncio.to_thread(
-                    lambda: SecurityAnalyzer(project_root).security_health_check(check_only=True)
+                    lambda: SecurityAnalyzer(project_root).security_health_check(
+                        check_only=True
+                    )
                 ),
                 asyncio.to_thread(
-                    lambda: get_ai_suggestions("health check", config=app_config.ai_config)
+                    lambda: get_ai_suggestions(
+                        "health check", config=app_config.ai_config
+                    )
                 ),
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -464,7 +494,9 @@ async def _handle_health_check(project_root, app_config):
                 health_statuses[name] = True if name != "security_analyzer" else result
                 logger.info(f"{name} component is healthy.")
         overall_status = all(health_statuses.values())
-        logger.info(f"Overall system health: {'HEALTHY' if overall_status else 'UNHEALTHY'}")
+        logger.info(
+            f"Overall system health: {'HEALTHY' if overall_status else 'UNHEALTHY'}"
+        )
         audit_logger.log_event(
             "health_check_complete", overall_status=overall_status, **health_statuses
         )
@@ -525,7 +557,9 @@ atexit.register(_shutdown)
     help="Output directory for reports (default: reports).",
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose logging.")
-@click.option("--production-mode", is_flag=True, help="Force production mode (overrides env var).")
+@click.option(
+    "--production-mode", is_flag=True, help="Force production mode (overrides env var)."
+)
 @click.option(
     "--dry-run",
     is_flag=True,
@@ -573,10 +607,14 @@ def main(action, path, config, output_dir, verbose, production_mode, dry_run):
 
     # No Unprotected Demo/Dev Modes in Prod
     if PRODUCTION_MODE and app_config.demo_mode_enabled:
-        logger.critical("Demo mode is enabled in PRODUCTION_MODE. Aborting for security.")
+        logger.critical(
+            "Demo mode is enabled in PRODUCTION_MODE. Aborting for security."
+        )
         raise AnalyzerCriticalError("Demo mode enabled in production.")
     if PRODUCTION_MODE and not app_config.audit_logging_enabled:
-        logger.critical("Audit logging is DISABLED in PRODUCTION_MODE. Aborting for compliance.")
+        logger.critical(
+            "Audit logging is DISABLED in PRODUCTION_MODE. Aborting for compliance."
+        )
         raise AnalyzerCriticalError("Audit logging disabled in production.")
 
     actions: Dict[str, Callable] = {

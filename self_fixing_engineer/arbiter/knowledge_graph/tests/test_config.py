@@ -402,7 +402,9 @@ class TestConfigIntegration:
 
             # Check sensitive value handling
             assert isinstance(config.AUDIT_ENCRYPTION_KEY, SensitiveValue)
-            assert config.AUDIT_ENCRYPTION_KEY.get_actual_value() == "test_encryption_key"
+            assert (
+                config.AUDIT_ENCRYPTION_KEY.get_actual_value() == "test_encryption_key"
+            )
 
     def test_config_persistence(self, temp_data_dir):
         """Test that config values persist correctly"""

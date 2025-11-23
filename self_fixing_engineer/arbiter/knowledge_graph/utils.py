@@ -35,14 +35,18 @@ class ContextVarFormatter(logging.Formatter):
 
 logging.basicConfig(level=logging.INFO, handlers=[])
 handler = logging.StreamHandler(sys.stdout)
-formatter = ContextVarFormatter("%(asctime)s - [%(levelname)s] - [%(trace_id)s] - %(message)s")
+formatter = ContextVarFormatter(
+    "%(asctime)s - [%(levelname)s] - [%(trace_id)s] - %(message)s"
+)
 handler.setFormatter(formatter)
 logging.getLogger().addHandler(handler)
 logger = logging.getLogger(__name__)
 
 
 # --- Prometheus Metrics ---
-def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
+def get_or_create_metric(
+    metric_type, name, documentation, labelnames=None, buckets=None
+):
     labelnames = labelnames or []
     if name in REGISTRY._names_to_collectors:
         existing_metric = REGISTRY._names_to_collectors[name]
@@ -307,7 +311,9 @@ PII_SENSITIVE_PATTERNS = [
 def _redact_sensitive_pii(key: str, value: Any) -> Any:
     key_lower = key.lower()
     if key_lower in PII_SENSITIVE_KEYS:
-        AGENT_METRICS["sensitive_data_redaction_total"].labels(redaction_type="key").inc()
+        AGENT_METRICS["sensitive_data_redaction_total"].labels(
+            redaction_type="key"
+        ).inc()
         logger.warning(
             f"PII redacted for key '{key}' (GDPR mode: {Config.GDPR_MODE}). Trace ID: {trace_id_var.get()}"
         )
@@ -343,7 +349,9 @@ async def _sanitize_context(
 ) -> Dict[str, Any]:
     with tracer.start_as_current_span("sanitize_context"):
         redact_keys_lower = [k.lower() for k in (redact_keys or [])]
-        compiled_patterns = [re.compile(p, re.IGNORECASE) for p in (redact_patterns or [])]
+        compiled_patterns = [
+            re.compile(p, re.IGNORECASE) for p in (redact_patterns or [])
+        ]
 
         def _redact_value_and_pii(key: str, value: Any) -> Any:
             if isinstance(value, SensitiveValue):
@@ -374,7 +382,9 @@ async def _sanitize_context(
 
         def _json_serializable_converter(obj: Any, current_depth: int = 0) -> Any:
             if current_depth > max_nesting_depth:
-                logger.warning(f"Max nesting depth exceeded. Trace ID: {trace_id_var.get()}")
+                logger.warning(
+                    f"Max nesting depth exceeded. Trace ID: {trace_id_var.get()}"
+                )
                 AGENT_METRICS["agent_predict_errors"].labels(
                     agent_id="context_sanitization",
                     error_code=AgentErrorCode.CONTEXT_MAX_DEPTH_EXCEEDED.value,
@@ -387,11 +397,15 @@ async def _sanitize_context(
             if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
                 return obj.isoformat()
             if isinstance(obj, collections.abc.Coroutine):
-                logger.warning(f"Coroutine found in context. Trace ID: {trace_id_var.get()}")
+                logger.warning(
+                    f"Coroutine found in context. Trace ID: {trace_id_var.get()}"
+                )
                 return f"<Coroutine at {hex(id(obj))}>"
             if isinstance(obj, dict):
                 return {
-                    k: _redact_value_and_pii(k, _json_serializable_converter(v, current_depth + 1))
+                    k: _redact_value_and_pii(
+                        k, _json_serializable_converter(v, current_depth + 1)
+                    )
                     for k, v in obj.items()
                 }
             if isinstance(obj, list):
@@ -404,7 +418,9 @@ async def _sanitize_context(
                 ]
             if PydanticBaseModel and isinstance(obj, PydanticBaseModel):
                 return obj.model_dump()
-            logger.warning(f"Unsupported type {type(obj)}. Trace ID: {trace_id_var.get()}")
+            logger.warning(
+                f"Unsupported type {type(obj)}. Trace ID: {trace_id_var.get()}"
+            )
             AGENT_METRICS["agent_predict_errors"].labels(
                 agent_id="context_sanitization",
                 error_code=AgentErrorCode.CONTEXT_UNSUPPORTED_TYPE.value,
@@ -414,9 +430,13 @@ async def _sanitize_context(
         try:
             if context_schema_model:
                 context = context_schema_model(**context).model_dump()
-                logger.debug(f"Context validated against schema. Trace ID: {trace_id_var.get()}")
+                logger.debug(
+                    f"Context validated against schema. Trace ID: {trace_id_var.get()}"
+                )
             sanitized_context = _json_serializable_converter(context)
-            context_json = json.dumps(sanitized_context, sort_keys=True, ensure_ascii=False)
+            context_json = json.dumps(
+                sanitized_context, sort_keys=True, ensure_ascii=False
+            )
             if len(context_json.encode("utf-8")) > max_size_bytes:
                 logger.warning(
                     f"Context size exceeds limit ({len(context_json.encode('utf-8'))} bytes). Truncating. Trace ID: {trace_id_var.get()}"
@@ -442,7 +462,9 @@ async def _sanitize_context(
                 try:
                     return json.loads(truncated_json_str)
                 except json.JSONDecodeError:
-                    logger.error(f"Truncation broke JSON. Trace ID: {trace_id_var.get()}")
+                    logger.error(
+                        f"Truncation broke JSON. Trace ID: {trace_id_var.get()}"
+                    )
                     AGENT_METRICS["agent_predict_errors"].labels(
                         agent_id="context_sanitization",
                         error_code=AgentErrorCode.INVALID_CONTEXT_FORMAT.value,

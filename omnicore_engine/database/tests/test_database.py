@@ -31,7 +31,9 @@ def mock_settings():
     settings.DB_POOL_MAX_OVERFLOW = 10
     settings.database_path = "sqlite+aiosqlite:///:memory:"
     settings.redis_url = "redis://localhost:6379"
-    settings.ENCRYPTION_KEY = Mock(get_secret_value=lambda: Fernet.generate_key().decode())
+    settings.ENCRYPTION_KEY = Mock(
+        get_secret_value=lambda: Fernet.generate_key().decode()
+    )
     settings.FERNET_KEYS = Mock(get_secret_value=lambda: Fernet.generate_key().decode())
     settings.DB_RETRY_ATTEMPTS = 3
     settings.DB_RETRY_DELAY = 1
@@ -105,7 +107,9 @@ class TestSafeSerialize:
         assert result["self"] == "[Circular Reference: dict]"
 
     def test_serialize_nested_dict(self):
-        data = {"level1": {"level2": {"datetime": datetime(2025, 1, 1), "bytes": b"data"}}}
+        data = {
+            "level1": {"level2": {"datetime": datetime(2025, 1, 1), "bytes": b"data"}}
+        }
         result = safe_serialize(data)
         assert isinstance(result["level1"]["level2"]["datetime"], str)
         assert isinstance(result["level1"]["level2"]["bytes"], str)
@@ -140,7 +144,9 @@ class TestDatabaseInit:
     @pytest.mark.asyncio
     async def test_init_sqlite(self, mock_settings, mock_security_config, temp_db_path):
         with patch("database.ArbiterConfig", return_value=mock_settings):
-            with patch("database.get_security_config", return_value=mock_security_config):
+            with patch(
+                "database.get_security_config", return_value=mock_security_config
+            ):
                 with patch("database.EnterpriseSecurityUtils"):
                     db = Database(f"sqlite+aiosqlite:///{temp_db_path}")
                     assert db.db_path == f"sqlite+aiosqlite:///{temp_db_path}"
@@ -151,7 +157,9 @@ class TestDatabaseInit:
     async def test_init_postgresql(self, mock_settings, mock_security_config):
         mock_settings.database_path = "postgresql://user:pass@localhost/db"
         with patch("database.ArbiterConfig", return_value=mock_settings):
-            with patch("database.get_security_config", return_value=mock_security_config):
+            with patch(
+                "database.get_security_config", return_value=mock_security_config
+            ):
                 with patch("database.EnterpriseSecurityUtils"):
                     db = Database("postgresql://user:pass@localhost/db")
                     assert db.is_postgres is True
@@ -159,11 +167,17 @@ class TestDatabaseInit:
 
     def test_init_invalid_path(self, mock_settings, mock_security_config):
         with patch("database.ArbiterConfig", return_value=mock_settings):
-            with patch("database.get_security_config", return_value=mock_security_config):
+            with patch(
+                "database.get_security_config", return_value=mock_security_config
+            ):
                 with patch("database.EnterpriseSecurityUtils"):
-                    with pytest.raises(ValueError, match="db_path must be a non-empty string"):
+                    with pytest.raises(
+                        ValueError, match="db_path must be a non-empty string"
+                    ):
                         Database("")
-                    with pytest.raises(ValueError, match="db_path must be a non-empty string"):
+                    with pytest.raises(
+                        ValueError, match="db_path must be a non-empty string"
+                    ):
                         Database(None)
 
 
@@ -203,7 +217,9 @@ class TestDatabaseOperations:
         status = "completed"
         user_id = "test_user"
 
-        await database.save_simulation_legacy(sim_id, request_data, result_data, status, user_id)
+        await database.save_simulation_legacy(
+            sim_id, request_data, result_data, status, user_id
+        )
         result = await database.get_simulation_legacy(sim_id)
 
         assert result is not None
@@ -288,7 +304,9 @@ class TestAgentStateOperations:
         with patch.object(
             database.policy_engine, "should_auto_learn", return_value=(True, "Allowed")
         ):
-            with patch.object(database.knowledge_graph, "add_fact", new_callable=AsyncMock):
+            with patch.object(
+                database.knowledge_graph, "add_fact", new_callable=AsyncMock
+            ):
                 await database.save_agent_state(agent)
 
     @pytest.mark.asyncio
@@ -312,7 +330,9 @@ class TestAgentStateOperations:
         with patch.object(
             database.policy_engine, "should_auto_learn", return_value=(True, "Allowed")
         ):
-            with patch.object(database.knowledge_graph, "add_fact", new_callable=AsyncMock):
+            with patch.object(
+                database.knowledge_graph, "add_fact", new_callable=AsyncMock
+            ):
                 await database.save_agent_state(agent)
 
         # Now retrieve it
@@ -347,7 +367,9 @@ class TestAgentStateOperations:
                 "should_auto_learn",
                 return_value=(True, "Allowed"),
             ):
-                with patch.object(database.knowledge_graph, "add_fact", new_callable=AsyncMock):
+                with patch.object(
+                    database.knowledge_graph, "add_fact", new_callable=AsyncMock
+                ):
                     await database.save_agent_state(agent)
 
         # Query all agents
@@ -412,7 +434,9 @@ class TestSnapshotOperations:
             "agents": ["agent1", "agent2"],
             "timestamp": datetime.utcnow().isoformat(),
         }
-        encrypted_state = database.encrypter.encrypt(json.dumps(state).encode()).decode()
+        encrypted_state = database.encrypter.encrypt(
+            json.dumps(state).encode()
+        ).decode()
         user_id = "test_user"
 
         await database.snapshot_audit_state(snapshot_id, encrypted_state, user_id)
@@ -448,7 +472,9 @@ class TestSnapshotOperations:
                 "should_auto_learn",
                 return_value=(True, "Allowed"),
             ):
-                with patch.object(database.knowledge_graph, "add_fact", new_callable=AsyncMock):
+                with patch.object(
+                    database.knowledge_graph, "add_fact", new_callable=AsyncMock
+                ):
                     await database.save_agent_state(agent)
 
         # Create snapshot
@@ -555,7 +581,9 @@ class TestConcurrency:
                 "should_auto_learn",
                 return_value=(True, "Allowed"),
             ):
-                with patch.object(database.knowledge_graph, "add_fact", new_callable=AsyncMock):
+                with patch.object(
+                    database.knowledge_graph, "add_fact", new_callable=AsyncMock
+                ):
                     await database.save_agent_state(agent)
 
         # Run multiple saves concurrently

@@ -29,7 +29,11 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+    OAuth2PasswordBearer,
+)
 
 # Pydantic imports
 from pydantic import BaseModel, Field
@@ -404,7 +408,9 @@ class SecurityIntegrationManager:
             expires_at=datetime.now(timezone.utc)
             + timedelta(minutes=self.config.SESSION_TIMEOUT_MINUTES),
             ip_address=request.client.host if request else "unknown",
-            device_fingerprint=(self._get_device_fingerprint(request) if request else None),
+            device_fingerprint=(
+                self._get_device_fingerprint(request) if request else None
+            ),
             mfa_verified=True,
             security_level=SecurityLevel.CONFIDENTIAL,
         )
@@ -421,7 +427,9 @@ class SecurityIntegrationManager:
             "accept_language": request.headers.get("accept-language", ""),
             "accept_encoding": request.headers.get("accept-encoding", ""),
         }
-        return hashlib.sha256(json.dumps(fingerprint_data, sort_keys=True).encode()).hexdigest()
+        return hashlib.sha256(
+            json.dumps(fingerprint_data, sort_keys=True).encode()
+        ).hexdigest()
 
     def cleanup_expired_sessions(self) -> int:
         """
@@ -433,7 +441,9 @@ class SecurityIntegrationManager:
         """
         now = datetime.now(timezone.utc)
         expired_sessions = [
-            session_id for session_id, session in self._sessions.items() if now > session.expires_at
+            session_id
+            for session_id, session in self._sessions.items()
+            if now > session.expires_at
         ]
 
         for session_id in expired_sessions:
@@ -488,7 +498,9 @@ class SecurityIntegrationManager:
 
         return True
 
-    async def _check_resource_access(self, session: SessionContext, resource: str) -> bool:
+    async def _check_resource_access(
+        self, session: SessionContext, resource: str
+    ) -> bool:
         """Check resource-specific access control"""
         # Implement resource-based access control
         # This could check ownership, department, etc.
@@ -531,7 +543,9 @@ class SecurityIntegrationManager:
         # Validate session
         if datetime.now(timezone.utc) > session.expires_at:
             del self._sessions[credentials.credentials]
-            raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Session expired")
+            raise HTTPException(
+                status_code=HTTP_401_UNAUTHORIZED, detail="Session expired"
+            )
 
         # Validate IP if configured
         if self.config.INVALIDATE_SESSION_ON_IP_CHANGE:
@@ -633,7 +647,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
             # Input validation
             if not await self._validate_request(request):
-                return JSONResponse(status_code=400, content={"error": "Invalid request"})
+                return JSONResponse(
+                    status_code=400, content={"error": "Invalid request"}
+                )
 
             # Process request
             response = await call_next(request)
@@ -705,7 +721,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         for header, value in self.config.SECURITY_HEADERS.items():
             response.headers[header] = value
 
-    async def _log_request(self, request: Request, response: Response, process_time: float):
+    async def _log_request(
+        self, request: Request, response: Response, process_time: float
+    ):
         """Log request for audit"""
         # Log only specific endpoints or errors
         if response.status_code >= 400 or request.url.path.startswith("/api/"):
@@ -757,7 +775,9 @@ class SecureDatabase(Database):
         if self.security_manager:
             self.encrypter = EncryptionAdapter(self.security_manager.security_utils)
 
-    async def execute_query(self, query: str, params: Dict[str, Any], session: SessionContext):
+    async def execute_query(
+        self, query: str, params: Dict[str, Any], session: SessionContext
+    ):
         """Execute query with security checks"""
         # Audit query execution
         await self.security_manager._audit_security_event(
@@ -803,7 +823,9 @@ class SecureMessageBus(ShardedMessageBus):
     ):
         """Publish message with security context"""
         # Check authorization
-        if not await self.security_manager.authorize(session, Permission.MESSAGE_PUBLISH, topic):
+        if not await self.security_manager.authorize(
+            session, Permission.MESSAGE_PUBLISH, topic
+        ):
             raise AuthorizationError(f"Not authorized to publish to {topic}")
 
         # Add security context to message
@@ -854,7 +876,9 @@ def secure_endpoint(
             # Check roles
             if roles:
                 if not any(role in session.roles for role in roles):
-                    raise AuthorizationError(f"Role required: {[r.value for r in roles]}")
+                    raise AuthorizationError(
+                        f"Role required: {[r.value for r in roles]}"
+                    )
 
             # Audit access if configured
             if audit:
@@ -866,7 +890,9 @@ def secure_endpoint(
                         resource=func.__name__,
                         action="execute",
                         result="allowed",
-                        details={"permission": permission.value if permission else None},
+                        details={
+                            "permission": permission.value if permission else None
+                        },
                     )
                 )
 
@@ -1046,7 +1072,9 @@ def configure_app_security(
         )
 
         if not is_valid:
-            raise HTTPException(status_code=400, detail=f"Invalid file type: {mime_type}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid file type: {mime_type}"
+            )
 
         return {"message": "Plugin installed"}
 

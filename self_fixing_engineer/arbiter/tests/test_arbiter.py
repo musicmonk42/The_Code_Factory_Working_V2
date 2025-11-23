@@ -38,7 +38,9 @@ mock_np.random = MagicMock()
 mock_np.random.rand = Mock(return_value=0.5)
 mock_np.random.uniform = Mock(return_value=5.0)
 mock_np.clip = Mock(side_effect=lambda x, min_val, max_val: x)
-mock_np.zeros = lambda shape: MockNdarray([0] * shape if isinstance(shape, int) else [0] * shape[0])
+mock_np.zeros = lambda shape: MockNdarray(
+    [0] * shape if isinstance(shape, int) else [0] * shape[0]
+)
 mock_np.float32 = float
 mock_np.mean = Mock(return_value=0.5)
 mock_np.std = Mock(return_value=0.1)
@@ -194,7 +196,9 @@ def setup_mocks():
     arbiter_mocks["arbiter.metrics"].get_or_create_counter = mock_get_or_create_counter
     arbiter_mocks["arbiter.metrics"].get_or_create_gauge = mock_get_or_create_gauge
     arbiter_mocks["arbiter.metrics"].get_or_create_summary = mock_get_or_create_summary
-    arbiter_mocks["arbiter.metrics"].get_or_create_histogram = mock_get_or_create_histogram
+    arbiter_mocks["arbiter.metrics"].get_or_create_histogram = (
+        mock_get_or_create_histogram
+    )
 
     # Setup arbiter specific mocks
     arbiter_mocks["arbiter.agent_state"].Base = Base
@@ -219,7 +223,9 @@ def setup_mocks():
             self.get_session = MagicMock()
 
     arbiter_mocks["arbiter.models.postgres_client"].PostgresClient = MockPostgresClient
-    arbiter_mocks["envs.evolution"].evolve_configs = MagicMock(return_value={"test": "config"})
+    arbiter_mocks["envs.evolution"].evolve_configs = MagicMock(
+        return_value={"test": "config"}
+    )
 
     for name, mock_obj in arbiter_mocks.items():
         sys.modules[name] = mock_obj
@@ -249,7 +255,9 @@ def test_config():
     config.REDIS_URL = "redis://localhost:6379"
     config.ENCRYPTION_KEY = MagicMock()
     # Generate a proper base64-encoded 32-byte key
-    config.ENCRYPTION_KEY.get_secret_value = MagicMock(return_value=generate_fernet_key())
+    config.ENCRYPTION_KEY.get_secret_value = MagicMock(
+        return_value=generate_fernet_key()
+    )
     config.REPORTS_DIRECTORY = "./test_reports"
     config.FRONTEND_URL = "http://localhost:3000"
     config.ARENA_PORT = 8080
@@ -420,7 +428,9 @@ def test_agent_state_manager_exists():
         # Create a minimal mock config with proper Fernet key
         mock_config = MagicMock()
         mock_config.ENCRYPTION_KEY = MagicMock()
-        mock_config.ENCRYPTION_KEY.get_secret_value = MagicMock(return_value=generate_fernet_key())
+        mock_config.ENCRYPTION_KEY.get_secret_value = MagicMock(
+            return_value=generate_fernet_key()
+        )
 
         mock_db = MagicMock()
         # Mock the session for AgentStateManager
@@ -436,7 +446,9 @@ def test_agent_state_manager_exists():
 
 
 @pytest.mark.asyncio
-async def test_arbiter_with_mocked_dependencies(test_config, mock_engine, mock_db_client):
+async def test_arbiter_with_mocked_dependencies(
+    test_config, mock_engine, mock_db_client
+):
     """Test Arbiter with fully mocked dependencies."""
     # PostgresClient is imported within arbiter.py, so patch it there
     with patch("arbiter.arbiter.PostgresClient", return_value=mock_db_client):
@@ -501,7 +513,9 @@ def test_list_all_arbiter_attributes():
     """List all attributes available in the arbiter module for debugging."""
     attrs = dir(arbiter)
     classes = [attr for attr in attrs if attr[0].isupper() and not attr.startswith("_")]
-    functions = [attr for attr in attrs if attr[0].islower() and not attr.startswith("_")]
+    functions = [
+        attr for attr in attrs if attr[0].islower() and not attr.startswith("_")
+    ]
 
     print(f"\nClasses found in arbiter module: {classes}")
     print(f"Functions found in arbiter module: {functions}")

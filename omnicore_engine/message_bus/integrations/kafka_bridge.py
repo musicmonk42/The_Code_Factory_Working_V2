@@ -49,7 +49,17 @@ import logging
 import random
 import signal
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 # --------------------------------------------------------------------------- #
 #  Lazy imports – raise a clear error only when the bridge is used
@@ -77,7 +87,9 @@ except ImportError:  # pragma: no cover
     # Fallback if not available - provides no-op implementation for testing
     import warnings
 
-    warnings.warn("CircuitBreaker module not available, using no-op fallback", ImportWarning)
+    warnings.warn(
+        "CircuitBreaker module not available, using no-op fallback", ImportWarning
+    )
 
     class CircuitBreaker:  # type: ignore
         """Fallback CircuitBreaker if resilience module is not available."""
@@ -120,9 +132,9 @@ class JsonSerializer(Serializer):
         self.ensure_ascii = ensure_ascii
 
     def dumps(self, obj: Any) -> bytes:
-        return json.dumps(obj, ensure_ascii=self.ensure_ascii, separators=(",", ":")).encode(
-            "utf-8"
-        )
+        return json.dumps(
+            obj, ensure_ascii=self.ensure_ascii, separators=(",", ":")
+        ).encode("utf-8")
 
     def loads(self, data: bytes) -> Any:
         return json.loads(data.decode("utf-8"))
@@ -278,9 +290,13 @@ Handler signature:
 class KafkaBridge:
     """Async Kafka producer/consumer with full observability and resilience."""
 
-    def __init__(self, cfg: KafkaBridgeConfig, circuit: Optional[CircuitBreaker] = None):
+    def __init__(
+        self, cfg: KafkaBridgeConfig, circuit: Optional[CircuitBreaker] = None
+    ):
         self.cfg = cfg
-        self.circuit = circuit or CircuitBreaker(failure_threshold=5, recovery_timeout=60)
+        self.circuit = circuit or CircuitBreaker(
+            failure_threshold=5, recovery_timeout=60
+        )
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
         self._consume_tasks: List[asyncio.Task] = []
@@ -469,7 +485,9 @@ class KafkaBridge:
 
         # Spin up N concurrent workers (default 1)
         for i in range(self.cfg.consumer_concurrency):
-            task = asyncio.create_task(self._consume_worker(i), name=f"kafka_consume_worker_{i}")
+            task = asyncio.create_task(
+                self._consume_worker(i), name=f"kafka_consume_worker_{i}"
+            )
             self._consume_tasks.append(task)
 
         logger.info(
@@ -495,7 +513,9 @@ class KafkaBridge:
                         self._metrics.inc_inflight()
                         start = asyncio.get_event_loop().time()
                         try:
-                            await self._process_message(msg.topic, msg.key, msg.value, msg.headers)
+                            await self._process_message(
+                                msg.topic, msg.key, msg.value, msg.headers
+                            )
                             if not self.cfg.enable_auto_commit:
                                 await self._consumer.commit()
                         except Exception as exc:
@@ -565,7 +585,9 @@ class KafkaBridge:
                     -self.cfg.handler_retry_jitter * delay,
                     self.cfg.handler_retry_jitter * delay,
                 )
-                await asyncio.sleep(min(delay + jitter, self.cfg.handler_retry_max_delay))
+                await asyncio.sleep(
+                    min(delay + jitter, self.cfg.handler_retry_max_delay)
+                )
                 delay = min(delay * 2, self.cfg.handler_retry_max_delay)
 
     async def _maybe_publish_dlq(self, msg: Any) -> None:

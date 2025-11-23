@@ -9,7 +9,9 @@ import threading
 import pytest
 
 # Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
+)
 
 
 class TestSeverityEnumConsolidation:
@@ -51,7 +53,9 @@ class TestThreadingLockFix:
         registry = PluginRegistry()
         # The locks should be threading.RLock instances
         for lock in registry._kind_locks.values():
-            assert isinstance(lock, threading.RLock), f"Expected RLock, got {type(lock)}"
+            assert isinstance(
+                lock, threading.RLock
+            ), f"Expected RLock, got {type(lock)}"
 
 
 class TestRedisStreamFix:

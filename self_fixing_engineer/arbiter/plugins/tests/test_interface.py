@@ -44,7 +44,9 @@ class TestProcessingResult:
 
     def test_processing_result_failure(self):
         """Test failed ProcessingResult creation."""
-        result = ProcessingResult(success=False, error="Processing failed", operation_id="op456")
+        result = ProcessingResult(
+            success=False, error="Processing failed", operation_id="op456"
+        )
 
         assert result.success is False
         assert result.error == "Processing failed"
@@ -53,7 +55,9 @@ class TestProcessingResult:
     def test_processing_result_confidence_validation(self):
         """Test confidence score validation."""
         # Valid confidence
-        result = ProcessingResult(success=True, operation_id="op789", model_confidence=0.5)
+        result = ProcessingResult(
+            success=True, operation_id="op789", model_confidence=0.5
+        )
         assert result.model_confidence == 0.5
 
         # Invalid confidence (out of range)
@@ -62,7 +66,9 @@ class TestProcessingResult:
 
     def test_processing_result_extra_fields_allowed(self):
         """Test that extra fields are allowed."""
-        result = ProcessingResult(success=True, operation_id="op123", custom_field="custom_value")
+        result = ProcessingResult(
+            success=True, operation_id="op123", custom_field="custom_value"
+        )
         assert result.custom_field == "custom_value"
 
 

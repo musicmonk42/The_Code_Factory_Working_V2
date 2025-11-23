@@ -18,7 +18,12 @@ except ImportError:
     import demo_python_plugin
 
 # Import components from the plugin
-from plugins.demo_python_plugin import PLUGIN_API, PLUGIN_MANIFEST, logger, plugin_health
+from plugins.demo_python_plugin import (
+    PLUGIN_API,
+    PLUGIN_MANIFEST,
+    logger,
+    plugin_health,
+)
 
 
 # --- Test Setup ---
@@ -27,7 +32,9 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -53,7 +60,9 @@ def mock_alert_operator():
 def mock_scrub_secrets():
     """Mock the scrub_secrets function."""
     with patch("demo_python_plugin.scrub_secrets") as mock:
-        mock.side_effect = lambda x: x  # Default behavior is to return the input un-scrubbed
+        mock.side_effect = (
+            lambda x: x
+        )  # Default behavior is to return the input un-scrubbed
         yield mock
 
 
@@ -112,7 +121,9 @@ def test_plugin_manifest_structure():
 def test_manifest_version_format():
     """Test that version fields follow semantic versioning."""
     version_pattern = r"^\d+\.\d+\.\d+$"
-    assert re.match(version_pattern, PLUGIN_MANIFEST["version"]), "Invalid version format"
+    assert re.match(
+        version_pattern, PLUGIN_MANIFEST["version"]
+    ), "Invalid version format"
     assert re.match(
         version_pattern, PLUGIN_MANIFEST["min_core_version"]
     ), "Invalid min_core_version format"
@@ -153,7 +164,9 @@ def test_plugin_health_healthy(mock_importlib, mock_audit_logger, mock_scrub_sec
 
 def test_plugin_health_degraded(mock_importlib, mock_audit_logger, mock_scrub_secrets):
     """Test plugin_health when dependencies are missing."""
-    mock_importlib.side_effect = lambda x: (None if x in ["requests", "numpy"] else MagicMock())
+    mock_importlib.side_effect = lambda x: (
+        None if x in ["requests", "numpy"] else MagicMock()
+    )
     health_status = plugin_health()
     assert health_status["status"] == "degraded"
     assert "Missing optional dependencies: requests, numpy" in health_status["message"]
@@ -271,7 +284,9 @@ def test_plugin_load_with_missing_core_utils(monkeypatch):
 
     with patch.object(demo_python_plugin.logger, "info") as mock_info:
         mock_audit_logger_instance.log_event("test_event", detail="test")
-        mock_info.assert_called_with("[AUDIT_LOG_DISABLED] test_event: {'detail': 'test'}")
+        mock_info.assert_called_with(
+            "[AUDIT_LOG_DISABLED] test_event: {'detail': 'test'}"
+        )
 
 
 # --- Cleanup Fixture ---

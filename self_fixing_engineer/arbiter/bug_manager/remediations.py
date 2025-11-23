@@ -110,15 +110,21 @@ class MLRemediationModel:
         self._http_session: Optional[aiohttp.ClientSession] = None
 
         self.retry_attempts = getattr(settings, "ML_REMEDIATION_RETRY_ATTEMPTS", 3)
-        self.retry_delay_seconds = getattr(settings, "ML_REMEDIATION_RETRY_DELAY_SECONDS", 1)
+        self.retry_delay_seconds = getattr(
+            settings, "ML_REMEDIATION_RETRY_DELAY_SECONDS", 1
+        )
         self.request_timeout = getattr(settings, "ML_REMEDIATION_REQUEST_TIMEOUT", 5.0)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Ensures a single aiohttp ClientSession is used for efficiency with pooling."""
         if self._http_session is None or self._http_session.closed:
-            connector = aiohttp.TCPConnector(limit=getattr(self.settings, "ML_HTTP_CONN_LIMIT", 50))
+            connector = aiohttp.TCPConnector(
+                limit=getattr(self.settings, "ML_HTTP_CONN_LIMIT", 50)
+            )
             self._http_session = aiohttp.ClientSession(connector=connector)
-            logger.info(json.dumps({"event": "ml_http_session_created", "with_pooling": True}))
+            logger.info(
+                json.dumps({"event": "ml_http_session_created", "with_pooling": True})
+            )
         return self._http_session
 
     async def close(self) -> None:
@@ -129,13 +135,17 @@ class MLRemediationModel:
             logger.info("MLRemediationModel HTTP session closed.")
 
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(lambda retry_state: retry_state.args[0].retry_attempts),
+        stop=tenacity.stop_after_attempt(
+            lambda retry_state: retry_state.args[0].retry_attempts
+        ),
         wait=tenacity.wait.wait_exponential(
             multiplier=lambda retry_state: retry_state.args[0].retry_delay_seconds,
             min=1,
             max=10,
         ),
-        retry=tenacity.retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
+        retry=tenacity.retry_if_exception_type(
+            (aiohttp.ClientError, asyncio.TimeoutError)
+        ),
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -160,7 +170,9 @@ class MLRemediationModel:
                 "exception_type": bug_details.get("exception_type", ""),
                 "location": bug_details.get("location", ""),
                 "severity": bug_details.get("severity", ""),
-                "custom_details": validate_input_details(bug_details.get("custom_details", {})),
+                "custom_details": validate_input_details(
+                    bug_details.get("custom_details", {})
+                ),
             }
         )
         logger.info(
@@ -243,13 +255,17 @@ class MLRemediationModel:
             raise MLRemediationError(f"ML prediction failed: {e}") from e
 
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(lambda retry_state: retry_state.args[0].retry_attempts),
+        stop=tenacity.stop_after_attempt(
+            lambda retry_state: retry_state.args[0].retry_attempts
+        ),
         wait=tenacity.wait.wait_exponential(
             multiplier=lambda retry_state: retry_state.args[0].retry_delay_seconds,
             min=1,
             max=10,
         ),
-        retry=tenacity.retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
+        retry=tenacity.retry_if_exception_type(
+            (aiohttp.ClientError, asyncio.TimeoutError)
+        ),
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -345,7 +361,9 @@ class RemediationStep:
         self,
         name: str,
         action_name: str,
-        pre_condition: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]] = None,
+        pre_condition: Optional[
+            Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]
+        ] = None,
         on_success: Optional[str] = "FINISH",
         on_failure: Optional[str] = "ABORT",
         description: Optional[str] = None,
@@ -542,7 +560,9 @@ class RemediationPlaybook:
     It acts as a state machine, moving from step to step based on outcomes.
     """
 
-    def __init__(self, name: str, steps: List[RemediationStep], description: Optional[str] = None):
+    def __init__(
+        self, name: str, steps: List[RemediationStep], description: Optional[str] = None
+    ):
         if not steps:
             raise ValueError("Remediation playbook must contain at least one step.")
         self.name = name
@@ -624,7 +644,9 @@ class RemediationPlaybook:
                     )
                     break
                 if current_step_name == "ABORT":
-                    logger.warning(json.dumps({"event": "playbook_aborted", "playbook": self.name}))
+                    logger.warning(
+                        json.dumps({"event": "playbook_aborted", "playbook": self.name})
+                    )
                     is_fixed = False
                     break
         finally:
@@ -715,12 +737,16 @@ class BugFixerRegistry:
 
         # 1. Attempt ML-based prediction if model is available
         ml_confidence_threshold = (
-            getattr(cls._settings, "ML_CONFIDENCE_THRESHOLD", 0.75) if cls._settings else 0.75
+            getattr(cls._settings, "ML_CONFIDENCE_THRESHOLD", 0.75)
+            if cls._settings
+            else 0.75
         )
         if cls._ml_remediation_model:
             try:
                 predicted_name, confidence = (
-                    await cls._ml_remediation_model.predict_remediation_strategy(validated_details)
+                    await cls._ml_remediation_model.predict_remediation_strategy(
+                        validated_details
+                    )
                 )
                 if predicted_name and confidence >= ml_confidence_threshold:
                     # Find the predicted playbook anywhere in the registry
@@ -728,18 +754,24 @@ class BugFixerRegistry:
                         for sig, pb in sig_map.items():
                             if pb.name == predicted_name:
                                 chosen_playbook = pb
-                                playbook_source = f"ml_prediction (confidence: {confidence:.2f})"
+                                playbook_source = (
+                                    f"ml_prediction (confidence: {confidence:.2f})"
+                                )
                                 break
                         if chosen_playbook:
                             break
                     if chosen_playbook:
-                        logger.info(f"ML model selected playbook '{chosen_playbook.name}'.")
+                        logger.info(
+                            f"ML model selected playbook '{chosen_playbook.name}'."
+                        )
                     else:
                         logger.warning(
                             f"ML model recommended playbook '{predicted_name}' but it was not found in registry."
                         )
             except MLRemediationError as e:
-                logger.error(f"ML prediction failed: {e}. Falling back to rule-based remediation.")
+                logger.error(
+                    f"ML prediction failed: {e}. Falling back to rule-based remediation."
+                )
 
         # 2. If no ML prediction, use rule-based fallback
         if not chosen_playbook:
@@ -747,7 +779,9 @@ class BugFixerRegistry:
             # Find most specific signature match
             best_match_prefix = ""
             for prefix in location_playbooks:
-                if bug_signature.startswith(prefix) and len(prefix) > len(best_match_prefix):
+                if bug_signature.startswith(prefix) and len(prefix) > len(
+                    best_match_prefix
+                ):
                     best_match_prefix = prefix
 
             if best_match_prefix:
@@ -771,9 +805,13 @@ class BugFixerRegistry:
             REMEDIATION_PLAYBOOK_EXECUTION.labels(
                 playbook_name=chosen_playbook.name, source=playbook_source
             ).inc()
-            fixed_successfully = await chosen_playbook.execute(location, validated_details)
+            fixed_successfully = await chosen_playbook.execute(
+                location, validated_details
+            )
         else:
-            logger.info(f"No applicable remediation playbook found for bug at '{location}'.")
+            logger.info(
+                f"No applicable remediation playbook found for bug at '{location}'."
+            )
 
         # 3. Record feedback only if a playbook was actually attempted
         if cls._ml_remediation_model and chosen_playbook:
@@ -799,7 +837,9 @@ async def restart_service(bug_details: Dict[str, Any]) -> bool:
     logger.info(f"Attempting to restart service: {service_name}")
     await asyncio.sleep(0.1)  # Simulate async I/O
     success = True
-    logger.info(f"Service '{service_name}' restart {'succeeded' if success else 'failed'}.")
+    logger.info(
+        f"Service '{service_name}' restart {'succeeded' if success else 'failed'}."
+    )
     return success
 
 

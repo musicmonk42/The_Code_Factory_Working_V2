@@ -109,7 +109,9 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
     # Patch the isinstance check in PolicyEngine.__init__
     # Store the original isinstance function
     original_isinstance = (
-        __builtins__["isinstance"] if isinstance(__builtins__, dict) else __builtins__.isinstance
+        __builtins__["isinstance"]
+        if isinstance(__builtins__, dict)
+        else __builtins__.isinstance
     )
 
     with patch("arbiter.policy.core.isinstance") as mock_isinstance:
@@ -129,10 +131,12 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
         initialize_policy_engine(mock_arbiter)
 
     # Patch external dependencies
-    with patch("arbiter.policy.core.audit_log", new_callable=AsyncMock) as mock_audit, patch(
-        "arbiter.policy.core.LLMClient"
-    ) as mock_llm, patch(
-        "arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=False
+    with (
+        patch("arbiter.policy.core.audit_log", new_callable=AsyncMock) as mock_audit,
+        patch("arbiter.policy.core.LLMClient") as mock_llm,
+        patch(
+            "arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=False
+        ),
     ):
 
         # Test 1: Simulate happy path - should allow auto-learning
@@ -155,7 +159,9 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
         policy_engine._policies["domain_rules"]["test"]["control_tag"] = "PC-1"
 
         result, reason = await should_auto_learn("test", "key", "user", {"foo": "bar"})
-        assert result is False, f"Expected deny due to compliance, got allow. Reason: {reason}"
+        assert (
+            result is False
+        ), f"Expected deny due to compliance, got allow. Reason: {reason}"
         assert (
             "Compliance enforcement blocked" in reason or "not_implemented" in reason
         ), f"Expected compliance block message, got: {reason}"
@@ -176,7 +182,9 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
         assert result is False, f"Expected deny from LLM, got allow. Reason: {reason}"
 
         # Test 4: Simulate circuit breaker open
-        with patch("arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=True):
+        with patch(
+            "arbiter.policy.core.is_llm_policy_circuit_breaker_open", return_value=True
+        ):
             result, reason = await should_auto_learn("test", "key", "user", "value")
             assert (
                 result is False

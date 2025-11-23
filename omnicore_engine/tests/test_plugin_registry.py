@@ -358,7 +358,9 @@ class TestPluginVersionManager:
     async def test_register_version(self, version_manager):
         """Test registering a plugin version"""
         plugin = Mock()
-        plugin.meta = Mock(description="test", safe=True, source="local", params_schema={})
+        plugin.meta = Mock(
+            description="test", safe=True, source="local", params_schema={}
+        )
         plugin.fn = lambda: "test"
 
         await version_manager.register_version("execution", "test", plugin, "1.0.0")

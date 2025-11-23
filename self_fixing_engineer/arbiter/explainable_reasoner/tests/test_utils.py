@@ -27,9 +27,12 @@ from arbiter.explainable_reasoner.utils import (
 @pytest.fixture(autouse=True)
 def mock_dependencies():
     """Mocks dependencies that are not the focus of the tests."""
-    with patch(
-        "arbiter.explainable_reasoner.metrics.get_or_create_metric"
-    ) as mock_get_metric, patch("arbiter.explainable_reasoner.utils._utils_logger") as mock_logger:
+    with (
+        patch(
+            "arbiter.explainable_reasoner.metrics.get_or_create_metric"
+        ) as mock_get_metric,
+        patch("arbiter.explainable_reasoner.utils._utils_logger") as mock_logger,
+    ):
 
         # Configure metric mock
         def create_metric(*args, **kwargs):
@@ -145,7 +148,9 @@ async def test_sanitize_context_multimodal(dummy_multimodal_obj):
 async def test_sanitize_context_errors(mock_dependencies):
     # Test max depth exceeded
     config_depth = ReasonerConfig(sanitization_options={"max_nesting_depth": 2})
-    result_depth = await _sanitize_context({"too_deep": {"nest": {"more": "deeper"}}}, config_depth)
+    result_depth = await _sanitize_context(
+        {"too_deep": {"nest": {"more": "deeper"}}}, config_depth
+    )
     assert result_depth == {"too_deep": {"nest": "[MAX_DEPTH_EXCEEDED]"}}
 
     # Test circular reference
@@ -159,7 +164,9 @@ async def test_sanitize_context_errors(mock_dependencies):
 @pytest.mark.asyncio
 async def test_sanitize_context_redaction_count(mock_dependencies):
     context = {"api_key": "secret", "password": "pass"}
-    config = ReasonerConfig(sanitization_options={"redact_keys": ["api_key", "password"]})
+    config = ReasonerConfig(
+        sanitization_options={"redact_keys": ["api_key", "password"]}
+    )
     result = await _sanitize_context(context, config)
 
     assert result["api_key"] == "[REDACTED]"
@@ -389,10 +396,14 @@ async def test_sanitize_context_performance():
     # Create a large nested structure
     large_context = {}
     for i in range(100):
-        large_context[f"key_{i}"] = {"nested": {"data": f"value_{i}" * 10, "list": list(range(10))}}
+        large_context[f"key_{i}"] = {
+            "nested": {"data": f"value_{i}" * 10, "list": list(range(10))}
+        }
 
     # Increase max_size_bytes to handle the large context
-    config = ReasonerConfig(sanitization_options={"max_nesting_depth": 3, "max_size_bytes": 100000})
+    config = ReasonerConfig(
+        sanitization_options={"max_nesting_depth": 3, "max_size_bytes": 100000}
+    )
     start = time.monotonic()
     result = await _sanitize_context(large_context, config)
     duration = time.monotonic() - start

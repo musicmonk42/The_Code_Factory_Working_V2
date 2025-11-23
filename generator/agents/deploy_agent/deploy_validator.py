@@ -35,7 +35,9 @@ from aiohttp.web_response import Response
 from aiohttp.web_routedef import RouteTableDef
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
-from ruamel.yaml import YAML as RuYAML  # For advanced YAML operations (preserving comments)
+from ruamel.yaml import (
+    YAML as RuYAML,
+)  # For advanced YAML operations (preserving comments)
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -66,11 +68,18 @@ except (ImportError, AttributeError):
 # --- Presidio Imports (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
-from runner.llm_client import call_ensemble_api  # Central LLM Client for auto-correction
+from runner.llm_client import (
+    call_ensemble_api,
+)  # Central LLM Client for auto-correction
 from runner.runner_errors import LLMError
-from runner.runner_logging import add_provenance, logger  # Use central logging and provenance
+from runner.runner_logging import (
+    add_provenance,
+    logger,
+)  # Use central logging and provenance
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
-from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL  # Use central metrics
+from runner.runner_metrics import (
+    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,
+)  # Use central metrics
 
 # -----------------------------------
 
@@ -165,7 +174,9 @@ def scrub_text(text: str) -> str:
         return anonymized_text
 
     except Exception as e:
-        logger.error("Presidio PII/secret scrubbing failed critically: %s", e, exc_info=True)
+        logger.error(
+            "Presidio PII/secret scrubbing failed critically: %s", e, exc_info=True
+        )
         # In a strict-fail model, re-raise the exception if scrubbing cannot be performed
         raise RuntimeError(
             f"Critical error during sensitive data scrubbing with Presidio: {e}"
@@ -206,7 +217,8 @@ async def scan_config_for_findings(
     # Trivy often needs the config as a file. Use a temp file for this.
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_config_path = (
-            Path(temp_dir) / f"config.{config_format.lower().replace('dockerfile', 'docker')}"
+            Path(temp_dir)
+            / f"config.{config_format.lower().replace('dockerfile', 'docker')}"
         )  # Use common file extension
         try:
             # Write the config text to a temporary file. It's assumed `config_text` is already scrubbed.
@@ -229,7 +241,8 @@ async def scan_config_for_findings(
                 *trivy_command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                limit=1024 * 1024,  # Set a buffer limit to prevent very large outputs from hanging
+                limit=1024
+                * 1024,  # Set a buffer limit to prevent very large outputs from hanging
             )
             stdout, stderr = await process.communicate()
 
@@ -240,15 +253,21 @@ async def scan_config_for_findings(
                         trivy_results = json.loads(trivy_output_str)
                         for result_section in trivy_results.get("Results", []):
                             # Trivy can find 'Misconfigurations', 'Vulnerabilities', etc.
-                            for misconfig in result_section.get("Misconfigurations", []):
+                            for misconfig in result_section.get(
+                                "Misconfigurations", []
+                            ):
                                 findings.append(
                                     {
                                         "type": "Misconfiguration_Trivy",
                                         "category": misconfig.get("Type", "N/A"),
-                                        "description": misconfig.get("Title", "No Title")
+                                        "description": misconfig.get(
+                                            "Title", "No Title"
+                                        )
                                         + ": "
                                         + misconfig.get("Description", ""),
-                                        "severity": misconfig.get("Severity", "Unknown"),
+                                        "severity": misconfig.get(
+                                            "Severity", "Unknown"
+                                        ),
                                     }
                                 )
                                 scan_total_findings.labels(
@@ -307,7 +326,9 @@ async def scan_config_for_findings(
             logger.error(
                 "Trivy command not found. Skipping Trivy scan. This tool is required for full compliance checks."
             )  # Error level for missing tool
-            scan_total_findings.labels(format=config_format, finding_type="Trivy_NotFound").inc()
+            scan_total_findings.labels(
+                format=config_format, finding_type="Trivy_NotFound"
+            ).inc()
         except Exception as e:
             findings.append(
                 {
@@ -324,9 +345,9 @@ async def scan_config_for_findings(
 
     # Update gauge with current number of unique findings.
     # FIX: Use 'target' instead of 'format' to match the metric label definition
-    issue_count_gauge.labels(target=config_format, issue_type_category="OverallFindingsCount").set(
-        len(findings)
-    )
+    issue_count_gauge.labels(
+        target=config_format, issue_type_category="OverallFindingsCount"
+    ).set(len(findings))
 
     return findings
 
@@ -338,7 +359,9 @@ class Validator(ABC):
     """Abstract base class for validators for different configuration formats."""
 
     __version__ = "1.0"
-    __source__ = "default"  # Indicates if it's a built-in or dynamically loaded validator
+    __source__ = (
+        "default"  # Indicates if it's a built-in or dynamically loaded validator
+    )
 
     @abstractmethod
     async def validate(self, config_content: str, target_type: str) -> Dict[str, Any]:
@@ -350,7 +373,9 @@ class Validator(ABC):
         pass
 
     @abstractmethod
-    async def fix(self, config_content: str, issues: List[str], target_type: str) -> str:
+    async def fix(
+        self, config_content: str, issues: List[str], target_type: str
+    ) -> str:
         """
         Attempts to fix detected issues in the configuration content using an LLM.
         Returns the fixed configuration string. Must raise exceptions on fix failure.
@@ -379,7 +404,9 @@ class DockerValidator(Validator):
 
             try:
                 # Corrected to use aiofiles.open for async file write
-                async with aiofiles.open(dockerfile_path, mode="w", encoding="utf-8") as f:
+                async with aiofiles.open(
+                    dockerfile_path, mode="w", encoding="utf-8"
+                ) as f:
                     await f.write(config_content)
 
                 # 1. Docker Build Test
@@ -421,7 +448,8 @@ class DockerValidator(Validator):
                     # When returncode is 0, hadolint found no issues, so don't add output to lint_issues
                     if hadolint_proc.returncode != 0:
                         lint_output_lines = (
-                            lint_stdout.decode().splitlines() + lint_stderr.decode().splitlines()
+                            lint_stdout.decode().splitlines()
+                            + lint_stderr.decode().splitlines()
                         )
                         report["lint_issues"].extend(
                             [line for line in lint_output_lines if line.strip()]
@@ -434,14 +462,23 @@ class DockerValidator(Validator):
                         report["lint_status"] = "success"
                     else:
                         report["lint_status"] = (
-                            "warning" if report["build_status"] == "success" else "failed"
+                            "warning"
+                            if report["build_status"] == "success"
+                            else "failed"
                         )
-                    if hadolint_proc.returncode != 0 and report["build_status"] == "success":
+                    if (
+                        hadolint_proc.returncode != 0
+                        and report["build_status"] == "success"
+                    ):
                         report["build_status"] = "lint_warning"
 
                 except FileNotFoundError:
-                    report["lint_issues"].append("Hadolint not found. Skipping linting.")
-                    report["lint_status"] = "skipped"  # FIX: Set status when tool not found
+                    report["lint_issues"].append(
+                        "Hadolint not found. Skipping linting."
+                    )
+                    report["lint_status"] = (
+                        "skipped"  # FIX: Set status when tool not found
+                    )
                     logger.warning(
                         "Hadolint command not found. Please install hadolint for comprehensive Dockerfile linting."
                     )
@@ -449,9 +486,13 @@ class DockerValidator(Validator):
                         target=target_type, issue_type_category="HadolintNotFound"
                     ).inc()
                 except Exception as e:
-                    report["lint_issues"].append(f"Error during Hadolint execution: {e}")
+                    report["lint_issues"].append(
+                        f"Error during Hadolint execution: {e}"
+                    )
                     report["lint_status"] = "error"  # FIX: Set status on error
-                    logger.error("Error during Hadolint execution: %s", e, exc_info=True)
+                    logger.error(
+                        "Error during Hadolint execution: %s", e, exc_info=True
+                    )
                     issue_total_found.labels(
                         target=target_type, issue_type_category="HadolintError"
                     ).inc()
@@ -464,27 +505,35 @@ class DockerValidator(Validator):
 
                 # Calculate compliance score
                 # FIX: Use more strict scoring (divide by 5 instead of 10) so issues have bigger impact
-                total_issues = len(report["lint_issues"]) + len(report["security_findings"])
+                total_issues = len(report["lint_issues"]) + len(
+                    report["security_findings"]
+                )
                 report["compliance_score"] = (
                     1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
                 )
 
             except FileNotFoundError as e:
                 report["build_status"] = "tool_not_found"
-                report["build_output"] = f"Required tool not found: {e}"  # Fixed to show error
+                report["build_output"] = (
+                    f"Required tool not found: {e}"  # Fixed to show error
+                )
                 logger.error(
                     "Required tool not found for Docker validation: %s",
                     e,
                     exc_info=True,
                 )
-                report["lint_issues"].append(f"Required Docker build tool not found: {e}")
+                report["lint_issues"].append(
+                    f"Required Docker build tool not found: {e}"
+                )
                 issue_total_found.labels(
                     target=target_type, issue_type_category="ToolNotFound"
                 ).inc()
             except Exception as e:
                 report["build_status"] = "internal_error"
                 report["build_output"] = f"Internal validation error: {e}"
-                logger.error("Internal error during Docker validation: %s", e, exc_info=True)
+                logger.error(
+                    "Internal error during Docker validation: %s", e, exc_info=True
+                )
                 report["lint_issues"].append(f"Internal validator error: {e}")
                 issue_total_found.labels(
                     target=target_type, issue_type_category="InternalError"
@@ -492,7 +541,9 @@ class DockerValidator(Validator):
 
         return report
 
-    async def fix(self, config_content: str, issues: List[str], target_type: str) -> str:
+    async def fix(
+        self, config_content: str, issues: List[str], target_type: str
+    ) -> str:
         """Attempts to fix Dockerfile issues using an LLM."""
         fix_prompt = f"Fix these issues in the Dockerfile:\n{json.dumps(issues, indent=2)}\n\nOriginal Dockerfile:\n```dockerfile\n{config_content}\n```\n\nProvide ONLY the corrected Dockerfile content. Do not add any conversational text or markdown wrappers."
 
@@ -509,9 +560,9 @@ class DockerValidator(Validator):
             LLM_CALLS_TOTAL.labels(
                 provider="deploy_validator", model="gpt-4o"
             ).inc()  # Removed non-standard 'task' label
-            LLM_LATENCY_SECONDS.labels(provider="deploy_validator", model="gpt-4o").observe(
-                time.time() - start_time
-            )
+            LLM_LATENCY_SECONDS.labels(
+                provider="deploy_validator", model="gpt-4o"
+            ).observe(time.time() - start_time)
             add_provenance({"action": "fix_docker_config", "model": "gpt-4o"})
 
             # The LLM client returns a structured dict: {'content': '...', 'model': ...}
@@ -539,7 +590,9 @@ class DockerValidator(Validator):
                     model="gpt-4o",
                     error_type=type(e).__name__,
                 ).inc()
-            logger.error("Failed to fix Dockerfile issues using LLM: %s", e, exc_info=True)
+            logger.error(
+                "Failed to fix Dockerfile issues using LLM: %s", e, exc_info=True
+            )
             raise RuntimeError(f"Failed to auto-fix Dockerfile issues: {e}") from e
 
 
@@ -570,12 +623,18 @@ class HelmValidator(Validator):
                     and "name" in chart_data
                 ):
                     # Corrected to use aiofiles.open for async file write
-                    async with aiofiles.open(chart_yaml_path, mode="w", encoding="utf-8") as f:
+                    async with aiofiles.open(
+                        chart_yaml_path, mode="w", encoding="utf-8"
+                    ) as f:
                         await f.write(config_content)
                 else:
                     # Fallback for when content is not a Chart.yaml (e.g., it's a values.yaml or template snippet)
-                    async with aiofiles.open(chart_yaml_path, mode="w", encoding="utf-8") as f:
-                        await f.write("apiVersion: v2\nname: temp-chart\nversion: 0.1.0\n")
+                    async with aiofiles.open(
+                        chart_yaml_path, mode="w", encoding="utf-8"
+                    ) as f:
+                        await f.write(
+                            "apiVersion: v2\nname: temp-chart\nversion: 0.1.0\n"
+                        )
                     async with aiofiles.open(
                         chart_path / "values.yaml", mode="w", encoding="utf-8"
                     ) as f:
@@ -597,7 +656,9 @@ class HelmValidator(Validator):
                 )
                 lint_stdout, lint_stderr = await helm_lint_proc.communicate()
 
-                report["lint_output"] = lint_stdout.decode("utf-8") + lint_stderr.decode("utf-8")
+                report["lint_output"] = lint_stdout.decode(
+                    "utf-8"
+                ) + lint_stderr.decode("utf-8")
                 if helm_lint_proc.returncode == 0:
                     report["lint_status"] = "success"
                 else:
@@ -632,7 +693,9 @@ class HelmValidator(Validator):
 
             except FileNotFoundError as e:
                 report["lint_status"] = "tool_not_found"
-                report["lint_output"] = f"Required tool not found: {e}"  # Fixed to show error
+                report["lint_output"] = (
+                    f"Required tool not found: {e}"  # Fixed to show error
+                )
                 logger.error("Required Helm tool not found: %s", e, exc_info=True)
                 report["lint_issues"].append(f"Required Helm tool not found: {e}")
                 issue_total_found.labels(
@@ -641,7 +704,9 @@ class HelmValidator(Validator):
             except Exception as e:
                 report["lint_status"] = "internal_error"
                 report["lint_output"] = f"Internal validation error: {e}"
-                logger.error("Internal error during Helm validation: %s", e, exc_info=True)
+                logger.error(
+                    "Internal error during Helm validation: %s", e, exc_info=True
+                )
                 report["lint_issues"].append(f"Internal validator error: {e}")
                 issue_total_found.labels(
                     target=target_type, issue_type_category="InternalError"
@@ -649,7 +714,9 @@ class HelmValidator(Validator):
 
         return report
 
-    async def fix(self, config_content: str, issues: List[str], target_type: str) -> str:
+    async def fix(
+        self, config_content: str, issues: List[str], target_type: str
+    ) -> str:
         """Attempts to fix Helm chart issues using an LLM."""
         fix_prompt = f"Fix these issues in the Helm chart YAML:\n{json.dumps(issues, indent=2)}\n\nOriginal Helm Chart YAML:\n```yaml\n{config_content}\n```\n\nProvide ONLY the corrected Helm chart YAML content. Do not add any conversational text or markdown wrappers."
 
@@ -666,9 +733,9 @@ class HelmValidator(Validator):
             LLM_CALLS_TOTAL.labels(
                 provider="deploy_validator", model="gpt-4o"
             ).inc()  # Removed non-standard 'task' label
-            LLM_LATENCY_SECONDS.labels(provider="deploy_validator", model="gpt-4o").observe(
-                time.time() - start_time
-            )
+            LLM_LATENCY_SECONDS.labels(
+                provider="deploy_validator", model="gpt-4o"
+            ).observe(time.time() - start_time)
             add_provenance({"action": "fix_helm_config", "model": "gpt-4o"})
 
             fixed_config_content = fixed_response.get("content", "").strip()
@@ -695,7 +762,9 @@ class HelmValidator(Validator):
                     model="gpt-4o",
                     error_type=type(e).__name__,
                 ).inc()
-            logger.error("Failed to fix Helm chart issues using LLM: %s", e, exc_info=True)
+            logger.error(
+                "Failed to fix Helm chart issues using LLM: %s", e, exc_info=True
+            )
             raise RuntimeError(f"Failed to auto-fix Helm chart issues: {e}") from e
 
 
@@ -715,8 +784,12 @@ class ValidatorRegistry:
 
     def __init__(self, plugin_dir: str = "validator_plugins"):
         self.plugin_dir = plugin_dir
-        self.validators: Dict[str, Type[Validator]] = {}  # Stores validator classes (not instances)
-        self.validator_info: Dict[str, Dict[str, Any]] = {}  # Stores metadata about validators
+        self.validators: Dict[str, Type[Validator]] = (
+            {}
+        )  # Stores validator classes (not instances)
+        self.validator_info: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # Stores metadata about validators
         self._load_plugins()  # Initial load of plugins
         self._setup_hot_reload()  # Setup watchdog for hot-reloading
 
@@ -751,11 +824,15 @@ class ValidatorRegistry:
                 continue
 
             module_name_base = Path(file_path).stem
-            unique_module_name = f"dynamic_validator_{module_name_base}_{uuid.uuid4().hex}"
+            unique_module_name = (
+                f"dynamic_validator_{module_name_base}_{uuid.uuid4().hex}"
+            )
 
             spec = importlib.util.spec_from_file_location(unique_module_name, file_path)
             if spec is None or spec.loader is None:
-                logger.warning("Could not find module spec for plugin file: %s", file_path)
+                logger.warning(
+                    "Could not find module spec for plugin file: %s", file_path
+                )
                 continue
 
             try:
@@ -766,7 +843,11 @@ class ValidatorRegistry:
 
                 found_custom_validator = False
                 for name, obj in vars(module).items():
-                    if isinstance(obj, type) and issubclass(obj, Validator) and obj != Validator:
+                    if (
+                        isinstance(obj, type)
+                        and issubclass(obj, Validator)
+                        and obj != Validator
+                    ):
                         tgt_key = name.lower().replace("validator", "")
                         self.validators[tgt_key] = obj
                         self.validator_info[tgt_key] = {
@@ -811,7 +892,9 @@ class ValidatorRegistry:
         """Sets up a Watchdog observer to monitor the plugin directory for changes."""
         # --- FIX: Guard hot-reload for testing environments ---
         if os.getenv("TESTING") == "1":
-            logger.info("TESTING environment detected. Skipping hot-reload observer setup.")
+            logger.info(
+                "TESTING environment detected. Skipping hot-reload observer setup."
+            )
             return
         # --- End Fix ---
 
@@ -843,7 +926,9 @@ class ValidatorRegistry:
         observer = Observer()
         observer.schedule(ReloadHandler(self), self.plugin_dir, recursive=False)
         observer.start()
-        logger.info("Started hot-reload observer for validator plugins in: %s", self.plugin_dir)
+        logger.info(
+            "Started hot-reload observer for validator plugins in: %s", self.plugin_dir
+        )
 
     def get_validator(self, target: str) -> Validator:
         """
@@ -934,7 +1019,9 @@ async def api_fix(request: Request) -> Response:
             span.set_attribute("target", target)
 
             if not config_content or not issues:
-                raise web.HTTPBadRequest(reason="'config_content' and 'issues' are required.")
+                raise web.HTTPBadRequest(
+                    reason="'config_content' and 'issues' are required."
+                )
 
             # --- FIX: Use singleton registry from app context ---
             validator_registry: ValidatorRegistry = request.app["validator_registry"]
@@ -944,7 +1031,9 @@ async def api_fix(request: Request) -> Response:
             fixed_content = await validator.fix(config_content, issues, target)
 
             span.set_status(Status(StatusCode.OK))
-            return web.json_response({"status": "success", "fixed_content": fixed_content})
+            return web.json_response(
+                {"status": "success", "fixed_content": fixed_content}
+            )
         except web.HTTPError as e:
             span.set_status(Status(StatusCode.ERROR, str(e)))
             raise

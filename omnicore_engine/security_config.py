@@ -104,7 +104,9 @@ class EnterpriseSecurityConfig(BaseSettings):
         default="ChaCha20-Poly1305", description="Fallback encryption algorithm"
     )
 
-    HASH_ALGORITHM: str = Field(default="SHA3-512", description="Cryptographic hash algorithm")
+    HASH_ALGORITHM: str = Field(
+        default="SHA3-512", description="Cryptographic hash algorithm"
+    )
 
     REQUIRE_ENCRYPTION_AT_REST: bool = Field(
         default=True, description="Mandate encryption for stored data"
@@ -128,7 +130,9 @@ class EnterpriseSecurityConfig(BaseSettings):
     # ================== AUTHENTICATION & AUTHORIZATION ==================
 
     # Multi-Factor Authentication
-    MFA_REQUIRED: bool = Field(default=True, description="Require multi-factor authentication")
+    MFA_REQUIRED: bool = Field(
+        default=True, description="Require multi-factor authentication"
+    )
 
     MFA_METHODS: List[str] = Field(
         default=["TOTP", "FIDO2", "SMS_BACKUP"], description="Allowed MFA methods"
@@ -139,7 +143,9 @@ class EnterpriseSecurityConfig(BaseSettings):
     )
 
     # Password Policy
-    MIN_PASSWORD_LENGTH: conint(ge=14) = Field(default=16, description="Minimum password length")
+    MIN_PASSWORD_LENGTH: conint(ge=14) = Field(
+        default=16, description="Minimum password length"
+    )
 
     PASSWORD_COMPLEXITY_RULES: Dict[str, Any] = Field(
         default={
@@ -218,11 +224,17 @@ class EnterpriseSecurityConfig(BaseSettings):
 
     # ================== ACCESS CONTROL ==================
 
-    RBAC_ENABLED: bool = Field(default=True, description="Enable Role-Based Access Control")
+    RBAC_ENABLED: bool = Field(
+        default=True, description="Enable Role-Based Access Control"
+    )
 
-    ABAC_ENABLED: bool = Field(default=True, description="Enable Attribute-Based Access Control")
+    ABAC_ENABLED: bool = Field(
+        default=True, description="Enable Attribute-Based Access Control"
+    )
 
-    DEFAULT_DENY: bool = Field(default=True, description="Deny access unless explicitly granted")
+    DEFAULT_DENY: bool = Field(
+        default=True, description="Deny access unless explicitly granted"
+    )
 
     PRIVILEGE_ESCALATION_REQUIRES_MFA: bool = Field(
         default=True, description="Require MFA for privilege escalation"
@@ -313,7 +325,9 @@ class EnterpriseSecurityConfig(BaseSettings):
         default=True, description="Verify file content matches extension"
     )
 
-    ENABLE_VIRUS_SCANNING: bool = Field(default=True, description="Scan uploads for malware")
+    ENABLE_VIRUS_SCANNING: bool = Field(
+        default=True, description="Scan uploads for malware"
+    )
 
     SQL_INJECTION_PROTECTION: bool = Field(
         default=True, description="Enable SQL injection prevention"
@@ -366,7 +380,9 @@ class EnterpriseSecurityConfig(BaseSettings):
 
     # ================== NETWORK SECURITY ==================
 
-    ALLOWED_IP_RANGES: List[str] = Field(default=[], description="Allowed IP ranges (empty = all)")
+    ALLOWED_IP_RANGES: List[str] = Field(
+        default=[], description="Allowed IP ranges (empty = all)"
+    )
 
     BLOCKED_IP_RANGES: List[str] = Field(
         default=[
@@ -380,7 +396,9 @@ class EnterpriseSecurityConfig(BaseSettings):
         description="Blocked IP ranges",
     )
 
-    REQUIRE_SECURE_HEADERS: bool = Field(default=True, description="Enforce security headers")
+    REQUIRE_SECURE_HEADERS: bool = Field(
+        default=True, description="Enforce security headers"
+    )
 
     SECURITY_HEADERS: Dict[str, str] = Field(
         default={
@@ -465,7 +483,9 @@ class EnterpriseSecurityConfig(BaseSettings):
 
     # ================== BACKUP & RECOVERY ==================
 
-    BACKUP_ENCRYPTION_REQUIRED: bool = Field(default=True, description="Encrypt all backups")
+    BACKUP_ENCRYPTION_REQUIRED: bool = Field(
+        default=True, description="Encrypt all backups"
+    )
 
     BACKUP_RETENTION_COPIES: conint(ge=3) = Field(
         default=30, description="Number of backup copies to retain"
@@ -475,7 +495,9 @@ class EnterpriseSecurityConfig(BaseSettings):
         default=True, description="Distribute backups geographically"
     )
 
-    BACKUP_INTEGRITY_CHECK: bool = Field(default=True, description="Verify backup integrity")
+    BACKUP_INTEGRITY_CHECK: bool = Field(
+        default=True, description="Verify backup integrity"
+    )
 
     # ================== COMPLIANCE VALIDATION ==================
 

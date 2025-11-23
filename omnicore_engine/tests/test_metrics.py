@@ -87,7 +87,9 @@ class TestMetricCreation:
             metric1 = _get_or_create_metric(Counter, "test_existing", "Test metric")
 
             # Try to create again - should return existing
-            metric2 = _get_or_create_metric(Counter, "test_existing", "Different description")
+            metric2 = _get_or_create_metric(
+                Counter, "test_existing", "Different description"
+            )
 
             assert metric1 is metric2
 
@@ -207,9 +209,15 @@ class TestMetricOperations:
         # Clear histogram for testing
         PLUGIN_EXECUTION_DURATION_SECONDS._metrics.clear()
 
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(0.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(1.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(0.01)
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            1.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.01
+        )
 
         # Check that observations were recorded
         metric_family = list(PLUGIN_EXECUTION_DURATION_SECONDS.collect())[0]
@@ -365,7 +373,9 @@ class TestPrometheusServerStartup:
 
             mock_start_server.assert_called_with(8000)
 
-    @patch("omnicore_engine.metrics.start_http_server", side_effect=OSError("Port in use"))
+    @patch(
+        "omnicore_engine.metrics.start_http_server", side_effect=OSError("Port in use")
+    )
     @patch("omnicore_engine.metrics.logger")
     def test_server_startup_port_in_use(self, mock_logger, mock_start_server):
         """Test handling when port is already in use"""

@@ -71,7 +71,9 @@ async def test_count_tokens(provider: GrokProvider) -> None:
 async def test_api_call_non_stream(provider: GrokProvider) -> None:
     mock_resp = AsyncMock()
     mock_resp.status = 200
-    mock_resp.json = AsyncMock(return_value={"choices": [{"message": {"content": "Hi"}}]})
+    mock_resp.json = AsyncMock(
+        return_value={"choices": [{"message": {"content": "Hi"}}]}
+    )
 
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp

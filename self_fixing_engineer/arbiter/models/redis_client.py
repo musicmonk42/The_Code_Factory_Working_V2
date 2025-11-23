@@ -20,10 +20,21 @@ from opentelemetry import trace
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from redis.asyncio import Redis
 from redis.asyncio.lock import Lock as RedisLock
-from redis.exceptions import ConnectionError, DataError, LockError, RedisError, TimeoutError
+from redis.exceptions import (
+    ConnectionError,
+    DataError,
+    LockError,
+    RedisError,
+    TimeoutError,
+)
 
 # Import tenacity for retries with exponential backoff
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Logger initialization
 logger = logging.getLogger(__name__)
@@ -193,15 +204,23 @@ class RedisClient:
                 )
                 await self.client.ping()
                 REDIS_CONNECTIONS_CURRENT.inc()  # Increment gauge on successful connection
-                self._health_check_task = asyncio.create_task(self._start_health_check())
+                self._health_check_task = asyncio.create_task(
+                    self._start_health_check()
+                )
                 REDIS_CALLS_TOTAL.labels(operation="connect", status="success").inc()
                 span.set_status(trace.Status(trace.StatusCode.OK))
-                logger.info(f"Successfully connected to Redis at {_redact_key(self.redis_url)}")
+                logger.info(
+                    f"Successfully connected to Redis at {_redact_key(self.redis_url)}"
+                )
             except Exception as e:
                 REDIS_CALLS_TOTAL.labels(operation="connect", status="failure").inc()
-                REDIS_CALLS_ERRORS.labels(operation="connect", error_type=type(e).__name__).inc()
+                REDIS_CALLS_ERRORS.labels(
+                    operation="connect", error_type=type(e).__name__
+                ).inc()
                 span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, f"Failed to connect: {e}"))
+                span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, f"Failed to connect: {e}")
+                )
                 logger.error(
                     f"Failed to connect to Redis at {_redact_key(self.redis_url)}: {e}",
                     exc_info=True,
@@ -253,11 +272,15 @@ class RedisClient:
             return
         try:
             # Use the existing _execute_operation for consistency and retries
-            info = await self._execute_operation("info", "server", self.client.info, "memory")
+            info = await self._execute_operation(
+                "info", "server", self.client.info, "memory"
+            )
             used_memory = info.get("used_memory", 0) / 1024 / 1024  # MB
             REDIS_MEMORY_USAGE.labels(instance=self.redis_url).set(used_memory)
 
-            key_count = await self._execute_operation("dbsize", "server", self.client.dbsize)
+            key_count = await self._execute_operation(
+                "dbsize", "server", self.client.dbsize
+            )
             REDIS_KEYSPACE_SIZE.labels(instance=self.redis_url).set(key_count)
 
         except Exception as e:
@@ -289,9 +312,13 @@ class RedisClient:
                 logger.info("Redis client connection closed.")
             except Exception as e:
                 REDIS_CALLS_TOTAL.labels(operation="disconnect", status="failure").inc()
-                REDIS_CALLS_ERRORS.labels(operation="disconnect", error_type=type(e).__name__).inc()
+                REDIS_CALLS_ERRORS.labels(
+                    operation="disconnect", error_type=type(e).__name__
+                ).inc()
                 span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, f"Failed to disconnect: {e}"))
+                span.set_status(
+                    trace.Status(trace.StatusCode.ERROR, f"Failed to disconnect: {e}")
+                )
                 logger.error(f"Failed to close Redis connection: {e}", exc_info=True)
                 raise ConnectionError(f"Failed to disconnect from Redis: {e}") from e
             finally:
@@ -324,7 +351,9 @@ class RedisClient:
             for attempt in range(2):
                 try:
                     result = await func(*args, **kwargs)
-                    REDIS_CALLS_TOTAL.labels(operation=operation, status="success").inc()
+                    REDIS_CALLS_TOTAL.labels(
+                        operation=operation, status="success"
+                    ).inc()
                     span.set_status(trace.Status(trace.StatusCode.OK))
                     return result
                 except (ConnectionError, TimeoutError, RedisError) as e:
@@ -334,7 +363,9 @@ class RedisClient:
                         )
                         await self.reconnect()
                         continue
-                    REDIS_CALLS_TOTAL.labels(operation=operation, status="failure").inc()
+                    REDIS_CALLS_TOTAL.labels(
+                        operation=operation, status="failure"
+                    ).inc()
                     REDIS_CALLS_ERRORS.labels(
                         operation=operation, error_type=type(e).__name__
                     ).inc()
@@ -403,7 +434,9 @@ class RedisClient:
         if isinstance(value, (str, bytes)) and len(value) > 1024 * 1024:  # 1MB limit
             raise ValueError("Value size exceeds 1MB limit.")
 
-        return await self._execute_operation("set", key, self.client.set, key, value, ex=ex, px=px)
+        return await self._execute_operation(
+            "set", key, self.client.set, key, value, ex=ex, px=px
+        )
 
     async def mset(self, mapping: Dict[str, Any]) -> bool:
         """
@@ -433,7 +466,9 @@ class RedisClient:
         sanitized_mapping = {}
         for key, value in mapping.items():
             if not key or len(key) > 1024:
-                raise ValueError(f"Key '{key}' must be non-empty and <= 1024 characters.")
+                raise ValueError(
+                    f"Key '{key}' must be non-empty and <= 1024 characters."
+                )
             if not isinstance(value, (str, bytes, int, float)):
                 try:
                     sanitized_mapping[key] = json.dumps(value, default=str)
@@ -512,8 +547,12 @@ class RedisClient:
             return []
         for key in keys:
             if not key or len(key) > 1024:
-                raise ValueError(f"Key '{key}' must be non-empty and <= 1024 characters.")
-        values = await self._execute_operation("mget", "multiple", self.client.mget, keys)
+                raise ValueError(
+                    f"Key '{key}' must be non-empty and <= 1024 characters."
+                )
+        values = await self._execute_operation(
+            "mget", "multiple", self.client.mget, keys
+        )
 
         def safe_parse(v):
             if isinstance(v, str) and v.startswith(("{", "[")):
@@ -551,8 +590,12 @@ class RedisClient:
             return 0
         for key in keys:
             if not key or len(key) > 1024:
-                raise ValueError(f"Key '{key}' must be non-empty and <= 1024 characters.")
-        return await self._execute_operation("delete", "multiple", self.client.delete, *keys)
+                raise ValueError(
+                    f"Key '{key}' must be non-empty and <= 1024 characters."
+                )
+        return await self._execute_operation(
+            "delete", "multiple", self.client.delete, *keys
+        )
 
     async def setex(self, key: str, time: int, value: Any) -> bool:
         """
@@ -582,7 +625,9 @@ class RedisClient:
         """
         return await self.set(key, value, ex=time)
 
-    def lock(self, name: str, timeout: int = 10, blocking_timeout: int = 5) -> RedisLock:
+    def lock(
+        self, name: str, timeout: int = 10, blocking_timeout: int = 5
+    ) -> RedisLock:
         """
         Creates a new Lock instance for distributed locking with metrics.
 
@@ -619,7 +664,9 @@ class RedisClient:
             f"Creating RedisLock for '{_redact_key(name)}' with timeout={timeout}, blocking_timeout={blocking_timeout}"
         )
 
-        lock = RedisLock(self.client, name, timeout=timeout, blocking_timeout=blocking_timeout)
+        lock = RedisLock(
+            self.client, name, timeout=timeout, blocking_timeout=blocking_timeout
+        )
 
         # Enhance the acquire and release methods to include metrics
         original_acquire = lock.acquire
@@ -642,7 +689,9 @@ class RedisClient:
                 await original_release()
                 REDIS_LOCK_RELEASED_TOTAL.inc()
             except Exception as e:
-                logger.error(f"Failed to release lock '{_redact_key(name)}': {e}", exc_info=True)
+                logger.error(
+                    f"Failed to release lock '{_redact_key(name)}': {e}", exc_info=True
+                )
                 raise
 
         lock.acquire = _acquire
@@ -702,7 +751,9 @@ async def main():
 
         # Test SET with JSON value
         json_key = f"{test_key}_json"
-        logger.info(f"Setting key '{_redact_key(json_key)}' to '{test_json_value}' (JSON)...")
+        logger.info(
+            f"Setting key '{_redact_key(json_key)}' to '{test_json_value}' (JSON)..."
+        )
         success_json = await client.set(json_key, test_json_value)
         logger.info(f"SET JSON operation successful: {success_json}")
         assert success_json
@@ -711,14 +762,18 @@ async def main():
         assert retrieved_json_value == test_json_value
 
         # Test SETEX operation
-        logger.info(f"Setting expiring key '{_redact_key(test_expiring_key)}' for 2 seconds...")
+        logger.info(
+            f"Setting expiring key '{_redact_key(test_expiring_key)}' for 2 seconds..."
+        )
         success_expiring = await client.setex(test_expiring_key, 2, "will_expire")
         logger.info(f"SETEX operation successful: {success_expiring}")
         assert success_expiring
 
         await asyncio.sleep(2.5)  # Wait for key to expire
         expired_value = await client.get(test_expiring_key)
-        logger.info(f"Value for '{_redact_key(test_expiring_key)}' after 2.5s: '{expired_value}'")
+        logger.info(
+            f"Value for '{_redact_key(test_expiring_key)}' after 2.5s: '{expired_value}'"
+        )
         assert expired_value is None
 
         # Test DELETE operation
@@ -745,7 +800,9 @@ async def main():
         assert deleted == 3
 
         # Test Distributed Lock
-        logger.info(f"Attempting to acquire distributed lock '{_redact_key(test_lock_name)}'...")
+        logger.info(
+            f"Attempting to acquire distributed lock '{_redact_key(test_lock_name)}'..."
+        )
         lock = client.lock(
             test_lock_name, timeout=5, blocking_timeout=2
         )  # Lock for max 5s, wait max 2s
@@ -774,7 +831,9 @@ async def main():
         except LockError:
             logger.info("Concurrent lock acquisition failed as expected.")
         except Exception as e:
-            logger.error(f"Unexpected error during concurrent lock attempt: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error during concurrent lock attempt: {e}", exc_info=True
+            )
 
         # Test security validations
         logger.info("Testing security validations...")
@@ -790,7 +849,9 @@ async def main():
             assert "Value size exceeds 1MB limit." in str(e)
 
     except Exception as e:
-        logger.error(f"An error occurred during RedisClient testing: {e}", exc_info=True)
+        logger.error(
+            f"An error occurred during RedisClient testing: {e}", exc_info=True
+        )
     finally:
         await client.disconnect()
         logger.info("RedisClient disconnected.")

@@ -10,13 +10,22 @@ import openai  # Import the underlying SDK for specific exception types
 from prometheus_client import Counter, Gauge, Histogram
 
 # Import custom exceptions and LLMClient from the shared client module
-from .llm_client import APIError, AuthError, LLMClient, LLMClientError, RateLimitError, TimeoutError
+from .llm_client import (
+    APIError,
+    AuthError,
+    LLMClient,
+    LLMClientError,
+    RateLimitError,
+    TimeoutError,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 
@@ -61,7 +70,9 @@ class OpenAIAdapter:
         self._circuit_breaker_failures = 0
         self._circuit_breaker_last_failure_time = 0.0
         self._circuit_breaker_threshold = settings.get("CIRCUIT_BREAKER_THRESHOLD", 3)
-        self._circuit_breaker_timeout = settings.get("CIRCUIT_BREAKER_TIMEOUT_SECONDS", 30)
+        self._circuit_breaker_timeout = settings.get(
+            "CIRCUIT_BREAKER_TIMEOUT_SECONDS", 30
+        )
 
         # Security configuration for PII masking
         self.security_config = settings.get("security_config", {})
@@ -98,7 +109,9 @@ class OpenAIAdapter:
                 self.circuit_breaker_state_gauge.set(1)
                 self.logger.warning("Circuit breaker is now 'half-open'.")
             else:
-                raise APIError("Circuit breaker is open. Not attempting OpenAI API call.")
+                raise APIError(
+                    "Circuit breaker is open. Not attempting OpenAI API call."
+                )
 
     def _update_circuit_breaker(self, success: bool):
         """
@@ -106,7 +119,9 @@ class OpenAIAdapter:
         """
         if success:
             if self._circuit_breaker_state in ["open", "half-open"]:
-                self.logger.info("Circuit breaker is now 'closed' after a successful request.")
+                self.logger.info(
+                    "Circuit breaker is now 'closed' after a successful request."
+                )
             self._circuit_breaker_failures = 0
             self._circuit_breaker_state = "closed"
             self.circuit_breaker_state_gauge.set(0)
@@ -116,7 +131,9 @@ class OpenAIAdapter:
                 self._circuit_breaker_state = "open"
                 self.circuit_breaker_state_gauge.set(2)
                 self._circuit_breaker_last_failure_time = time.monotonic()
-                self.logger.error("Circuit breaker failed in 'half-open' state and is now 'open'.")
+                self.logger.error(
+                    "Circuit breaker failed in 'half-open' state and is now 'open'."
+                )
             elif self._circuit_breaker_failures >= self._circuit_breaker_threshold:
                 self._circuit_breaker_state = "open"
                 self.circuit_breaker_state_gauge.set(2)
@@ -139,7 +156,9 @@ class OpenAIAdapter:
         self.logger.info("Exiting OpenAIAdapter async context.")
         await self.client.aclose_session()
         if exc_val:
-            self.logger.error(f"OpenAIAdapter exited with an exception: {exc_val}", exc_info=True)
+            self.logger.error(
+                f"OpenAIAdapter exited with an exception: {exc_val}", exc_info=True
+            )
         self.logger.info("OpenAIAdapter cleanup complete.")
 
     async def health_check(self) -> bool:
@@ -204,10 +223,12 @@ class OpenAIAdapter:
             self.requests_total.labels(
                 status="success", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
-                time.monotonic() - start_time
+            self.processing_latency_seconds.labels(
+                correlation_id=correlation_id or "none"
+            ).observe(time.monotonic() - start_time)
+            self.logger.info(
+                f"OpenAI generation successful for correlation_id: {correlation_id}"
             )
-            self.logger.info(f"OpenAI generation successful for correlation_id: {correlation_id}")
             return response_text
 
         except LLMClientError as e:
@@ -215,13 +236,15 @@ class OpenAIAdapter:
             self.requests_total.labels(
                 status="failure", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
-                time.monotonic() - start_time
-            )
+            self.processing_latency_seconds.labels(
+                correlation_id=correlation_id or "none"
+            ).observe(time.monotonic() - start_time)
 
             original_exception = e.__cause__ if e.__cause__ else e
             # Handle timeout, authentication, and API errors
-            if isinstance(original_exception, (openai.APITimeoutError, asyncio.TimeoutError)):
+            if isinstance(
+                original_exception, (openai.APITimeoutError, asyncio.TimeoutError)
+            ):
                 self.logger.error(
                     f"OpenAI generation timed out: {original_exception} [Correlation ID: {correlation_id}]"
                 )
@@ -257,9 +280,9 @@ class OpenAIAdapter:
             self.requests_total.labels(
                 status="failure", correlation_id=correlation_id or "none"
             ).inc()
-            self.processing_latency_seconds.labels(correlation_id=correlation_id or "none").observe(
-                time.monotonic() - start_time
-            )
+            self.processing_latency_seconds.labels(
+                correlation_id=correlation_id or "none"
+            ).observe(time.monotonic() - start_time)
             self.logger.critical(
                 f"A critical, unhandled error occurred in OpenAIAdapter: {e} [Correlation ID: {correlation_id}]",
                 exc_info=True,

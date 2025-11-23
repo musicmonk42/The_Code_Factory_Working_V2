@@ -7,7 +7,10 @@ import pytest
 from test_generation.backends import BackendRegistry
 from test_generation.orchestrator import sanitize_path
 from test_generation.orchestrator.config import CONFIG
-from test_generation.orchestrator.orchestrator import GenerationOrchestrator, InitializationError
+from test_generation.orchestrator.orchestrator import (
+    GenerationOrchestrator,
+    InitializationError,
+)
 from test_generation.policy_and_audit import EventBus, PolicyEngine
 from test_generation.utils import MutationTester, PRCreator, SecurityScanner
 
@@ -108,9 +111,13 @@ def orchestrator(project: Path, monkeypatch):
         Mock(return_value=1),
     )
 
-    monkeypatch.setattr("test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock())
+    monkeypatch.setattr(
+        "test_generation.orchestrator.orchestrator.cleanup_path_safe", AsyncMock()
+    )
 
-    monkeypatch.setattr("test_generation.orchestrator.orchestrator.audit_event", AsyncMock())
+    monkeypatch.setattr(
+        "test_generation.orchestrator.orchestrator.audit_event", AsyncMock()
+    )
 
     monkeypatch.setattr(
         "test_generation.orchestrator.orchestrator.run_pytest_and_coverage",
@@ -135,20 +142,26 @@ def orchestrator(project: Path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_tests_with_concurrency(orchestrator, project: Path, monkeypatch):
+async def test_generate_tests_with_concurrency(
+    orchestrator, project: Path, monkeypatch
+):
     mock_backend_instance = Mock(
         generate_tests=AsyncMock(
             return_value=(True, "", "atco_artifacts/generated/test_module1.py")
         )
     )
     mock_backend_class = Mock(return_value=mock_backend_instance)
-    monkeypatch.setattr(BackendRegistry, "get_backend", Mock(return_value=mock_backend_class))
+    monkeypatch.setattr(
+        BackendRegistry, "get_backend", Mock(return_value=mock_backend_class)
+    )
 
     targets = [
         {"identifier": "module1", "language": "python"},
         {"identifier": "module2", "language": "python"},
     ]
-    result = await orchestrator.generate_tests_for_targets(targets, "atco_artifacts/generated")
+    result = await orchestrator.generate_tests_for_targets(
+        targets, "atco_artifacts/generated"
+    )
 
     assert len(result) == 2
     assert result["module1"]["generation_success"] is True
@@ -157,7 +170,9 @@ async def test_generate_tests_with_concurrency(orchestrator, project: Path, monk
 
 
 @pytest.mark.asyncio
-async def test_integrate_with_stubbed_components(orchestrator, project: Path, monkeypatch):
+async def test_integrate_with_stubbed_components(
+    orchestrator, project: Path, monkeypatch
+):
     gen_summary = {
         "module1": {
             "generation_success": True,
@@ -205,7 +220,9 @@ def test_calculate_test_quality_score(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_handle_single_test_deduplication(orchestrator, project: Path, monkeypatch):
+async def test_handle_single_test_deduplication(
+    orchestrator, project: Path, monkeypatch
+):
     test_path_relative = "atco_artifacts/generated/test_module1.py"
     test_path = sanitize_path(test_path_relative, str(project))
     suite_path = sanitize_path("tests/test_module1.py", str(project))
@@ -301,7 +318,9 @@ async def test_low_mutation_score_quarantine(orchestrator, project: Path, monkey
 
     # Mock the mutation tester to return a low score
     mock_mutation_tester = AsyncMock(return_value=(True, 40.0, "Low score"))
-    monkeypatch.setattr(orchestrator.mutation_tester, "run_mutations", mock_mutation_tester)
+    monkeypatch.setattr(
+        orchestrator.mutation_tester, "run_mutations", mock_mutation_tester
+    )
 
     # Ensure the config reflects a min score higher than the mock return
     orchestrator.config["mutation_testing"]["min_score_for_integration"] = 50.0

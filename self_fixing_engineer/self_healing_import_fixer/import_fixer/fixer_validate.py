@@ -24,7 +24,12 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from .compat_core import SECRETS_MANAGER, alert_operator, audit_logger, scrub_secrets
+    from .compat_core import (
+        SECRETS_MANAGER,
+        alert_operator,
+        audit_logger,
+        scrub_secrets,
+    )
 
     # Lazy import of get_cache to avoid import-time side effects
     if TYPE_CHECKING:
@@ -55,7 +60,9 @@ except ImportError as e:
         audit_logger = _DummyAudit()
         SECRETS_MANAGER = object()
     else:
-        raise RuntimeError(f"[CRITICAL][VALIDATE] fixer_validate requires core modules: {e}") from e
+        raise RuntimeError(
+            f"[CRITICAL][VALIDATE] fixer_validate requires core modules: {e}"
+        ) from e
 
 # Handle optional termcolor import gracefully
 try:
@@ -194,7 +201,9 @@ class CodeValidator:
         """Checks if a path is under one of the whitelisted paths and not a symlink."""
         try:
             if child.is_symlink() or any(p.is_symlink() for p in child.parents):
-                logger.warning(f"Path '{child}' contains a symlink, which is forbidden.")
+                logger.warning(
+                    f"Path '{child}' contains a symlink, which is forbidden."
+                )
                 return False
 
             resolved_child = child.resolve()
@@ -252,7 +261,9 @@ class CodeValidator:
         except (FileNotFoundError, asyncio.TimeoutError, Exception):
             return None
 
-    def _cache_key(self, stage: str, files: List[Path], extra: Optional[Dict] = None) -> str:
+    def _cache_key(
+        self, stage: str, files: List[Path], extra: Optional[Dict] = None
+    ) -> str:
         """Generates a robust cache key based on file content, tool versions, and stage."""
         h = hashlib.sha256()
 
@@ -291,7 +302,9 @@ class CodeValidator:
             "stage": stage,
             "tool": tool,
             "version": (extra or {}).get("version"),
-            "extra": {k: v for k, v in (extra or {}).items() if k not in ("tool", "version")},
+            "extra": {
+                k: v for k, v in (extra or {}).items() if k not in ("tool", "version")
+            },
         }
 
         h.update(json.dumps(payload, sort_keys=True).encode())
@@ -345,7 +358,9 @@ class CodeValidator:
 
                     kwargs["preexec_fn"] = _os.setsid
                 else:
-                    kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    kwargs["creationflags"] = getattr(
+                        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                    )
 
                 process = await asyncio.create_subprocess_exec(
                     tool_path,
@@ -373,7 +388,9 @@ class CodeValidator:
                         process.kill()
                     await process.wait()
                     elapsed = asyncio.get_event_loop().time() - start_time
-                    logger.error(f"{description} timed out after {elapsed:.2f}s and was killed.")
+                    logger.error(
+                        f"{description} timed out after {elapsed:.2f}s and was killed."
+                    )
                     return False, "", f"{description} timed out after {elapsed:.2f}s"
 
                 def _trim(b: bytes) -> str:
@@ -593,7 +610,9 @@ class CodeValidator:
         except NonCriticalError as e:
             logger.warning(str(e))
             try:
-                audit_logger.log_event("validation_step_skipped", step=stage_name, reason=str(e))
+                audit_logger.log_event(
+                    "validation_step_skipped", step=stage_name, reason=str(e)
+                )
             except Exception:
                 pass
             all_passed = True  # Treat as passed if tool is missing
@@ -648,7 +667,9 @@ class CodeValidator:
                 stderr_tail="Neither Ruff nor Flake8 found.",
             )
 
-    def _parse_ruff_output(self, stdout: str, stderr: str, files: List[Path]) -> List[Issue]:
+    def _parse_ruff_output(
+        self, stdout: str, stderr: str, files: List[Path]
+    ) -> List[Issue]:
         issues = []
         for line in stdout.splitlines():
             m = re.match(r"^(.*?):(\d+):(\d+):\s*(\S+)\s*(.*)$", line)
@@ -667,7 +688,9 @@ class CodeValidator:
             )
         return issues
 
-    def _parse_flake8_output(self, stdout: str, stderr: str, files: List[Path]) -> List[Issue]:
+    def _parse_flake8_output(
+        self, stdout: str, stderr: str, files: List[Path]
+    ) -> List[Issue]:
         issues = []
         for line in stdout.splitlines():
             m = re.match(r"^(.*?):(\d+):(\d+):\s*(\S+)\s*(.*)$", line)
@@ -696,7 +719,9 @@ class CodeValidator:
             parser_func=self._parse_mypy_output,
         )
 
-    def _parse_mypy_output(self, stdout: str, stderr: str, files: List[Path]) -> List[Issue]:
+    def _parse_mypy_output(
+        self, stdout: str, stderr: str, files: List[Path]
+    ) -> List[Issue]:
         issues = []
         for line in stdout.splitlines():
             # path:line[:col]: severity: message
@@ -734,7 +759,9 @@ class CodeValidator:
             parser_func=self._parse_bandit_output,
         )
 
-    def _parse_bandit_output(self, stdout: str, stderr: str, files: List[Path]) -> List[Issue]:
+    def _parse_bandit_output(
+        self, stdout: str, stderr: str, files: List[Path]
+    ) -> List[Issue]:
         issues = []
         if not stdout:
             return issues
@@ -754,7 +781,9 @@ class CodeValidator:
                     )
                 )
         except json.JSONDecodeError:
-            logger.error(f"Failed to parse Bandit JSON output. Raw output: {stdout[:500]}...")
+            logger.error(
+                f"Failed to parse Bandit JSON output. Raw output: {stdout[:500]}..."
+            )
             issues.append(
                 Issue(
                     file="unknown",
@@ -766,7 +795,9 @@ class CodeValidator:
 
         return issues
 
-    async def run_tests(self, test_paths: List[Path], full_suite: bool = False) -> StageResult:
+    async def run_tests(
+        self, test_paths: List[Path], full_suite: bool = False
+    ) -> StageResult:
         """
         Runs pytest tests.
         Args:
@@ -809,7 +840,9 @@ class CodeValidator:
         try:
             original_code = file_path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            logger.error(f"Original file not found for diff: {file_path}. Cannot show diff.")
+            logger.error(
+                f"Original file not found for diff: {file_path}. Cannot show diff."
+            )
             return False
 
         original_lines = original_code.splitlines(keepends=True)
@@ -910,10 +943,14 @@ class CodeValidator:
 
         try:
             if not os.access(file_path_obj, os.W_OK):
-                raise AnalyzerCriticalError(f"No write access to {file_path_obj}. Aborting.")
+                raise AnalyzerCriticalError(
+                    f"No write access to {file_path_obj}. Aborting."
+                )
 
             self._atomic_write(file_path_obj, new_code)
-            logger.debug(f"Temporarily applied change to {file_path_obj} for validation.")
+            logger.debug(
+                f"Temporarily applied change to {file_path_obj} for validation."
+            )
         except IOError as e:
             self.rollback_change(file_path_obj, original_code, is_critical_failure=True)
             raise AnalyzerCriticalError(
@@ -939,13 +976,17 @@ class CodeValidator:
             if not validation_passed:
                 return report
 
-            report.stages["static_analysis"] = await self.run_static_analysis([file_path_obj])
+            report.stages["static_analysis"] = await self.run_static_analysis(
+                [file_path_obj]
+            )
             validation_passed &= report.stages["static_analysis"].passed
             if not validation_passed:
                 return report
 
             if run_tests:
-                report.stages["tests"] = await self.run_tests([self.tests_root], full_suite=False)
+                report.stages["tests"] = await self.run_tests(
+                    [self.tests_root], full_suite=False
+                )
                 validation_passed &= report.stages["tests"].passed
                 if not validation_passed:
                     return report
@@ -990,7 +1031,9 @@ class CodeValidator:
                 report.stages["custom_validators"] = StageResult(
                     name="custom_validators",
                     passed=custom_passed,
-                    duration_ms=int((datetime.now() - start_time_custom).total_seconds() * 1000),
+                    duration_ms=int(
+                        (datetime.now() - start_time_custom).total_seconds() * 1000
+                    ),
                     tool="custom",
                     version="1.0",
                 )
@@ -1003,8 +1046,12 @@ class CodeValidator:
             raise
         finally:
             if not validation_passed:
-                logger.error(f"Validation FAILED for {file_path_obj}. Rolling back changes.")
-                self.rollback_change(file_path_obj, original_code, is_critical_failure=False)
+                logger.error(
+                    f"Validation FAILED for {file_path_obj}. Rolling back changes."
+                )
+                self.rollback_change(
+                    file_path_obj, original_code, is_critical_failure=False
+                )
                 try:
                     audit_logger.log_event(
                         "single_file_validation_failed",
@@ -1053,7 +1100,9 @@ class CodeValidator:
                     f"Original content mismatch for {f}. Aborting batch to prevent corrupt rollback."
                 )
 
-        logger.info(f"Starting batch validation pipeline for {len(files_to_validate_obj)} files...")
+        logger.info(
+            f"Starting batch validation pipeline for {len(files_to_validate_obj)} files..."
+        )
         try:
             audit_logger.log_event(
                 "batch_file_validation_start",
@@ -1081,7 +1130,9 @@ class CodeValidator:
                 shutil.copy(file_path_obj, backup_path)
                 backup_paths[file_path_obj] = backup_path
                 self._atomic_write(file_path_obj, new_contents[str(file_path_obj)])
-                logger.debug(f"Temporarily applied change to {file_path_obj} for batch validation.")
+                logger.debug(
+                    f"Temporarily applied change to {file_path_obj} for batch validation."
+                )
 
             # Step 2: Run validation stages on all files
             report.stages["lint"] = await self.run_linting(files_to_validate_obj)
@@ -1089,18 +1140,24 @@ class CodeValidator:
             if not validation_passed:
                 return report
 
-            report.stages["type_check"] = await self.run_type_checking(files_to_validate_obj)
+            report.stages["type_check"] = await self.run_type_checking(
+                files_to_validate_obj
+            )
             validation_passed &= report.stages["type_check"].passed
             if not validation_passed:
                 return report
 
-            report.stages["static_analysis"] = await self.run_static_analysis(files_to_validate_obj)
+            report.stages["static_analysis"] = await self.run_static_analysis(
+                files_to_validate_obj
+            )
             validation_passed &= report.stages["static_analysis"].passed
             if not validation_passed:
                 return report
 
             if run_tests:
-                report.stages["tests"] = await self.run_tests([self.project_root], full_suite=True)
+                report.stages["tests"] = await self.run_tests(
+                    [self.project_root], full_suite=True
+                )
                 validation_passed &= report.stages["tests"].passed
                 if not validation_passed:
                     return report
@@ -1148,7 +1205,9 @@ class CodeValidator:
                 report.stages["custom_validators"] = StageResult(
                     name="custom_validators",
                     passed=custom_passed,
-                    duration_ms=int((datetime.now() - start_time_custom).total_seconds() * 1000),
+                    duration_ms=int(
+                        (datetime.now() - start_time_custom).total_seconds() * 1000
+                    ),
                     tool="custom",
                     version="1.0",
                 )
@@ -1166,7 +1225,9 @@ class CodeValidator:
             raise
         finally:
             if not validation_passed:
-                logger.error("Batch validation FAILED. Rolling back all changes in this batch.")
+                logger.error(
+                    "Batch validation FAILED. Rolling back all changes in this batch."
+                )
                 for file_path in files_to_validate_obj:
                     self.rollback_change(
                         file_path,
@@ -1197,7 +1258,9 @@ class CodeValidator:
                         os.remove(backup_path)
                         logger.debug(f"Removed backup file {backup_path}.")
                     except Exception as e:
-                        logger.warning(f"Failed to remove backup file {backup_path}: {e}")
+                        logger.warning(
+                            f"Failed to remove backup file {backup_path}: {e}"
+                        )
 
         report.overall_passed = validation_passed
         return report
@@ -1215,7 +1278,9 @@ class CodeValidator:
                     f"No write access to {file_path} for rollback. Manual intervention REQUIRED!"
                 )
 
-            backups = sorted(file_path.parent.glob(f"{file_path.name}.bak.*"), reverse=True)
+            backups = sorted(
+                file_path.parent.glob(f"{file_path.name}.bak.*"), reverse=True
+            )
             if backups:
                 data = backups[0].read_text(encoding="utf-8")
                 for b in backups:
@@ -1238,7 +1303,9 @@ class CodeValidator:
                 exc_info=True,
             )
             try:
-                audit_logger.log_event("file_rollback_failure", file=str(file_path), error=str(e))
+                audit_logger.log_event(
+                    "file_rollback_failure", file=str(file_path), error=str(e)
+                )
             except Exception:
                 pass
             if is_critical_failure:
@@ -1253,7 +1320,9 @@ class CodeValidator:
                 exc_info=True,
             )
             try:
-                audit_logger.log_event("file_rollback_failure", file=str(file_path), error=str(e))
+                audit_logger.log_event(
+                    "file_rollback_failure", file=str(file_path), error=str(e)
+                )
             except Exception:
                 pass
             if is_critical_failure:
@@ -1268,7 +1337,9 @@ class CodeValidator:
                 exc_info=True,
             )
             try:
-                audit_logger.log_event("file_rollback_failure", file=str(file_path), error=str(e))
+                audit_logger.log_event(
+                    "file_rollback_failure", file=str(file_path), error=str(e)
+                )
             except Exception:
                 pass
             if is_critical_failure:
@@ -1299,7 +1370,9 @@ def make_validator(
 async def main():
     import shutil
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.setLevel(logging.DEBUG)  # Enable debug for this module's internal logs
 
     # Clean up any old test files
@@ -1332,7 +1405,9 @@ async def main():
     syntax_error_file.write_text("def bad_syntax:\n")  # Missing parentheses
 
     type_error_file = test_project_root / "type_error.py"
-    type_error_file.write_text("def add_numbers(a: int, b: str) -> int:\n    return a + b\n")
+    type_error_file.write_text(
+        "def add_numbers(a: int, b: str) -> int:\n    return a + b\n"
+    )
 
     test_test_file = test_project_root / "test_my_module.py"
     test_test_file.write_text(
@@ -1342,7 +1417,9 @@ async def main():
     # --- Test Single File Validation (Success) ---
     print("\n--- Testing Single File Validation (Success) ---")
     original_code_ok = test_file_path.read_text()
-    new_code_ok = "import os\n\ndef my_function():\n    x = 2 # Changed value\n    return x\n"
+    new_code_ok = (
+        "import os\n\ndef my_function():\n    x = 2 # Changed value\n    return x\n"
+    )
 
     report_ok = await code_validator.validate_and_commit_file(
         file_path=str(test_file_path),
@@ -1376,7 +1453,9 @@ async def main():
         report_syntax_error = ValidationReport(overall_passed=False, stages={})
 
     print(f"Validation Result (Syntax Error): {report_syntax_error.overall_passed}")
-    print(f"File content after Syntax Error validation: {syntax_error_file.read_text().strip()}")
+    print(
+        f"File content after Syntax Error validation: {syntax_error_file.read_text().strip()}"
+    )
     assert not report_syntax_error.overall_passed
     assert original_syntax_ok == syntax_error_file.read_text()
 
@@ -1401,7 +1480,9 @@ async def main():
         report_security = ValidationReport(overall_passed=False, stages={})
 
     print(f"Validation Result (Security Issue): {report_security.overall_passed}")
-    print(f"File content after Security Issue validation: {bad_security_file.read_text().strip()}")
+    print(
+        f"File content after Security Issue validation: {bad_security_file.read_text().strip()}"
+    )
     assert not report_security.overall_passed
     assert original_security_ok == bad_security_file.read_text()
 
@@ -1413,7 +1494,9 @@ async def main():
         str(test_test_file): test_test_file.read_text(),
     }
 
-    new_code_for_batch = "import os\n\ndef my_function():\n    x = 3 # Batch change\n    return x\n"
+    new_code_for_batch = (
+        "import os\n\ndef my_function():\n    x = 3 # Batch change\n    return x\n"
+    )
     test_file_path.write_text(new_code_for_batch)
 
     report_batch_ok = await code_validator.validate_and_commit_batch(
@@ -1427,7 +1510,9 @@ async def main():
         custom_validators=[],
     )
     print(f"Batch Validation Result (OK): {report_batch_ok.overall_passed}")
-    print(f"File content after Batch OK validation: {test_file_path.read_text().strip()}")
+    print(
+        f"File content after Batch OK validation: {test_file_path.read_text().strip()}"
+    )
     assert report_batch_ok.overall_passed
     assert "3 # Batch change" in test_file_path.read_text()
 
@@ -1439,12 +1524,12 @@ async def main():
         str(type_error_file): type_error_file.read_text(),
     }
 
-    new_code_for_batch_fail = (
-        "import os\ndef my_function():\n    x = 4 # Batch change for fail\n    return x\n"
-    )
+    new_code_for_batch_fail = "import os\ndef my_function():\n    x = 4 # Batch change for fail\n    return x\n"
     test_file_path.write_text(new_code_for_batch_fail)
 
-    new_type_error_content = "def add_numbers(a: int, b: str) -> int:\n    return a + b\n"
+    new_type_error_content = (
+        "def add_numbers(a: int, b: str) -> int:\n    return a + b\n"
+    )
     type_error_file.write_text(new_type_error_content)
 
     try:
@@ -1463,13 +1548,20 @@ async def main():
         report_batch_fail = ValidationReport(overall_passed=False, stages={})
 
     print(f"Batch Validation Result (Type Error): {report_batch_fail.overall_passed}")
-    print(f"File content after Batch Type Error validation: {test_file_path.read_text().strip()}")
+    print(
+        f"File content after Batch Type Error validation: {test_file_path.read_text().strip()}"
+    )
     print(
         f"Type Error file content after Batch Type Error validation: {type_error_file.read_text().strip()}"
     )
     assert not report_batch_fail.overall_passed
-    assert original_batch_contents_fail[str(test_file_path)] == test_file_path.read_text()
-    assert original_batch_contents_fail[str(type_error_file)] == type_error_file.read_text()
+    assert (
+        original_batch_contents_fail[str(test_file_path)] == test_file_path.read_text()
+    )
+    assert (
+        original_batch_contents_fail[str(type_error_file)]
+        == type_error_file.read_text()
+    )
 
     # Clean up dummy project
     print("\n--- Cleaning up test project ---")

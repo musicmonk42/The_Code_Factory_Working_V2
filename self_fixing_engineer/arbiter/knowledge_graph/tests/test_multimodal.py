@@ -90,7 +90,9 @@ class TestDefaultMultiModalProcessor:
     @pytest.fixture
     def mock_audit(self):
         """Fixture for mock audit ledger client"""
-        with patch("arbiter.knowledge_graph.multimodal.audit_ledger_client") as mock_audit:
+        with patch(
+            "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+        ) as mock_audit:
             mock_audit.log_event = AsyncMock()
             yield mock_audit
 
@@ -147,7 +149,9 @@ class TestDefaultMultiModalProcessor:
                 mock_pipeline.assert_any_call(
                     "automatic-speech-recognition", model="openai/whisper-tiny"
                 )
-                mock_pipeline.assert_any_call("summarization", model="facebook/bart-large-cnn")
+                mock_pipeline.assert_any_call(
+                    "summarization", model="facebook/bart-large-cnn"
+                )
 
     @pytest.mark.asyncio
     async def test_summarize_with_cache_hit(
@@ -173,9 +177,9 @@ class TestDefaultMultiModalProcessor:
             result = await processor.summarize(item)
 
             assert result == cached_result
-            mock_metrics["multimodal_data_processed_total"].labels.assert_called_once_with(
-                data_type="image"
-            )
+            mock_metrics[
+                "multimodal_data_processed_total"
+            ].labels.assert_called_once_with(data_type="image")
 
     @pytest.mark.asyncio
     async def test_summarize_data_too_large(
@@ -239,9 +243,13 @@ class TestDefaultMultiModalProcessor:
             )
 
     @pytest.mark.asyncio
-    async def test_process_image_success(self, mock_logger, mock_config, mock_multimodal_data):
+    async def test_process_image_success(
+        self, mock_logger, mock_config, mock_multimodal_data
+    ):
         """Test successful image processing"""
-        with patch("arbiter.knowledge_graph.multimodal.IMAGE_PROCESSING_AVAILABLE", True):
+        with patch(
+            "arbiter.knowledge_graph.multimodal.IMAGE_PROCESSING_AVAILABLE", True
+        ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._image_processing_available = True
 
@@ -258,7 +266,9 @@ class TestDefaultMultiModalProcessor:
 
                 # Mock image captioner
                 processor.image_captioner = Mock()
-                processor.image_captioner.return_value = [{"generated_text": "A beautiful sunset"}]
+                processor.image_captioner.return_value = [
+                    {"generated_text": "A beautiful sunset"}
+                ]
 
                 result = await processor._process_image(item)
 
@@ -285,9 +295,13 @@ class TestDefaultMultiModalProcessor:
         mock_audit.log_event.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_audio_success(self, mock_logger, mock_config, mock_multimodal_data):
+    async def test_process_audio_success(
+        self, mock_logger, mock_config, mock_multimodal_data
+    ):
         """Test successful audio processing"""
-        with patch("arbiter.knowledge_graph.multimodal.AUDIO_PROCESSING_AVAILABLE", True):
+        with patch(
+            "arbiter.knowledge_graph.multimodal.AUDIO_PROCESSING_AVAILABLE", True
+        ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._audio_processing_available = True
 
@@ -312,9 +326,13 @@ class TestDefaultMultiModalProcessor:
 
     @pytest.mark.skipif(not VIDEO_PROCESSING_AVAILABLE, reason="moviepy not installed")
     @pytest.mark.asyncio
-    async def test_process_video_success(self, mock_logger, mock_config, mock_multimodal_data):
+    async def test_process_video_success(
+        self, mock_logger, mock_config, mock_multimodal_data
+    ):
         """Test successful video processing - skipped if moviepy not available"""
-        with patch("arbiter.knowledge_graph.multimodal.VIDEO_PROCESSING_AVAILABLE", True):
+        with patch(
+            "arbiter.knowledge_graph.multimodal.VIDEO_PROCESSING_AVAILABLE", True
+        ):
             processor = DefaultMultiModalProcessor(mock_logger)
             processor._video_processing_available = True
 
@@ -322,7 +340,9 @@ class TestDefaultMultiModalProcessor:
             item = mock_multimodal_data("video", test_video_data)
 
             # Mock VideoFileClip from the multimodal module
-            with patch("arbiter.knowledge_graph.multimodal.VideoFileClip") as mock_video_clip:
+            with patch(
+                "arbiter.knowledge_graph.multimodal.VideoFileClip"
+            ) as mock_video_clip:
                 mock_clip = MagicMock()
                 mock_clip.duration = 30.5
                 mock_clip.get_frame.return_value = [[0, 0, 0]]  # Mock frame array
@@ -331,7 +351,9 @@ class TestDefaultMultiModalProcessor:
                 # Mock Image from multimodal module
                 with patch("arbiter.knowledge_graph.multimodal.Image"):
                     processor.image_captioner = Mock()
-                    processor.image_captioner.return_value = [{"generated_text": "First frame"}]
+                    processor.image_captioner.return_value = [
+                        {"generated_text": "First frame"}
+                    ]
 
                     result = await processor._process_video(item)
 
@@ -340,7 +362,9 @@ class TestDefaultMultiModalProcessor:
                     assert "First frame" in result["summary"]
 
     @pytest.mark.asyncio
-    async def test_process_text_file_success(self, mock_logger, mock_config, mock_multimodal_data):
+    async def test_process_text_file_success(
+        self, mock_logger, mock_config, mock_multimodal_data
+    ):
         """Test successful text file processing"""
         processor = DefaultMultiModalProcessor(mock_logger)
 
@@ -375,7 +399,9 @@ class TestDefaultMultiModalProcessor:
 
     @pytest.mark.skipif(not PDF_PROCESSING_AVAILABLE, reason="PyPDF2 not installed")
     @pytest.mark.asyncio
-    async def test_process_pdf_file_success(self, mock_logger, mock_config, mock_multimodal_data):
+    async def test_process_pdf_file_success(
+        self, mock_logger, mock_config, mock_multimodal_data
+    ):
         """Test successful PDF file processing - skipped if PyPDF2 not available"""
         with patch("arbiter.knowledge_graph.multimodal.PDF_PROCESSING_AVAILABLE", True):
             processor = DefaultMultiModalProcessor(mock_logger)
@@ -385,7 +411,9 @@ class TestDefaultMultiModalProcessor:
             item = mock_multimodal_data("pdf_file", test_pdf_data)
 
             # Mock PdfReader from the multimodal module
-            with patch("arbiter.knowledge_graph.multimodal.PdfReader") as mock_pdf_reader:
+            with patch(
+                "arbiter.knowledge_graph.multimodal.PdfReader"
+            ) as mock_pdf_reader:
                 mock_reader = Mock()
                 mock_page = Mock()
                 mock_page.extract_text.return_value = "Page content"
@@ -394,7 +422,9 @@ class TestDefaultMultiModalProcessor:
 
                 # Mock text summarizer
                 processor.text_summarizer = Mock()
-                processor.text_summarizer.return_value = [{"summary_text": "PDF summary"}]
+                processor.text_summarizer.return_value = [
+                    {"summary_text": "PDF summary"}
+                ]
 
                 result = await processor._process_pdf_file(item)
 
@@ -544,7 +574,9 @@ class TestErrorCases:
             item.data_type = "image"
             item.data = b"test"
 
-            with patch("arbiter.knowledge_graph.multimodal.audit_ledger_client") as mock_audit:
+            with patch(
+                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+            ) as mock_audit:
                 mock_audit.log_event = AsyncMock(side_effect=Exception("Audit failed"))
 
                 # Should handle audit failure gracefully
@@ -552,7 +584,8 @@ class TestErrorCases:
                 assert result["status"] == "skipped"
                 # Check that warning was logged about audit failure
                 assert any(
-                    "Failed to log audit" in str(call) for call in logger.warning.call_args_list
+                    "Failed to log audit" in str(call)
+                    for call in logger.warning.call_args_list
                 )
 
 

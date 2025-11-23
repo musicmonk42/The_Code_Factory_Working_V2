@@ -11,7 +11,12 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Now import the module to be tested.
-from self_healing_import_fixer.cli import PluginManager, _validate_path_argument, main, main_async
+from self_healing_import_fixer.cli import (
+    PluginManager,
+    _validate_path_argument,
+    main,
+    main_async,
+)
 
 # --- Fixtures ---
 
@@ -22,16 +27,22 @@ def mock_core_dependencies():
     mock_audit_logger_instance = MagicMock()
     mock_audit_logger_instance.log_event = MagicMock()
 
-    with patch(
-        "self_healing_import_fixer.cli.alert_operator", new=MagicMock()
-    ) as mock_alert, patch(
-        "self_healing_import_fixer.cli.scrub_secrets",
-        new=MagicMock(side_effect=lambda x: x),
-    ) as mock_scrub, patch(
-        "self_healing_import_fixer.cli.SECRETS_MANAGER", new=MagicMock()
-    ) as mock_secrets, patch(
-        "self_healing_import_fixer.cli.cli_audit_logger", new=mock_audit_logger_instance
-    ) as mock_logger:
+    with (
+        patch(
+            "self_healing_import_fixer.cli.alert_operator", new=MagicMock()
+        ) as mock_alert,
+        patch(
+            "self_healing_import_fixer.cli.scrub_secrets",
+            new=MagicMock(side_effect=lambda x: x),
+        ) as mock_scrub,
+        patch(
+            "self_healing_import_fixer.cli.SECRETS_MANAGER", new=MagicMock()
+        ) as mock_secrets,
+        patch(
+            "self_healing_import_fixer.cli.cli_audit_logger",
+            new=mock_audit_logger_instance,
+        ) as mock_logger,
+    ):
 
         # Configure the mocked SecretsManager to return dummy values for any secret lookups
         mock_secrets.get_secret.return_value = "dummy_secret_value"
@@ -153,20 +164,22 @@ def test_main_handles_analyze_command(
         os.getcwd(),
     ]
 
-    with patch(
-        "sys.argv",
-        [
-            "self_healing_import_fixer.cli",
-            "analyze",
-            test_project_setup["project_root"],
-            "--output-format",
-            "text",
-        ],
-    ), patch(
-        "self_healing_import_fixer.cli.ImportGraphAnalyzer", create=True
-    ) as MockAnalyzer, patch(
-        "builtins.print"
-    ) as mock_print:
+    with (
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "analyze",
+                test_project_setup["project_root"],
+                "--output-format",
+                "text",
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.ImportGraphAnalyzer", create=True
+        ) as MockAnalyzer,
+        patch("builtins.print") as mock_print,
+    ):
 
         # Set up the mock to return our analyzer instance when instantiated
         MockAnalyzer.return_value = mock_analyzer
@@ -210,15 +223,23 @@ def test_heal_command_in_prod_requires_interactive(
             super().__init__(f"sys.exit({code})")
 
     # Mock the heal_entrypoint - it should NOT be called if security check works
-    with patch(
-        "sys.argv",
-        ["self_healing_import_fixer.cli", "heal", test_project_setup["project_root"]],
-    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True) as mock_heal, patch(
-        "self_healing_import_fixer.cli.PRODUCTION_MODE", True
-    ), patch(
-        "self_healing_import_fixer.cli.load_fixer"
-    ) as mock_load_fixer, patch(
-        "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+    with (
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "heal",
+                test_project_setup["project_root"],
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.heal_entrypoint", create=True
+        ) as mock_heal,
+        patch("self_healing_import_fixer.cli.PRODUCTION_MODE", True),
+        patch("self_healing_import_fixer.cli.load_fixer") as mock_load_fixer,
+        patch(
+            "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+        ),
     ):
 
         try:
@@ -262,21 +283,25 @@ def test_heal_command_in_prod_forbids_yes_flag(
             super().__init__(f"sys.exit({code})")
 
     # Mock the heal_entrypoint - it should NOT be called if security check works
-    with patch(
-        "sys.argv",
-        [
-            "self_healing_import_fixer.cli",
-            "heal",
-            test_project_setup["project_root"],
-            "-i",
-            "-y",
-        ],
-    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True) as mock_heal, patch(
-        "self_healing_import_fixer.cli.PRODUCTION_MODE", True
-    ), patch(
-        "self_healing_import_fixer.cli.load_fixer"
-    ) as mock_load_fixer, patch(
-        "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+    with (
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "heal",
+                test_project_setup["project_root"],
+                "-i",
+                "-y",
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.heal_entrypoint", create=True
+        ) as mock_heal,
+        patch("self_healing_import_fixer.cli.PRODUCTION_MODE", True),
+        patch("self_healing_import_fixer.cli.load_fixer") as mock_load_fixer,
+        patch(
+            "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+        ),
     ):
 
         try:
@@ -324,19 +349,25 @@ def test_serve_command_in_prod_enforces_security(
             super().__init__(f"sys.exit({code})")
 
     # Test: Missing --require-auth
-    with patch(
-        "sys.argv",
-        ["self_healing_import_fixer.cli", "serve", test_project_setup["project_root"]],
-    ), patch(
-        "self_healing_import_fixer.cli.ImportGraphAnalyzer",
-        create=True,
-        return_value=mock_analyzer,
-    ), patch(
-        "self_healing_import_fixer.cli.PRODUCTION_MODE", True
-    ), patch(
-        "self_healing_import_fixer.cli.load_analyzer"
-    ) as mock_load_analyzer, patch(
-        "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+    with (
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "serve",
+                test_project_setup["project_root"],
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.ImportGraphAnalyzer",
+            create=True,
+            return_value=mock_analyzer,
+        ),
+        patch("self_healing_import_fixer.cli.PRODUCTION_MODE", True),
+        patch("self_healing_import_fixer.cli.load_analyzer") as mock_load_analyzer,
+        patch(
+            "sys.exit", side_effect=lambda code: (_ for _ in ()).throw(TestExit(code))
+        ),
     ):
 
         try:
@@ -381,25 +412,27 @@ async def test_main_loads_plugins_from_config(mock_plugin_manager, test_project_
         os.getcwd(),
     ]
 
-    with patch("self_healing_import_fixer.cli.load_config", return_value=config_data), patch(
-        "sys.argv",
-        [
-            "self_healing_import_fixer.cli",
-            "--config",
-            str(config_path),
-            "analyze",
-            test_project_setup["project_root"],
-            "--output-format",
-            "text",
-        ],
-    ), patch(
-        "self_healing_import_fixer.cli.ImportGraphAnalyzer",
-        create=True,
-        return_value=mock_analyzer,
-    ), patch(
-        "self_healing_import_fixer.cli.PluginManager"
-    ) as MockPluginManager, patch(
-        "builtins.print"
+    with (
+        patch("self_healing_import_fixer.cli.load_config", return_value=config_data),
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "--config",
+                str(config_path),
+                "analyze",
+                test_project_setup["project_root"],
+                "--output-format",
+                "text",
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.ImportGraphAnalyzer",
+            create=True,
+            return_value=mock_analyzer,
+        ),
+        patch("self_healing_import_fixer.cli.PluginManager") as MockPluginManager,
+        patch("builtins.print"),
     ):
 
         # Set the return value for the mocked manager
@@ -422,15 +455,17 @@ def test_selftest_command_runs_diagnostics(mock_plugin_manager, mock_core_depend
     mock_analyzer = MagicMock()
     mock_analyzer.build_graph.return_value = {}
 
-    with patch("sys.argv", ["self_healing_import_fixer.cli", "selftest"]), patch(
-        "self_healing_import_fixer.cli.ImportGraphAnalyzer",
-        create=True,
-        return_value=mock_analyzer,
-    ), patch("self_healing_import_fixer.cli.heal_entrypoint", create=True), patch(
-        "shutil.which", return_value=True
-    ), patch(
-        "sys.exit"
-    ) as mock_exit:  # Catch the exit call
+    with (
+        patch("sys.argv", ["self_healing_import_fixer.cli", "selftest"]),
+        patch(
+            "self_healing_import_fixer.cli.ImportGraphAnalyzer",
+            create=True,
+            return_value=mock_analyzer,
+        ),
+        patch("self_healing_import_fixer.cli.heal_entrypoint", create=True),
+        patch("shutil.which", return_value=True),
+        patch("sys.exit") as mock_exit,
+    ):  # Catch the exit call
 
         main()
 
@@ -444,7 +479,9 @@ def test_selftest_command_runs_diagnostics(mock_plugin_manager, mock_core_depend
         assert "selftest_complete" in selftest_calls
 
 
-def test_cli_execution_failure_logs_and_aborts(mock_plugin_manager, mock_core_dependencies):
+def test_cli_execution_failure_logs_and_aborts(
+    mock_plugin_manager, mock_core_dependencies
+):
     """
     Tests that a generic unhandled exception during command execution is caught, logged,
     and results in an abort.
@@ -453,13 +490,15 @@ def test_cli_execution_failure_logs_and_aborts(mock_plugin_manager, mock_core_de
     mock_plugin_manager.whitelisted_plugin_dirs = [os.getcwd(), tempfile.gettempdir()]
 
     # Mock ImportGraphAnalyzer to raise an error when instantiated
-    with patch(
-        "self_healing_import_fixer.cli.ImportGraphAnalyzer",
-        create=True,
-        side_effect=ValueError("An unexpected error occurred."),
-    ), patch("sys.argv", ["self_healing_import_fixer.cli", "analyze", "."]), patch(
-        "sys.exit"
-    ) as mock_exit:  # Catch the exit call
+    with (
+        patch(
+            "self_healing_import_fixer.cli.ImportGraphAnalyzer",
+            create=True,
+            side_effect=ValueError("An unexpected error occurred."),
+        ),
+        patch("sys.argv", ["self_healing_import_fixer.cli", "analyze", "."]),
+        patch("sys.exit") as mock_exit,
+    ):  # Catch the exit call
 
         main()
 

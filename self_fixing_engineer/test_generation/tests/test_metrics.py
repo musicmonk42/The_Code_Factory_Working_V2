@@ -14,7 +14,9 @@ from test_generation.orchestrator.metrics import (
 @pytest.mark.asyncio
 async def test_metrics_available(monkeypatch):
     mock_histogram = Mock()
-    monkeypatch.setattr("prometheus_client.Histogram", Mock(return_value=mock_histogram))
+    monkeypatch.setattr(
+        "prometheus_client.Histogram", Mock(return_value=mock_histogram)
+    )
     monkeypatch.setattr("test_generation.orchestrator.metrics.METRICS_AVAILABLE", True)
     generation_duration.labels(language="python").observe(1.0)
     assert mock_histogram.observe.called

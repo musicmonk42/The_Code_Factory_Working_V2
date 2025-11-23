@@ -52,7 +52,9 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
                 load_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await load_task
-                raise AssertionError("LLMPluginManager initial load timed out after 5 seconds")
+                raise AssertionError(
+                    "LLMPluginManager initial load timed out after 5 seconds"
+                )
 
     async def asyncTearDown(self):
         # Clean up manager + temp dir with timeout protection
@@ -196,7 +198,9 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
 
         with patch.object(
             self.manager, "_get_expected_hash", return_value="expected_hash"
-        ), patch.object(self.manager, "_verify_integrity", return_value=False) as mock_verify:
+        ), patch.object(
+            self.manager, "_verify_integrity", return_value=False
+        ) as mock_verify:
             await self.manager._scan_and_load_plugins()
 
         self.assertNotIn("tampered", self.manager.list_providers())
@@ -209,7 +213,9 @@ class TestLLMPluginManager(IsolatedAsyncioTestCase):
         """
         Direct registry manipulation (for dynamic providers) works as expected.
         """
-        provider = SimpleNamespace(name="dynamic", call=asyncio.sleep, health_check=asyncio.sleep)
+        provider = SimpleNamespace(
+            name="dynamic", call=asyncio.sleep, health_check=asyncio.sleep
+        )
         self.manager.registry["dynamic"] = provider
 
         self.assertIn("dynamic", self.manager.list_providers())

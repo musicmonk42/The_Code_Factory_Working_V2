@@ -96,7 +96,9 @@ def mock_dependencies():
         mock_metrics.return_value = {"test_metric": 1}
 
         # <<< FIX: Configure mock_search_logs to return the expected dummy output
-        mock_search_logs.side_effect = lambda query: [f"Dummy log entry for query: {query}"]
+        mock_search_logs.side_effect = lambda query: [
+            f"Dummy log entry for query: {query}"
+        ]
 
         yield {
             "runner": mock_runner,
@@ -359,7 +361,9 @@ class TestRunnerEndpoints:
         """Test run endpoint with API key authentication."""
         payload = {"project_name": "Test Project", "description": "A test run"}
 
-        response = test_app.post("/api/v1/run", json=payload, headers={"X-API-Key": test_api_key})
+        response = test_app.post(
+            "/api/v1/run", json=payload, headers={"X-API-Key": test_api_key}
+        )
 
         assert response.status_code == 200
         assert response.json() == {"status": "success"}
@@ -953,7 +957,9 @@ class TestDatabaseModels:
             db.add(api_key)
             db.commit()
 
-            retrieved = db.query(APIKey).filter(APIKey.api_key_id == "test-key-id").first()
+            retrieved = (
+                db.query(APIKey).filter(APIKey.api_key_id == "test-key-id").first()
+            )
             assert retrieved is not None
             assert "read" in retrieved.scopes
         finally:

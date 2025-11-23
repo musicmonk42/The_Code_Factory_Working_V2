@@ -24,7 +24,12 @@ import yaml
 from runner.llm_provider_base import LLMProvider
 from runner.runner_config import load_config  # For loading API key in get_provider
 from runner.runner_errors import LLMError
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # -------------------------------------------------------------------------------
 
@@ -90,7 +95,9 @@ class LocalProvider(LLMProvider):
         Load external configuration for model aliases and endpoints from YAML or JSON file.
         """
         if not (
-            file_path.endswith(".yaml") or file_path.endswith(".yml") or file_path.endswith(".json")
+            file_path.endswith(".yaml")
+            or file_path.endswith(".yml")
+            or file_path.endswith(".json")
         ):
             raise ValueError("Unsupported config format. Use YAML or JSON.")
 
@@ -207,11 +214,11 @@ class LocalProvider(LLMProvider):
                     if resp.status != 200:
                         # [FIX] Handle 429 Rate Limit specifically to trigger retry
                         if resp.status == 429:
-                            error_msg = (
-                                f"API error: {resp.status} - Rate Limited. {await resp.text()}"
-                            )
+                            error_msg = f"API error: {resp.status} - Rate Limited. {await resp.text()}"
                             logger.warning(error_msg, extra={"run_id": run_id})
-                            raise aiohttp.ClientError(error_msg)  # Raise to trigger tenacity retry
+                            raise aiohttp.ClientError(
+                                error_msg
+                            )  # Raise to trigger tenacity retry
 
                         error_msg = f"API error: {resp.status} - {await resp.text()}"
                         logger.error(error_msg, extra={"run_id": run_id})
@@ -233,13 +240,13 @@ class LocalProvider(LLMProvider):
                 ) from e
             except aiohttp.ClientError as e:
                 # Retriable network error
-                error_msg = (
-                    f"Client error: {str(e)}. Check server status or endpoint configuration."
-                )
+                error_msg = f"Client error: {str(e)}. Check server status or endpoint configuration."
                 logger.warning(error_msg, extra={"run_id": run_id})
                 raise  # Re-raise to trigger tenacity retry
             except asyncio.TimeoutError as e:
-                error_msg = "API call timed out. The local model may be too slow or stuck."
+                error_msg = (
+                    "API call timed out. The local model may be too slow or stuck."
+                )
                 logger.error(error_msg, extra={"run_id": run_id})
                 raise LLMError(
                     detail=error_msg,
@@ -317,10 +324,14 @@ class LocalProvider(LLMProvider):
                                     partial_response += chunk_text
 
                                     # Keep local, plugin-specific stream metrics
-                                    chunk_output_tokens = await self.count_tokens(chunk_text, model)
+                                    chunk_output_tokens = await self.count_tokens(
+                                        chunk_text, model
+                                    )
                                     output_tokens += chunk_output_tokens
                                     chunk_latency = time.time() - chunk_start
-                                    stream_chunk_latency.labels(model=model).observe(chunk_latency)
+                                    stream_chunk_latency.labels(model=model).observe(
+                                        chunk_latency
+                                    )
                                     stream_chunks_total.labels(model=model).inc()
                                     chunk_start = time.time()
                     except Exception as e:
@@ -374,7 +385,9 @@ class LocalProvider(LLMProvider):
                 raise  # Re-raise errors we've already translated
             else:
                 # Wrap unexpected errors
-                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
+                raise LLMError(
+                    detail=f"Unexpected error in call: {e}", provider=self.name
+                ) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """

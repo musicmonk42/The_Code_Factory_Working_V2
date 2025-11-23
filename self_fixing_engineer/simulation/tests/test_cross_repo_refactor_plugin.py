@@ -55,36 +55,39 @@ def mock_external_dependencies():
         pytest.skip("Tenacity is not installed, cannot run these tests.")
 
     # Mock the GitPython Repo class and its methods
-    with patch.object(cross_repo_refactor_plugin, "Repo") as mock_repo_class, patch(
-        "aiohttp.ClientSession"
-    ) as mock_aiohttp, patch.object(
-        cross_repo_refactor_plugin._sfe_audit_logger, "log_event", new=AsyncMock()
-    ) as mock_audit_log, patch.object(
-        cross_repo_refactor_plugin.shutil, "rmtree"
-    ) as mock_rmtree, patch.dict(
-        cross_repo_refactor_plugin.GIT_CONFIG,
-        {
-            "default_branch_prefix": "sfe-refactor/",
-            "default_author_name": "Self-Fixing Engineer Bot",
-            "default_author_email": "bot@self-fixing.engineer",
-            "clone_timeout_seconds": 300,
-            "push_timeout_seconds": 90,
-            "git_op_timeout_seconds": 120,
-            "pr_api_base_url": "https://api.github.com",
-            "pr_api_token": "mock_pr_token",
-            "retry_attempts": 3,
-            "retry_backoff_factor": 2.0,
-            "max_concurrency": 3,
-            "validate_remote_in_health": False,
-            "health_sample_repo_url": "",
-            "scrub_pushurl_on_retain": True,
-        },
-    ), patch.dict(
-        os.environ,
-        {
-            "GIT_PR_API_BASE_URL": "https://api.github.com",
-            "GIT_PR_API_TOKEN": "mock_pr_token",
-        },
+    with (
+        patch.object(cross_repo_refactor_plugin, "Repo") as mock_repo_class,
+        patch("aiohttp.ClientSession") as mock_aiohttp,
+        patch.object(
+            cross_repo_refactor_plugin._sfe_audit_logger, "log_event", new=AsyncMock()
+        ) as mock_audit_log,
+        patch.object(cross_repo_refactor_plugin.shutil, "rmtree") as mock_rmtree,
+        patch.dict(
+            cross_repo_refactor_plugin.GIT_CONFIG,
+            {
+                "default_branch_prefix": "sfe-refactor/",
+                "default_author_name": "Self-Fixing Engineer Bot",
+                "default_author_email": "bot@self-fixing.engineer",
+                "clone_timeout_seconds": 300,
+                "push_timeout_seconds": 90,
+                "git_op_timeout_seconds": 120,
+                "pr_api_base_url": "https://api.github.com",
+                "pr_api_token": "mock_pr_token",
+                "retry_attempts": 3,
+                "retry_backoff_factor": 2.0,
+                "max_concurrency": 3,
+                "validate_remote_in_health": False,
+                "health_sample_repo_url": "",
+                "scrub_pushurl_on_retain": True,
+            },
+        ),
+        patch.dict(
+            os.environ,
+            {
+                "GIT_PR_API_BASE_URL": "https://api.github.com",
+                "GIT_PR_API_TOKEN": "mock_pr_token",
+            },
+        ),
     ):
 
         # --- Mock GitPython Repo Instance ---
@@ -98,7 +101,9 @@ def mock_external_dependencies():
         mock_repo_instance.remote.return_value.push = AsyncMock()
         mock_repo_instance.remote.return_value.set_url = AsyncMock()
         mock_repo_class.clone_from.return_value = mock_repo_instance
-        mock_repo_class.return_value = mock_repo_instance  # For when Repo is instantiated directly
+        mock_repo_class.return_value = (
+            mock_repo_instance  # For when Repo is instantiated directly
+        )
 
         yield {
             "mock_repo_class": mock_repo_class,
@@ -122,7 +127,9 @@ def valid_refactor_plan():
     return [
         {
             "repo_url": "https://github.com/test-org/test-repo.git",
-            "changes": [{"filepath": "src/main.py", "new_content": "print('hello world')"}],
+            "changes": [
+                {"filepath": "src/main.py", "new_content": "print('hello world')"}
+            ],
             "commit_message": "feat: initial refactor",
             "base_branch": "main",
             "create_pr": True,
@@ -169,8 +176,13 @@ def test_is_safe_path(temp_repo_dir):
     """Test path traversal prevention logic."""
     base = Path(temp_repo_dir)
     assert _is_safe_path(str(base), str(base / "src" / "file.txt")) is True
-    assert _is_safe_path(str(base), str(base / "src" / ".." / "file.txt")) is True  # Still inside
-    assert _is_safe_path(str(base), str(base / "src" / ".." / ".." / "etc" / "passwd")) is False
+    assert (
+        _is_safe_path(str(base), str(base / "src" / ".." / "file.txt")) is True
+    )  # Still inside
+    assert (
+        _is_safe_path(str(base), str(base / "src" / ".." / ".." / "etc" / "passwd"))
+        is False
+    )
     assert _is_safe_path(str(base), "/etc/passwd") is False
 
 
@@ -197,7 +209,9 @@ async def test_git_repo_manager_push(mock_external_dependencies, temp_repo_dir):
     await manager.clone_repo()
     await manager.push_branch("my-feature-branch")
 
-    mock_push = mock_external_dependencies["mock_repo_instance"].remote.return_value.push
+    mock_push = mock_external_dependencies[
+        "mock_repo_instance"
+    ].remote.return_value.push
     mock_push.assert_called_once()
     # Check that the refspec 'my-feature-branch:my-feature-branch' was used
     assert mock_push.call_args[0][0] == "my-feature-branch:my-feature-branch"
@@ -215,10 +229,13 @@ async def test_perform_refactor_full_success_workflow(
     """
     Test the complete successful workflow: clone, branch, change, commit, push, and PR creation.
     """
-    with patch("tempfile.mkdtemp", return_value=temp_repo_dir), patch.object(
-        cross_repo_refactor_plugin.GitRepoManager,
-        "create_pull_request",
-        new=AsyncMock(return_value="https://github.com/mock/repo/pull/1"),
+    with (
+        patch("tempfile.mkdtemp", return_value=temp_repo_dir),
+        patch.object(
+            cross_repo_refactor_plugin.GitRepoManager,
+            "create_pull_request",
+            new=AsyncMock(return_value="https://github.com/mock/repo/pull/1"),
+        ),
     ):
 
         result = await perform_cross_repo_refactor(
@@ -339,11 +356,18 @@ async def test_perform_refactor_no_cleanup_on_failure(
 async def test_plugin_health_success():
     """Test health check when Git and GitPython are available."""
     # Patch the environment variables needed for the health check to avoid warnings.
-    with patch("simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", True), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_subprocess, patch.dict(
-        cross_repo_refactor_plugin.GIT_CONFIG,
-        {"pr_api_token": "mock_pr_token", "pr_api_base_url": "https://api.github.com"},
+    with (
+        patch(
+            "simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", True
+        ),
+        patch("asyncio.create_subprocess_exec") as mock_subprocess,
+        patch.dict(
+            cross_repo_refactor_plugin.GIT_CONFIG,
+            {
+                "pr_api_token": "mock_pr_token",
+                "pr_api_base_url": "https://api.github.com",
+            },
+        ),
     ):
 
         mock_proc = AsyncMock()
@@ -360,7 +384,9 @@ async def test_plugin_health_success():
 @pytest.mark.asyncio
 async def test_plugin_health_gitpython_missing():
     """Test health check when GitPython is not installed."""
-    with patch("simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", False):
+    with patch(
+        "simulation.plugins.cross_repo_refactor_plugin.GITPYTHON_AVAILABLE", False
+    ):
         health = await plugin_health()
         assert health["status"] == "error"
         assert "GitPython library not found" in health["details"][0]

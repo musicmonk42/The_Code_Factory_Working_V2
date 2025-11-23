@@ -151,7 +151,9 @@ def mock_web3_dependencies(mocker: MockerFixture):
         "gasPrice": 2000000000,
         "nonce": 1,
     }
-    mock_contract.functions.logEvent.return_value.estimate_gas = AsyncMock(return_value=200000)
+    mock_contract.functions.logEvent.return_value.estimate_gas = AsyncMock(
+        return_value=200000
+    )
     mock_eth.contract = MagicMock(return_value=mock_contract)
 
     mock_eth.account = mock_account
@@ -161,7 +163,9 @@ def mock_web3_dependencies(mocker: MockerFixture):
 
     mock_web3_instance.eth = mock_eth
     mock_web3_instance.to_wei = lambda x, unit: x * 1000000000 if unit == "gwei" else x
-    mock_web3_instance.from_wei = lambda x, unit: (x / 1000000000 if unit == "gwei" else x)
+    mock_web3_instance.from_wei = lambda x, unit: (
+        x / 1000000000 if unit == "gwei" else x
+    )
 
     mock_provider = MagicMock()
     mock_provider.disconnect = AsyncMock()
@@ -265,7 +269,9 @@ class TestAuditLedgerClientInit:
         assert client.contract_abi is None
         assert client.dlt_type == "ethereum"
 
-    def test_init_with_invalid_abi_production(self, mock_web3_dependencies, mocker: MockerFixture):
+    def test_init_with_invalid_abi_production(
+        self, mock_web3_dependencies, mocker: MockerFixture
+    ):
         """Test initialization with invalid ABI JSON in production - should fail"""
         mocker.patch.dict(
             os.environ,
@@ -278,23 +284,31 @@ class TestAuditLedgerClientInit:
 
         from arbiter.models.audit_ledger_client import AuditLedgerClient
 
-        with pytest.raises(ValueError, match="must be valid JSON for Ethereum DLT in production"):
+        with pytest.raises(
+            ValueError, match="must be valid JSON for Ethereum DLT in production"
+        ):
             AuditLedgerClient(dlt_type="ethereum")
 
-    def test_init_missing_required_env_vars(self, mock_web3_dependencies, mocker: MockerFixture):
+    def test_init_missing_required_env_vars(
+        self, mock_web3_dependencies, mocker: MockerFixture
+    ):
         """Test initialization fails with missing required environment variables"""
         mocker.patch.dict(os.environ, {"AUDIT_LEDGER_URL": ""}, clear=False)
 
         from arbiter.models.audit_ledger_client import AuditLedgerClient
 
-        with pytest.raises(ValueError, match="AUDIT_LEDGER_URL must be a WebSocket URL"):
+        with pytest.raises(
+            ValueError, match="AUDIT_LEDGER_URL must be a WebSocket URL"
+        ):
             AuditLedgerClient(dlt_type="ethereum")
 
     def test_init_with_production_env_requires_secrets_manager(
         self, mock_web3_dependencies, mocker: MockerFixture
     ):
         """Test that production environment requires secrets manager"""
-        mocker.patch.dict(os.environ, {"APP_ENV": "production", "USE_SECRETS_MANAGER": "false"})
+        mocker.patch.dict(
+            os.environ, {"APP_ENV": "production", "USE_SECRETS_MANAGER": "false"}
+        )
 
         from arbiter.models.audit_ledger_client import AuditLedgerClient, DLTError
 
@@ -333,7 +347,9 @@ class TestAuditLedgerClientConnection:
 
         mock_web3_dependencies["web3"].is_connected.return_value = False
 
-        with pytest.raises(DLTConnectionError, match="Failed to connect to Ethereum node"):
+        with pytest.raises(
+            DLTConnectionError, match="Failed to connect to Ethereum node"
+        ):
             await audit_client.connect()
 
     @pytest.mark.asyncio
@@ -396,7 +412,9 @@ class TestAuditLedgerClientEventLogging:
         """Test logging event when not connected raises error"""
         from arbiter.models.audit_ledger_client import DLTTransactionError
 
-        with pytest.raises(DLTTransactionError, match="Failed to log DLT event to ethereum"):
+        with pytest.raises(
+            DLTTransactionError, match="Failed to log DLT event to ethereum"
+        ):
             await audit_client.log_event("test:event", {})
 
     @pytest.mark.asyncio
@@ -420,13 +438,17 @@ class TestAuditLedgerClientEventLogging:
 
         await audit_client.log_event("test:event", event_details, "operator1")
 
-        tx_hash2 = await audit_client.log_event("test:event", event_details, "operator1")
+        tx_hash2 = await audit_client.log_event(
+            "test:event", event_details, "operator1"
+        )
 
         assert "duplicate_local_" in tx_hash2
         assert tx_hash2.startswith("duplicate_local_")
 
     @pytest.mark.asyncio
-    async def test_log_event_transaction_failure(self, audit_client, mock_web3_dependencies):
+    async def test_log_event_transaction_failure(
+        self, audit_client, mock_web3_dependencies
+    ):
         """Test handling of transaction failure"""
         from arbiter.models.audit_ledger_client import DLTTransactionError
 
@@ -454,7 +476,9 @@ class TestAuditLedgerClientEventLogging:
         mock_web3_dependencies["eth"].wait_for_transaction_receipt.side_effect = (
             DLTTransactionError(f"Transaction {b'tx_hash_123'.hex()} reverted.")
         )
-        mock_web3_dependencies["eth"].get_transaction_receipt.return_value = mock_receipt
+        mock_web3_dependencies["eth"].get_transaction_receipt.return_value = (
+            mock_receipt
+        )
 
         with pytest.raises(
             DLTTransactionError,
@@ -478,7 +502,9 @@ class TestAuditLedgerClientBatchOperations:
     """Test batch operations"""
 
     @pytest.mark.asyncio
-    async def test_batch_log_events_not_supported(self, audit_client, mock_web3_dependencies):
+    async def test_batch_log_events_not_supported(
+        self, audit_client, mock_web3_dependencies
+    ):
         """Test batch logging when not supported by contract"""
         from arbiter.models.audit_ledger_client import AuditEvent, DLTUnsupportedError
 
@@ -486,7 +512,9 @@ class TestAuditLedgerClientBatchOperations:
 
         mock_web3_dependencies["contract"].functions = MagicMock(spec=[])
 
-        events = [AuditEvent(event_type="test:batch", details={"id": i}) for i in range(3)]
+        events = [
+            AuditEvent(event_type="test:batch", details={"id": i}) for i in range(3)
+        ]
 
         with pytest.raises(DLTUnsupportedError, match="Batch logging not supported"):
             await audit_client.batch_log_events(events)
@@ -496,7 +524,9 @@ class TestAuditLedgerClientHealthCheck:
     """Test health check functionality"""
 
     @pytest.mark.asyncio
-    async def test_is_connected_when_connected(self, audit_client, mock_web3_dependencies):
+    async def test_is_connected_when_connected(
+        self, audit_client, mock_web3_dependencies
+    ):
         """Test is_connected returns True when connected"""
         await audit_client.connect()
 
@@ -528,7 +558,9 @@ class TestAuditLedgerClientRetryMechanism:
     """Test retry mechanisms"""
 
     @pytest.mark.asyncio
-    async def test_connect_retries_on_failure(self, audit_client, mock_web3_dependencies):
+    async def test_connect_retries_on_failure(
+        self, audit_client, mock_web3_dependencies
+    ):
         """Test that connect would retry on connection failure (disabled for tests)"""
         from arbiter.models.audit_ledger_client import DLTConnectionError
 
@@ -545,7 +577,9 @@ class TestAuditLedgerClientRetryMechanism:
 class TestAuditLedgerClientUnsupportedDLT:
     """Test unsupported DLT types"""
 
-    def test_hyperledger_fabric_not_supported(self, mock_web3_dependencies, mocker: MockerFixture):
+    def test_hyperledger_fabric_not_supported(
+        self, mock_web3_dependencies, mocker: MockerFixture
+    ):
         """Test that Hyperledger Fabric is not supported"""
 
         # Patch retry before import
@@ -557,13 +591,20 @@ class TestAuditLedgerClientUnsupportedDLT:
 
         mocker.patch("tenacity.retry", no_retry)
 
-        from arbiter.models.audit_ledger_client import AuditLedgerClient, DLTConnectionError
+        from arbiter.models.audit_ledger_client import (
+            AuditLedgerClient,
+            DLTConnectionError,
+        )
 
-        mocker.patch.dict(os.environ, {"AUDIT_LEDGER_URL": "ws://test", "APP_ENV": "development"})
+        mocker.patch.dict(
+            os.environ, {"AUDIT_LEDGER_URL": "ws://test", "APP_ENV": "development"}
+        )
 
         client = AuditLedgerClient(dlt_type="hyperledger_fabric")
 
-        with pytest.raises(DLTConnectionError, match="Hyperledger Fabric is not supported"):
+        with pytest.raises(
+            DLTConnectionError, match="Hyperledger Fabric is not supported"
+        ):
             asyncio.run(client.connect())
 
 
@@ -571,7 +612,9 @@ class TestAuditLedgerClientGasManagement:
     """Test gas management features"""
 
     @pytest.mark.asyncio
-    async def test_gas_estimation_failure_uses_default(self, audit_client, mock_web3_dependencies):
+    async def test_gas_estimation_failure_uses_default(
+        self, audit_client, mock_web3_dependencies
+    ):
         """Test that gas estimation failure falls back to default"""
         await audit_client.connect()
 
@@ -639,7 +682,9 @@ class TestAuditLedgerClientSecretManagement:
         assert key == "0x" + "1" * 64
 
     @pytest.mark.asyncio
-    async def test_get_private_key_from_secrets_manager(self, audit_client, mocker: MockerFixture):
+    async def test_get_private_key_from_secrets_manager(
+        self, audit_client, mocker: MockerFixture
+    ):
         """Test retrieving private key from AWS Secrets Manager"""
         mocker.patch.dict(
             os.environ,
@@ -652,7 +697,9 @@ class TestAuditLedgerClientSecretManagement:
 
         mock_boto3 = mocker.patch("arbiter.models.audit_ledger_client.boto3")
         mock_client = MagicMock()
-        mock_client.get_secret_value.return_value = {"SecretString": "0xsecret_key_from_aws"}
+        mock_client.get_secret_value.return_value = {
+            "SecretString": "0xsecret_key_from_aws"
+        }
         mock_boto3.session.Session.return_value.client.return_value = mock_client
 
         key = audit_client._get_private_key()

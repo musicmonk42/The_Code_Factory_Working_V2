@@ -183,7 +183,9 @@ def _enforce_prod_requirements():
         )
 
     if not MultiFernet or not ENCRYPTION_KEY or not HMAC_KEY:
-        logger.critical("CRITICAL: `cryptography` or encryption keys not configured. Exiting.")
+        logger.critical(
+            "CRITICAL: `cryptography` or encryption keys not configured. Exiting."
+        )
         sys.exit(1)
     if not aiofiles:
         logger.critical("CRITICAL: `aiofiles` module not available. Exiting.")
@@ -239,7 +241,9 @@ async def with_async_retry(
                 **log_context,
             )
             if attempt == max_retries - 1:
-                logger.critical("Operation failed after retries.", error=str(e), **log_context)
+                logger.critical(
+                    "Operation failed after retries.", error=str(e), **log_context
+                )
                 audit_logger.critical(
                     "Operation failed after retries.", error=str(e), **log_context
                 )
@@ -268,15 +272,21 @@ async def _dlq_policy_op(op: str, policy_id: str, error: Exception):
 
         # Simple rotation: if file is too large, rename it
         if dlq_path.exists() and dlq_path.stat().st_size > 10 * 1024 * 1024:  # 10MB
-            backup_path = dlq_path.with_suffix(f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.jsonl')
+            backup_path = dlq_path.with_suffix(
+                f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.jsonl'
+            )
             dlq_path.rename(backup_path)
-            logger.info("Rotated DLQ file", old_file=str(dlq_path), new_file=str(backup_path))
+            logger.info(
+                "Rotated DLQ file", old_file=str(dlq_path), new_file=str(backup_path)
+            )
 
         # Write to DLQ
         async with aiofiles.open(str(dlq_path), "ab") as f:
             await f.write(encrypted + b"\n")
 
-        logger.warning("Operation failed and logged to DLQ.", op=op, policy_id=policy_id)
+        logger.warning(
+            "Operation failed and logged to DLQ.", op=op, policy_id=policy_id
+        )
     except Exception as e:
         logger.critical(
             "Failed to write to DLQ. Data may be lost.",
@@ -392,18 +402,28 @@ class MeshPolicyBackend:
         elif backend_type == "s3":
             self.s3_bucket = kwargs.get("s3_bucket", os.environ.get("S3_BUCKET_NAME"))
             self.s3_prefix = kwargs.get("s3_prefix", "policies/")
-            if PROD_MODE and (not self.s3_bucket or self.s3_bucket in ["my-test-bucket"]):
-                logger.critical("S3_BUCKET_NAME must be configured in production.", backend="s3")
+            if PROD_MODE and (
+                not self.s3_bucket or self.s3_bucket in ["my-test-bucket"]
+            ):
+                logger.critical(
+                    "S3_BUCKET_NAME must be configured in production.", backend="s3"
+                )
                 sys.exit(1)
             if boto3:
                 self._s3_session = boto3.Session()
                 self._clients["s3"] = self._s3_session.client("s3")
         elif backend_type == "etcd":
             self.etcd_host = kwargs.get("etcd_host", os.environ.get("ETCD_HOST"))
-            self.etcd_port = int(kwargs.get("etcd_port", os.environ.get("ETCD_PORT", 2379)))
+            self.etcd_port = int(
+                kwargs.get("etcd_port", os.environ.get("ETCD_PORT", 2379))
+            )
             self.etcd_prefix = kwargs.get("etcd_prefix", "/mesh/policy/")
-            if PROD_MODE and (not self.etcd_host or self.etcd_host in ["localhost", "127.0.0.1"]):
-                logger.critical("ETCD_HOST must be configured in production.", backend="etcd")
+            if PROD_MODE and (
+                not self.etcd_host or self.etcd_host in ["localhost", "127.0.0.1"]
+            ):
+                logger.critical(
+                    "ETCD_HOST must be configured in production.", backend="etcd"
+                )
                 sys.exit(1)
             if etcd3:
                 self._clients["etcd"] = etcd3.client(
@@ -434,10 +454,14 @@ class MeshPolicyBackend:
                         )
                 elif self.backend_type == "local":
                     if not self.local_dir.exists():
-                        raise PolicyBackendError(f"Local directory {self.local_dir} does not exist")
+                        raise PolicyBackendError(
+                            f"Local directory {self.local_dir} does not exist"
+                        )
                 logger.info("Backend connection successful.", backend=self.backend_type)
         except Exception as e:
-            logger.critical("Backend connection FAILED.", backend=self.backend_type, error=str(e))
+            logger.critical(
+                "Backend connection FAILED.", backend=self.backend_type, error=str(e)
+            )
             audit_logger.critical(
                 "Backend connection FAILED.", backend=self.backend_type, error=str(e)
             )
@@ -509,7 +533,9 @@ class MeshPolicyBackend:
         elif self.backend_type == "s3" and "s3" in self._clients:
             signed_data = json.dumps({"data": data_bytes.decode(), "sig": sig}).encode()
             encrypted_data = (
-                self.multi_fernet.encrypt(signed_data) if self.multi_fernet else signed_data
+                self.multi_fernet.encrypt(signed_data)
+                if self.multi_fernet
+                else signed_data
             )
 
             key = f"{self.s3_prefix}{policy_id}.json"
@@ -524,21 +550,31 @@ class MeshPolicyBackend:
         elif self.backend_type == "etcd" and "etcd" in self._clients:
             signed_data = json.dumps({"data": data_bytes.decode(), "sig": sig}).encode()
             encrypted_data = (
-                self.multi_fernet.encrypt(signed_data) if self.multi_fernet else signed_data
+                self.multi_fernet.encrypt(signed_data)
+                if self.multi_fernet
+                else signed_data
             )
 
             key = f"{self.etcd_prefix}{policy_id}"
-            await run_sync_in_executor(self._clients["etcd"].put, key, encrypted_data.decode())
+            await run_sync_in_executor(
+                self._clients["etcd"].put, key, encrypted_data.decode()
+            )
             return "1.0"
 
         else:
-            raise PolicyBackendError(f"Backend {self.backend_type} not properly configured")
+            raise PolicyBackendError(
+                f"Backend {self.backend_type} not properly configured"
+            )
 
     async def save(
         self, policy_id: str, policy_data: Dict[str, Any], version: Optional[str] = None
     ) -> str:
         # Circuit breaker handling - completely rewritten to avoid internal state manipulation
-        if CircuitBreaker and self.backend_type in breakers and breakers[self.backend_type].breaker:
+        if (
+            CircuitBreaker
+            and self.backend_type in breakers
+            and breakers[self.backend_type].breaker
+        ):
             breaker = breakers[self.backend_type].breaker
 
             # Check if circuit breaker is open
@@ -558,7 +594,9 @@ class MeshPolicyBackend:
                         # Metrics would be recorded here
                         pass
 
-                    audit_logger.info("Saved policy.", policy_id=policy_id, version=version)
+                    audit_logger.info(
+                        "Saved policy.", policy_id=policy_id, version=version
+                    )
                     return version
 
             except Exception as e:
@@ -601,7 +639,9 @@ class MeshPolicyBackend:
                 await _dlq_policy_op("save", policy_id, e)
                 raise PolicyBackendError(f"Save operation failed: {e}")
 
-    async def load(self, policy_id: str, version: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def load(
+        self, policy_id: str, version: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         cache_key = f"{policy_id}:{version or 'latest'}"
         if cache_key in self.policy_cache:
             logger.info("Policy loaded from cache.", policy_id=policy_id)
@@ -638,7 +678,9 @@ class MeshPolicyBackend:
                         payload = json.loads(content)
 
                     if "encrypted" in payload and self.multi_fernet:
-                        decrypted = self.multi_fernet.decrypt(payload["encrypted"].encode())
+                        decrypted = self.multi_fernet.decrypt(
+                            payload["encrypted"].encode()
+                        )
                         return json.loads(decrypted)
                     elif "data" in payload:
                         return json.loads(payload["data"])
@@ -655,7 +697,9 @@ class MeshPolicyBackend:
 
                 elif self.backend_type == "etcd" and "etcd" in self._clients:
                     key = f"{self.etcd_prefix}{policy_id}"
-                    value, metadata = await run_sync_in_executor(self._clients["etcd"].get, key)
+                    value, metadata = await run_sync_in_executor(
+                        self._clients["etcd"].get, key
+                    )
                     if value:
                         return self._process_incoming_data(value.encode())
                     return None
@@ -685,7 +729,11 @@ class MeshPolicyBackend:
             # For mocked S3 backend in tests - handle plain JSON
             try:
                 test_data = json.loads(data)
-                if isinstance(test_data, dict) and "data" in test_data and "sig" in test_data:
+                if (
+                    isinstance(test_data, dict)
+                    and "data" in test_data
+                    and "sig" in test_data
+                ):
                     # This is plain signed data (not encrypted)
                     return json.loads(test_data["data"])
             except Exception:
@@ -734,7 +782,9 @@ class MeshPolicyBackend:
             await self.save(policy_id, policy_data)
             logger.info("Policy rolled back", policy_id=policy_id, version=version)
         else:
-            raise PolicyBackendError(f"Version {version} not found for policy {policy_id}")
+            raise PolicyBackendError(
+                f"Version {version} not found for policy {policy_id}"
+            )
 
     async def replay_policy_dlq(self):
         """Replay failed operations from DLQ."""
@@ -780,7 +830,9 @@ class MeshPolicyBackend:
                         await f_out.write(line)
 
         temp_path.replace(dlq_path)
-        logger.info("DLQ replay complete.", replayed=replayed_count, failed=failed_count)
+        logger.info(
+            "DLQ replay complete.", replayed=replayed_count, failed=failed_count
+        )
 
 
 class Policy:
@@ -824,7 +876,9 @@ class MeshPolicyEnforcer:
                     version=version or "latest",
                 )
         except Exception as e:
-            logger.error("Error loading policy.", policy_id=self.policy_id, error=str(e))
+            logger.error(
+                "Error loading policy.", policy_id=self.policy_id, error=str(e)
+            )
             self.policy = None
 
     async def enforce_policy(self, rule: str, **kwargs) -> bool:
@@ -840,16 +894,22 @@ class MeshPolicyEnforcer:
                 rule=rule,
                 failures=failures,
             )
-            await _dlq_policy_op("enforce", self.policy_id, Exception("Max redeliveries exceeded"))
+            await _dlq_policy_op(
+                "enforce", self.policy_id, Exception("Max redeliveries exceeded")
+            )
             return False
 
         try:
             if user_token and jwt:
                 if not JWT_SECRET:
-                    logger.critical("Policy enforcement FAILED: JWT secret is not configured.")
+                    logger.critical(
+                        "Policy enforcement FAILED: JWT secret is not configured."
+                    )
                     return False
                 try:
-                    decoded_token = jwt.decode(user_token, JWT_SECRET, algorithms=["HS256"])
+                    decoded_token = jwt.decode(
+                        user_token, JWT_SECRET, algorithms=["HS256"]
+                    )
                     if not decoded_token.get("mfa_verified", False):
                         logger.warning(
                             "Policy enforcement FAILED: MFA not verified.",
@@ -895,7 +955,9 @@ if __name__ == "__main__":
             # Setup test environment
             if not os.environ.get("POLICY_ENCRYPTION_KEY"):
                 os.environ["POLICY_ENCRYPTION_KEY"] = (
-                    Fernet.generate_key().decode() + "," + Fernet.generate_key().decode()
+                    Fernet.generate_key().decode()
+                    + ","
+                    + Fernet.generate_key().decode()
                 )
             if not os.environ.get("POLICY_HMAC_KEY"):
                 os.environ["POLICY_HMAC_KEY"] = "test-hmac-key"
@@ -905,7 +967,10 @@ if __name__ == "__main__":
             # Reinitialize multi_fernet with new keys
             global multi_fernet
             multi_fernet = MultiFernet(
-                [Fernet(k.encode()) for k in os.environ["POLICY_ENCRYPTION_KEY"].split(",")]
+                [
+                    Fernet(k.encode())
+                    for k in os.environ["POLICY_ENCRYPTION_KEY"].split(",")
+                ]
             )
 
             policy_data = {
@@ -917,7 +982,9 @@ if __name__ == "__main__":
 
             # Test Local Backend
             print("\nTesting Local backend...")
-            local_backend = MeshPolicyBackend(backend_type="local", local_dir="test_policies")
+            local_backend = MeshPolicyBackend(
+                backend_type="local", local_dir="test_policies"
+            )
             await local_backend.healthcheck()
             version = await local_backend.save("test_policy_local", policy_data)
             print(f"Saved policy with version: {version}")
@@ -927,7 +994,9 @@ if __name__ == "__main__":
 
             # Test Policy Enforcement
             print("\nTesting Policy Enforcement...")
-            enforcer = MeshPolicyEnforcer(policy_id="test_policy_local", backend=local_backend)
+            enforcer = MeshPolicyEnforcer(
+                policy_id="test_policy_local", backend=local_backend
+            )
             await enforcer.load_policy()
 
             # Test allowed action

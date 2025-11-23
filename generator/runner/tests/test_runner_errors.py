@@ -157,7 +157,9 @@ async def test_runner_error_basic(clean_state, run_id):
         register_error_code("BASE_ERR", "Base error")
 
     with patch("runner.runner_errors.redact_secrets", new=lambda s: s):
-        exc = RunnerError(error_code="BASE_ERR", detail="Something went wrong", task_id=run_id)
+        exc = RunnerError(
+            error_code="BASE_ERR", detail="Something went wrong", task_id=run_id
+        )
         d = error_dict(exc)
 
     assert d["error_type"] == "RunnerError"

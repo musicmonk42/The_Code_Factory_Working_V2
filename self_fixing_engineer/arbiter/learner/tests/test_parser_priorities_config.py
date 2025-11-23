@@ -71,7 +71,9 @@ class TestParserPrioritiesConfig:
         for parser_name, config in config_data["parser_priorities"].items():
             if "timeout_override" in config:
                 timeout = config["timeout_override"]
-                assert 0 < timeout <= 30, f"{parser_name} has unreasonable timeout: {timeout}"
+                assert (
+                    0 < timeout <= 30
+                ), f"{parser_name} has unreasonable timeout: {timeout}"
 
                 # Critical parsers should have reasonable timeouts
                 if config.get("critical", False):
@@ -89,7 +91,9 @@ class TestParserPrioritiesConfig:
         assert overrides["FinancialData"]["FinancialTransactionParser"] >= 900
 
         # Personal data should prioritize PII parser
-        assert "PersonalIdentifiableInformationParser" in overrides.get("PersonalData", {})
+        assert "PersonalIdentifiableInformationParser" in overrides.get(
+            "PersonalData", {}
+        )
         assert overrides["PersonalData"]["PersonalIdentifiableInformationParser"] >= 900
 
         # In PersonalData domain, specialized parsers get boosted priority
@@ -124,7 +128,10 @@ class TestParserPrioritiesConfig:
         assert thresholds["max_memory_usage_mb"] > 0
 
         # Single parser time should be less than total time
-        assert thresholds["max_single_parser_time_ms"] < thresholds["max_total_parsing_time_ms"]
+        assert (
+            thresholds["max_single_parser_time_ms"]
+            < thresholds["max_total_parsing_time_ms"]
+        )
 
     def test_critical_parser_properties(self, config_data):
         """Test that critical parsers have appropriate properties."""
@@ -150,7 +157,9 @@ class TestParserPrioritiesConfig:
 
             # Check that critical parsers appear in appropriate chains or overrides
             # They should be prioritized in at least one domain or chain
-            in_chain = any(parser_name in chain for chain in config_data["parser_chains"].values())
+            in_chain = any(
+                parser_name in chain for chain in config_data["parser_chains"].values()
+            )
             in_override = any(
                 parser_name in domain
                 for domain in config_data["domain_specific_overrides"].values()

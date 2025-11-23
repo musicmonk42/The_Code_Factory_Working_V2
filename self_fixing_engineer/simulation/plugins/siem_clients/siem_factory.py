@@ -45,7 +45,11 @@ except ImportError as e:
     alert_operator(f"GCP SIEM clients unavailable: {e}", level="ERROR")
 
 try:
-    from .siem_azure_clients import AzureEventGridClient, AzureSentinelClient, AzureServiceBusClient
+    from .siem_azure_clients import (
+        AzureEventGridClient,
+        AzureSentinelClient,
+        AzureServiceBusClient,
+    )
 except ImportError as e:
     _base_logger.error(
         f"Azure SIEM clients unavailable: {e}",
@@ -177,7 +181,9 @@ def list_available_siem_clients() -> List[Dict[str, Any]]:
         # Deeper runtime configuration (e.g., credentials, endpoints) is validated during get_siem_client().
         # We intentionally do not instantiate clients here to avoid side effects and unsafe global toggles.
         try:
-            description = (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            description = (
+                (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            )
         except Exception:
             description = "No description."
 

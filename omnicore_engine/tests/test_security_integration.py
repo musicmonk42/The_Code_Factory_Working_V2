@@ -144,7 +144,9 @@ class TestSecurityIntegrationManager:
     @pytest.fixture
     def manager(self, mock_config, mock_security_utils):
         """Create SecurityIntegrationManager instance"""
-        with patch("omnicore_engine.security_integration.get_security_utils") as mock_get_utils:
+        with patch(
+            "omnicore_engine.security_integration.get_security_utils"
+        ) as mock_get_utils:
             mock_get_utils.return_value = mock_security_utils
 
             manager = SecurityIntegrationManager(
@@ -400,7 +402,9 @@ class TestSecurityMiddleware:
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded(self, middleware):
         """Test rate limiting"""
-        middleware.security_manager.security_utils._rate_limiter.is_allowed.return_value = False
+        middleware.security_manager.security_utils._rate_limiter.is_allowed.return_value = (
+            False
+        )
 
         request = Mock()
         request.client.host = "192.168.1.1"
@@ -534,7 +538,9 @@ class TestSingleton:
 
     def test_get_security_integration_manager_singleton(self):
         """Test manager singleton"""
-        with patch("omnicore_engine.security_integration._security_integration_manager", None):
+        with patch(
+            "omnicore_engine.security_integration._security_integration_manager", None
+        ):
             manager1 = get_security_integration_manager()
             manager2 = get_security_integration_manager()
 

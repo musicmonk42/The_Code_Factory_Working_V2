@@ -19,7 +19,16 @@ from typing import Any, Dict, List, Optional
 
 import jwt
 from cryptography.fernet import Fernet
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -35,7 +44,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from omnicore_engine.core import logger, omnicore_engine, safe_serialize, settings
 from omnicore_engine.database.database import Database
 from omnicore_engine.meta_supervisor import MetaSupervisor
-from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, PluginMarketplace
+from omnicore_engine.plugin_registry import (
+    PLUGIN_REGISTRY,
+    PlugInKind,
+    PluginMarketplace,
+)
 
 try:
     from simulations.simulation_module import UnifiedSimulationModule
@@ -197,7 +210,9 @@ class SizeLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.headers.get("content-length"):
             if int(request.headers["content-length"]) > 10_000_000:  # 10MB
-                return JSONResponse(status_code=413, content={"error": "Request too large"})
+                return JSONResponse(
+                    status_code=413, content={"error": "Request too large"}
+                )
         return await call_next(request)
 
 
@@ -297,10 +312,16 @@ async def startup_event_fastapi():
             logger.warning(
                 "Database or MessageBus not available, skipping UnifiedSimulationModule initialization."
             )
-            simulation_module = UnifiedSimulationModule(config=settings, db=None, message_bus=None)
+            simulation_module = UnifiedSimulationModule(
+                config=settings, db=None, message_bus=None
+            )
     except Exception as e:
-        logger.error(f"Failed to initialize UnifiedSimulationModule: {e}", exc_info=True)
-        simulation_module = UnifiedSimulationModule(config=settings, db=None, message_bus=None)
+        logger.error(
+            f"Failed to initialize UnifiedSimulationModule: {e}", exc_info=True
+        )
+        simulation_module = UnifiedSimulationModule(
+            config=settings, db=None, message_bus=None
+        )
 
     try:
         if MERKLE_TREE_AVAILABLE:
@@ -371,7 +392,9 @@ async def startup_event_fastapi():
                 db_engine=omnicore_engine.database.engine,
             )
             await arena.start_arena_services(http_port=settings.ARENA_PORT)
-            logger.info(f"AI assistant arena services started on port {settings.ARENA_PORT}.")
+            logger.info(
+                f"AI assistant arena services started on port {settings.ARENA_PORT}."
+            )
         else:
             logger.warning("AI assistant arena is not available.")
 
@@ -411,7 +434,9 @@ async def shutdown_event_fastapi():
 
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
-    return get_swagger_ui_html(openapi_url=app.openapi_url, title=app.title + " - Swagger UI")
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url, title=app.title + " - Swagger UI"
+    )
 
 
 @app.get("/redoc", include_in_schema=False)
@@ -461,7 +486,9 @@ def safe_jsonify(data: Dict[str, Any]) -> JSONResponse:
     try:
         return JSONResponse(content=data)
     except TypeError:
-        return JSONResponse(content=json.loads(json.dumps(data, default=safe_serialize)))
+        return JSONResponse(
+            content=json.loads(json.dumps(data, default=safe_serialize))
+        )
 
 
 ALLOWED_EXTENSIONS = {".py", ".json", ".yaml", ".yml"}
@@ -548,7 +575,9 @@ async def execute_simulation(request: Request):
     """
     global simulation_module
     if not simulation_module:
-        raise HTTPException(status_code=500, detail="Simulation engine is not initialized.")
+        raise HTTPException(
+            status_code=500, detail="Simulation engine is not initialized."
+        )
     try:
         sim_config = await request.json()
         result = await simulation_module.execute_simulation(sim_config)
@@ -565,7 +594,9 @@ async def explain_simulation(request: Request):
     """
     global simulation_module
     if not simulation_module:
-        raise HTTPException(status_code=500, detail="Simulation engine is not initialized.")
+        raise HTTPException(
+            status_code=500, detail="Simulation engine is not initialized."
+        )
     try:
         result = await request.json()
         explanation = await simulation_module.explain_result(result)
@@ -581,7 +612,9 @@ async def notify(request: Request):
     start_time = time.time()
     try:
         data = await request.json()
-        logger.info(f"Received UI notification: {data.get('message')} (Type: {data.get('type')})")
+        logger.info(
+            f"Received UI notification: {data.get('message')} (Type: {data.get('type')})"
+        )
         return {"status": "received", "data": data}
     except Exception as e:
         API_ERRORS.labels(endpoint="/notify").observe(time.time() - start_time)
@@ -618,7 +651,9 @@ async def chat_with_bot(chat_request: ChatRequest):
     except Exception as e:
         API_ERRORS.labels(endpoint="/chat").observe(time.time() - start_time)
         logger.error(f"Chatbot response error: {e}", exc_info=True)
-        return ChatResponse(response="Error processing request.", status="error", message=str(e))
+        return ChatResponse(
+            response="Error processing request.", status="error", message=str(e)
+        )
 
 
 @router.post("/arbiter/analyze-code")
@@ -664,7 +699,9 @@ async def verify_admin_api_enabled():
 
 @admin_router.get("/feature-flag")
 async def get_feature_flag(
-    flag_name: Optional[str] = Query(None, description="Specific feature flag name to retrieve")
+    flag_name: Optional[str] = Query(
+        None, description="Specific feature flag name to retrieve"
+    )
 ):
     API_REQUESTS.labels(endpoint="/admin/feature-flag_get").inc()
     return {
@@ -687,11 +724,15 @@ async def set_feature_flag(
 
 
 @admin_router.post("/plugins/install")
-async def install_plugin(request_body: PluginInstallRequest, user_id: str = Depends(get_user_id)):
+async def install_plugin(
+    request_body: PluginInstallRequest, user_id: str = Depends(get_user_id)
+):
     API_REQUESTS.labels(endpoint="/admin/plugins/install").inc()
     try:
         marketplace = PluginMarketplace(db=omnicore_engine.database)
-        await marketplace.install_plugin(request_body.kind, request_body.name, request_body.version)
+        await marketplace.install_plugin(
+            request_body.kind, request_body.name, request_body.version
+        )
         return {
             "status": "success",
             "message": f"Plugin {request_body.name} (v{request_body.version}) installed.",
@@ -705,7 +746,9 @@ async def install_plugin(request_body: PluginInstallRequest, user_id: str = Depe
 
 
 @admin_router.post("/plugins/rate")
-async def rate_plugin(request_body: PluginRateRequest, user_id: str = Depends(get_user_id)):
+async def rate_plugin(
+    request_body: PluginRateRequest, user_id: str = Depends(get_user_id)
+):
     API_REQUESTS.labels(endpoint="/admin/plugins/rate").inc()
     try:
         marketplace = PluginMarketplace(db=omnicore_engine.database)

@@ -100,7 +100,9 @@ class LabeledMetricWrapper:
         return getattr(self._metric, name)
 
 
-def _get_or_create_metric_internal(metric_class, name, documentation, labelnames=(), buckets=None):
+def _get_or_create_metric_internal(
+    metric_class, name, documentation, labelnames=(), buckets=None
+):
     """
     Internal helper to get or create a Prometheus metric.
     Handles unregistering existing metrics if there's a type mismatch.
@@ -110,7 +112,9 @@ def _get_or_create_metric_internal(metric_class, name, documentation, labelnames
         if existing_metric and isinstance(existing_metric, metric_class):
             # Return wrapped metric with existing metric
             extra_labelnames = tuple(l for l in labelnames if l not in GLOBAL_LABELS)
-            return LabeledMetricWrapper(existing_metric, GLOBAL_LABELS, extra_labelnames)
+            return LabeledMetricWrapper(
+                existing_metric, GLOBAL_LABELS, extra_labelnames
+            )
         if existing_metric:
             REGISTRY.unregister(existing_metric)
             logger.warning(
@@ -126,7 +130,9 @@ def _get_or_create_metric_internal(metric_class, name, documentation, labelnames
     # Validate labels
     for label in all_labelnames:
         if not isinstance(label, str) or not label:
-            raise ValueError(f"Invalid label name: '{label}'. Must be a non-empty string.")
+            raise ValueError(
+                f"Invalid label name: '{label}'. Must be a non-empty string."
+            )
 
     # Create the metric
     if buckets:
@@ -138,7 +144,9 @@ def _get_or_create_metric_internal(metric_class, name, documentation, labelnames
             registry=REGISTRY,
         )
     else:
-        metric = metric_class(name, documentation, labelnames=all_labelnames, registry=REGISTRY)
+        metric = metric_class(
+            name, documentation, labelnames=all_labelnames, registry=REGISTRY
+        )
 
     # Return wrapped metric
     extra_labelnames = tuple(l for l in labelnames if l not in GLOBAL_LABELS)

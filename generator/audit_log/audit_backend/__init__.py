@@ -5,7 +5,9 @@ from typing import Any, Dict, Optional, Type
 from .audit_backend_cloud import AzureBlobBackend, GCSBackend, S3Backend
 
 # Core components
-from .audit_backend_core import retry_operation  # <-- ADD here (it’s defined in audit_backend_core)
+from .audit_backend_core import (
+    retry_operation,
+)  # <-- ADD here (it’s defined in audit_backend_core)
 from .audit_backend_core import (
     _STATUS_ERROR,
     _STATUS_OK,
@@ -52,7 +54,9 @@ _BACKEND_REGISTRY: Dict[str, Type[LogBackend]] = {
 }
 
 
-def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> LogBackend:
+def get_backend(
+    backend_type: str, params: Optional[Dict[str, Any]] = None
+) -> LogBackend:
     """Factory for backend instantiation."""
     backend_type_lower = backend_type.lower()
     if backend_type_lower not in _BACKEND_REGISTRY:

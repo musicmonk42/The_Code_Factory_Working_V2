@@ -35,7 +35,9 @@ try:
     from core_audit import audit_logger
     from core_utils import alert_operator, scrub_secrets
 except ImportError:
-    logger.warning("core_utils or core_audit not found. Plugin functionality will be limited.")
+    logger.warning(
+        "core_utils or core_audit not found. Plugin functionality will be limited."
+    )
 
     def alert_operator(message, level="CRITICAL"):
         logger.critical(f"[OPS ALERT - {level}] {message}")
@@ -125,9 +127,13 @@ def plugin_health():
 
     if missing_deps:
         health_status["status"] = "degraded"
-        health_status["message"] = f"Missing optional dependencies: {', '.join(missing_deps)}"
+        health_status["message"] = (
+            f"Missing optional dependencies: {', '.join(missing_deps)}"
+        )
         health_status["details"]["missing_dependencies"] = missing_deps
-        logger.warning(f"Plugin health check: {health_status['message']}", extra=health_status)
+        logger.warning(
+            f"Plugin health check: {health_status['message']}", extra=health_status
+        )
         audit_logger.log_event(
             "plugin_health_degraded",
             plugin=PLUGIN_MANIFEST["name"],

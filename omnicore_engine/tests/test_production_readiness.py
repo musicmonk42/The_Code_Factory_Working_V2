@@ -205,7 +205,12 @@ class TestProductionReadiness:
 
     def test_cli_functions_available(self):
         """Test that CLI functions are available"""
-        from omnicore_engine.cli import main, safe_command, sanitize_env_vars, validate_file_path
+        from omnicore_engine.cli import (
+            main,
+            safe_command,
+            sanitize_env_vars,
+            validate_file_path,
+        )
 
         assert callable(main)
         assert callable(sanitize_env_vars)

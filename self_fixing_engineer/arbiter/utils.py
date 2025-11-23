@@ -11,7 +11,12 @@ from aiolimiter import AsyncLimiter
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
 from prometheus_client import Counter
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Mock/Placeholder imports for a self-contained fix
 try:
@@ -196,7 +201,9 @@ async def check_service_health(
                         return await response.json()
                     except aiohttp.ContentTypeError:
                         content = await response.text()
-                        utils_errors_total.labels(operation="check_service_health").inc()
+                        utils_errors_total.labels(
+                            operation="check_service_health"
+                        ).inc()
                         logger.error(f"Non-JSON response from {url}: {content}")
                         return {"error": f"Non-JSON response from {url}: {content}"}
             except aiohttp.ClientError as e:

@@ -11,7 +11,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from test_generation.utils import CodeEnricher  # Updated to the new class name
 from test_generation.utils import atomic_write  # FIX: Add atomic_write import
-from test_generation.utils import scan_for_uncovered_code_rust  # Import the new function
+from test_generation.utils import (
+    scan_for_uncovered_code_rust,
+)  # Import the new function
 from test_generation.utils import (
     ATCOConfig,
     KnowledgeGraphClient,
@@ -277,7 +279,9 @@ async def test_mutation_tester_success(temp_project_root, mock_config):
 
     # FIX: Patch random.random to ensure a successful outcome (random.random() < 0.9)
     with patch("random.random", return_value=0.0):
-        success, score, log = await tester.run_mutations("source.py", "test.py", "python")
+        success, score, log = await tester.run_mutations(
+            "source.py", "test.py", "python"
+        )
         assert success
         assert score >= 0
         assert "successful" in log
@@ -357,15 +361,19 @@ async def test_create_and_install_venv_success(temp_project_root):
     """Test successful virtual environment creation and dependency installation."""
     # The production code has a bug where it doesn't return on TimeoutError.
     # The test also has a bug where it fails because it doesn't correctly mock the process.
-    with patch("venv.EnvBuilder.create"), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_exec, patch("os.path.exists", return_value=True):
+    with (
+        patch("venv.EnvBuilder.create"),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+        patch("os.path.exists", return_value=True),
+    ):
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"", b"")
         mock_process.returncode = 0
         mock_exec.return_value = mock_process
 
-        success, path = await create_and_install_venv("venv_temp", temp_project_root, ["pytest"])
+        success, path = await create_and_install_venv(
+            "venv_temp", temp_project_root, ["pytest"]
+        )
         assert success
         assert path.endswith("python" if sys.platform != "win32" else "python.exe")
 
@@ -373,14 +381,18 @@ async def test_create_and_install_venv_success(temp_project_root):
 @pytest.mark.asyncio
 async def test_create_and_install_venv_timeout(temp_project_root):
     """Test virtual environment creation timeout."""
-    with patch("venv.EnvBuilder.create"), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_exec, patch("os.path.exists", return_value=True):
+    with (
+        patch("venv.EnvBuilder.create"),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+        patch("os.path.exists", return_value=True),
+    ):
         mock_process = AsyncMock()
         mock_process.communicate.side_effect = asyncio.TimeoutError
         mock_exec.return_value = mock_process
 
-        success, err = await create_and_install_venv("venv_temp", temp_project_root, ["pytest"])
+        success, err = await create_and_install_venv(
+            "venv_temp", temp_project_root, ["pytest"]
+        )
         assert not success
         assert "timed out" in err
 
@@ -391,10 +403,12 @@ async def test_create_and_install_venv_timeout(temp_project_root):
 @pytest.mark.asyncio
 async def test_run_pytest_and_coverage_success(temp_project_root, mock_config):
     """Test successful pytest execution with coverage."""
-    with patch("os.path.exists", return_value=True), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_exec, patch(
-        "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=80.0)
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+        patch(
+            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=80.0)
+        ),
     ):
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"== passed in ==\n", b"")
@@ -417,9 +431,10 @@ async def test_run_pytest_and_coverage_success(temp_project_root, mock_config):
 @pytest.mark.asyncio
 async def test_run_pytest_and_coverage_timeout(temp_project_root, mock_config):
     """Test pytest execution timeout."""
-    with patch("os.path.exists", return_value=True), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_exec:
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+    ):
         mock_process = AsyncMock()
         mock_process.communicate.side_effect = asyncio.TimeoutError
         mock_exec.return_value = mock_process
@@ -443,10 +458,13 @@ async def test_run_pytest_and_coverage_timeout(temp_project_root, mock_config):
 @pytest.mark.asyncio
 async def test_run_jest_and_coverage_success(temp_project_root, mock_config):
     """Test successful Jest execution with coverage."""
-    with patch("shutil.which", return_value="/usr/bin/npm"), patch(
-        "os.path.exists", return_value=True
-    ), patch("asyncio.create_subprocess_exec") as mock_exec, patch(
-        "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=75.0)
+    with (
+        patch("shutil.which", return_value="/usr/bin/npm"),
+        patch("os.path.exists", return_value=True),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+        patch(
+            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=75.0)
+        ),
     ):
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"", b"")
@@ -479,10 +497,12 @@ async def test_run_jest_and_coverage_no_npm(temp_project_root, mock_config):
 @pytest.mark.asyncio
 async def test_run_junit_and_coverage_success(temp_project_root, mock_config):
     """Test successful JUnit execution with coverage."""
-    with patch("os.path.exists", return_value=True), patch(
-        "asyncio.create_subprocess_exec"
-    ) as mock_exec, patch(
-        "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=85.0)
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("asyncio.create_subprocess_exec") as mock_exec,
+        patch(
+            "test_generation.utils.parse_coverage_delta", AsyncMock(return_value=85.0)
+        ),
     ):
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (b"BUILD SUCCESS\n", b"")
@@ -624,7 +644,9 @@ async def test_monitor_and_prioritize_uncovered_code_policy_denied(
     with open(file_path, "w") as f:
         f.write(xml_content)
 
-    mock_policy_engine.should_generate_tests = AsyncMock(return_value=(False, "Policy denied"))
+    mock_policy_engine.should_generate_tests = AsyncMock(
+        return_value=(False, "Policy denied")
+    )
     with patch(
         "test_generation.utils.scan_for_uncovered_code_from_xml",
         return_value=["module1"],

@@ -61,7 +61,13 @@ from .checkpoint_exceptions import (
     CheckpointBackendError,
     CheckpointValidationError,
 )
-from .checkpoint_utils import compress_json, decompress_json, deep_diff, hash_dict, scrub_data
+from .checkpoint_utils import (
+    compress_json,
+    decompress_json,
+    deep_diff,
+    hash_dict,
+    scrub_data,
+)
 
 # ---- Third-Party Imports with Availability Checks ----
 try:
@@ -154,7 +160,9 @@ class Environment:
 
     # Paths
     CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/var/lib/checkpoints")
-    AUDIT_LOG_PATH = os.environ.get("CHECKPOINT_AUDIT_LOG_PATH", "/var/log/checkpoint/audit.log")
+    AUDIT_LOG_PATH = os.environ.get(
+        "CHECKPOINT_AUDIT_LOG_PATH", "/var/log/checkpoint/audit.log"
+    )
     DLQ_PATH = os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl")
 
     # Security
@@ -172,7 +180,9 @@ class Environment:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", 10 * 1024 * 1024))
     LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", 10))
-    ENABLE_PROFILING = os.environ.get("CHECKPOINT_ENABLE_PROFILING", "false").lower() == "true"
+    ENABLE_PROFILING = (
+        os.environ.get("CHECKPOINT_ENABLE_PROFILING", "false").lower() == "true"
+    )
 
     @classmethod
     def validate(cls) -> None:
@@ -183,7 +193,9 @@ class Environment:
             if not cls.ENCRYPTION_KEYS:
                 errors.append("CHECKPOINT_ENCRYPTION_KEYS must be set in production")
             elif len(cls.ENCRYPTION_KEYS.split(",")) < 2:
-                errors.append("At least 2 encryption keys required for rotation capability")
+                errors.append(
+                    "At least 2 encryption keys required for rotation capability"
+                )
 
             if not cls.HMAC_KEY:
                 errors.append("CHECKPOINT_HMAC_KEY must be set in production")
@@ -215,7 +227,9 @@ class AuditLogger:
 
         self.logger = logging.getLogger("checkpoint.audit")
         self.logger.setLevel(logging.INFO)
-        self.logger.propagate = False  # <--- FIX: Prevent logs from bubbling up to root logger
+        self.logger.propagate = (
+            False  # <--- FIX: Prevent logs from bubbling up to root logger
+        )
 
         handler = RotatingFileHandler(
             log_path,
@@ -268,7 +282,9 @@ if PROMETHEUS_AVAILABLE:
         buckets=(100, 1000, 10000, 100000, 1000000, 10000000),
     )
 
-    CACHE_HITS = Counter("checkpoint_cache_hits_total", "Cache hit count", ["operation", "tenant"])
+    CACHE_HITS = Counter(
+        "checkpoint_cache_hits_total", "Cache hit count", ["operation", "tenant"]
+    )
 
     CACHE_MISSES = Counter(
         "checkpoint_cache_misses_total", "Cache miss count", ["operation", "tenant"]
@@ -313,7 +329,9 @@ if TRACING_AVAILABLE:
 
     if Environment.PROD_MODE:
         exporter = OTLPSpanExporter(
-            endpoint=os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+            endpoint=os.environ.get(
+                "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+            )
         )
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
@@ -348,8 +366,12 @@ else:
 # ---- Circuit Breaker Configuration ----
 if PYBREAKER_AVAILABLE:
     circuit_breakers = {
-        "save": CircuitBreaker(fail_max=5, reset_timeout=60, exclude=[CheckpointValidationError]),
-        "load": CircuitBreaker(fail_max=5, reset_timeout=60, exclude=[FileNotFoundError]),
+        "save": CircuitBreaker(
+            fail_max=5, reset_timeout=60, exclude=[CheckpointValidationError]
+        ),
+        "load": CircuitBreaker(
+            fail_max=5, reset_timeout=60, exclude=[FileNotFoundError]
+        ),
         "backend": CircuitBreaker(fail_max=3, reset_timeout=120),
     }
 else:
@@ -497,7 +519,9 @@ class CheckpointManager:
             )
 
             # L2 Cache: Warm data (in-memory)
-            self._cache_l2 = TTLCache(maxsize=Environment.CACHE_SIZE, ttl=Environment.CACHE_TTL)
+            self._cache_l2 = TTLCache(
+                maxsize=Environment.CACHE_SIZE, ttl=Environment.CACHE_TTL
+            )
 
             # Metadata cache
             self._metadata_cache = LRUCache(maxsize=1000)
@@ -514,7 +538,9 @@ class CheckpointManager:
         self._backends = {
             "local": self._local_backend_operations,
             "s3": (
-                checkpoint_backends.s3_save if hasattr(checkpoint_backends, "s3_save") else None
+                checkpoint_backends.s3_save
+                if hasattr(checkpoint_backends, "s3_save")
+                else None
             ),
             "redis": (
                 checkpoint_backends.redis_save
@@ -536,8 +562,16 @@ class CheckpointManager:
                 if hasattr(checkpoint_backends, "BlobServiceClient")
                 else None
             ),
-            "minio": (checkpoint_backends.Minio if hasattr(checkpoint_backends, "Minio") else None),
-            "etcd": (checkpoint_backends.etcd3 if hasattr(checkpoint_backends, "etcd3") else None),
+            "minio": (
+                checkpoint_backends.Minio
+                if hasattr(checkpoint_backends, "Minio")
+                else None
+            ),
+            "etcd": (
+                checkpoint_backends.etcd3
+                if hasattr(checkpoint_backends, "etcd3")
+                else None
+            ),
         }
 
     async def initialize(self) -> None:
@@ -587,7 +621,9 @@ class CheckpointManager:
             # Delegate to backend-specific initialization
             backend_fn = self._backends.get(self.backend_type)
             if not backend_fn:
-                raise NotImplementedError(f"Backend '{self.backend_type}' not implemented")
+                raise NotImplementedError(
+                    f"Backend '{self.backend_type}' not implemented"
+                )
 
             # Backend initialization is handled by first operation
             pass
@@ -662,7 +698,9 @@ class CheckpointManager:
         if circuit_breakers and "save" in circuit_breakers:
             breaker = circuit_breakers["save"]
             if breaker.state == "open":
-                raise CheckpointBackendError("Circuit breaker is open - too many recent failures")
+                raise CheckpointBackendError(
+                    "Circuit breaker is open - too many recent failures"
+                )
 
         self._operation_id = str(uuid.uuid4())
         start_time = time.time()
@@ -675,7 +713,9 @@ class CheckpointManager:
                 # Access control
                 if self.access_policy:
                     if not self.access_policy(user or "system", "save", {"name": name}):
-                        raise PermissionError(f"User '{user}' denied save access to '{name}'")
+                        raise PermissionError(
+                            f"User '{user}' denied save access to '{name}'"
+                        )
 
                 # Schema validation
                 if self.state_schema:
@@ -688,7 +728,9 @@ class CheckpointManager:
                         raise CheckpointValidationError(f"State validation failed: {e}")
 
                 # Prepare checkpoint data
-                checkpoint_data = await self._prepare_checkpoint(name, state, metadata, user)
+                checkpoint_data = await self._prepare_checkpoint(
+                    name, state, metadata, user
+                )
 
                 # Execute save operation
                 if self.backend_type == "local":
@@ -696,7 +738,9 @@ class CheckpointManager:
                 else:
                     backend_fn = self._backends.get(self.backend_type)
                     if not backend_fn:
-                        raise NotImplementedError(f"Backend '{self.backend_type}' not implemented")
+                        raise NotImplementedError(
+                            f"Backend '{self.backend_type}' not implemented"
+                        )
 
                     version_hash = await backend_fn(
                         self, "save", name, state, metadata or {}, user=user
@@ -837,7 +881,9 @@ class CheckpointManager:
                 # Access control
                 if self.access_policy:
                     if not self.access_policy(user or "system", "load", {"name": name}):
-                        raise PermissionError(f"User '{user}' denied load access to '{name}'")
+                        raise PermissionError(
+                            f"User '{user}' denied load access to '{name}'"
+                        )
 
                 # Execute load operation
                 if self.backend_type == "local":
@@ -845,9 +891,13 @@ class CheckpointManager:
                 else:
                     backend_fn = self._backends.get(self.backend_type)
                     if not backend_fn:
-                        raise NotImplementedError(f"Backend '{self.backend_type}' not implemented")
+                        raise NotImplementedError(
+                            f"Backend '{self.backend_type}' not implemented"
+                        )
 
-                    payload = await backend_fn(self, "load", name, version, auto_heal=auto_heal)
+                    payload = await backend_fn(
+                        self, "load", name, version, auto_heal=auto_heal
+                    )
                     state = (
                         payload["state"]
                         if isinstance(payload, dict) and "state" in payload
@@ -863,11 +913,15 @@ class CheckpointManager:
                             self.state_schema(**state)
                     except (ValidationError, TypeError) as e:
                         if auto_heal:
-                            logger.warning(f"Schema validation failed, attempting auto-heal: {e}")
+                            logger.warning(
+                                f"Schema validation failed, attempting auto-heal: {e}"
+                            )
                             # Try previous version
                             versions = await self.list_versions(name)
                             if len(versions) > 1:
-                                return await self.load(name, versions[-2], user, auto_heal=False)
+                                return await self.load(
+                                    name, versions[-2], user, auto_heal=False
+                                )
                         raise CheckpointValidationError(f"State validation failed: {e}")
 
                 # Update caches
@@ -955,8 +1009,12 @@ class CheckpointManager:
             try:
                 # Access control
                 if self.access_policy:
-                    if not self.access_policy(user or "system", "rollback", {"name": name}):
-                        raise PermissionError(f"User '{user}' denied rollback access to '{name}'")
+                    if not self.access_policy(
+                        user or "system", "rollback", {"name": name}
+                    ):
+                        raise PermissionError(
+                            f"User '{user}' denied rollback access to '{name}'"
+                        )
 
                 # Load target version to verify it exists
                 target_state = await self.load(name, version, user)
@@ -1029,7 +1087,9 @@ class CheckpointManager:
                 else:
                     backend_fn = self._backends.get(self.backend_type)
                     if not backend_fn:
-                        raise NotImplementedError(f"Backend '{self.backend_type}' not implemented")
+                        raise NotImplementedError(
+                            f"Backend '{self.backend_type}' not implemented"
+                        )
 
                     versions = await backend_fn(self, "list_versions", name)
 
@@ -1145,7 +1205,9 @@ class CheckpointManager:
                 else:
                     backend_fn = self._backends.get(self.backend_type)
                     if not backend_fn:
-                        raise NotImplementedError(f"Backend '{self.backend_type}' not implemented")
+                        raise NotImplementedError(
+                            f"Backend '{self.backend_type}' not implemented"
+                        )
 
                     checkpoints = await backend_fn(self, "available", "")
 
@@ -1176,7 +1238,9 @@ class CheckpointManager:
             # Check backend connectivity
             if self.backend_type == "local":
                 path = Path(Environment.CHECKPOINT_DIR)
-                health_status["checks"]["directory_accessible"] = path.exists() and path.is_dir()
+                health_status["checks"]["directory_accessible"] = (
+                    path.exists() and path.is_dir()
+                )
                 health_status["checks"]["directory_writable"] = os.access(path, os.W_OK)
             else:
                 # Delegate to backend-specific health check
@@ -1194,23 +1258,27 @@ class CheckpointManager:
                         health_status["status"] = "unhealthy"
 
             # Check encryption
-            health_status["checks"]["encryption_enabled"] = self.multi_fernet is not None
+            health_status["checks"]["encryption_enabled"] = (
+                self.multi_fernet is not None
+            )
 
             # Check cache
             health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
 
             # Update metrics
             if PROMETHEUS_AVAILABLE:
-                BACKEND_HEALTH.labels(backend=self.backend_type, tenant=Environment.TENANT).set(
-                    1 if health_status["status"] == "healthy" else 0
-                )
+                BACKEND_HEALTH.labels(
+                    backend=self.backend_type, tenant=Environment.TENANT
+                ).set(1 if health_status["status"] == "healthy" else 0)
 
         except Exception as e:
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
 
             if PROMETHEUS_AVAILABLE:
-                BACKEND_HEALTH.labels(backend=self.backend_type, tenant=Environment.TENANT).set(0)
+                BACKEND_HEALTH.labels(
+                    backend=self.backend_type, tenant=Environment.TENANT
+                ).set(0)
 
         return health_status
 
@@ -1259,7 +1327,9 @@ class CheckpointManager:
         if self.enable_hash_chain:
             version_hash = hash_dict(state, prev_hash)
         else:
-            version_hash = hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+            version_hash = hashlib.sha256(
+                json.dumps(state, sort_keys=True).encode()
+            ).hexdigest()
 
         # Build checkpoint structure
         checkpoint = {
@@ -1316,7 +1386,9 @@ class CheckpointManager:
 
         handler = operations.get(operation)
         if not handler:
-            raise NotImplementedError(f"Local backend operation '{operation}' not implemented")
+            raise NotImplementedError(
+                f"Local backend operation '{operation}' not implemented"
+            )
 
         return await handler(*args, **kwargs)
 
@@ -1443,7 +1515,9 @@ class CheckpointManager:
                         if target.is_file():
                             checkpoint_file = target
                     except Exception as e:
-                        logger.warning(f"Could not read or use pointer file for '{name}': {e}")
+                        logger.warning(
+                            f"Could not read or use pointer file for '{name}': {e}"
+                        )
 
             # Strategy 3: Find the numerically highest version file
             if not checkpoint_file:
@@ -1455,7 +1529,9 @@ class CheckpointManager:
                         version_files.append((int(match.group(1)), f))
 
                 if not version_files:
-                    raise FileNotFoundError(f"No versions found for checkpoint '{name}'")
+                    raise FileNotFoundError(
+                        f"No versions found for checkpoint '{name}'"
+                    )
 
                 version_files.sort(key=lambda x: x[0], reverse=True)
                 checkpoint_file = version_files[0][1]
@@ -1464,7 +1540,9 @@ class CheckpointManager:
             pattern = f"checkpoint_v{version}.json*"
             matches = list(checkpoint_dir.glob(pattern))
             if not matches:
-                raise FileNotFoundError(f"Version {version} not found for checkpoint '{name}'")
+                raise FileNotFoundError(
+                    f"Version {version} not found for checkpoint '{name}'"
+                )
             checkpoint_file = matches[0]
 
         if not checkpoint_file or not checkpoint_file.exists():
@@ -1491,7 +1569,9 @@ class CheckpointManager:
             # Decrypt if needed
             if ".enc" in checkpoint_file.suffixes:
                 if not self.multi_fernet:
-                    raise CheckpointAuditError("Checkpoint is encrypted but no keys configured")
+                    raise CheckpointAuditError(
+                        "Checkpoint is encrypted but no keys configured"
+                    )
                 try:
                     data_bytes = self.multi_fernet.decrypt(data_bytes)
                 except InvalidToken as e:
@@ -1515,7 +1595,9 @@ class CheckpointManager:
 
             # Verify structure
             if not isinstance(checkpoint_data, dict) or "state" not in checkpoint_data:
-                raise CheckpointAuditError("Invalid checkpoint structure - missing 'state' field")
+                raise CheckpointAuditError(
+                    "Invalid checkpoint structure - missing 'state' field"
+                )
 
             # Verify integrity if hash chain is enabled
             if self.enable_hash_chain and "metadata" in checkpoint_data:
@@ -1535,7 +1617,9 @@ class CheckpointManager:
         except (CheckpointAuditError, InvalidToken, json.JSONDecodeError) as e:
             # These are corruption errors that should trigger auto-heal
             if auto_heal:
-                logger.warning(f"Failed to load {checkpoint_file}: {e}. Attempting auto-heal...")
+                logger.warning(
+                    f"Failed to load {checkpoint_file}: {e}. Attempting auto-heal..."
+                )
 
                 # Get all versions and try the previous one
                 versions = await self._local_list_versions(name)
@@ -1560,8 +1644,12 @@ class CheckpointManager:
                             if current_idx < len(numeric_versions) - 1:
                                 # Try the next older version
                                 prev_version = str(numeric_versions[current_idx + 1])
-                                logger.info(f"Auto-healing: Trying version {prev_version}")
-                                return await self._local_load(name, prev_version, auto_heal=False)
+                                logger.info(
+                                    f"Auto-healing: Trying version {prev_version}"
+                                )
+                                return await self._local_load(
+                                    name, prev_version, auto_heal=False
+                                )
                         except (ValueError, IndexError):
                             pass
                     else:
@@ -1613,7 +1701,9 @@ class CheckpointManager:
         sorted_versions = sorted(list(versions), key=int, reverse=True)
 
         # Add latest if exists
-        if (checkpoint_dir / "latest").exists() or (checkpoint_dir / "latest.txt").exists():
+        if (checkpoint_dir / "latest").exists() or (
+            checkpoint_dir / "latest.txt"
+        ).exists():
             sorted_versions.insert(0, "latest")
 
         return sorted_versions
@@ -1650,8 +1740,10 @@ def get_checkpoint_manager(**kwargs) -> CheckpointManager:
     defaults = {
         "backend_type": os.environ.get("CHECKPOINT_BACKEND", "local"),
         "keep_versions": int(os.environ.get("CHECKPOINT_KEEP_VERSIONS", "10")),
-        "enable_compression": os.environ.get("CHECKPOINT_COMPRESSION", "true").lower() == "true",
-        "enable_hash_chain": os.environ.get("CHECKPOINT_HASH_CHAIN", "true").lower() == "true",
+        "enable_compression": os.environ.get("CHECKPOINT_COMPRESSION", "true").lower()
+        == "true",
+        "enable_hash_chain": os.environ.get("CHECKPOINT_HASH_CHAIN", "true").lower()
+        == "true",
     }
 
     # Merge with provided kwargs

@@ -63,7 +63,9 @@ class SIEMClientResponseError(SIEMClientError):
         details=None,
         correlation_id=None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         self.status_code = status_code
         self.response_text = response_text
 
@@ -83,7 +85,9 @@ class SIEMClientValidationError(SIEMClientError):
 # Mock Pydantic models
 class GenericLogEvent:
     def __init__(self, **kwargs):
-        self.timestamp_utc = kwargs.get("timestamp_utc", datetime.utcnow().isoformat() + "Z")
+        self.timestamp_utc = kwargs.get(
+            "timestamp_utc", datetime.utcnow().isoformat() + "Z"
+        )
         self.event_type = kwargs.get("event_type", "test")
         self.message = kwargs.get("message", "")
         self.severity = kwargs.get("severity", "INFO")
@@ -168,7 +172,9 @@ class SecretsManager:
             return self.cache[key]
         value = os.getenv(key, default)
         if not value and required:
-            raise SIEMClientConfigurationError(f"Missing required secret: {key}", "SecretsManager")
+            raise SIEMClientConfigurationError(
+                f"Missing required secret: {key}", "SecretsManager"
+            )
         self.cache[key] = value
         return value
 
@@ -188,7 +194,8 @@ def scrub_secrets(data: Any, patterns: Optional[List[str]] = None) -> Any:
             result = {}
             for k, v in item.items():
                 if any(
-                    sensitive in k.lower() for sensitive in ["password", "key", "secret", "token"]
+                    sensitive in k.lower()
+                    for sensitive in ["password", "key", "secret", "token"]
                 ):
                     result[k] = "[SCRUBBED]"
                 else:
@@ -315,7 +322,9 @@ class BaseSIEMClient:
             except ValueError:
                 pass
 
-    async def health_check(self, correlation_id: Optional[str] = None) -> Tuple[bool, str]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Tuple[bool, str]:
         self._set_correlation_id(correlation_id)
         try:
             await self._apply_rate_limit()
@@ -356,7 +365,9 @@ class BaseSIEMClient:
             processed_log_entry = log_entry
             if validate_schema:
                 try:
-                    processed_log_entry = GenericLogEvent.parse_obj(log_entry).model_dump()
+                    processed_log_entry = GenericLogEvent.parse_obj(
+                        log_entry
+                    ).model_dump()
                 except (ValueError, AttributeError) as e:
                     raise SIEMClientValidationError(
                         f"Log entry validation failed: {e}",
@@ -365,7 +376,9 @@ class BaseSIEMClient:
                         correlation_id=correlation_id,
                     )
 
-            scrubbed_log_entry = scrub_secrets(processed_log_entry, self.secret_scrub_patterns)
+            scrubbed_log_entry = scrub_secrets(
+                processed_log_entry, self.secret_scrub_patterns
+            )
             is_success, message = await self._perform_send_log_logic(scrubbed_log_entry)
 
             if self.metrics_hook:
@@ -388,7 +401,9 @@ class BaseSIEMClient:
             self._release_rate_limit()
             self._set_correlation_id(None)
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         raise NotImplementedError("Send log logic not implemented for this client.")
 
     async def send_logs(
@@ -431,8 +446,8 @@ class BaseSIEMClient:
             is_batch_supported = hasattr(self, "_perform_send_logs_batch_logic")
 
             if is_batch_supported:
-                success, msg, batch_failed_logs = await self._perform_send_logs_batch_logic(
-                    processed_logs
+                success, msg, batch_failed_logs = (
+                    await self._perform_send_logs_batch_logic(processed_logs)
                 )
                 if not success:
                     all_successful = False
@@ -466,7 +481,9 @@ class BaseSIEMClient:
             if all_successful and not failed_logs:
                 status_message = "All logs sent successfully."
             else:
-                status_message = f"{success_count} logs sent, {len(failed_logs)} failed."
+                status_message = (
+                    f"{success_count} logs sent, {len(failed_logs)} failed."
+                )
 
             if self.metrics_hook:
                 self.metrics_hook(
@@ -498,7 +515,9 @@ class BaseSIEMClient:
     async def _perform_send_logs_batch_logic(
         self, log_entries: List[Dict[str, Any]]
     ) -> Tuple[bool, str, List[Dict[str, Any]]]:
-        raise NotImplementedError("Batch send log logic not implemented for this client.")
+        raise NotImplementedError(
+            "Batch send log logic not implemented for this client."
+        )
 
     async def query_logs(
         self,
@@ -510,7 +529,9 @@ class BaseSIEMClient:
         self._set_correlation_id(correlation_id)
         try:
             await self._apply_rate_limit()
-            results = await self._perform_query_logs_logic(query_string, time_range, limit)
+            results = await self._perform_query_logs_logic(
+                query_string, time_range, limit
+            )
 
             if self.metrics_hook:
                 self.metrics_hook(
@@ -1012,11 +1033,21 @@ class TestTimeRangeParsing:
 
     def test_parse_time_to_timedelta(self, test_client):
         """Test parsing time range to timedelta."""
-        assert test_client._parse_relative_time_range_to_timedelta("5s") == timedelta(seconds=5)
-        assert test_client._parse_relative_time_range_to_timedelta("10m") == timedelta(minutes=10)
-        assert test_client._parse_relative_time_range_to_timedelta("2h") == timedelta(hours=2)
-        assert test_client._parse_relative_time_range_to_timedelta("1d") == timedelta(days=1)
-        assert test_client._parse_relative_time_range_to_timedelta("invalid") == timedelta(hours=24)
+        assert test_client._parse_relative_time_range_to_timedelta("5s") == timedelta(
+            seconds=5
+        )
+        assert test_client._parse_relative_time_range_to_timedelta("10m") == timedelta(
+            minutes=10
+        )
+        assert test_client._parse_relative_time_range_to_timedelta("2h") == timedelta(
+            hours=2
+        )
+        assert test_client._parse_relative_time_range_to_timedelta("1d") == timedelta(
+            days=1
+        )
+        assert test_client._parse_relative_time_range_to_timedelta(
+            "invalid"
+        ) == timedelta(hours=24)
 
 
 class TestMetricsHook:
@@ -1053,7 +1084,9 @@ class TestCorrelationId:
     async def test_correlation_id_in_errors(self, test_client):
         """Test correlation ID is included in errors."""
         correlation_id = str(uuid.uuid4())
-        test_client._perform_send_log_logic = AsyncMock(side_effect=Exception("Test error"))
+        test_client._perform_send_log_logic = AsyncMock(
+            side_effect=Exception("Test error")
+        )
 
         with pytest.raises(SIEMClientError) as exc_info:
             await test_client.send_log(

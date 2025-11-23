@@ -66,8 +66,12 @@ class TestArbiterConfig:
 
             # Verify SSM was called correctly
             assert mock_ssm.get_parameter.call_count == 2
-            mock_ssm.get_parameter.assert_any_call(Name="/test/key/v1", WithDecryption=True)
-            mock_ssm.get_parameter.assert_any_call(Name="/test/key/v2", WithDecryption=True)
+            mock_ssm.get_parameter.assert_any_call(
+                Name="/test/key/v1", WithDecryption=True
+            )
+            mock_ssm.get_parameter.assert_any_call(
+                Name="/test/key/v2", WithDecryption=True
+            )
 
             # Verify keys were loaded
             assert "v1" in keys
@@ -208,7 +212,9 @@ class TestEncryptValue:
                 await encrypt_value({"test": "data"}, cipher)
 
             # Verify error counter was incremented
-            mock_counter.assert_called_with(domain="encryption", error_type="serialization_failed")
+            mock_counter.assert_called_with(
+                domain="encryption", error_type="serialization_failed"
+            )
             mock_labels.inc.assert_called_once()
 
 
@@ -289,7 +295,9 @@ class TestDecryptValue:
             with pytest.raises(InvalidToken, match="Unknown encryption key ID: v99"):
                 await decrypt_value(encrypted, ciphers)
 
-            mock_counter.assert_called_with(domain="decryption", error_type="unknown_key_id")
+            mock_counter.assert_called_with(
+                domain="decryption", error_type="unknown_key_id"
+            )
             mock_labels.inc.assert_called_once()
 
     @pytest.mark.asyncio
@@ -305,7 +313,9 @@ class TestDecryptValue:
             with pytest.raises(InvalidToken):
                 await decrypt_value(encrypted, ciphers)
 
-            mock_counter.assert_called_with(domain="decryption", error_type="invalid_token")
+            mock_counter.assert_called_with(
+                domain="decryption", error_type="invalid_token"
+            )
             mock_labels.inc.assert_called_once()
 
     @pytest.mark.asyncio
@@ -323,7 +333,9 @@ class TestDecryptValue:
             mock_labels = MagicMock()
             mock_counter.return_value = mock_labels
 
-            with pytest.raises(InvalidToken, match="Decryption or deserialization failed"):
+            with pytest.raises(
+                InvalidToken, match="Decryption or deserialization failed"
+            ):
                 await decrypt_value(encrypted, ciphers)
 
             mock_counter.assert_called_with(
@@ -367,7 +379,9 @@ class TestIntegration:
 
         # Encrypt data with v1
         data = {"sensitive": "information"}
-        encrypted_v1 = await encrypt_value(data, ArbiterConfig.ENCRYPTION_KEYS["v1"], "v1")
+        encrypted_v1 = await encrypt_value(
+            data, ArbiterConfig.ENCRYPTION_KEYS["v1"], "v1"
+        )
 
         # Rotate to v2
         await ArbiterConfig.rotate_keys("v2")
@@ -377,7 +391,9 @@ class TestIntegration:
         assert decrypted == data
 
         # New data should use v2
-        encrypted_v2 = await encrypt_value(data, ArbiterConfig.ENCRYPTION_KEYS["v2"], "v2")
+        encrypted_v2 = await encrypt_value(
+            data, ArbiterConfig.ENCRYPTION_KEYS["v2"], "v2"
+        )
         assert encrypted_v2.startswith(b"v2:")
 
         # Both should decrypt correctly

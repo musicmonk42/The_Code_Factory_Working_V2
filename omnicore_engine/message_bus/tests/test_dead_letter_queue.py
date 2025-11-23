@@ -110,7 +110,9 @@ class TestDeadLetterQueue(unittest.TestCase):
         """Test handling database persistence failure."""
         self.mock_db.save_preferences.side_effect = Exception("DB error")
 
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         await self.dlq.add(message, "Test error")
 
@@ -126,7 +128,9 @@ class TestDeadLetterQueue(unittest.TestCase):
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_success(self, mock_sleep, mock_logger):
         """Test successful processing of DLQ message to Kafka."""
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         # Add message to queue
         await self.dlq.queue.put((message, "error", 0))
@@ -136,7 +140,9 @@ class TestDeadLetterQueue(unittest.TestCase):
         await self.dlq._process_dlq()
 
         # Verify Kafka publish was called
-        self.mock_kafka_bridge.publish.assert_called_once_with(message, topic="dlq_events")
+        self.mock_kafka_bridge.publish.assert_called_once_with(
+            message, topic="dlq_events"
+        )
 
         # Verify circuit breaker was checked
         self.mock_kafka_bridge.circuit.can_attempt.assert_called_once()
@@ -150,7 +156,9 @@ class TestDeadLetterQueue(unittest.TestCase):
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_kafka_failure_with_retry(self, mock_sleep, mock_logger):
         """Test Kafka publish failure with retry logic."""
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         # Make Kafka publish fail
         self.mock_kafka_bridge.publish.side_effect = Exception("Kafka error")
@@ -177,7 +185,9 @@ class TestDeadLetterQueue(unittest.TestCase):
     @patch("message_bus.dead_letter_queue.asyncio.sleep", new_callable=AsyncMock)
     async def test_process_dlq_max_retries_exceeded(self, mock_sleep, mock_logger):
         """Test message dropped after max retries."""
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         # Make Kafka publish fail
         self.mock_kafka_bridge.publish.side_effect = Exception("Kafka error")
@@ -194,7 +204,9 @@ class TestDeadLetterQueue(unittest.TestCase):
 
         # Critical log should be generated
         mock_logger.critical.assert_called_once()
-        self.assertIn("failed to process after 3 attempts", mock_logger.critical.call_args[0][0])
+        self.assertIn(
+            "failed to process after 3 attempts", mock_logger.critical.call_args[0][0]
+        )
 
     @patch("message_bus.dead_letter_queue.logger")
     async def test_process_dlq_circuit_open(self, mock_logger):
@@ -202,7 +214,9 @@ class TestDeadLetterQueue(unittest.TestCase):
         # Set circuit to open
         self.mock_kafka_bridge.circuit.can_attempt.return_value = False
 
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         await self.dlq.queue.put((message, "error", 0))
 
@@ -226,7 +240,9 @@ class TestDeadLetterQueue(unittest.TestCase):
         # Create DLQ without Kafka bridge
         dlq = DeadLetterQueue(db=self.mock_db, kafka_bridge=None, priority_threshold=5)
 
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         await dlq.queue.put((message, "error", 0))
 
@@ -304,7 +320,9 @@ class TestDeadLetterQueue(unittest.TestCase):
     async def test_multiple_messages_processing(self, mock_logger):
         """Test processing multiple messages in sequence."""
         messages = [
-            Message(topic=f"topic_{i}", payload={"data": f"test_{i}"}, trace_id=f"trace_{i}")
+            Message(
+                topic=f"topic_{i}", payload={"data": f"test_{i}"}, trace_id=f"trace_{i}"
+            )
             for i in range(3)
         ]
 
@@ -374,7 +392,9 @@ class TestDeadLetterQueueIntegration(unittest.TestCase):
         # Add multiple messages
         messages = []
         for i in range(5):
-            msg = Message(topic=f"topic_{i}", payload={"data": f"test_{i}"}, trace_id=f"trace_{i}")
+            msg = Message(
+                topic=f"topic_{i}", payload={"data": f"test_{i}"}, trace_id=f"trace_{i}"
+            )
             messages.append(msg)
             await dlq.add(msg, f"Error {i}")
 
@@ -408,7 +428,9 @@ if __name__ == "__main__":
     print("Running Async Integration Tests")
     print("=" * 70)
 
-    integration_suite = unittest.TestLoader().loadTestsFromTestCase(TestDeadLetterQueueIntegration)
+    integration_suite = unittest.TestLoader().loadTestsFromTestCase(
+        TestDeadLetterQueueIntegration
+    )
     for test in integration_suite:
         test_method = getattr(test, test._testMethodName)
         if asyncio.iscoroutinefunction(test_method):

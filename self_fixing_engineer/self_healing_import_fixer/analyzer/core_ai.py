@@ -16,7 +16,11 @@ from openai import (  # Production-grade LLM client with specific error handling
     AsyncOpenAI,
     RateLimitError,
 )
-from tenacity import retry, stop_after_attempt, wait_exponential  # For robust retry logic
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+)  # For robust retry logic
 
 # Make Redis optional
 try:
@@ -41,7 +45,9 @@ try:
     from .core_secrets import SECRETS_MANAGER
     from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
-    logger.critical(f"CRITICAL: Missing core dependency for core_ai: {e}. Aborting startup.")
+    logger.critical(
+        f"CRITICAL: Missing core dependency for core_ai: {e}. Aborting startup."
+    )
     try:
         from .core_utils import alert_operator
 
@@ -84,7 +90,9 @@ if REDIS_AVAILABLE:
         )
         _run_async(REDIS_CLIENT.ping())
     except Exception as e:
-        logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
+        logger.warning(
+            f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
+        )
         REDIS_CLIENT = None
 else:
     logger.info("Redis not available - caching disabled")
@@ -106,14 +114,18 @@ class AIManager:
         from .core_audit import audit_logger
 
         self.config = config.copy() if config else {}
-        self.trace_id = trace_id or self.config.get("trace_id") or _default_trace_id_from_env()
+        self.trace_id = (
+            trace_id or self.config.get("trace_id") or _default_trace_id_from_env()
+        )
 
         # --- Mandatory production checks ---
         if PRODUCTION_MODE:
             if not self.config.get("llm_endpoint") or not self.config.get(
                 "llm_endpoint"
             ).startswith("https://"):
-                raise RuntimeError("[CRITICAL][AI] LLM endpoint must use HTTPS in production.")
+                raise RuntimeError(
+                    "[CRITICAL][AI] LLM endpoint must use HTTPS in production."
+                )
             if not self.config.get("proxy_url"):
                 raise RuntimeError(
                     "[CRITICAL][AI] In PRODUCTION_MODE, 'proxy_url' for LLM traffic is required but not configured."
@@ -143,13 +155,17 @@ class AIManager:
         self.temperature = self.config.get("temperature", 0.7)
         self.max_tokens = self.config.get("max_tokens", 500)
         self.proxy_url = self.config.get("proxy_url")
-        self.allow_auto_apply_patches = self.config.get("allow_auto_apply_patches", False)
+        self.allow_auto_apply_patches = self.config.get(
+            "allow_auto_apply_patches", False
+        )
 
         # --- Tokenizer with fallback ---
         try:
             self.token_encoder = tiktoken.encoding_for_model(self.model_name)
         except Exception:
-            warnings.warn("Failed to get specific tiktoken encoder. Falling back to default.")
+            warnings.warn(
+                "Failed to get specific tiktoken encoder. Falling back to default."
+            )
             self.token_encoder = tiktoken.get_encoding("cl100k_base")
 
         self.api_concurrency_limit = self.config.get("api_concurrency_limit", 5)
@@ -159,7 +175,9 @@ class AIManager:
         self._token_usage_lock = asyncio.Lock()
 
         # --- HTTP and LLM Clients ---
-        self.http_client = httpx.AsyncClient(proxies=self.proxy_url, verify=True, timeout=90)
+        self.http_client = httpx.AsyncClient(
+            proxies=self.proxy_url, verify=True, timeout=90
+        )
         self.llm_client = AsyncOpenAI(
             api_key=self.llm_api_key,
             base_url=self.llm_endpoint,
@@ -200,7 +218,9 @@ class AIManager:
         # Long prompt
         if len(prompt) > 4096:
             logger.warning(
-                "Prompt length is unusually long (>{} chars). Truncating for safety.".format(4096)
+                "Prompt length is unusually long (>{} chars). Truncating for safety.".format(
+                    4096
+                )
             )
             prompt = prompt[:4096]
 
@@ -247,9 +267,13 @@ class AIManager:
         async with self._token_usage_lock:
             current_time = time.time()
             self._token_usage_history = [
-                (ts, tokens) for ts, tokens in self._token_usage_history if current_time - ts < 60
+                (ts, tokens)
+                for ts, tokens in self._token_usage_history
+                if current_time - ts < 60
             ]
-            current_minute_usage = sum(tokens for _, tokens in self._token_usage_history)
+            current_minute_usage = sum(
+                tokens for _, tokens in self._token_usage_history
+            )
             if current_minute_usage + tokens_to_use > self.token_quota_per_minute:
                 oldest_timestamp = (
                     self._token_usage_history[0][0]
@@ -299,7 +323,9 @@ class AIManager:
                     for ts, tokens in self._token_usage_history
                     if time.time() - ts < 60
                 ]
-                current_minute_usage = sum(tokens for _, tokens in self._token_usage_history)
+                current_minute_usage = sum(
+                    tokens for _, tokens in self._token_usage_history
+                )
                 if current_minute_usage + tokens_to_use > self.token_quota_per_minute:
                     logger.critical(
                         "CRITICAL: LLM token quota overrun after waiting. Aborting API call.",
@@ -326,7 +352,9 @@ class AIManager:
         wait=wait_exponential(multiplier=1, min=4, max=10),
         reraise=True,
     )
-    async def _call_llm_api(self, prompt: str, trace_id: Optional[str] = None) -> Optional[str]:
+    async def _call_llm_api(
+        self, prompt: str, trace_id: Optional[str] = None
+    ) -> Optional[str]:
         from .core_audit import audit_logger
 
         prompt = self._sanitize_prompt(prompt)
@@ -368,7 +396,9 @@ class AIManager:
                     timeout=60,
                 )
                 response_content = (
-                    response.choices[0].message.content.strip() if response.choices else None
+                    response.choices[0].message.content.strip()
+                    if response.choices
+                    else None
                 )
                 if response_content:
                     logger.debug("Successfully received response from LLM.")
@@ -430,7 +460,9 @@ class AIManager:
 
         return response_content
 
-    async def get_refactoring_suggestion(self, context: str, trace_id: Optional[str] = None) -> str:
+    async def get_refactoring_suggestion(
+        self, context: str, trace_id: Optional[str] = None
+    ) -> str:
         logger.info("Generating AI refactoring suggestion...")
         prompt = (
             f"Given the following context about a Python code issue or area, provide a concise, actionable, high-level refactoring strategy. "
@@ -524,7 +556,9 @@ async def get_ai_suggestions(
     tenant_id: Optional[str] = None,
 ) -> List[str]:
     manager = await get_ai_manager_instance(config, trace_id, tenant_id)
-    suggestion = await manager.get_refactoring_suggestion(codebase_context, trace_id=trace_id)
+    suggestion = await manager.get_refactoring_suggestion(
+        codebase_context, trace_id=trace_id
+    )
     if suggestion and "AI features are unavailable" not in suggestion:
         return [s.strip() for s in suggestion.split("\n") if s.strip()]
     return []
@@ -579,7 +613,9 @@ def get_ai_patch_sync(
     tenant_id: Optional[str] = None,
 ) -> List[str]:
     return _run_async(
-        get_ai_patch(problem_description, relevant_code, suggestions, config, trace_id, tenant_id)
+        get_ai_patch(
+            problem_description, relevant_code, suggestions, config, trace_id, tenant_id
+        )
     )
 
 
@@ -593,7 +629,9 @@ def ai_health_check_sync(
 
 # Example usage (for testing this module independently)
 async def main_test():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.setLevel(logging.DEBUG)
 
     # Mock SECRETS_MANAGER
@@ -640,7 +678,9 @@ async def main_test():
     # Create manager and wrap in a finally block for cleanup
     manager = None
     try:
-        manager = await get_ai_manager_instance(test_config, trace_id=trace_id, tenant_id=tenant_id)
+        manager = await get_ai_manager_instance(
+            test_config, trace_id=trace_id, tenant_id=tenant_id
+        )
 
         print("\n--- Testing AI Refactoring Suggestion ---")
         sample_refactoring_context = """

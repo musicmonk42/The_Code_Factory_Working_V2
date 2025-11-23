@@ -70,7 +70,9 @@ class SensitiveDataFilter(logging.Filter):
             original_msg = str(record.msg)
             redacted_msg = original_msg
             for pattern in self.SENSITIVE_PATTERNS:
-                redacted_msg = pattern.sub(self._get_redacted_replacement(pattern), redacted_msg)
+                redacted_msg = pattern.sub(
+                    self._get_redacted_replacement(pattern), redacted_msg
+                )
             record.msg = redacted_msg
 
         # Redact in arguments (if structured logging is used with extra dict)
@@ -89,7 +91,9 @@ class SensitiveDataFilter(logging.Filter):
             record.args = redacted_args
 
         # Redact in exception traceback
-        if record.exc_info and record.exc_info[1]:  # exc_info is (type, value, traceback)
+        if (
+            record.exc_info and record.exc_info[1]
+        ):  # exc_info is (type, value, traceback)
             # Redact in the exception message itself
             redacted_exc_value = str(record.exc_info[1])
             for pattern in self.SENSITIVE_PATTERNS:
@@ -106,7 +110,9 @@ class SensitiveDataFilter(logging.Filter):
 
             # Redact in the formatted traceback text
             if record.exc_text:  # This is usually populated by the formatter
-                record.exc_text = self.redact_sensitive_info_in_traceback(record.exc_text)
+                record.exc_text = self.redact_sensitive_info_in_traceback(
+                    record.exc_text
+                )
 
         return True
 
@@ -115,7 +121,9 @@ class SensitiveDataFilter(logging.Filter):
             return traceback_text
         redacted_text = traceback_text
         for pattern in self.SENSITIVE_PATTERNS:
-            redacted_text = pattern.sub(self._get_redacted_replacement(pattern), redacted_text)
+            redacted_text = pattern.sub(
+                self._get_redacted_replacement(pattern), redacted_text
+            )
         return redacted_text
 
     # --- START: FIX for test_sensitive_data_filter_redaction ---
@@ -217,8 +225,12 @@ class SimpleCircuitBreaker:
             if len(self.current_failures) >= self.failure_threshold:
                 self._state = "OPEN"
                 self.last_state_change_time = now
-                self.COUNTER_CIRCUIT_BREAKER_TRIPS.labels(backend=self.backend_name).inc()
-                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(1)
+                self.COUNTER_CIRCUIT_BREAKER_TRIPS.labels(
+                    backend=self.backend_name
+                ).inc()
+                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(
+                    1
+                )
                 self.logger.warning(
                     f"Circuit Breaker for {self.backend_name} tripped to OPEN due to {len(self.current_failures)} failures.",
                     extra={"backend_type": self.backend_name, "operation": "cb_open"},
@@ -229,7 +241,9 @@ class SimpleCircuitBreaker:
             if now - self.last_state_change_time > self.recovery_timeout:
                 self._state = "HALF_OPEN"
                 self.last_state_change_time = now
-                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(2)
+                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(
+                    2
+                )
                 self.logger.info(
                     f"Circuit Breaker for {self.backend_name} transitioned to HALF_OPEN.",
                     extra={
@@ -242,7 +256,9 @@ class SimpleCircuitBreaker:
         elif self._state == "HALF_OPEN":
             if now - self.last_state_change_time > self.reset_timeout:
                 self._state = "OPEN"
-                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(1)
+                self.GAUGE_CIRCUIT_BREAKER_STATE.labels(backend=self.backend_name).set(
+                    1
+                )
                 self.logger.warning(
                     f"Circuit Breaker for {self.backend_name} reverted to OPEN from HALF_OPEN (timeout).",
                     extra={
@@ -456,7 +472,9 @@ class PersistentRetryQueue(_BaseRetryQueue):
                 else:
                     # dead-dead-letter: alert
                     # from .audit_backend_core import send_alert # Already imported at top
-                    self.logger.critical(f"DLQ: item exhausted retries: {item.get('dlq_item_id')}")
+                    self.logger.critical(
+                        f"DLQ: item exhausted retries: {item.get('dlq_item_id')}"
+                    )
                     await send_alert(
                         f"{self.backend_name}: DLQ item exhausted retries",
                         severity="error",
@@ -691,7 +709,9 @@ class FileBackedRetryQueue(PersistentRetryQueue):
                 await f.write(json.dumps(items, ensure_ascii=False))
         except Exception as e:
             # from .audit_backend_core import send_alert # Already imported at top
-            await send_alert(f"{self.backend_name}: persist failed: {e}", severity="error")
+            await send_alert(
+                f"{self.backend_name}: persist failed: {e}", severity="error"
+            )
             raise
 
     # --- Override append and reprocess to add persistence ---

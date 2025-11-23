@@ -6,7 +6,10 @@ import pytest
 import pytest_asyncio
 
 # Import the filters - assuming the PIIRedactorFilter is the correct name
-from arbiter.meta_learning_orchestrator.logging_utils import LogCorrelationFilter, PIIRedactorFilter
+from arbiter.meta_learning_orchestrator.logging_utils import (
+    LogCorrelationFilter,
+    PIIRedactorFilter,
+)
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
@@ -109,7 +112,9 @@ def setup_env(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
-async def test_log_correlation_filter_with_span(logger_with_filters, mock_span_context, caplog):
+async def test_log_correlation_filter_with_span(
+    logger_with_filters, mock_span_context, caplog
+):
     """Test LogCorrelationFilter adds correlation ID when span is present."""
     test_logger, _ = logger_with_filters
     test_logger.info("Test message with span")
@@ -123,7 +128,9 @@ async def test_log_correlation_filter_with_span(logger_with_filters, mock_span_c
 
 
 @pytest.mark.asyncio
-async def test_log_correlation_filter_no_span(logger_with_filters, mocker: MockerFixture, caplog):
+async def test_log_correlation_filter_no_span(
+    logger_with_filters, mocker: MockerFixture, caplog
+):
     """Test LogCorrelationFilter when no span is present."""
     mocker.patch("opentelemetry.trace.get_current_span", return_value=None)
     test_logger, _ = logger_with_filters
@@ -256,7 +263,9 @@ async def test_pii_redaction_filter_env_sensitive_keys(mocker: MockerFixture, ca
     test_logger.propagate = True
 
     with caplog.at_level(logging.DEBUG, logger="test_logger_custom_keys"):
-        msg = json.dumps({"custom_key1": "sensitive_value1", "custom_key2": "sensitive_value2"})
+        msg = json.dumps(
+            {"custom_key1": "sensitive_value1", "custom_key2": "sensitive_value2"}
+        )
         test_logger.info(msg)
 
     assert len(caplog.records) > 0
@@ -366,7 +375,9 @@ async def test_pii_redaction_filter_empty_keys(mocker: MockerFixture, caplog):
 
 
 @pytest.mark.asyncio
-async def test_log_correlation_filter_no_trace(logger_with_filters, mocker: MockerFixture, caplog):
+async def test_log_correlation_filter_no_trace(
+    logger_with_filters, mocker: MockerFixture, caplog
+):
     """Test LogCorrelationFilter with no trace context."""
     mocker.patch("opentelemetry.trace.get_current_span", return_value=None)
     test_logger, _ = logger_with_filters

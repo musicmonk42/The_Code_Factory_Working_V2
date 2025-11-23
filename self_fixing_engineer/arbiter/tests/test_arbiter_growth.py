@@ -60,7 +60,9 @@ create_module_stub("etcd3", {"client": lambda **kwargs: MagicMock()})
 
 create_module_stub("kazoo.client", {"KazooClient": MagicMock})
 
-create_module_stub("confluent_kafka.schema_registry", {"SchemaRegistryClient": MagicMock})
+create_module_stub(
+    "confluent_kafka.schema_registry", {"SchemaRegistryClient": MagicMock}
+)
 
 create_module_stub(
     "confluent_kafka.schema_registry.avro",
@@ -244,7 +246,9 @@ class MockStorageBackend:
     async def save_event(self, arbiter_id: str, event: Dict[str, Any]) -> None:
         self.saved_events.append(event.copy())
 
-    async def load_events(self, arbiter_id: str, from_offset: int = 0) -> List[Dict[str, Any]]:
+    async def load_events(
+        self, arbiter_id: str, from_offset: int = 0
+    ) -> List[Dict[str, Any]]:
         return self.saved_events[from_offset:]
 
     async def save_audit_log(
@@ -432,7 +436,9 @@ def test_module_imports():
     assert hasattr(arbiter_growth, "ConfigStore")
     assert hasattr(arbiter_growth, "IdempotencyStore")
     print("Module imported successfully")
-    print(f"  Available classes: {[c for c in dir(arbiter_growth) if c[0].isupper()][:10]}")
+    print(
+        f"  Available classes: {[c for c in dir(arbiter_growth) if c[0].isupper()][:10]}"
+    )
 
 
 # ------------------------------------------------------------
@@ -750,14 +756,18 @@ async def test_snapshot_creation():
 
     # Check if skills were actually added to state
     summary = await mgr.get_growth_summary()
-    assert len(summary["skills"]) == 5, f"Expected 5 skills but got {len(summary['skills'])}"
+    assert (
+        len(summary["skills"]) == 5
+    ), f"Expected 5 skills but got {len(summary['skills'])}"
 
     # The current implementation doesn't persist snapshots when operations
     # execute immediately (manager is loaded). This is a known limitation.
     # Instead of checking saved_states, verify the internal state is correct.
     assert "skill_0" in summary["skills"]
     assert "skill_4" in summary["skills"]
-    assert abs(summary["skills"]["skill_3"] - 0.3) < 0.0001  # Use approximate equality for floats
+    assert (
+        abs(summary["skills"]["skill_3"] - 0.3) < 0.0001
+    )  # Use approximate equality for floats
 
     # If we really need to test snapshot persistence, we could force it:
     # Note: Even this may not work due to how _call_maybe_async handles mocks
@@ -816,8 +826,12 @@ async def test_audit_chain_validation_detects_tampering():
     storage = MockStorageBackend()
 
     # Create valid audit log first
-    await storage.save_audit_log("test-arbiter", "op1", {"data": "test"}, "genesis_hash")
-    await storage.save_audit_log("test-arbiter", "op2", {"data": "test2"}, storage._last_hash)
+    await storage.save_audit_log(
+        "test-arbiter", "op1", {"data": "test"}, "genesis_hash"
+    )
+    await storage.save_audit_log(
+        "test-arbiter", "op2", {"data": "test2"}, storage._last_hash
+    )
 
     # Tamper with the audit log
     if len(storage.audit_logs) > 1:

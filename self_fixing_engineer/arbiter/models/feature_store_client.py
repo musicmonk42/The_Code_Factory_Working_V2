@@ -38,7 +38,12 @@ from pydantic import Field as PydanticField
 from pydantic import field_validator
 
 # Import tenacity for retries with exponential backoff
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Feast imports
 try:
@@ -46,7 +51,11 @@ try:
     from feast import Field as FeastField
     from feast import ValueType
     from feast.data_source import DataSource, FileSource
-    from feast.errors import FeastObjectNotFoundException, FeastProviderError, FeastResourceError
+    from feast.errors import (
+        FeastObjectNotFoundException,
+        FeastProviderError,
+        FeastResourceError,
+    )
 
     # Production-ready sources
     from feast.infra.offline_stores.bigquery_source import BigQuerySource
@@ -104,7 +113,9 @@ try:
     RAY_AVAILABLE = True
 except ImportError:
     RAY_AVAILABLE = False
-    logging.getLogger(__name__).warning("Ray not found. Distributed ingestion unavailable.")
+    logging.getLogger(__name__).warning(
+        "Ray not found. Distributed ingestion unavailable."
+    )
 
 try:
     import scipy.stats
@@ -112,7 +123,9 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-    logging.getLogger(__name__).warning("Scipy not found. Statistical drift detection unavailable.")
+    logging.getLogger(__name__).warning(
+        "Scipy not found. Statistical drift detection unavailable."
+    )
 
 try:
     from great_expectations.data_context import DataContext
@@ -132,7 +145,9 @@ try:
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
-    logging.getLogger(__name__).warning("Boto3 not found. Secrets Manager integration unavailable.")
+    logging.getLogger(__name__).warning(
+        "Boto3 not found. Secrets Manager integration unavailable."
+    )
 
 # For redaction storage
 try:
@@ -154,7 +169,9 @@ except ImportError:
             pass
 
         async def save(self, table, data, id_field):
-            logger.info(f"Stubbed PostgresClient.save called for table: {table}, data: {data}")
+            logger.info(
+                f"Stubbed PostgresClient.save called for table: {table}, data: {data}"
+            )
 
 
 # For audit logging
@@ -268,7 +285,9 @@ FS_AUDIT_LOGS_TOTAL = _get_or_create_metric(
 class FeatureEntityModel(BaseModel):
     """Pydantic model for validating Feast Entity definitions."""
 
-    name: str = PydanticField(..., min_length=1, max_length=100, description="Unique entity name.")
+    name: str = PydanticField(
+        ..., min_length=1, max_length=100, description="Unique entity name."
+    )
     value_type: str = PydanticField(
         ..., description="Value type (e.g., INT64, STRING, DOUBLE, DATETIME)."
     )
@@ -301,12 +320,16 @@ class FeatureViewModel(BaseModel):
     name: str = PydanticField(
         ..., min_length=1, max_length=100, description="Unique feature view name."
     )
-    entities: List[str] = PydanticField(..., min_items=1, description="List of entity names.")
+    entities: List[str] = PydanticField(
+        ..., min_items=1, description="List of entity names."
+    )
     ttl: timedelta = PydanticField(..., description="Time-to-live duration.")
     schema: List[Dict[str, str]] = PydanticField(
         ..., min_items=1, description="Schema fields with name and dtype."
     )
-    source: Dict[str, Any] = PydanticField(..., description="Data source configuration.")
+    source: Dict[str, Any] = PydanticField(
+        ..., description="Data source configuration."
+    )
 
     @field_validator("schema")
     @classmethod
@@ -330,8 +353,12 @@ class FeatureViewModel(BaseModel):
 class FeatureSourceModel(BaseModel):
     """Pydantic model for validating Feast DataSource configurations."""
 
-    name: Optional[str] = PydanticField(None, max_length=100, description="Source name.")
-    type: str = PydanticField(..., description="Source type (e.g., BigQuerySource, FileSource).")
+    name: Optional[str] = PydanticField(
+        None, max_length=100, description="Source name."
+    )
+    type: str = PydanticField(
+        ..., description="Source type (e.g., BigQuerySource, FileSource)."
+    )
     config: Dict[str, Any] = PydanticField(
         ..., description="Source configuration (e.g., table, path)."
     )
@@ -404,10 +431,14 @@ class FeatureStoreClient:
                 client = boto3.client(
                     "secretsmanager", region_name=os.getenv("AWS_REGION", "us-east-1")
                 )
-                secret = client.get_secret_value(SecretId=f"feast/{key}")["SecretString"]
+                secret = client.get_secret_value(SecretId=f"feast/{key}")[
+                    "SecretString"
+                ]
                 return secret
             except ClientError as e:
-                logger.error(f"Failed to fetch {key} from Secrets Manager: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to fetch {key} from Secrets Manager: {e}", exc_info=True
+                )
                 raise ConnectionError(f"Failed to fetch {key}: {e}") from e
         env_value = os.getenv(key)
         if env_value and os.getenv("ENV", "dev") != "dev":
@@ -428,7 +459,9 @@ class FeatureStoreClient:
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type((ConnectionError, FeastProviderError, FeastResourceError)),
+        retry=retry_if_exception_type(
+            (ConnectionError, FeastProviderError, FeastResourceError)
+        ),
         reraise=True,
     )
     async def connect(self) -> None:
@@ -446,11 +479,17 @@ class FeatureStoreClient:
             return
         with tracer.start_as_current_span("feast_connect") as span:
             start_time = time.monotonic()
-            FS_CALLS_TOTAL.labels(operation="connect", status="attempt", **self.metric_labels).inc()
+            FS_CALLS_TOTAL.labels(
+                operation="connect", status="attempt", **self.metric_labels
+            ).inc()
             try:
                 loop = asyncio.get_running_loop()
-                self._fs = await loop.run_in_executor(None, FeatureStore, self.repo_path)
-                await loop.run_in_executor(None, self._fs.list_feature_views)  # Health check
+                self._fs = await loop.run_in_executor(
+                    None, FeatureStore, self.repo_path
+                )
+                await loop.run_in_executor(
+                    None, self._fs.list_feature_views
+                )  # Health check
                 self._is_connected = True
                 FS_CALLS_TOTAL.labels(
                     operation="connect", status="success", **self.metric_labels
@@ -471,9 +510,9 @@ class FeatureStoreClient:
                 logger.error(f"Failed to connect to Feast: {e}", exc_info=True)
                 raise ConnectionError(f"Failed to connect to Feast: {e}") from e
             finally:
-                FS_CALL_LATENCY_SECONDS.labels(operation="connect", **self.metric_labels).observe(
-                    time.monotonic() - start_time
-                )
+                FS_CALL_LATENCY_SECONDS.labels(
+                    operation="connect", **self.metric_labels
+                ).observe(time.monotonic() - start_time)
 
     async def disconnect(self) -> None:
         """Disconnect from Feast Feature Store."""
@@ -548,8 +587,12 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to log operation: {e}"))
-                logger.error(f"Failed to log operation '{operation}': {e}", exc_info=True)
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to log operation: {e}")
+                )
+                logger.error(
+                    f"Failed to log operation '{operation}': {e}", exc_info=True
+                )
                 raise ValueError(f"Failed to log operation: {e}") from e
 
     @retry(
@@ -574,7 +617,9 @@ class FeatureStoreClient:
             FeastProviderError: If registry update fails.
         """
         if not self._fs:
-            raise RuntimeError("Feast FeatureStore not connected. Call connect() first.")
+            raise RuntimeError(
+                "Feast FeatureStore not connected. Call connect() first."
+            )
         with tracer.start_as_current_span("feast_apply_definitions") as span:
             span.set_attribute("feast.num_definitions", len(definitions))
             start_time = time.monotonic()
@@ -594,7 +639,10 @@ class FeatureStoreClient:
                             name=defn.name,
                             entities=defn.entities,
                             ttl=defn.ttl,
-                            schema=[{"name": f.name, "dtype": f.dtype.name} for f in defn.schema],
+                            schema=[
+                                {"name": f.name, "dtype": f.dtype.name}
+                                for f in defn.schema
+                            ],
                             source=defn.source.__dict__,
                         )
                         FeatureSourceModel(
@@ -632,7 +680,9 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to apply definitions: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to apply definitions: {e}")
+                )
                 logger.error(f"Failed to apply definitions: {e}", exc_info=True)
                 raise ValueError(f"Failed to apply definitions: {e}") from e
             finally:
@@ -640,7 +690,9 @@ class FeatureStoreClient:
                     operation="apply_definitions", **self.metric_labels
                 ).observe(time.monotonic() - start_time)
 
-    async def wait_for_ingestion(self, feature_view_name: str, timeout: int = 30) -> None:
+    async def wait_for_ingestion(
+        self, feature_view_name: str, timeout: int = 30
+    ) -> None:
         """
         Poll for ingestion completion to ensure features are available.
         Args:
@@ -684,7 +736,9 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to wait for ingestion: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to wait for ingestion: {e}")
+                )
                 logger.error(
                     f"Failed to wait for ingestion of '{feature_view_name}': {e}",
                     exc_info=True,
@@ -724,7 +778,9 @@ class FeatureStoreClient:
             os.getenv("ENV", "dev") != "dev"
             and os.getenv("USE_SECRETS_MANAGER", "false").lower() != "true"
         ):
-            raise ValueError("Secrets Manager required for secure credential management.")
+            raise ValueError(
+                "Secrets Manager required for secure credential management."
+            )
 
         # Hash PII columns before ingestion, but keep entity keys
         sensitive_cols = ["email"]  # Configurable
@@ -746,7 +802,10 @@ class FeatureStoreClient:
                 try:
                     feature_view = self._fs.get_feature_view(feature_view_name)
                     loop = asyncio.get_running_loop()
-                    if RAY_AVAILABLE and os.getenv("FEAST_PROVIDER", "local") != "local":
+                    if (
+                        RAY_AVAILABLE
+                        and os.getenv("FEAST_PROVIDER", "local") != "local"
+                    ):
                         ray.init(ignore_reinit_error=True)
 
                         @ray.remote
@@ -758,17 +817,22 @@ class FeatureStoreClient:
 
                         batch_size = int(os.getenv("RAY_BATCH_SIZE", "1000"))
                         batches = [
-                            data_df[i : i + batch_size] for i in range(0, len(data_df), batch_size)
+                            data_df[i : i + batch_size]
+                            for i in range(0, len(data_df), batch_size)
                         ]
                         futures = [
-                            ingest_batch.remote(self.repo_path, feature_view_name, batch)
+                            ingest_batch.remote(
+                                self.repo_path, feature_view_name, batch
+                            )
                             for batch in batches
                         ]
                         await loop.run_in_executor(None, lambda: ray.get(futures))
                     else:
                         logger.warning("Ray unavailable; using threaded ingestion.")
                         batch_size = int(os.getenv("BATCH_SIZE", "1000"))
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                        with concurrent.futures.ThreadPoolExecutor(
+                            max_workers=4
+                        ) as executor:
                             batches = [
                                 data_df[i : i + batch_size]
                                 for i in range(0, len(data_df), batch_size)
@@ -810,7 +874,9 @@ class FeatureStoreClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to ingest features: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to ingest features: {e}")
+                    )
                     logger.error(
                         f"Failed to ingest data into FeatureView '{feature_view_name}': {e}",
                         exc_info=True,
@@ -874,10 +940,16 @@ class FeatureStoreClient:
                         d = response.to_dict()
                         if d:
                             # Validate that all dictionary values have consistent lengths
-                            lengths = [len(v) for v in d.values() if isinstance(v, list)]
+                            lengths = [
+                                len(v) for v in d.values() if isinstance(v, list)
+                            ]
                             if not lengths or len(set(lengths)) > 1:
-                                logger.error(f"Inconsistent response lengths: {lengths}")
-                                raise ValueError("Feast response has inconsistent value lengths")
+                                logger.error(
+                                    f"Inconsistent response lengths: {lengths}"
+                                )
+                                raise ValueError(
+                                    "Feast response has inconsistent value lengths"
+                                )
                             n = lengths[0]
                             rows = [{k: v[i] for k, v in d.items()} for i in range(n)]
                             # ensure entity keys are present (Feast may omit them)
@@ -890,7 +962,9 @@ class FeatureStoreClient:
                         **self.metric_labels,
                     ).inc()
                     span.set_status(Status(StatusCode.OK))
-                    logger.info(f"Retrieved online features for {len(entity_rows)} entities.")
+                    logger.info(
+                        f"Retrieved online features for {len(entity_rows)} entities."
+                    )
                     return all_results
                 except Exception as e:
                     FS_CALLS_TOTAL.labels(
@@ -904,8 +978,12 @@ class FeatureStoreClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to get online features: {e}"))
-                    logger.error(f"Failed to retrieve online features: {e}", exc_info=True)
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to get online features: {e}")
+                    )
+                    logger.error(
+                        f"Failed to retrieve online features: {e}", exc_info=True
+                    )
                     raise
                 finally:
                     FS_CALL_LATENCY_SECONDS.labels(
@@ -920,7 +998,9 @@ class FeatureStoreClient:
         ),
         reraise=True,
     )
-    async def get_historical_features(self, entity_df: Any, feature_refs: List[str]) -> Any:
+    async def get_historical_features(
+        self, entity_df: Any, feature_refs: List[str]
+    ) -> Any:
         """
         Retrieve point-in-time correct historical features.
         Args:
@@ -972,7 +1052,9 @@ class FeatureStoreClient:
                         **self.metric_labels,
                     ).inc()
                     span.set_status(Status(StatusCode.OK))
-                    logger.info(f"Retrieved historical features for {len(entity_df)} entities.")
+                    logger.info(
+                        f"Retrieved historical features for {len(entity_df)} entities."
+                    )
                     return feature_data
                 except Exception as e:
                     FS_CALLS_TOTAL.labels(
@@ -987,9 +1069,13 @@ class FeatureStoreClient:
                     ).inc()
                     span.record_exception(e)
                     span.set_status(
-                        Status(StatusCode.ERROR, f"Failed to get historical features: {e}")
+                        Status(
+                            StatusCode.ERROR, f"Failed to get historical features: {e}"
+                        )
                     )
-                    logger.error(f"Failed to retrieve historical features: {e}", exc_info=True)
+                    logger.error(
+                        f"Failed to retrieve historical features: {e}", exc_info=True
+                    )
                     raise
                 finally:
                     FS_CALL_LATENCY_SECONDS.labels(
@@ -1030,7 +1116,9 @@ class FeatureStoreClient:
 
                 results = {"success": True, "details": {}}
                 if not GX_AVAILABLE:
-                    logger.warning("Great Expectations unavailable; using basic Pandas validation.")
+                    logger.warning(
+                        "Great Expectations unavailable; using basic Pandas validation."
+                    )
                     null_counts = df.isnull().sum().to_dict()
                     results["details"]["nulls"] = null_counts
                     results["success"] = all(null == 0 for null in null_counts.values())
@@ -1053,7 +1141,9 @@ class FeatureStoreClient:
                 freshness = (
                     (
                         datetime.now(timezone.utc)
-                        - df.get("event_timestamp", pd.Series([datetime.now(timezone.utc)])).max()
+                        - df.get(
+                            "event_timestamp", pd.Series([datetime.now(timezone.utc)])
+                        ).max()
                     ).total_seconds()
                     if "event_timestamp" in df
                     else 0
@@ -1075,16 +1165,21 @@ class FeatureStoreClient:
                                     {
                                         "user_id": [101],
                                         "event_timestamp": [
-                                            datetime.now(timezone.utc) - timedelta(days=7)
+                                            datetime.now(timezone.utc)
+                                            - timedelta(days=7)
                                         ],
                                     }
                                 ),
                                 feature_refs=[f"{feature_view_name}:{feature.name}"],
                             )
                             if not baseline_data.empty and not df.empty:
-                                current_values = df.get(feature.name, pd.Series([])).dropna().values
+                                current_values = (
+                                    df.get(feature.name, pd.Series([])).dropna().values
+                                )
                                 baseline_values = (
-                                    baseline_data.get(feature.name, pd.Series([])).dropna().values
+                                    baseline_data.get(feature.name, pd.Series([]))
+                                    .dropna()
+                                    .values
                                 )
                                 if len(current_values) > 0 and len(baseline_values) > 0:
                                     current_dist = (
@@ -1113,7 +1208,9 @@ class FeatureStoreClient:
                         "feature_view": feature_view_name,
                         "validation_success": results["success"],
                         "freshness_seconds": freshness,
-                        "drift_detected": (any(drift_stats.values()) if drift_stats else None),
+                        "drift_detected": (
+                            any(drift_stats.values()) if drift_stats else None
+                        ),
                     },
                 )
 
@@ -1145,7 +1242,9 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to validate features: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to validate features: {e}")
+                )
                 logger.error(
                     f"Failed to validate FeatureView '{feature_view_name}': {e}",
                     exc_info=True,
@@ -1178,7 +1277,9 @@ class FeatureStoreClient:
             try:
                 view_hash = hashlib.sha256(feature_view_name.encode()).hexdigest()
                 if not POSTGRES_AVAILABLE:
-                    logger.warning("Postgres unavailable; using audit ledger for redaction.")
+                    logger.warning(
+                        "Postgres unavailable; using audit ledger for redaction."
+                    )
                     await self.log_operation(
                         "redaction_flag",
                         {
@@ -1210,7 +1311,9 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.set_status(Status(StatusCode.OK))
-                logger.info(f"Flagged FeatureView '{feature_view_name}' for redaction: {reason}")
+                logger.info(
+                    f"Flagged FeatureView '{feature_view_name}' for redaction: {reason}"
+                )
             except Exception as e:
                 FS_CALLS_TOTAL.labels(
                     operation="flag_for_redaction",
@@ -1223,7 +1326,9 @@ class FeatureStoreClient:
                     **self.metric_labels,
                 ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to flag for redaction: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to flag for redaction: {e}")
+                )
                 logger.error(
                     f"Failed to flag FeatureView '{feature_view_name}' for redaction: {e}",
                     exc_info=True,
@@ -1302,7 +1407,9 @@ offline_store:
     # Define entities and feature views
     import pandas as pd
 
-    user_entity = Entity(name="user_id", value_type=ValueType.INT64, description="User ID")
+    user_entity = Entity(
+        name="user_id", value_type=ValueType.INT64, description="User ID"
+    )
     user_data_df = pd.DataFrame(
         {
             "user_id": [101, 102, 101, 103, 104],
@@ -1400,7 +1507,9 @@ offline_store:
         logger.info(f"Historical features:\n{historical_features}")
         assert not historical_features.empty, "Historical features empty"
         assert (
-            historical_features[historical_features["user_id"] == 101]["daily_login_count"].iloc[0]
+            historical_features[historical_features["user_id"] == 101][
+                "daily_login_count"
+            ].iloc[0]
             == 5
         ), "Point-in-time join failed"
         await client.log_operation(
@@ -1455,7 +1564,8 @@ offline_store:
             await client.ingest_features("user_daily_logins", invalid_gx_data)
             validation_results = await client.validate_features("user_daily_logins")
             assert (
-                not validation_results["freshness_ok"] or validation_results["drift_detected"]
+                not validation_results["freshness_ok"]
+                or validation_results["drift_detected"]
             ), "Expected validation failure for invalid data"
             logger.info("Caught expected GX validation failure")
             await client.log_operation(
@@ -1479,7 +1589,9 @@ offline_store:
             entity_rows=[{"user_id": 1000}],
         )
         logger.info(f"Extreme stress features: {extreme_features}")
-        assert extreme_features[0]["daily_login_count"] == 1, "Extreme stress ingestion failed"
+        assert (
+            extreme_features[0]["daily_login_count"] == 1
+        ), "Extreme stress ingestion failed"
         await client.log_operation(
             "ingest_features",
             {"feature_view": "user_daily_logins", "rows": len(extreme_df)},
@@ -1492,7 +1604,9 @@ offline_store:
             logger.info("Caught audit logging error")
         # Flag for redaction
         logger.info("\nFlagging feature view for redaction...")
-        await client.flag_for_redaction("user_daily_logins", "GDPR Right to be Forgotten")
+        await client.flag_for_redaction(
+            "user_daily_logins", "GDPR Right to be Forgotten"
+        )
         await client.log_operation(
             "flag_for_redaction",
             {"feature_view": "user_daily_logins", "reason": "GDPR"},

@@ -77,7 +77,9 @@ async def test_integration_load_config_and_manage_agents(
 
     config_data = load_crew_config(temp_config)
     for agent in config_data["agents"]:
-        await manager.add_agent(agent["name"], "CrewAgentBase")  # Use registered class name
+        await manager.add_agent(
+            agent["name"], "CrewAgentBase"
+        )  # Use registered class name
 
     # Start the agent
     await manager.start_agent(config_data["agents"][0]["name"])

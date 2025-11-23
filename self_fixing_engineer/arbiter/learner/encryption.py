@@ -139,7 +139,9 @@ async def encrypt_value(value: Any, cipher: Fernet, key_id: str = "v1") -> bytes
         encrypted = cipher.encrypt(serialized)
         return f"{key_id}:".encode("utf-8") + encrypted
     except Exception as e:
-        learn_error_counter.labels(domain="encryption", error_type="serialization_failed").inc()
+        learn_error_counter.labels(
+            domain="encryption", error_type="serialization_failed"
+        ).inc()
         logger.error("Failed to encrypt value", error=str(e), exc_info=True)
         raise ValueError(f"Failed to encrypt value: {e}") from e
 
@@ -162,14 +164,18 @@ async def decrypt_value(encrypted: bytes, ciphers: Dict[str, Fernet]) -> Any:
     try:
         parts = encrypted.split(b":", 1)
         key_id, encrypted_data = (
-            (parts[0].decode("utf-8"), parts[1]) if len(parts) == 2 else ("v1", encrypted)
+            (parts[0].decode("utf-8"), parts[1])
+            if len(parts) == 2
+            else ("v1", encrypted)
         )
         cipher = ciphers.get(key_id)
 
         # FIX: Check for unknown key ID before attempting decryption
         if not cipher:
             logger.error("Unknown encryption key ID", key_id=key_id)
-            learn_error_counter.labels(domain="decryption", error_type="unknown_key_id").inc()
+            learn_error_counter.labels(
+                domain="decryption", error_type="unknown_key_id"
+            ).inc()
             raise InvalidToken(f"Unknown encryption key ID: {key_id}")
 
         # Try to decrypt
@@ -178,7 +184,9 @@ async def decrypt_value(encrypted: bytes, ciphers: Dict[str, Fernet]) -> Any:
             return json.loads(decrypted_data.decode("utf-8"))
         except InvalidToken:
             # This is a genuine invalid token error (bad data, wrong key, etc.)
-            learn_error_counter.labels(domain="decryption", error_type="invalid_token").inc()
+            learn_error_counter.labels(
+                domain="decryption", error_type="invalid_token"
+            ).inc()
             raise
         except json.JSONDecodeError as e:
             # Deserialization failed
@@ -194,5 +202,7 @@ async def decrypt_value(encrypted: bytes, ciphers: Dict[str, Fernet]) -> Any:
     except Exception as e:
         # Unexpected error
         logger.error("Unexpected error during decryption", error=str(e), exc_info=True)
-        learn_error_counter.labels(domain="decryption", error_type="deserialization_failed").inc()
+        learn_error_counter.labels(
+            domain="decryption", error_type="deserialization_failed"
+        ).inc()
         raise InvalidToken(f"Decryption or deserialization failed: {e}") from e

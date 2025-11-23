@@ -49,9 +49,16 @@ from .codegen_response_handler import add_traceability_comments, parse_llm_respo
 try:
     # --- FIX: Changed imports to be ABSOLUTE from the 'generator' root ---
     # CircuitBreaker is in llm_client, but if you need the class itself:
-    from generator.runner.llm_client import CircuitBreaker, call_ensemble_api, call_llm_api
+    from generator.runner.llm_client import (
+        CircuitBreaker,
+        call_ensemble_api,
+        call_llm_api,
+    )
     from generator.runner.runner_logging import log_audit_event
-    from generator.runner.runner_metrics import LLM_CIRCUIT_STATE, LLM_RATE_LIMIT_EXCEEDED
+    from generator.runner.runner_metrics import (
+        LLM_CIRCUIT_STATE,
+        LLM_RATE_LIMIT_EXCEEDED,
+    )
     from generator.runner.runner_security_utils import scan_for_vulnerabilities
 except ImportError as e:
     # Hard fail: this agent is not allowed to run without the runner stack.
@@ -158,12 +165,16 @@ class SecurityUtils:
         violations = []
         for func in rules.get("banned_functions", []):
             if re.search(r"\b" + re.escape(func) + r"\b", code):
-                violations.append(f"Compliance violation: Use of banned function '{func}'.")
+                violations.append(
+                    f"Compliance violation: Use of banned function '{func}'."
+                )
         for banned_import in rules.get("banned_imports", []):
-            if re.search(r"\bimport\s+" + re.escape(banned_import) + r"\b", code) or re.search(
-                r"\bfrom\s+" + re.escape(banned_import) + r"\b", code
-            ):
-                violations.append(f"Compliance violation: Use of banned import '{banned_import}'.")
+            if re.search(
+                r"\bimport\s+" + re.escape(banned_import) + r"\b", code
+            ) or re.search(r"\bfrom\s+" + re.escape(banned_import) + r"\b", code):
+                violations.append(
+                    f"Compliance violation: Use of banned import '{banned_import}'."
+                )
         required_header = rules.get("required_header")
         if required_header and not code.startswith(required_header):
             violations.append("Compliance violation: Missing required license header.")
@@ -187,7 +198,9 @@ def _is_tool_available(tool: str) -> bool:
     if tool not in _tool_cache:
         _tool_cache[tool] = shutil.which(tool) is not None
         if not _tool_cache[tool]:
-            logger.warning(f"Tool '{tool}' not found in PATH. Dependent checks will be skipped.")
+            logger.warning(
+                f"Tool '{tool}' not found in PATH. Dependent checks will be skipped."
+            )
     return _tool_cache[tool]
 
 
@@ -306,7 +319,9 @@ provider = TracerProvider(resource=resource)
 if JaegerExporter:
     provider.add_span_processor(
         SimpleSpanProcessor(
-            JaegerExporter(agent_host_name=os.getenv("OTEL_EXPORTER_JAEGER_ENDPOINT", "localhost"))
+            JaegerExporter(
+                agent_host_name=os.getenv("OTEL_EXPORTER_JAEGER_ENDPOINT", "localhost")
+            )
         )
     )
 else:
@@ -426,8 +441,12 @@ class CodeGenConfig:
     def __init__(self, config: Dict[str, Any]):
         ### --- DEPLOYMENT NOTE ---
         # The internal model/key config has been removed, as the runner client handles this.
-        self.backend = os.getenv("CODEGEN_BACKEND", config.get("backend", "openai")).lower()
-        self.api_keys = config.get("api_keys", {})  # Retained for env key presence checks
+        self.backend = os.getenv(
+            "CODEGEN_BACKEND", config.get("backend", "openai")
+        ).lower()
+        self.api_keys = config.get(
+            "api_keys", {}
+        )  # Retained for env key presence checks
         self.model = config.get("model", {})  # Retained for custom model mapping
 
         # VALIDATION: Ensure the environment key for the configured backend is present.
@@ -443,7 +462,9 @@ class CodeGenConfig:
         self.max_retries = int(config.get("max_retries", 2))
         self.enable_security_scan = bool(config.get("enable_security_scan", True))
         self.allow_interactive_hitl = bool(config.get("allow_interactive_hitl", False))
-        self.ensemble_enabled = bool(config.get("ensemble_enabled", False))  # ADDED ENSEMBLE FLAG
+        self.ensemble_enabled = bool(
+            config.get("ensemble_enabled", False)
+        )  # ADDED ENSEMBLE FLAG
         self.compliance_rules = config.get(
             "compliance",
             {"banned_imports": [], "banned_functions": [], "max_line_length": 120},
@@ -533,7 +554,9 @@ async def hitl_review(
     review_request = {
         "req_hash": req_hash,
         "code_files": code_files,
-        "review_url": os.getenv("REVIEW_SYSTEM_URL", "https://review-system.example.com")
+        "review_url": os.getenv(
+            "REVIEW_SYSTEM_URL", "https://review-system.example.com"
+        )
         + f"/{req_hash}",
     }
 
@@ -547,7 +570,9 @@ async def hitl_review(
                     resp.raise_for_status()
                     webhook_sent = True
                     # --- Audit/Logging Change: Use log_audit_event ---
-                    log_audit_event("HITLWebhookSent", {"req_hash": req_hash, "attempt": i + 1})
+                    log_audit_event(
+                        "HITLWebhookSent", {"req_hash": req_hash, "attempt": i + 1}
+                    )
                     # --- End Audit/Logging Change ---
                     break
         except Exception as e:
@@ -639,7 +664,9 @@ if PLUGIN_AVAILABLE:
         # Initialize components based on config
         redis_client = None
         try:
-            redis_client = await aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost"))
+            redis_client = await aioredis.from_url(
+                os.getenv("REDIS_URL", "redis://localhost")
+            )
             await redis_client.ping()
         except Exception:
             logger.warning(
@@ -678,7 +705,9 @@ if PLUGIN_AVAILABLE:
                             requirements=requirements,
                             state_summary=state_summary,
                             previous_feedback=previous_feedback,
-                            target_language=requirements.get("target_language", "python"),
+                            target_language=requirements.get(
+                                "target_language", "python"
+                            ),
                             target_framework=None,
                             enable_meta_llm_critique=False,
                             multi_modal_inputs=None,
@@ -686,13 +715,17 @@ if PLUGIN_AVAILABLE:
                             redis_client=redis_client,
                         )
                     except TemplateNotFound as e:
-                        logger.warning(f"Template not found ({e}). Using minimal fallback prompt.")
+                        logger.warning(
+                            f"Template not found ({e}). Using minimal fallback prompt."
+                        )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
                             + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
                         )
                     except Exception as e:
-                        logger.warning(f"Prompt build failed ({e}). Using minimal fallback prompt.")
+                        logger.warning(
+                            f"Prompt build failed ({e}). Using minimal fallback prompt."
+                        )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
                             + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
@@ -725,7 +758,8 @@ if PLUGIN_AVAILABLE:
                         )
                         response = (
                             response_dict["content"]
-                            if isinstance(response_dict, dict) and "content" in response_dict
+                            if isinstance(response_dict, dict)
+                            and "content" in response_dict
                             else str(response_dict)
                         )
                         backend_used = "ensemble"
@@ -750,10 +784,14 @@ if PLUGIN_AVAILABLE:
 
                     # Post-Processing and Scans
                     for code in code_files.values():
-                        violations = security_utils.apply_compliance(code, config.compliance_rules)
+                        violations = security_utils.apply_compliance(
+                            code, config.compliance_rules
+                        )
                         if violations:
                             # --- Audit/Logging Change: Use log_audit_event ---
-                            log_audit_event("Compliance Violation", {"violations": violations})
+                            log_audit_event(
+                                "Compliance Violation", {"violations": violations}
+                            )
                             # --- End Audit/Logging Change ---
 
                     # --- Security Scans Change: Use unified scanning utility ---
@@ -776,7 +814,9 @@ if PLUGIN_AVAILABLE:
                         # --- Audit/Logging Change: Use log_audit_event ---
                         log_audit_event("HITL Rejection", {"feedback": feedback})
                         # --- End Audit/Logging Change ---
-                        return {"error.txt": f"Code rejected by human review. Feedback: {feedback}"}
+                        return {
+                            "error.txt": f"Code rejected by human review. Feedback: {feedback}"
+                        }
                 else:
                     # Skip HITL entirely; treat as approved
                     status, feedback = ("approved", None)
@@ -792,10 +832,14 @@ if PLUGIN_AVAILABLE:
             except Exception as e:
                 logger.exception(f"Code generation failed: {e}")
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event("Code Generation Failed", {"error": str(e), "traceback": repr(e)})
+                log_audit_event(
+                    "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
+                )
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
-                return {"error.txt": f"Error: Code generation failed. Details: {str(e)}"}
+                return {
+                    "error.txt": f"Error: Code generation failed. Details: {str(e)}"
+                }
 
 else:
 
@@ -817,7 +861,9 @@ else:
         # Initialize components based on config
         redis_client = None
         try:
-            redis_client = await aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost"))
+            redis_client = await aioredis.from_url(
+                os.getenv("REDIS_URL", "redis://localhost")
+            )
             await redis_client.ping()
         except Exception:
             logger.warning(
@@ -856,7 +902,9 @@ else:
                             requirements=requirements,
                             state_summary=state_summary,
                             previous_feedback=previous_feedback,
-                            target_language=requirements.get("target_language", "python"),
+                            target_language=requirements.get(
+                                "target_language", "python"
+                            ),
                             target_framework=None,
                             enable_meta_llm_critique=False,
                             multi_modal_inputs=None,
@@ -864,13 +912,17 @@ else:
                             redis_client=redis_client,
                         )
                     except TemplateNotFound as e:
-                        logger.warning(f"Template not found ({e}). Using minimal fallback prompt.")
+                        logger.warning(
+                            f"Template not found ({e}). Using minimal fallback prompt."
+                        )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
                             + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
                         )
                     except Exception as e:
-                        logger.warning(f"Prompt build failed ({e}). Using minimal fallback prompt.")
+                        logger.warning(
+                            f"Prompt build failed ({e}). Using minimal fallback prompt."
+                        )
                         prompt = (
                             "Generate code strictly as JSON with a 'files' object mapping filenames to code strings. "
                             + f"Requirements: {json.dumps(requirements, sort_keys=True)}"
@@ -903,7 +955,8 @@ else:
                         )
                         response = (
                             response_dict["content"]
-                            if isinstance(response_dict, dict) and "content" in response_dict
+                            if isinstance(response_dict, dict)
+                            and "content" in response_dict
                             else str(response_dict)
                         )
                         backend_used = "ensemble"
@@ -928,10 +981,14 @@ else:
 
                     # Post-Processing and Scans
                     for code in code_files.values():
-                        violations = security_utils.apply_compliance(code, config.compliance_rules)
+                        violations = security_utils.apply_compliance(
+                            code, config.compliance_rules
+                        )
                         if violations:
                             # --- Audit/Logging Change: Use log_audit_event ---
-                            log_audit_event("Compliance Violation", {"violations": violations})
+                            log_audit_event(
+                                "Compliance Violation", {"violations": violations}
+                            )
                             # --- End Audit/Logging Change ---
 
                     # --- Security Scans Change: Use unified scanning utility ---
@@ -954,7 +1011,9 @@ else:
                         # --- Audit/Logging Change: Use log_audit_event ---
                         log_audit_event("HITL Rejection", {"feedback": feedback})
                         # --- End Audit/Logging Change ---
-                        return {"error.txt": f"Code rejected by human review. Feedback: {feedback}"}
+                        return {
+                            "error.txt": f"Code rejected by human review. Feedback: {feedback}"
+                        }
                 else:
                     # Skip HITL entirely; treat as approved
                     status, feedback = ("approved", None)
@@ -970,10 +1029,14 @@ else:
             except Exception as e:
                 logger.exception(f"Code generation failed: {e}")
                 # --- Audit/Logging Change: Use log_audit_event ---
-                log_audit_event("Code Generation Failed", {"error": str(e), "traceback": repr(e)})
+                log_audit_event(
+                    "Code Generation Failed", {"error": str(e), "traceback": repr(e)}
+                )
                 # --- End Audit/Logging Change ---
                 CODEGEN_ERRORS.labels(type(e).__name__).inc()
-                return {"error.txt": f"Error: Code generation failed. Details: {str(e)}"}
+                return {
+                    "error.txt": f"Error: Code generation failed. Details: {str(e)}"
+                }
 
 
 # ==============================================================================
@@ -1167,4 +1230,6 @@ if __name__ == "__main__":
             "Skipping example run: OPENAI_API_KEY environment variable is not set. Cannot run LLM."
         )
     else:
-        print("Skipping demo harness. To run, set CODEGEN_RUN_DEMO=1 and OPENAI_API_KEY.")
+        print(
+            "Skipping demo harness. To run, set CODEGEN_RUN_DEMO=1 and OPENAI_API_KEY."
+        )

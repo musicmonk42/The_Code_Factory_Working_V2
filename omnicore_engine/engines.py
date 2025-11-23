@@ -24,7 +24,9 @@ except Exception:
 
 
 from arbiter.arbiter import Arbiter
-from arbiter.utils import get_system_metrics_async  # New import needed for helper function
+from arbiter.utils import (
+    get_system_metrics_async,
+)  # New import needed for helper function
 from envs.code_health_env import CodeHealthEnv  # New import for the RL environment
 from intent_capture.api import app as intent_capture_api
 from self_healing_import_fixer.import_fixer.import_fixer_engine import (
@@ -77,7 +79,9 @@ class PluginService:
 
         # Subscribe to a channel for self-healing import fixer requests
         asyncio.create_task(
-            self.message_bus.subscribe("shif:fix_import_request", self.handle_shif_request)
+            self.message_bus.subscribe(
+                "shif:fix_import_request", self.handle_shif_request
+            )
         )
 
         self.logger = logging.getLogger("PluginService")
@@ -185,7 +189,9 @@ class OmniCoreOmega:
         db = Database(settings.database_path)
         message_bus = ShardedMessageBus(config=settings, db=db)
         plugin_service = PluginService(global_plugin_registry)
-        simulation_engine = UnifiedSimulationModule(config=settings, db=db, message_bus=message_bus)
+        simulation_engine = UnifiedSimulationModule(
+            config=settings, db=db, message_bus=message_bus
+        )
 
         crew_manager = CrewManager()
 
@@ -208,7 +214,9 @@ class OmniCoreOmega:
                 )
             logger.info("CrewManager agents loaded from crew_config.yaml.")
         except FileNotFoundError:
-            logger.error("crew_config.yaml not found. No agents will be added to the crew manager.")
+            logger.error(
+                "crew_config.yaml not found. No agents will be added to the crew manager."
+            )
         except Exception as e:
             logger.error(f"Failed to load agents from crew_config.yaml: {e}")
 

@@ -87,7 +87,11 @@ class SecretsManager:
                 self._logger.addHandler(logging.NullHandler())
 
             env = os.getenv("ENVIRONMENT", "").strip().lower()
-            allow = allow_dotenv if allow_dotenv is not None else (not env.startswith("prod"))
+            allow = (
+                allow_dotenv
+                if allow_dotenv is not None
+                else (not env.startswith("prod"))
+            )
             if env.startswith("prod"):
                 override = os.getenv("SECRETS_ALLOW_DOTENV_IN_PROD", "")
                 if override.strip().lower() in {"1", "true", "yes", "on"}:
@@ -106,7 +110,9 @@ class SecretsManager:
             if self._allow_dotenv:
                 self._load_env()
             else:
-                self._logger.info("Skipping .env file load: disabled for this environment.")
+                self._logger.info(
+                    "Skipping .env file load: disabled for this environment."
+                )
 
             self._initialized = True
 
@@ -132,7 +138,9 @@ class SecretsManager:
 
     def _validate_name(self, name: str, *, strict: Optional[bool] = None) -> None:
         if not name or not isinstance(name, str) or "=" in name:
-            raise ValueError("Secret name must be a non-empty string and cannot contain '='")
+            raise ValueError(
+                "Secret name must be a non-empty string and cannot contain '='"
+            )
         if any(ch.isspace() for ch in name):
             raise ValueError("Secret name cannot contain whitespace")
 
@@ -267,7 +275,9 @@ class SecretsManager:
         norm_val = s_val.casefold() if casefold else s_val
         valid_map = {(c.casefold() if casefold else c): c for c in choices}
         if norm_val not in valid_map:
-            raise TypeError(f"Secret '{name}' must be one of {sorted(choices)}; got {s_val!r}")
+            raise TypeError(
+                f"Secret '{name}' must be one of {sorted(choices)}; got {s_val!r}"
+            )
         return valid_map[norm_val] if return_normalized else s_val
 
     def get_json(self, name: str, **kwargs) -> Any:
@@ -300,13 +310,19 @@ class SecretsManager:
         value = self.get_secret(name, **kwargs)
         if value is None:
             return None
-        return Path(os.path.expanduser(os.path.expandvars(str(value)))).resolve(strict=False)
+        return Path(os.path.expanduser(os.path.expandvars(str(value)))).resolve(
+            strict=False
+        )
 
-    def get_int_in_range(self, name: str, *, min_val: int, max_val: int, **kwargs) -> Optional[int]:
+    def get_int_in_range(
+        self, name: str, *, min_val: int, max_val: int, **kwargs
+    ) -> Optional[int]:
         """Retrieves an integer secret, validating it's within a given range."""
         v = self.get_int(name, **kwargs)
         if v is not None and not (min_val <= v <= max_val):
-            raise TypeError(f"Secret '{name}' must be in range [{min_val}, {max_val}]; got {v}")
+            raise TypeError(
+                f"Secret '{name}' must be in range [{min_val}, {max_val}]; got {v}"
+            )
         return v
 
     def get_bytes(self, name: str, **kwargs) -> Optional[int]:
@@ -355,7 +371,10 @@ class SecretsManager:
             cached = {k: self._cache.get(k) for k in keys if k in self._cache}
             uncached = {k: os.environ.get(k) for k in keys if k not in self._cache}
             all_vals = {**cached, **uncached}
-            return {k: ("set" if all_vals.get(k) not in (None, "") else "missing") for k in keys}
+            return {
+                k: ("set" if all_vals.get(k) not in (None, "") else "missing")
+                for k in keys
+            }
 
 
 SECRETS_MANAGER = SecretsManager()

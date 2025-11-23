@@ -245,7 +245,9 @@ class FabricClientWrapper(BaseDLTClient):
             fabric_cfg: Dict[str, Any] = dict(config.get("fabric", {}))
 
             # Handle secrets if present
-            if fabric_cfg.get("mode") == "rest" and not fabric_cfg.get("rest_api_auth_token"):
+            if fabric_cfg.get("mode") == "rest" and not fabric_cfg.get(
+                "rest_api_auth_token"
+            ):
                 fabric_cfg["rest_api_auth_token"] = SECRETS_MANAGER.get_secret(
                     "FABRIC_REST_TOKEN", required=False
                 )
@@ -253,7 +255,9 @@ class FabricClientWrapper(BaseDLTClient):
             # Use dict() instead of dict(exclude_unset=True) to include defaults
             validated_fabric = FabricConfig(**fabric_cfg).dict()
         except ValidationError as e:
-            raise DLTClientValidationError(f"Invalid Fabric client configuration: {e}", "Fabric")
+            raise DLTClientValidationError(
+                f"Invalid Fabric client configuration: {e}", "Fabric"
+            )
         except Exception as e:
             raise DLTClientValidationError(
                 f"Failed to load Fabric client configuration: {e}",
@@ -313,7 +317,9 @@ class FabricClientWrapper(BaseDLTClient):
             self._session_lock = asyncio.Lock()
 
         # Rate limiter
-        self._rate_limit_delay = 1.0 / float(self.client_config["rate_limit_requests_per_second"])
+        self._rate_limit_delay = 1.0 / float(
+            self.client_config["rate_limit_requests_per_second"]
+        )
         self._last_request_time = 0.0
 
         # Logging format
@@ -326,7 +332,9 @@ class FabricClientWrapper(BaseDLTClient):
 
     # ------------- internal helpers -------------
 
-    def _format_log(self, level: str, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    def _format_log(
+        self, level: str, message: str, extra: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         Formats logs as JSON or text based on configuration.
         Also emits critical events to the AUDIT trail.
@@ -452,7 +460,9 @@ class FabricClientWrapper(BaseDLTClient):
                         total=self.client_config["default_timeout_seconds"]
                     ),
                     headers=headers,
-                    connector=aiohttp.TCPConnector(limit=self.client_config["max_connections"]),
+                    connector=aiohttp.TCPConnector(
+                        limit=self.client_config["max_connections"]
+                    ),
                 )
             return self._session
 
@@ -465,7 +475,9 @@ class FabricClientWrapper(BaseDLTClient):
 
         try:
             # This work is done in a thread since SDK operations are blocking
-            self._sdk_client = await self._run_blocking_in_executor(self._create_fabric_sdk_client)
+            self._sdk_client = await self._run_blocking_in_executor(
+                self._create_fabric_sdk_client
+            )
             self._sdk_initialized = True
             self._format_log("info", "Fabric SDK client initialized successfully")
         except Exception as e:
@@ -496,7 +508,9 @@ class FabricClientWrapper(BaseDLTClient):
                 if peer_cfg.get("tls_cacerts"):
                     kwargs["tls_cacerts"] = peer_cfg["tls_cacerts"]
                 if peer_cfg.get("ssl_target_name_override"):
-                    kwargs["ssl_target_name_override"] = peer_cfg["ssl_target_name_override"]
+                    kwargs["ssl_target_name_override"] = peer_cfg[
+                        "ssl_target_name_override"
+                    ]
 
                 client.new_peer(**kwargs)
 
@@ -510,7 +524,9 @@ class FabricClientWrapper(BaseDLTClient):
                     if orderer_cfg.get("tls_cacerts"):
                         kwargs["tls_cacerts"] = orderer_cfg["tls_cacerts"]
                     if orderer_cfg.get("ssl_target_name_override"):
-                        kwargs["ssl_target_name_override"] = orderer_cfg["ssl_target_name_override"]
+                        kwargs["ssl_target_name_override"] = orderer_cfg[
+                            "ssl_target_name_override"
+                        ]
 
                     client.new_orderer(**kwargs)
 
@@ -548,7 +564,9 @@ class FabricClientWrapper(BaseDLTClient):
 
     # ------------- public API -------------
 
-    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Performs a health check by accessing the Fabric network.
         Returns status, message, and details.
@@ -569,7 +587,9 @@ class FabricClientWrapper(BaseDLTClient):
                     try:
                         result = await self._run_blocking_in_executor(
                             lambda: self._sdk_client.query_chaincode(
-                                requestor=self._sdk_client.get_user(org_name=self.msp_id),
+                                requestor=self._sdk_client.get_user(
+                                    org_name=self.msp_id
+                                ),
                                 channel_name=self.channel_name,
                                 peers=[list(self.client_config["peers"].keys())[0]],
                                 args=["GetMetadata"],
@@ -630,7 +650,9 @@ class FabricClientWrapper(BaseDLTClient):
                         resp.raise_for_status()
                         health_data = await resp.json()
                     except aiohttp.ContentTypeError:
-                        health_data = {"status": "ok" if resp.status == 200 else "error"}
+                        health_data = {
+                            "status": "ok" if resp.status == 200 else "error"
+                        }
                     finally:
                         # Ensure connection is released back to pool
                         try:
@@ -641,7 +663,9 @@ class FabricClientWrapper(BaseDLTClient):
                     if resp.status != 200:
                         msg = f"Fabric REST Gateway responded with status {resp.status}"
                         span.set_status(Status(StatusCode.ERROR, description=msg))
-                        self._format_log("error", msg, {"correlation_id": correlation_id})
+                        self._format_log(
+                            "error", msg, {"correlation_id": correlation_id}
+                        )
                         return {
                             "status": False,
                             "message": msg,
@@ -661,7 +685,9 @@ class FabricClientWrapper(BaseDLTClient):
                     }
 
             except aiohttp.ClientResponseError as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"HTTP Error: {e.status}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"HTTP Error: {e.status}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -706,7 +732,9 @@ class FabricClientWrapper(BaseDLTClient):
                 # Already logged/escalated by CB/exception base
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Unexpected error: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Unexpected error: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -786,7 +814,9 @@ class FabricClientWrapper(BaseDLTClient):
                         lambda: self._sdk_client.invoke_chaincode(
                             requestor=self._sdk_client.get_user(org_name=self.msp_id),
                             channel_name=self.channel_name,
-                            peers=[list(self.client_config["peers"].keys())[0]],  # Use first peer
+                            peers=[
+                                list(self.client_config["peers"].keys())[0]
+                            ],  # Use first peer
                             args=args,
                             cc_name=self.chaincode_id,
                             wait_for_event=True,
@@ -813,7 +843,9 @@ class FabricClientWrapper(BaseDLTClient):
                     # Prepare request payload
                     payload = {
                         "channelID": self.client_config.get("channel", "mychannel"),
-                        "chaincodeName": self.client_config.get("chaincode_id", "checkpoint"),
+                        "chaincodeName": self.client_config.get(
+                            "chaincode_id", "checkpoint"
+                        ),
                         "function": self.checkpoint_function,
                         "args": args[1:],  # First arg was the function name
                     }
@@ -907,7 +939,9 @@ class FabricClientWrapper(BaseDLTClient):
                         function=self.checkpoint_function,
                         status="error",
                     ).inc()
-                span.set_status(Status(StatusCode.ERROR, description=f"Fabric write failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Fabric write failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -975,7 +1009,9 @@ class FabricClientWrapper(BaseDLTClient):
                         lambda: self._sdk_client.query_chaincode(
                             requestor=self._sdk_client.get_user(org_name=self.msp_id),
                             channel_name=self.channel_name,
-                            peers=[list(self.client_config["peers"].keys())[0]],  # Use first peer
+                            peers=[
+                                list(self.client_config["peers"].keys())[0]
+                            ],  # Use first peer
                             args=query_args,
                             cc_name=self.chaincode_id,
                         )
@@ -998,7 +1034,9 @@ class FabricClientWrapper(BaseDLTClient):
                     # Prepare request payload
                     payload = {
                         "channelID": self.client_config.get("channel", "mychannel"),
-                        "chaincodeName": self.client_config.get("chaincode_id", "checkpoint"),
+                        "chaincodeName": self.client_config.get(
+                            "chaincode_id", "checkpoint"
+                        ),
                         "function": self.query_function,
                         "args": query_args[1:],  # First arg was the function name
                     }
@@ -1071,7 +1109,9 @@ class FabricClientWrapper(BaseDLTClient):
                 )
 
                 span.set_status(Status(StatusCode.OK))
-                retrieved_version = version if version is not None else entry.get("version")
+                retrieved_version = (
+                    version if version is not None else entry.get("version")
+                )
                 self._format_log(
                     "info",
                     f"Fabric checkpoint read: {name} v{retrieved_version} [tx_id={entry.get('tx_id')}]",
@@ -1122,7 +1162,9 @@ class FabricClientWrapper(BaseDLTClient):
                         function=self.query_function,
                         status="error",
                     ).inc()
-                span.set_status(Status(StatusCode.ERROR, description=f"Fabric read failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Fabric read failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1187,7 +1229,9 @@ class FabricClientWrapper(BaseDLTClient):
                         lambda: self._sdk_client.invoke_chaincode(
                             requestor=self._sdk_client.get_user(org_name=self.msp_id),
                             channel_name=self.channel_name,
-                            peers=[list(self.client_config["peers"].keys())[0]],  # Use first peer
+                            peers=[
+                                list(self.client_config["peers"].keys())[0]
+                            ],  # Use first peer
                             args=args,
                             cc_name=self.chaincode_id,
                             wait_for_event=True,
@@ -1211,7 +1255,9 @@ class FabricClientWrapper(BaseDLTClient):
                     # Prepare request payload
                     payload = {
                         "channelID": self.client_config.get("channel", "mychannel"),
-                        "chaincodeName": self.client_config.get("chaincode_id", "checkpoint"),
+                        "chaincodeName": self.client_config.get(
+                            "chaincode_id", "checkpoint"
+                        ),
                         "function": self.rollback_function,
                         "args": args[1:],  # First arg was the function name
                     }
@@ -1428,7 +1474,9 @@ def register_plugin_entrypoints(register_func):
 
 
 # Factory function for creating a new Fabric client
-def create_fabric_client(config: Dict[str, Any], off_chain_client) -> FabricClientWrapper:
+def create_fabric_client(
+    config: Dict[str, Any], off_chain_client
+) -> FabricClientWrapper:
     """
     Create a new Fabric client instance with the given configuration.
 
@@ -1466,4 +1514,6 @@ try:
         _register_with_plugin_manager()
 
 except ImportError:
-    _base_logger.debug("Plugin manager not available, skipping auto-registration of Fabric client.")
+    _base_logger.debug(
+        "Plugin manager not available, skipping auto-registration of Fabric client."
+    )

@@ -187,7 +187,9 @@ class TestE2EMultiModalSystem:
             with patch.object(
                 plugin_with_config.text_processor,
                 "process",
-                return_value=ProcessingResult(success=True, data={}, operation_id="test"),
+                return_value=ProcessingResult(
+                    success=True, data={}, operation_id="test"
+                ),
             ):
                 result = await plugin_with_config.process_text("test")
                 # Should succeed and close the circuit
@@ -402,7 +404,9 @@ class TestE2EMultiModalSystem:
                     success=True, data={"alt": "alternative"}, operation_id="alt-123"
                 )
 
-        PluginRegistry.register_processor("text", "alternative", AlternativeTextProcessor)
+        PluginRegistry.register_processor(
+            "text", "alternative", AlternativeTextProcessor
+        )
 
         # Switch to the alternative provider
         plugin_with_config.set_default_provider("text", "alternative")
@@ -464,13 +468,18 @@ def get_or_create(metric):
 @pytest.fixture(autouse=True)
 def mock_metrics():
     """Mock metrics for all tests."""
-    with patch("arbiter.plugins.multi_modal_plugin.get_or_create_counter", get_or_create), patch(
-        "arbiter.plugins.multi_modal_plugin.get_or_create_histogram", get_or_create
-    ), patch(
-        "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
-        get_or_create,
-    ), patch(
-        "arbiter.plugins.multimodal.interface.get_or_create", get_or_create
+    with (
+        patch(
+            "arbiter.plugins.multi_modal_plugin.get_or_create_counter", get_or_create
+        ),
+        patch(
+            "arbiter.plugins.multi_modal_plugin.get_or_create_histogram", get_or_create
+        ),
+        patch(
+            "arbiter.plugins.multimodal.providers.default_multimodal_providers.get_or_create",
+            get_or_create,
+        ),
+        patch("arbiter.plugins.multimodal.interface.get_or_create", get_or_create),
     ):
         yield
 

@@ -184,7 +184,9 @@ async def _write_sarif_atomically(path: str, data: Dict[str, Any]) -> bool:
         return True
     except Exception as e:
         # Log the error and clean up the temporary file if it still exists
-        logger.error(f"Failed to write SARIF file atomically to '{path}': {e}", exc_info=True)
+        logger.error(
+            f"Failed to write SARIF file atomically to '{path}': {e}", exc_info=True
+        )
         if tmp_name and os.path.exists(tmp_name):
             os.remove(tmp_name)
         return False
@@ -223,13 +225,17 @@ class HTMLReporter:
         # Resolve report_dir against project_root if it's relative
         report_dir_to_use = report_dir or sarif_dir or "atco_artifacts/sarif"
         if not os.path.isabs(report_dir_to_use):
-            report_dir_abs = os.path.abspath(os.path.join(self.project_root, report_dir_to_use))
+            report_dir_abs = os.path.abspath(
+                os.path.join(self.project_root, report_dir_to_use)
+            )
         else:
             report_dir_abs = os.path.abspath(report_dir_to_use)
 
         # Compute a relative path only if possible; otherwise keep the provided path
         try:
-            self.report_dir_relative = os.path.relpath(report_dir_abs, self.project_root)
+            self.report_dir_relative = os.path.relpath(
+                report_dir_abs, self.project_root
+            )
         except ValueError:
             # Different drive letters on Windows; just use the given directory as-is
             self.report_dir_relative = report_dir_to_use.replace("\\", "/")
@@ -244,12 +250,16 @@ class HTMLReporter:
         if not os.access(self.report_dir, os.W_OK):
             raise IOError(f"Directory is not writable: {self.report_dir}")
 
-        logger.info(f"HTMLReporter initialized. Reports will be saved to: {self.report_dir}")
+        logger.info(
+            f"HTMLReporter initialized. Reports will be saved to: {self.report_dir}"
+        )
 
     def _sanitize_and_create_dir(self, path_relative: str) -> str:
         """Sanitizes a path and ensures the directory exists and is writable."""
         if not path_relative or ".." in path_relative or os.path.isabs(path_relative):
-            raise ValueError(f"Invalid directory path: '{path_relative}'. Must be a relative path.")
+            raise ValueError(
+                f"Invalid directory path: '{path_relative}'. Must be a relative path."
+            )
 
         full_path = os.path.join(self.project_root, path_relative)
         os.makedirs(full_path, exist_ok=True)
@@ -300,11 +310,15 @@ class HTMLReporter:
         ]
         for key in required_ai_metrics_keys:
             if key not in overall_results["ai_metrics"]:
-                raise ReportValidationError(f"Missing required key in ai_metrics: '{key}'")
+                raise ReportValidationError(
+                    f"Missing required key in ai_metrics: '{key}'"
+                )
 
         for identifier, detail in overall_results["details"].items():
             if not isinstance(detail, dict):
-                raise ReportValidationError(f"Detail entry for '{identifier}' is not a dictionary.")
+                raise ReportValidationError(
+                    f"Detail entry for '{identifier}' is not a dictionary."
+                )
             required_detail_keys = [
                 "integration_status",
                 "test_passed",
@@ -414,7 +428,9 @@ class HTMLReporter:
             try:
                 self._validate_report_schema(overall_results)
             except ReportValidationError as e:
-                logger.critical(f"CRITICAL: Report schema validation failed: {e}", exc_info=True)
+                logger.critical(
+                    f"CRITICAL: Report schema validation failed: {e}", exc_info=True
+                )
                 await maybe_await(
                     audit_logger.log_event(
                         event_type="report_generation_failed",
@@ -429,14 +445,18 @@ class HTMLReporter:
                 raise
 
             report_filename = f"atco_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{random.randint(0,9999)}.html"
-            report_path_relative = os.path.join(self.report_dir_relative, report_filename)
+            report_path_relative = os.path.join(
+                self.report_dir_relative, report_filename
+            )
             full_report_path = os.path.join(self.project_root, report_path_relative)
 
             sanitized_results = self._sanitize_data_recursively(overall_results)
             sanitized_summary = sanitized_results["summary"]
             sanitized_details = sanitized_results["details"]
             sanitized_ai_metrics = sanitized_results["ai_metrics"]
-            sanitized_policy_hash = html.escape(str(getattr(policy_engine, "policy_hash", "")))
+            sanitized_policy_hash = html.escape(
+                str(getattr(policy_engine, "policy_hash", ""))
+            )
 
             # Re-format the details into a list of tuples to sort them
             sorted_details = sorted(sanitized_details.items(), key=lambda item: item[0])
@@ -474,15 +494,17 @@ class HTMLReporter:
                     }
                     icon_map = {"warn": "&#9888;", "fail": "&#x2716;"}
                     severity_class = severity_map.get(security_max_severity, "warn")
-                    security_icon_html = (
-                        f'<span class="icon {severity_class}">{icon_map[severity_class]}</span>'
-                    )
+                    security_icon_html = f'<span class="icon {severity_class}">{icon_map[severity_class]}</span>'
 
                 sarif_link = "N/A"
                 if detail.get("sarif_artifact_path"):
                     # Fix: Normalize path for POSIX-style URLs
-                    sanitized_sarif_path = Path(detail["sarif_artifact_path"]).as_posix()
-                    sarif_link = f'<a href="{sanitized_sarif_path}" target="_blank">View</a>'
+                    sanitized_sarif_path = Path(
+                        detail["sarif_artifact_path"]
+                    ).as_posix()
+                    sarif_link = (
+                        f'<a href="{sanitized_sarif_path}" target="_blank">View</a>'
+                    )
 
                 file_hash_display = detail.get("final_integrated_test_hash", "N/A")
                 if file_hash_display != "N/A":
@@ -723,7 +745,9 @@ class HTMLReporter:
                 total_requires_pr=sanitized_summary.get("total_requires_pr", 0),
                 total_deduplicated=sanitized_summary.get("total_deduplicated", 0),
                 total_not_generated=sanitized_summary.get("total_not_generated", 0),
-                total_targets_considered=sanitized_summary.get("total_targets_considered", 0),
+                total_targets_considered=sanitized_summary.get(
+                    "total_targets_considered", 0
+                ),
                 policy_hash_display=f"{sanitized_policy_hash[:10]}...{sanitized_policy_hash[-10:]}",
                 quarantine_panel_html=quarantine_panel_html,
                 pr_panel_html=pr_panel_html,
@@ -738,10 +762,14 @@ class HTMLReporter:
 
                 # write the 'latest' alias file
                 latest_report_path = os.path.join(self.report_dir, "latest.html")
-                await atomic_write(latest_report_path, final_html_content.encode("utf-8"))
+                await atomic_write(
+                    latest_report_path, final_html_content.encode("utf-8")
+                )
 
                 logger.info(f"HTML report generated at: {full_report_path}")
-                logger.info(f"HTML report 'latest' alias created at: {latest_report_path}")
+                logger.info(
+                    f"HTML report 'latest' alias created at: {latest_report_path}"
+                )
 
                 if AUDIT_LOGGER_AVAILABLE:
                     await maybe_await(
@@ -750,7 +778,9 @@ class HTMLReporter:
                             details={
                                 "report_path": Path(report_path_relative).as_posix(),
                                 "latest_alias": Path(
-                                    os.path.relpath(latest_report_path, self.project_root)
+                                    os.path.relpath(
+                                        latest_report_path, self.project_root
+                                    )
                                 ).as_posix(),
                                 "summary": sanitized_summary,
                                 "policy_hash": sanitized_policy_hash,
@@ -788,7 +818,9 @@ class HTMLReporter:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self.generate_html_report(overall_results, policy_engine))
+            return asyncio.run(
+                self.generate_html_report(overall_results, policy_engine)
+            )
 
         # If we are in an async context, we shouldn't block.
         # Instead, raise an error to tell the caller to await the coroutine directly.
@@ -801,10 +833,14 @@ class HTMLReporter:
         normalized_path = os.path.normpath(path)
 
         if normalized_path.startswith("..") or "../" in normalized_path:
-            raise ValueError(f"Path '{path}' contains forbidden parent directory traversals.")
+            raise ValueError(
+                f"Path '{path}' contains forbidden parent directory traversals."
+            )
 
         abs_path = os.path.abspath(os.path.join(self.project_root, normalized_path))
         if not abs_path.startswith(self.project_root):
-            raise ValueError(f"Path '{path}' attempts to traverse outside the project root.")
+            raise ValueError(
+                f"Path '{path}' attempts to traverse outside the project root."
+            )
 
         return os.path.relpath(abs_path, self.project_root)

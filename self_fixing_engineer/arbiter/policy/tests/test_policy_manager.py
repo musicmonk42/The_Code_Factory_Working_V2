@@ -73,7 +73,9 @@ async def policy_manager(mock_config, temp_policy_file):
 def test_domain_rule_validation():
     """Test DomainRule model validation"""
     # Valid rule
-    rule = DomainRule(active=True, allow=True, required_roles=["admin"], trust_score_threshold=0.5)
+    rule = DomainRule(
+        active=True, allow=True, required_roles=["admin"], trust_score_threshold=0.5
+    )
     assert rule.trust_score_threshold == 0.5
 
     # Invalid trust score
@@ -196,7 +198,9 @@ def test_policy_manager_encryption_key_setup(mock_config):
             ARBITER_ENGINE_BACKEND="openai",
             ARBITER_BACKEND_LLM_MODEL="gpt-4",
             ARBITER_BACKEND_LLM_API_KEY="test-key",
-            POLICY_CONFIG_FILE_PATH=str(Path(tempfile.mktemp(suffix=".json")).absolute()),
+            POLICY_CONFIG_FILE_PATH=str(
+                Path(tempfile.mktemp(suffix=".json")).absolute()
+            ),
             VALID_DOMAIN_PATTERN=r"^[a-zA-Z0-9_.-]+$",
             # No ENCRYPTION_KEY specified
         )
@@ -438,7 +442,9 @@ async def test_check_permission_unavailable():
 
     # Mock the import to raise ImportError
     with patch.object(manager, "check_permission") as mock_check:
-        mock_check.side_effect = RuntimeError("PermissionManager not available in this environment")
+        mock_check.side_effect = RuntimeError(
+            "PermissionManager not available in this environment"
+        )
 
         with pytest.raises(RuntimeError, match="PermissionManager not available"):
             await mock_check("admin", "write")
@@ -455,7 +461,9 @@ async def test_corrupted_json_after_decrypt(policy_manager):
     await policy_manager.save_policies()
 
     # Mock decrypt to return invalid JSON
-    with patch.object(policy_manager._fernet, "decrypt", return_value=b'{"invalid json'):
+    with patch.object(
+        policy_manager._fernet, "decrypt", return_value=b'{"invalid json'
+    ):
         with pytest.raises(ValueError, match="not valid JSON"):
             await policy_manager.load_policies()
 

@@ -33,7 +33,11 @@ except ImportError:
     PYDANTIC_AVAILABLE = False
 
 try:
-    from simulation.parallel import KUBERNETES_AVAILABLE, PROMETHEUS_AVAILABLE, RLLIB_AVAILABLE
+    from simulation.parallel import (
+        KUBERNETES_AVAILABLE,
+        PROMETHEUS_AVAILABLE,
+        RLLIB_AVAILABLE,
+    )
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     RLLIB_AVAILABLE = False
@@ -126,7 +130,9 @@ def test_parallel_config_validation_failure(temp_yaml_file, mock_config_data):
 
 @pytest.mark.skipif(not RLLIB_AVAILABLE, reason="Ray RLlib not available")
 @pytest.mark.asyncio
-async def test_ray_rllib_concurrency_tuner_init_success(mock_rl_tuner_config, monkeypatch, caplog):
+async def test_ray_rllib_concurrency_tuner_init_success(
+    mock_rl_tuner_config, monkeypatch, caplog
+):
     """Test successful initialization of RayRLlibConcurrencyTuner."""
     # RLlib available, tuner disabled
     mock_rl_tuner_config.enabled = False
@@ -233,7 +239,9 @@ async def test_execute_kubernetes_success(monkeypatch):
     monkeypatch.setattr("simulation.parallel.k8s_client.V1PodTemplateSpec", MagicMock())
     monkeypatch.setattr("simulation.parallel.k8s_client.V1PodSpec", MagicMock())
     monkeypatch.setattr("simulation.parallel.k8s_client.V1Container", MagicMock())
-    monkeypatch.setattr("simulation.parallel.k8s_config.load_incluster_config", MagicMock())
+    monkeypatch.setattr(
+        "simulation.parallel.k8s_config.load_incluster_config", MagicMock()
+    )
     monkeypatch.setattr("simulation.parallel.k8s_config.load_kube_config", MagicMock())
 
     mock_batch_v1 = MagicMock()
@@ -245,7 +253,9 @@ async def test_execute_kubernetes_success(monkeypatch):
     mock_core_v1.list_namespaced_pod.return_value = MagicMock(
         items=[MagicMock(metadata=MagicMock(name="test_pod"))]
     )
-    mock_core_v1.read_namespaced_pod_log.return_value = json.dumps({"status": "completed"})
+    mock_core_v1.read_namespaced_pod_log.return_value = json.dumps(
+        {"status": "completed"}
+    )
 
     monkeypatch.setattr(
         "simulation.parallel.k8s_client.CoreV1Api", MagicMock(return_value=mock_core_v1)
@@ -283,7 +293,9 @@ async def test_execute_aws_batch_success(monkeypatch):
     }
     mock_s3_client.delete_object.return_value = None
 
-    monkeypatch.setattr("boto3.client", MagicMock(side_effect=[mock_batch_client, mock_s3_client]))
+    monkeypatch.setattr(
+        "boto3.client", MagicMock(side_effect=[mock_batch_client, mock_s3_client])
+    )
 
     async def sim_func(config):
         return {"result": config["value"]}
@@ -308,12 +320,16 @@ async def test_run_parallel_simulations_success(monkeypatch):
     mock_global_config.default_backend = "local_asyncio"
     mock_global_config.max_local_workers = 2
 
-    monkeypatch.setattr("simulation.parallel.GLOBAL_PARALLEL_CONFIG", mock_global_config)
+    monkeypatch.setattr(
+        "simulation.parallel.GLOBAL_PARALLEL_CONFIG", mock_global_config
+    )
     monkeypatch.setattr(
         "simulation.parallel._parallel_backends",
         {"local_asyncio": execute_local_asyncio},
     )
-    monkeypatch.setattr("simulation.parallel._backend_availability", {"local_asyncio": True})
+    monkeypatch.setattr(
+        "simulation.parallel._backend_availability", {"local_asyncio": True}
+    )
 
     async def sim_func(config):
         return {"result": config["value"]}

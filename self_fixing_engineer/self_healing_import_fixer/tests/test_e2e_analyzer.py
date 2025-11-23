@@ -58,7 +58,9 @@ class TestAnalyzerE2E:
     def setup_and_teardown(self):
         """Setup test environment and cleanup after tests"""
         # Clean up any existing test directories first
-        for existing_dir in glob.glob(os.path.join(tempfile.gettempdir(), "analyzer_e2e_*")):
+        for existing_dir in glob.glob(
+            os.path.join(tempfile.gettempdir(), "analyzer_e2e_*")
+        ):
             try:
                 shutil.rmtree(existing_dir, ignore_errors=True)
             except:
@@ -158,7 +160,9 @@ def helper():
         import hmac
 
         hmac_key = os.environ.get("ANALYZER_POLICY_HMAC_KEY", "").encode()
-        signature = hmac.new(hmac_key, policy_content.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(
+            hmac_key, policy_content.encode(), hashlib.sha256
+        ).hexdigest()
         policies["signature"] = signature
 
         policy_file = os.path.join(self.config_dir, "policies.json")

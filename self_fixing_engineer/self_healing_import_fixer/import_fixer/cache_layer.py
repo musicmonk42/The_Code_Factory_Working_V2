@@ -145,7 +145,9 @@ def _safe_metric(ctor, *args, **kwargs):
         return _NoopMetric()
 
 
-cache_hits = _safe_metric(metrics.Counter, "cache_layer_hits_total", "Cache hits", ["backend"])
+cache_hits = _safe_metric(
+    metrics.Counter, "cache_layer_hits_total", "Cache hits", ["backend"]
+)
 cache_misses = _safe_metric(
     metrics.Counter, "cache_layer_misses_total", "Cache misses", ["backend"]
 )
@@ -170,7 +172,10 @@ _retry_on_redis = (
     retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=(retry_if_exception_type(RedisError) | retry_if_exception_type(ConnectionError)),
+        retry=(
+            retry_if_exception_type(RedisError)
+            | retry_if_exception_type(ConnectionError)
+        ),
         after=after_log(json_logger, 20),
     )
     if _HAS_TENACITY
@@ -199,7 +204,9 @@ class _BaseCache:
                         async with asyncio.timeout(5.0):
                             result = await self._get_impl(key)
                     else:
-                        result = await asyncio.wait_for(self._get_impl(key), timeout=5.0)
+                        result = await asyncio.wait_for(
+                            self._get_impl(key), timeout=5.0
+                        )
 
                     if result is None:
                         cache_misses.labels(self.backend).inc()
@@ -316,7 +323,9 @@ class _BaseCache:
                         async with asyncio.timeout(5.0):
                             new_val = await self._incr_impl(key)
                     else:
-                        new_val = await asyncio.wait_for(self._incr_impl(key), timeout=5.0)
+                        new_val = await asyncio.wait_for(
+                            self._incr_impl(key), timeout=5.0
+                        )
 
                     audit_logger.info(
                         "Cache operation",
@@ -403,7 +412,9 @@ class _FileCache(_BaseCache):
                 )
             else:
                 self.hmac_key = os.urandom(32).hex()
-                json_logger.warning("Generated temporary FILE_CACHE_HMAC_KEY for development.")
+                json_logger.warning(
+                    "Generated temporary FILE_CACHE_HMAC_KEY for development."
+                )
 
     def _p(self, key: str) -> Path:
         """Generates a secure file path from a key."""
@@ -458,7 +469,9 @@ class _FileCache(_BaseCache):
 
     async def _setex_impl(self, key: str, ttl: int, val: Any) -> bool:
         p = self._p(key)
-        payload = self._sign_payload({"v": val, "exp": time.time() + ttl if ttl else None})
+        payload = self._sign_payload(
+            {"v": val, "exp": time.time() + ttl if ttl else None}
+        )
         with contextlib.suppress(Exception):
             p.write_text(json.dumps(payload), "utf-8")
         return True
@@ -644,5 +657,7 @@ async def get_cache(
             )
 
     # Fallback to in-memory cache (last resort)
-    await _check_fallback_usage("in_memory_cache", "Using in-memory cache as last resort.")
+    await _check_fallback_usage(
+        "in_memory_cache", "Using in-memory cache as last resort."
+    )
     return _InMemoryCache()

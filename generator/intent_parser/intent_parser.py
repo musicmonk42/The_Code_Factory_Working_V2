@@ -131,7 +131,9 @@ def get_spacy():
             _spacy = spacy
             logger.info("spaCy loaded successfully (lazy import)")
         except ImportError as e:
-            logger.error(f"Failed to import spacy: {e}. NLP features will be unavailable.")
+            logger.error(
+                f"Failed to import spacy: {e}. NLP features will be unavailable."
+            )
             raise ImportError(
                 "spacy is required for NLP extraction. Install with: pip install spacy"
             )
@@ -151,7 +153,9 @@ def get_torch():
             _torch = torch
             logger.info("PyTorch loaded successfully (lazy import)")
         except ImportError as e:
-            logger.error(f"Failed to import torch: {e}. Some ML features will be unavailable.")
+            logger.error(
+                f"Failed to import torch: {e}. Some ML features will be unavailable."
+            )
             raise ImportError(
                 "torch is required for some ML features. Install with: pip install torch"
             )
@@ -191,7 +195,9 @@ logger = logging.getLogger(__name__)
 PARSE_LATENCY = Histogram(
     "intent_parser_parse_latency_seconds", "Latency of the full parsing process"
 )
-AMBIGUITY_RATE = Gauge("intent_parser_ambiguity_rate", "Ratio of ambiguities to features")
+AMBIGUITY_RATE = Gauge(
+    "intent_parser_ambiguity_rate", "Ratio of ambiguities to features"
+)
 PARSE_ERRORS = Counter(
     "intent_parser_errors_total", "Total errors during parsing", ["stage", "error_type"]
 )
@@ -219,7 +225,9 @@ LLM_CLIENT_CACHE_HITS = Counter(
 LLM_CLIENT_FALLBACKS = Counter(
     "intent_parser_llm_client_fallbacks_total", "LLM client fallbacks", ["reason"]
 )
-REDACTION_COUNT = Counter("intent_parser_redaction_events_total", "Redaction events during parsing")
+REDACTION_COUNT = Counter(
+    "intent_parser_redaction_events_total", "Redaction events during parsing"
+)
 FEEDBACK_RECORDED_COUNT = Counter(
     "intent_parser_feedback_recorded_total", "Number of feedback ratings recorded"
 )
@@ -258,7 +266,9 @@ class IntentParserConfig(BaseModel):
     def validate_format(cls, v):
         supported_formats = ["auto", "markdown", "rst", "plaintext", "yaml", "pdf"]
         if v not in supported_formats:
-            raise ValueError(f"Unsupported format: {v}. Must be one of {supported_formats}")
+            raise ValueError(
+                f"Unsupported format: {v}. Must be one of {supported_formats}"
+            )
         return v
 
     @validator("cache_dir", pre=True, always=True)
@@ -305,7 +315,9 @@ class MarkdownStrategy(ParserStrategy):
                 sections[section],
                 flags=re.DOTALL,
             )
-            sections[section] = re.sub(r"(\*\*|__|\*|_)(.*?)\1", r"\2", sections[section])
+            sections[section] = re.sub(
+                r"(\*\*|__|\*|_)(.*?)\1", r"\2", sections[section]
+            )
             sections[section] = re.sub(r"\[.*?\]\(.*?\)", "", sections[section])
 
         FORMAT_DETECTION_COUNT.labels(format="markdown").inc()
@@ -350,7 +362,9 @@ class YAMLStrategy(ParserStrategy):
             if isinstance(data, dict):
                 for k, v in data.items():
                     sections[str(k)] = (
-                        json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else str(v)
+                        json.dumps(v, ensure_ascii=False)
+                        if isinstance(v, (dict, list))
+                        else str(v)
                     )
             elif isinstance(data, list):
                 sections["List Content"] = json.dumps(data, ensure_ascii=False)
@@ -360,7 +374,9 @@ class YAMLStrategy(ParserStrategy):
             logger.debug(f"Parsed YAML into {len(sections)} sections.")
             return sections
         except yaml.YAMLError as e:
-            logger.error(f"YAML parsing failed: {e}. Falling back to plaintext.", exc_info=True)
+            logger.error(
+                f"YAML parsing failed: {e}. Falling back to plaintext.", exc_info=True
+            )
             PARSE_ERRORS.labels(stage="parsing", error_type="yaml_error").inc()
             return PlaintextStrategy().parse(content)
 
@@ -368,7 +384,9 @@ class YAMLStrategy(ParserStrategy):
 class PDFStrategy(ParserStrategy):
     def parse(self, content: Union[str, Path]) -> Dict[str, str]:
         if not HAS_PDFPLUMBER:
-            logger.error("PDF parsing requested but pdfplumber is not installed. Falling back.")
+            logger.error(
+                "PDF parsing requested but pdfplumber is not installed. Falling back."
+            )
             PARSE_ERRORS.labels(stage="parsing", error_type="pdf_no_lib").inc()
             return PlaintextStrategy().parse(str(content))
 
@@ -397,16 +415,22 @@ class PDFStrategy(ParserStrategy):
                                 if ocr_text.strip():
                                     full_text += f"\n[OCR_IMAGE_TEXT]:\n{ocr_text}\n"
                             except Exception as ocr_err:
-                                logger.warning(f"OCR failed for an image on page {i+1}: {ocr_err}")
+                                logger.warning(
+                                    f"OCR failed for an image on page {i+1}: {ocr_err}"
+                                )
                                 PARSE_ERRORS.labels(
                                     stage="parsing", error_type="pdf_ocr_error"
                                 ).inc()
 
             FORMAT_DETECTION_COUNT.labels(format="pdf").inc()
             logger.debug(f"Parsed PDF. Extracted text length: {len(full_text)}.")
-            return {"Full Document (PDF)": full_text.strip() or "[EMPTY_OR_UNREADABLE_PDF]"}
+            return {
+                "Full Document (PDF)": full_text.strip() or "[EMPTY_OR_UNREADABLE_PDF]"
+            }
         except Exception as e:
-            logger.error(f"Failed to open or process PDF '{content}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to open or process PDF '{content}': {e}", exc_info=True
+            )
             PARSE_ERRORS.labels(stage="parsing", error_type="pdf_general_error").inc()
             return {"Full Document (PDF)": f"[ERROR_PROCESSING_PDF: {e}]"}
 
@@ -414,31 +438,44 @@ class PDFStrategy(ParserStrategy):
 # --- Other components (Extractor, Detector, Summarizer, LLMClient, FeedbackLoop) ---
 class ExtractorStrategy(ABC):
     @abstractmethod
-    def extract(self, sections: Dict[str, str], language: str = "en") -> Dict[str, List[str]]:
+    def extract(
+        self, sections: Dict[str, str], language: str = "en"
+    ) -> Dict[str, List[str]]:
         pass
 
 
 class RegexExtractor(ExtractorStrategy):
-    def __init__(self, patterns: Dict[str, str], language_patterns: Dict[str, Dict[str, str]]):
+    def __init__(
+        self, patterns: Dict[str, str], language_patterns: Dict[str, Dict[str, str]]
+    ):
         self.default_patterns = {
             k: re.compile(v, re.IGNORECASE | re.MULTILINE) for k, v in patterns.items()
         }
         self.language_specific_patterns = {}
         for lang, lang_pats in language_patterns.items():
             self.language_specific_patterns[lang] = {
-                k: re.compile(v, re.IGNORECASE | re.MULTILINE) for k, v in lang_pats.items()
+                k: re.compile(v, re.IGNORECASE | re.MULTILINE)
+                for k, v in lang_pats.items()
             }
 
-    def extract(self, sections: Dict[str, str], language: str = "en") -> Dict[str, List[str]]:
+    def extract(
+        self, sections: Dict[str, str], language: str = "en"
+    ) -> Dict[str, List[str]]:
         extracted = defaultdict(list)
-        current_patterns = self.language_specific_patterns.get(language, self.default_patterns)
+        current_patterns = self.language_specific_patterns.get(
+            language, self.default_patterns
+        )
         if not current_patterns:
-            logger.warning(f"No specific or default regex patterns found for '{language}'.")
+            logger.warning(
+                f"No specific or default regex patterns found for '{language}'."
+            )
         for text in sections.values():
             for key, pattern in current_patterns.items():
                 matches = pattern.finditer(text)
                 for m in matches:
-                    extracted[key].append(m.group(1).strip() if m.groups() else m.group(0).strip())
+                    extracted[key].append(
+                        m.group(1).strip() if m.groups() else m.group(0).strip()
+                    )
         EXTRACTION_COUNT.labels(extractor_type="regex", language=language).inc()
         return dict(extracted)
 
@@ -454,9 +491,13 @@ class NLPExtractor(ExtractorStrategy):
             # ... rest of extraction logic
     """
 
-    def extract(self, sections: Dict[str, str], language: str = "en") -> Dict[str, List[str]]:
+    def extract(
+        self, sections: Dict[str, str], language: str = "en"
+    ) -> Dict[str, List[str]]:
         """Placeholder implementation. Override this method to use NLP-based extraction."""
-        logger.warning("NLPExtractor.extract() called but not implemented. Returning empty dict.")
+        logger.warning(
+            "NLPExtractor.extract() called but not implemented. Returning empty dict."
+        )
         return {}
 
 
@@ -483,14 +524,18 @@ class LLMDetector(AmbiguityDetectorStrategy):
 
     async def detect(self, text: str, dry_run: bool, language: str = "en") -> List[str]:
         """Placeholder implementation. Override this method to use LLM-based detection."""
-        logger.warning("LLMDetector.detect() called but not implemented. Returning empty list.")
+        logger.warning(
+            "LLMDetector.detect() called but not implemented. Returning empty list."
+        )
         return []
 
 
 class SummarizerStrategy(ABC):
     # --- FIX: Removed duplicated 'abstract' ---
     @abstractmethod
-    def summarize(self, requirements: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    def summarize(
+        self, requirements: Dict[str, Any], language: str = "en"
+    ) -> Dict[str, Any]:
         pass
 
 
@@ -508,7 +553,9 @@ class LLMSummarizer(SummarizerStrategy):
         self.llm_config = llm_config
         logger.info("LLMSummarizer initialized (stub implementation)")
 
-    def summarize(self, requirements: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    def summarize(
+        self, requirements: Dict[str, Any], language: str = "en"
+    ) -> Dict[str, Any]:
         """Placeholder implementation. Override this method to use LLM-based summarization."""
         logger.warning(
             "LLMSummarizer.summarize() called but not implemented. Returning requirements as-is."
@@ -524,7 +571,9 @@ class TruncateSummarizer(SummarizerStrategy):
         self.max_length = max_length
         logger.info(f"TruncateSummarizer initialized with max_length={max_length}")
 
-    def summarize(self, requirements: Dict[str, Any], language: str = "en") -> Dict[str, Any]:
+    def summarize(
+        self, requirements: Dict[str, Any], language: str = "en"
+    ) -> Dict[str, Any]:
         """Truncate requirements to max length."""
         truncated = {}
         for key, value in requirements.items():
@@ -601,7 +650,9 @@ class FeedbackLoop:
         }
 
 
-def generate_provenance(content: str, file_path: Optional[Path] = None) -> Dict[str, Any]:
+def generate_provenance(
+    content: str, file_path: Optional[Path] = None
+) -> Dict[str, Any]:
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     timestamp = datetime.datetime.utcnow().isoformat() + "Z"
     provenance = {
@@ -619,7 +670,9 @@ def generate_provenance(content: str, file_path: Optional[Path] = None) -> Dict[
 class IntentParser:
     def __init__(self, config_path: str = "intent_parser.yaml"):
         self._config_path = Path(config_path)
-        self.config: IntentParserConfig = self._load_and_validate_config(self._config_path)
+        self.config: IntentParserConfig = self._load_and_validate_config(
+            self._config_path
+        )
 
         self.feedback: FeedbackLoop = FeedbackLoop(self.config.feedback_file)
         self.llm_client: LLMClient = LLMClient(
@@ -631,7 +684,9 @@ class IntentParser:
         self.detector: AmbiguityDetectorStrategy = self._select_detector()
         self.summarizer: SummarizerStrategy = self._select_summarizer()
 
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=os.cpu_count() or 1
+        )
         self.input_language: str = self.config.multi_language_support.default_lang
         self._health_check()
 
@@ -652,13 +707,17 @@ class IntentParser:
     def reload_config_and_strategies(self):
         logger.info(f"Reloading configuration from {self._config_path}")
         self.config = self._load_and_validate_config(self._config_path)
-        self.llm_client = LLMClient(self.config.llm_config, cache_dir=self.config.cache_dir)
+        self.llm_client = LLMClient(
+            self.config.llm_config, cache_dir=self.config.cache_dir
+        )
         self.extractor = self._select_extractor()
         self.detector = self._select_detector()
         self.summarizer = self._select_summarizer()
         log_action("Config Reloaded", {"path": str(self._config_path)})
 
-    def _select_parser(self, format_hint: str, file_path: Optional[Path] = None) -> ParserStrategy:
+    def _select_parser(
+        self, format_hint: str, file_path: Optional[Path] = None
+    ) -> ParserStrategy:
         target_format = format_hint
         if target_format == "auto":
             if file_path:
@@ -725,7 +784,11 @@ class IntentParser:
                 file_path = Path(file_path)
                 if not file_path.exists():
                     raise FileNotFoundError(f"File not found: {file_path}")
-                if not content and file_path.is_file() and file_path.suffix.lower() not in [".pdf"]:
+                if (
+                    not content
+                    and file_path.is_file()
+                    and file_path.suffix.lower() not in [".pdf"]
+                ):
                     content = file_path.read_text(encoding="utf-8")
 
             if not content and not file_path:
@@ -741,12 +804,18 @@ class IntentParser:
                 try:
                     self.input_language = detect(content_redacted)
                 except LangDetectException:
-                    self.input_language = self.config.multi_language_support.default_lang
+                    self.input_language = (
+                        self.config.multi_language_support.default_lang
+                    )
             else:
                 self.input_language = self.config.multi_language_support.default_lang
 
-            self.parser = self._select_parser(format_hint or self.config.format, file_path)
-            parser_input = file_path if isinstance(self.parser, PDFStrategy) else content_redacted
+            self.parser = self._select_parser(
+                format_hint or self.config.format, file_path
+            )
+            parser_input = (
+                file_path if isinstance(self.parser, PDFStrategy) else content_redacted
+            )
             sections = self.parser.parse(parser_input)
 
             extracted = self.extractor.extract(sections, language=self.input_language)
@@ -762,18 +831,24 @@ class IntentParser:
                 "ambiguities": ambiguities,
             }
 
-            requirements = self.summarizer.summarize(requirements, language=self.input_language)
+            requirements = self.summarizer.summarize(
+                requirements, language=self.input_language
+            )
 
             parse_latency = time.time() - start_time
             PARSE_LATENCY.observe(parse_latency)
 
-            log_action("Parse Completed", {"provenance": provenance, "user_id": user_id})
+            log_action(
+                "Parse Completed", {"provenance": provenance, "user_id": user_id}
+            )
             if span:
                 span.set_status(Status(StatusCode.OK))
             return requirements
         except Exception as e:
             logger.error(f"IntentParser.parse failed: {e}", exc_info=True)
-            PARSE_ERRORS.labels(stage="overall_parse", error_type=type(e).__name__).inc()
+            PARSE_ERRORS.labels(
+                stage="overall_parse", error_type=type(e).__name__
+            ).inc()
             if span:
                 span.set_status(Status(StatusCode.ERROR, f"Parsing failed: {e}"))
                 span.record_exception(e)

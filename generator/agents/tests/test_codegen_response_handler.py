@@ -178,7 +178,9 @@ def test_monitor_and_scan_code_invokes_scan_and_secret_detection(monkeypatch):
 
     def fake_scan(code_files):
         # simulate one issue in each file
-        return {name: {"issues": [{"id": "TEST", "severity": "LOW"}]} for name in code_files}
+        return {
+            name: {"issues": [{"id": "TEST", "severity": "LOW"}]} for name in code_files
+        }
 
     def fake_log_action(event_type, payload=None):
         captured["events"].append((event_type, payload or {}))
@@ -222,4 +224,6 @@ def test_monitor_and_scan_code_handles_scan_exceptions(monkeypatch):
     out = crh.monitor_and_scan_code(files)
 
     assert out == files
-    assert any("Unified SAST Scan Error" in e[0] or "SAST" in e[0] for e in captured["events"])
+    assert any(
+        "Unified SAST Scan Error" in e[0] or "SAST" in e[0] for e in captured["events"]
+    )

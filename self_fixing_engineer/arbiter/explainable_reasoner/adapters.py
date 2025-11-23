@@ -17,7 +17,10 @@ from arbiter.explainable_reasoner.metrics import METRICS
 from arbiter.explainable_reasoner.reasoner_config import SensitiveValue
 
 # Real internal imports (enforce)
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from arbiter.explainable_reasoner.reasoner_errors import (
+    ReasonerError,
+    ReasonerErrorCode,
+)
 from arbiter.explainable_reasoner.utils import redact_pii
 from prometheus_client import REGISTRY, Counter, Histogram
 from pydantic import BaseModel, Field, HttpUrl, ValidationError
@@ -362,7 +365,9 @@ class OpenAIGPTAdapter(LLMAdapter):
             ReasonerError: If an image is too large.
         """
         if not isinstance(prompt, str):
-            raise ReasonerError("Prompt must be a string", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "Prompt must be a string", ReasonerErrorCode.INVALID_INPUT
+            )
         prompt = redact_pii(prompt)
         # Assuming 128k context for GPT-4-turbo
         if len(prompt) > 128000:
@@ -376,7 +381,11 @@ class OpenAIGPTAdapter(LLMAdapter):
                 )
             _logger.info("multimodal_encode", count=len(multi_modal_data))
             for key, data in multi_modal_data.items():
-                if not isinstance(data, dict) or "data_type" not in data or "data" not in data:
+                if (
+                    not isinstance(data, dict)
+                    or "data_type" not in data
+                    or "data" not in data
+                ):
                     raise ReasonerError(
                         f"Invalid multimodal data for key {key}",
                         ReasonerErrorCode.INVALID_INPUT,
@@ -387,7 +396,10 @@ class OpenAIGPTAdapter(LLMAdapter):
                             f"Image too large for key {key}",
                             ReasonerErrorCode.INVALID_INPUT,
                         )
-                    mime = mimetypes.guess_type(data.get("filename", ""))[0] or "image/jpeg"
+                    mime = (
+                        mimetypes.guess_type(data.get("filename", ""))[0]
+                        or "image/jpeg"
+                    )
                     if mime not in [
                         "image/jpeg",
                         "image/png",
@@ -439,7 +451,9 @@ class OpenAIGPTAdapter(LLMAdapter):
             )
         # GPT-4 has a max_tokens limit of 4096, but newer models are higher. Sticking to a safe lower bound.
         if max_tokens > 4096 and "gpt-4" in self.model_name.lower():
-            raise ReasonerError("max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT
+            )
 
         start_time = time.monotonic()
         messages = self._build_openai_messages(prompt, multi_modal_data)
@@ -462,9 +476,9 @@ class OpenAIGPTAdapter(LLMAdapter):
             generation = result["choices"][0]["message"]["content"]
 
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
             return generation
         except httpx.HTTPStatusError as e:
             _logger.error(
@@ -530,7 +544,9 @@ class OpenAIGPTAdapter(LLMAdapter):
                 "Temperature must be between 0 and 1", ReasonerErrorCode.INVALID_INPUT
             )
         if max_tokens > 4096 and "gpt-4" in self.model_name.lower():
-            raise ReasonerError("max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT
+            )
 
         start_time = time.monotonic()
         messages = self._build_openai_messages(prompt, multi_modal_data)
@@ -558,7 +574,11 @@ class OpenAIGPTAdapter(LLMAdapter):
                                 continue
                             try:
                                 data = json.loads(line.replace("data: ", "", 1))
-                                if data.get("choices", [{}])[0].get("delta", {}).get("content"):
+                                if (
+                                    data.get("choices", [{}])[0]
+                                    .get("delta", {})
+                                    .get("content")
+                                ):
                                     text_chunk = data["choices"][0]["delta"]["content"]
                                     STREAM_CHUNKS.labels(
                                         adapter=self.__class__.__name__,
@@ -574,11 +594,13 @@ class OpenAIGPTAdapter(LLMAdapter):
                                 )
 
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
         except httpx.TimeoutException as e:
-            _logger.error("openai_stream_timeout", timeout=self.timeout, endpoint=endpoint)
+            _logger.error(
+                "openai_stream_timeout", timeout=self.timeout, endpoint=endpoint
+            )
             INFERENCE_ERRORS.labels(
                 adapter=self.__class__.__name__, endpoint=endpoint, code="timeout"
             ).inc()
@@ -628,10 +650,14 @@ class OpenAIGPTAdapter(LLMAdapter):
             ReasonerError: On unexpected errors during the check.
         """
         endpoint = "models"
-        _logger.debug("openai_health_check_start", model=self.model_name, endpoint=endpoint)
+        _logger.debug(
+            "openai_health_check_start", model=self.model_name, endpoint=endpoint
+        )
         try:
             client = await self._get_client()
-            response = await client.get(f"{self.base_url}/{endpoint}", headers=self._client_headers)
+            response = await client.get(
+                f"{self.base_url}/{endpoint}", headers=self._client_headers
+            )
             response.raise_for_status()
             _logger.info("openai_health_check_success")
             return True
@@ -640,7 +666,9 @@ class OpenAIGPTAdapter(LLMAdapter):
             HEALTH_CHECK_ERRORS.labels(adapter=self.__class__.__name__).inc()
             return False
         except Exception as e:
-            _logger.critical("openai_health_check_unexpected", exc_info=True, error=str(e))
+            _logger.critical(
+                "openai_health_check_unexpected", exc_info=True, error=str(e)
+            )
             raise ReasonerError(
                 f"Health check failed: {str(e)}",
                 ReasonerErrorCode.SERVICE_UNAVAILABLE,
@@ -675,7 +703,9 @@ class GeminiAPIAdapter(LLMAdapter):
             ReasonerError: If an image is too large.
         """
         if not isinstance(prompt, str):
-            raise ReasonerError("Prompt must be a string", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "Prompt must be a string", ReasonerErrorCode.INVALID_INPUT
+            )
         prompt = redact_pii(prompt)
         parts = [{"text": prompt}]
         if multi_modal_data:
@@ -686,7 +716,11 @@ class GeminiAPIAdapter(LLMAdapter):
                 )
             _logger.info("multimodal_encode", count=len(multi_modal_data))
             for key, data in multi_modal_data.items():
-                if not isinstance(data, dict) or "data_type" not in data or "data" not in data:
+                if (
+                    not isinstance(data, dict)
+                    or "data_type" not in data
+                    or "data" not in data
+                ):
                     raise ReasonerError(
                         f"Invalid multimodal data for key {key}",
                         ReasonerErrorCode.INVALID_INPUT,
@@ -698,7 +732,8 @@ class GeminiAPIAdapter(LLMAdapter):
                             ReasonerErrorCode.INVALID_INPUT,
                         )
                     mime_type = (
-                        mimetypes.guess_type(data.get("filename", "image.jpg"))[0] or "image/jpeg"
+                        mimetypes.guess_type(data.get("filename", "image.jpg"))[0]
+                        or "image/jpeg"
                     )
                     if mime_type not in [
                         "image/jpeg",
@@ -711,7 +746,9 @@ class GeminiAPIAdapter(LLMAdapter):
                             ReasonerErrorCode.INVALID_INPUT,
                         )
                     b64_image = base64.b64encode(data["data"]).decode("utf-8")
-                    parts.append({"inline_data": {"mime_type": mime_type, "data": b64_image}})
+                    parts.append(
+                        {"inline_data": {"mime_type": mime_type, "data": b64_image}}
+                    )
         return parts
 
     @retry()
@@ -770,16 +807,18 @@ class GeminiAPIAdapter(LLMAdapter):
             )
             response.raise_for_status()
             result = response.json()
-            if not result.get("candidates") or not result["candidates"][0].get("content"):
+            if not result.get("candidates") or not result["candidates"][0].get(
+                "content"
+            ):
                 finish_reason = result["candidates"][0].get("finishReason", "UNKNOWN")
                 _logger.warning("gemini_empty_response", finish_reason=finish_reason)
                 return f"[MODEL_RESPONSE_BLOCKED: {finish_reason}]"
 
             generation = result["candidates"][0]["content"]["parts"][0]["text"]
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
             return generation
         except httpx.HTTPStatusError as e:
             _logger.error(
@@ -879,10 +918,12 @@ class GeminiAPIAdapter(LLMAdapter):
                                 continue
                             try:
                                 data = json.loads(line)
-                                if data.get("candidates") and data["candidates"][0].get("content"):
-                                    text_chunk = data["candidates"][0]["content"]["parts"][0][
-                                        "text"
-                                    ]
+                                if data.get("candidates") and data["candidates"][0].get(
+                                    "content"
+                                ):
+                                    text_chunk = data["candidates"][0]["content"][
+                                        "parts"
+                                    ][0]["text"]
                                     STREAM_CHUNKS.labels(
                                         adapter=self.__class__.__name__,
                                         endpoint=endpoint,
@@ -897,11 +938,13 @@ class GeminiAPIAdapter(LLMAdapter):
                                 )
 
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
         except httpx.TimeoutException as e:
-            _logger.error("gemini_stream_timeout", timeout=self.timeout, endpoint=endpoint)
+            _logger.error(
+                "gemini_stream_timeout", timeout=self.timeout, endpoint=endpoint
+            )
             INFERENCE_ERRORS.labels(
                 adapter=self.__class__.__name__, endpoint=endpoint, code="timeout"
             ).inc()
@@ -951,10 +994,14 @@ class GeminiAPIAdapter(LLMAdapter):
             ReasonerError: On unexpected errors during the check.
         """
         endpoint = "models"
-        _logger.debug("gemini_health_check_start", model=self.model_name, endpoint=endpoint)
+        _logger.debug(
+            "gemini_health_check_start", model=self.model_name, endpoint=endpoint
+        )
         try:
             client = await self._get_client()
-            response = await client.get(f"{self.base_url}", params={"key": self._api_key_param})
+            response = await client.get(
+                f"{self.base_url}", params={"key": self._api_key_param}
+            )
             response.raise_for_status()
             _logger.info("gemini_health_check_success")
             return True
@@ -963,7 +1010,9 @@ class GeminiAPIAdapter(LLMAdapter):
             HEALTH_CHECK_ERRORS.labels(adapter=self.__class__.__name__).inc()
             return False
         except Exception as e:
-            _logger.critical("gemini_health_check_unexpected", exc_info=True, error=str(e))
+            _logger.critical(
+                "gemini_health_check_unexpected", exc_info=True, error=str(e)
+            )
             raise ReasonerError(
                 f"Health check failed: {str(e)}",
                 ReasonerErrorCode.SERVICE_UNAVAILABLE,
@@ -1002,7 +1051,9 @@ class AnthropicAdapter(LLMAdapter):
             ReasonerError: If an image is too large.
         """
         if not isinstance(prompt, str):
-            raise ReasonerError("Prompt must be a string", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "Prompt must be a string", ReasonerErrorCode.INVALID_INPUT
+            )
         prompt = redact_pii(prompt)
         content = [{"type": "text", "text": prompt}]
         if multi_modal_data:
@@ -1013,7 +1064,11 @@ class AnthropicAdapter(LLMAdapter):
                 )
             _logger.info("multimodal_encode", count=len(multi_modal_data))
             for key, data in multi_modal_data.items():
-                if not isinstance(data, dict) or "data_type" not in data or "data" not in data:
+                if (
+                    not isinstance(data, dict)
+                    or "data_type" not in data
+                    or "data" not in data
+                ):
                     raise ReasonerError(
                         f"Invalid multimodal data for key {key}",
                         ReasonerErrorCode.INVALID_INPUT,
@@ -1025,7 +1080,8 @@ class AnthropicAdapter(LLMAdapter):
                             ReasonerErrorCode.INVALID_INPUT,
                         )
                     media_type = (
-                        mimetypes.guess_type(data.get("filename", "image.jpg"))[0] or "image/jpeg"
+                        mimetypes.guess_type(data.get("filename", "image.jpg"))[0]
+                        or "image/jpeg"
                     )
                     if media_type not in [
                         "image/jpeg",
@@ -1073,7 +1129,9 @@ class AnthropicAdapter(LLMAdapter):
             ReasonerError: On API failure, timeout, or unexpected errors.
         """
         endpoint = "messages"
-        _logger.debug("anthropic_request_start", model=self.model_name, endpoint=endpoint)
+        _logger.debug(
+            "anthropic_request_start", model=self.model_name, endpoint=endpoint
+        )
 
         max_tokens = kwargs.get("max_tokens", 2048)
         temperature = kwargs.get("temperature", 0.7)
@@ -1082,7 +1140,9 @@ class AnthropicAdapter(LLMAdapter):
                 "Temperature must be between 0 and 1", ReasonerErrorCode.INVALID_INPUT
             )
         if max_tokens > 4096:
-            raise ReasonerError("max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT
+            )
 
         start_time = time.monotonic()
         messages = self._build_anthropic_messages(prompt, multi_modal_data)
@@ -1105,9 +1165,9 @@ class AnthropicAdapter(LLMAdapter):
             generation = result["content"][0]["text"]
 
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
             return generation
         except httpx.HTTPStatusError as e:
             _logger.error(
@@ -1164,7 +1224,9 @@ class AnthropicAdapter(LLMAdapter):
             ReasonerError: On API failure, timeout, or unexpected errors.
         """
         endpoint = "messages"
-        _logger.debug("anthropic_stream_start", model=self.model_name, endpoint=endpoint)
+        _logger.debug(
+            "anthropic_stream_start", model=self.model_name, endpoint=endpoint
+        )
 
         max_tokens = kwargs.get("max_tokens", 2048)
         temperature = kwargs.get("temperature", 0.7)
@@ -1173,7 +1235,9 @@ class AnthropicAdapter(LLMAdapter):
                 "Temperature must be between 0 and 1", ReasonerErrorCode.INVALID_INPUT
             )
         if max_tokens > 4096:
-            raise ReasonerError("max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "max_tokens exceeds limit (4096)", ReasonerErrorCode.INVALID_INPUT
+            )
 
         start_time = time.monotonic()
         messages = self._build_anthropic_messages(prompt, multi_modal_data)
@@ -1222,11 +1286,13 @@ class AnthropicAdapter(LLMAdapter):
                                 )
 
             latency = time.monotonic() - start_time
-            INFERENCE_LATENCY.labels(adapter=self.__class__.__name__, endpoint=endpoint).observe(
-                latency
-            )
+            INFERENCE_LATENCY.labels(
+                adapter=self.__class__.__name__, endpoint=endpoint
+            ).observe(latency)
         except httpx.TimeoutException as e:
-            _logger.error("anthropic_stream_timeout", timeout=self.timeout, endpoint=endpoint)
+            _logger.error(
+                "anthropic_stream_timeout", timeout=self.timeout, endpoint=endpoint
+            )
             INFERENCE_ERRORS.labels(
                 adapter=self.__class__.__name__, endpoint=endpoint, code="timeout"
             ).inc()
@@ -1276,11 +1342,15 @@ class AnthropicAdapter(LLMAdapter):
             ReasonerError: On unexpected errors during the check.
         """
         endpoint = "health"  # Hypothetical endpoint, as Anthropic doesn't have a public health check. A lightweight request could be used instead.
-        _logger.debug("anthropic_health_check_start", model=self.model_name, endpoint=endpoint)
+        _logger.debug(
+            "anthropic_health_check_start", model=self.model_name, endpoint=endpoint
+        )
         try:
             client = await self._get_client()
             # As a substitute for a true health endpoint, we can make a lightweight request that checks for a valid response
-            response = await client.get(f"{self.base_url}/messages", headers=self._client_headers)
+            response = await client.get(
+                f"{self.base_url}/messages", headers=self._client_headers
+            )
             # A 4xx or 5xx response here would indicate an issue.
             response.raise_for_status()
             _logger.info("anthropic_health_check_success")
@@ -1290,7 +1360,9 @@ class AnthropicAdapter(LLMAdapter):
             HEALTH_CHECK_ERRORS.labels(adapter=self.__class__.__name__).inc()
             return False
         except Exception as e:
-            _logger.critical("anthropic_health_check_unexpected", exc_info=True, error=str(e))
+            _logger.critical(
+                "anthropic_health_check_unexpected", exc_info=True, error=str(e)
+            )
             raise ReasonerError(
                 f"Health check failed: {str(e)}",
                 ReasonerErrorCode.SERVICE_UNAVAILABLE,
@@ -1312,7 +1384,9 @@ class LLMAdapterFactory:
         model_name: str = Field(..., description="Model name (e.g., 'gpt-4').")
         api_key: Optional[str] = Field(None, description="API key.")
         base_url: Optional[HttpUrl] = Field(None, description="Base URL.")
-        adapter_type: str = Field(..., description="Adapter type (openai/gemini/anthropic).")
+        adapter_type: str = Field(
+            ..., description="Adapter type (openai/gemini/anthropic)."
+        )
 
     @classmethod
     def register_adapter(cls, name: str, adapter_class: Type[LLMAdapter]):
@@ -1350,7 +1424,9 @@ class LLMAdapterFactory:
         try:
             config = cls.AdapterConfig.model_validate(model_config)
         except ValidationError as e:
-            _logger.error("config_validation_failed", errors=str(e), config=model_config)
+            _logger.error(
+                "config_validation_failed", errors=str(e), config=model_config
+            )
             raise ReasonerError(
                 f"Invalid model configuration: {str(e)}",
                 ReasonerErrorCode.CONFIGURATION_ERROR,

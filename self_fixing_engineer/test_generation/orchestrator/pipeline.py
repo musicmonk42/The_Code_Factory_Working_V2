@@ -104,11 +104,15 @@ class PipelineConfig:
     coverage_reports_dir: str = "atco_artifacts/coverage_reports"
     venv_dir: str = "atco_artifacts/venv"  # FIX: Add venv directory to config
     suite_dir: str = "tests"
-    python_venv_deps: List[str] = field(default_factory=lambda: ["pytest", "pytest-cov"])
+    python_venv_deps: List[str] = field(
+        default_factory=lambda: ["pytest", "pytest-cov"]
+    )
     backend_timeouts: Dict[str, int] = field(default_factory=lambda: {"pynguin": 60})
     test_exec_timeout_seconds: int = 30
     mutation_testing: Dict[str, Any] = field(default_factory=lambda: {"enabled": False})
-    compliance_reporting: Dict[str, Any] = field(default_factory=lambda: {"enabled": True})
+    compliance_reporting: Dict[str, Any] = field(
+        default_factory=lambda: {"enabled": True}
+    )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineConfig":
@@ -192,7 +196,9 @@ async def _process_target(
         await _maybe_await(utils.SecurityScanner.scan_test_file(test_path))
     except Exception as exc:
         # Non‑blocking: log and continue
-        await audit.log_event("security_scan_error", {"file": test_path, "error": str(exc)})
+        await audit.log_event(
+            "security_scan_error", {"file": test_path, "error": str(exc)}
+        )
 
     # Hash / compare / optional backup (all patched in tests)
     try:
@@ -222,7 +228,9 @@ async def _run_reporting(
 
     try:
         _ = await _maybe_await(
-            HTMLReporter.generate_html_report("sarif", "html", {"files": generated_paths})
+            HTMLReporter.generate_html_report(
+                "sarif", "html", {"files": generated_paths}
+            )
         )
     except Exception as exc:
         await audit.log_event("html_report_error", {"error": str(exc)})

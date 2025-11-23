@@ -14,7 +14,9 @@ import pytest
 # Import the plugin from the correct directory
 # Try multiple possible locations for the plugin
 plugin_paths = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
+    ),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -48,10 +50,14 @@ def mock_sbt_and_java_in_path():
     """
     Mocks the `which`/`where` command to find SBT and Java.
     """
-    with patch("scala_test_runner_plugin._which") as mock_which, patch(
-        "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
+    with (
+        patch("scala_test_runner_plugin._which") as mock_which,
+        patch(
+            "scala_test_runner_plugin._get_sbt_version",
+            new=AsyncMock(return_value="1.9.8"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
     ):  # Assume files exist
 
         # Configure _which to return paths for Java and SBT
@@ -93,9 +99,10 @@ async def test_plugin_health_success(mock_sbt_and_java_in_path):
 @pytest.mark.asyncio
 async def test_plugin_health_sbt_not_found():
     """Test `plugin_health` returns 'degraded' when SBT is not found."""
-    with patch("scala_test_runner_plugin._which") as mock_which, patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess:
+    with (
+        patch("scala_test_runner_plugin._which") as mock_which,
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+    ):
 
         # Java found, SBT not found
         def which_side_effect(cmd):
@@ -133,8 +140,9 @@ def test_parse_junit_xml_success():
     </testsuite>
 </testsuites>
 """
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", new_callable=mock_open, read_data=junit_xml_content
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", new_callable=mock_open, read_data=junit_xml_content),
     ):
         summary = _parse_junit_xml("mock_junit.xml")
         assert summary == {"tests": 2, "failures": 1, "errors": 0, "skipped": 0}
@@ -143,8 +151,9 @@ def test_parse_junit_xml_success():
 def test_parse_junit_xml_malformed():
     """Test parsing a malformed JUnit XML file gracefully."""
     malformed_xml_content = "<testsuites> <testsuite tests='a' /> </testsuites>"
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", new_callable=mock_open, read_data=malformed_xml_content
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", new_callable=mock_open, read_data=malformed_xml_content),
     ):
         summary = _parse_junit_xml("mock_junit_malformed.xml")
         assert summary == {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
@@ -159,8 +168,9 @@ def test_parse_scoverage_xml_success():
     </project>
 </scoverage>
 """
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", new_callable=mock_open, read_data=scoverage_xml_content
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", new_callable=mock_open, read_data=scoverage_xml_content),
     ):
         coverage = _parse_scoverage_xml("mock_scoverage.xml")
         assert coverage == 85.50
@@ -169,8 +179,11 @@ def test_parse_scoverage_xml_success():
 def test_parse_scoverage_xml_no_coverage_info():
     """Test parsing an Scoverage XML file with no coverage information."""
     no_coverage_xml_content = "<scoverage><project></project></scoverage>"
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", new_callable=mock_open, read_data=no_coverage_xml_content
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "builtins.open", new_callable=mock_open, read_data=no_coverage_xml_content
+        ),
     ):
         coverage = _parse_scoverage_xml("mock_scoverage_no_coverage.xml")
         assert coverage == 0.0
@@ -186,32 +199,30 @@ async def test_run_scala_tests_success_full_workflow():
     """
     Test the complete successful workflow of `run_scala_tests` with mocks.
     """
-    with patch("scala_test_runner_plugin._which") as mock_which, patch(
-        "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
-        "os.path.exists"
-    ) as mock_exists, patch(
-        "os.makedirs"
-    ) as mock_makedirs, patch(
-        "shutil.copy"
-    ), patch(
-        "shutil.copy2"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "scala_test_runner_plugin._parse_junit_xml",
-        return_value={"tests": 1, "failures": 0, "errors": 0, "skipped": 0},
-    ), patch(
-        "scala_test_runner_plugin._parse_scoverage_xml", return_value=85.50
-    ), patch(
-        "scala_test_runner_plugin._find_scoverage_xml",
-        return_value="/mock/path/scoverage.xml",
-    ), patch(
-        "os.listdir", return_value=["TEST-results.xml"]
-    ), patch(
-        "tempfile.TemporaryDirectory"
-    ) as mock_temp_dir, patch(
-        "builtins.open", new_callable=mock_open
+    with (
+        patch("scala_test_runner_plugin._which") as mock_which,
+        patch(
+            "scala_test_runner_plugin._get_sbt_version",
+            new=AsyncMock(return_value="1.9.8"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists") as mock_exists,
+        patch("os.makedirs") as mock_makedirs,
+        patch("shutil.copy"),
+        patch("shutil.copy2"),
+        patch("shutil.copyfile"),
+        patch(
+            "scala_test_runner_plugin._parse_junit_xml",
+            return_value={"tests": 1, "failures": 0, "errors": 0, "skipped": 0},
+        ),
+        patch("scala_test_runner_plugin._parse_scoverage_xml", return_value=85.50),
+        patch(
+            "scala_test_runner_plugin._find_scoverage_xml",
+            return_value="/mock/path/scoverage.xml",
+        ),
+        patch("os.listdir", return_value=["TEST-results.xml"]),
+        patch("tempfile.TemporaryDirectory") as mock_temp_dir,
+        patch("builtins.open", new_callable=mock_open),
     ):
 
         # Configure _which to return sbt path
@@ -249,7 +260,10 @@ async def test_run_scala_tests_success_full_workflow():
         )
 
         assert result["success"] is True
-        assert "SBT tests passed" in result["reason"] or "SBT tests finished" in result["reason"]
+        assert (
+            "SBT tests passed" in result["reason"]
+            or "SBT tests finished" in result["reason"]
+        )
         assert result["coverage_increase_percent"] == 85.50
 
         # Assert core steps were called
@@ -260,26 +274,27 @@ async def test_run_scala_tests_success_full_workflow():
 @pytest.mark.asyncio
 async def test_run_scala_tests_test_failure():
     """Test `run_scala_tests` when the JUnit report indicates a test failure."""
-    with patch("scala_test_runner_plugin._which") as mock_which, patch(
-        "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
-    ), patch(
-        "scala_test_runner_plugin._parse_junit_xml",
-        return_value={"tests": 2, "failures": 1, "errors": 0, "skipped": 0},
-    ), patch(
-        "scala_test_runner_plugin._parse_scoverage_xml", return_value=50.0
-    ), patch(
-        "scala_test_runner_plugin._find_scoverage_xml",
-        return_value="/mock/path/scoverage.xml",
-    ), patch(
-        "os.listdir", return_value=["TEST-results.xml"]
-    ), patch(
-        "os.makedirs"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "builtins.open", new_callable=mock_open
+    with (
+        patch("scala_test_runner_plugin._which") as mock_which,
+        patch(
+            "scala_test_runner_plugin._get_sbt_version",
+            new=AsyncMock(return_value="1.9.8"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
+        patch(
+            "scala_test_runner_plugin._parse_junit_xml",
+            return_value={"tests": 2, "failures": 1, "errors": 0, "skipped": 0},
+        ),
+        patch("scala_test_runner_plugin._parse_scoverage_xml", return_value=50.0),
+        patch(
+            "scala_test_runner_plugin._find_scoverage_xml",
+            return_value="/mock/path/scoverage.xml",
+        ),
+        patch("os.listdir", return_value=["TEST-results.xml"]),
+        patch("os.makedirs"),
+        patch("shutil.copyfile"),
+        patch("builtins.open", new_callable=mock_open),
     ):
 
         # Configure _which to return sbt path
@@ -302,15 +317,19 @@ async def test_run_scala_tests_test_failure():
             )
 
             assert result["success"] is False
-            assert "1 failures" in result["reason"] or "SBT tests finished" in result["reason"]
+            assert (
+                "1 failures" in result["reason"]
+                or "SBT tests finished" in result["reason"]
+            )
             assert result["coverage_increase_percent"] == 50.0
 
 
 @pytest.mark.asyncio
 async def test_run_scala_tests_sbt_not_found():
     """Test that `run_scala_tests` returns an error if SBT is not in PATH."""
-    with patch("scala_test_runner_plugin._which", return_value=None), patch(
-        "os.path.exists", return_value=True
+    with (
+        patch("scala_test_runner_plugin._which", return_value=None),
+        patch("os.path.exists", return_value=True),
     ):  # Test file exists
 
         result = await run_scala_tests(
@@ -327,8 +346,9 @@ async def test_run_scala_tests_sbt_not_found():
 @pytest.mark.asyncio
 async def test_run_scala_tests_file_not_found():
     """Test that `run_scala_tests` returns an error if the test file is not found."""
-    with patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"), patch(
-        "os.path.exists", return_value=False
+    with (
+        patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"),
+        patch("os.path.exists", return_value=False),
     ):
 
         result = await run_scala_tests(
@@ -345,26 +365,27 @@ async def test_run_scala_tests_file_not_found():
 @pytest.mark.asyncio
 async def test_run_scala_tests_with_existing_build_sbt():
     """Test `run_scala_tests` when build.sbt already exists (no temp project needed)."""
-    with patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"), patch(
-        "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
-    ), patch(
-        "scala_test_runner_plugin._parse_junit_xml",
-        return_value={"tests": 3, "failures": 0, "errors": 0, "skipped": 1},
-    ), patch(
-        "scala_test_runner_plugin._parse_scoverage_xml", return_value=92.0
-    ), patch(
-        "scala_test_runner_plugin._find_scoverage_xml",
-        return_value="/mock/path/scoverage.xml",
-    ), patch(
-        "os.listdir", return_value=["TEST-results.xml"]
-    ), patch(
-        "os.makedirs"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "builtins.open", new_callable=mock_open
+    with (
+        patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"),
+        patch(
+            "scala_test_runner_plugin._get_sbt_version",
+            new=AsyncMock(return_value="1.9.8"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
+        patch(
+            "scala_test_runner_plugin._parse_junit_xml",
+            return_value={"tests": 3, "failures": 0, "errors": 0, "skipped": 1},
+        ),
+        patch("scala_test_runner_plugin._parse_scoverage_xml", return_value=92.0),
+        patch(
+            "scala_test_runner_plugin._find_scoverage_xml",
+            return_value="/mock/path/scoverage.xml",
+        ),
+        patch("os.listdir", return_value=["TEST-results.xml"]),
+        patch("os.makedirs"),
+        patch("shutil.copyfile"),
+        patch("builtins.open", new_callable=mock_open),
     ):
 
         # Mock SBT subprocess output for a successful run with existing project
@@ -393,10 +414,14 @@ async def test_run_scala_tests_with_existing_build_sbt():
             # Should not have created temp directories
             assert len(result["temp_dirs_used"]) == 0
     """Test that `run_scala_tests` handles timeout correctly."""
-    with patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"), patch(
-        "scala_test_runner_plugin._get_sbt_version", new=AsyncMock(return_value="1.9.8")
-    ), patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
+    with (
+        patch("scala_test_runner_plugin._which", return_value="/usr/bin/sbt"),
+        patch(
+            "scala_test_runner_plugin._get_sbt_version",
+            new=AsyncMock(return_value="1.9.8"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
     ):
 
         # Mock SBT subprocess that times out

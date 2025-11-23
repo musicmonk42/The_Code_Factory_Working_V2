@@ -105,14 +105,18 @@ class ArbiterConfig(BaseSettings):
     POLICY_CONFIG_FILE_PATH: str = Field(
         default_factory=lambda: os.getenv(
             "POLICY_CONFIG_FILE_PATH",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "../policies.json")),
+            os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../policies.json")
+            ),
         ),
         description="Absolute path to the policy configuration file.",
     )
     AUDIT_LOG_FILE_PATH: str = Field(
         default_factory=lambda: os.getenv(
             "AUDIT_LOG_FILE_PATH",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "policy_audit.log")),
+            os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "policy_audit.log")
+            ),
         ),
         description="Absolute path to the audit log file.",
     )
@@ -141,12 +145,16 @@ class ArbiterConfig(BaseSettings):
     )
 
     # Circuit Breaker Settings
-    CIRCUIT_BREAKER_STATE_TTL_SECONDS: int = Field(86400, description="Redis key TTL in seconds")
+    CIRCUIT_BREAKER_STATE_TTL_SECONDS: int = Field(
+        86400, description="Redis key TTL in seconds"
+    )
     CIRCUIT_BREAKER_CLEANUP_INTERVAL_SECONDS: int = Field(
         3600, description="Interval for cleanup task in seconds"
     )
     REDIS_MAX_CONNECTIONS: int = Field(100, description="Redis connection pool size")
-    REDIS_SOCKET_TIMEOUT: float = Field(5.0, description="Redis socket timeout in seconds")
+    REDIS_SOCKET_TIMEOUT: float = Field(
+        5.0, description="Redis socket timeout in seconds"
+    )
     REDIS_SOCKET_CONNECT_TIMEOUT: float = Field(
         5.0, description="Redis socket connect timeout in seconds"
     )
@@ -159,7 +167,9 @@ class ArbiterConfig(BaseSettings):
     CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL: float = Field(
         300.0, description="Interval for logging validation errors in seconds"
     )
-    CIRCUIT_BREAKER_MAX_PROVIDERS: int = Field(1000, description="Maximum number of providers")
+    CIRCUIT_BREAKER_MAX_PROVIDERS: int = Field(
+        1000, description="Maximum number of providers"
+    )
     PAUSE_CIRCUIT_BREAKER_TASKS: str = Field(
         "false", description="Set to 'true' to pause cleanup and refresh tasks"
     )
@@ -260,7 +270,9 @@ class ArbiterConfig(BaseSettings):
         if isinstance(v, dict):
             # Check if it's actually the environment dict by looking for definitive markers
             # Unix and Windows environment markers
-            if all(k in v for k in ["PATH", "HOME"]) or all(k in v for k in ["PATH", "SYSTEMROOT"]):
+            if all(k in v for k in ["PATH", "HOME"]) or all(
+                k in v for k in ["PATH", "SYSTEMROOT"]
+            ):
                 raise ValueError(
                     "DECISION_OPTIMIZER_SETTINGS appears to be the full environment dict"
                 )
@@ -299,11 +311,15 @@ class ArbiterConfig(BaseSettings):
             if is_production:
                 if not values.get("ENCRYPTION_KEY"):
                     CONFIG_ERRORS.labels(error_type="missing_encryption_key").inc()
-                    span.record_exception(ValueError("ENCRYPTION_KEY must be set in production."))
+                    span.record_exception(
+                        ValueError("ENCRYPTION_KEY must be set in production.")
+                    )
                     raise ValueError("ENCRYPTION_KEY must be set in production.")
                 if not values.get("REDIS_URL"):
                     CONFIG_ERRORS.labels(error_type="missing_redis_url").inc()
-                    span.record_exception(ValueError("REDIS_URL must be set in production."))
+                    span.record_exception(
+                        ValueError("REDIS_URL must be set in production.")
+                    )
                     raise ValueError("REDIS_URL must be set in production.")
                 for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
                     if not values.get(key):
@@ -348,9 +364,13 @@ class ArbiterConfig(BaseSettings):
                 else:
                     path = values.get(path_key, "")
                 if path and not os.path.isabs(path):
-                    logger.error(f"Invalid {path_key}: {path} must be an absolute path.")
+                    logger.error(
+                        f"Invalid {path_key}: {path} must be an absolute path."
+                    )
                     CONFIG_ERRORS.labels(error_type="invalid_file_path").inc()
-                    span.record_exception(ValueError(f"{path_key} must be an absolute path."))
+                    span.record_exception(
+                        ValueError(f"{path_key} must be an absolute path.")
+                    )
                     span.set_attribute(f"{path_key.lower()}_status", "invalid")
                     if path_key == "POLICY_CONFIG_FILE_PATH":
                         values[path_key] = os.path.abspath(
@@ -369,10 +389,16 @@ class ArbiterConfig(BaseSettings):
             # Validate circuit breaker critical providers
             critical_providers = values.get("CIRCUIT_BREAKER_CRITICAL_PROVIDERS", "")
             if critical_providers:
-                providers = [p.strip() for p in critical_providers.split(",") if p.strip()]
-                invalid_providers = [p for p in providers if not re.match(r"^[a-zA-Z0-9_-]+$", p)]
+                providers = [
+                    p.strip() for p in critical_providers.split(",") if p.strip()
+                ]
+                invalid_providers = [
+                    p for p in providers if not re.match(r"^[a-zA-Z0-9_-]+$", p)
+                ]
                 if invalid_providers:
-                    logger.error(f"Invalid CIRCUIT_BREAKER_CRITICAL_PROVIDERS: {invalid_providers}")
+                    logger.error(
+                        f"Invalid CIRCUIT_BREAKER_CRITICAL_PROVIDERS: {invalid_providers}"
+                    )
                     CONFIG_ERRORS.labels(error_type="invalid_critical_providers").inc()
                     span.record_exception(
                         ValueError(
@@ -391,7 +417,9 @@ class ArbiterConfig(BaseSettings):
                     f"Invalid LLM_PROVIDER: {llm_provider}. Must be one of {valid_providers}"
                 )
                 CONFIG_ERRORS.labels(error_type="invalid_llm_provider").inc()
-                span.record_exception(ValueError(f"Invalid LLM_PROVIDER: {llm_provider}"))
+                span.record_exception(
+                    ValueError(f"Invalid LLM_PROVIDER: {llm_provider}")
+                )
                 span.set_attribute("llm_provider_status", "invalid")
                 values["LLM_PROVIDER"] = "openai"
             else:
@@ -410,19 +438,27 @@ class ArbiterConfig(BaseSettings):
                 )
                 CONFIG_ERRORS.labels(error_type="invalid_llm_model").inc()
                 span.record_exception(
-                    ValueError(f"Invalid LLM_MODEL: {llm_model} for provider {llm_provider}")
+                    ValueError(
+                        f"Invalid LLM_MODEL: {llm_model} for provider {llm_provider}"
+                    )
                 )
                 span.set_attribute("llm_model_status", "invalid")
                 values["LLM_MODEL"] = (
                     "gpt-4o-mini"
                     if llm_provider == "openai"
-                    else ("claude-3-sonnet" if llm_provider == "anthropic" else "gemini-1.5-flash")
+                    else (
+                        "claude-3-sonnet"
+                        if llm_provider == "anthropic"
+                        else "gemini-1.5-flash"
+                    )
                 )
             else:
                 span.set_attribute("llm_model_status", "valid")
             # Validate LLM API URL
             llm_api_url = values.get("LLM_API_URL", None)
-            if llm_api_url and not re.match(r"^https?://[\w.-]+(:\d+)?(/.*)?$", llm_api_url):
+            if llm_api_url and not re.match(
+                r"^https?://[\w.-]+(:\d+)?(/.*)?$", llm_api_url
+            ):
                 logger.error(f"Invalid LLM_API_URL: {llm_api_url}")
                 CONFIG_ERRORS.labels(error_type="invalid_llm_api_url").inc()
                 span.record_exception(ValueError(f"Invalid LLM_API_URL: {llm_api_url}"))
@@ -452,7 +488,9 @@ class ArbiterConfig(BaseSettings):
                         asyncio.get_running_loop()
                         # We're already in async - skip ping or schedule it
                         logger.debug("Skipping Redis ping in validator (async context)")
-                        span.set_attribute("redis_validation_status", "skipped_async_context")
+                        span.set_attribute(
+                            "redis_validation_status", "skipped_async_context"
+                        )
                     except RuntimeError:
                         # No running loop - safe to use asyncio.run
                         pong = asyncio.run(conn.ping())
@@ -468,9 +506,9 @@ class ArbiterConfig(BaseSettings):
                     if os.getenv("APP_ENV") == "production":
                         raise ValueError(f"Invalid REDIS_URL: {e}")
                 finally:
-                    CONFIG_REDIS_VALIDATION_DURATION.labels(operation="validate_redis_url").observe(
-                        time.time() - start_time
-                    )
+                    CONFIG_REDIS_VALIDATION_DURATION.labels(
+                        operation="validate_redis_url"
+                    ).observe(time.time() - start_time)
         return self
 
     async def reload_config(self) -> None:
@@ -509,7 +547,8 @@ class ArbiterConfig(BaseSettings):
                 current_time = time.monotonic()
                 if (
                     self._config_cache is not None
-                    and (current_time - self._config_cache_timestamp) < self._config_cache_ttl
+                    and (current_time - self._config_cache_timestamp)
+                    < self._config_cache_ttl
                 ):
                     CONFIG_TO_DICT_CACHE_HITS.labels(result="hit").inc()
                     span.set_attribute("cache_status", "hit")

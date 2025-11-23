@@ -126,11 +126,15 @@ COMMAND_LATENCY_SECONDS = Histogram(
     "cli_command_latency_seconds", "Command execution latency", ["command"]
 )
 CLI_RESOURCE_USAGE = Gauge("cli_resource_usage_percent", "Resource usage", ["resource"])
-ACTIVE_COLLAB_CLIENTS = Gauge("cli_active_collab_clients_total", "Active collaboration clients")
+ACTIVE_COLLAB_CLIENTS = Gauge(
+    "cli_active_collab_clients_total", "Active collaboration clients"
+)
 SAFETY_VIOLATIONS_TOTAL = Counter(
     "cli_safety_violations_total", "Safety violations in CLI responses"
 )
-TOKEN_USAGE = Counter("cli_llm_token_usage_total", "Total LLM tokens used", ["user", "provider"])
+TOKEN_USAGE = Counter(
+    "cli_llm_token_usage_total", "Total LLM tokens used", ["user", "provider"]
+)
 command_cache = TTLCache(maxsize=128, ttl=300)
 
 # UPGRADE: Vault for JWT_SECRET - [Date: August 19, 2025]
@@ -143,7 +147,9 @@ def fetch_jwt_from_vault() -> Optional[str]:
     try:
         client = hvac.Client(url=os.getenv("VAULT_URL"), token=os.getenv("VAULT_TOKEN"))
         if client.is_authenticated():
-            secret = client.secrets.kv.v2.read_secret_version(path="secret/data/cli/jwt")
+            secret = client.secrets.kv.v2.read_secret_version(
+                path="secret/data/cli/jwt"
+            )
             logger.info("Fetched JWT_SECRET from Vault.")
             return secret["data"]["data"]["JWT_SECRET"]
         logger.warning("Vault not authenticated; falling back to env.")
@@ -273,15 +279,21 @@ def validate_environment():
     if sys.version_info < (3, 9):
         raise RuntimeError("Python 3.9+ is required to run this application.")
     if not os.getenv("REDIS_URL"):
-        logger.warning("REDIS_URL is not set. Autocomplete and session features will be limited.")
+        logger.warning(
+            "REDIS_URL is not set. Autocomplete and session features will be limited."
+        )
     JWT_SECRET = fetch_jwt_from_vault() or os.getenv(
         "CLI_JWT_SECRET", "default-insecure-secret-key-for-dev"
     )
     if PROD_ENV and JWT_SECRET == "default-insecure-secret-key-for-dev":
-        raise ValueError("FATAL: Default CLI_JWT_SECRET is used in a production environment.")
+        raise ValueError(
+            "FATAL: Default CLI_JWT_SECRET is used in a production environment."
+        )
     # UPGRADE: Additional env checks - [Date: August 19, 2025]
     if os.getenv("USE_QUEUE", "false") == "true" and not os.getenv("RABBITMQ_URL"):
-        logger.warning("Queue enabled but RABBITMQ_URL not set; falling back to direct calls.")
+        logger.warning(
+            "Queue enabled but RABBITMQ_URL not set; falling back to direct calls."
+        )
     if os.getenv("ENABLE_AUDIT", "false") == "true" and not os.getenv("AUDIT_BUCKET"):
         logger.error("Audit logging enabled but AUDIT_BUCKET not set.")
     logger.info("Environment validation passed.")
@@ -296,12 +308,16 @@ class JsonFormatter(logging.Formatter):
             "[REDACTED_EMAIL]",
             message,
         )
-        message = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]", message)
+        message = re.sub(
+            r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]", message
+        )
         # UPGRADE: Enhanced PII masking - [Date: August 19, 2025]
         message = re.sub(r"\b(1-)?\d{3}-\d{3}-\d{4}\b", "[REDACTED_PHONE]", message)
         message = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]", message)
         message = re.sub(r"\b\d{5}(-\d{4})?\b", "[REDACTED_ZIP]", message)
-        message = re.sub(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[REDACTED_CC]", message)
+        message = re.sub(
+            r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[REDACTED_CC]", message
+        )
         log_record = {
             "timestamp": datetime.datetime.now().isoformat(),
             "level": record.levelname,
@@ -328,7 +344,9 @@ def setup_logging():
 
 def shutdown_handler(signum, frame):
     if not _shutdown_event.is_set():
-        CONSOLE.print(f"\n[red]Signal {signum} received, initiating graceful shutdown...[/red]")
+        CONSOLE.print(
+            f"\n[red]Signal {signum} received, initiating graceful shutdown...[/red]"
+        )
         _shutdown_event.set()
 
 
@@ -377,7 +395,9 @@ class CommandDispatcher:
         try:
             await handler(args)
             COMMAND_EXECUTION_TOTAL.labels(command=command, status="success").inc()
-            COMMAND_LATENCY_SECONDS.labels(command=command).observe(time.time() - start_time)
+            COMMAND_LATENCY_SECONDS.labels(command=command).observe(
+                time.time() - start_time
+            )
         except Exception as e:
             COMMAND_EXECUTION_TOTAL.labels(command=command, status="failed").inc()
             logger.error(f"Error dispatching command '{command}': {e}", exc_info=True)
@@ -409,7 +429,9 @@ class CommandDispatcher:
 
     async def _handle_collab_start(self, args: List[str]):
         if not WEBSOCKETS_AVAILABLE:
-            CONSOLE.print("[red]WebSockets not installed. `pip install websockets`[/red]")
+            CONSOLE.print(
+                "[red]WebSockets not installed. `pip install websockets`[/red]"
+            )
             return
         if await self.state.get("collab_mode") != "inactive":
             CONSOLE.print("[yellow]Collaboration is already active.[/yellow]")
@@ -451,11 +473,15 @@ class CommandDispatcher:
             websockets.exceptions.InvalidURI,
             websockets.exceptions.InvalidHandshake,
         ) as e:
-            await queue.put(json.dumps({"type": "error", "payload": f"Connection failed: {e}"}))
+            await queue.put(
+                json.dumps({"type": "error", "payload": f"Connection failed: {e}"})
+            )
         except Exception as e:
             logger.error(f"Collab client listener error: {e}", exc_info=True)
             await queue.put(
-                json.dumps({"type": "error", "payload": "An unexpected error occurred."})
+                json.dumps(
+                    {"type": "error", "payload": "An unexpected error occurred."}
+                )
             )
 
     async def _handle_collab_stop(self, args: List[str]):
@@ -558,7 +584,11 @@ def log_audit_event(event_type: str, data: Dict):
 
 
 # PRESERVED: Main CLI loop
-@(tracer.start_as_current_span("main_cli_loop") if OTEL_AVAILABLE else (lambda func: func))
+@(
+    tracer.start_as_current_span("main_cli_loop")
+    if OTEL_AVAILABLE
+    else (lambda func: func)
+)
 async def main_cli_loop():
     """Main CLI loop handling input, collaboration, macro expansion, and agent prediction. Runs asynchronously until shutdown."""
     session_state = SessionState()
@@ -599,7 +629,9 @@ async def main_cli_loop():
     agent = await get_or_create_agent(session_id="default_cli_session")
     await session_state.set("agent", agent)
     setup_autocomplete(llm=getattr(agent, "_llm", None))
-    CONSOLE.print("[bold green]Welcome to the Hardened Intent Capture Agent CLI[/bold green]")
+    CONSOLE.print(
+        "[bold green]Welcome to the Hardened Intent Capture Agent CLI[/bold green]"
+    )
 
     local_input_queue = asyncio.Queue()
     threading.Thread(
@@ -617,7 +649,9 @@ async def main_cli_loop():
             tasks = [asyncio.create_task(local_input_queue.get())]
             if await session_state.get("collab_mode") == "client":
                 tasks.append(asyncio.create_task(collab_queue.get()))
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
+            )
             for task in pending:
                 task.cancel()
             message = done.pop().result()
@@ -626,7 +660,9 @@ async def main_cli_loop():
             else:
                 data = json.loads(message)
                 if data.get("type") == "error":
-                    CONSOLE.print(f"[red]Collaboration Error: {data.get('payload')}[/red]")
+                    CONSOLE.print(
+                        f"[red]Collaboration Error: {data.get('payload')}[/red]"
+                    )
                     await command_dispatcher.dispatch("collab stop", [])
                     continue
                 user_input = data.get("payload", "")
@@ -638,7 +674,9 @@ async def main_cli_loop():
             parts = shlex.split(processed_input)
             # UPGRADE: Pydantic input validation
             try:
-                cli_input = CLIInput(command=parts[0].lower() if parts else "", args=parts[1:])
+                cli_input = CLIInput(
+                    command=parts[0].lower() if parts else "", args=parts[1:]
+                )
                 command, args = cli_input.command, cli_input.args
             except ValidationError as e:
                 logger.error(f"Input validation failed: {e}", exc_info=True)
@@ -660,7 +698,9 @@ async def main_cli_loop():
 
                         connection = pika.BlockingConnection(
                             pika.URLParameters(
-                                os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+                                os.getenv(
+                                    "RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"
+                                )
                             )
                         )
                         channel = connection.channel()
@@ -688,7 +728,9 @@ async def main_cli_loop():
                 if queued:
                     continue
                 # PRESERVED: Original agent prediction
-                response = await agent_breaker.call_async(agent.predict, sanitized_input)
+                response = await agent_breaker.call_async(
+                    agent.predict, sanitized_input
+                )
                 safe_response = bleach.clean(
                     response.get("response", "No response text."), strip=True
                 )
@@ -704,17 +746,25 @@ async def main_cli_loop():
                                 if r["label"] == "TOXIC" and r["score"] > 0.8:
                                     SAFETY_VIOLATIONS_TOTAL.inc()
                                     logger.warning("Response blocked due to toxicity.")
-                                    CONSOLE.print("[yellow]Response moderated for safety.[/yellow]")
+                                    CONSOLE.print(
+                                        "[yellow]Response moderated for safety.[/yellow]"
+                                    )
                                     break
                             else:
                                 CONSOLE.print(
-                                    Panel(Markdown(safe_response), title="Agent Response")
+                                    Panel(
+                                        Markdown(safe_response), title="Agent Response"
+                                    )
                                 )
                         except Exception as e:
                             logger.error(f"Moderation failed: {e}", exc_info=True)
-                            CONSOLE.print(Panel(Markdown(safe_response), title="Agent Response"))
+                            CONSOLE.print(
+                                Panel(Markdown(safe_response), title="Agent Response")
+                            )
                 else:
-                    CONSOLE.print(Panel(Markdown(safe_response), title="Agent Response"))
+                    CONSOLE.print(
+                        Panel(Markdown(safe_response), title="Agent Response")
+                    )
         except (KeyboardInterrupt, EOFError):
             _shutdown_event.set()
         except (ConnectionClosed, asyncio.TimeoutError) as e:

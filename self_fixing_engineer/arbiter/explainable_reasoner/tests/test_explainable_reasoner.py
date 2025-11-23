@@ -16,7 +16,10 @@ from arbiter.explainable_reasoner.explainable_reasoner import (
     ReasonerConfig,
     SensitiveValue,
 )
-from arbiter.explainable_reasoner.reasoner_errors import ReasonerError, ReasonerErrorCode
+from arbiter.explainable_reasoner.reasoner_errors import (
+    ReasonerError,
+    ReasonerErrorCode,
+)
 
 # --- Fixtures ---
 
@@ -36,14 +39,20 @@ def mock_dependencies():
         patch("arbiter.explainable_reasoner.explainable_reasoner.JWT_AVAILABLE", True),
         patch("arbiter.explainable_reasoner.explainable_reasoner.pybreaker"),
         patch("arbiter.explainable_reasoner.explainable_reasoner.trace"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.PromptStrategyFactory"),
+        patch(
+            "arbiter.explainable_reasoner.explainable_reasoner.PromptStrategyFactory"
+        ),
         patch("arbiter.explainable_reasoner.explainable_reasoner.SQLiteHistoryManager"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.PostgresHistoryManager"),
+        patch(
+            "arbiter.explainable_reasoner.explainable_reasoner.PostgresHistoryManager"
+        ),
         patch("arbiter.explainable_reasoner.explainable_reasoner.RedisHistoryManager"),
         patch("arbiter.explainable_reasoner.explainable_reasoner.AuditLedgerClient"),
         patch("arbiter.explainable_reasoner.explainable_reasoner.LLMAdapterFactory"),
         patch("arbiter.explainable_reasoner.explainable_reasoner.get_or_create_metric"),
-        patch("arbiter.explainable_reasoner.explainable_reasoner.aioredis", create=True),
+        patch(
+            "arbiter.explainable_reasoner.explainable_reasoner.aioredis", create=True
+        ),
         patch("arbiter.explainable_reasoner.explainable_reasoner.asyncpg", create=True),
         patch("arbiter.explainable_reasoner.explainable_reasoner.tracemalloc"),
         # Add prometheus metric mocks
@@ -55,7 +64,9 @@ def mock_dependencies():
         # Mock the _sanitize_context function - FIX: Accept 2 arguments
         patch("arbiter.explainable_reasoner.explainable_reasoner._sanitize_context"),
         # Mock _simple_text_sanitize
-        patch("arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"),
+        patch(
+            "arbiter.explainable_reasoner.explainable_reasoner._simple_text_sanitize"
+        ),
     ]
 
     mocks = []
@@ -67,7 +78,9 @@ def mock_dependencies():
     pipeline_mock = mocks[1]
     pipeline_instance = MagicMock()
     pipeline_instance.tokenizer = MagicMock()
-    pipeline_instance.tokenizer.encode.return_value = list(range(100))  # Return list of token IDs
+    pipeline_instance.tokenizer.encode.return_value = list(
+        range(100)
+    )  # Return list of token IDs
     pipeline_instance.tokenizer.decode.return_value = "decoded text"
     pipeline_instance.tokenizer.pad_token_id = 0
     pipeline_instance.tokenizer.eos_token_id = 0
@@ -81,7 +94,9 @@ def mock_dependencies():
     # Configure AutoTokenizer
     tokenizer_mock = mocks[3]
     tokenizer_instance = MagicMock()
-    tokenizer_instance.encode.return_value = list(range(100))  # Return list of token IDs
+    tokenizer_instance.encode.return_value = list(
+        range(100)
+    )  # Return list of token IDs
     tokenizer_instance.decode.return_value = "decoded text"
     tokenizer_instance.pad_token_id = 0
     tokenizer_instance.eos_token_id = 0
@@ -160,7 +175,9 @@ def mock_dependencies():
     tracemalloc_mock.is_tracing.return_value = False
     tracemalloc_mock.start = MagicMock()
     tracemalloc_mock.stop = MagicMock()
-    tracemalloc_mock.take_snapshot.return_value = MagicMock(statistics=MagicMock(return_value=[]))
+    tracemalloc_mock.take_snapshot.return_value = MagicMock(
+        statistics=MagicMock(return_value=[])
+    )
 
     # Configure Prometheus metrics mocks
     gauge_mock = mocks[18]
@@ -241,12 +258,16 @@ async def reasoner_instance(mock_config):
         await reasoner.async_init()
 
         # Override components that might not be properly mocked
-        reasoner._inference_semaphore = asyncio.Semaphore(mock_config.max_concurrent_requests)
+        reasoner._inference_semaphore = asyncio.Semaphore(
+            mock_config.max_concurrent_requests
+        )
 
         # Create a proper mock pipeline that returns the expected format
         mock_pipeline = MagicMock()
         mock_tokenizer = MagicMock()
-        mock_tokenizer.encode.return_value = list(range(100))  # Return list of token IDs
+        mock_tokenizer.encode.return_value = list(
+            range(100)
+        )  # Return list of token IDs
         mock_tokenizer.decode.return_value = "decoded text"
         mock_tokenizer.pad_token_id = 0
         mock_tokenizer.eos_token_id = 0
@@ -366,7 +387,9 @@ async def test_batch_explain_with_exceptions(reasoner_instance):
             ReasonerError("Failed", ReasonerErrorCode.INVALID_INPUT),
         ],
     ):
-        results = await reasoner_instance.batch_explain(queries=["q1", "q2"], contexts=[{}, {}])
+        results = await reasoner_instance.batch_explain(
+            queries=["q1", "q2"], contexts=[{}, {}]
+        )
 
         assert len(results) == 2
         assert "explain" in results[0] or "id" in results[0]
@@ -482,7 +505,9 @@ async def test_plugin_execute_explain():
         await plugin.initialize()
 
         # Mock the explain method directly
-        with patch.object(plugin, "explain", return_value={"explain": "test", "id": "123"}):
+        with patch.object(
+            plugin, "explain", return_value={"explain": "test", "id": "123"}
+        ):
             result = await plugin.execute(
                 action="explain", query="test query", context={"test": "context"}
             )
@@ -523,7 +548,9 @@ async def test_plugin_execute_rbac_success():
             await plugin.initialize()
 
             # Mock jwt module properly
-            with patch("arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt:
+            with patch(
+                "arbiter.explainable_reasoner.explainable_reasoner.jwt"
+            ) as mock_jwt:
                 # Setup decode to return admin role
                 mock_jwt.decode.return_value = {"role": "admin", "exp": 9999999999}
 
@@ -555,7 +582,10 @@ async def test_plugin_execute_rbac_success():
                         assert result is not None
                         if isinstance(result, dict):
                             if "error" in result:
-                                assert result.get("error", {}).get("code") != "PERMISSION_DENIED"
+                                assert (
+                                    result.get("error", {}).get("code")
+                                    != "PERMISSION_DENIED"
+                                )
 
 
 @pytest.mark.asyncio
@@ -573,7 +603,9 @@ async def test_plugin_execute_rbac_failure():
             plugin = ExplainableReasonerPlugin()
             await plugin.initialize()
 
-            with patch("arbiter.explainable_reasoner.explainable_reasoner.jwt") as mock_jwt:
+            with patch(
+                "arbiter.explainable_reasoner.explainable_reasoner.jwt"
+            ) as mock_jwt:
                 mock_jwt.decode.return_value = {
                     "role": "user",
                     "exp": 9999999999,
@@ -591,7 +623,9 @@ async def test_plugin_execute_rbac_failure():
                         return_value={"role": "user", "exp": 9999999999}
                     )
 
-                    result = await plugin.execute(action="purge_history", auth_token="valid_token")
+                    result = await plugin.execute(
+                        action="purge_history", auth_token="valid_token"
+                    )
 
                     assert "error" in result
                     assert result["error"]["code"] == "PERMISSION_DENIED"
@@ -623,7 +657,9 @@ async def test_plugin_execute_rbac_invalid_token():
                     side_effect=InvalidTokenError("Invalid token")
                 )
 
-                result = await plugin.execute(action="purge_history", auth_token="invalid_token")
+                result = await plugin.execute(
+                    action="purge_history", auth_token="invalid_token"
+                )
 
                 assert "error" in result
                 assert result["error"]["code"] == ReasonerErrorCode.SECURITY_VIOLATION
