@@ -1,10 +1,12 @@
-import pytest
 import asyncio
-from fastapi.testclient import TestClient
-from omnicore_engine.fastapi_app import app
-from omnicore_engine.cli import parse_args, command_handlers
-from omnicore_engine.plugin_registry import plugin, PlugInKind
 from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from omnicore_engine.cli import command_handlers, parse_args
+from omnicore_engine.fastapi_app import app
+from omnicore_engine.plugin_registry import PlugInKind, plugin
 
 
 @pytest.mark.asyncio
@@ -45,7 +47,9 @@ async def test_end_to_end_plugin_cli(tmp_path):
 @pytest.mark.asyncio
 async def test_end_to_end_audit_workflow(tmp_path):
     # Patch the audit client's methods to prevent real database interactions
-    with patch("omnicore_engine.fastapi_app.ExplainAudit.add_entry_async", AsyncMock()), patch(
+    with patch(
+        "omnicore_engine.fastapi_app.ExplainAudit.add_entry_async", AsyncMock()
+    ), patch(
         "omnicore_engine.fastapi_app.ExplainAudit.export_proof_bundle",
         AsyncMock(return_value={"proof": "merkle_proof"}),
     ):

@@ -1,11 +1,12 @@
-import pytest
-from unittest.mock import patch, MagicMock, mock_open, AsyncMock
 import asyncio
-import os
-import sys
 import json
 import logging
+import os
+import sys
 from logging.handlers import RotatingFileHandler
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # We need to patch imports before importing the module under test
 sys.modules["arbiter.config"] = MagicMock()
@@ -78,13 +79,13 @@ if "arbiter.run_exploration" in sys.modules:
     del sys.modules["arbiter.run_exploration"]
 
 from arbiter.run_exploration import (
-    setup_logging,
     load_config,
-    notify_critical_error,
     load_plugins,
+    main,
+    notify_critical_error,
     run_agent_task,
     run_agentic_workflow,
-    main,
+    setup_logging,
 )
 
 
@@ -115,8 +116,12 @@ def test_setup_logging(tmp_path):
     # Check we have handlers
     assert len(root_logger.handlers) >= 2
     # Check handler types
-    has_file_handler = any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers)
-    has_console_handler = any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers)
+    has_file_handler = any(
+        isinstance(h, RotatingFileHandler) for h in root_logger.handlers
+    )
+    has_console_handler = any(
+        isinstance(h, logging.StreamHandler) for h in root_logger.handlers
+    )
     assert has_file_handler
     assert has_console_handler
 
@@ -361,7 +366,9 @@ async def test_main_no_args(mock_event, mock_workflow, mock_health, mock_setup):
     shutdown_event.wait.side_effect = [asyncio.CancelledError()]
 
     # Patch load_config at module level for main function
-    with patch("arbiter.run_exploration.load_config", new_callable=AsyncMock) as mock_load:
+    with patch(
+        "arbiter.run_exploration.load_config", new_callable=AsyncMock
+    ) as mock_load:
         mock_load.return_value = {"log_file": "test.log", "health_port": 8080}
 
         with patch("asyncio.create_task", return_value=workflow_task):
@@ -389,7 +396,9 @@ async def test_main_with_config_file(mock_health, mock_setup):
         mock_event_class.return_value = shutdown_event
 
         # Patch load_config at module level
-        with patch("arbiter.run_exploration.load_config", new_callable=AsyncMock) as mock_load:
+        with patch(
+            "arbiter.run_exploration.load_config", new_callable=AsyncMock
+        ) as mock_load:
             mock_load.return_value = {"log_file": "test.log", "health_port": 8080}
 
             with pytest.raises(SystemExit) as exc:
@@ -405,7 +414,9 @@ async def test_main_with_config_file(mock_health, mock_setup):
 async def test_main_unhandled_exception(caplog):
     """Test main function with unhandled exception."""
     # Patch load_config to raise an exception
-    with patch("arbiter.run_exploration.load_config", new_callable=AsyncMock) as mock_load:
+    with patch(
+        "arbiter.run_exploration.load_config", new_callable=AsyncMock
+    ) as mock_load:
         mock_load.side_effect = Exception("Config error")
 
         with pytest.raises(SystemExit) as exc:

@@ -1,34 +1,29 @@
-import pytest
-from unittest.mock import (
-    patch,
-    AsyncMock,
-    MagicMock,
-    Mock,
-)
 import asyncio
-import yaml
-from aiolimiter import AsyncLimiter
-from typer.testing import CliRunner
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 # Fix: Import from arbiter.file_watcher instead of file_watcher
 import arbiter.file_watcher as file_watcher_module
+import pytest
+import yaml
+from aiolimiter import AsyncLimiter
 from arbiter.file_watcher import (
-    load_config_with_env,
-    send_email_alert,
-    send_slack_alert,
-    send_pagerduty_alert,
-    summarize_code_changes,
+    AlerterConfig,
+    CodeChangeHandler,
+    Config,
+    MetricsAndHealthServer,
+    SMTPConfig,
+    app,
     compare_diffs,
     deploy_code,
+    load_config_with_env,
     notify_changes,
     process_file,
-    CodeChangeHandler,
-    MetricsAndHealthServer,
-    app,
-    Config,
-    SMTPConfig,
-    AlerterConfig,
+    send_email_alert,
+    send_pagerduty_alert,
+    send_slack_alert,
+    summarize_code_changes,
 )
+from typer.testing import CliRunner
 
 
 # Fixture for temp dir
@@ -275,7 +270,9 @@ def test_compare_diffs():
 # Test deploy_code success
 @pytest.mark.asyncio
 async def test_deploy_code_success():
-    with patch("asyncio.create_subprocess_shell", new_callable=AsyncMock) as mock_subprocess:
+    with patch(
+        "asyncio.create_subprocess_shell", new_callable=AsyncMock
+    ) as mock_subprocess:
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"output", b"")
         mock_proc.returncode = 0
@@ -289,7 +286,9 @@ async def test_deploy_code_success():
 # Test deploy_code failure
 @pytest.mark.asyncio
 async def test_deploy_code_failure():
-    with patch("asyncio.create_subprocess_shell", new_callable=AsyncMock) as mock_subprocess:
+    with patch(
+        "asyncio.create_subprocess_shell", new_callable=AsyncMock
+    ) as mock_subprocess:
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"", b"error")
         mock_proc.returncode = 1
@@ -308,7 +307,9 @@ async def test_notify_changes(valid_config):
 
     with patch("arbiter.file_watcher.send_email_alert", new_callable=AsyncMock):
         with patch("arbiter.file_watcher.send_slack_alert", new_callable=AsyncMock):
-            with patch("arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock):
+            with patch(
+                "arbiter.file_watcher.send_pagerduty_alert", new_callable=AsyncMock
+            ):
                 await notify_changes("file.py", "diff", "summary", {"success": True})
                 # These are called but may fail, which is handled
                 assert True  # Just verify no exceptions

@@ -1,8 +1,9 @@
 # tests/test_model_deployment_plugin.py
 
-import pytest
 import json
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # Import the plugin using the correct module path
 from simulation.plugins.model_deployment_plugin import (
@@ -20,17 +21,17 @@ def mock_external_dependencies():
     """
     Mocks external libraries and environment variables for complete isolation.
     """
-    with patch(
-        "simulation.plugins.model_deployment_plugin.os.path.exists", return_value=True
-    ) as mock_exists, patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep, patch(
-        "os.getenv"
-    ) as mock_getenv, patch(
-        "os.remove"
-    ), patch(
-        "json.dump"
-    ) as mock_json_dump, patch(
-        "simulation.plugins.model_deployment_plugin.logger"
-    ) as mock_logger:
+    with (
+        patch(
+            "simulation.plugins.model_deployment_plugin.os.path.exists",
+            return_value=True,
+        ) as mock_exists,
+        patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("os.getenv") as mock_getenv,
+        patch("os.remove"),
+        patch("json.dump") as mock_json_dump,
+        patch("simulation.plugins.model_deployment_plugin.logger") as mock_logger,
+    ):
 
         mock_getenv.return_value = "mock_env_key"
 

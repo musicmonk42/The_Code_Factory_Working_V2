@@ -1,9 +1,10 @@
 # test_config_integration.py
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 
 class TestConfigIntegration:
@@ -68,8 +69,8 @@ class TestConfigIntegration:
                 },
             ):
                 from arbiter.learner.explanations import (
-                    _load_prompt_templates,
                     EXPLANATION_PROMPT_TEMPLATES,
+                    _load_prompt_templates,
                     generate_explanation,
                 )
 
@@ -98,7 +99,9 @@ class TestConfigIntegration:
                     assert explanation is not None
                     assert len(explanation) > 0
 
-    async def _mock_generate_explanation(self, learner, domain, key, new_value, old_value, diff):
+    async def _mock_generate_explanation(
+        self, learner, domain, key, new_value, old_value, diff
+    ):
         """Mock implementation of generate_explanation."""
         # Simple mock that returns a generated explanation
         if old_value is None:
@@ -126,7 +129,9 @@ class TestConfigIntegration:
                 "arbiter.learner.fuzzy.PARSER_PRIORITIES",
                 config_data["parser_priorities"],
             ):
-                with patch("arbiter.learner.fuzzy.process_unstructured_data") as mock_process:
+                with patch(
+                    "arbiter.learner.fuzzy.process_unstructured_data"
+                ) as mock_process:
                     mock_process.return_value = {"extracted": "data"}
 
                     from arbiter.learner.fuzzy import process_unstructured_data

@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import (
-    Any,
-    AsyncGenerator,
-    Dict,
-    Optional,
-    Union,
-)
+from typing import Any, AsyncGenerator, Dict, Optional, Union
 
 # ============================================================================
 # Type aliases for clarity and alignment with runner.llm_client expectations.

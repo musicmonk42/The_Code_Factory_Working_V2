@@ -1,52 +1,51 @@
 # simulation/plugins/dlt_clients/dlt_quorum_clients.py
 
 import asyncio
-import json
-import time
-from typing import Any, Dict, Optional, Callable, List, Literal, Final
-from contextlib import contextmanager, suppress
 import atexit
-import tempfile
+import json
 import os
-from pydantic import BaseModel, Field, validator, ValidationError
-from urllib.parse import urlparse
 import re
-from datetime import datetime
-from abc import ABC, abstractmethod
+import tempfile
+import time
 import uuid
+from abc import ABC, abstractmethod
+from contextlib import contextmanager, suppress
+from datetime import datetime
+from typing import Any, Callable, Dict, Final, List, Literal, Optional
+from urllib.parse import urlparse
 
-from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
-from .dlt_base import (
-    BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientConnectivityError,
-    DLTClientAuthError,
-    DLTClientValidationError,
-    DLTClientCircuitBreakerError,
-    DLTClientTimeoutError,
-    async_retry,
-    TRACER,
-    Status,
-    StatusCode,
-    alert_operator,
-    AUDIT,
-    PRODUCTION_MODE,
-)
-from .dlt_base import _base_logger, scrub_secrets
+from eth_account import Account
+from pydantic import BaseModel, Field, ValidationError, validator
 
 # --- Strict Dependency Check for web3.py ---
 # WEB3_AVAILABLE is now determined by the critical import check in dlt_base.py
 # If it's not available, dlt_base.py would have already aborted.
 from web3 import Web3
 from web3.eth import AsyncEth
-from web3.exceptions import (
-    TimeExhausted,
-)
-from eth_account import Account
+from web3.exceptions import TimeExhausted
 from web3.middleware import geth_poa_middleware
 
+from .dlt_base import (
+    AUDIT,
+    PRODUCTION_MODE,
+    TRACER,
+    BaseOffChainClient,
+    DLTClientAuthError,
+    DLTClientCircuitBreakerError,
+    DLTClientConfigurationError,
+    DLTClientConnectivityError,
+    DLTClientQueryError,
+    DLTClientTimeoutError,
+    DLTClientTransactionError,
+    DLTClientValidationError,
+    Status,
+    StatusCode,
+    _base_logger,
+    alert_operator,
+    async_retry,
+    scrub_secrets,
+)
+from .dlt_evm_clients import EthereumClientWrapper  # Inherit from EVM client
 
 # --- Secrets Backend Integrations (Strict Checks) ---
 AWS_SECRETS_AVAILABLE = False
@@ -56,7 +55,9 @@ try:
 
     AWS_SECRETS_AVAILABLE = True
 except ImportError:
-    _base_logger.warning("boto3 not found. AWS Secrets Manager integration will be disabled.")
+    _base_logger.warning(
+        "boto3 not found. AWS Secrets Manager integration will be disabled."
+    )
 
     class BotoClientError(Exception):
         pass  # Define for type hinting
@@ -66,8 +67,8 @@ AZURE_KEYVAULT_AVAILABLE = False
 try:
     from azure.identity.aio import DefaultAzureCredential
     from azure.keyvault.secrets.aio import (
-        SecretClient as AsyncSecretClient,
-    )  # Use async client + async credential
+        SecretClient as AsyncSecretClient,  # Use async client + async credential
+    )
 
     AZURE_KEYVAULT_AVAILABLE = True
 except ImportError:
@@ -136,7 +137,9 @@ def cleanup_temp_files() -> None:
         except OSError as e:
             _base_logger.warning(f"Failed to clean up temporary file {temp_file}: {e}")
         finally:
-            _temp_files.pop(temp_file, None)  # Remove from tracking regardless of success
+            _temp_files.pop(
+                temp_file, None
+            )  # Remove from tracking regardless of success
 
 
 # Register cleanup on process exit
@@ -223,7 +226,9 @@ class AWSSecretsBackend(SecretsBackend):
     async def get_secret(self, secret_id: str) -> str:
         try:
             # boto3 client methods are typically blocking, run in executor
-            response = await asyncio.to_thread(self.client.get_secret_value, SecretId=secret_id)
+            response = await asyncio.to_thread(
+                self.client.get_secret_value, SecretId=secret_id
+            )
             return response["SecretString"]
         except BotoClientError as e:
             raise DLTClientConfigurationError(
@@ -247,7 +252,9 @@ class AzureKeyVaultBackend(SecretsBackend):
                 "Quorum",
             )
         if not vault_url:
-            raise DLTClientConfigurationError("Azure Key Vault URL is required.", "Quorum")
+            raise DLTClientConfigurationError(
+                "Azure Key Vault URL is required.", "Quorum"
+            )
         self.credential = DefaultAzureCredential()
         self.client = AsyncSecretClient(vault_url=vault_url, credential=self.credential)
 
@@ -290,7 +297,9 @@ class GCPSecretManagerBackend(SecretsBackend):
     async def get_secret(self, secret_id: str) -> str:
         try:
             name = f"projects/{self.project_id}/secrets/{secret_id}/versions/latest"
-            response = await asyncio.to_thread(self.client.access_secret_version, name=name)
+            response = await asyncio.to_thread(
+                self.client.access_secret_version, name=name
+            )
             return response.payload.data.decode("UTF-8")
         except Exception as e:
             raise DLTClientConfigurationError(
@@ -308,9 +317,13 @@ class QuorumConfig(BaseModel):
     chain_id: int = Field(..., ge=1)
     contract_address: str = Field(..., pattern=r"^0x[a-fA-F0-9]{40}$")
     contract_abi_path: Optional[str] = None  # Path to ABI file (for non-prod)
-    contract_abi_secret_id: Optional[str] = None  # Secret ID for ABI JSON in secrets backend
+    contract_abi_secret_id: Optional[str] = (
+        None  # Secret ID for ABI JSON in secrets backend
+    )
     private_key: Optional[str] = None  # Should not be used in prod directly
-    private_key_secret_id: Optional[str] = None  # Secret ID for private key in secrets backend
+    private_key_secret_id: Optional[str] = (
+        None  # Secret ID for private key in secrets backend
+    )
     secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
         default_factory=list
     )  # Prioritized list of secrets backends
@@ -341,7 +354,9 @@ class QuorumConfig(BaseModel):
     @validator("contract_abi_path", pre=True, always=True)
     def validate_contract_abi_source(cls, v, values):
         if not v and not values.get("contract_abi_secret_id"):
-            raise ValueError("Either contract_abi_path or contract_abi_secret_id must be provided.")
+            raise ValueError(
+                "Either contract_abi_path or contract_abi_secret_id must be provided."
+            )
         if v and values.get("contract_abi_secret_id") and PRODUCTION_MODE:
             _base_logger.warning(
                 "Both contract_abi_path and contract_abi_secret_id are provided. Prioritizing secret ID in production."
@@ -351,7 +366,9 @@ class QuorumConfig(BaseModel):
     @validator("private_key", pre=True, always=True)
     def validate_private_key_source(cls, v, values):
         if not v and not values.get("private_key_secret_id"):
-            raise ValueError("Either private_key or private_key_secret_id must be provided.")
+            raise ValueError(
+                "Either private_key or private_key_secret_id must be provided."
+            )
         if v and values.get("private_key_secret_id") and PRODUCTION_MODE:
             _base_logger.warning(
                 "Both private_key and private_key_secret_id are provided. Prioritizing secret ID in production."
@@ -367,14 +384,18 @@ class QuorumConfig(BaseModel):
 
         if (privacy_group_id or private_for) and not (privacy_group_id and private_for):
             if QUORUM_METRICS:
-                QUORUM_METRICS["privacy_config_invalid"].labels(client_type="Quorum").inc()
+                QUORUM_METRICS["privacy_config_invalid"].labels(
+                    client_type="Quorum"
+                ).inc()
             raise ValueError(
                 "Both privacy_group_id and private_for must be provided for private transactions, or neither."
             )
 
         if privacy_group_id and not re.match(r"^[a-fA-F0-9]{64}$", privacy_group_id):
             if QUORUM_METRICS:
-                QUORUM_METRICS["privacy_config_invalid"].labels(client_type="Quorum").inc()
+                QUORUM_METRICS["privacy_config_invalid"].labels(
+                    client_type="Quorum"
+                ).inc()
             raise ValueError("privacy_group_id must be a 64-character hex string.")
 
         if private_for:
@@ -382,7 +403,9 @@ class QuorumConfig(BaseModel):
                 re.match(r"^[A-Za-z0-9+/]{44}$", pk) for pk in private_for
             ):
                 if QUORUM_METRICS:
-                    QUORUM_METRICS["privacy_config_invalid"].labels(client_type="Quorum").inc()
+                    QUORUM_METRICS["privacy_config_invalid"].labels(
+                        client_type="Quorum"
+                    ).inc()
                 raise ValueError(
                     "private_for must be a list of valid 44-character base64 public keys."
                 )
@@ -400,15 +423,15 @@ class QuorumConfig(BaseModel):
                     raise ValueError(
                         f"Invalid secrets_provider: {provider}. Must be one of 'aws', 'azure', 'gcp'."
                     )
-                if provider == "azure" and not values.get("secrets_provider_config", {}).get(
-                    "vault_url"
-                ):
+                if provider == "azure" and not values.get(
+                    "secrets_provider_config", {}
+                ).get("vault_url"):
                     raise ValueError(
                         "secrets_provider_config.vault_url required for Azure Key Vault."
                     )
-                if provider == "gcp" and not values.get("secrets_provider_config", {}).get(
-                    "project_id"
-                ):
+                if provider == "gcp" and not values.get(
+                    "secrets_provider_config", {}
+                ).get("project_id"):
                     raise ValueError(
                         "secrets_provider_config.project_id required for GCP Secret Manager."
                     )
@@ -427,9 +450,13 @@ class QuorumClientWrapper(EthereumClientWrapper):
         # Validate configuration
         try:
             quorum_config_data = config.get("quorum", {})
-            validated_config = QuorumConfig(**quorum_config_data).dict(exclude_unset=True)
+            validated_config = QuorumConfig(**quorum_config_data).dict(
+                exclude_unset=True
+            )
         except ValidationError as e:
-            _base_logger.critical(f"CRITICAL: Invalid Quorum client configuration: {e}.")
+            _base_logger.critical(
+                f"CRITICAL: Invalid Quorum client configuration: {e}."
+            )
             try:
                 asyncio.get_running_loop().create_task(
                     alert_operator(
@@ -492,7 +519,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             with open(contract_abi_path, "r") as f:
                 self.contract_abi = json.load(f)
         except Exception as e:
-            self._format_log("error", f"Failed to read contract ABI from {contract_abi_path}: {e}")
+            self._format_log(
+                "error", f"Failed to read contract ABI from {contract_abi_path}: {e}"
+            )
             raise DLTClientConfigurationError(
                 f"Failed to read contract ABI: {e}",
                 self.client_type,
@@ -553,9 +582,13 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     if provider_name == "aws" and AWS_SECRETS_AVAILABLE:
                         backend = AWSSecretsBackend()
                     elif provider_name == "azure" and AZURE_KEYVAULT_AVAILABLE:
-                        backend = AzureKeyVaultBackend(secrets_provider_config.get("vault_url"))
+                        backend = AzureKeyVaultBackend(
+                            secrets_provider_config.get("vault_url")
+                        )
                     elif provider_name == "gcp" and GCP_SECRET_MANAGER_AVAILABLE:
-                        backend = GCPSecretManagerBackend(secrets_provider_config.get("project_id"))
+                        backend = GCPSecretManagerBackend(
+                            secrets_provider_config.get("project_id")
+                        )
                     else:
                         if QUORUM_METRICS:
                             QUORUM_METRICS["secrets_unavailable_total"].labels(
@@ -569,7 +602,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                         continue
 
                     abi_json = await backend.get_secret(contract_abi_secret_id)
-                    with temp_file(abi_json, ttl=self.config["quorum"]["temp_file_ttl"]) as path:
+                    with temp_file(
+                        abi_json, ttl=self.config["quorum"]["temp_file_ttl"]
+                    ) as path:
                         self._temp_contract_abi_path = path
                         self._temp_files[path] = time.time()
                     self._format_log(
@@ -616,7 +651,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     QUORUM_METRICS["contract_abi_load_failure"].labels(
                         client_type=self.client_type, source_type="file_not_found"
                     ).inc()
-                _base_logger.critical(f"CRITICAL: Contract ABI not found at {contract_abi_path}.")
+                _base_logger.critical(
+                    f"CRITICAL: Contract ABI not found at {contract_abi_path}."
+                )
                 try:
                     asyncio.get_running_loop().create_task(
                         alert_operator(
@@ -688,9 +725,13 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     if provider_name == "aws" and AWS_SECRETS_AVAILABLE:
                         backend = AWSSecretsBackend()
                     elif provider_name == "azure" and AZURE_KEYVAULT_AVAILABLE:
-                        backend = AzureKeyVaultBackend(secrets_provider_config.get("vault_url"))
+                        backend = AzureKeyVaultBackend(
+                            secrets_provider_config.get("vault_url")
+                        )
                     elif provider_name == "gcp" and GCP_SECRET_MANAGER_AVAILABLE:
-                        backend = GCPSecretManagerBackend(secrets_provider_config.get("project_id"))
+                        backend = GCPSecretManagerBackend(
+                            secrets_provider_config.get("project_id")
+                        )
                     else:
                         if QUORUM_METRICS:
                             QUORUM_METRICS["secrets_unavailable_total"].labels(
@@ -772,7 +813,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
         """Deprecated: use initialize(). Kept for backward compatibility."""
         await self.initialize()
 
-    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
+    def _format_log(
+        self, level: str, message: str, extra: Dict[str, Any] = None
+    ) -> None:
         """
         Formats logs as JSON or text based on configuration.
         Args:
@@ -825,10 +868,15 @@ class QuorumClientWrapper(EthereumClientWrapper):
                 # Iterate over a copy of the list to allow modification during iteration
                 for temp_file_path in list(self._temp_files):
                     creation_time = self._temp_files.get(temp_file_path)
-                    if creation_time and current_time - creation_time > self._temp_file_ttl:
+                    if (
+                        creation_time
+                        and current_time - creation_time > self._temp_file_ttl
+                    ):
                         try:
                             os.unlink(temp_file_path)
-                            self._temp_files.pop(temp_file_path, None)  # Remove from tracking
+                            self._temp_files.pop(
+                                temp_file_path, None
+                            )  # Remove from tracking
                             _base_logger.info(
                                 f"Cleaned up expired temporary file: {temp_file_path}"
                             )
@@ -865,7 +913,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             "quorum.rotate_credentials", attributes={"correlation_id": correlation_id}
         ) as span:
             try:
-                if not new_private_key or not re.match(r"^(0x)?[a-fA-F0-9]{64}$", new_private_key):
+                if not new_private_key or not re.match(
+                    r"^(0x)?[a-fA-F0-9]{64}$", new_private_key
+                ):
                     if QUORUM_METRICS:
                         QUORUM_METRICS["private_key_load_failure"].labels(
                             client_type=self.client_type,
@@ -960,7 +1010,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             DLTClientCircuitBreakerError,
         )
     )
-    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Verifies Quorum client connectivity, contract accessibility, and privacy settings.
         Args:
@@ -987,7 +1039,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
 
                 # Additional Quorum-specific privacy checks
                 privacy_details = {}
-                if self.privacy_group_id and self.private_for:  # Both must be present for privacy
+                if (
+                    self.privacy_group_id and self.private_for
+                ):  # Both must be present for privacy
                     try:
                         privacy_details = {
                             "privacy_group_id": self.privacy_group_id,
@@ -1069,7 +1123,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Unexpected error: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Unexpected error: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1129,7 +1185,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                 }
 
                 # Gas pricing
-                if (max_fee_per_gas is not None and max_priority_fee_per_gas is not None) or (
+                if (
+                    max_fee_per_gas is not None and max_priority_fee_per_gas is not None
+                ) or (
                     self.default_max_fee_per_gas_gwei is not None
                     and self.default_max_priority_fee_per_gas_gwei is not None
                 ):
@@ -1137,21 +1195,28 @@ class QuorumClientWrapper(EthereumClientWrapper):
                         max_fee_per_gas or self.default_max_fee_per_gas_gwei, "gwei"
                     )
                     tx_params["maxPriorityFeePerGas"] = self.w3.to_wei(
-                        max_priority_fee_per_gas or self.default_max_priority_fee_per_gas_gwei,
+                        max_priority_fee_per_gas
+                        or self.default_max_priority_fee_per_gas_gwei,
                         "gwei",
                     )
-                    self._format_log("debug", "Using EIP-1559 gas parameters from config/args.")
+                    self._format_log(
+                        "debug", "Using EIP-1559 gas parameters from config/args."
+                    )
                 else:
                     try:
                         latest_block = await self._circuit_breaker.execute(
-                            lambda: self.w3.eth.get_block("latest", full_transactions=False)
+                            lambda: self.w3.eth.get_block(
+                                "latest", full_transactions=False
+                            )
                         )
                         if (
                             "baseFeePerGas" in latest_block
                             and latest_block.baseFeePerGas is not None
                         ):
                             base_fee_per_gas = latest_block.baseFeePerGas
-                            priority_fee_gwei = self.default_max_priority_fee_per_gas_gwei or 2
+                            priority_fee_gwei = (
+                                self.default_max_priority_fee_per_gas_gwei or 2
+                            )
                             tx_params["maxPriorityFeePerGas"] = self.w3.to_wei(
                                 priority_fee_gwei, "gwei"
                             )
@@ -1193,7 +1258,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                 span.set_attribute("private_transaction", is_private_tx)
                 if is_private_tx:
                     span.set_attribute("privacy_group_id", self.privacy_group_id)
-                    span.set_attribute("private_for_recipients", ",".join(self.private_for))
+                    span.set_attribute(
+                        "private_for_recipients", ",".join(self.private_for)
+                    )
 
                 # Build transaction
                 transaction = await self._circuit_breaker.execute(
@@ -1211,7 +1278,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     asyncio.get_running_loop().create_task(
                         AUDIT.log_event(
                             "quorum_tx.signed",
-                            tx_hash_unsigned=self.w3.to_hex(self.w3.keccak(unsigned_tx_json)),
+                            tx_hash_unsigned=self.w3.to_hex(
+                                self.w3.keccak(unsigned_tx_json)
+                            ),
                             signer_address=self.account.address,
                             is_private=is_private_tx,
                             correlation_id=correlation_id,
@@ -1271,12 +1340,16 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     if not tx_hash_hex:
                         # Either RPCs failed or returned unexpected structure; try public send
                         tx_hash = await self._circuit_breaker.execute(
-                            lambda: self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                            lambda: self.w3.eth.send_raw_transaction(
+                                signed_tx.rawTransaction
+                            )
                         )
                         tx_hash_hex = tx_hash.hex()
                 else:
                     tx_hash = await self._circuit_breaker.execute(
-                        lambda: self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                        lambda: self.w3.eth.send_raw_transaction(
+                            signed_tx.rawTransaction
+                        )
                     )
                     tx_hash_hex = tx_hash.hex()
 
@@ -1322,7 +1395,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
 
                 if getattr(receipt, "status", 1) == 0:
                     span.set_status(
-                        Status(StatusCode.ERROR, description="Transaction failed on-chain")
+                        Status(
+                            StatusCode.ERROR, description="Transaction failed on-chain"
+                        )
                     )
                     self._format_log(
                         "error",
@@ -1373,7 +1448,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Transaction failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Transaction failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -1413,7 +1490,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
                     pass
 
             # Explicitly clean up any remaining temporary files
-            if self._temp_contract_abi_path and os.path.exists(self._temp_contract_abi_path):
+            if self._temp_contract_abi_path and os.path.exists(
+                self._temp_contract_abi_path
+            ):
                 try:
                     os.unlink(self._temp_contract_abi_path)
                     _base_logger.info(
@@ -1429,7 +1508,9 @@ class QuorumClientWrapper(EthereumClientWrapper):
             self.w3 = None
             self.contract = None
             self.account = None
-            self._format_log("info", "Quorum DLT Client closed", {"client_type": self.client_type})
+            self._format_log(
+                "info", "Quorum DLT Client closed", {"client_type": self.client_type}
+            )
         except Exception as e:
             self._format_log(
                 "warning",

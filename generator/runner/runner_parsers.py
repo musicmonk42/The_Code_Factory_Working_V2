@@ -3,32 +3,32 @@
 # Provides robust, extensible, and explainable parsing of various formats,
 # enforcing clear output schemas with versioning.
 
-import xml.etree.ElementTree as ET  # For XML parsing
+import asyncio  # For __main__ block
 import json  # For JSON parsing
+import logging
 import re  # For regex parsing (e.g., unittest, simple text outputs)
+import xml.etree.ElementTree as ET  # For XML parsing
 
 # FIX: Import datetime directly from datetime
 from datetime import datetime, timezone  # Explicitly import datetime for timestamps
 from pathlib import Path  # For file paths
-from typing import (
-    Dict,
+from typing import (  # Union for Path/str, Callable for register_parser
     Any,
+    Awaitable,
+    Callable,
+    Dict,
     List,
     Optional,
-    Callable,
     Union,
-    Awaitable,
-)  # Union for Path/str, Callable for register_parser
-import logging
+)
 
+import aiofiles  # For asynchronous file operations
 from pydantic import (
     BaseModel,
     Field,
     ValidationError,
     model_validator,
 )  # Import model_validator
-import aiofiles  # For asynchronous file operations
-import asyncio  # For __main__ block
 
 # Assume logger from runner.logging is configured
 # If not, a basic logger fallback is standard practice
@@ -41,7 +41,9 @@ except ImportError:
     )
     logger = logging.getLogger(__name__)
     # FIX: Updated warning message
-    logger.warning("runner.runner_logging not found. Using basic logging setup in parsers.py.")
+    logger.warning(
+        "runner.runner_logging not found. Using basic logging setup in parsers.py."
+    )
 
 
 class RunnerError(Exception):
@@ -62,7 +64,9 @@ COVERAGE_DETAILS_KEY = "coverage_details"  # Detailed breakdown by file/line
 TEST_CASES_KEY = "test_cases"  # List of individual test case results
 
 # --- Output Schema Versioning ---
-CURRENT_PARSER_SCHEMA_VERSION = 2  # Increment for breaking changes in parser output schemas
+CURRENT_PARSER_SCHEMA_VERSION = (
+    2  # Increment for breaking changes in parser output schemas
+)
 
 # --- Formal Output Schemas (Gold Standard: Pydantic Validation for Parser Output) ---
 
@@ -79,8 +83,12 @@ class ParserInfo(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="UTC timestamp of parsing completion.",
     )
-    status: str = Field("success", description="Parsing status: 'success', 'failed', or 'partial'.")
-    message: str | None = Field(None, description="Human-readable summary of what happened.")
+    status: str = Field(
+        "success", description="Parsing status: 'success', 'failed', or 'partial'."
+    )
+    message: str | None = Field(
+        None, description="Human-readable summary of what happened."
+    )
     rationale: str | None = Field(
         None, description="Machine-readable details (e.g. error traces, decisions)."
     )
@@ -117,7 +125,9 @@ class TestCaseResult(BaseModel):
         ...,
         description="Status of the test case ('passed', 'failed', 'error', 'skipped').",
     )
-    time: Optional[float] = Field(None, description="Execution time of the test case in seconds.")
+    time: Optional[float] = Field(
+        None, description="Execution time of the test case in seconds."
+    )
     message: Optional[str] = Field(
         None, description="A message associated with the test case (e.g., skip reason)."
     )
@@ -145,8 +155,12 @@ class TestReportSchema(BaseModel):
 
     total_tests: int = Field(0, description="Total number of tests executed.")
     passed_tests: int = Field(0, description="Number of tests that passed.")
-    failed_tests: int = Field(0, description="Number of tests that failed (assertion failures).")
-    error_tests: int = Field(0, description="Number of tests that encountered errors (exceptions).")
+    failed_tests: int = Field(
+        0, description="Number of tests that failed (assertion failures)."
+    )
+    error_tests: int = Field(
+        0, description="Number of tests that encountered errors (exceptions)."
+    )
     skipped_tests: int = Field(0, description="Number of tests that were skipped.")
     pass_rate: float = Field(
         0.0, description="Pass rate (passed_tests / total_tests), from 0.0 to 1.0."
@@ -184,14 +198,18 @@ class CoverageDetail(BaseModel):
     path: str = Field(..., description="Path to the source file.")
     lines_covered: int = Field(0, description="Number of lines covered by tests.")
     lines_total: int = Field(0, description="Total number of lines.")
-    percentage: float = Field(0.0, description="Coverage percentage for this file (0.0 to 100.0).")
+    percentage: float = Field(
+        0.0, description="Coverage percentage for this file (0.0 to 100.0)."
+    )
     statements_covered: Optional[int] = Field(
         None, description="Number of statements covered (if available)."
     )
     statements_total: Optional[int] = Field(
         None, description="Total number of statements (if available)."
     )
-    package: Optional[str] = Field(None, description="Package or module name (for Java/Go).")
+    package: Optional[str] = Field(
+        None, description="Package or module name (for Java/Go)."
+    )
 
 
 class CoverageReportSchema(BaseModel):
@@ -222,9 +240,9 @@ class CoverageReportSchema(BaseModel):
 _PARSER_REGISTRY: Dict[str, Callable[[Path], Awaitable[TestReportSchema]]] = (
     {}
 )  # Parsers return TestReportSchema
-_COVERAGE_PARSER_REGISTRY: Dict[str, Callable[[Path], Awaitable[CoverageReportSchema]]] = (
-    {}
-)  # Parsers return CoverageReportSchema
+_COVERAGE_PARSER_REGISTRY: Dict[
+    str, Callable[[Path], Awaitable[CoverageReportSchema]]
+] = {}  # Parsers return CoverageReportSchema
 
 
 def parser_wrapper(parser_func: Callable[[Path], Any], name: str):
@@ -296,7 +314,9 @@ def register_test_parser(name: str):
                 parser_info = ParserInfo(parser_name=name, **pi_data)
 
                 # Create the Pydantic model instance using the alias
-                validated_results = TestReportSchema(_parser_info=parser_info, **raw_results)
+                validated_results = TestReportSchema(
+                    _parser_info=parser_info, **raw_results
+                )
                 return validated_results
             except ValidationError as e:
                 logger.error(
@@ -476,19 +496,25 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         logger.warning(f"JUnit XML file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"JUnit XML file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"JUnit XML file not found: {file_path.name}"
         return results
 
     xml_content = b""
     try:
-        async with aiofiles.open(file_path, mode="rb") as f:  # Use aiofiles for async read
+        async with aiofiles.open(
+            file_path, mode="rb"
+        ) as f:  # Use aiofiles for async read
             xml_content = await f.read()
 
         tree = ET.fromstring(xml_content)
         root = tree  # root is already the element
 
         testsuites = root.findall(".//testsuite")
-        if not testsuites and root.tag == "testsuite":  # Handle root element being <testsuite>
+        if (
+            not testsuites and root.tag == "testsuite"
+        ):  # Handle root element being <testsuite>
             testsuites = [root]
 
         if not testsuites:
@@ -546,13 +572,17 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
                         "time": test_case_time,
                         "status": status,
                         "message": message,  # <-- PASS MESSAGE
-                        "failure_info": (failure_info if status in ("failed", "error") else None),
+                        "failure_info": (
+                            failure_info if status in ("failed", "error") else None
+                        ),
                     }
                 )
 
         # Recalculate passed tests based on other outcomes
         results[PASSED_TESTS_KEY] = results[TOTAL_TESTS_KEY] - (
-            results[FAILED_TESTS_KEY] + results[ERROR_TESTS_KEY] + results[SKIPPED_TESTS_KEY]
+            results[FAILED_TESTS_KEY]
+            + results[ERROR_TESTS_KEY]
+            + results[SKIPPED_TESTS_KEY]
         )
         results[PASS_RATE_KEY] = _calculate_pass_rate(results)
         results["_parser_info"]["status"] = "success"
@@ -569,7 +599,9 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
         # Per instruction, raise RunnerError for this specific test case
         raise RunnerError("XML parsing failed")
     except Exception as e:
-        logger.error(f"Unexpected error parsing JUnit XML file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error parsing JUnit XML file {file_path}: {e}", exc_info=True
+        )
         results["_parser_info"]["status"] = "failed"
         results["_parser_info"]["message"] = f"Unexpected error: {e}"
         return results
@@ -581,13 +613,17 @@ async def parse_unittest_output(file_path: Path) -> Dict[str, Any]:
     Parses Python unittest text output (e.g., from `python -m unittest discover -v`).
     """
     results = _get_common_test_result_template_raw("unittest_output")
-    results["raw_output_summary"] = f"Parsed from unittest text output: {file_path.name}"
+    results["raw_output_summary"] = (
+        f"Parsed from unittest text output: {file_path.name}"
+    )
     content: Union[str, bytes] = ""
 
     if not file_path.exists():
         logger.warning(f"Unittest output file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"Unittest output file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"Unittest output file not found: {file_path.name}"
         return results
 
     try:
@@ -616,9 +652,15 @@ async def parse_unittest_output(file_path: Path) -> Dict[str, Any]:
                 errors_match = re.search(r"errors=(\d+)", status_line_full)
                 skipped_match = re.search(r"skipped=(\d+)", status_line_full)
 
-                results[FAILED_TESTS_KEY] = int(failures_match.group(1)) if failures_match else 0
-                results[ERROR_TESTS_KEY] = int(errors_match.group(1)) if errors_match else 0
-                results[SKIPPED_TESTS_KEY] = int(skipped_match.group(1)) if skipped_match else 0
+                results[FAILED_TESTS_KEY] = (
+                    int(failures_match.group(1)) if failures_match else 0
+                )
+                results[ERROR_TESTS_KEY] = (
+                    int(errors_match.group(1)) if errors_match else 0
+                )
+                results[SKIPPED_TESTS_KEY] = (
+                    int(skipped_match.group(1)) if skipped_match else 0
+                )
 
                 results[PASSED_TESTS_KEY] = results[TOTAL_TESTS_KEY] - (
                     results[FAILED_TESTS_KEY]
@@ -674,7 +716,9 @@ async def parse_unittest_output(file_path: Path) -> Dict[str, Any]:
         )
         return results
     except Exception as e:
-        logger.error(f"Error parsing unittest output file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error parsing unittest output file {file_path}: {e}", exc_info=True
+        )
         results["_parser_info"]["status"] = "failed"
         results["_parser_info"]["message"] = f"Error during parsing: {e}."
         if isinstance(content, bytes):
@@ -696,7 +740,9 @@ async def parse_behave_junit(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         logger.warning(f"Behave report file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"Behave report file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"Behave report file not found: {file_path.name}"
         return results
 
     if file_path.suffix == ".json":
@@ -764,7 +810,9 @@ async def parse_behave_junit(file_path: Path) -> Dict[str, Any]:
                 exc_info=True,
             )
             results["_parser_info"]["status"] = "failed"
-            results["_parser_info"]["message"] = f"Unexpected error parsing Behave JSON: {e}"
+            results["_parser_info"][
+                "message"
+            ] = f"Unexpected error parsing Behave JSON: {e}"
             return results
     else:  # Default to JUnit XML parsing
         junit_model = await _PARSER_REGISTRY["junit_xml"](file_path)
@@ -783,7 +831,9 @@ async def parse_robot_xml(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         logger.warning(f"Robot Framework XML file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"Robot Framework XML file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"Robot Framework XML file not found: {file_path.name}"
         return results
 
     try:
@@ -865,7 +915,9 @@ async def parse_jest_json(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         logger.warning(f"Jest JSON file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"Jest JSON file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"Jest JSON file not found: {file_path.name}"
         return results
 
     try:
@@ -892,15 +944,21 @@ async def parse_jest_json(file_path: Path) -> Dict[str, Any]:
 
                 results[TEST_CASES_KEY].append(
                     {
-                        "name": test_case_result.get("fullName", test_case_result.get("title")),
-                        "classname": ".".join(test_case_result.get("ancestorTitles", ["N/A"])),
+                        "name": test_case_result.get(
+                            "fullName", test_case_result.get("title")
+                        ),
+                        "classname": ".".join(
+                            test_case_result.get("ancestorTitles", ["N/A"])
+                        ),
                         "status": status,  # Jest uses "passed", "failed", "skipped" which match schema
                         "time": (
                             test_case_result.get("duration") / 1000
                             if test_case_result.get("duration") is not None
                             else None
                         ),
-                        "failure_info": ({"message": failure_message} if failure_message else None),
+                        "failure_info": (
+                            {"message": failure_message} if failure_message else None
+                        ),
                     }
                 )
 
@@ -921,7 +979,9 @@ async def parse_jest_json(file_path: Path) -> Dict[str, Any]:
         results["raw_output_summary"] = raw_content
         return results
     except Exception as e:
-        logger.error(f"Unexpected error parsing Jest JSON file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error parsing Jest JSON file {file_path}: {e}", exc_info=True
+        )
         results["_parser_info"]["status"] = "failed"
         results["_parser_info"]["message"] = f"Unexpected error: {e}"
         return results
@@ -939,7 +999,9 @@ async def parse_go_test_json(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         logger.warning(f"Go test JSON file not found: {file_path}")
         results["_parser_info"]["status"] = "failed"
-        results["_parser_info"]["message"] = f"Go test JSON file not found: {file_path.name}"
+        results["_parser_info"][
+            "message"
+        ] = f"Go test JSON file not found: {file_path.name}"
         return results
 
     try:
@@ -954,7 +1016,9 @@ async def parse_go_test_json(file_path: Path) -> Dict[str, Any]:
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                logger.warning(f"Go test JSON: Skipping malformed JSON line: {line[:100]}...")
+                logger.warning(
+                    f"Go test JSON: Skipping malformed JSON line: {line[:100]}..."
+                )
                 continue
 
             action = (event.get("Action") or "").lower()
@@ -1040,18 +1104,32 @@ async def parse_surefire_xml(file_path: Path) -> Dict[str, Any]:
             single_file_results_model = await _PARSER_REGISTRY["junit_xml"](xml_file)
 
             if single_file_results_model.parser_info.status in ["success", "partial"]:
-                overall_results[TOTAL_TESTS_KEY] += single_file_results_model.total_tests
-                overall_results[PASSED_TESTS_KEY] += single_file_results_model.passed_tests
-                overall_results[FAILED_TESTS_KEY] += single_file_results_model.failed_tests
-                overall_results[ERROR_TESTS_KEY] += single_file_results_model.error_tests
-                overall_results[SKIPPED_TESTS_KEY] += single_file_results_model.skipped_tests
-                overall_results[TEST_CASES_KEY].extend(single_file_results_model.test_cases)
+                overall_results[
+                    TOTAL_TESTS_KEY
+                ] += single_file_results_model.total_tests
+                overall_results[
+                    PASSED_TESTS_KEY
+                ] += single_file_results_model.passed_tests
+                overall_results[
+                    FAILED_TESTS_KEY
+                ] += single_file_results_model.failed_tests
+                overall_results[
+                    ERROR_TESTS_KEY
+                ] += single_file_results_model.error_tests
+                overall_results[
+                    SKIPPED_TESTS_KEY
+                ] += single_file_results_model.skipped_tests
+                overall_results[TEST_CASES_KEY].extend(
+                    single_file_results_model.test_cases
+                )
                 successful_parses += 1
             else:
                 logger.error(
                     f"Skipping aggregation for malformed Surefire XML: {xml_file.name}. Error: {single_file_results_model.parser_info.message}"
                 )
-                if not overall_results["_parser_info"]["message"].startswith("Partial success"):
+                if not overall_results["_parser_info"]["message"].startswith(
+                    "Partial success"
+                ):
                     overall_results["_parser_info"][
                         "message"
                     ] = "Partial success: some XMLs were malformed."
@@ -1060,7 +1138,9 @@ async def parse_surefire_xml(file_path: Path) -> Dict[str, Any]:
             logger.error(
                 f"Skipping aggregation for unparseable Surefire XML: {xml_file.name}. Error: {e}"
             )
-            if not overall_results["_parser_info"]["message"].startswith("Partial success"):
+            if not overall_results["_parser_info"]["message"].startswith(
+                "Partial success"
+            ):
                 overall_results["_parser_info"][
                     "message"
                 ] = "Partial success: some XMLs were unparseable."
@@ -1068,7 +1148,9 @@ async def parse_surefire_xml(file_path: Path) -> Dict[str, Any]:
 
     if successful_parses == 0:
         overall_results["_parser_info"]["status"] = "failed"
-        overall_results["_parser_info"]["message"] = "No valid Surefire XML files could be parsed."
+        overall_results["_parser_info"][
+            "message"
+        ] = "No valid Surefire XML files could be parsed."
         overall_results["raw_output_summary"] = (
             f"All Surefire XMLs in {file_path} were unparseable."
         )
@@ -1160,7 +1242,9 @@ async def parse_coverage_xml(file_path: Path) -> Dict[str, Any]:
                 }
 
         coverage_results["_parser_info"]["status"] = "success"
-        coverage_results["_parser_info"]["message"] = "Successfully parsed Cobertura XML."
+        coverage_results["_parser_info"][
+            "message"
+        ] = "Successfully parsed Cobertura XML."
         logger.info(
             f"Successfully parsed Cobertura XML from {file_path.name}. Overall coverage: {coverage_results[COVERAGE_PERCENTAGE_KEY]:.2f}%"
         )
@@ -1226,7 +1310,9 @@ async def parse_jacoco_xml(file_path: Path) -> Dict[str, Any]:
                 total = covered + missed
                 if total > 0:
                     coverage_results[COVERAGE_PERCENTAGE_KEY] = (covered / total) * 100
-                coverage_results["_parser_info"]["status"] = "partial"  # Parsed with fallback
+                coverage_results["_parser_info"][
+                    "status"
+                ] = "partial"  # Parsed with fallback
                 coverage_results["_parser_info"][
                     "message"
                 ] = "Successfully parsed malformed JaCoCo XML with regex fallback."
@@ -1266,11 +1352,15 @@ async def parse_jacoco_xml(file_path: Path) -> Dict[str, Any]:
                 total_instructions_covered / total_instructions
             ) * 100
         elif total_lines > 0:
-            coverage_results[COVERAGE_PERCENTAGE_KEY] = (total_lines_covered / total_lines) * 100
+            coverage_results[COVERAGE_PERCENTAGE_KEY] = (
+                total_lines_covered / total_lines
+            ) * 100
 
         for package_node in root.findall(".//package"):
             package_name = package_node.get("name", "N/A")
-            for class_node in package_node.findall(".//class"):  # Find classes within this package
+            for class_node in package_node.findall(
+                ".//class"
+            ):  # Find classes within this package
                 class_sourcefilename = class_node.get("sourcefilename", "N/A")
                 class_name = class_node.get("name", "N/A")  # Get class name
 
@@ -1308,7 +1398,9 @@ async def parse_jacoco_xml(file_path: Path) -> Dict[str, Any]:
         )
         return coverage_results
     except Exception as e:
-        logger.error(f"Unexpected error parsing JaCoCo XML file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error parsing JaCoCo XML file {file_path}: {e}", exc_info=True
+        )
         coverage_results["_parser_info"]["message"] = f"Unexpected error: {e}"
         return coverage_results
 
@@ -1344,7 +1436,9 @@ async def parse_istanbul_json(file_path: Path) -> Dict[str, Any]:
         # Istanbul format has a 'total' key at the root, or iterate through files
         total_summary = report.get("total")
         if total_summary and "lines" in total_summary:
-            coverage_results[COVERAGE_PERCENTAGE_KEY] = total_summary["lines"].get("pct", 0.0)
+            coverage_results[COVERAGE_PERCENTAGE_KEY] = total_summary["lines"].get(
+                "pct", 0.0
+            )
 
         for file_path_key, file_coverage in report.items():
             if (
@@ -1372,25 +1466,34 @@ async def parse_istanbul_json(file_path: Path) -> Dict[str, Any]:
                 "lines_covered": lines_covered_file,
                 "lines_total": lines_total_file,
                 "percentage": percentage_file,
-                "statements_covered": sum(1 for hits in file_coverage["s"].values() if hits > 0),
+                "statements_covered": sum(
+                    1 for hits in file_coverage["s"].values() if hits > 0
+                ),
                 "statements_total": len(file_coverage["s"]),
             }
             total_lines_all_files += lines_total_file
             covered_lines_all_files += lines_covered_file
 
-        if total_lines_all_files > 0 and coverage_results[COVERAGE_PERCENTAGE_KEY] == 0.0:
+        if (
+            total_lines_all_files > 0
+            and coverage_results[COVERAGE_PERCENTAGE_KEY] == 0.0
+        ):
             coverage_results[COVERAGE_PERCENTAGE_KEY] = (
                 covered_lines_all_files / total_lines_all_files
             ) * 100
 
         coverage_results["_parser_info"]["status"] = "success"
-        coverage_results["_parser_info"]["message"] = "Successfully parsed Istanbul JSON."
+        coverage_results["_parser_info"][
+            "message"
+        ] = "Successfully parsed Istanbul JSON."
         logger.info(
             f"Successfully parsed Istanbul JSON from {file_path.name}. Overall coverage: {coverage_results[COVERAGE_PERCENTAGE_KEY]:.2f}%"
         )
         return coverage_results
     except (json.JSONDecodeError, FileNotFoundError) as e:
-        logger.error(f"Error parsing Istanbul JSON file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error parsing Istanbul JSON file {file_path}: {e}", exc_info=True
+        )
         raw_content = content[:500] + "..."
         coverage_results["_parser_info"][
             "message"
@@ -1442,7 +1545,9 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
         mode_line = lines[0]
         if not mode_line.startswith("mode:"):
             logger.warning(f"Go coverprofile: Unexpected header format: {mode_line}")
-            coverage_results["_parser_info"]["message"] = f"Unexpected header format: {mode_line}"
+            coverage_results["_parser_info"][
+                "message"
+            ] = f"Unexpected header format: {mode_line}"
             return coverage_results
 
         total_blocks_all_files = 0
@@ -1457,7 +1562,9 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
             filename = parts[0]
             coverage_info = parts[1].strip().split(" ")
             if len(coverage_info) < 3:
-                logger.warning(f"Go coverprofile: Skipping malformed line: {line[:100]}...")
+                logger.warning(
+                    f"Go coverprofile: Skipping malformed line: {line[:100]}..."
+                )
                 continue
 
             num_statements = int(coverage_info[1])
@@ -1475,13 +1582,19 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
                     "percentage": 0.0,
                 }
 
-            coverage_results[COVERAGE_DETAILS_KEY][filename]["lines_total"] += num_statements
+            coverage_results[COVERAGE_DETAILS_KEY][filename][
+                "lines_total"
+            ] += num_statements
             if hit_count > 0:
-                coverage_results[COVERAGE_DETAILS_KEY][filename]["lines_covered"] += num_statements
+                coverage_results[COVERAGE_DETAILS_KEY][filename][
+                    "lines_covered"
+                ] += num_statements
 
         for filename, details in coverage_results[COVERAGE_DETAILS_KEY].items():
             if details["lines_total"] > 0:
-                details["percentage"] = (details["lines_covered"] / details["lines_total"]) * 100
+                details["percentage"] = (
+                    details["lines_covered"] / details["lines_total"]
+                ) * 100
 
         if total_blocks_all_files > 0:
             coverage_results[COVERAGE_PERCENTAGE_KEY] = (
@@ -1489,7 +1602,9 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
             ) * 100
 
         coverage_results["_parser_info"]["status"] = "success"
-        coverage_results["_parser_info"]["message"] = "Successfully parsed Go coverprofile."
+        coverage_results["_parser_info"][
+            "message"
+        ] = "Successfully parsed Go coverprofile."
         logger.info(
             f"Successfully parsed Go coverprofile from {file_path.name}. Overall coverage: {coverage_results[COVERAGE_PERCENTAGE_KEY]:.2f}%"
         )
@@ -1501,7 +1616,9 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
         ] = f"Go coverprofile file not found: {file_path.name}"
         return coverage_results
     except Exception as e:
-        logger.error(f"Error parsing Go coverprofile file {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error parsing Go coverprofile file {file_path}: {e}", exc_info=True
+        )
         coverage_results["_parser_info"][
             "message"
         ] = f"Unexpected error: {e}. Raw summary: {content[:200]}..."
@@ -1550,11 +1667,15 @@ async def parse_coverage_html(file_path: Path) -> Dict[str, Any]:
                     "message"
                 ] = f"HTML report found, overall percentage ({results[COVERAGE_PERCENTAGE_KEY]}%) extracted."
         except Exception as e:
-            logger.warning(f"Failed to extract overall percentage from HTML report: {e}")
+            logger.warning(
+                f"Failed to extract overall percentage from HTML report: {e}"
+            )
 
     else:
         logger.warning(f"HTML coverage report not found at {index_html}.")
-        results["_parser_info"]["message"] = f"HTML coverage report not found at {index_html.name}."
+        results["_parser_info"][
+            "message"
+        ] = f"HTML coverage report not found at {index_html.name}."
 
     return results
 
@@ -1563,7 +1684,9 @@ async def parse_coverage_html(file_path: Path) -> Dict[str, Any]:
 if __name__ == "__main__":
     import tempfile
 
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     async def run_tests():
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1681,7 +1804,9 @@ if __name__ == "__main__":
             behave_json_file = tmp_path / "behave_results.json"
             async with aiofiles.open(behave_json_file, "w", encoding="utf-8") as f:
                 await f.write(behave_json_content)
-            behave_json_parsed = await _PARSER_REGISTRY["behave_report"](behave_json_file)
+            behave_json_parsed = await _PARSER_REGISTRY["behave_report"](
+                behave_json_file
+            )
             print(json.dumps(behave_json_parsed.model_dump(by_alias=True), indent=2))
             assert behave_json_parsed.total_tests == 2
             assert behave_json_parsed.failed_tests == 1
@@ -1893,7 +2018,9 @@ if __name__ == "__main__":
             cobertura_file = tmp_path / "cobertura_coverage.xml"
             async with aiofiles.open(cobertura_file, "w", encoding="utf-8") as f:
                 await f.write(cobertura_content)
-            cobertura_parsed = await _COVERAGE_PARSER_REGISTRY["cobertura_xml"](cobertura_file)
+            cobertura_parsed = await _COVERAGE_PARSER_REGISTRY["cobertura_xml"](
+                cobertura_file
+            )
             print(json.dumps(cobertura_parsed.model_dump(by_alias=True), indent=2))
             assert cobertura_parsed.coverage_percentage == 75.0
             assert "com.example.app.MyClass" in cobertura_parsed.coverage_details
@@ -1964,7 +2091,9 @@ if __name__ == "__main__":
             istanbul_file = tmp_path / "istanbul_coverage.json"
             async with aiofiles.open(istanbul_file, "w", encoding="utf-8") as f:
                 await f.write(istanbul_content)
-            istanbul_parsed = await _COVERAGE_PARSER_REGISTRY["istanbul_json"](istanbul_file)
+            istanbul_parsed = await _COVERAGE_PARSER_REGISTRY["istanbul_json"](
+                istanbul_file
+            )
             print(json.dumps(istanbul_parsed.model_dump(by_alias=True), indent=2))
             assert round(istanbul_parsed.coverage_percentage, 2) == 66.67
             assert "/path/to/project/src/app.js" in istanbul_parsed.coverage_details
@@ -1980,24 +2109,32 @@ if __name__ == "__main__":
             go_cover_file = tmp_path / "coverage.out"
             async with aiofiles.open(go_cover_file, "w", encoding="utf-8") as f:
                 await f.write(go_cover_content)
-            go_cover_parsed = await _COVERAGE_PARSER_REGISTRY["go_coverprofile"](go_cover_file)
+            go_cover_parsed = await _COVERAGE_PARSER_REGISTRY["go_coverprofile"](
+                go_cover_file
+            )
             print(json.dumps(go_cover_parsed.model_dump(by_alias=True), indent=2))
             assert round(go_cover_parsed.coverage_percentage, 2) == 66.67
-            assert "github.com/myuser/myproject/main.go" in go_cover_parsed.coverage_details
-            assert "github.com.myuser/myproject/util.go" in go_cover_parsed.coverage_details
+            assert (
+                "github.com/myuser/myproject/main.go"
+                in go_cover_parsed.coverage_details
+            )
+            assert (
+                "github.com.myuser/myproject/util.go"
+                in go_cover_parsed.coverage_details
+            )
             assert go_cover_parsed.parser_info.status == "success"
 
             # --- Test parse_coverage_html with content ---
             print("\n--- Testing parse_coverage_html with content ---")
-            html_cov_content = (
-                """<html><body><span class="pc_cov">Overall coverage: 85.5%</span></body></html>"""
-            )
+            html_cov_content = """<html><body><span class="pc_cov">Overall coverage: 85.5%</span></body></html>"""
             html_cov_dir = tmp_path / "htmlcov"
             html_cov_dir.mkdir(exist_ok=True)
             html_cov_file = html_cov_dir / "index.html"
             async with aiofiles.open(html_cov_file, "w", encoding="utf-8") as f:
                 await f.write(html_cov_content)
-            html_cov_parsed = await _COVERAGE_PARSER_REGISTRY["html_coverage_report"](html_cov_file)
+            html_cov_parsed = await _COVERAGE_PARSER_REGISTRY["html_coverage_report"](
+                html_cov_file
+            )
             print(json.dumps(html_cov_parsed.model_dump(by_alias=True), indent=2))
             assert html_cov_parsed.coverage_percentage == 85.5
             assert html_cov_parsed.parser_info.status == "success"

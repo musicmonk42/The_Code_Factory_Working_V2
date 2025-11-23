@@ -105,18 +105,26 @@ utils_logger = logging.getLogger("io_utils")
 
 # --- Prometheus Metrics ---
 if PROMETHEUS_AVAILABLE:
-    FILE_OPS_TOTAL = Counter("io_file_ops_total", "File operations", ["operation", "status"])
+    FILE_OPS_TOTAL = Counter(
+        "io_file_ops_total", "File operations", ["operation", "status"]
+    )
     FILE_OPS_LATENCY_SECONDS = Histogram(
         "io_file_ops_latency_seconds", "File operation latency", ["operation"]
     )
-    DOWNLOAD_LATENCY_SECONDS = Histogram("io_download_latency_seconds", "Download latency")
+    DOWNLOAD_LATENCY_SECONDS = Histogram(
+        "io_download_latency_seconds", "Download latency"
+    )
     DOWNLOAD_BYTES_TOTAL = Counter("io_download_bytes_total", "Bytes downloaded")
-    IN_PROGRESS_DOWNLOADS = Gauge("io_in_progress_downloads_total", "In-progress downloads")
-    SAFETY_VIOLATIONS_TOTAL = Counter("io_safety_violations_total", "Safety violations in IO")
+    IN_PROGRESS_DOWNLOADS = Gauge(
+        "io_in_progress_downloads_total", "In-progress downloads"
+    )
+    SAFETY_VIOLATIONS_TOTAL = Counter(
+        "io_safety_violations_total", "Safety violations in IO"
+    )
 else:
-    FILE_OPS_TOTAL = FILE_OPS_LATENCY_SECONDS = DOWNLOAD_LATENCY_SECONDS = DOWNLOAD_BYTES_TOTAL = (
-        IN_PROGRESS_DOWNLOADS
-    ) = SAFETY_VIOLATIONS_TOTAL = None
+    FILE_OPS_TOTAL = FILE_OPS_LATENCY_SECONDS = DOWNLOAD_LATENCY_SECONDS = (
+        DOWNLOAD_BYTES_TOTAL
+    ) = IN_PROGRESS_DOWNLOADS = SAFETY_VIOLATIONS_TOTAL = None
 
 # --- OTEL Tracing ---
 telemetry_tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
@@ -125,7 +133,9 @@ telemetry_tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 download_breaker = (
     CircuitBreaker(fail_max=5, timeout_duration=120) if AIOBREAKER_AVAILABLE else None
 )
-redis_breaker = CircuitBreaker(fail_max=3, timeout_duration=60) if AIOBREAKER_AVAILABLE else None
+redis_breaker = (
+    CircuitBreaker(fail_max=3, timeout_duration=60) if AIOBREAKER_AVAILABLE else None
+)
 
 
 # --- Hardened Path and Workspace Management ---
@@ -166,7 +176,11 @@ class ScalableProvenanceLogger:
     def log_event(self, event: Dict[str, Any]):
         event_copy = dict(event)
         event_copy["timestamp"] = datetime.now(timezone.utc).isoformat()
-        payload = self._last_hash + json.dumps(event_copy, sort_keys=True) + (PROVENANCE_SALT or "")
+        payload = (
+            self._last_hash
+            + json.dumps(event_copy, sort_keys=True)
+            + (PROVENANCE_SALT or "")
+        )
         current_hash = hashlib.sha256(payload.encode()).hexdigest()
         event_copy["chain_hash"] = current_hash
         self._last_hash = current_hash
@@ -299,7 +313,9 @@ async def download_file_to_temp(url: str, file_manager: FileManager) -> Optional
             import pika
 
             connection = pika.BlockingConnection(
-                pika.URLParameters(os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"))
+                pika.URLParameters(
+                    os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+                )
             )
             channel = connection.channel()
             channel.queue_declare(queue="io_downloads", durable=True)
@@ -340,7 +356,9 @@ async def download_file_to_temp(url: str, file_manager: FileManager) -> Optional
                 try:
                     from transformers import pipeline
 
-                    mdl = pipeline("text-classification", model="unitary/toxic-bert", top_k=None)
+                    mdl = pipeline(
+                        "text-classification", model="unitary/toxic-bert", top_k=None
+                    )
                     with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read()
                     results = mdl([content])
@@ -348,7 +366,9 @@ async def download_file_to_temp(url: str, file_manager: FileManager) -> Optional
                         if r["label"] == "TOXIC" and r["score"] > 0.8:
                             if SAFETY_VIOLATIONS_TOTAL:
                                 SAFETY_VIOLATIONS_TOTAL.inc()
-                            utils_logger.warning("Downloaded content blocked for safety.")
+                            utils_logger.warning(
+                                "Downloaded content blocked for safety."
+                            )
                             os.remove(temp_path)
                             return None
                 except Exception as e:
@@ -368,13 +388,19 @@ async def download_file_to_temp(url: str, file_manager: FileManager) -> Optional
         return None
 
 
-async def _do_actual_download(url: str, file_manager: FileManager, span) -> Optional[str]:
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+async def _do_actual_download(
+    url: str, file_manager: FileManager, span
+) -> Optional[str]:
+    async with aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=60)
+    ) as session:
         async with session.get(url) as response:
             response.raise_for_status()
             content_length = int(response.headers.get("Content-Length", 0))
             if content_length > 100 * 1024 * 1024:
-                raise ValueError("Content-Length exceeds the maximum allowed file size of 100MB.")
+                raise ValueError(
+                    "Content-Length exceeds the maximum allowed file size of 100MB."
+                )
             fd, temp_path = tempfile.mkstemp(dir=file_manager.workspace)
             with os.fdopen(fd, "wb") as f:
                 async for chunk in response.content.iter_chunked(8192):
@@ -437,7 +463,9 @@ def prune_audit_logs(retention_days: int = 90):
                 if obj["LastModified"].replace(tzinfo=None) < cutoff
             ]
             if keys:
-                s3.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]})
+                s3.delete_objects(
+                    Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys]}
+                )
                 utils_logger.info(f"Pruned {len(keys)} audit logs.")
     except Exception as e:
         utils_logger.error(f"Failed to prune audit logs: {e}")
@@ -477,10 +505,14 @@ if __name__ == "__main__":
         test_file_path = os.path.join(WORKSPACE_DIR, "test.txt")
         with open(test_file_path, "w") as f:
             f.write("test")
-        hash_val = asyncio.run(hash_file_distributed_cache(test_file_path, file_manager))
+        hash_val = asyncio.run(
+            hash_file_distributed_cache(test_file_path, file_manager)
+        )
         print(f"Hash of {test_file_path}: {hash_val}")
         # Example: download a file (use a dummy URL or local file server)
-        temp_path = asyncio.run(download_file_to_temp("https://www.example.com/", file_manager))
+        temp_path = asyncio.run(
+            download_file_to_temp("https://www.example.com/", file_manager)
+        )
         if temp_path:
             print(f"Downloaded file to: {temp_path}")
             os.remove(temp_path)

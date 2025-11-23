@@ -5,21 +5,22 @@ Tests for the enterprise OpenTelemetry configuration with proper mocking
 of external dependencies and comprehensive coverage of functionality.
 """
 
-import pytest
+import asyncio
 import os
 import sys
 import threading
 from unittest.mock import MagicMock, patch
-import asyncio
+
+import pytest
 
 # Import the module under test
 from arbiter.otel_config import (
-    OpenTelemetryConfig,
-    Environment,
     CollectorEndpoint,
-    SamplingStrategy,
-    NoOpTracer,
+    Environment,
     NoOpSpan,
+    NoOpTracer,
+    OpenTelemetryConfig,
+    SamplingStrategy,
     get_tracer,
     trace_operation,
 )
@@ -144,18 +145,28 @@ class TestSamplingStrategy:
 
         # Errors should always be sampled when error_rate is 1.0
         for _ in range(10):
-            assert strategy.should_sample("test_span", "test_service", {"error": True}) is True
+            assert (
+                strategy.should_sample("test_span", "test_service", {"error": True})
+                is True
+            )
 
     def test_should_sample_high_latency(self):
         """Test high latency sampling."""
-        strategy = SamplingStrategy(high_latency_threshold_ms=100, high_latency_rate=1.0)
+        strategy = SamplingStrategy(
+            high_latency_threshold_ms=100, high_latency_rate=1.0
+        )
 
         # High latency should always be sampled when rate is 1.0
-        assert strategy.should_sample("test_span", "test_service", {"latency_ms": 200}) is True
+        assert (
+            strategy.should_sample("test_span", "test_service", {"latency_ms": 200})
+            is True
+        )
 
     def test_should_sample_operation_override(self):
         """Test operation-specific sampling rate."""
-        strategy = SamplingStrategy(base_rate=0.0, operation_rates={"critical_operation": 1.0})
+        strategy = SamplingStrategy(
+            base_rate=0.0, operation_rates={"critical_operation": 1.0}
+        )
 
         # Critical operation should always be sampled
         assert strategy.should_sample("critical_operation", "test_service", {}) is True
@@ -165,7 +176,9 @@ class TestSamplingStrategy:
 
     def test_should_sample_service_override(self):
         """Test service-specific sampling rate."""
-        strategy = SamplingStrategy(base_rate=0.0, service_rates={"important_service": 1.0})
+        strategy = SamplingStrategy(
+            base_rate=0.0, service_rates={"important_service": 1.0}
+        )
 
         # Important service should always be sampled
         assert strategy.should_sample("any_operation", "important_service", {}) is True
@@ -191,7 +204,9 @@ class TestOpenTelemetryConfig:
     def test_direct_instantiation_raises_error(self):
         """Test that direct instantiation raises an error after singleton exists."""
         OpenTelemetryConfig.get_instance()
-        with pytest.raises(RuntimeError, match="Use OpenTelemetryConfig.get_instance()"):
+        with pytest.raises(
+            RuntimeError, match="Use OpenTelemetryConfig.get_instance()"
+        ):
             OpenTelemetryConfig()
 
     @patch.dict(
@@ -255,7 +270,9 @@ class TestOpenTelemetryConfig:
         assert config._validate_endpoint(https_endpoint) is True
 
         # Explicitly insecure endpoint should be accepted
-        insecure_endpoint = CollectorEndpoint(url="http://internal-collector", insecure=True)
+        insecure_endpoint = CollectorEndpoint(
+            url="http://internal-collector", insecure=True
+        )
         insecure_endpoint.is_reachable = MagicMock(return_value=True)
         assert config._validate_endpoint(insecure_endpoint) is True
 
@@ -464,7 +481,9 @@ class TestTraceContext:
         config = OpenTelemetryConfig.get_instance()
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
         config.tracer = mock_tracer
 
         with config.trace_context("test_operation", key1="value1", key2="value2"):

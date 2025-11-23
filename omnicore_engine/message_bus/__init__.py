@@ -10,22 +10,22 @@ The central communication layer for OmniCoreEngine. It provides:
 4. Security features (Encryption, Signing, Dedup).
 """
 import logging
-from .message_types import Message, MessageSchema
 
-# Basic utilities
-from .hash_ring import ConsistentHashRing
-from .resilience import RetryPolicy, CircuitBreaker
+from .backpressure import BackpressureManager
+from .cache import MessageCache
+from .context import ContextPropagationMiddleware, ExecutionContext
+from .dead_letter_queue import DeadLetterQueue
+from .encryption import EncryptionStrategy, FernetEncryption
 
 # FIX: Corrected import source for MessageBusGuardian from 'resilience' to 'guardian'.
 from .guardian import MessageBusGuardian
 
-from .sharded_message_bus import ShardedMessageBus
-from .context import ContextPropagationMiddleware, ExecutionContext
-from .backpressure import BackpressureManager
-from .dead_letter_queue import DeadLetterQueue
-from .cache import MessageCache
-from .encryption import EncryptionStrategy, FernetEncryption
+# Basic utilities
+from .hash_ring import ConsistentHashRing
+from .message_types import Message, MessageSchema
 from .rate_limit import RateLimiter, RateLimitError
+from .resilience import CircuitBreaker, RetryPolicy
+from .sharded_message_bus import ShardedMessageBus
 
 # Integrations (Conditionally available)
 try:

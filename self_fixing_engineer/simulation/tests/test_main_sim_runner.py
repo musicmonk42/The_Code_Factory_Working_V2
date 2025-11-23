@@ -1,13 +1,14 @@
 # tests/test_main_sim_runner.py
 
+import argparse
+import io
 import os
 import sys
-import pytest
-import io
-import argparse
-import warnings
-from unittest.mock import patch, MagicMock, mock_open
 import tempfile
+import warnings
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="simulation.registry")
@@ -58,7 +59,9 @@ sys.modules["cryptography.exceptions"] = MagicMock()
 mock_otel = MagicMock()
 mock_tracer = MagicMock()
 mock_span = MagicMock()
-mock_span.get_span_context.return_value = MagicMock(trace_id=123456789, span_id=987654321)
+mock_span.get_span_context.return_value = MagicMock(
+    trace_id=123456789, span_id=987654321
+)
 mock_span.__enter__ = MagicMock(return_value=mock_span)
 mock_span.__exit__ = MagicMock(return_value=None)
 mock_tracer.start_as_current_span.return_value = mock_span
@@ -82,24 +85,24 @@ sys.modules["simulation.agentic"] = MagicMock()
 # Now we can safely import the module under test
 try:
     from simulation.plugins.main_sim_runner import (
-        discover_and_register_plugin_entrypoints,
-        validate_deployment_or_exit,
         _execute_remotely,
-        run_plugin_in_sandbox,
+        _plugin_register_adapter,
         _registered_plugin_entrypoints,
         _registered_plugin_info,
-        verify_plugin_signature,
-        register_entrypoint,
-        aggregate_simulation_results,
-        parse_plugin_kv_args,
-        check_rbac_permission,
-        send_notification,
         _synthesize_kwargs_for_runner,
-        _plugin_register_adapter,
+        aggregate_simulation_results,
+        check_rbac_permission,
+        discover_and_register_plugin_entrypoints,
         enforce_kernel_sandboxing,
-        opa_cache,
-        plugin_load_errors,
         main,
+        opa_cache,
+        parse_plugin_kv_args,
+        plugin_load_errors,
+        register_entrypoint,
+        run_plugin_in_sandbox,
+        send_notification,
+        validate_deployment_or_exit,
+        verify_plugin_signature,
     )
 except ImportError as e:
     # If import still fails, create mock functions for testing
@@ -348,7 +351,9 @@ class TestNotifications:
     def test_send_notification_dry_run(self):
         """Test dry-run notification."""
         # The actual implementation uses main_runner_logger.info, not print
-        with patch("simulation.plugins.main_sim_runner.main_runner_logger") as mock_logger:
+        with patch(
+            "simulation.plugins.main_sim_runner.main_runner_logger"
+        ) as mock_logger:
             send_notification("test_event", "Test message", dry_run=True)
             mock_logger.info.assert_called_once_with(
                 "Dry-run notification: [test_event] Test message"
@@ -422,7 +427,9 @@ class TestIntegration:
     def test_main_help(self):
         """Test main function with help flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
-        with patch("simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"):
+        with patch(
+            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
+        ):
             with patch("sys.argv", ["main_sim_runner.py", "--help"]):
                 with pytest.raises(SystemExit) as exc_info:
                     main()
@@ -433,9 +440,13 @@ class TestIntegration:
     def test_main_validate(self):
         """Test main function with validate flag."""
         # Mock discover_and_register_plugin_entrypoints to prevent the coroutine warning
-        with patch("simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"):
+        with patch(
+            "simulation.plugins.main_sim_runner.discover_and_register_plugin_entrypoints"
+        ):
             with patch("sys.argv", ["main_sim_runner.py", "--validate"]):
-                with patch("simulation.plugins.main_sim_runner.validate_deployment_or_exit"):
+                with patch(
+                    "simulation.plugins.main_sim_runner.validate_deployment_or_exit"
+                ):
                     with pytest.raises(SystemExit):
                         main()
                     # Validate should be called

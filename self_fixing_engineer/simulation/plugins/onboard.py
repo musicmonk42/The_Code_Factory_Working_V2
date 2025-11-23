@@ -1,22 +1,23 @@
-import os
-import json
-import logging
-import asyncio
-import sys
-import time
-import platform
-from typing import Dict, Any, Optional, List
-import ast
-import subprocess
-import shutil
-import requests
-import webbrowser
-from logging.handlers import RotatingFileHandler
 import argparse
-from pathlib import Path
-import getpass
+import ast
+import asyncio
 import contextlib
 import functools
+import getpass
+import json
+import logging
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import time
+import webbrowser
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import requests
 
 # Required library (fail fast)
 try:
@@ -57,9 +58,9 @@ except ImportError:
 try:
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
     )
 
     tenacity_available = True
@@ -100,7 +101,7 @@ except ImportError:
 
 # Prometheus client (optional)
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     prometheus_available = True
 except ImportError:
@@ -136,15 +137,21 @@ if str(parent_dir) not in sys.path:
 class OnboardConfig(BaseModel):
     project_type: str = Field(default="agentic_swarm", description="Type of project")
     plugins_dir: str = Field(default="./plugins", description="Directory for plugins")
-    results_dir: str = Field(default="./simulation_results", description="Directory for results")
+    results_dir: str = Field(
+        default="./simulation_results", description="Directory for results"
+    )
     notification_backend: dict = Field(
         default_factory=dict, description="Notification backend config"
     )
-    checkpoint_backend: dict = Field(default_factory=dict, description="Checkpoint backend config")
+    checkpoint_backend: dict = Field(
+        default_factory=dict, description="Checkpoint backend config"
+    )
     environment_variables: dict = Field(
         default_factory=dict, description="Environment variables to set"
     )
-    generated_with: dict = Field(default_factory=dict, description="Generation metadata")
+    generated_with: dict = Field(
+        default_factory=dict, description="Generation metadata"
+    )
 
 
 # Load onboard_config from file with environment overrides
@@ -284,7 +291,9 @@ def _get_user_input(
         # In non-interactive mode, auto-return default if provided; otherwise fail fast.
         if default is not None:
             return default
-        raise RuntimeError(f"Non-interactive mode: missing required input for prompt: {prompt}")
+        raise RuntimeError(
+            f"Non-interactive mode: missing required input for prompt: {prompt}"
+        )
     with ONBOARDING_LATENCY_SECONDS.labels(operation="get_user_input").time():
         while True:
             prompt_str = f"{prompt}"
@@ -293,7 +302,9 @@ def _get_user_input(
             if default is not None:
                 prompt_str += f" [default: {default}]"
             prompt_str += ": "
-            user_input = (getpass.getpass(prompt_str) if secret else input(prompt_str)).strip()
+            user_input = (
+                getpass.getpass(prompt_str) if secret else input(prompt_str)
+            ).strip()
 
             if not user_input and default is not None:
                 return default
@@ -323,7 +334,9 @@ async def _generate_readme(target_dir: Path, title: str, description: str):
             logger.info(f"Generated README: {readme_path}")
         except (PermissionError, OSError) as e:
             logger.exception(f"Failed to write README: {e}")
-            print_status(f"Failed to write README: {readme_path}. Check permissions.", "err")
+            print_status(
+                f"Failed to write README: {readme_path}. Check permissions.", "err"
+            )
 
 
 async def _generate_config(config_data: Dict[str, Any], filename: str = "config.json"):
@@ -340,7 +353,9 @@ async def _generate_config(config_data: Dict[str, Any], filename: str = "config.
                     "results_dir": config_data.get("results_dir", ""),
                     "notification_backend": config_data.get("notification_backend", {}),
                     "checkpoint_backend": config_data.get("checkpoint_backend", {}),
-                    "environment_variables": config_data.get("environment_variables", {}),
+                    "environment_variables": config_data.get(
+                        "environment_variables", {}
+                    ),
                     "generated_with": config_data.get("generated_with", {}),
                 }
             )
@@ -382,7 +397,9 @@ def _read_or_create_key() -> Optional[bytes]:
             Fernet(env_key.encode("utf-8"))
             return env_key.encode("utf-8")
         except Exception:
-            logger.error("Invalid OMNI_FERNET_KEY: must be a valid Fernet (base64 urlsafe) key.")
+            logger.error(
+                "Invalid OMNI_FERNET_KEY: must be a valid Fernet (base64 urlsafe) key."
+            )
             return None
 
     try:
@@ -418,7 +435,9 @@ def _generate_secure_config(secrets: Dict[str, str], secrets_manager: str = "loc
             try:
                 client = hvac.Client(url=vault_url, token=vault_token)
                 # Store secrets directly under kv v2 path
-                client.secrets.kv.v2.create_or_update_secret(path="onboard-secrets", secret=secrets)
+                client.secrets.kv.v2.create_or_update_secret(
+                    path="onboard-secrets", secret=secrets
+                )
                 print_status("Secrets stored in HashiCorp Vault.", "ok")
             except Exception as e:
                 print_status(f"Failed to store secrets in Vault: {e}", "err")
@@ -443,11 +462,15 @@ def _generate_secure_config(secrets: Dict[str, str], secrets_manager: str = "loc
 
         key = _read_or_create_key()
         if not key:
-            print_status("Failed to provision encryption key. Secrets will not be stored.", "err")
+            print_status(
+                "Failed to provision encryption key. Secrets will not be stored.", "err"
+            )
             raise RuntimeError("Encryption key unavailable.")
 
         f = Fernet(key)
-        encrypted_secrets = {k: f.encrypt(v.encode()).decode() for k, v in secrets.items()}
+        encrypted_secrets = {
+            k: f.encrypt(v.encode()).decode() for k, v in secrets.items()
+        }
         data = {"secrets": encrypted_secrets}
 
         with open(SECURE_CONFIG_PATH, "w", encoding="utf-8") as file:
@@ -465,7 +488,9 @@ def _load_secure_config() -> Dict[str, str]:
         data = json.load(f)
 
     if not crypto_available:
-        print_status("cryptography not available. Encrypted secrets cannot be decrypted.", "err")
+        print_status(
+            "cryptography not available. Encrypted secrets cannot be decrypted.", "err"
+        )
         return {}
 
     key = _read_or_create_key()
@@ -544,7 +569,9 @@ def _auto_format_plugin(plugin_file_path: Path):
         print_status("black not available, skipping auto-formatting.", "warn")
 
 
-async def _generate_plugin_manifest(plugin_type: str, plugin_name: str, plugins_dir: Path):
+async def _generate_plugin_manifest(
+    plugin_type: str, plugin_name: str, plugins_dir: Path
+):
     """Generates a basic plugin manifest and a dummy plugin file for demonstration."""
     with ONBOARDING_LATENCY_SECONDS.labels(operation="generate_plugin_manifest").time():
         manifest = {
@@ -600,7 +627,9 @@ if __name__ == "__main__":
             plugin_filepath = plugins_dir / f"{plugin_name}.py"
             try:
                 if aiofiles_available:
-                    async with aiofiles.open(plugin_filepath, "w", encoding="utf-8") as f:
+                    async with aiofiles.open(
+                        plugin_filepath, "w", encoding="utf-8"
+                    ) as f:
                         await f.write(plugin_file_content)
                 else:
                     with open(plugin_filepath, "w", encoding="utf-8") as f:
@@ -608,7 +637,9 @@ if __name__ == "__main__":
 
                 _validate_plugin_syntax(plugin_filepath)
                 _auto_format_plugin(plugin_filepath)
-                print_status(f"Generated demo Python plugin file: {plugin_filepath}", "ok")
+                print_status(
+                    f"Generated demo Python plugin file: {plugin_filepath}", "ok"
+                )
                 logger.info(f"Generated demo Python plugin file: {plugin_filepath}")
                 await _generate_readme(
                     plugins_dir,
@@ -620,7 +651,9 @@ if __name__ == "__main__":
                     f"Failed to write demo plugin file {plugin_filepath}: {e}. Check permissions or syntax in template.",
                     "err",
                 )
-                logger.exception(f"Failed to write demo plugin file {plugin_filepath}: {e}")
+                logger.exception(
+                    f"Failed to write demo plugin file {plugin_filepath}: {e}"
+                )
                 raise
         else:
             plugin_dir = plugins_dir / plugin_name
@@ -639,7 +672,9 @@ if __name__ == "__main__":
                     f"Generated demo {plugin_type} plugin manifest: {manifest_path}",
                     "ok",
                 )
-                logger.info(f"Generated demo {plugin_type} plugin manifest: {manifest_path}")
+                logger.info(
+                    f"Generated demo {plugin_type} plugin manifest: {manifest_path}"
+                )
 
                 if plugin_type == "wasm":
                     wasm_filepath = plugin_dir / f"{plugin_name}.wasm"
@@ -660,7 +695,9 @@ if __name__ == "__main__":
                     f"Failed to write demo plugin manifest {manifest_path}: {e}. Check permissions.",
                     "err",
                 )
-                logger.exception(f"Failed to write demo plugin manifest {manifest_path}: {e}")
+                logger.exception(
+                    f"Failed to write demo plugin manifest {manifest_path}: {e}"
+                )
                 raise
 
 
@@ -680,14 +717,16 @@ async def _run_health_checks(config: Dict[str, Any]):
                         "gcs_bucket_name"
                     )
                 elif pubsub_backend_url.startswith("azure://"):
-                    mesh_kwargs["azure_connection_string"] = config["notification_backend"].get(
-                        "azure_connection_string"
-                    )
-                    mesh_kwargs["azure_container_name"] = config["notification_backend"].get(
-                        "azure_container_name"
-                    )
+                    mesh_kwargs["azure_connection_string"] = config[
+                        "notification_backend"
+                    ].get("azure_connection_string")
+                    mesh_kwargs["azure_container_name"] = config[
+                        "notification_backend"
+                    ].get("azure_container_name")
                 elif pubsub_backend_url.startswith("etcd://"):
-                    mesh_kwargs["etcd_host"] = config["notification_backend"].get("etcd_host")
+                    mesh_kwargs["etcd_host"] = config["notification_backend"].get(
+                        "etcd_host"
+                    )
                     mesh_kwargs["etcd_port"] = int(
                         config["notification_backend"].get("etcd_port", 2379)
                     )
@@ -700,7 +739,9 @@ async def _run_health_checks(config: Dict[str, Any]):
                     f"Pub/Sub Health: {health.get('status','unknown').upper()} - {health.get('message', '')}",
                     "ok" if ok else "err",
                 )
-                ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="pubsub").set(1 if ok else 0)
+                ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="pubsub").set(
+                    1 if ok else 0
+                )
                 await mesh.close()
             except Exception as e:
                 print_status(f"Pub/Sub Health Check FAILED: {e}", "err")
@@ -720,9 +761,9 @@ async def _run_health_checks(config: Dict[str, Any]):
                 chk_manager_kwargs = {"backend": checkpoint_backend_type}
                 backend_config_key = f"{checkpoint_backend_type}_config"
                 if backend_config_key in config.get("checkpoint_backend", {}):
-                    chk_manager_kwargs[backend_config_key] = config["checkpoint_backend"][
-                        backend_config_key
-                    ]
+                    chk_manager_kwargs[backend_config_key] = config[
+                        "checkpoint_backend"
+                    ][backend_config_key]
 
                 if checkpoint_backend_type == "fs":
                     fs_dir = config["checkpoint_backend"].get("dir", "./checkpoints")
@@ -747,24 +788,32 @@ async def _run_health_checks(config: Dict[str, Any]):
                         f"Checkpoint Health: OK (saved and loaded test data successfully for {checkpoint_backend_type}).",
                         "ok",
                     )
-                    ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="checkpoint").set(1)
+                    ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="checkpoint").set(
+                        1
+                    )
                 else:
                     print_status(
                         f"Checkpoint Health FAILED: Data mismatch for {checkpoint_backend_type}.",
                         "err",
                     )
-                    ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="checkpoint").set(0)
+                    ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="checkpoint").set(
+                        0
+                    )
             except Exception as e:
                 print_status(
                     f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}",
                     "err",
                 )
-                logger.error(f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}")
+                logger.error(
+                    f"Checkpoint Health Check FAILED for {checkpoint_backend_type}: {e}"
+                )
                 ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="checkpoint").set(0)
         else:
             print_status("No Checkpoint backend configured for health check.")
     else:
-        print_status("CheckpointManager not available, skipping Checkpoint health check.", "warn")
+        print_status(
+            "CheckpointManager not available, skipping Checkpoint health check.", "warn"
+        )
 
     print_status(
         "\nChecking installed demo plugins (requires PluginManager to be run separately for full check):",
@@ -908,17 +957,23 @@ def _run_basic_onboarding_tests():
                 content = f.read()
             assert "PLUGIN_MANIFEST" in content
             assert "plugin_health" in content
-            print_status("Test 2 (Python Plugin Content): Basic structure present. PASSED.", "ok")
+            print_status(
+                "Test 2 (Python Plugin Content): Basic structure present. PASSED.", "ok"
+            )
         except (AssertionError, Exception) as e:
             print_status(f"Test 2 (Python Plugin Content): FAILED - {e}", "err")
             logger.error(f"Test 2 (Python Plugin Content): FAILED - {e}")
     elif test_plugin_manifest_path.exists():
-        print_status(f"Test 2 (Non-Python Plugin): {test_plugin_manifest_path} exists.", "ok")
+        print_status(
+            f"Test 2 (Non-Python Plugin): {test_plugin_manifest_path} exists.", "ok"
+        )
         try:
             with open(test_plugin_manifest_path, "r", encoding="utf-8") as f:
                 manifest_content = json.load(f)
             assert manifest_content.get("name") == test_plugin_name
-            print_status("Test 2 (Non-Python Plugin Content): Manifest present. PASSED.", "ok")
+            print_status(
+                "Test 2 (Non-Python Plugin Content): Manifest present. PASSED.", "ok"
+            )
         except (json.JSONDecodeError, AssertionError, Exception) as e:
             print_status(f"Test 2 (Non-Python Plugin Content): FAILED - {e}", "err")
             logger.error(f"Test 2 (Non-Python Plugin Content): FAILED - {e}")
@@ -1124,7 +1179,9 @@ async def _test_connection(backend: str, config: Dict[str, Any]):
             list(client.list_buckets())
             print_status("GCS connection test passed.", "ok")
         except ImportError:
-            print_status("Google Cloud Storage library not installed. Skipping GCS test.", "warn")
+            print_status(
+                "Google Cloud Storage library not installed. Skipping GCS test.", "warn"
+            )
         except Exception as e:
             print_status(f"GCS connection test failed: {e}", "err")
             ONBOARDING_HEALTH_CHECK_STATUS.labels(check_name="gcs_connection").set(0)
@@ -1144,7 +1201,9 @@ async def onboard(args):
 
         ONBOARDING_STEPS_TOTAL.labels(step="start").inc()
 
-        print_status("--- Welcome to the Omnisapient AI Project Onboarding Wizard! ---", "ok")
+        print_status(
+            "--- Welcome to the Omnisapient AI Project Onboarding Wizard! ---", "ok"
+        )
         print_status(
             "This wizard will help you set up your project configuration and a demo plugin.",
             "info",
@@ -1196,7 +1255,9 @@ async def onboard(args):
             logger.info(f"User selected plugin types: {selected_plugin_types}")
 
         # --- Notification Backend Setup (MeshPubSub) ---
-        print_status("\n--- Notification Backend Setup (for real-time events) ---", "ok")
+        print_status(
+            "\n--- Notification Backend Setup (for real-time events) ---", "ok"
+        )
         pubsub_backend_options = ["local"]
         if MESH_ADAPTER_AVAILABLE:
             try:
@@ -1215,7 +1276,12 @@ async def onboard(args):
                     ],
                 )()
                 pubsub_backend_options = sorted(
-                    list(set(pubsub_backend_options + [b for b in supported if b != "local"]))
+                    list(
+                        set(
+                            pubsub_backend_options
+                            + [b for b in supported if b != "local"]
+                        )
+                    )
                 )
             except Exception as e:
                 logger.warning(
@@ -1249,7 +1315,9 @@ async def onboard(args):
                     f"Choose your preferred notification backend: {pubsub_backend_options}",
                     options=pubsub_backend_options,
                     default=(
-                        "redis" if "redis" in pubsub_backend_options else pubsub_backend_options[0]
+                        "redis"
+                        if "redis" in pubsub_backend_options
+                        else pubsub_backend_options[0]
                     ),
                 )
             )
@@ -1278,7 +1346,9 @@ async def onboard(args):
             pubsub_config["url"] = (
                 "redis://localhost:6379/0"
                 if non_interactive
-                else _get_user_input("Enter Redis URL", default="redis://localhost:6379/0")
+                else _get_user_input(
+                    "Enter Redis URL", default="redis://localhost:6379/0"
+                )
             )
         elif pubsub_backend == "nats":
             pubsub_config["url"] = (
@@ -1309,7 +1379,9 @@ async def onboard(args):
             secrets["AWS_ACCESS_KEY_ID"] = os.environ.get("AWS_ACCESS_KEY_ID") or (
                 None if non_interactive else _get_user_input("Enter AWS Access Key ID")
             )
-            secrets["AWS_SECRET_ACCESS_KEY"] = os.environ.get("AWS_SECRET_ACCESS_KEY") or (
+            secrets["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY"
+            ) or (
                 None
                 if non_interactive
                 else _get_user_input("Enter AWS Secret Access Key", secret=True)
@@ -1319,7 +1391,9 @@ async def onboard(args):
                 if non_interactive
                 else _get_user_input("Enter AWS Region", default="us-east-1")
             )
-            print_status("For AWS backend, secrets will be stored when provided.", "info")
+            print_status(
+                "For AWS backend, secrets will be stored when provided.", "info"
+            )
             if not non_interactive:
                 test_conn = _get_user_input(
                     "Test AWS connection now?", options=["yes", "no"], default="yes"
@@ -1373,7 +1447,9 @@ async def onboard(args):
                 else _get_user_input("Enter etcd Host", default="localhost")
             )
             pubsub_config["etcd_port"] = (
-                "2379" if non_interactive else _get_user_input("Enter etcd Port", default="2379")
+                "2379"
+                if non_interactive
+                else _get_user_input("Enter etcd Port", default="2379")
             )
         elif pubsub_backend == "local":
             pubsub_config["url"] = "local://"
@@ -1387,7 +1463,12 @@ async def onboard(args):
             try:
                 additional = list(getattr(CheckpointManager, "_BACKENDS", {}).keys())
                 checkpoint_backend_options = sorted(
-                    list(set(checkpoint_backend_options + [b for b in additional if b != "fs"]))
+                    list(
+                        set(
+                            checkpoint_backend_options
+                            + [b for b in additional if b != "fs"]
+                        )
+                    )
                 )
             except Exception as e:
                 logger.warning(
@@ -1437,7 +1518,11 @@ async def onboard(args):
             secrets["AWS_ACCESS_KEY_ID"] = (
                 secrets.get("AWS_ACCESS_KEY_ID")
                 or os.environ.get("AWS_ACCESS_KEY_ID")
-                or (None if non_interactive else _get_user_input("Enter AWS Access Key ID"))
+                or (
+                    None
+                    if non_interactive
+                    else _get_user_input("Enter AWS Access Key ID")
+                )
             )
             secrets["AWS_SECRET_ACCESS_KEY"] = (
                 secrets.get("AWS_SECRET_ACCESS_KEY")
@@ -1527,12 +1612,16 @@ async def onboard(args):
                 "host": (
                     "localhost"
                     if non_interactive
-                    else _get_user_input("Enter etcd Host for checkpoints", default="localhost")
+                    else _get_user_input(
+                        "Enter etcd Host for checkpoints", default="localhost"
+                    )
                 ),
                 "port": (
                     "2379"
                     if non_interactive
-                    else _get_user_input("Enter etcd Port for checkpoints", default="2379")
+                    else _get_user_input(
+                        "Enter etcd Port for checkpoints", default="2379"
+                    )
                 ),
             }
         print_status(f"Checkpoint backend selected: {checkpoint_backend}")
@@ -1540,7 +1629,9 @@ async def onboard(args):
 
         # Store secrets only if we actually have values
         if any(v for v in secrets.values()):
-            _generate_secure_config({k: v for k, v in secrets.items() if v}, secrets_manager)
+            _generate_secure_config(
+                {k: v for k, v in secrets.items() if v}, secrets_manager
+            )
 
         # --- Generate Core Configuration ---
         core_config = {
@@ -1676,7 +1767,9 @@ async def onboard(args):
                     "info",
                 )
                 print_status("Or, if using environment variables:", "info")
-                print_status(f"export MESH_BACKEND_URL='{pubsub_config.get('url', '')}'", "info")
+                print_status(
+                    f"export MESH_BACKEND_URL='{pubsub_config.get('url', '')}'", "info"
+                )
                 print_status(
                     f"export CHECKPOINT_BACKEND_TYPE='{checkpoint_config.get('type', '')}'",
                     "info",
@@ -1696,7 +1789,9 @@ async def onboard(args):
 
         ONBOARDING_STEPS_TOTAL.labels(step="complete").inc()
         print_status("\n--- Onboarding Complete! ---", "ok")
-        print_status("You're all set. Explore the generated files and start building!", "ok")
+        print_status(
+            "You're all set. Explore the generated files and start building!", "ok"
+        )
     except Exception as e:
         print_status(f"Onboarding failed: {e}", "err")
         _cleanup_partial_onboard()
@@ -1727,15 +1822,25 @@ if __name__ == "__main__":
         help="Show example configs, plugins, jobs after onboarding",
     )
     parser.add_argument("--verbose", action="store_true", help="Show detailed output")
-    parser.add_argument("--quiet", action="store_true", help="Suppress non-essential output")
-    parser.add_argument("--json-log", action="store_true", help="Enable structured JSON logging")
+    parser.add_argument(
+        "--quiet", action="store_true", help="Suppress non-essential output"
+    )
+    parser.add_argument(
+        "--json-log", action="store_true", help="Enable structured JSON logging"
+    )
     parser.add_argument("--project-type", type=str, help="Set project type (no prompt)")
     parser.add_argument(
         "--plugin-types", type=str, help="Set plugin types (comma-separated, no prompt)"
     )
-    parser.add_argument("--pubsub-backend", type=str, help="Set pubsub backend (no prompt)")
-    parser.add_argument("--checkpoint-backend", type=str, help="Set checkpoint backend (no prompt)")
-    parser.add_argument("-h", "--help", action="store_true", help="Show this help message")
+    parser.add_argument(
+        "--pubsub-backend", type=str, help="Set pubsub backend (no prompt)"
+    )
+    parser.add_argument(
+        "--checkpoint-backend", type=str, help="Set checkpoint backend (no prompt)"
+    )
+    parser.add_argument(
+        "-h", "--help", action="store_true", help="Show this help message"
+    )
     args = parser.parse_args()
 
     setup_logging(args.verbose, args.quiet, args.json_log)

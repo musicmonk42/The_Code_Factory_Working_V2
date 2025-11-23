@@ -1,13 +1,13 @@
-from typing import Dict, Any, List, Callable, Type, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 
 # Import base/tooling
 from .siem_base import (
+    PRODUCTION_MODE,
     BaseSIEMClient,
     SIEMClientConfigurationError,
     SIEMClientError,
-    alert_operator,
-    PRODUCTION_MODE,
     _base_logger,
+    alert_operator,
 )
 
 # Attempt to import individual client classes; do not abort on failure.
@@ -18,7 +18,7 @@ GcpLoggingClient = None
 AzureSentinelClient = AzureEventGridClient = AzureServiceBusClient = None
 
 try:
-    from .siem_generic_clients import SplunkClient, ElasticClient, DatadogClient
+    from .siem_generic_clients import DatadogClient, ElasticClient, SplunkClient
 except ImportError as e:
     _base_logger.error(
         f"Generic SIEM clients unavailable: {e}",
@@ -46,8 +46,8 @@ except ImportError as e:
 
 try:
     from .siem_azure_clients import (
-        AzureSentinelClient,
         AzureEventGridClient,
+        AzureSentinelClient,
         AzureServiceBusClient,
     )
 except ImportError as e:
@@ -181,7 +181,9 @@ def list_available_siem_clients() -> List[Dict[str, Any]]:
         # Deeper runtime configuration (e.g., credentials, endpoints) is validated during get_siem_client().
         # We intentionally do not instantiate clients here to avoid side effects and unsafe global toggles.
         try:
-            description = (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            description = (
+                (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            )
         except Exception:
             description = "No description."
 

@@ -1,18 +1,19 @@
 # test_fuzzy.py
 
-import pytest
 import asyncio
 import json
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # Fix the import path - should import from the learner module, not tests
 from arbiter.learner.fuzzy import (
+    _learn_batch_with_retry,
+    fuzzy_parser_failure_total,
+    load_parser_priorities,
     process_unstructured_data,
     register_fuzzy_parser_hook,
-    _learn_batch_with_retry,
-    load_parser_priorities,
-    fuzzy_parser_failure_total,
 )
 
 
@@ -69,7 +70,9 @@ class TestLoadParserPriorities:
         mock_file.__enter__.return_value.read.return_value = json.dumps(test_priorities)
 
         with patch("builtins.open", return_value=mock_file):
-            with patch("arbiter.learner.fuzzy.os.getenv", return_value="test_priorities.json"):
+            with patch(
+                "arbiter.learner.fuzzy.os.getenv", return_value="test_priorities.json"
+            ):
                 load_parser_priorities()
 
                 assert fuzzy_module.PARSER_PRIORITIES == test_priorities
@@ -82,7 +85,9 @@ class TestLoadParserPriorities:
             with patch("arbiter.learner.fuzzy.os.getenv", return_value="missing.json"):
                 load_parser_priorities()
 
-                assert fuzzy_module.PARSER_PRIORITIES == {}  # Should use empty dict as default
+                assert (
+                    fuzzy_module.PARSER_PRIORITIES == {}
+                )  # Should use empty dict as default
 
     def test_load_priorities_invalid_json(self):
         """Test handling of invalid JSON in priority file."""
@@ -114,7 +119,9 @@ class TestLearnBatchWithRetry:
             {"domain": "test", "key": "key2", "value": "value2"},
         ]
 
-        result = await _learn_batch_with_retry(mock_learner, facts, "user123", "test_source")
+        result = await _learn_batch_with_retry(
+            mock_learner, facts, "user123", "test_source"
+        )
 
         assert len(result) == 2
         assert all(r["status"] == "learned" for r in result)
@@ -246,9 +253,13 @@ class TestProcessUnstructuredData:
             mock_metric.return_value = mock_labels
 
             with pytest.raises(ValueError, match="Text must be a non-empty string"):
-                await process_unstructured_data(learner=mock_learner, text="")  # Empty string
+                await process_unstructured_data(
+                    learner=mock_learner, text=""
+                )  # Empty string
 
-            mock_metric.assert_called_with(parser_name="none", error_type="invalid_text")
+            mock_metric.assert_called_with(
+                parser_name="none", error_type="invalid_text"
+            )
             mock_labels.inc.assert_called_once()
 
     @pytest.mark.asyncio
@@ -265,7 +276,9 @@ class TestProcessUnstructuredData:
                     context="invalid",  # Not a dict
                 )
 
-            mock_metric.assert_called_with(parser_name="none", error_type="invalid_context")
+            mock_metric.assert_called_with(
+                parser_name="none", error_type="invalid_context"
+            )
             mock_labels.inc.assert_called_once()
 
     @pytest.mark.asyncio
@@ -277,7 +290,9 @@ class TestProcessUnstructuredData:
             mock_labels = MagicMock()
             mock_metric.return_value = mock_labels
 
-            result = await process_unstructured_data(learner=mock_learner, text="Test text")
+            result = await process_unstructured_data(
+                learner=mock_learner, text="Test text"
+            )
 
             assert len(result) == 1
             assert result[0]["status"] == "failed"
@@ -301,7 +316,9 @@ class TestProcessUnstructuredData:
                     mock_labels = MagicMock()
                     mock_metric.return_value = mock_labels
 
-                    result = await process_unstructured_data(learner=mock_learner, text="Test text")
+                    result = await process_unstructured_data(
+                        learner=mock_learner, text="Test text"
+                    )
 
                     # Should return no facts extracted
                     assert result[0]["status"] == "skipped"
@@ -324,7 +341,9 @@ class TestProcessUnstructuredData:
                 mock_labels = MagicMock()
                 mock_metric.return_value = mock_labels
 
-                result = await process_unstructured_data(learner=mock_learner, text="Test text")
+                result = await process_unstructured_data(
+                    learner=mock_learner, text="Test text"
+                )
 
                 # Should return no facts extracted
                 assert result[0]["status"] == "skipped"
@@ -367,8 +386,12 @@ class TestProcessUnstructuredData:
         with patch("arbiter.learner.fuzzy.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
-            with patch("arbiter.learner.fuzzy.os.getenv", return_value="1"):  # Only 1 retry
-                result = await process_unstructured_data(learner=mock_learner, text="Test text")
+            with patch(
+                "arbiter.learner.fuzzy.os.getenv", return_value="1"
+            ):  # Only 1 retry
+                result = await process_unstructured_data(
+                    learner=mock_learner, text="Test text"
+                )
 
                 assert len(result) == 1
                 assert result[0]["status"] == "failed"
@@ -400,7 +423,9 @@ class TestRegisterFuzzyParserHook:
 
         invalid_parser = Mock(spec=[])  # No parse method
 
-        with pytest.raises(TypeError, match="Parser must implement FuzzyParser protocol"):
+        with pytest.raises(
+            TypeError, match="Parser must implement FuzzyParser protocol"
+        ):
             register_fuzzy_parser_hook(mock_learner, invalid_parser)
 
     def test_register_invalid_parser_sync_parse(self):
@@ -414,7 +439,9 @@ class TestRegisterFuzzyParserHook:
 
         invalid_parser = SyncParser()
 
-        with pytest.raises(TypeError, match="Parser must implement FuzzyParser protocol"):
+        with pytest.raises(
+            TypeError, match="Parser must implement FuzzyParser protocol"
+        ):
             register_fuzzy_parser_hook(mock_learner, invalid_parser)
 
 
@@ -427,11 +454,15 @@ class TestIntegration:
 
         # Create a custom parser
         class EmailParser:
-            async def parse(self, text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+            async def parse(
+                self, text: str, context: Dict[str, Any]
+            ) -> List[Dict[str, Any]]:
                 # Simple email extraction
                 import re
 
-                emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text)
+                emails = re.findall(
+                    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text
+                )
                 return [
                     {
                         "domain": context.get("domain_hint", "Emails"),

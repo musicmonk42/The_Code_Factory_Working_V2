@@ -25,33 +25,32 @@ Security & Limitations:
 """
 
 import asyncio
+import base64
+import datetime  # For history timestamp and backup
+import json
 import logging
 import os
-import json
-import time
-import datetime  # For history timestamp and backup
 import signal  # For graceful shutdown
 import sqlite3  # For SQLiteContextManager
-import sys  # For SystemExit
 import stat  # For file permissions
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Callable, Tuple
-import uuid  # For history temp file
-import base64
+import sys  # For SystemExit
+import time
 import unittest
+import uuid  # For history temp file
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from unittest.mock import AsyncMock, patch
 
-
-from dynaconf import Dynaconf, Validator  # Configuration management (reqs: dynaconf)
+import aiofiles  # Async file I/O (reqs: aiofiles)
+import boto3  # For KMS integration (reqs: boto3)
+import zstandard as zstd  # Compression (reqs: zstandard)
 from cryptography.fernet import (
     Fernet,
 )  # Encryption for data at rest (reqs: cryptography)
-import boto3  # For KMS integration (reqs: boto3)
-import aiofiles  # Async file I/O (reqs: aiofiles)
-import zstandard as zstd  # Compression (reqs: zstandard)
+from dynaconf import Dynaconf, Validator  # Configuration management (reqs: dynaconf)
 
 # Prometheus metrics need to be defined at the top level to be accessible globally
-from prometheus_client import Histogram, Counter
+from prometheus_client import Counter, Histogram
 
 # --- FIX: Make imports resilient against missing sub-modules or circular dependencies ---
 
@@ -95,10 +94,11 @@ except ImportError as e:
 
 # Import internal package components that might create a circular dependency loop.
 try:
+    from omnicore_engine.plugin_registry import PlugInKind, plugin
+
+    from .clarifier_updater import update_requirements_with_answers
     from .clarifier_user_prompt import UserPromptChannel as InteractionMode
     from .clarifier_user_prompt import get_channel
-    from .clarifier_updater import update_requirements_with_answers
-    from omnicore_engine.plugin_registry import plugin, PlugInKind
 except ImportError as e:
     logging.warning(
         f"Failed to load package dependencies (Prompt/Updater/Plugin) due to potential circular import: {e}"
@@ -140,7 +140,9 @@ try:
     from audit_log import log_action, send_alert
 except ImportError:
     # Use a dummy logger for the warning before the main logger is configured
-    logging.warning("audit_log.py not found. log_action and send_alert will be dummy functions.")
+    logging.warning(
+        "audit_log.py not found. log_action and send_alert will be dummy functions."
+    )
 
     async def log_action(*args, **kwargs):
         # This will use the properly configured logger once it's initialized
@@ -177,7 +179,9 @@ def setup_logging() -> logging.Logger:
         log.addFilter(SensitiveDataFilter())
         log.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
         handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         handler.setFormatter(formatter)
         log.addHandler(handler)
     return log
@@ -208,7 +212,9 @@ def load_config() -> Dynaconf:
     try:
         cfg.validators.validate()
         get_logger().info("Clarifier configuration validated successfully.")
-        cfg.is_production_env = os.getenv("PYTHON_ENV", "development").lower() == "production"
+        cfg.is_production_env = (
+            os.getenv("PYTHON_ENV", "development").lower() == "production"
+        )
     except Exception as e:
         get_logger().critical(f"Configuration validation failed: {e}")
         sys.exit(1)
@@ -220,7 +226,9 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
     try:
         kms_client = boto3.client("kms", region_name=os.getenv("AWS_REGION"))
         response = kms_client.decrypt(
-            CiphertextBlob=base64.b64decode(os.getenv("CLARIFIER_HISTORY_ENCRYPTION_KEY_B64", "")),
+            CiphertextBlob=base64.b64decode(
+                os.getenv("CLARIFIER_HISTORY_ENCRYPTION_KEY_B64", "")
+            ),
             KeyId=kms_key_id,
         )
         history_encryption_key = response["Plaintext"]
@@ -248,17 +256,19 @@ def setup_tracing() -> Tuple[Optional[Any], Optional[Any], Optional[Any], bool]:
     """Initializes OpenTelemetry tracing."""
     try:
         from opentelemetry import trace
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.trace import Status, StatusCode
 
         resource = Resource.create({"service.name": "clarifier-service"})
         provider = TracerProvider(resource=resource)
-        processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
+        processor = BatchSpanProcessor(
+            OTLPSpanExporter(endpoint="http://otel-collector:4317")
+        )
         provider.add_span_processor(processor)
         trace.set_tracer_provider(provider)
         tracer_instance = trace.get_tracer(__name__)
@@ -307,7 +317,9 @@ def get_tracer() -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
 
 
 # --- Metrics (defined globally for easy access) ---
-CLARIFIER_CYCLES = Counter("clarifier_cycles_total", "Total clarification cycles", ["status"])
+CLARIFIER_CYCLES = Counter(
+    "clarifier_cycles_total", "Total clarification cycles", ["status"]
+)
 CLARIFIER_LATENCY = Histogram(
     "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
 )
@@ -358,10 +370,14 @@ class CircuitBreaker:
                 # FIX: Check for running loop before creating task
                 try:
                     asyncio.get_running_loop()
-                    asyncio.create_task(log_action("circuit_breaker_event", status="half_open"))
+                    asyncio.create_task(
+                        log_action("circuit_breaker_event", status="half_open")
+                    )
                 except RuntimeError:
                     # No event loop - log synchronously
-                    self.logger.debug("No event loop available for async logging in is_open")
+                    self.logger.debug(
+                        "No event loop available for async logging in is_open"
+                    )
                 return False
             self.logger.warning(
                 "Circuit breaker is open. Preventing calls.",
@@ -523,7 +539,9 @@ class SQLiteContextManager(ContextManager):
                     conn.execute(
                         "CREATE TABLE IF NOT EXISTS db_info (key TEXT PRIMARY KEY, value TEXT)"
                     )
-                    cursor = conn.execute("SELECT value FROM db_info WHERE key = 'schema_version'")
+                    cursor = conn.execute(
+                        "SELECT value FROM db_info WHERE key = 'schema_version'"
+                    )
                     row = cursor.fetchone()
                     current_schema_version = int(row["value"]) if row else 0
                     if current_schema_version < 1:
@@ -617,9 +635,13 @@ class SQLiteContextManager(ContextManager):
                     decrypted = self.fernet.decrypt(encrypted_blob).decode("utf-8")
                     results.append(decrypted)
                 except Exception as e:
-                    self.logger.error(f"Failed to decrypt context data: {e}", exc_info=True)
+                    self.logger.error(
+                        f"Failed to decrypt context data: {e}", exc_info=True
+                    )
                     CLARIFIER_ERRORS.labels("context_decryption_failed").inc()
-                    await log_action("context_retrieval_decrypt_fail", query=query, error=str(e))
+                    await log_action(
+                        "context_retrieval_decrypt_fail", query=query, error=str(e)
+                    )
                     continue
             CLARIFIER_CONTEXT_RETRIEVAL_LATENCY.labels("sqlite").observe(
                 time.perf_counter() - start_time
@@ -633,7 +655,9 @@ class SQLiteContextManager(ContextManager):
             )
             return results
         except Exception as e:
-            self.logger.error(f"Context retrieval failed from SQLite: {e}", exc_info=True)
+            self.logger.error(
+                f"Context retrieval failed from SQLite: {e}", exc_info=True
+            )
             CLARIFIER_ERRORS.labels("context_retrieval_failed").inc()
             await log_action(
                 "context_retrieval",
@@ -659,7 +683,9 @@ class SQLiteContextManager(ContextManager):
                 (entry_id, encrypted_data_blob),
             )
             await asyncio.to_thread(self.conn.commit)
-            await log_action("context_add", entry_id=entry_id, source="sqlite", status="success")
+            await log_action(
+                "context_add", entry_id=entry_id, source="sqlite", status="success"
+            )
         except Exception as e:
             self.logger.error(f"Context add failed to SQLite: {e}", exc_info=True)
             CLARIFIER_ERRORS.labels("context_add_failed").inc()
@@ -677,7 +703,9 @@ class SQLiteContextManager(ContextManager):
         """Alias for add_to_context (backward compatibility)."""
         return await self.add_to_context(data)
 
-    async def query(self, query: str, limit: int = 3, top_k: Optional[int] = None) -> List[str]:
+    async def query(
+        self, query: str, limit: int = 3, top_k: Optional[int] = None
+    ) -> List[str]:
         """Alias for retrieve_context (backward compatibility).
 
         Accepts either 'limit' or 'top_k' parameter for backward compatibility.
@@ -808,7 +836,9 @@ class Clarifier:
         context_manager: Optional[ContextManager] = None,
     ) -> "Clarifier":
         """Factory method that creates and initializes a Clarifier with async setup."""
-        clarifier = cls(llm=llm, prioritizer=prioritizer, context_manager=context_manager)
+        clarifier = cls(
+            llm=llm, prioritizer=prioritizer, context_manager=context_manager
+        )
 
         # Initialize dependencies if not provided
         if clarifier.llm is None:
@@ -847,7 +877,9 @@ class Clarifier:
             else:
                 self.logger.warning(f"Unsupported OS for signal handling: {os.name}.")
         except RuntimeError:
-            self.logger.warning("No event loop available for signal handler registration")
+            self.logger.warning(
+                "No event loop available for signal handler registration"
+            )
 
     def _init_llm(self) -> LLMProvider:
         """
@@ -864,7 +896,9 @@ class Clarifier:
                     target_language=self.config.TARGET_LANGUAGE,
                 )
             except Exception as e:
-                self.logger.warning(f"Failed to initialize GrokLLM: {e}. Using dummy LLM provider.")
+                self.logger.warning(
+                    f"Failed to initialize GrokLLM: {e}. Using dummy LLM provider."
+                )
                 return LLMProvider()
         else:
             CLARIFIER_ERRORS.labels("config_llm").inc()
@@ -888,10 +922,14 @@ class Clarifier:
                 asyncio.get_running_loop()
                 asyncio.create_task(manager.ensure_initialized())
             except RuntimeError:
-                self.logger.warning("No event loop available for context manager initialization")
+                self.logger.warning(
+                    "No event loop available for context manager initialization"
+                )
             return manager
         else:
-            self.logger.info("Initializing InMemoryContextManager for non-production environment.")
+            self.logger.info(
+                "Initializing InMemoryContextManager for non-production environment."
+            )
             return InMemoryContextManager(self.history)
 
     def _load_history(self) -> None:
@@ -938,7 +976,9 @@ class Clarifier:
             )
 
     async def _monitor_metrics(self):
-        if self.config.is_production_env and not hasattr(self, "_metrics_server_started"):
+        if self.config.is_production_env and not hasattr(
+            self, "_metrics_server_started"
+        ):
             try:
                 from prometheus_client import start_http_server
 
@@ -946,7 +986,9 @@ class Clarifier:
                 self.logger.info("Prometheus metrics server started on port 8000.")
                 setattr(self, "_metrics_server_started", True)
             except Exception as e:
-                self.logger.error(f"Failed to start Prometheus metrics server: {e}", exc_info=True)
+                self.logger.error(
+                    f"Failed to start Prometheus metrics server: {e}", exc_info=True
+                )
         while not self.shutdown_event.is_set():
             await asyncio.sleep(60)
             if self.shutdown_event.is_set():
@@ -961,7 +1003,9 @@ class Clarifier:
             if self.shutdown_event.is_set():
                 break
             if self.context_manager and self.context_manager.is_production_ready:
-                self.logger.debug("Performing periodic context manager sync (conceptual).")
+                self.logger.debug(
+                    "Performing periodic context manager sync (conceptual)."
+                )
 
     async def get_clarifications(
         self, ambiguities: List[str], requirements: Dict[str, Any]
@@ -972,7 +1016,9 @@ class Clarifier:
             span = self.tracer.start_span("get_clarifications_workflow")
             span.set_attribute("clarifier.target_language", self.config.TARGET_LANGUAGE)
         try:
-            return await self._get_clarifications_internal(ambiguities, requirements, span)
+            return await self._get_clarifications_internal(
+                ambiguities, requirements, span
+            )
         finally:
             if span:
                 span.end()
@@ -1023,7 +1069,8 @@ class Clarifier:
             self.circuit_breaker.record_success()
 
             batched_info = [
-                prioritization_result["prioritized"][i] for i in prioritization_result["batch"]
+                prioritization_result["prioritized"][i]
+                for i in prioritization_result["batch"]
             ]
             questions_to_ask = [b["question"] for b in batched_info]
             original_ambiguities = [b["original"] for b in batched_info]
@@ -1074,7 +1121,9 @@ class Clarifier:
                 await self.context_manager.add_to_context(current_cycle)
                 self.circuit_breaker.record_success()
 
-            CLARIFIER_LATENCY.labels(status="success").observe(time.perf_counter() - start_time)
+            CLARIFIER_LATENCY.labels(status="success").observe(
+                time.perf_counter() - start_time
+            )
             # FIX: Add the missing metric increment for 'completed' cycles
             CLARIFIER_CYCLES.labels(status="completed").inc()
             self.circuit_breaker.record_success()
@@ -1134,7 +1183,9 @@ class Clarifier:
                 await f.write(encrypted_data)
             os.rename(temp_file, self.config.HISTORY_FILE)
             os.chmod(self.config.HISTORY_FILE, stat.S_IREAD | stat.S_IWRITE)
-            self.logger.info("History saved successfully.", extra={"operation": "save_history"})
+            self.logger.info(
+                "History saved successfully.", extra={"operation": "save_history"}
+            )
             self.circuit_breaker.record_success()
         except Exception as e:
             self.logger.error(
@@ -1155,11 +1206,15 @@ class Clarifier:
             extra={"operation": "graceful_shutdown", "reason": reason},
         )
         self.shutdown_event.set()
-        tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        tasks = [
+            task for task in asyncio.all_tasks() if task is not asyncio.current_task()
+        ]
         for task in tasks:
             task.cancel()
         try:
-            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True), timeout=5.0
+            )
         except asyncio.TimeoutError:
             self.logger.warning(
                 "Some tasks did not complete during shutdown.",
@@ -1178,7 +1233,9 @@ class Clarifier:
         self.logger.info("Shutdown complete.", extra={"operation": "shutdown_complete"})
 
     async def run(self):
-        self.logger.info("Clarifier application starting...", extra={"operation": "startup"})
+        self.logger.info(
+            "Clarifier application starting...", extra={"operation": "startup"}
+        )
         try:
             while not self.shutdown_event.is_set():
                 await asyncio.sleep(1)
@@ -1188,7 +1245,9 @@ class Clarifier:
                 extra={"operation": "run_loop_cancelled"},
             )
         finally:
-            self.logger.info("Clarifier run loop exited.", extra={"operation": "run_loop_exited"})
+            self.logger.info(
+                "Clarifier run loop exited.", extra={"operation": "run_loop_exited"}
+            )
 
 
 # --- Plugin Entrypoint ---
@@ -1272,15 +1331,17 @@ class TestClarifier(unittest.TestCase):
 
     async def test_save_history(self):
         # Mock dependencies for _save_history
-        with patch("aiofiles.open", new_callable=AsyncMock), patch("os.rename"), patch("os.chmod"):
+        with patch("aiofiles.open", new_callable=AsyncMock), patch("os.rename"), patch(
+            "os.chmod"
+        ):
             self.clarifier.history = [{"test": "data"}]  # Ensure history is not empty
             await self.clarifier._save_history()
             # Assertions can be made here about the mocked calls if needed
 
     async def test_graceful_shutdown(self):
-        with patch.object(self.clarifier.context_manager, "close", AsyncMock()), patch.object(
-            self.clarifier, "_save_history", AsyncMock()
-        ):
+        with patch.object(
+            self.clarifier.context_manager, "close", AsyncMock()
+        ), patch.object(self.clarifier, "_save_history", AsyncMock()):
             await self.clarifier.graceful_shutdown("test")
             self.assertTrue(self.clarifier.shutdown_event.is_set())
 

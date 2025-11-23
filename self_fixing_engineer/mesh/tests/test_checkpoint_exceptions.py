@@ -13,7 +13,7 @@ Tests cover:
 import json
 import os
 import time
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -81,7 +81,9 @@ def mock_tracing():
 def mock_metrics():
     """Mock Prometheus metrics."""
     with patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", True):
-        with patch("mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT") as mock_count:
+        with patch(
+            "mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT"
+        ) as mock_count:
             mock_count.labels.return_value = mock_count
             yield mock_count
 
@@ -263,7 +265,9 @@ class TestCheckpointError:
         mock_alert_cache.get.return_value = 10
 
         with pytest.raises(CheckpointError):
-            await CheckpointError.raise_with_alert(TestConstants.MESSAGE, {"test": "context"})
+            await CheckpointError.raise_with_alert(
+                TestConstants.MESSAGE, {"test": "context"}
+            )
 
         # Alert should be suppressed
         mock_alert_callback.assert_not_called()
@@ -313,9 +317,9 @@ class TestExceptionSubclasses:
     def test_retryable_error(self):
         """Test CheckpointRetryableError for transient failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointRetryableError,
             CheckpointBackendError,
             CheckpointErrorCode,
+            CheckpointRetryableError,
         )
 
         error = CheckpointRetryableError("Temporary network issue", {"retry_count": 3})
@@ -327,8 +331,8 @@ class TestExceptionSubclasses:
     def test_validation_error(self):
         """Test CheckpointValidationError for schema failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            CheckpointValidationError,
             CheckpointErrorCode,
+            CheckpointValidationError,
         )
 
         error = CheckpointValidationError(
@@ -350,8 +354,8 @@ class TestRetryDecorator:
     async def test_successful_retry(self):
         """Test successful retry after failures."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            retry_on_exception,
             CheckpointRetryableError,
+            retry_on_exception,
         )
 
         call_count = 0
@@ -372,9 +376,9 @@ class TestRetryDecorator:
     async def test_circuit_breaker_integration(self, mock_circuit_breaker):
         """Test circuit breaker with retry decorator."""
         from mesh.checkpoint.checkpoint_exceptions import (
-            retry_on_exception,
             CheckpointBackendError,
             CheckpointErrorCode,
+            retry_on_exception,
         )
 
         @retry_on_exception(max_attempts=3)
@@ -454,7 +458,10 @@ class TestSecurity:
             assert error.context["jwt"] == "[MASKED]"
         else:
             # If it's been partially scrubbed and shortened
-            assert "[REDACTED]" in error.context["jwt"] or error.context["jwt"] == "[MASKED]"
+            assert (
+                "[REDACTED]" in error.context["jwt"]
+                or error.context["jwt"] == "[MASKED]"
+            )
 
         # Short strings should be preserved
         assert error.context["short"] == "abc"
@@ -507,9 +514,13 @@ class TestEdgeCases:
 
     def test_missing_dependencies(self):
         """Test behavior with missing optional dependencies."""
-        with patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False), patch(
-            "mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
-        ), patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False):
+        with (
+            patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False),
+            patch(
+                "mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
+            ),
+            patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False),
+        ):
 
             from mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
@@ -538,7 +549,9 @@ class TestPerformance:
         from mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         def create_exception():
-            return CheckpointError(TestConstants.MESSAGE, TestConstants.SENSITIVE_CONTEXT)
+            return CheckpointError(
+                TestConstants.MESSAGE, TestConstants.SENSITIVE_CONTEXT
+            )
 
         result = benchmark(create_exception)
         assert result is not None
@@ -550,8 +563,12 @@ class TestPerformance:
 
         # Create a large context but not so large it exceeds the size limit
         # Reduce the number of fields to stay under the 2048 byte limit
-        large_context = {f"password_{i}": f"secret_{i}" for i in range(20)}  # Reduced from 100
-        large_context.update({f"safe_{i}": f"data_{i}" for i in range(20)})  # Reduced from 100
+        large_context = {
+            f"password_{i}": f"secret_{i}" for i in range(20)
+        }  # Reduced from 100
+        large_context.update(
+            {f"safe_{i}": f"data_{i}" for i in range(20)}
+        )  # Reduced from 100
 
         def create_with_scrubbing():
             return CheckpointError(TestConstants.MESSAGE, large_context)

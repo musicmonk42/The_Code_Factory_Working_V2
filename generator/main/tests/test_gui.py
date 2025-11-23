@@ -3,14 +3,15 @@ Comprehensive unit tests for gui.py
 Tests Textual TUI application, API interactions, and UI components.
 """
 
-import pytest
 import asyncio
 import os
 import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-import aiohttp
 import threading
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiohttp
+import pytest
 
 # Set testing environment variables
 os.environ["TESTING"] = "true"
@@ -90,8 +91,9 @@ class TestTuiLogHandler:
 
     @pytest.mark.asyncio
     async def test_emit_log_record(self, log_widget, mock_app):
-        from main.gui import TuiLogHandler
         import logging
+
+        from main.gui import TuiLogHandler
 
         # Create a real task for the mock app to "create"
         pending_tasks = []
@@ -324,14 +326,18 @@ class TestRunnerTab:
     async def test_submit_runner_input_invalid_json(self, app_instance):
         """Test submitting invalid JSON to runner."""
 
-        with patch.object(app_instance.runner_log, "write") as mock_log_write, patch.object(
+        with patch.object(
+            app_instance.runner_log, "write"
+        ) as mock_log_write, patch.object(
             app_instance, "_set_error_message", new_callable=AsyncMock
         ) as mock_set_error:
 
             app_instance.query_one("#runner_input").value = "{ invalid json }"
             await app_instance.run_workflow_from_button()
 
-            mock_log_write.assert_called_with(pytest.string_containing("[red]Invalid JSON payload"))
+            mock_log_write.assert_called_with(
+                pytest.string_containing("[red]Invalid JSON payload")
+            )
             mock_set_error.assert_called_with(
                 app_instance.runner_error,
                 pytest.string_containing("Invalid JSON payload"),
@@ -388,7 +394,9 @@ class TestParserTab:
 
         with patch.object(app_instance, "_make_api_request") as mock_api, patch(
             "main.gui.aiofiles.open", new_callable=AsyncMock
-        ), patch.object(app_instance.runner_log, "write") as mock_log_write, patch.object(
+        ), patch.object(
+            app_instance.runner_log, "write"
+        ) as mock_log_write, patch.object(
             app_instance, "_set_success_message", new_callable=AsyncMock
         ):
 
@@ -419,7 +427,9 @@ class TestClarifierTab:
         app = MainApp()
         async with app.run_test() as pilot:
             await asyncio.sleep(0.01)  # Wait for on_mount to add columns
-            await app.clarifier_table.add_row("q123", "Test Question?", "Pending", key="q123")
+            await app.clarifier_table.add_row(
+                "q123", "Test Question?", "Pending", key="q123"
+            )
             app.clarifier_table.cursor_row = 0
             yield app
 
@@ -483,7 +493,9 @@ class TestMetricsTab:
                 await app_instance._update_metrics()
 
             assert mock_api.call_count == 2
-            mock_version_update.assert_called_once_with("API Version: [green]1.2.3[/green]")
+            mock_version_update.assert_called_once_with(
+                "API Version: [green]1.2.3[/green]"
+            )
             assert mock_display_update.call_count == 2
 
     @pytest.mark.asyncio
@@ -517,7 +529,9 @@ class TestMetricsTab:
 
             from textual.widgets import Select
 
-            event = Select.Changed(app_instance.query_one("#metrics_refresh_interval"), "10")
+            event = Select.Changed(
+                app_instance.query_one("#metrics_refresh_interval"), "10"
+            )
 
             await app_instance.on_metrics_refresh_interval_changed(event)
 
@@ -546,7 +560,9 @@ class TestConfigReload:
         app_instance.config_watcher = MagicMock()
         app_instance.config_watcher._reload = MagicMock()
 
-        with patch.object(app_instance.runner_log, "write") as mock_log_write, patch.object(
+        with patch.object(
+            app_instance.runner_log, "write"
+        ) as mock_log_write, patch.object(
             app_instance, "_set_success_message", new_callable=AsyncMock
         ):
 
@@ -573,7 +589,9 @@ class TestConfigReload:
             app_instance.query_one("#reload-parser-config").press()
             await asyncio.sleep(0.01)  # Allow events to process
 
-            app_instance.parser_config_watcher._reload.assert_called_once_with(force=True)
+            app_instance.parser_config_watcher._reload.assert_called_once_with(
+                force=True
+            )
             mock_trigger.assert_called_once()
 
 
@@ -814,7 +832,9 @@ class TestIntegrationWithAPI:
                     "output": {"result": "Generated"},
                 }
                 payload = {"input": "test"}
-                result = await app._make_api_request("POST", "http://test/run", json_data=payload)
+                result = await app._make_api_request(
+                    "POST", "http://test/run", json_data=payload
+                )
                 assert result["status"] == "success"
                 assert "run_id" in result
 

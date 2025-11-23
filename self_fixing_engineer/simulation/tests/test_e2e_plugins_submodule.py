@@ -4,14 +4,15 @@ End-to-end test suite for the plugins submodule.
 Tests plugin discovery, loading, execution, and integration.
 """
 
-import os
-import sys
 import asyncio
 import json
+import os
+import sys
 import tempfile
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # --- CRITICAL: Mock the problematic module BEFORE pytest loads conftest.py ---
 # Create a mock module for custom_llm_provider_plugin
@@ -65,8 +66,8 @@ sys.path.insert(0, str(SIMULATION_DIR.parent))
 
 # Import after all mocking and environment setup is complete
 try:
-    from simulation.plugins import plugin_manager, main_sim_runner
-    from simulation.plugins.dlt_clients import dlt_factory, dlt_base
+    from simulation.plugins import main_sim_runner, plugin_manager
+    from simulation.plugins.dlt_clients import dlt_base, dlt_factory
 
     IMPORTS_SUCCESSFUL = True
 except Exception as e:
@@ -155,7 +156,9 @@ class MockDLTClient:
         self.config = config
         self.storage = {}
 
-    async def write_checkpoint(self, checkpoint_name, hash, prev_hash, metadata, payload_blob):
+    async def write_checkpoint(
+        self, checkpoint_name, hash, prev_hash, metadata, payload_blob
+    ):
         """Mock writing a checkpoint."""
         self.storage[checkpoint_name] = {
             "hash": hash,
@@ -196,7 +199,9 @@ def setup_test_environment():
         # Create mock source files
         mock_src_dir = base_dir / "src"
         mock_src_dir.mkdir()
-        (mock_src_dir / "app.js").write_text("module.exports = { sum: (a, b) => a + b };")
+        (mock_src_dir / "app.js").write_text(
+            "module.exports = { sum: (a, b) => a + b };"
+        )
         (mock_src_dir / "app.py").write_text(
             "def main():\n    print('hello')\n    exec('print(\"dynamic\")')"
         )
@@ -285,7 +290,9 @@ async def mock_evolution_cycle(args):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_plugins_submodule_end_to_end(setup_test_environment, mock_external_services):
+async def test_plugins_submodule_end_to_end(
+    setup_test_environment, mock_external_services
+):
     """
     Main E2E test for the plugins submodule.
 
@@ -367,7 +374,9 @@ async def test_plugins_submodule_end_to_end(setup_test_environment, mock_externa
     # c) Runtime Tracer
     trace_result = await mock_runtime_tracer(
         MagicMock(
-            plugin_args=[f"target_code_path={setup_test_environment['mock_src_dir'] / 'app.py'}"]
+            plugin_args=[
+                f"target_code_path={setup_test_environment['mock_src_dir'] / 'app.py'}"
+            ]
         )
     )
     assert trace_result["success"] is True

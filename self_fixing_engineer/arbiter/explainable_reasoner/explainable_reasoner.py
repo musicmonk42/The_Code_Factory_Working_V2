@@ -1,32 +1,34 @@
-import os
-import json
 import asyncio
 import collections
-import uuid
-import time
+import hashlib
+import io
+import json
 import logging
+import os
+import time
 import tracemalloc
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import (
-    Dict,
     Any,
-    Optional,
-    List,
-    Union,
-    Callable,
     AsyncGenerator,
+    Callable,
     Coroutine,
+    Dict,
+    List,
+    Optional,
     Tuple,
+    Union,
 )
-from typing_extensions import Self
+
 import structlog
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from logging.handlers import RotatingFileHandler
 from PIL import Image
-import io
-import hashlib
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from typing_extensions import Self
 
 # Attempt to set UVloop policy if available
 try:
@@ -39,33 +41,33 @@ except ImportError:
 # Add to requirements.txt: pybreaker>=1.0.0, sentry-sdk, PyJWT>=2.10.2, transformers>=4.49.1, pydantic>=2.11.7, pytest, pytest-asyncio, pytest-cov, hypothesis, locust, huggingface_hub, Pillow, cryptography, prometheus-client
 __version__ = "1.2.0"
 
-from prometheus_client import Gauge, Counter, Histogram
+from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
+from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
+from arbiter.explainable_reasoner.history_manager import (
+    BaseHistoryManager,
+    PostgresHistoryManager,
+    RedisHistoryManager,
+    SQLiteHistoryManager,
+)
 
 # --- Corrected Internal Imports ---
 from arbiter.explainable_reasoner.metrics import (
-    get_or_create_metric,
     get_metrics_content,
+    get_or_create_metric,
 )
 from arbiter.explainable_reasoner.prompt_strategies import PromptStrategyFactory
-from arbiter.explainable_reasoner.history_manager import (
-    BaseHistoryManager,
-    SQLiteHistoryManager,
-    PostgresHistoryManager,
-    RedisHistoryManager,
-)
-from arbiter.explainable_reasoner.audit_ledger import AuditLedgerClient
-from arbiter.explainable_reasoner.adapters import LLMAdapter, LLMAdapterFactory
-from arbiter.explainable_reasoner.utils import (
-    _sanitize_context,
-    _simple_text_sanitize,
-    _rule_based_fallback,
-    _format_multimodal_for_prompt,
-    rate_limited,
-)
 from arbiter.explainable_reasoner.reasoner_errors import (
     ReasonerError,
     ReasonerErrorCode,
 )
+from arbiter.explainable_reasoner.utils import (
+    _format_multimodal_for_prompt,
+    _rule_based_fallback,
+    _sanitize_context,
+    _simple_text_sanitize,
+    rate_limited,
+)
+from prometheus_client import Counter, Gauge, Histogram
 
 # Availability Checks & Conditional Imports
 try:
@@ -105,7 +107,9 @@ try:
 except ImportError:
     httpx = None
     HTTPX_AVAILABLE = False
-    logging.getLogger(__name__).warning("Warning: httpx not found. HTTP client features will fail.")
+    logging.getLogger(__name__).warning(
+        "Warning: httpx not found. HTTP client features will fail."
+    )
 try:
     import jwt
 
@@ -113,7 +117,9 @@ try:
 except ImportError:
     jwt = None
     JWT_AVAILABLE = False
-    logging.getLogger(__name__).warning("Warning: PyJWT not found. JWT authentication is disabled.")
+    logging.getLogger(__name__).warning(
+        "Warning: PyJWT not found. JWT authentication is disabled."
+    )
 try:
     from opentelemetry import trace
     from opentelemetry.trace import SpanKind
@@ -143,7 +149,9 @@ except ImportError:
         def start_as_current_span(self, name: str, *args, **kwargs):
             return DummySpan()
 
-    logging.getLogger(__name__).warning("Warning: opentelemetry not found. Tracing is disabled.")
+    logging.getLogger(__name__).warning(
+        "Warning: opentelemetry not found. Tracing is disabled."
+    )
 
 if OTEL_AVAILABLE:
     tracer = trace.get_tracer(__name__)
@@ -153,14 +161,14 @@ else:
 
 TRANSFORMERS_AVAILABLE = False
 try:
+    import torch
+    from huggingface_hub import HfApi
     from transformers import (
-        pipeline,
         AutoModelForCausalLM,
         AutoTokenizer,
         BitsAndBytesConfig,
+        pipeline,
     )
-    import torch
-    from huggingface_hub import HfApi
 
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -184,7 +192,9 @@ except ImportError:
 
 # Structured Logging Setup
 log_file_path = os.getenv("REASONER_LOG_PATH", "reasoner.log")
-log_handler = RotatingFileHandler(log_file_path, maxBytes=5 * 1024 * 1024, backupCount=5)
+log_handler = RotatingFileHandler(
+    log_file_path, maxBytes=5 * 1024 * 1024, backupCount=5
+)
 log_handler.setFormatter(logging.Formatter("%(message)s"))
 structlog.configure(
     processors=[
@@ -228,36 +238,58 @@ class ReasonerConfig(BaseModel):
     (e.g., REASONER_MODEL_NAME=... or REASONER_STRICT_MODE=true).
     """
 
-    model_reload_retries: int = Field(5, ge=1, description="Max retries for model reload")
-    context_buffer_tokens: int = Field(50, ge=10, description="Token buffer for context")
-    max_context_bytes: int = Field(1_000_000, ge=1000, description="Max context size in bytes")
+    model_reload_retries: int = Field(
+        5, ge=1, description="Max retries for model reload"
+    )
+    context_buffer_tokens: int = Field(
+        50, ge=10, description="Token buffer for context"
+    )
+    max_context_bytes: int = Field(
+        1_000_000, ge=1000, description="Max context size in bytes"
+    )
     calls_per_second: float = Field(10.0, gt=0.0, description="Rate limit per second")
     max_workers: int = Field(4, ge=1, description="Thread pool workers")
-    max_concurrent_requests: int = Field(8, ge=1, description="Concurrent inference limit")
+    max_concurrent_requests: int = Field(
+        8, ge=1, description="Concurrent inference limit"
+    )
     model_configs: List[Dict[str, Any]] = Field(
         default_factory=list, description="Model configurations"
     )
     model_name: str = Field("distilgpt2", description="Default model name")
     device: Union[int, str] = Field(-1, description="Device ID or name")
     mock_mode: bool = Field(False, description="Enable mock mode")
-    cloud_fallback_model_enabled: bool = Field(False, description="Enable cloud fallback")
-    cloud_fallback_model_name: str = Field("openai/gpt-4o-mini", description="Cloud model name")
-    cloud_fallback_api_key: Optional[SensitiveValue] = Field(None, description="Cloud API key")
+    cloud_fallback_model_enabled: bool = Field(
+        False, description="Enable cloud fallback"
+    )
+    cloud_fallback_model_name: str = Field(
+        "openai/gpt-4o-mini", description="Cloud model name"
+    )
+    cloud_fallback_api_key: Optional[SensitiveValue] = Field(
+        None, description="Cloud API key"
+    )
     strict_mode: bool = Field(False, description="Strict error handling")
     model_cache_dir: str = Field(
         str(Path.home() / ".cache" / "huggingface" / "hub"),
         description="Model cache dir",
     )
-    transformers_offline: bool = Field(False, description="Offline model loading for transformers")
+    transformers_offline: bool = Field(
+        False, description="Offline model loading for transformers"
+    )
     offline_only: bool = Field(
         False,
         description="Disables all cloud features and enforces local-only operation.",
     )
-    model_cooldown_period: int = Field(300, ge=60, description="Model cooldown in seconds")
+    model_cooldown_period: int = Field(
+        300, ge=60, description="Model cooldown in seconds"
+    )
     max_query_length: int = Field(2048, ge=100, description="Max query length")
     max_generation_tokens: int = Field(512, ge=50, description="Max tokens to generate")
-    temperature_explain: float = Field(0.7, ge=0.0, le=2.0, description="Temperature for explain")
-    temperature_reason: float = Field(0.7, ge=0.0, le=2.0, description="Temperature for reason")
+    temperature_explain: float = Field(
+        0.7, ge=0.0, le=2.0, description="Temperature for explain"
+    )
+    temperature_reason: float = Field(
+        0.7, ge=0.0, le=2.0, description="Temperature for reason"
+    )
     log_prompts: bool = Field(False, description="Log prompts")
     distributed_history_backend: str = Field("sqlite", description="History backend")
     history_db_path: str = Field("./history.db", description="SQLite DB path")
@@ -310,7 +342,9 @@ class ReasonerConfig(BaseModel):
                 try:
                     env_config[key] = json.loads(env_config[key])
                 except json.JSONDecodeError:
-                    logger.error("config_invalid_json", field=key, value=env_config[key])
+                    logger.error(
+                        "config_invalid_json", field=key, value=env_config[key]
+                    )
                     del env_config[key]
 
         try:
@@ -334,11 +368,11 @@ class ReasonerConfig(BaseModel):
 # Conditional Import for MultiModalData
 try:
     from arbiter.models.multi_modal_schemas import (
-        MultiModalData,
-        ImageAnalysisResult,
         AudioAnalysisResult,
-        VideoAnalysisResult,
+        ImageAnalysisResult,
         MultiModalAnalysisResult,
+        MultiModalData,
+        VideoAnalysisResult,
     )
 
     MULTI_MODAL_SCHEMAS_AVAILABLE = True
@@ -398,20 +432,29 @@ class ExplainableReasoner:
             os.getenv("REASONER_SESSION_AUTH", "False").lower() == "true"
         )
 
-        if self.config.jwt_secret_key.get_actual_value() == "default-secret-key-change-me":
+        if (
+            self.config.jwt_secret_key.get_actual_value()
+            == "default-secret-key-change-me"
+        ):
             raise ReasonerError(
                 "Change JWT secret! The default key is insecure.",
                 code=ReasonerErrorCode.SECURITY_VIOLATION,
             )
-        if self._session_auth_enabled and (not os.getenv("JWT_AUD") or not os.getenv("JWT_ISS")):
+        if self._session_auth_enabled and (
+            not os.getenv("JWT_AUD") or not os.getenv("JWT_ISS")
+        ):
             raise ReasonerError(
                 "JWT AUD/ISS env vars required for session auth.",
                 code=ReasonerErrorCode.CONFIGURATION_ERROR,
             )
 
         if self.config.offline_only and not TRANSFORMERS_AVAILABLE:
-            msg = "Offline mode is enabled, but 'transformers' library is not installed."
-            self.logger.critical("dependency_missing", library="transformers", mode="offline_only")
+            msg = (
+                "Offline mode is enabled, but 'transformers' library is not installed."
+            )
+            self.logger.critical(
+                "dependency_missing", library="transformers", mode="offline_only"
+            )
             raise ReasonerError(msg, code=ReasonerErrorCode.CONFIGURATION_ERROR)
 
         self.audit_ledger_client: Optional[AuditLedgerClient] = None
@@ -464,7 +507,11 @@ class ExplainableReasoner:
         backend_choice = self.config.distributed_history_backend
         db_path = Path(self.config.history_db_path)
 
-        if backend_choice == "postgres" and POSTGRES_AVAILABLE and self.config.postgres_db_url:
+        if (
+            backend_choice == "postgres"
+            and POSTGRES_AVAILABLE
+            and self.config.postgres_db_url
+        ):
             self.history: BaseHistoryManager = PostgresHistoryManager(
                 self.config.postgres_db_url.get_actual_value(),
                 self.config.max_history_size,
@@ -488,7 +535,9 @@ class ExplainableReasoner:
                 )
             if not db_path.parent.exists() or not db_path.parent.is_dir():
                 msg = f"Invalid history DB path: Directory '{db_path.parent}' does not exist."
-                self.logger.critical("history_init_failed_no_fallback", path=str(db_path.parent))
+                self.logger.critical(
+                    "history_init_failed_no_fallback", path=str(db_path.parent)
+                )
                 raise ReasonerError(msg, code=ReasonerErrorCode.CONFIGURATION_ERROR)
 
             self.history: BaseHistoryManager = SQLiteHistoryManager(
@@ -509,7 +558,9 @@ class ExplainableReasoner:
         try:
             self.config.max_workers = os.cpu_count() or self.config.max_workers
             self._executor = ThreadPoolExecutor(max_workers=self.config.max_workers)
-            self._inference_semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
+            self._inference_semaphore = asyncio.Semaphore(
+                self.config.max_concurrent_requests
+            )
             self.logger.info(
                 "executor_initialized",
                 max_workers=self.config.max_workers,
@@ -527,7 +578,9 @@ class ExplainableReasoner:
                     "no_models_loaded", message="Reasoner has no inference capability"
                 )
             elif self._failed_model_count > 0:
-                self.logger.warning("degraded_mode", failed_models=self._failed_model_count)
+                self.logger.warning(
+                    "degraded_mode", failed_models=self._failed_model_count
+                )
 
             if self._model_pipelines and not self.config.mock_mode:
                 await self._run_model_readiness_test()
@@ -536,7 +589,9 @@ class ExplainableReasoner:
             self._is_ready = True
             self.logger.info("async_initialization_complete")
         except Exception as e:
-            self.logger.error("async_initialization_failed", error=str(e), exc_info=True)
+            self.logger.error(
+                "async_initialization_failed", error=str(e), exc_info=True
+            )
             self._is_ready = False
             raise ReasonerError(
                 f"Initialization failed: {e}",
@@ -545,7 +600,9 @@ class ExplainableReasoner:
             ) from e
         finally:
             if self._executor and not self._is_ready:
-                await asyncio.to_thread(self._executor.shutdown, wait=False, cancel_futures=True)
+                await asyncio.to_thread(
+                    self._executor.shutdown, wait=False, cancel_futures=True
+                )
             get_or_create_metric(
                 Histogram,
                 "reasoner_init_duration_seconds",
@@ -562,7 +619,9 @@ class ExplainableReasoner:
                 )
                 self._redis_client = aioredis.Redis(connection_pool=self._redis_pool)
                 await self._redis_client.ping()
-                self.logger.info("redis_connection_pool_created", max_connections=pool_size)
+                self.logger.info(
+                    "redis_connection_pool_created", max_connections=pool_size
+                )
         except Exception as e:
             self.logger.error("redis_pool_creation_failed", error=str(e), exc_info=True)
             self._redis_client = None
@@ -582,7 +641,9 @@ class ExplainableReasoner:
                         code=ReasonerErrorCode.HISTORY_WRITE_FAILED,
                         original_exception=e,
                     ) from e
-                self.logger.warning("history_db_init_failed", attempt=attempt + 1, error=str(e))
+                self.logger.warning(
+                    "history_db_init_failed", attempt=attempt + 1, error=str(e)
+                )
                 await asyncio.sleep(2**attempt)
 
         try:
@@ -625,7 +686,9 @@ class ExplainableReasoner:
                     "Failed health checks",
                     labelnames=("type",),
                 ).labels(type="model_init").inc()
-                self.logger.warning("model_readiness_test_failed", error=str(e), exc_info=True)
+                self.logger.warning(
+                    "model_readiness_test_failed", error=str(e), exc_info=True
+                )
                 self._last_health_check = {
                     "status": "degraded",
                     "messages": [f"Model readiness test failed: {e}"],
@@ -633,7 +696,9 @@ class ExplainableReasoner:
 
     async def _run_history_pruner(self) -> None:
         """Background task to periodically prune old history entries."""
-        prune_interval_seconds = int(os.getenv("REASONER_PRUNE_INTERVAL_SECONDS", 24 * 60 * 60))
+        prune_interval_seconds = int(
+            os.getenv("REASONER_PRUNE_INTERVAL_SECONDS", 24 * 60 * 60)
+        )
         while True:
             try:
                 await self.history.prune_old_entries()
@@ -645,12 +710,16 @@ class ExplainableReasoner:
     async def _initialize_models_async(self) -> None:
         """Loads models from Hugging Face or cloud backends."""
         if self.config.mock_mode:
-            self.logger.info("mock_mode_enabled", message="Skipping model initialization")
+            self.logger.info(
+                "mock_mode_enabled", message="Skipping model initialization"
+            )
             return
         if not TRANSFORMERS_AVAILABLE and not (
             self.config.cloud_fallback_model_enabled and not self.config.offline_only
         ):
-            self.logger.warning("no_models_available", message="Reasoner in fallback mode")
+            self.logger.warning(
+                "no_models_available", message="Reasoner in fallback mode"
+            )
             return
         if self.config.cloud_fallback_model_enabled and not (
             self.config.cloud_fallback_api_key
@@ -659,7 +728,9 @@ class ExplainableReasoner:
             self.logger.warning("cloud_fallback_disabled", reason="No API key provided")
             self.config.cloud_fallback_model_enabled = False
         if self.config.offline_only:
-            self.logger.info("offline_only_mode_enabled", message="Cloud features are disabled.")
+            self.logger.info(
+                "offline_only_mode_enabled", message="Cloud features are disabled."
+            )
 
         model_configs_to_load = self.config.model_configs or []
         seen = set()
@@ -672,10 +743,13 @@ class ExplainableReasoner:
             seen.add(key)
             unique_configs.append(cfg)
         if self.config.cloud_fallback_model_enabled and not self.config.offline_only:
-            unique_configs.insert(0, {"model_name": self.config.cloud_fallback_model_name})
+            unique_configs.insert(
+                0, {"model_name": self.config.cloud_fallback_model_name}
+            )
 
         tasks = [
-            asyncio.wait_for(self._load_single_model(cfg), timeout=600) for cfg in unique_configs
+            asyncio.wait_for(self._load_single_model(cfg), timeout=600)
+            for cfg in unique_configs
         ]
         loaded_pipelines_info = await asyncio.gather(*tasks, return_exceptions=True)
         for i, result in enumerate(loaded_pipelines_info):
@@ -715,7 +789,10 @@ class ExplainableReasoner:
             await self._unload_model(model_key)
         try:
             if (
-                any(model_name.lower().startswith(p) for p in ("openai/", "google/", "anthropic/"))
+                any(
+                    model_name.lower().startswith(p)
+                    for p in ("openai/", "google/", "anthropic/")
+                )
                 and not self.config.offline_only
             ):
                 adapter_type = model_name.split("/")[0].lower()
@@ -749,17 +826,22 @@ class ExplainableReasoner:
                     model_info = api.model_info(model_name)
                     if (
                         model_info.cardData
-                        and model_info.cardData.get("security-scan-status") == "malicious"
+                        and model_info.cardData.get("security-scan-status")
+                        == "malicious"
                     ):
                         raise ReasonerError(
                             f"Model {model_name} is marked as malicious.",
                             code=ReasonerErrorCode.SECURITY_VIOLATION,
                         )
                 except Exception as e:
-                    self.logger.warning("model_scan_failed", model_name=model_name, error=str(e))
+                    self.logger.warning(
+                        "model_scan_failed", model_name=model_name, error=str(e)
+                    )
                     pass
 
-            self.logger.info("loading_hf_model", model_name=model_name, device=device, attempt=1)
+            self.logger.info(
+                "loading_hf_model", model_name=model_name, device=device, attempt=1
+            )
             pipeline_info = await self._execute_in_thread(
                 self._load_hf_pipeline_sync, model_cfg, timeout=600
             )
@@ -840,7 +922,9 @@ class ExplainableReasoner:
                     }
                 )
             except (ValueError, IndexError):
-                self.logger.warning("invalid_cuda_device", device=device, fallback_to_cpu=True)
+                self.logger.warning(
+                    "invalid_cuda_device", device=device, fallback_to_cpu=True
+                )
                 device = -1  # Fallback to CPU
         else:
             device = -1
@@ -857,7 +941,9 @@ class ExplainableReasoner:
         )
 
         if text_gen_pipeline.tokenizer.pad_token_id is None:
-            text_gen_pipeline.tokenizer.pad_token_id = text_gen_pipeline.tokenizer.eos_token_id
+            text_gen_pipeline.tokenizer.pad_token_id = (
+                text_gen_pipeline.tokenizer.eos_token_id
+            )
 
         return {
             "pipeline": text_gen_pipeline,
@@ -911,7 +997,9 @@ class ExplainableReasoner:
 
             num_pipelines = len(self._model_pipelines)
             for _ in range(num_pipelines):
-                pipeline_info = self._model_pipelines[self._next_pipeline_idx % num_pipelines]
+                pipeline_info = self._model_pipelines[
+                    self._next_pipeline_idx % num_pipelines
+                ]
                 self._next_pipeline_idx = (self._next_pipeline_idx + 1) % num_pipelines
 
                 model_key = f"{pipeline_info['model_name']}-{pipeline_info['device']}"
@@ -946,9 +1034,16 @@ class ExplainableReasoner:
                 ).inc()
                 return pipeline_info
 
-            if self.config.cloud_fallback_model_enabled and not self.config.offline_only:
+            if (
+                self.config.cloud_fallback_model_enabled
+                and not self.config.offline_only
+            ):
                 fallback = next(
-                    (p for p in self._model_pipelines if isinstance(p["pipeline"], LLMAdapter)),
+                    (
+                        p
+                        for p in self._model_pipelines
+                        if isinstance(p["pipeline"], LLMAdapter)
+                    ),
                     None,
                 )
                 if fallback:
@@ -989,7 +1084,9 @@ class ExplainableReasoner:
                     "reasoner_model_unload_total",
                     "Total model unloads",
                     labelnames=("model_name", "device"),
-                ).labels(model_name=p_info["model_name"], device=str(p_info["device"])).inc()
+                ).labels(
+                    model_name=p_info["model_name"], device=str(p_info["device"])
+                ).inc()
                 del p_info["pipeline"]
                 if TRANSFORMERS_AVAILABLE and torch and torch.cuda.is_available():
                     torch.cuda.empty_cache()
@@ -1009,7 +1106,9 @@ class ExplainableReasoner:
             "reasoner_model_reload_attempts",
             "Model reload attempts",
             labelnames=("model_name", "device"),
-        ).labels(model_name=model_info["model_name"], device=str(model_info["device"])).inc()
+        ).labels(
+            model_name=model_info["model_name"], device=str(model_info["device"])
+        ).inc()
 
         if not self._reload_breaker:
             await self._reload_model_with_retries(model_info, initial_delay, new_config)
@@ -1102,7 +1201,9 @@ class ExplainableReasoner:
                 if attempt < self.config.model_reload_retries - 1:
                     await asyncio.sleep(2**attempt)
                 else:
-                    self.logger.critical("model_reload_failed_max_retries", model_key=key)
+                    self.logger.critical(
+                        "model_reload_failed_max_retries", model_key=key
+                    )
                     raise ReasonerError(
                         f"Model reload failed for {key} after max retries",
                         code=ReasonerErrorCode.MODEL_LOAD_FAILED,
@@ -1130,7 +1231,11 @@ class ExplainableReasoner:
             prompt_length_tokens = input_ids.shape[1]
 
             if prompt_length_tokens >= model_max_length - max_new_tokens:
-                new_length = model_max_length - max_new_tokens - self.config.context_buffer_tokens
+                new_length = (
+                    model_max_length
+                    - max_new_tokens
+                    - self.config.context_buffer_tokens
+                )
                 self.logger.info(
                     "prompt_truncated",
                     original_length=prompt_length_tokens,
@@ -1189,7 +1294,9 @@ class ExplainableReasoner:
         async with self._inference_semaphore:
             start_time = time.monotonic()
             if multi_modal_data and not MULTI_MODAL_SCHEMAS_AVAILABLE:
-                self.logger.warning("multimodal_data_ignored", reason="Schemas unavailable")
+                self.logger.warning(
+                    "multimodal_data_ignored", reason="Schemas unavailable"
+                )
                 multi_modal_data = None
             pipeline_info = await self._get_next_pipeline()
             if not pipeline_info:
@@ -1224,7 +1331,9 @@ class ExplainableReasoner:
                     "reasoner_inference_duration_seconds",
                     "Duration of inference operations",
                     ("type", "strategy"),
-                ).labels(type="generate", strategy="default").observe(time.monotonic() - start_time)
+                ).labels(type="generate", strategy="default").observe(
+                    time.monotonic() - start_time
+                )
                 return result
             except httpx.HTTPStatusError if HTTPX_AVAILABLE else Exception as e:
                 raise ReasonerError(
@@ -1280,7 +1389,11 @@ class ExplainableReasoner:
         }
         try:
             result_raw = model_pipeline(prompt, **generation_kwargs)
-            if isinstance(result_raw, list) and result_raw and "generated_text" in result_raw[0]:
+            if (
+                isinstance(result_raw, list)
+                and result_raw
+                and "generated_text" in result_raw[0]
+            ):
                 generated_text = result_raw[0]["generated_text"]
                 # Ensure we have a string result
                 if not isinstance(generated_text, str):
@@ -1300,7 +1413,9 @@ class ExplainableReasoner:
                     "reasoner_model_generation_tokens_total",
                     "Total tokens generated",
                     labelnames=("model_name", "task_type"),
-                ).labels(model_name=pipeline_info["model_name"], task_type="text_generation").inc(
+                ).labels(
+                    model_name=pipeline_info["model_name"], task_type="text_generation"
+                ).inc(
                     len(processed_text.split())
                 )
                 return processed_text
@@ -1350,7 +1465,9 @@ class ExplainableReasoner:
                 formatted_context, query, history_str=history_str
             )
         if len(prompt) > self.config.max_query_length:
-            raise ReasonerError("Generated prompt too long", code=ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "Generated prompt too long", code=ReasonerErrorCode.INVALID_INPUT
+            )
         if self.config.log_prompts:
             self.logger.info("prompt_generated", type=prompt_type, length=len(prompt))
         get_or_create_metric(
@@ -1391,7 +1508,9 @@ class ExplainableReasoner:
                     "Session validation errors",
                     labelnames=("type",),
                 ).labels(type="redis_error").inc()
-                self.logger.warning("session_validation_failed", error=str(e), exc_info=True)
+                self.logger.warning(
+                    "session_validation_failed", error=str(e), exc_info=True
+                )
                 if self.config.strict_mode:
                     raise ReasonerError(
                         "Session validation failed due to backend error",
@@ -1406,7 +1525,9 @@ class ExplainableReasoner:
     ) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         """Validates and sanitizes all incoming request data."""
         if not query or not query.strip():
-            raise ReasonerError("Query cannot be empty.", code=ReasonerErrorCode.INVALID_INPUT)
+            raise ReasonerError(
+                "Query cannot be empty.", code=ReasonerErrorCode.INVALID_INPUT
+            )
         if len(query) > self.config.max_query_length:
             raise ReasonerError(
                 f"Query exceeds max length of {self.config.max_query_length}",
@@ -1515,7 +1636,9 @@ class ExplainableReasoner:
             if self.config.strict_mode:
                 raise
 
-            response_text = _rule_based_fallback(sanitized_query, sanitized_context, task_type)
+            response_text = _rule_based_fallback(
+                sanitized_query, sanitized_context, task_type
+            )
             response_type = f"fallback_{task_type}"
             return response_text, response_type
 
@@ -1548,7 +1671,9 @@ class ExplainableReasoner:
 
         if self._redis_client and "fallback" not in response_type:
             try:
-                await self._redis_client.set(cache_key, response_text, ex=self.config.cache_ttl)
+                await self._redis_client.set(
+                    cache_key, response_text, ex=self.config.cache_ttl
+                )
             except Exception as e:
                 self.logger.warning("cache_set_failed", key=cache_key, error=str(e))
                 get_or_create_metric(
@@ -1681,7 +1806,9 @@ class ExplainableReasoner:
     ) -> str:
         """Formats history entries into a prompt string."""
         if session_id:
-            history_entries = [e for e in history_entries if e.get("session_id") == session_id]
+            history_entries = [
+                e for e in history_entries if e.get("session_id") == session_id
+            ]
 
         get_or_create_metric(
             Histogram,
@@ -1711,7 +1838,9 @@ class ExplainableReasoner:
         if len(full_history) > 5000:
             full_history = full_history[-5000:]
         return (
-            "\n--- Previous Conversation ---\n" + full_history + "\n--- End of Conversation ---\n\n"
+            "\n--- Previous Conversation ---\n"
+            + full_history
+            + "\n--- End of Conversation ---\n\n"
         )
 
     async def explain(
@@ -1733,7 +1862,10 @@ class ExplainableReasoner:
                 code=ReasonerErrorCode.INVALID_INPUT,
             )
 
-        tasks = [self.explain(query=q, context=c, **kwargs) for q, c in zip(queries, contexts)]
+        tasks = [
+            self.explain(query=q, context=c, **kwargs)
+            for q, c in zip(queries, contexts)
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         processed_results = []
@@ -1776,7 +1908,9 @@ class ExplainableReasoner:
             status = "unhealthy"
             messages.append("CRITICAL: No models loaded")
         else:
-            failed_models = sum(1 for p in self._model_pipelines if p.get("last_failed_at"))
+            failed_models = sum(
+                1 for p in self._model_pipelines if p.get("last_failed_at")
+            )
             if failed_models == len(self._model_pipelines):
                 status = "unhealthy"
                 messages.append("CRITICAL: All models failed")
@@ -1812,9 +1946,13 @@ class ExplainableReasoner:
                 status = "degraded"
                 messages.append(f"WARNING: Audit ledger connection failed: {e}")
         if self._last_health_check:
-            messages.append(f"Last init health check: {self._last_health_check['status']}.")
+            messages.append(
+                f"Last init health check: {self._last_health_check['status']}."
+            )
         if self._model_reload_tasks:
-            messages.append(f"INFO: {len(self._model_reload_tasks)} models being reloaded")
+            messages.append(
+                f"INFO: {len(self._model_reload_tasks)} models being reloaded"
+            )
 
         health_check_metric = get_or_create_metric(
             Counter,
@@ -1879,9 +2017,13 @@ class ExplainableReasoner:
     async def export_history(
         self, output_format: str = "json", operator_id: str = "system_api_request"
     ) -> AsyncGenerator[Union[str, bytes], None]:
-        self.logger.info("history_export_requested", format=output_format, operator_id=operator_id)
+        self.logger.info(
+            "history_export_requested", format=output_format, operator_id=operator_id
+        )
         try:
-            async for chunk in self.history.export_history(output_format, operator_id=operator_id):
+            async for chunk in self.history.export_history(
+                output_format, operator_id=operator_id
+            ):
                 yield chunk
         except Exception as e:
             self.logger.error("history_export_failed", error=str(e), exc_info=True)
@@ -1906,10 +2048,16 @@ class ExplainableReasoner:
             tracemalloc.stop()
 
         start_time = time.monotonic()
-        if hasattr(self, "_pruning_task") and self._pruning_task and not self._pruning_task.done():
+        if (
+            hasattr(self, "_pruning_task")
+            and self._pruning_task
+            and not self._pruning_task.done()
+        ):
             self._pruning_task.cancel()
 
-        close_tasks = [task for task in self._model_reload_tasks.values() if not task.done()]
+        close_tasks = [
+            task for task in self._model_reload_tasks.values() if not task.done()
+        ]
         for task in close_tasks:
             task.cancel()
         await asyncio.gather(*close_tasks, return_exceptions=True)
@@ -1987,14 +2135,22 @@ class ExecuteInput(BaseModel):
         action = data.get("action")
         if action in ("explain", "reason"):
             if not data.get("query"):
-                raise ValueError("Query is required for 'explain' and 'reason' actions.")
+                raise ValueError(
+                    "Query is required for 'explain' and 'reason' actions."
+                )
             if data.get("queries"):
-                raise ValueError("'queries' field is not allowed for single-request actions.")
+                raise ValueError(
+                    "'queries' field is not allowed for single-request actions."
+                )
         elif action == "batch_explain":
             if not data.get("queries"):
-                raise ValueError("'queries' field is required for 'batch_explain' action.")
+                raise ValueError(
+                    "'queries' field is required for 'batch_explain' action."
+                )
             if not data.get("contexts"):
-                raise ValueError("'contexts' field is required for 'batch_explain' action.")
+                raise ValueError(
+                    "'contexts' field is required for 'batch_explain' action."
+                )
             if len(data["queries"]) != len(data["contexts"]):
                 raise ValueError("Length of 'queries' and 'contexts' must be equal.")
             if data.get("query"):
@@ -2060,7 +2216,8 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
         if required_role:
             if (
                 not self.config.jwt_secret_key
-                or self.config.jwt_secret_key.get_actual_value() == "default-secret-key-change-me"
+                or self.config.jwt_secret_key.get_actual_value()
+                == "default-secret-key-change-me"
             ):
                 self.logger.critical(
                     "rbac_misconfigured",
@@ -2191,7 +2348,9 @@ if __name__ == "__main__":
             print("\n--- Testing Sensitive Action (Purge History) ---")
             # NOTE: This will fail without a valid JWT token. This is expected.
             # Use environment variable for testing token (default is clearly marked as test-only)
-            test_token = os.getenv("TEST_AUTH_TOKEN", "test-only-no-production-use")  # nosec B105
+            test_token = os.getenv(
+                "TEST_AUTH_TOKEN", "test-only-no-production-use"
+            )  # nosec B105
             purge_result = await plugin_instance.execute(
                 action="purge_history", auth_token=test_token
             )

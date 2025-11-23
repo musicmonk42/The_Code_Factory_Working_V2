@@ -1,30 +1,21 @@
-import os
-import sys
 import asyncio
-import time
+import hashlib
+import hmac
+import importlib.metadata
 import json
 import logging
-import socket
+import os
 import random
-import hmac
-import hashlib
-import importlib.metadata
 import re
+import socket
 import ssl
+import sys
+import time
 import uuid
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Callable,
-    Awaitable,
-    Protocol,
-    Literal,
-)
-from contextlib import asynccontextmanager
 from collections import deque
+from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Protocol
 
 try:
     import fcntl
@@ -55,14 +46,14 @@ except ImportError:
             pass
 
 
-import aiohttp
 import aiofiles
-from pydantic import BaseModel, ValidationError, Field, field_validator
+import aiohttp
+import psutil
+from cryptography.fernet import Fernet
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger import jsonlogger
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
-from cryptography.fernet import Fernet
-import psutil
 
 # Import centralized exceptions
 from self_fixing_engineer.exceptions import AnalyzerCriticalError
@@ -72,9 +63,9 @@ PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
 # --- Core integrations for multi-plugin production readiness ---
 try:
-    from core_utils import alert_operator
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import alert_operator
 except ImportError:
     import logging
 
@@ -155,7 +146,9 @@ except Exception as e:
     audit_log_handler = DummyHandler()
 
 audit_log_handler.setFormatter(
-    AuditJsonFormatter("%(timestamp)s %(hostname)s %(service_name)s %(levelname)s %(message)s")
+    AuditJsonFormatter(
+        "%(timestamp)s %(hostname)s %(service_name)s %(levelname)s %(message)s"
+    )
 )
 audit_logger = logging.getLogger("sns_audit")
 audit_logger.setLevel(logging.INFO)
@@ -165,7 +158,9 @@ if not audit_logger.handlers:
 main_logger = logging.getLogger("sns_plugin")
 main_logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 log_handler = logging.StreamHandler()
-log_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+log_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 log_handler.setFormatter(log_formatter)
 if not main_logger.handlers:
     main_logger.addHandler(log_handler)
@@ -177,20 +172,22 @@ TraceContextTextMapPropagator = None
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.context import get_current
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
     from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.sdk.trace.sampling import ProbabilitySampler
     from opentelemetry.trace.propagation.tracecontext import (
         TraceContextTextMapPropagator,
     )
-    from opentelemetry.context import get_current
-    from opentelemetry.sdk.trace.sampling import ProbabilitySampler
 
     resource = Resource(
-        attributes={SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "sns-gateway-service")}
+        attributes={
+            SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "sns-gateway-service")
+        }
     )
     trace_provider = TracerProvider(sampler=ProbabilitySampler(0.1), resource=resource)
     trace_exporter = OTLPSpanExporter(
@@ -218,7 +215,9 @@ except ImportError:
     tracer = MockTracer()
     TraceContextTextMapPropagator = None
     OPENTELEMETRY_AVAILABLE = False
-    main_logger.warning("OpenTelemetry SDK not found. Distributed tracing will be disabled.")
+    main_logger.warning(
+        "OpenTelemetry SDK not found. Distributed tracing will be disabled."
+    )
 except Exception as e:
     main_logger.critical(f"Failed to initialize OpenTelemetry: {e}. Exiting.")
     alert_operator(f"Failed to initialize OpenTelemetry: {e}", "CRITICAL")
@@ -307,7 +306,9 @@ class SNSGatewaySettings(BaseSettings):
     @classmethod
     def validate_admin_api_host(cls, v: str) -> str:
         if PROD_MODE and v not in ["127.0.0.1", "localhost"]:
-            raise ValueError("In production, the admin API must only be exposed on localhost.")
+            raise ValueError(
+                "In production, the admin API must only be exposed on localhost."
+            )
         return v
 
     @classmethod
@@ -315,13 +316,21 @@ class SNSGatewaySettings(BaseSettings):
         main_logger.info("Loading secrets and configuration from secure vault...")
         try:
             settings_dict = {
-                "signing_secret": SECRETS_MANAGER.get_secret("SNS_GATEWAY_SIGNING_SECRET"),
-                "admin_api_key": SECRETS_MANAGER.get_secret("SNS_GATEWAY_ADMIN_API_KEY"),
+                "signing_secret": SECRETS_MANAGER.get_secret(
+                    "SNS_GATEWAY_SIGNING_SECRET"
+                ),
+                "admin_api_key": SECRETS_MANAGER.get_secret(
+                    "SNS_GATEWAY_ADMIN_API_KEY"
+                ),
                 "encryption_key": SECRETS_MANAGER.get_secret(
                     "SNS_GATEWAY_ENCRYPTION_KEY", required=False
                 ),
-                "cert_path": SECRETS_MANAGER.get_secret("SNS_GATEWAY_API_CERT", required=False),
-                "key_path": SECRETS_MANAGER.get_secret("SNS_GATEWAY_API_KEY", required=False),
+                "cert_path": SECRETS_MANAGER.get_secret(
+                    "SNS_GATEWAY_API_CERT", required=False
+                ),
+                "key_path": SECRETS_MANAGER.get_secret(
+                    "SNS_GATEWAY_API_KEY", required=False
+                ),
             }
 
             # Check for key expiry
@@ -365,7 +374,9 @@ class SNSGatewaySettings(BaseSettings):
                         )
                     settings_dict[key] = os.environ[env_key]
 
-            targets_json = SECRETS_MANAGER.get_secret("SNS_GATEWAY_TARGETS", required=False)
+            targets_json = SECRETS_MANAGER.get_secret(
+                "SNS_GATEWAY_TARGETS", required=False
+            )
             if targets_json:
                 settings_dict["targets"] = [
                     SNSTarget.model_validate(t) for t in json.loads(targets_json)
@@ -375,7 +386,9 @@ class SNSGatewaySettings(BaseSettings):
 
             if PROD_MODE:
                 if not settings.encryption_key:
-                    raise ValueError("Encryption must be enabled in production for compliance.")
+                    raise ValueError(
+                        "Encryption must be enabled in production for compliance."
+                    )
 
                 for target in settings.targets:
                     if not target.access_key_id.startswith("AKIA"):
@@ -383,7 +396,10 @@ class SNSGatewaySettings(BaseSettings):
                             f"Invalid AWS access key format for '{target.name}'. Must start with 'AKIA'."
                         )
 
-                    endpoint = target.url_endpoint or f"https://sns.{target.region}.amazonaws.com"
+                    endpoint = (
+                        target.url_endpoint
+                        or f"https://sns.{target.region}.amazonaws.com"
+                    )
                     if not settings.url_allowlist and not re.match(
                         r"^https://sns\..*\.amazonaws\.com", endpoint
                     ):
@@ -391,7 +407,8 @@ class SNSGatewaySettings(BaseSettings):
                             f"URL for SNS target '{target.name}' is not a valid AWS SNS endpoint and no allowlist is provided."
                         )
                     if settings.url_allowlist and not any(
-                        re.match(pattern, endpoint) for pattern in settings.url_allowlist
+                        re.match(pattern, endpoint)
+                        for pattern in settings.url_allowlist
                     ):
                         raise ValueError(
                             f"URL for SNS target '{target.name}' not in allowed_urls list."
@@ -459,7 +476,9 @@ class SNSMetrics:
         "Events sent without OpenTelemetry tracing.",
         ["target_name"],
     )
-    QUEUE_SIZE = Gauge("sns_queue_size", "Current size of the event queue.", ["target_name"])
+    QUEUE_SIZE = Gauge(
+        "sns_queue_size", "Current size of the event queue.", ["target_name"]
+    )
     WAL_COMPACTIONS = Counter(
         "sns_wal_compactions_total",
         "Number of WAL compactions performed.",
@@ -473,7 +492,9 @@ class SNSMetrics:
     )
 
     SYSTEM_CPU_USAGE = Gauge("sns_system_cpu_usage_percent", "CPU usage percentage.")
-    SYSTEM_MEMORY_USAGE = Gauge("sns_system_memory_usage_bytes", "Memory usage in bytes.")
+    SYSTEM_MEMORY_USAGE = Gauge(
+        "sns_system_memory_usage_bytes", "Memory usage in bytes."
+    )
 
     def update_system_metrics(self):
         self.SYSTEM_CPU_USAGE.set(psutil.cpu_percent())
@@ -577,11 +598,15 @@ class PersistentWALQueue(EventQueue):
         self._max_log_size = 10 * 1024 * 1024
         self._log_rotation_interval = 86400
         self._last_rotation_time = time.time()
-        self._hmac_key = SECRETS_MANAGER.get_secret("SNS_WAL_HMAC_KEY", required=PROD_MODE).encode()
+        self._hmac_key = SECRETS_MANAGER.get_secret(
+            "SNS_WAL_HMAC_KEY", required=PROD_MODE
+        ).encode()
 
         self._mem_queue = asyncio.Queue(maxsize=max_in_memory_size)
         self._write_lock = asyncio.Lock()
-        self._current_write_log: Optional[aiofiles.threadpool.binary.AsyncBufferedIOBase] = None
+        self._current_write_log: Optional[
+            aiofiles.threadpool.binary.AsyncBufferedIOBase
+        ] = None
         self._current_log_path: Optional[str] = None
         self._compactor_task: Optional[asyncio.Task] = None
 
@@ -590,10 +615,16 @@ class PersistentWALQueue(EventQueue):
 
     async def startup(self):
         if PROD_MODE and fcntl is None:
-            raise AnalyzerCriticalError("File locking unavailable in prod—required for WAL safety.")
+            raise AnalyzerCriticalError(
+                "File locking unavailable in prod—required for WAL safety."
+            )
         try:
             log_files = sorted(
-                [f for f in os.listdir(self._dir) if f.startswith("events.") and f.endswith(".log")]
+                [
+                    f
+                    for f in os.listdir(self._dir)
+                    if f.startswith("events.") and f.endswith(".log")
+                ]
             )
             for log_file in log_files:
                 path = os.path.join(self._dir, log_file)
@@ -610,7 +641,9 @@ class PersistentWALQueue(EventQueue):
                                 )
 
                                 data_to_check = (
-                                    data.encode("utf-8") if isinstance(data, str) else data
+                                    data.encode("utf-8")
+                                    if isinstance(data, str)
+                                    else data
                                 )
 
                                 if not hmac.compare_digest(
@@ -658,14 +691,14 @@ class PersistentWALQueue(EventQueue):
                 f"Failed to load WAL from disk: {e}. Exiting.",
                 extra={"context": {"target": self._target_name}},
             )
-            raise RuntimeError("Critical startup failure: WAL could not be loaded.") from e
+            raise RuntimeError(
+                "Critical startup failure: WAL could not be loaded."
+            ) from e
         await self._open_next_log_segment()
         self._compactor_task = asyncio.create_task(self._wal_compactor())
 
     def _create_signature(self, event: SNSEvent) -> str:
-        canonical_event = (
-            f"{event.sequence_id}|{event.event_name}|{json.dumps(event.details, sort_keys=True)}"
-        )
+        canonical_event = f"{event.sequence_id}|{event.event_name}|{json.dumps(event.details, sort_keys=True)}"
         return hmac.new(
             SECRETS_MANAGER.get_secret("SNS_GATEWAY_SIGNING_SECRET").encode(),
             canonical_event.encode(),
@@ -677,7 +710,9 @@ class PersistentWALQueue(EventQueue):
             if self._current_write_log:
                 await self._current_write_log.flush()
                 await self._current_write_log.close()
-            temp_path = os.path.join(self._dir, f"events.temp.{time.strftime('%Y%m%d_%H%M%S')}.log")
+            temp_path = os.path.join(
+                self._dir, f"events.temp.{time.strftime('%Y%m%d_%H%M%S')}.log"
+            )
             self._current_write_log = await aiofiles.open(temp_path, "ab")
             os.chmod(temp_path, 0o600)
             self._current_log_path = os.path.join(
@@ -690,7 +725,8 @@ class PersistentWALQueue(EventQueue):
         async with self._write_lock:
             if (
                 not self._current_write_log
-                or await aiofiles.os.stat(self._current_log_path).st_size > self._max_log_size
+                or await aiofiles.os.stat(self._current_log_path).st_size
+                > self._max_log_size
                 or time.time() - self._last_rotation_time > self._log_rotation_interval
             ):
                 await self._open_next_log_segment()
@@ -700,7 +736,9 @@ class PersistentWALQueue(EventQueue):
                 line = self._cipher.encrypt(line)
 
             signature = hmac.new(self._hmac_key, line, hashlib.sha256).hexdigest()
-            await self._current_write_log.write(f"{signature}:{line.decode()}\n".encode())
+            await self._current_write_log.write(
+                f"{signature}:{line.decode()}\n".encode()
+            )
             await self._current_write_log.flush()
         await self._mem_queue.put(item)
 
@@ -722,13 +760,19 @@ class PersistentWALQueue(EventQueue):
                 "shutdown_timeout",
                 extra={"context": {"remaining_events": self._mem_queue.qsize()}},
             )
-            alert_operator("CRITICAL: Shutdown timeout exceeded. Events may be lost.", "CRITICAL")
+            alert_operator(
+                "CRITICAL: Shutdown timeout exceeded. Events may be lost.", "CRITICAL"
+            )
 
     async def _wal_compactor(self):
         while not self._compactor_task.done():
             await asyncio.sleep(self.global_settings.compaction_interval)
             log_files = sorted(
-                [f for f in os.listdir(self._dir) if f.startswith("events.") and f.endswith(".log")]
+                [
+                    f
+                    for f in os.listdir(self._dir)
+                    if f.startswith("events.") and f.endswith(".log")
+                ]
             )
             if len(log_files) > 2:
                 for old_file in log_files[:-2]:
@@ -760,18 +804,26 @@ class PersistentWALQueue(EventQueue):
 
 # ---- 5. Advanced Resilience Patterns ----
 class CircuitBreaker:
-    def __init__(self, threshold: int, reset_seconds: int, metrics: SNSMetrics, target_name: str):
+    def __init__(
+        self, threshold: int, reset_seconds: int, metrics: SNSMetrics, target_name: str
+    ):
         self._threshold, self._reset_seconds = threshold, reset_seconds
         self._metrics, self._target_name = metrics, target_name
         self._failure_count, self._is_open, self._last_failure_time = 0, False, 0.0
-        self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(0)
+        self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(
+            0
+        )
 
     def check(self):
         if self._is_open:
             jitter = random.uniform(0, self._reset_seconds * 0.1)
-            if time.monotonic() - self._last_failure_time > (self._reset_seconds + jitter):
+            if time.monotonic() - self._last_failure_time > (
+                self._reset_seconds + jitter
+            ):
                 self._is_open, self._failure_count = False, 0
-                self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(0)
+                self._metrics.CIRCUIT_BREAKER_STATUS.labels(
+                    target_name=self._target_name
+                ).set(0)
                 main_logger.warning(
                     "Circuit breaker has been reset.",
                     extra={"context": {"target": self._target_name}},
@@ -781,13 +833,17 @@ class CircuitBreaker:
                     extra={"context": {"target": self._target_name}},
                 )
             else:
-                raise ConnectionAbortedError(f"Circuit breaker for {self._target_name} is open.")
+                raise ConnectionAbortedError(
+                    f"Circuit breaker for {self._target_name} is open."
+                )
 
     def record_failure(self):
         self._failure_count += 1
         if self._failure_count >= self._threshold and not self._is_open:
             self._is_open, self._last_failure_time = True, time.monotonic()
-            self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(1)
+            self._metrics.CIRCUIT_BREAKER_STATUS.labels(
+                target_name=self._target_name
+            ).set(1)
             main_logger.critical(
                 "Circuit breaker tripped. Escalating.",
                 extra={"context": {"target": self._target_name}},
@@ -816,7 +872,9 @@ class CircuitBreaker:
 
 
 class TokenBucket:
-    def __init__(self, rate: float, capacity: float, metrics: SNSMetrics, target_name: str):
+    def __init__(
+        self, rate: float, capacity: float, metrics: SNSMetrics, target_name: str
+    ):
         self._rate, self._capacity = rate, max(rate * 10, capacity)
         self._metrics, self._target_name = metrics, target_name
         self._tokens, self._last_refill = self._capacity, time.monotonic()
@@ -882,12 +940,16 @@ class SNSGateway:
             dead_letter_hook,
             encryption_key=global_settings.encryption_key,
         )
-        self._fallback_queue: EventQueue = asyncio.Queue(maxsize=global_settings.max_queue_size)
+        self._fallback_queue: EventQueue = asyncio.Queue(
+            maxsize=global_settings.max_queue_size
+        )
 
         self._workers: List[asyncio.Task] = []
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
-        self._concurrency_limiter = asyncio.Semaphore(global_settings.max_concurrent_per_region)
+        self._concurrency_limiter = asyncio.Semaphore(
+            global_settings.max_concurrent_per_region
+        )
         self._hostname = socket.gethostname()
         self._health_stats = {"processed_count": 0, "last_processed_time": 0.0}
         self._is_paused = False
@@ -910,7 +972,9 @@ class SNSGateway:
         main_logger.info(f"SNS Gateway started for target '{self.target_config.name}'.")
 
     async def shutdown(self):
-        main_logger.info(f"Initiating graceful shutdown for target '{self.target_config.name}'.")
+        main_logger.info(
+            f"Initiating graceful shutdown for target '{self.target_config.name}'."
+        )
         self._shutdown_event.set()
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
@@ -924,7 +988,9 @@ class SNSGateway:
         await asyncio.gather(*self._workers, return_exceptions=True)
 
         await self._event_queue.flush(
-            timeout=self.global_settings.max_queue_size / self.global_settings.max_workers + 10
+            timeout=self.global_settings.max_queue_size
+            / self.global_settings.max_workers
+            + 10
         )
         await self._event_queue.shutdown()
         async with self._session_lock:
@@ -932,7 +998,9 @@ class SNSGateway:
                 await self._session.close()
 
         await self._save_sequence_counter(self._sequence_id)
-        main_logger.info(f"Graceful shutdown complete for target '{self.target_config.name}'.")
+        main_logger.info(
+            f"Graceful shutdown complete for target '{self.target_config.name}'."
+        )
 
     def pause(self):
         self._is_paused = True
@@ -984,12 +1052,18 @@ class SNSGateway:
             if self._session is None or self._session.closed:
                 ssl_context = ssl.create_default_context()
                 ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
-                if PROD_MODE and self.global_settings.cert_path and self.global_settings.key_path:
+                if (
+                    PROD_MODE
+                    and self.global_settings.cert_path
+                    and self.global_settings.key_path
+                ):
                     ssl_context.load_cert_chain(
                         self.global_settings.cert_path, self.global_settings.key_path
                     )
 
-                timeout = aiohttp.ClientTimeout(total=self.global_settings.retry_backoff_factor * 5)
+                timeout = aiohttp.ClientTimeout(
+                    total=self.global_settings.retry_backoff_factor * 5
+                )
                 self._session = aiohttp.ClientSession(timeout=timeout, ssl=ssl_context)
         return self._session
 
@@ -1013,7 +1087,9 @@ class SNSGateway:
             except Exception as e:
                 main_logger.error(
                     "Dead-letter hook failed.",
-                    extra={"context": {"error": str(e), "target": self.target_config.name}},
+                    extra={
+                        "context": {"error": str(e), "target": self.target_config.name}
+                    },
                 )
 
     async def publish(self, event: SNSEvent):
@@ -1098,13 +1174,15 @@ class SNSGateway:
                     await self._handle_dead_letter(event, "circuit_breaker_open")
                 return False
 
-            payload_data = [self.serializer.encode_payload(event) for event in deduped_batch]
+            payload_data = [
+                self.serializer.encode_payload(event) for event in deduped_batch
+            ]
             headers = {"Content-Type": "application/json"}
             attempt = 0
             while attempt < self.global_settings.max_retries:
-                self.metrics.RETRY_ATTEMPTS.labels(target_name=self.target_config.name).observe(
-                    attempt
-                )
+                self.metrics.RETRY_ATTEMPTS.labels(
+                    target_name=self.target_config.name
+                ).observe(attempt)
                 await self.rate_limiter.acquire()
                 async with self._concurrency_limiter:
                     start_time = time.monotonic()
@@ -1158,7 +1236,9 @@ class SNSGateway:
                                 retry_after = int(resp.headers.get("Retry-After", "5"))
                                 main_logger.warning(
                                     f"Rate limited by SNS API. Backing off for {retry_after} seconds.",
-                                    extra={"context": {"target": self.target_config.name}},
+                                    extra={
+                                        "context": {"target": self.target_config.name}
+                                    },
                                 )
                                 await asyncio.sleep(retry_after)
                                 continue
@@ -1175,7 +1255,9 @@ class SNSGateway:
                                     },
                                 )
                                 for event in deduped_batch:
-                                    await self._handle_dead_letter(event, "client_error")
+                                    await self._handle_dead_letter(
+                                        event, "client_error"
+                                    )
                                 self.metrics.NOTIFICATIONS_FAILED_PERMANENTLY.labels(
                                     target_name=self.target_config.name,
                                     reason=f"client_error_{resp.status}",
@@ -1197,7 +1279,9 @@ class SNSGateway:
                         if attempt + 1 >= self.global_settings.max_retries:
                             self.circuit_breaker.record_failure()
                             for event in deduped_batch:
-                                await self._handle_dead_letter(event, "service_unavailable")
+                                await self._handle_dead_letter(
+                                    event, "service_unavailable"
+                                )
                             self.metrics.NOTIFICATIONS_FAILED_PERMANENTLY.labels(
                                 target_name=self.target_config.name,
                                 reason="service_unavailable",
@@ -1205,14 +1289,20 @@ class SNSGateway:
                             return False
                 attempt += 1
                 if attempt < self.global_settings.max_retries:
-                    await asyncio.sleep(self.global_settings.retry_backoff_factor**attempt)
+                    await asyncio.sleep(
+                        self.global_settings.retry_backoff_factor**attempt
+                    )
             return False
 
     async def _worker(self, worker_id: int):
-        main_logger.info(f"Starting worker {worker_id} for target {self.target_config.name}")
+        main_logger.info(
+            f"Starting worker {worker_id} for target {self.target_config.name}"
+        )
         audit_logger.info(
             "worker_started",
-            extra={"context": {"target": self.target_config.name, "worker_id": worker_id}},
+            extra={
+                "context": {"target": self.target_config.name, "worker_id": worker_id}
+            },
         )
         while not self._shutdown_event.is_set():
             try:
@@ -1228,9 +1318,9 @@ class SNSGateway:
                     self._event_queue.task_done()
                     await self._event_queue.put(None)
                     break
-                self.metrics.QUEUE_LATENCY.labels(target_name=self.target_config.name).observe(
-                    time.time() - first_event.enqueue_time
-                )
+                self.metrics.QUEUE_LATENCY.labels(
+                    target_name=self.target_config.name
+                ).observe(time.time() - first_event.enqueue_time)
                 batch.append(first_event)
                 while len(batch) < self.global_settings.worker_batch_size:
                     try:
@@ -1264,7 +1354,9 @@ class SNSGateway:
                         and random.random() < self.global_settings.dry_run_failure_rate
                     ):
                         for event in batch:
-                            await self._handle_dead_letter(event, "dry_run_simulated_failure")
+                            await self._handle_dead_letter(
+                                event, "dry_run_simulated_failure"
+                            )
                         success = False
                     else:
                         success = True
@@ -1280,15 +1372,20 @@ class SNSGateway:
                 break
             except Exception as e:
                 raise AnalyzerCriticalError(f"Unhandled exception in SNS worker: {e}.")
-        main_logger.info(f"Stopping worker {worker_id} for target {self.target_config.name}")
+        main_logger.info(
+            f"Stopping worker {worker_id} for target {self.target_config.name}"
+        )
         audit_logger.info(
             "worker_stopped",
-            extra={"context": {"target": self.target_config.name, "worker_id": worker_id}},
+            extra={
+                "context": {"target": self.target_config.name, "worker_id": worker_id}
+            },
         )
 
     async def _worker_manager(self):
         active_workers = [
-            asyncio.create_task(self._worker(i)) for i in range(self.global_settings.min_workers)
+            asyncio.create_task(self._worker(i))
+            for i in range(self.global_settings.min_workers)
         ]
 
         self._queue_history = deque(maxlen=3)
@@ -1304,7 +1401,8 @@ class SNSGateway:
             mem_usage = psutil.virtual_memory().percent
 
             if (
-                avg_queue > self.global_settings.queue_size_per_worker * len(active_workers)
+                avg_queue
+                > self.global_settings.queue_size_per_worker * len(active_workers)
                 and len(active_workers) < self.global_settings.max_workers
                 and cpu_usage < 80
                 and mem_usage < 80
@@ -1324,9 +1422,15 @@ class SNSGateway:
                     },
                 )
                 active_workers.append(asyncio.create_task(self._worker(worker_id)))
-            elif avg_queue == 0 and len(active_workers) > self.global_settings.min_workers:
+            elif (
+                avg_queue == 0
+                and len(active_workers) > self.global_settings.min_workers
+            ):
                 self._scale_down_timer += self.global_settings.worker_scaling_interval
-                if self._scale_down_timer >= self.global_settings.worker_scaling_interval * 3:
+                if (
+                    self._scale_down_timer
+                    >= self.global_settings.worker_scaling_interval * 3
+                ):
                     main_logger.info(
                         f"Queue empty, scaling down worker for {self.target_config.name} to {len(active_workers) - 1}"
                     )
@@ -1373,7 +1477,9 @@ class SNSGateway:
                     self.circuit_breaker.record_failure()
             except Exception as e:
                 self.circuit_breaker.record_failure()
-                main_logger.warning(f"Heartbeat failed for {self.target_config.name}: {e}")
+                main_logger.warning(
+                    f"Heartbeat failed for {self.target_config.name}: {e}"
+                )
             await asyncio.sleep(self.global_settings.heartbeat_interval)
 
 
@@ -1394,7 +1500,9 @@ class SNSGatewayManager:
         self._http_server_task: Optional[asyncio.Task] = None
         self._sequence_counters: Dict[str, int] = {}
         self._sequence_locks: Dict[str, asyncio.Lock] = {}
-        self._admin_audit_log: Optional[aiofiles.threadpool.binary.AsyncBufferedIOBase] = None
+        self._admin_audit_log: Optional[
+            aiofiles.threadpool.binary.AsyncBufferedIOBase
+        ] = None
         self._config_version: int = 0
         self._system_metrics_task: Optional[asyncio.Task] = None
         self._api_sem = asyncio.Semaphore(self.settings.max_concurrent_requests)
@@ -1412,7 +1520,9 @@ class SNSGatewayManager:
                 )
                 sys.exit(1)
             if not OPENTELEMETRY_AVAILABLE:
-                main_logger.critical("OpenTelemetry is mandatory in production. Exiting.")
+                main_logger.critical(
+                    "OpenTelemetry is mandatory in production. Exiting."
+                )
                 sys.exit(1)
 
         self._admin_audit_log = await aiofiles.open("admin_audit.log", "a")
@@ -1425,7 +1535,9 @@ class SNSGatewayManager:
         if self.settings.admin_api_enabled and self._http_server_task is None:
             self._http_server_task = asyncio.create_task(self._run_admin_api_server())
 
-        self._system_metrics_task = asyncio.create_task(self._run_system_metrics_collector())
+        self._system_metrics_task = asyncio.create_task(
+            self._run_system_metrics_collector()
+        )
 
     async def _run_system_metrics_collector(self):
         while self._http_server_task is None or not self._http_server_task.done():
@@ -1452,7 +1564,9 @@ class SNSGatewayManager:
 
     async def _log_admin_action(self, action: str, details: Dict[str, Any]):
         if self._admin_audit_log:
-            log_entry = json.dumps({"timestamp": time.time(), "action": action, **details})
+            log_entry = json.dumps(
+                {"timestamp": time.time(), "action": action, **details}
+            )
             await self._admin_audit_log.write(log_entry + "\n")
             await self._admin_audit_log.flush()
 
@@ -1512,7 +1626,9 @@ class SNSGatewayManager:
 
             self._rate_limiters = {}
             for target in new_settings.targets:
-                limiter_key = f"{target.region}_{new_settings.requests_per_second_limit}"
+                limiter_key = (
+                    f"{target.region}_{new_settings.requests_per_second_limit}"
+                )
                 if limiter_key not in self._rate_limiters:
                     self._rate_limiters[limiter_key] = TokenBucket(
                         new_settings.requests_per_second_limit,
@@ -1538,7 +1654,9 @@ class SNSGatewayManager:
                     )
                     continue
 
-                limiter_key = f"{target_config.region}_{new_settings.requests_per_second_limit}"
+                limiter_key = (
+                    f"{target_config.region}_{new_settings.requests_per_second_limit}"
+                )
                 rate_limiter = self._rate_limiters[limiter_key]
                 new_gateways[name] = SNSGateway(
                     target_config,
@@ -1571,10 +1689,14 @@ class SNSGatewayManager:
             await asyncio.gather(*(gw.shutdown() for gw in old_gateways.values()))
             main_logger.info("Old gateways drained and shut down.")
 
-    async def publish(self, target_name: str, event_name: str, details: Dict[str, Any], **kwargs):
+    async def publish(
+        self, target_name: str, event_name: str, details: Dict[str, Any], **kwargs
+    ):
         gateway = self._gateways.get(target_name)
         if not gateway:
-            main_logger.warning(f"Publish to unknown target '{target_name}'. Event dropped.")
+            main_logger.warning(
+                f"Publish to unknown target '{target_name}'. Event dropped."
+            )
             audit_logger.warning(
                 "publish_to_unknown_target",
                 extra={"context": {"target": target_name, "event_name": event_name}},
@@ -1583,7 +1705,9 @@ class SNSGatewayManager:
 
         scrubbed_details = SNSEvent.scrub_sensitive_details(details)
         if scrubbed_details != details:
-            main_logger.error("Sensitive data detected in event payload. Event dropped.")
+            main_logger.error(
+                "Sensitive data detected in event payload. Event dropped."
+            )
             return
 
         async with gateway._sequence_lock:
@@ -1647,7 +1771,9 @@ class SNSGatewayManager:
                     "paused"
                     if gw._is_paused
                     else (
-                        "healthy" if not gw.circuit_breaker._is_open else "unhealthy_circuit_open"
+                        "healthy"
+                        if not gw.circuit_breaker._is_open
+                        else "unhealthy_circuit_open"
                     )
                 ),
                 **gw._health_stats,
@@ -1667,7 +1793,10 @@ class SNSGatewayManager:
                 return web.Response(status=403, text="Forbidden IP")
             if request.path.startswith("/admin"):
                 auth_header = request.headers.get("Authorization")
-                if not auth_header or auth_header != f"Bearer {self.settings.admin_api_key}":
+                if (
+                    not auth_header
+                    or auth_header != f"Bearer {self.settings.admin_api_key}"
+                ):
                     audit_logger.warning(
                         "unauthorized_admin_api_access",
                         extra={
@@ -1691,12 +1820,18 @@ class SNSGatewayManager:
         async def handle_reload(request):
             try:
                 if not request.can_read_body:
-                    return web.Response(status=400, text="Request body required for reload.")
+                    return web.Response(
+                        status=400, text="Request body required for reload."
+                    )
                 data = await request.json()
                 new_settings = SNSGatewaySettings(**data)
                 if new_settings.model_dump_json() == self.settings.model_dump_json():
-                    return web.Response(status=200, text="No configuration changes detected.")
-                await self._log_admin_action("api_reload", {"source_ip": request.remote})
+                    return web.Response(
+                        status=200, text="No configuration changes detected."
+                    )
+                await self._log_admin_action(
+                    "api_reload", {"source_ip": request.remote}
+                )
                 await self.reload_config(new_settings)
                 return web.Response(text="Configuration reload initiated.")
             except json.JSONDecodeError:
@@ -1704,7 +1839,9 @@ class SNSGatewayManager:
             except ValidationError as e:
                 return web.Response(status=400, text=f"Invalid configuration: {e}")
             except Exception as e:
-                main_logger.critical(f"Admin API reload failed due to an unexpected error: {e}")
+                main_logger.critical(
+                    f"Admin API reload failed due to an unexpected error: {e}"
+                )
                 audit_logger.critical(
                     "admin_api_reload_critical_failure",
                     extra={"context": {"error": str(e), "source_ip": request.remote}},
@@ -1744,7 +1881,9 @@ class SNSGatewayManager:
         if PROD_MODE and self.settings.cert_path and self.settings.key_path:
             ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             try:
-                ssl_context.load_cert_chain(self.settings.cert_path, self.settings.key_path)
+                ssl_context.load_cert_chain(
+                    self.settings.cert_path, self.settings.key_path
+                )
             except FileNotFoundError as e:
                 raise AnalyzerCriticalError(f"SSL certificate/key not found: {e}")
 
@@ -1782,7 +1921,9 @@ class SNSGatewayManager:
 
 
 # ---- Global Instances & Application Lifecycle ----
-DEAD_LETTER_DIR = os.environ.get("SNS_GATEWAY_DEAD_LETTER_DIR", "/var/lib/sns_gateway_dead_letters")
+DEAD_LETTER_DIR = os.environ.get(
+    "SNS_GATEWAY_DEAD_LETTER_DIR", "/var/lib/sns_gateway_dead_letters"
+)
 if not os.path.exists(DEAD_LETTER_DIR):
     os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
     os.chmod(DEAD_LETTER_DIR, 0o700)
@@ -1796,7 +1937,9 @@ async def dead_letter_to_file(event: SNSEvent, reason: str):
             "timestamp": time.time(),
         }
     )
-    filepath = os.path.join(DEAD_LETTER_DIR, f"sns_dead_letters.{time.strftime('%Y%m%d')}.log")
+    filepath = os.path.join(
+        DEAD_LETTER_DIR, f"sns_dead_letters.{time.strftime('%Y%m%d')}.log"
+    )
 
     encryption_key = SECRETS_MANAGER.get_secret(
         "SNS_GATEWAY_DEAD_LETTER_ENCRYPTION_KEY", required=False
@@ -1826,7 +1969,9 @@ async def app_lifecycle(main_func: Callable):
                 signing_secret=os.environ.get(
                     "SNS_GATEWAY_SIGNING_SECRET", "non-prod-signing-secret"
                 ),
-                admin_api_key=os.environ.get("SNS_GATEWAY_ADMIN_API_KEY", "non-prod-admin-key"),
+                admin_api_key=os.environ.get(
+                    "SNS_GATEWAY_ADMIN_API_KEY", "non-prod-admin-key"
+                ),
                 targets=[
                     SNSTarget(
                         name="alerts",
@@ -1855,7 +2000,9 @@ async def app_lifecycle(main_func: Callable):
         await main_func()
     except (ValidationError, RuntimeError, KeyError, AnalyzerCriticalError) as e:
         main_logger.critical(f"Critical initialization failure. Exiting. Error: {e}")
-        alert_operator(f"Critical initialization failure. Exiting. Error: {e}", "CRITICAL")
+        alert_operator(
+            f"Critical initialization failure. Exiting. Error: {e}", "CRITICAL"
+        )
         sys.exit(1)
     finally:
         if sns_gateway_manager:

@@ -3,16 +3,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import agents.critique_agent.critique_agent as core
 import pytest
-
 from agents.critique_agent.critique_agent import (
     CritiqueConfig,
     PythonCritiquePlugin,
     call_llm_for_critique,
     orchestrate_critique_pipeline,
 )
-import agents.critique_agent.critique_agent as core
-
 
 # ---------------------------------------------------------------------------
 # CritiqueConfig tests
@@ -189,7 +187,9 @@ async def test_python_plugin_lint_delegates_safely(
         assert outdir == tmp_path
         recorded["saved"] = True
 
-    async def fake_run_all_lints_and_checks(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    async def fake_run_all_lints_and_checks(
+        *args: Any, **kwargs: Any
+    ) -> Dict[str, Any]:
         # Expect first arg = code_files, second arg = project_dir (str)
         assert len(args) >= 2, "Expected code_files and project_dir as positional args"
         code_files = args[0]
@@ -211,7 +211,9 @@ async def test_python_plugin_lint_delegates_safely(
         recorded["called"] = True
         return {"all_errors": []}
 
-    monkeypatch.setattr(core, "save_files_to_output", fake_save_files_to_output, raising=False)
+    monkeypatch.setattr(
+        core, "save_files_to_output", fake_save_files_to_output, raising=False
+    )
     monkeypatch.setattr(
         core, "run_all_lints_and_checks", fake_run_all_lints_and_checks, raising=False
     )

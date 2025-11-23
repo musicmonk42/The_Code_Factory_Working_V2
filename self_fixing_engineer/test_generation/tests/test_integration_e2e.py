@@ -1,22 +1,19 @@
-import pytest
+import argparse
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
-# Updated for renamed GenerationOrchestrator to avoid pytest collection
-from test_generation.orchestrator.orchestrator import GenerationOrchestrator
+import pytest
+from test_generation.orchestrator import (  # sanitize_path from orchestrator init re-export.
+    sanitize_path,
+)
 from test_generation.orchestrator.cli import main as cli_main
 from test_generation.orchestrator.config import CONFIG
-from test_generation.orchestrator import (
-    sanitize_path,
-)  # sanitize_path from orchestrator init re-export.
-from test_generation.utils import (
-    SecurityScanner,
-    PRCreator,
-    MutationTester,
-)
+
+# Updated for renamed GenerationOrchestrator to avoid pytest collection
+from test_generation.orchestrator.orchestrator import GenerationOrchestrator
 from test_generation.policy_and_audit import PolicyEngine
-import json
-import argparse
+from test_generation.utils import MutationTester, PRCreator, SecurityScanner
 
 
 @pytest.fixture
@@ -59,7 +56,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     mock_scanner = Mock(
         spec=SecurityScanner, scan_test_file=AsyncMock(return_value=(False, [], "NONE"))
     )
-    mock_pr = Mock(spec=PRCreator, create_pr=AsyncMock(return_value=(True, "http://pr")))
+    mock_pr = Mock(
+        spec=PRCreator, create_pr=AsyncMock(return_value=(True, "http://pr"))
+    )
     mock_tester = Mock(
         spec=MutationTester,
         run_mutations=AsyncMock(return_value=(True, 80.0, "Passed")),
@@ -68,7 +67,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     # Happy path: successful integration
     # Mock the function before the orchestrator is created and calls it
     mock_run_pytest = AsyncMock(return_value=(True, 10.0, "Passed"))
-    monkeypatch.setattr("test_generation.utils.run_pytest_and_coverage", mock_run_pytest)
+    monkeypatch.setattr(
+        "test_generation.utils.run_pytest_and_coverage", mock_run_pytest
+    )
 
     # We must also mock venv creation, which is a dependency of run_pytest
     monkeypatch.setattr(
@@ -106,7 +107,9 @@ async def test_e2e_happy_and_quarantine_paths(project: Path, config, monkeypatch
     assert (project / "atco_artifacts/quarantined_tests").exists()
 
     # Verify audit logs
-    audit_log_path = project / sanitize_path("atco_artifacts/atco_audit.log", str(project))
+    audit_log_path = project / sanitize_path(
+        "atco_artifacts/atco_audit.log", str(project)
+    )
     assert audit_log_path.exists()
     with audit_log_path.open("r") as f:
         logs = [json.loads(line) for line in f if line.strip()]

@@ -1,24 +1,25 @@
 # runner/config.py
-from pydantic import (
-    BaseModel,
-    Field,
-    SecretStr,
-    model_validator,
-    PydanticUserError,
-    field_validator,
-)
-from dotenv import load_dotenv
-import yaml
-import os
 import asyncio
-from typing import Dict, Any, Callable, Optional, List, Union
-import multiprocessing
 import json
-from cryptography.fernet import Fernet
 import logging
+import multiprocessing
+import os
 import sys  # Added for TESTING guard
 from functools import partial
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import yaml
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+from pydantic import (
+    BaseModel,
+    Field,
+    PydanticUserError,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from runner.runner_errors import ConfigurationError  # ensure this import exists at top
 
 # --- TESTING Guard ---
@@ -89,11 +90,15 @@ class RunnerConfig(BaseModel):
         4,
         description="Number of parallel workers; suggested based on CPU cores for local execution.",
     )
-    timeout: int = Field(300, description="Execution timeout for a single test run in seconds.")
+    timeout: int = Field(
+        300, description="Execution timeout for a single test run in seconds."
+    )
     mutation: bool = Field(
         False, description="Enable mutation testing for code quality assessment."
     )
-    fuzz: bool = Field(False, description="Enable fuzz testing for robustness analysis.")
+    fuzz: bool = Field(
+        False, description="Enable fuzz testing for robustness analysis."
+    )
     doc_framework: str = Field(
         "auto",
         description="Documentation generation framework ('auto', 'sphinx', 'mkdocs', 'javadoc', 'jsdoc'). 'auto' attempts detection.",
@@ -516,7 +521,11 @@ class RunnerConfig(BaseModel):
                         info = schema["properties"][field_name]
                         field_type = info.get("type", "any")
                         if "anyOf" in info:
-                            types = [t.get("type", "any") for t in info["anyOf"] if "type" in t]
+                            types = [
+                                t.get("type", "any")
+                                for t in info["anyOf"]
+                                if "type" in t
+                            ]
                             field_type = " or ".join(types)
                         elif "$ref" in info:
                             ref_name = info["$ref"].split("/")[-1]
@@ -530,14 +539,18 @@ class RunnerConfig(BaseModel):
                         ):
                             default_value = field_metadata[field_name].default_factory()
 
-                        if isinstance(default_value, dict) or isinstance(default_value, list):
+                        if isinstance(default_value, dict) or isinstance(
+                            default_value, list
+                        ):
                             default_value = json.dumps(
                                 default_value
                             )  # Represent dicts/lists as JSON string
                         elif default_value is None:
                             default_value = "null"
 
-                        description = info.get("description", "No description provided.")
+                        description = info.get(
+                            "description", "No description provided."
+                        )
 
                         # Add notes for sensitive fields or fields loaded from env
                         extra_notes = []
@@ -553,7 +566,9 @@ class RunnerConfig(BaseModel):
                             "encryption_key_env_var",
                             "log_signing_key_env_var",
                         ]:
-                            extra_notes.append("Environment variable name for a secret key.")
+                            extra_notes.append(
+                                "Environment variable name for a secret key."
+                            )
 
                         md += f"- **`{field_name}`**: {description} (Type: `{field_type}`, Default: `{default_value}`)\n"
                         if extra_notes:
@@ -572,7 +587,9 @@ class RunnerConfig(BaseModel):
                                 ):
                                     nested_type = nested_info.get("type", "any")
                                     nested_default = nested_info.get("default", "N/A")
-                                    nested_desc = nested_info.get("description", "No description.")
+                                    nested_desc = nested_info.get(
+                                        "description", "No description."
+                                    )
                                     md += f"    - `{nested_field}`: {nested_desc} (Type: `{nested_type}`, Default: `{nested_default}`)\n"
                 md += "\n"
 
@@ -588,7 +605,9 @@ class RunnerConfig(BaseModel):
             if field_value and isinstance(field_value, SecretStr):
                 try:
                     # FIX: Use get_secret_value() to get the raw string for encryption
-                    encrypted_value = f.encrypt(field_value.get_secret_value().encode()).decode()
+                    encrypted_value = f.encrypt(
+                        field_value.get_secret_value().encode()
+                    ).decode()
                     return SecretStr(encrypted_value)
                 except Exception as e:
                     logger.error(f"Failed to encrypt secret field: {e}", exc_info=True)
@@ -609,7 +628,9 @@ class RunnerConfig(BaseModel):
             if field_value and isinstance(field_value, SecretStr):
                 try:
                     # FIX: Use get_secret_value() to get the raw string (which is the ciphertext)
-                    decrypted_value = f.decrypt(field_value.get_secret_value().encode()).decode()
+                    decrypted_value = f.decrypt(
+                        field_value.get_secret_value().encode()
+                    ).decode()
                     return SecretStr(decrypted_value)
                 except Exception as e:
                     logger.error(
@@ -630,16 +651,22 @@ class RunnerConfig(BaseModel):
         """Integrate with Hashicorp Vault for secrets."""
         if not self.vault_url or not hvac:
             if not hvac:
-                logger.warning("hvac package not installed. Cannot fetch secrets from Vault.")
+                logger.warning(
+                    "hvac package not installed. Cannot fetch secrets from Vault."
+                )
             return
 
         if not self.vault_token:
-            logger.warning("Vault token not provided in config. Cannot authenticate with Vault.")
+            logger.warning(
+                "Vault token not provided in config. Cannot authenticate with Vault."
+            )
             return
 
         try:
             # Ensure the token value is retrieved correctly for authentication
-            client = hvac.Client(url=self.vault_url, token=self.vault_token.get_secret_value())
+            client = hvac.Client(
+                url=self.vault_url, token=self.vault_token.get_secret_value()
+            )
             if client.is_authenticated():
                 # FIX: Read secret from 'runner/secrets' using KV v2 path
                 secrets_response = await asyncio.to_thread(
@@ -652,10 +679,14 @@ class RunnerConfig(BaseModel):
                 ):
                     secrets = secrets_response["data"]["data"]
                     if "api_key" in secrets:
-                        self.api_key = SecretStr(secrets["api_key"])  # Store as SecretStr
+                        self.api_key = SecretStr(
+                            secrets["api_key"]
+                        )  # Store as SecretStr
                         logger.info("API key fetched from Vault.")
                     if "llm_provider_api_key" in secrets:
-                        self.llm_provider_api_key = SecretStr(secrets["llm_provider_api_key"])
+                        self.llm_provider_api_key = SecretStr(
+                            secrets["llm_provider_api_key"]
+                        )
                         logger.info("LLM provider API key fetched from Vault.")
                     logger.info("Vault secrets loaded successfully.")
                 else:
@@ -692,7 +723,9 @@ class RunnerConfig(BaseModel):
         return secrets
 
 
-def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) -> RunnerConfig:
+def load_config(
+    config_file: str, overrides: Optional[Dict[str, Any]] = None
+) -> RunnerConfig:
     """
     Load config from YAML, apply env overrides, handle versioning/migrations.
     Args:
@@ -772,10 +805,17 @@ def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) ->
                 field_type_info = field_info.annotation
 
                 # Handle Optional types by unwrapping
-                if hasattr(field_type_info, "__origin__") and field_type_info.__origin__ is Union:
+                if (
+                    hasattr(field_type_info, "__origin__")
+                    and field_type_info.__origin__ is Union
+                ):
                     # Look for non-None type in Optional[T]
                     actual_type = next(
-                        (arg for arg in field_type_info.__args__ if arg is not type(None)),
+                        (
+                            arg
+                            for arg in field_type_info.__args__
+                            if arg is not type(None)
+                        ),
                         str,
                     )
                 else:
@@ -794,12 +834,14 @@ def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) ->
                 elif actual_type is SecretStr:
                     data[field_name] = SecretStr(env_val)
                 elif actual_type is list or (
-                    hasattr(actual_type, "__origin__") and actual_type.__origin__ is list
+                    hasattr(actual_type, "__origin__")
+                    and actual_type.__origin__ is list
                 ):
                     # FIX: Safely parse lists/dicts from JSON string
                     data[field_name] = json.loads(env_val)
                 elif actual_type is dict or (
-                    hasattr(actual_type, "__origin__") and actual_type.__origin__ is dict
+                    hasattr(actual_type, "__origin__")
+                    and actual_type.__origin__ is dict
                 ):
                     data[field_name] = json.loads(env_val)
                 else:
@@ -862,7 +904,9 @@ def load_config(config_file: str, overrides: Optional[Dict[str, Any]] = None) ->
                 "log_sinks": d.get("log_sinks", [{"type": "stream", "config": {}}]),
                 "real_time_log_streaming": d.get("real_time_log_streaming", True),
                 "metrics_interval_seconds": d.get("metrics_interval_seconds", 1),
-                "alert_monitor_interval_seconds": d.get("alert_monitor_interval_seconds", 60),
+                "alert_monitor_interval_seconds": d.get(
+                    "alert_monitor_interval_seconds", 60
+                ),
                 "aws_region": d.get("aws_region", None),
                 "lambda_function_name": d.get("lambda_function_name", None),
                 "k8s": d.get("k8s", {}),
@@ -1005,7 +1049,9 @@ class ConfigWatcher:
     async def _start_polling_fallback(self):
         """Starts a polling mechanism if watchfiles is not available or fails."""
         polling_interval = (
-            self.current_config.metrics_interval_seconds * 5 if self.current_config else 5
+            self.current_config.metrics_interval_seconds * 5
+            if self.current_config
+            else 5
         )
         logger.info(f"Starting config polling every {polling_interval} seconds.")
         try:
@@ -1030,14 +1076,14 @@ class ConfigWatcher:
                         f"Failed to load/validate new config: {load_e}. Keeping old config.",
                         exc_info=True,
                     )
-                    self.last_mtime = (
-                        mtime  # Update mtime even on failure to avoid immediate re-check
-                    )
+                    self.last_mtime = mtime  # Update mtime even on failure to avoid immediate re-check
                     return
 
                 # Calculate Diff
                 diff = {}
-                old_config_dict = self.current_config.model_dump() if self.current_config else {}
+                old_config_dict = (
+                    self.current_config.model_dump() if self.current_config else {}
+                )
                 new_config_dict = new_config.model_dump()
 
                 if DeepDiff:
@@ -1064,15 +1110,21 @@ class ConfigWatcher:
                         )
                         diff = {"error": f"Failed to compute DeepDiff: {diff_e}"}
                 else:
-                    logger.warning("DeepDiff not installed. Cannot show config changes.")
-                    diff = {"message": "DeepDiff not available, changes applied but not shown."}
+                    logger.warning(
+                        "DeepDiff not installed. Cannot show config changes."
+                    )
+                    diff = {
+                        "message": "DeepDiff not available, changes applied but not shown."
+                    }
 
                 try:
                     # Run the synchronous, potentially blocking callback
                     # in a separate thread to not block the async loop.
                     await asyncio.to_thread(self.callback, new_config, diff)
                 except Exception as e:
-                    logger.error(f"Error executing config reload callback: {e}", exc_info=True)
+                    logger.error(
+                        f"Error executing config reload callback: {e}", exc_info=True
+                    )
 
                 self.current_config = new_config
                 self.last_mtime = mtime
@@ -1082,7 +1134,9 @@ class ConfigWatcher:
             else:
                 logger.debug("Config file not modified since last check.")
         except Exception as e:
-            logger.error(f"Failed to reload config from '{self.config_file}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to reload config from '{self.config_file}': {e}", exc_info=True
+            )
 
     async def fetch_remote(self, remote_url: Optional[str] = None):
         """
@@ -1094,7 +1148,9 @@ class ConfigWatcher:
             logger.error("aiohttp package not installed. Cannot fetch remote config.")
             return
 
-        fetch_url = remote_url or (self.current_config.dist_url if self.current_config else None)
+        fetch_url = remote_url or (
+            self.current_config.dist_url if self.current_config else None
+        )
         if not fetch_url or not fetch_url.startswith("http"):
             logger.warning("No valid HTTP(s) remote URL configured for fetching.")
             return
@@ -1136,8 +1192,12 @@ class ConfigWatcher:
                             )
                             diff = {"error": f"Failed to compute DeepDiff: {diff_e}"}
                     else:
-                        logger.warning("DeepDiff not installed. Cannot show remote config changes.")
-                        diff = {"message": "DeepDiff not available, changes applied but not shown."}
+                        logger.warning(
+                            "DeepDiff not installed. Cannot show remote config changes."
+                        )
+                        diff = {
+                            "message": "DeepDiff not available, changes applied but not shown."
+                        }
 
                     try:
                         # Run the synchronous, potentially blocking callback
@@ -1243,7 +1303,9 @@ timeout: 300
     assert "resources" in migrated_config.model_dump()
     assert "commercial_mode_enabled" in migrated_config.model_dump()
     assert "fuzz" in migrated_config.model_dump()  # Check for latest fields
-    assert migrated_config.instance_id == os.getenv("HOSTNAME", "default_runner_instance")
+    assert migrated_config.instance_id == os.getenv(
+        "HOSTNAME", "default_runner_instance"
+    )
 
     os.remove(v1_config_file_path_for_migration)
 
@@ -1252,7 +1314,9 @@ timeout: 300
     os.environ["RUNNER_TIMEOUT"] = "120"
     os.environ["RUNNER_BACKEND"] = "podman"
     os.environ["RUNNER_COMMERCIAL_MODE_ENABLED"] = "True"
-    os.environ["RUNNER_LOG_SINKS"] = '[{"type": "file", "config": {"path": "/var/log/runner.log"}}]'
+    os.environ["RUNNER_LOG_SINKS"] = (
+        '[{"type": "file", "config": {"path": "/var/log/runner.log"}}]'
+    )
     os.environ["RUNNER_LLM_PROVIDER_API_KEY"] = "sk-llm-12345"
 
     # Create a minimal config file for the environment test
@@ -1268,11 +1332,15 @@ instance_id: dummy_id
 """
     )
 
-    env_overridden_config = load_config(config_file=temp_minimal_config_path, overrides={})
+    env_overridden_config = load_config(
+        config_file=temp_minimal_config_path, overrides={}
+    )
 
     print(f"Env Overridden Timeout: {env_overridden_config.timeout}")
     print(f"Env Overridden Backend: {env_overridden_config.backend}")
-    print(f"Env Overridden Commercial Mode: {env_overridden_config.commercial_mode_enabled}")
+    print(
+        f"Env Overridden Commercial Mode: {env_overridden_config.commercial_mode_enabled}"
+    )
     print(f"Env Overridden Log Sinks: {env_overridden_config.log_sinks}")
     # llm_provider_api_key is SecretStr, so printing the object will mask the value by default, but we assert the internal value via the env loader
     print(f"Env Overridden LLM API Key: {env_overridden_config.llm_provider_api_key}")
@@ -1282,7 +1350,9 @@ instance_id: dummy_id
     assert env_overridden_config.log_sinks == [
         {"type": "file", "config": {"path": "/var/log/runner.log"}}
     ]
-    assert env_overridden_config.llm_provider_api_key.get_secret_value() == "sk-llm-12345"
+    assert (
+        env_overridden_config.llm_provider_api_key.get_secret_value() == "sk-llm-12345"
+    )
 
     # Cleanup environment variables
     del os.environ["RUNNER_TIMEOUT"]

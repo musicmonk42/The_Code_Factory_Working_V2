@@ -3,39 +3,39 @@ Test suite for omnicore_engine/metrics.py
 Tests Prometheus metrics collection, InfluxDB fallback, and metric utilities.
 """
 
-import pytest
-import os
 import json
-import tempfile
-from unittest.mock import Mock, patch
-from datetime import datetime
-from prometheus_client import CollectorRegistry
-from prometheus_client.core import Counter, Gauge, Histogram
+import os
 
 # Add the parent directory to path for imports
 import sys
+import tempfile
+from datetime import datetime
+from unittest.mock import Mock, patch
+
+import pytest
+from prometheus_client import CollectorRegistry
+from prometheus_client.core import Counter, Gauge, Histogram
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import after mocking to prevent server startup
 with patch("omnicore_engine.metrics.start_http_server"):
-    from omnicore_engine.metrics import (
-        _get_or_create_metric,
-        MockInfluxWriteApi,
+    from omnicore_engine.metrics import (  # Import specific metrics for testing
+        ACTIVE_SIMULATIONS,
+        FEATURE_FLAG_TOGGLES_TOTAL,
+        MESSAGE_BUS_QUEUE_SIZE,
+        PLUGIN_ACTIVE_COUNT,
+        PLUGIN_EXECUTION_DURATION_SECONDS,
+        PLUGIN_EXECUTIONS_TOTAL,
+        SIMULATIONS_TOTAL,
         MockInfluxDBClient,
+        MockInfluxWriteApi,
         MockPoint,
         MockWritePrecision,
+        _get_or_create_metric,
         get_all_metrics_data,
         get_plugin_metrics,
         get_test_metrics,
-        # Import specific metrics for testing
-        PLUGIN_EXECUTIONS_TOTAL,
-        PLUGIN_EXECUTION_DURATION_SECONDS,
-        PLUGIN_ACTIVE_COUNT,
-        SIMULATIONS_TOTAL,
-        ACTIVE_SIMULATIONS,
-        MESSAGE_BUS_QUEUE_SIZE,
-        FEATURE_FLAG_TOGGLES_TOTAL,
     )
 
 
@@ -87,7 +87,9 @@ class TestMetricCreation:
             metric1 = _get_or_create_metric(Counter, "test_existing", "Test metric")
 
             # Try to create again - should return existing
-            metric2 = _get_or_create_metric(Counter, "test_existing", "Different description")
+            metric2 = _get_or_create_metric(
+                Counter, "test_existing", "Different description"
+            )
 
             assert metric1 is metric2
 
@@ -207,9 +209,15 @@ class TestMetricOperations:
         # Clear histogram for testing
         PLUGIN_EXECUTION_DURATION_SECONDS._metrics.clear()
 
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(0.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(1.5)
-        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(0.01)
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            1.5
+        )
+        PLUGIN_EXECUTION_DURATION_SECONDS.labels(kind="test", name="plugin1").observe(
+            0.01
+        )
 
         # Check that observations were recorded
         metric_family = list(PLUGIN_EXECUTION_DURATION_SECONDS.collect())[0]
@@ -275,7 +283,7 @@ class TestMetricAliases:
 
     def test_plugin_executions_alias(self):
         """Test plugin_executions legacy alias"""
-        from omnicore_engine.metrics import plugin_executions, PLUGIN_EXECUTIONS_TOTAL
+        from omnicore_engine.metrics import PLUGIN_EXECUTIONS_TOTAL, plugin_executions
 
         assert plugin_executions is PLUGIN_EXECUTIONS_TOTAL
 
@@ -346,6 +354,7 @@ class TestPrometheusServerStartup:
         """Test server starts with environment variable port"""
         # Re-import to trigger startup code
         import importlib
+
         import omnicore_engine.metrics
 
         importlib.reload(omnicore_engine.metrics)
@@ -357,17 +366,21 @@ class TestPrometheusServerStartup:
         """Test server starts with default port"""
         with patch.dict(os.environ, {}, clear=True):
             import importlib
+
             import omnicore_engine.metrics
 
             importlib.reload(omnicore_engine.metrics)
 
             mock_start_server.assert_called_with(8000)
 
-    @patch("omnicore_engine.metrics.start_http_server", side_effect=OSError("Port in use"))
+    @patch(
+        "omnicore_engine.metrics.start_http_server", side_effect=OSError("Port in use")
+    )
     @patch("omnicore_engine.metrics.logger")
     def test_server_startup_port_in_use(self, mock_logger, mock_start_server):
         """Test handling when port is already in use"""
         import importlib
+
         import omnicore_engine.metrics
 
         importlib.reload(omnicore_engine.metrics)

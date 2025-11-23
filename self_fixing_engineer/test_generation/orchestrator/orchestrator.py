@@ -1,50 +1,49 @@
 # test_generation/orchestrator/orchestrator.py
-import os
-import shutil
-import json
-import sys
 import asyncio
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
-import random
-import logging
-import traceback
-import aiofiles
-from collections import defaultdict
-from pathlib import Path
-from unittest.mock import Mock
 import inspect
+import json
+import logging
+import os
+import random
+import shutil
+import sys
+import traceback
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
+from unittest.mock import Mock
+
+import aiofiles
 
 # --- Internal Module Imports ---
 from test_generation.orchestrator.config import (
     AUDIT_LOG_FILE,
+    COVERAGE_REPORTS_DIR,
     QUARANTINE_DIR,
     SARIF_EXPORT_DIR,
-    COVERAGE_REPORTS_DIR,
     _ensure_artifact_dirs,
 )
 
 # Import console utilities from same package for logging and UI.
 from .console import (
-    log,
     RICH_AVAILABLE,
-    console,
-    Progress,
     BarColumn,
+    Progress,
+    TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
-    TextColumn,
+    console,
+    log,
 )
 
 # Import venv utilities from same package for isolation.
 try:
-    from .venvs import (
-        sanitize_path as venv_sanitize_path,
-        temporary_env,
-        create_and_install_venv,
-    )
+    from .venvs import create_and_install_venv
+    from .venvs import sanitize_path as venv_sanitize_path
+    from .venvs import temporary_env
 except ImportError as e:
     logging.getLogger(__name__).error(f"Venvs import failed: {e}. Using stubs.")
 
@@ -63,10 +62,10 @@ except ImportError as e:
 # Metrics from same package for monitoring.
 try:
     from .metrics import (
-        generation_duration,
-        integration_success,
-        integration_failure,
         METRICS_AVAILABLE,
+        generation_duration,
+        integration_failure,
+        integration_success,
     )
 except ImportError:
 
@@ -114,7 +113,7 @@ except ImportError:
 
 # Audit from same package for logging.
 try:
-    from .audit import audit_event, RUN_ID
+    from .audit import RUN_ID, audit_event
 except ImportError:
     # Fallback stubs
     async def _dummy_audit_event(*args, **kwargs):
@@ -129,7 +128,9 @@ except ImportError:
 try:
     from .reporting import _write_sarif_atomically, cleanup_old_temp_files
 except ImportError:
-    logging.getLogger(__name__).warning("Reporting import failed. Using dummy fallbacks.")
+    logging.getLogger(__name__).warning(
+        "Reporting import failed. Using dummy fallbacks."
+    )
 
     async def _write_sarif_atomically(path, data):
         return True
@@ -138,29 +139,30 @@ except ImportError:
         pass
 
 
-from test_generation.backends import BackendRegistry
-from test_generation.policy_and_audit import PolicyEngine, EventBus, redact_sensitive
 from test_generation import utils
+from test_generation.backends import BackendRegistry
+from test_generation.policy_and_audit import EventBus, PolicyEngine, redact_sensitive
 from test_generation.utils import (
-    SecurityScanner,
-    KnowledgeGraphClient,
-    PRCreator,
-    MutationTester,
     CodeEnricher,
+    KnowledgeGraphClient,
+    MutationTester,
+    PRCreator,
+    SecurityScanner,
     add_atco_header,
     add_mocking_framework_import,
+)
+from test_generation.utils import backup_existing_test as _backup_existing_test
+from test_generation.utils import cleanup_path_safe
+from test_generation.utils import compare_files as _compare_files
+from test_generation.utils import generate_file_hash as _generate_file_hash
+from test_generation.utils import (
     llm_refine_test_plugin,
-    cleanup_path_safe,
     run_jest_and_coverage,
     run_junit_and_coverage,
-    compare_files as _compare_files,
-    backup_existing_test as _backup_existing_test,
-    generate_file_hash as _generate_file_hash,
 )
+
 from ..compliance_mapper import generate_report as generate_compliance_report
-from .stubs import (
-    DummyTestEnricher,
-)
+from .stubs import DummyTestEnricher
 
 
 # --- Backwards-compatible test hook -----------------------------------------
@@ -182,7 +184,9 @@ generate_file_hash = _generate_file_hash
 # Local audit log fallback: always append JSON lines so tests can assert on events
 def _append_local_audit_log(project_root, config, event_name, detail):
     try:
-        audit_rel = (config or {}).get("audit_log_file") or "atco_artifacts/atco_audit.log"
+        audit_rel = (config or {}).get(
+            "audit_log_file"
+        ) or "atco_artifacts/atco_audit.log"
         audit_path = Path(venv_sanitize_path(audit_rel, project_root))
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         record = {"event": event_name}
@@ -270,7 +274,9 @@ class GenerationOrchestrator:
         self.config = config
         self.project_root = project_root
         self.suite_dir = suite_dir
-        self.generation_semaphore = asyncio.Semaphore(self.config.get("max_parallel_generation", 4))
+        self.generation_semaphore = asyncio.Semaphore(
+            self.config.get("max_parallel_generation", 4)
+        )
         self.language_semaphores = defaultdict(
             lambda: asyncio.Semaphore(
                 self.config.get("demo_per_lang_concurrency", 2)
@@ -284,12 +290,16 @@ class GenerationOrchestrator:
 
         self.policy_engine = self._load_component("policy_engine", "policy_config")
         self.event_bus = self._load_component("event_bus", "event_bus_config")
-        self.security_scanner = self._load_component("security_scanner", "scanner_config")
+        self.security_scanner = self._load_component(
+            "security_scanner", "scanner_config"
+        )
         self.knowledge_graph_client = self._load_component(
             "knowledge_graph_client", "knowledge_graph_config"
         )
         self.pr_creator = self._load_component("pr_creator", "pr_config")
-        self.mutation_tester = self._load_component("mutation_tester", "mutation_config")
+        self.mutation_tester = self._load_component(
+            "mutation_tester", "mutation_config"
+        )
         self.test_enricher = self._load_test_enricher()
 
     async def run_pipeline(self, coverage_xml: str) -> dict:
@@ -311,13 +321,21 @@ class GenerationOrchestrator:
             elif component_name == "event_bus":
                 return EventBus(config=component_config)
             elif component_name == "security_scanner":
-                return SecurityScanner(project_root=self.project_root, config=component_config)
+                return SecurityScanner(
+                    project_root=self.project_root, config=component_config
+                )
             elif component_name == "knowledge_graph_client":
-                return KnowledgeGraphClient(project_root=self.project_root, config=component_config)
+                return KnowledgeGraphClient(
+                    project_root=self.project_root, config=component_config
+                )
             elif component_name == "pr_creator":
-                return PRCreator(project_root=self.project_root, config=component_config)
+                return PRCreator(
+                    project_root=self.project_root, config=component_config
+                )
             elif component_name == "mutation_tester":
-                return MutationTester(project_root=self.project_root, config=component_config)
+                return MutationTester(
+                    project_root=self.project_root, config=component_config
+                )
             else:
                 log(
                     f"Warning: Unknown component '{component_name}' requested in _load_component. Returning Mock.",
@@ -329,16 +347,22 @@ class GenerationOrchestrator:
                 f"CRITICAL: Failed to initialize {component_name}: {e}. This is a critical dependency.",
                 level="CRITICAL",
             )
-            raise InitializationError(f"Failed to load {component_name}: {str(e)}") from e
+            raise InitializationError(
+                f"Failed to load {component_name}: {str(e)}"
+            ) from e
 
     def _load_test_enricher(self):
         """Initializes the test enricher with configured plugins."""
         enrichment_plugins_list = []
         if self.config.get("enrichment_plugins", {}).get("header_enabled", True):
             enrichment_plugins_list.append(add_atco_header)
-        if self.config.get("enrichment_plugins", {}).get("mocking_import_enabled", True):
+        if self.config.get("enrichment_plugins", {}).get(
+            "mocking_import_enabled", True
+        ):
             enrichment_plugins_list.append(add_mocking_framework_import)
-        if self.config.get("enrichment_plugins", {}).get("llm_refinement_enabled", False):
+        if self.config.get("enrichment_plugins", {}).get(
+            "llm_refinement_enabled", False
+        ):
             enrichment_plugins_list.append(llm_refine_test_plugin)
         try:
             return CodeEnricher(enrichment_plugins_list)
@@ -427,21 +451,25 @@ class GenerationOrchestrator:
             timeout = timeout_map.get(target_data["language"], 60)
 
             for i in range(retry_settings["generation_retries"] + 1):
-                with generation_duration.labels(language=target_data["language"]).time():
+                with generation_duration.labels(
+                    language=target_data["language"]
+                ).time():
                     try:
                         sanitized_output_path = venv_sanitize_path(
                             output_base_relative, self.project_root
                         )
                         # Fix: Changed the order of parameters to `generate_tests` to match the expected signature.
                         # Also, ensure the return value from the mock in the test is what the function expects.
-                        success, err, test_path_relative = await backend_instance.generate_tests(
-                            target_data["identifier"],
-                            sanitized_output_path,
-                            params={
-                                "retry_count": i,
-                                "timeout": timeout,
-                                **target_data,
-                            },
+                        success, err, test_path_relative = (
+                            await backend_instance.generate_tests(
+                                target_data["identifier"],
+                                sanitized_output_path,
+                                params={
+                                    "retry_count": i,
+                                    "timeout": timeout,
+                                    **target_data,
+                                },
+                            )
                         )
                     except Exception as e:
                         success, err, test_path_relative = (
@@ -523,7 +551,9 @@ class GenerationOrchestrator:
                 target["language"] = target["language"].lower()
             lang_semaphore = self.language_semaphores[target["language"]]
             task = asyncio.create_task(
-                _generate_with_semaphore(lang_semaphore, _handle_single_test_generation(target))
+                _generate_with_semaphore(
+                    lang_semaphore, _handle_single_test_generation(target)
+                )
             )
             tasks.append(task)
 
@@ -561,7 +591,9 @@ class GenerationOrchestrator:
                             "result": "error",
                             "error": str(res),
                             "traceback": "".join(
-                                traceback.format_exception(type(res), res, res.__traceback__)
+                                traceback.format_exception(
+                                    type(res), res, res.__traceback__
+                                )
                             ),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         },
@@ -679,9 +711,13 @@ class GenerationOrchestrator:
                 )
             )
             if self.config.get("abort_on_critical", False):
-                raise InitializationError("Failed to set up required directories for the pipeline.")
+                raise InitializationError(
+                    "Failed to set up required directories for the pipeline."
+                )
             else:
-                raise InitializationError("Failed to set up required directories for the pipeline.")
+                raise InitializationError(
+                    "Failed to set up required directories for the pipeline."
+                )
 
         log("Starting integration and validation of generated tests...", level="INFO")
 
@@ -745,7 +781,9 @@ class GenerationOrchestrator:
             )
             integration_tasks.append(task)
 
-        integration_results_list = await asyncio.gather(*integration_tasks, return_exceptions=True)
+        integration_results_list = await asyncio.gather(
+            *integration_tasks, return_exceptions=True
+        )
         errors = [e for e in integration_results_list if isinstance(e, Exception)]
         for e in errors:
             log(f"Integration task raised: {e}", level="ERROR")
@@ -767,16 +805,24 @@ class GenerationOrchestrator:
             r for r in integration_results_list if not isinstance(r, Exception)
         ]
 
-        total_refinement_attempts = getattr(self.test_enricher, "total_refinement_attempts", 0)
-        refinement_success_count = getattr(self.test_enricher, "refinement_success_count", 0)
+        total_refinement_attempts = getattr(
+            self.test_enricher, "total_refinement_attempts", 0
+        )
+        refinement_success_count = getattr(
+            self.test_enricher, "refinement_success_count", 0
+        )
         refinement_success_rate = (
             (refinement_success_count / total_refinement_attempts) * 100
             if total_refinement_attempts > 0
             else 0.0
         )
 
-        overall_results["ai_metrics"]["total_refinement_attempts"] = total_refinement_attempts
-        overall_results["ai_metrics"]["refinement_success_rate_percent"] = refinement_success_rate
+        overall_results["ai_metrics"][
+            "total_refinement_attempts"
+        ] = total_refinement_attempts
+        overall_results["ai_metrics"][
+            "refinement_success_rate_percent"
+        ] = refinement_success_rate
 
         for result in integration_results_list:
             if result:
@@ -801,9 +847,15 @@ class GenerationOrchestrator:
                 "integration_results",
                 {
                     "total_integrated": overall_results["summary"]["total_integrated"],
-                    "total_quarantined": overall_results["summary"]["total_quarantined"],
-                    "total_requires_pr": overall_results["summary"]["total_requires_pr"],
-                    "total_deduplicated": overall_results["summary"]["total_deduplicated"],
+                    "total_quarantined": overall_results["summary"][
+                        "total_quarantined"
+                    ],
+                    "total_requires_pr": overall_results["summary"][
+                        "total_requires_pr"
+                    ],
+                    "total_deduplicated": overall_results["summary"][
+                        "total_deduplicated"
+                    ],
                     "total_targets_considered": overall_results["summary"][
                         "total_targets_considered"
                     ],
@@ -817,10 +869,18 @@ class GenerationOrchestrator:
                 self.config,
                 "integration_results",
                 {
-                    "total_integrated": overall_results["summary"].get("total_integrated", 0),
-                    "total_quarantined": overall_results["summary"].get("total_quarantined", 0),
-                    "total_requires_pr": overall_results["summary"].get("total_requires_pr", 0),
-                    "total_deduplicated": overall_results["summary"].get("total_deduplicated", 0),
+                    "total_integrated": overall_results["summary"].get(
+                        "total_integrated", 0
+                    ),
+                    "total_quarantined": overall_results["summary"].get(
+                        "total_quarantined", 0
+                    ),
+                    "total_requires_pr": overall_results["summary"].get(
+                        "total_requires_pr", 0
+                    ),
+                    "total_deduplicated": overall_results["summary"].get(
+                        "total_deduplicated", 0
+                    ),
                     "total_targets_considered": overall_results["summary"].get(
                         "total_targets_considered", 0
                     ),
@@ -848,7 +908,9 @@ class GenerationOrchestrator:
             # derive user_id and optional custom config path (if present in config)
             user_id = getattr(self.policy_engine, "user_id", None) or "unknown"
             comp_cfg = self.config.get("compliance_reporting") or {}
-            custom_cfg = comp_cfg.get("custom_config_path") or comp_cfg.get("custom_config")
+            custom_cfg = comp_cfg.get("custom_config_path") or comp_cfg.get(
+                "custom_config"
+            )
 
             # keep using the imported alias (if you have one), but pass the right kwargs
             await generate_compliance_report(
@@ -904,7 +966,9 @@ class GenerationOrchestrator:
         }
 
         try:
-            full_src_test_path = venv_sanitize_path(src_test_path_relative, self.project_root)
+            full_src_test_path = venv_sanitize_path(
+                src_test_path_relative, self.project_root
+            )
         except ValueError as e:
             result_summary["integration_status"] = "QUARANTINED"
             result_summary["reason"] = f"Pre-flight path validation failed: {e}"
@@ -931,7 +995,10 @@ class GenerationOrchestrator:
 
         missing_or_empty = False
         try:
-            if not os.path.exists(full_src_test_path) or os.path.getsize(full_src_test_path) == 0:
+            if (
+                not os.path.exists(full_src_test_path)
+                or os.path.getsize(full_src_test_path) == 0
+            ):
                 missing_or_empty = True
         except OSError:
             missing_or_empty = True
@@ -967,7 +1034,9 @@ class GenerationOrchestrator:
                 pass
             return result_summary
 
-        log(f"Enriching test file: {os.path.basename(full_src_test_path)}", level="INFO")
+        log(
+            f"Enriching test file: {os.path.basename(full_src_test_path)}", level="INFO"
+        )
         original_test_content = ""
         try:
             async with aiofiles.open(
@@ -975,10 +1044,14 @@ class GenerationOrchestrator:
             ) as f:
                 original_test_content = await f.read()
             enriched_test_content = await _maybe_await(
-                self.test_enricher.enrich_test(original_test_content, language, self.project_root)
+                self.test_enricher.enrich_test(
+                    original_test_content, language, self.project_root
+                )
             )
             if enriched_test_content != original_test_content:
-                async with aiofiles.open(full_src_test_path, "w", encoding="utf-8") as f:
+                async with aiofiles.open(
+                    full_src_test_path, "w", encoding="utf-8"
+                ) as f:
                     await f.write(enriched_test_content)
                 log(
                     f"Test file '{os.path.basename(full_src_test_path)}' enriched.",
@@ -1120,21 +1193,27 @@ class GenerationOrchestrator:
                 )
 
         result_summary["mutation_score_percent"] = mutation_score
-        if not mutation_success and self.config.get("mutation_testing", {}).get("enabled"):
+        if not mutation_success and self.config.get("mutation_testing", {}).get(
+            "enabled"
+        ):
             log(
                 f"Mutation testing failed for {target_identifier}: {mutation_log}",
                 level="WARNING",
             )
 
-        has_security_issues, security_issues_list, security_max_severity = await _maybe_await(
-            self.security_scanner.scan_test_file(src_test_path_relative, language)
+        has_security_issues, security_issues_list, security_max_severity = (
+            await _maybe_await(
+                self.security_scanner.scan_test_file(src_test_path_relative, language)
+            )
         )
         result_summary["security_issues_found"] = has_security_issues
         result_summary["security_issues_list"] = security_issues_list
         result_summary["security_max_severity"] = security_max_severity
         if has_security_issues:
             try:
-                truncated_issues_list = redact_sensitive(security_issues_list or [], max_items=10)
+                truncated_issues_list = redact_sensitive(
+                    security_issues_list or [], max_items=10
+                )
             except TypeError:
                 truncated_issues_list = redact_sensitive(security_issues_list or [])
                 if len(truncated_issues_list) > 10:
@@ -1229,7 +1308,9 @@ class GenerationOrchestrator:
         ):
             final_quarantine_reason = ""
             if not integrate_allowed:
-                final_quarantine_reason = f"Policy denied integration: {policy_reason_integrate}"
+                final_quarantine_reason = (
+                    f"Policy denied integration: {policy_reason_integrate}"
+                )
             elif not test_passed:
                 final_quarantine_reason = "Test failed during execution."
             elif coverage_increase < min_coverage_gain:
@@ -1247,9 +1328,7 @@ class GenerationOrchestrator:
             base = os.path.basename(full_src_test_path)
             now = datetime.now(timezone.utc)
             stamp = now.strftime("%Y%m%d%H%M%S")
-            quarantine_name = (
-                f"{os.path.splitext(base)[0]}_{stamp}_{RUN_ID}{os.path.splitext(base)[1]}"
-            )
+            quarantine_name = f"{os.path.splitext(base)[0]}_{stamp}_{RUN_ID}{os.path.splitext(base)[1]}"
             quarantine_dst_path = venv_sanitize_path(
                 os.path.join(QUARANTINE_DIR, quarantine_name), self.project_root
             )
@@ -1280,10 +1359,18 @@ class GenerationOrchestrator:
 
             quarantine_log_path = Path(str(quarantine_dst_path) + ".log")
             try:
-                async with aiofiles.open(quarantine_log_path, "w", encoding="utf-8") as f:
-                    await f.write(f"--- ATCO Quarantine Log for {target_identifier} ---\n")
-                    await f.write(f"Timestamp: {datetime.now(timezone.utc).isoformat()}\n")
-                    await f.write(f"Reason for Quarantine: {result_summary['reason']}\n\n")
+                async with aiofiles.open(
+                    quarantine_log_path, "w", encoding="utf-8"
+                ) as f:
+                    await f.write(
+                        f"--- ATCO Quarantine Log for {target_identifier} ---\n"
+                    )
+                    await f.write(
+                        f"Timestamp: {datetime.now(timezone.utc).isoformat()}\n"
+                    )
+                    await f.write(
+                        f"Reason for Quarantine: {result_summary['reason']}\n\n"
+                    )
                     await f.write("--- Execution Log ---\n")
                     await f.write(exec_log or "No execution log available.\n")
                     await f.write("\n--- Security Scan Issues (Full List) ---\n")
@@ -1406,7 +1493,9 @@ class GenerationOrchestrator:
             )
             os.makedirs(pr_stg_path_dir_full, exist_ok=True)
             staged_path = venv_sanitize_path(
-                os.path.join(pr_stg_path_dir_full, os.path.basename(full_src_test_path)),
+                os.path.join(
+                    pr_stg_path_dir_full, os.path.basename(full_src_test_path)
+                ),
                 self.project_root,
             )
             try:
@@ -1465,9 +1554,7 @@ class GenerationOrchestrator:
             if self.config.get("pr_integration", {}).get("enabled"):
                 try:
                     pr_branch_name = f"atco/add-tests-{target_identifier.replace('.', '-').replace(os.sep, '-')}-{RUN_ID}"
-                    pr_title = (
-                        f"ATCO: New tests for {target_identifier} ({language}) [Run: {RUN_ID}]"
-                    )
+                    pr_title = f"ATCO: New tests for {target_identifier} ({language}) [Run: {RUN_ID}]"
                     pr_description = (
                         f"Automated tests generated by ATCO for module/file `{target_identifier}` in `{language}`. "
                         f"Policy requires human review: {policy_reason_pr}\n\n"
@@ -1531,7 +1618,9 @@ class GenerationOrchestrator:
         dst_test_path_relative = os.path.join(
             self.suite_dir, os.path.basename(src_test_path_relative)
         )
-        full_dst_test_path = venv_sanitize_path(dst_test_path_relative, self.project_root)
+        full_dst_test_path = venv_sanitize_path(
+            dst_test_path_relative, self.project_root
+        )
 
         try:
             if os.path.isfile(full_dst_test_path):
@@ -1555,7 +1644,9 @@ class GenerationOrchestrator:
                     )
                     shutil.copyfile(full_src_test_path, full_dst_test_path)
                     result_summary["integration_status"] = "INTEGRATED_WITH_BACKUP"
-                    result_summary["reason"] = "New test integrated, original backed up."
+                    result_summary["reason"] = (
+                        "New test integrated, original backed up."
+                    )
                     log(f"Integrated new test for '{target_identifier}'.", level="INFO")
             else:
                 shutil.copyfile(full_src_test_path, full_dst_test_path)
@@ -1573,7 +1664,9 @@ class GenerationOrchestrator:
                 shutil.move(
                     full_src_test_path,
                     venv_sanitize_path(
-                        os.path.join(QUARANTINE_DIR, os.path.basename(full_src_test_path)),
+                        os.path.join(
+                            QUARANTINE_DIR, os.path.basename(full_src_test_path)
+                        ),
                         self.project_root,
                     ),
                 )
@@ -1654,7 +1747,9 @@ class GenerationOrchestrator:
         }
         sarif_file_name = f"atco_sarif_{os.path.basename(dst_test_path_relative).replace('.py', '').replace('.js', '').replace('.java', '')}_{RUN_ID}.json"
         sarif_path_relative = os.path.join(SARIF_EXPORT_DIR, sarif_file_name)
-        full_sarif_path = Path(venv_sanitize_path(sarif_path_relative, self.project_root))
+        full_sarif_path = Path(
+            venv_sanitize_path(sarif_path_relative, self.project_root)
+        )
         os.makedirs(full_sarif_path.parent, exist_ok=True)
 
         if await _maybe_await(_write_sarif_atomically(full_sarif_path, sarif_data)):
@@ -1687,7 +1782,9 @@ class GenerationOrchestrator:
             except Exception:
                 pass
         else:
-            result_summary["sarif_artifact_path"] = "Failed to export: could not write file"
+            result_summary["sarif_artifact_path"] = (
+                "Failed to export: could not write file"
+            )
             await _maybe_await(
                 audit_event(
                     "sarif_export_failure",
@@ -1708,13 +1805,19 @@ class GenerationOrchestrator:
                 self.knowledge_graph_client.update_module_metrics(
                     target_identifier,
                     {
-                        "last_test_generated_at": datetime.now(timezone.utc).isoformat(),
-                        "last_coverage_gain_percent": result_summary["coverage_increase_percent"],
+                        "last_test_generated_at": datetime.now(
+                            timezone.utc
+                        ).isoformat(),
+                        "last_coverage_gain_percent": result_summary[
+                            "coverage_increase_percent"
+                        ],
                         "generation_backend": language,
                         "integration_status": result_summary["integration_status"],
                         "integrated_test_hash": integrated_test_hash,
                         "security_issues": result_summary["security_issues_found"],
-                        "security_max_severity": result_summary["security_max_severity"],
+                        "security_max_severity": result_summary[
+                            "security_max_severity"
+                        ],
                         "mutation_score": result_summary["mutation_score_percent"],
                         "test_passed": result_summary["test_passed"],
                         "policy_compliant": integrate_allowed,
@@ -1752,7 +1855,9 @@ class GenerationOrchestrator:
                         "run_id": RUN_ID,
                         "module": target_identifier,
                         "status": result_summary["integration_status"],
-                        "coverage_increase": result_summary["coverage_increase_percent"],
+                        "coverage_increase": result_summary[
+                            "coverage_increase_percent"
+                        ],
                         "sarif_path": result_summary["sarif_artifact_path"],
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
@@ -1772,7 +1877,9 @@ class GenerationOrchestrator:
                     "run_id": RUN_ID,
                     "module": target_identifier,
                     "status": result_summary.get("integration_status"),
-                    "coverage_increase": result_summary.get("coverage_increase_percent"),
+                    "coverage_increase": result_summary.get(
+                        "coverage_increase_percent"
+                    ),
                     "sarif_path": result_summary.get("sarif_artifact_path"),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 },

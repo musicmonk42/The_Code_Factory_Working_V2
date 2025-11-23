@@ -17,35 +17,33 @@ Features:
 
 import abc
 import asyncio
-import os
-import re
-import time
 import hashlib
-import uuid
 import json
+import os
 import random
-import tempfile
-from typing import Any, Dict, Optional, List, Callable, Union, Awaitable
+import re
 import subprocess
+import tempfile
+import time
+import uuid
 from datetime import datetime, timezone
-from aiohttp import web
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # Gold Standard Imports
 import chromadb
+import tiktoken  # Imported for token counting
+from aiohttp import web
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-import tiktoken  # Imported for token counting
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
-from runner.runner_logging import logger, add_provenance
-from runner.runner_metrics import (
-    LLM_ERRORS_TOTAL,
-)
 from runner.runner_errors import LLMError
+from runner.runner_logging import add_provenance, logger
+from runner.runner_metrics import LLM_ERRORS_TOTAL
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # -----------------------------------
 
@@ -154,7 +152,10 @@ class MultiVectorDBManager:
             logger.debug(f"No files provided for {collection_name} collection")
             return
         try:
-            ids = [hashlib.sha256(content.encode()).hexdigest() for content in files.values()]
+            ids = [
+                hashlib.sha256(content.encode()).hexdigest()
+                for content in files.values()
+            ]
             documents = list(files.values())
             metadatas = [{"filename": filename} for filename in files.keys()]
             await asyncio.get_event_loop().run_in_executor(
@@ -163,7 +164,9 @@ class MultiVectorDBManager:
                     documents=documents, metadatas=metadatas, ids=ids
                 ),
             )
-            logger.info(f"Added/updated {len(files)} files in {collection_name} collection.")
+            logger.info(
+                f"Added/updated {len(files)} files in {collection_name} collection."
+            )
 
             # REFACTORED: Use add_provenance
             add_provenance(
@@ -202,11 +205,15 @@ class MultiVectorDBManager:
                 context_str = ""
                 for i, doc in enumerate(results["documents"][0]):
                     filename = results["metadatas"][0][i]["filename"]
-                    context_str += f"--- Relevant from {col_name}: {filename} ---\n{doc}\n\n"
+                    context_str += (
+                        f"--- Relevant from {col_name}: {filename} ---\n{doc}\n\n"
+                    )
                 contexts[col_name] = context_str
                 logger.debug(f"Queried {n_results} results from {col_name} collection")
             except Exception as e:
-                logger.error(f"Failed to query {col_name} collection: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to query {col_name} collection: {e}", exc_info=True
+                )
                 contexts[col_name] = f"Could not retrieve relevant context: {str(e)}"
 
         # REFACTORED: Use add_provenance
@@ -264,13 +271,17 @@ class AdvancedTemplateTracker:
     def _save(self):
         """Saves performance and version data to the JSON file atomically."""
         try:
-            temp_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json")
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w", delete=False, suffix=".json"
+            )
             json.dump(self.data, temp_file, indent=2)
             temp_file.close()
             os.replace(temp_file.name, self.db_path)
             logger.debug(f"Saved template performance data to {self.db_path}")
         except Exception as e:
-            logger.error(f"Failed to save template performance data: {e}", exc_info=True)
+            logger.error(
+                f"Failed to save template performance data: {e}", exc_info=True
+            )
 
     def log_performance(self, template_hash: str, scores: Dict[str, float]):
         """
@@ -284,8 +295,12 @@ class AdvancedTemplateTracker:
             }
         self.data["performance"][template_hash]["runs"] += 1
         for key, value in scores.items():
-            current_total = self.data["performance"][template_hash]["total_scores"].get(key, 0.0)
-            self.data["performance"][template_hash]["total_scores"][key] = current_total + value
+            current_total = self.data["performance"][template_hash]["total_scores"].get(
+                key, 0.0
+            )
+            self.data["performance"][template_hash]["total_scores"][key] = (
+                current_total + value
+            )
         self.data["performance"][template_hash]["history"].append(
             {"scores": scores, "timestamp": datetime.now(timezone.utc).isoformat()}
         )
@@ -319,14 +334,20 @@ class AdvancedTemplateTracker:
         Versions a template by saving it with a unique ID.
         """
         version = str(uuid.uuid4())[:8]
-        version_path = os.path.join(TEMPLATE_VERSION_DIR, f"{template_name}_{version}.jinja")
+        version_path = os.path.join(
+            TEMPLATE_VERSION_DIR, f"{template_name}_{version}.jinja"
+        )
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         with open(version_path, "w") as f:
             f.write(content)
         self.data["versions"].setdefault(template_name, []).append(version)
-        self.data["version_hashes"].setdefault(template_name, {})[version] = content_hash
+        self.data["version_hashes"].setdefault(template_name, {})[
+            version
+        ] = content_hash
         self._save()
-        logger.info(f"Versioned template {template_name} as {version} with hash {content_hash}.")
+        logger.info(
+            f"Versioned template {template_name} as {version} with hash {content_hash}."
+        )
 
         # REFACTORED: Use add_provenance
         add_provenance(
@@ -345,7 +366,9 @@ class AdvancedTemplateTracker:
         """
         Rolls back a template to a specified version.
         """
-        version_path = os.path.join(TEMPLATE_VERSION_DIR, f"{template_name}_{to_version}.jinja")
+        version_path = os.path.join(
+            TEMPLATE_VERSION_DIR, f"{template_name}_{to_version}.jinja"
+        )
         if os.path.exists(version_path):
             with open(version_path, "r") as f:
                 content = f.read()
@@ -353,7 +376,9 @@ class AdvancedTemplateTracker:
             with open(active_path, "w") as f:
                 f.write(content)
             content_hash = (
-                self.data["version_hashes"].get(template_name, {}).get(to_version, "unknown")
+                self.data["version_hashes"]
+                .get(template_name, {})
+                .get(to_version, "unknown")
             )
             logger.info(
                 f"Rolled back {template_name} to version {to_version} with hash {content_hash}."
@@ -374,7 +399,9 @@ class AdvancedTemplateTracker:
             logger.error(
                 f"Version {to_version} not found for {template_name}. Directory contents: {os.listdir(TEMPLATE_VERSION_DIR)}"
             )
-            raise FileNotFoundError(f"Version {to_version} not found for {template_name}.")
+            raise FileNotFoundError(
+                f"Version {to_version} not found for {template_name}."
+            )
 
     async def auto_evolve_template(
         self, template_name: str, current_content: str, performance_data: Dict
@@ -406,7 +433,9 @@ class AdvancedTemplateTracker:
             add_provenance(
                 {
                     "action": "ComplianceSensitiveData",
-                    "scrubbed_fields": {"prompt": {"pre_hash": pre_hash, "post_hash": post_hash}},
+                    "scrubbed_fields": {
+                        "prompt": {"pre_hash": pre_hash, "post_hash": post_hash}
+                    },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
@@ -424,7 +453,9 @@ class AdvancedTemplateTracker:
             new_content = response.get("content", current_content)
 
             if not new_content or new_content == current_content:
-                logger.warning(f"Auto-evolve returned no new content for {template_name}.")
+                logger.warning(
+                    f"Auto-evolve returned no new content for {template_name}."
+                )
                 LLM_ERRORS_TOTAL.labels(
                     provider="testgen_prompt",
                     model=model,
@@ -443,13 +474,17 @@ class AdvancedTemplateTracker:
                 ).inc()
             return current_content
 
-    def check_for_regression(self, template_hash: str, new_scores: Dict, primary_metric: str):
+    def check_for_regression(
+        self, template_hash: str, new_scores: Dict, primary_metric: str
+    ):
         """
         Checks for performance regression and initiates rollback if detected.
         """
         avg_score = self.get_avg_score(template_hash, primary_metric)
         if new_scores.get(primary_metric, 0) < avg_score * 0.9:  # 10% regression
-            logger.warning(f"Regression detected for {template_hash}. Initiating rollback.")
+            logger.warning(
+                f"Regression detected for {template_hash}. Initiating rollback."
+            )
             template_name = next(
                 (
                     name
@@ -519,7 +554,9 @@ class AdvancedTemplateTracker:
                     )
 
         self.observer = Observer()
-        self.observer.schedule(TemplateReloadHandler(self), TEMPLATE_DIR, recursive=True)
+        self.observer.schedule(
+            TemplateReloadHandler(self), TEMPLATE_DIR, recursive=True
+        )
         self.observer.start()
         logger.info(f"Started hot-reload observer for templates in: {TEMPLATE_DIR}")
 
@@ -560,7 +597,9 @@ class AdaptivePromptDirector:
     REFACTORED: Uses central runner logging.
     """
 
-    def __init__(self, multi_vdb: MultiVectorDBManager, tracker: AdvancedTemplateTracker):
+    def __init__(
+        self, multi_vdb: MultiVectorDBManager, tracker: AdvancedTemplateTracker
+    ):
         self.conversation_history = []
         self.multi_vdb = multi_vdb
         self.tracker = tracker
@@ -568,9 +607,13 @@ class AdaptivePromptDirector:
             loader=FileSystemLoader(TEMPLATE_DIR),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
         )  # Enable selective autoescape for XSS protection
-        self.human_review_callback: Optional[Callable[[str], Union[bool, Awaitable[bool]]]] = None
+        self.human_review_callback: Optional[
+            Callable[[str], Union[bool, Awaitable[bool]]]
+        ] = None
 
-    def set_human_review_callback(self, callback: Callable[[str], Union[bool, Awaitable[bool]]]):
+    def set_human_review_callback(
+        self, callback: Callable[[str], Union[bool, Awaitable[bool]]]
+    ):
         """Sets a callback for human-in-the-loop review (sync or async)."""
         self.human_review_callback = callback
         logger.info("Human review callback set.")
@@ -593,7 +636,9 @@ class AdaptivePromptDirector:
                 f"Failed to load template {template_name}: {e}. Directory contents: {os.listdir(TEMPLATE_DIR)}"
             )
             template_file_name = (
-                f"{template_name}.jinja" if not template_name.endswith(".jinja") else template_name
+                f"{template_name}.jinja"
+                if not template_name.endswith(".jinja")
+                else template_name
             )
             try:
                 path = os.path.join(TEMPLATE_DIR, template_file_name)
@@ -632,7 +677,9 @@ class AdaptivePromptDirector:
         )
         return self._get_template_content(candidate_hashes[selected_hash])
 
-    def get_rich_context(self, repo_path: str, code_files: Dict[str, str]) -> Dict[str, Any]:
+    def get_rich_context(
+        self, repo_path: str, code_files: Dict[str, str]
+    ) -> Dict[str, Any]:
         """
         Injects rich context like commits, coverage, etc.
         """
@@ -710,7 +757,9 @@ def register_prompt_builder(name: str, builder_class: type):
     Registers a custom AgenticPromptBuilder subclass.
     """
     if not issubclass(builder_class, AgenticPromptBuilder):
-        raise ValueError(f"Builder {builder_class} must be a subclass of AgenticPromptBuilder")
+        raise ValueError(
+            f"Builder {builder_class} must be a subclass of AgenticPromptBuilder"
+        )
     PROMPT_BUILDER_REGISTRY[name] = builder_class
     logger.info(f"Registered custom prompt builder: {name}")
 
@@ -753,7 +802,9 @@ class AgenticPromptBuilder(abc.ABC):
             add_provenance(
                 {
                     "action": "ComplianceSensitiveData",
-                    "scrubbed_fields": {"text": {"pre_hash": pre_hash, "post_hash": post_hash}},
+                    "scrubbed_fields": {
+                        "text": {"pre_hash": pre_hash, "post_hash": post_hash}
+                    },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
@@ -849,12 +900,16 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
         Gets candidate template files for the given prompt type, language, and framework.
         """
         candidates = []
-        if language in SUPPORTED_LANGUAGES and framework in SUPPORTED_FRAMEWORKS.get(language, []):
+        if language in SUPPORTED_LANGUAGES and framework in SUPPORTED_FRAMEWORKS.get(
+            language, []
+        ):
             candidates.append(f"{language}_{framework}_{prompt_type}.jinja")
         candidates.append(f"{language}_default_{prompt_type}.jinja")
         candidates.append(f"default_{prompt_type}.jinja")
 
-        valid_candidates = [c for c in candidates if os.path.exists(os.path.join(TEMPLATE_DIR, c))]
+        valid_candidates = [
+            c for c in candidates if os.path.exists(os.path.join(TEMPLATE_DIR, c))
+        ]
         logger.debug(
             f"Template candidates for {prompt_type}, {language}, {framework}: {valid_candidates}"
         )
@@ -868,20 +923,26 @@ class DefaultPromptBuilder(AgenticPromptBuilder):
         framework = kwargs.get("test_style", "pytest")
         primary_metric = kwargs.get("primary_metric", "coverage")
 
-        candidates = await self.get_template_candidates(prompt_type, language, framework)
+        candidates = await self.get_template_candidates(
+            prompt_type, language, framework
+        )
         template_str = self.director._select_template(candidates, primary_metric)
         template = Template(template_str)
         template_hash = hashlib.sha256(template_str.encode()).hexdigest()
 
         code_to_test = "\n".join(kwargs.get("code_files", {}).values())
-        rag_contexts = await self.director.multi_vdb.query_relevant_context(code_to_test)
+        rag_contexts = await self.director.multi_vdb.query_relevant_context(
+            code_to_test
+        )
         context_hashes = {
             k: hashlib.sha256(v.encode()).hexdigest() for k, v in rag_contexts.items()
         }
         kwargs["rag_contexts"] = rag_contexts
 
         repo_path = kwargs.get("repo_path", ".")
-        rich_context = self.director.get_rich_context(repo_path, kwargs.get("code_files", {}))
+        rich_context = self.director.get_rich_context(
+            repo_path, kwargs.get("code_files", {})
+        )
         kwargs["rich_context"] = rich_context
 
         sanitized_kwargs = kwargs.copy()
@@ -976,7 +1037,8 @@ def initialize_codebase_for_rag(repo_path: str):
                 elif file in ("requirements.txt", "package.json", "Cargo.toml"):
                     dep_files[filepath] = content
                 elif (
-                    file.lower().endswith((".log", ".txt")) and "fail" in content.lower()
+                    file.lower().endswith((".log", ".txt"))
+                    and "fail" in content.lower()
                 ):  # FIX: Added case-insensitivity check to endswith
                     content = content[-20000:]
                     failure_logs[filepath] = content
@@ -1014,7 +1076,9 @@ async def startup():
     logger.info("Initializing TestGen Prompt service components...")
     asyncio.create_task(start_health_server())
     logger.info("TestGen Prompt service components initialized.")
-    add_provenance({"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()})
+    add_provenance(
+        {"action": "Startup", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
 async def shutdown():
@@ -1022,7 +1086,9 @@ async def shutdown():
     logger.info("Shutting down TestGen Prompt service components...")
     await director.close()
     logger.info("TestGen Prompt service components shut down.")
-    add_provenance({"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()})
+    add_provenance(
+        {"action": "Shutdown", "timestamp": datetime.now(timezone.utc).isoformat()}
+    )
 
 
 async def example_human_review(prompt: str) -> bool:

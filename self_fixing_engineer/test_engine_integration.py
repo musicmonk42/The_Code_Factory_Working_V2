@@ -4,8 +4,9 @@ Integration tests for self_fixing_engineer engines.
 Tests basic integration and communication between key engines.
 """
 
-import pytest
 import asyncio
+
+import pytest
 
 
 class TestEngineIntegration:
@@ -156,7 +157,9 @@ class TestEngineArchitecture:
                         and asyncio.iscoroutinefunction(getattr(cls, name, None))
                     ]
                     # Should have at least some async methods
-                    assert len(async_methods) > 0, f"{class_name} should have async methods"
+                    assert (
+                        len(async_methods) > 0
+                    ), f"{class_name} should have async methods"
             except (ImportError, AttributeError):
                 # Some engines might not have the exact class name
                 pass

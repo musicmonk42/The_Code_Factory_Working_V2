@@ -6,11 +6,11 @@ Enhanced Code Health and Evolution Modules
 # Try to import gymnasium-dependent modules, use fallbacks if not available
 try:
     from .code_health_env import (
+        ActionType,
+        AsyncActionExecutor,
         CodeHealthEnv,
         EnvironmentConfig,
         SystemMetrics,
-        ActionType,
-        AsyncActionExecutor,
     )
 
     CODE_HEALTH_ENV_AVAILABLE = True
@@ -41,12 +41,12 @@ except ImportError as e:
 # It now uses the GeneticOptimizer class
 try:
     from .evolution import (
-        GeneticOptimizer,
+        DEAP_AVAILABLE,
         ConfigurationSpace,
         EvolutionConfig,
         FitnessEvaluator,
+        GeneticOptimizer,
         run_test_evaluation,
-        DEAP_AVAILABLE,
     )
 
     EVOLUTION_AVAILABLE = True

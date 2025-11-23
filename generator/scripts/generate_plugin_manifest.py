@@ -37,23 +37,24 @@ Key Generation:
 
 """
 
-import sys
-import os
+import argparse
 import hashlib
 import json
-import argparse
+import os
+import sys
 from datetime import datetime, timezone
 
 GENERATOR_VERSION = "2025.08.24-enterprise.1"
 
 # Optional signing
 try:
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PrivateKey,
         Ed25519PublicKey,
     )
-    from cryptography.hazmat.primitives import serialization
-    import base64
 
     HAS_CRYPTO = True
 except ImportError:
@@ -103,7 +104,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Enterprise plugin manifest generator and verifier"
     )
-    parser.add_argument("plugin_dir", nargs="?", help="Directory containing plugin .py files")
+    parser.add_argument(
+        "plugin_dir", nargs="?", help="Directory containing plugin .py files"
+    )
     parser.add_argument(
         "--sign",
         metavar="PRIVATE_KEY",
@@ -115,7 +118,9 @@ def main():
         default=None,
         help="Write manifest to given file (default: stdout)",
     )
-    parser.add_argument("--verify", metavar="MANIFEST", help="Verify manifest signature")
+    parser.add_argument(
+        "--verify", metavar="MANIFEST", help="Verify manifest signature"
+    )
     parser.add_argument(
         "--pubkey",
         metavar="PUBLIC_KEY",
@@ -133,7 +138,9 @@ def main():
         if not args.pubkey:
             error("Verification requires --pubkey argument.")
         if not HAS_CRYPTO:
-            error("cryptography package required for verification. (pip install cryptography)")
+            error(
+                "cryptography package required for verification. (pip install cryptography)"
+            )
         with open(args.verify) as f:
             doc = json.load(f)
         for key in ("manifest", "signed_at", "generator_version", "files"):
@@ -193,7 +200,9 @@ def main():
 
     if args.sign:
         if not HAS_CRYPTO:
-            error("cryptography package required for signing. (pip install cryptography)")
+            error(
+                "cryptography package required for signing. (pip install cryptography)"
+            )
         manifest_bytes = json.dumps(
             {
                 "manifest": manifest,

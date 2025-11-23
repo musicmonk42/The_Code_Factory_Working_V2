@@ -1,12 +1,12 @@
 # tests/test_import_fixer_integration.py
-import os
 import asyncio
 import importlib
 import importlib.util
+import os
+import sys
 import types
 from pathlib import Path
 from typing import Any, Dict, List
-import sys
 
 import pytest
 
@@ -27,7 +27,9 @@ def _install_core_stubs() -> None:
     # Create core_utils
     if "core_utils" not in sys.modules:
         fake_core_utils = types.SimpleNamespace(
-            alert_operator=lambda msg, level="INFO": print(f"[OPS ALERT - {level}] {msg}"),
+            alert_operator=lambda msg, level="INFO": print(
+                f"[OPS ALERT - {level}] {msg}"
+            ),
             scrub_secrets=lambda x: x,
         )
         sys.modules["core_utils"] = fake_core_utils
@@ -67,7 +69,9 @@ def _install_core_stubs() -> None:
         sys.modules["core_secrets"] = fake_core_secrets
         # Link it to the analyzer package
         analyzer_core_secrets = types.ModuleType("analyzer.core_secrets")
-        analyzer_core_secrets.SECRETS_MANAGER = sys.modules["core_secrets"].SECRETS_MANAGER
+        analyzer_core_secrets.SECRETS_MANAGER = sys.modules[
+            "core_secrets"
+        ].SECRETS_MANAGER
         sys.modules["analyzer.core_secrets"] = analyzer_core_secrets
 
 
@@ -160,7 +164,9 @@ class PluginProbe:
 # -----------------------------
 # Module import helpers
 # -----------------------------
-def _import_by_candidates(name_candidates: List[str], file_candidates: List[Path]) -> Any:
+def _import_by_candidates(
+    name_candidates: List[str], file_candidates: List[Path]
+) -> Any:
     for name in name_candidates:
         try:
             mod = importlib.import_module(name)
@@ -186,7 +192,9 @@ def _import_by_candidates(name_candidates: List[str], file_candidates: List[Path
             sys.modules[full_name] = mod
             spec.loader.exec_module(mod)
             return mod
-    raise ImportError(f"Could not import any of: {name_candidates} or files: {file_candidates}")
+    raise ImportError(
+        f"Could not import any of: {name_candidates} or files: {file_candidates}"
+    )
 
 
 def load_import_fixer_modules(test_dir: Path) -> Dict[str, Any]:
@@ -244,7 +252,9 @@ def make_tiny_project(base: Path) -> Path:
 
     # a -> b
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
-    (pkg / "a.py").write_text("import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n")
+    (pkg / "a.py").write_text(
+        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
+    )
     # b -> a (cycle) + dynamic import pattern + third-party import
     (pkg / "b.py").write_text(
         "import requests\n"
@@ -335,7 +345,9 @@ async def test_import_fixer_stack_end_to_end(tmp_path, monkeypatch):
     _patch_infra(monkeypatch, mods)
 
     # --- Sanity: engine should expose a top-level function we can call
-    assert hasattr(engine, "run_import_healer"), "import_fixer_engine.run_import_healer missing"
+    assert hasattr(
+        engine, "run_import_healer"
+    ), "import_fixer_engine.run_import_healer missing"
 
     # Execute the "healing" against the tiny project.
     result = await engine.run_import_healer(

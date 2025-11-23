@@ -1,38 +1,38 @@
-import sys
-import os
 import argparse
-import logging
-import subprocess
-import json
-import glob
-import traceback
-import asyncio
-import tempfile
-import uuid
-import time
-from typing import Dict, Any, Callable, List, Optional
-import hashlib
 import ast
-import shutil
-import tarfile  # portable packaging
+import asyncio
+import glob
+import hashlib
 import inspect  # for plugin runner signature introspection
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import tarfile  # portable packaging
+import tempfile
+import time
+import traceback
+import uuid
+from typing import Any, Callable, Dict, List, Optional
 
 if sys.version_info < (3, 10):
     sys.stderr.write("Python 3.10+ required.\n")
     sys.exit(98)
 
 try:
-    from prometheus_client import Gauge, Counter, Histogram, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
     prometheus_available = True
 except ImportError:
     prometheus_available = False
 
 try:
+    from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.exceptions import InvalidSignature
 
     crypto_available = True
 except ImportError:
@@ -40,7 +40,7 @@ except ImportError:
 
 # Centralized OpenTelemetry Imports
 # This will provide a no-op tracer if the library is unavailable.
-from ..otel_config import get_tracer, trace, extract, StatusCode
+from ..otel_config import StatusCode, extract, get_tracer, trace
 
 # Initialize tracer from the centralized configuration
 tracer = get_tracer(__name__)
@@ -49,12 +49,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from .. import core
-from .. import utils
-from ..dashboard import STREAMLIT_AVAILABLE, display_simulation_dashboard
+from .. import core, utils
 from ..audit_log import append_distributed_log
+from ..dashboard import STREAMLIT_AVAILABLE, display_simulation_dashboard
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s"
+)
 main_runner_logger = logging.getLogger("main_sim_runner")
 main_runner_logger.setLevel(logging.INFO)
 
@@ -66,8 +67,12 @@ if prometheus_available:
     remote_jobs_completed = Counter(
         "remote_jobs_completed_total", "Number of remote jobs completed successfully"
     )
-    remote_jobs_failed = Counter("remote_jobs_failed_total", "Number of remote jobs failed")
-    plugin_runs_total = Counter("plugin_runs_total", "Plugin runs", ["plugin", "status"])
+    remote_jobs_failed = Counter(
+        "remote_jobs_failed_total", "Number of remote jobs failed"
+    )
+    plugin_runs_total = Counter(
+        "plugin_runs_total", "Plugin runs", ["plugin", "status"]
+    )
     plugin_run_duration = Histogram(
         "plugin_run_duration_seconds", "Duration of plugin runs in seconds", ["plugin"]
     )
@@ -123,7 +128,9 @@ def _synthesize_kwargs_for_runner(
     os.makedirs(os.path.join(project_root, logs_dir_rel), exist_ok=True)
 
     # Sensible defaults
-    coverage_filename = f"{module_name.replace(':','_')}_{language_or_framework}_coverage.json"
+    coverage_filename = (
+        f"{module_name.replace(':','_')}_{language_or_framework}_coverage.json"
+    )
     log_filename = f"{module_name.replace(':','_')}_{language_or_framework}_run.log"
 
     defaults: Dict[str, Any] = {}
@@ -142,11 +149,17 @@ def _synthesize_kwargs_for_runner(
     if "extra_jest_args" in params:
         defaults["extra_jest_args"] = ["--verbose"]
     if "timeout_seconds" in params:
-        defaults["timeout_seconds"] = int(os.environ.get("PLUGIN_TIMEOUT_SECONDS", "600"))
+        defaults["timeout_seconds"] = int(
+            os.environ.get("PLUGIN_TIMEOUT_SECONDS", "600")
+        )
     if "log_max_bytes" in params:
-        defaults["log_max_bytes"] = int(os.environ.get("PLUGIN_LOG_MAX_BYTES", "262144"))
+        defaults["log_max_bytes"] = int(
+            os.environ.get("PLUGIN_LOG_MAX_BYTES", "262144")
+        )
     if "log_artifact_path_relative" in params:
-        defaults["log_artifact_path_relative"] = os.path.join(logs_dir_rel, log_filename)
+        defaults["log_artifact_path_relative"] = os.path.join(
+            logs_dir_rel, log_filename
+        )
 
     # Generic fallbacks some plugins may expect
     if "testfile" in params and getattr(args, "testfile", None):
@@ -169,14 +182,20 @@ def _plugin_register_adapter(module_name: str):
         register_func(language="javascript", runner=<fn>, version="1.0.0", ...)
     """
 
-    def adapter(language_or_framework=None, runner_info: Dict[str, Any] | None = None, **kw):
+    def adapter(
+        language_or_framework=None, runner_info: Dict[str, Any] | None = None, **kw
+    ):
         # Support both positional and keyword-based calls
         if language_or_framework is None:
-            language_or_framework = kw.get("language") or kw.get("framework") or kw.get("name")
+            language_or_framework = (
+                kw.get("language") or kw.get("framework") or kw.get("name")
+            )
         if runner_info is None:
             # Runner info may be passed as discrete kwargs; normalize
             runner_info = {
-                "runner_function": kw.get("runner") or kw.get("func") or kw.get("entrypoint_func"),
+                "runner_function": kw.get("runner")
+                or kw.get("func")
+                or kw.get("entrypoint_func"),
                 "version": kw.get("version", "unknown"),
                 "execution_mode": kw.get("execution_mode", "local"),
             }
@@ -238,12 +257,16 @@ def verify_plugin_signature(code_path: str, sig_path: str) -> bool:
 
     public_key_path = os.environ.get("PUBLIC_KEY_PATH")
     if not public_key_path or not os.path.isfile(public_key_path):
-        main_runner_logger.info("PUBLIC_KEY_PATH not set; skipping signature verification")
+        main_runner_logger.info(
+            "PUBLIC_KEY_PATH not set; skipping signature verification"
+        )
         return True
 
     try:
         with open(public_key_path, "rb") as f:
-            public_key = serialization.load_pem_public_key(f.read(), backend=default_backend())
+            public_key = serialization.load_pem_public_key(
+                f.read(), backend=default_backend()
+            )
         with open(code_path, "rb") as f:
             code_bytes = f.read()
 
@@ -318,7 +341,9 @@ def discover_and_register_plugin_entrypoints():
             sig_file = plugin_file + ".sig"
             if os.path.exists(sig_file):
                 if not verify_plugin_signature(plugin_file, sig_file):
-                    raise ValueError(f"Signature verification failed for plugin '{module_name}'")
+                    raise ValueError(
+                        f"Signature verification failed for plugin '{module_name}'"
+                    )
 
             spec = importlib.util.spec_from_file_location(module_name, plugin_file)
             if spec is None:
@@ -332,7 +357,9 @@ def discover_and_register_plugin_entrypoints():
             ):
                 try:
                     # Provide an adapter that matches plugins expecting (language_or_framework, runner_info)
-                    module.register_plugin_entrypoints(_plugin_register_adapter(module_name))
+                    module.register_plugin_entrypoints(
+                        _plugin_register_adapter(module_name)
+                    )
                 except TypeError:
                     # Fallback: if plugin expects our simple register_entrypoint signature
                     module.register_plugin_entrypoints(register_entrypoint)
@@ -376,7 +403,9 @@ def validate_deployment_or_exit(remote: bool = False):
     """
 
     log_path = os.environ.get("VALIDATION_LOG_PATH", "validation.log")
-    skip_local = os.environ.get("SIM_RUNNER_SKIP_VALIDATION_FOR_LOCAL", "true").lower() in (
+    skip_local = os.environ.get(
+        "SIM_RUNNER_SKIP_VALIDATION_FOR_LOCAL", "true"
+    ).lower() in (
         "1",
         "true",
         "yes",
@@ -405,7 +434,9 @@ def validate_deployment_or_exit(remote: bool = False):
             "AWS_SECRET_ACCESS_KEY",
             "SECCOMP_PROFILE",
         ]
-        effective_required = required_env if remote else ["OPA_URL", "METALEARNER_MODEL_URI"]
+        effective_required = (
+            required_env if remote else ["OPA_URL", "METALEARNER_MODEL_URI"]
+        )
         missing_env = [v for v in effective_required if not os.environ.get(v)]
         if missing_env:
             err_msg = (
@@ -424,12 +455,16 @@ def validate_deployment_or_exit(remote: bool = False):
         # Check seccomp profile path existence (both modes)
         seccomp_profile = os.environ.get("SECCOMP_PROFILE")
         if seccomp_profile and not os.path.isfile(seccomp_profile):
-            err_msg = f"\n[DEPLOYMENT ERROR] Seccomp profile not found: {seccomp_profile}\n"
+            err_msg = (
+                f"\n[DEPLOYMENT ERROR] Seccomp profile not found: {seccomp_profile}\n"
+            )
             sys.stderr.write(err_msg)
             validation_log.write(err_msg)
             sys.exit(99)
         elif seccomp_profile:
-            log_validation(f"[VALIDATION PASS] Seccomp profile found: {seccomp_profile}")
+            log_validation(
+                f"[VALIDATION PASS] Seccomp profile found: {seccomp_profile}"
+            )
         else:
             log_validation(
                 "[VALIDATION WARN] SECCOMP_PROFILE not set; kernel sandboxing not configured."
@@ -457,7 +492,9 @@ def validate_deployment_or_exit(remote: bool = False):
                 test_key = f"validation/{uuid.uuid4().hex}.txt"
                 s3.put_object(Bucket=bucket, Key=test_key, Body=b"validation test")
                 s3.delete_object(Bucket=bucket, Key=test_key)
-                log_validation(f"[VALIDATION PASS] S3 bucket '{bucket}' accessible and writable.")
+                log_validation(
+                    f"[VALIDATION PASS] S3 bucket '{bucket}' accessible and writable."
+                )
             except Exception as e:
                 err_msg = f"\n[DEPLOYMENT ERROR] Cannot access or write to S3 bucket '{os.environ.get('SIM_RUNNER_BUCKET','')}'. Ensure s3:HeadBucket, s3:PutObject, s3:DeleteObject permissions. Error: {e}\n"
                 sys.stderr.write(err_msg)
@@ -476,7 +513,9 @@ def validate_deployment_or_exit(remote: bool = False):
                     if resp.status_code == 200:
                         log_validation("[VALIDATION PASS] OPA server healthy.")
                         break
-                    raise Exception(f"OPA health check failed: status {resp.status_code}")
+                    raise Exception(
+                        f"OPA health check failed: status {resp.status_code}"
+                    )
                 except Exception as e:
                     if i == attempts - 1:
                         if remote:
@@ -501,9 +540,13 @@ def validate_deployment_or_exit(remote: bool = False):
             validation_log.write(err_msg)
             sys.exit(99)
         else:
-            log_validation(f"[VALIDATION PASS] MetaLearner model URI valid: {model_uri}")
+            log_validation(
+                f"[VALIDATION PASS] MetaLearner model URI valid: {model_uri}"
+            )
 
-    print("[DEPLOYMENT VALIDATION] All environment and infra checks passed for this mode.")
+    print(
+        "[DEPLOYMENT VALIDATION] All environment and infra checks passed for this mode."
+    )
 
 
 # --- Notification System ---
@@ -512,9 +555,10 @@ def send_notification(event_type: str, message: str, dry_run: bool = False):
         main_runner_logger.info(f"Dry-run notification: [{event_type}] {message}")
         return
 
-    import requests
     import smtplib
     from email.mime.text import MIMEText
+
+    import requests
 
     slack_webhook = os.environ.get("NOTIFY_SLACK_WEBHOOK")
     smtp_server = os.environ.get("SMTP_SERVER")
@@ -525,7 +569,9 @@ def send_notification(event_type: str, message: str, dry_run: bool = False):
 
     if slack_webhook:
         try:
-            requests.post(slack_webhook, json={"text": f"[{event_type}] {message}"}, timeout=5)
+            requests.post(
+                slack_webhook, json={"text": f"[{event_type}] {message}"}, timeout=5
+            )
         except Exception as e:
             main_runner_logger.error(f"Slack notification failed: {e}")
             if prometheus_available:
@@ -558,7 +604,9 @@ def send_notification(event_type: str, message: str, dry_run: bool = False):
                     "severity": "error",
                 },
             }
-            requests.post("https://events.pagerduty.com/v2/enqueue", json=payload, timeout=5)
+            requests.post(
+                "https://events.pagerduty.com/v2/enqueue", json=payload, timeout=5
+            )
         except Exception as e:
             main_runner_logger.error(f"PagerDuty notification failed: {e}")
             if prometheus_available:
@@ -604,7 +652,9 @@ def check_rbac_permission(actor: str, action: str, resource: str) -> bool:
         return result
 
 
-def enforce_kernel_sandboxing(profile_path: str, cgroup: str = None, apparmor_profile: str = None):
+def enforce_kernel_sandboxing(
+    profile_path: str, cgroup: str = None, apparmor_profile: str = None
+):
     if profile_path and os.path.isfile(profile_path):
         with open(profile_path, "rb") as f:
             profile_hash = hashlib.sha256(f.read()).hexdigest()
@@ -688,8 +738,9 @@ def _execute_remotely(
 ) -> Dict[str, Any]:
     tar_path = None
     try:
-        from kubernetes import client, config as k8s_config
         import boto3
+        from kubernetes import client
+        from kubernetes import config as k8s_config
 
         k8s_config.load_kube_config()
         batch_v1 = client.BatchV1Api()
@@ -718,15 +769,20 @@ def _execute_remotely(
         container_image = job_config["container_image"]
         resources = job_config["resources"]
         env_vars = [
-            client.V1EnvVar(name=k, value=str(v)) for k, v in job_config.get("env", {}).items()
+            client.V1EnvVar(name=k, value=str(v))
+            for k, v in job_config.get("env", {}).items()
         ]
         env_vars.append(client.V1EnvVar(name="SIM_ARTIFACT_URL", value=artifact_url))
-        env_vars.append(client.V1EnvVar(name="AWS_REGION", value=os.environ["AWS_REGION"]))
+        env_vars.append(
+            client.V1EnvVar(name="AWS_REGION", value=os.environ["AWS_REGION"])
+        )
         env_vars.append(client.V1EnvVar(name="JOB_ID", value=job_id))
 
         current_span = trace.get_current_span()
         ctx = current_span.get_span_context()
-        traceparent = f"00-{format(ctx.trace_id, '032x')}-{format(ctx.span_id, '016x')}-01"
+        traceparent = (
+            f"00-{format(ctx.trace_id, '032x')}-{format(ctx.span_id, '016x')}-01"
+        )
         env_vars.append(client.V1EnvVar(name="TRACEPARENT", value=traceparent))
 
         job = client.V1Job(
@@ -747,7 +803,9 @@ def _execute_remotely(
                             )
                         ],
                         restart_policy="Never",
-                        service_account_name=job_config.get("service_account", "sim-job-sa"),
+                        service_account_name=job_config.get(
+                            "service_account", "sim-job-sa"
+                        ),
                     ),
                 ),
                 backoff_limit=job_config.get("retries", 2),
@@ -770,16 +828,22 @@ def _execute_remotely(
         while True:
             # Timeout check
             if time.time() - start > max_wait:
-                main_runner_logger.error(f"Job '{job_name}' timed out after {max_wait} seconds.")
+                main_runner_logger.error(
+                    f"Job '{job_name}' timed out after {max_wait} seconds."
+                )
                 if notify_func:
                     notify_func("simulation_failure", f"Job {job_name} timed out.")
                 remote_jobs_failed.inc() if prometheus_available else None
                 return {"status": "error", "job_name": job_name, "details": "timeout"}
 
-            job_status = retry_op(lambda: batch_v1.read_namespaced_job_status(job_name, namespace))
+            job_status = retry_op(
+                lambda: batch_v1.read_namespaced_job_status(job_name, namespace)
+            )
             # Stream logs approximation by polling
             try:
-                pods = core_v1.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
+                pods = core_v1.list_namespaced_pod(
+                    namespace, label_selector=f"job-name={job_name}"
+                )
                 if pods.items:
                     pod_name = pods.items[0].metadata.name
                     current_log = core_v1.read_namespaced_pod_log(pod_name, namespace)
@@ -799,7 +863,8 @@ def _execute_remotely(
                 or succeeded > 0
             )
             has_failed = (
-                any(c.type == "Failed" and c.status == "True" for c in conditions) or failed > 0
+                any(c.type == "Failed" and c.status == "True" for c in conditions)
+                or failed > 0
             )
 
             if completed:
@@ -810,7 +875,9 @@ def _execute_remotely(
                     remote_jobs_completed.inc()
                 result_key = f"jobs/{job_id}/result.json"
                 try:
-                    result_obj = retry_op(lambda: s3.get_object(Bucket=bucket, Key=result_key))
+                    result_obj = retry_op(
+                        lambda: s3.get_object(Bucket=bucket, Key=result_key)
+                    )
                     result_json = json.loads(result_obj["Body"].read())
                     return {
                         "status": "completed",
@@ -864,7 +931,9 @@ def run_plugin_in_sandbox(
 ) -> Dict[str, Any]:
     if sandbox:
         enforce_kernel_sandboxing(
-            profile_path=os.environ.get("SECCOMP_PROFILE", "/etc/seccomp/sim_default.json"),
+            profile_path=os.environ.get(
+                "SECCOMP_PROFILE", "/etc/seccomp/sim_default.json"
+            ),
             cgroup=os.environ.get("PLUGIN_CGROUP"),
             apparmor_profile=os.environ.get("APPARMOR_PROFILE"),
         )
@@ -897,14 +966,16 @@ def aggregate_simulation_results(
         aggregated_result[f"{plugin_name}_version"] = _registered_plugin_info.get(
             plugin_name, {}
         ).get("version", "unknown")
-        aggregated_result[f"{plugin_name}_hash"] = _registered_plugin_info.get(plugin_name, {}).get(
-            "hash", "unknown"
-        )
+        aggregated_result[f"{plugin_name}_hash"] = _registered_plugin_info.get(
+            plugin_name, {}
+        ).get("hash", "unknown")
         res = p_res.get("result", {}) or {}
 
         # Expose useful artifact paths if present
         if "coverage_report_path" in res:
-            aggregated_result[f"{plugin_name}_coverage_report"] = res["coverage_report_path"]
+            aggregated_result[f"{plugin_name}_coverage_report"] = res[
+                "coverage_report_path"
+            ]
         junit_path = res.get("junit_report_path") or res.get("junit_xml_path")
         if not junit_path:
             jpr = res.get("jest_project_root")
@@ -925,7 +996,10 @@ def aggregate_simulation_results(
             elif isinstance(res.get("exit_code"), int) and res.get("exit_code") != 0:
                 status = "ERROR"
                 plugin_error = True
-            elif isinstance(res.get("numFailedTests"), int) and res.get("numFailedTests", 0) > 0:
+            elif (
+                isinstance(res.get("numFailedTests"), int)
+                and res.get("numFailedTests", 0) > 0
+            ):
                 status = "ERROR"
                 plugin_error = True
             else:
@@ -944,11 +1018,15 @@ def aggregate_simulation_results(
             aggregated_result.setdefault("errors", []).append(
                 {
                     "source": f"plugin_{plugin_name}",
-                    "details": res.get("exception") or res.get("reason") or "Plugin reported error",
+                    "details": res.get("exception")
+                    or res.get("reason")
+                    or "Plugin reported error",
                 }
             )
         elif status == "FINDINGS_DETECTED" and "security_audit" in plugin_name.lower():
-            aggregated_result.setdefault("security_findings", []).extend(res.get("findings", []))
+            aggregated_result.setdefault("security_findings", []).extend(
+                res.get("findings", [])
+            )
 
     main_runner_logger.info("Aggregated core and plugin simulation results.")
     return aggregated_result
@@ -976,7 +1054,9 @@ def main():
         notification_failures = Counter(
             "notification_failures_total", "Failed notifications", ["channel"]
         )
-        simulation_duration = Gauge("simulation_duration_seconds", "Duration of simulation runs")
+        simulation_duration = Gauge(
+            "simulation_duration_seconds", "Duration of simulation runs"
+        )
         simulation_errors = Counter("simulation_errors_total", "Simulation errors")
 
     # Discover plugins BEFORE creating the argument parser
@@ -991,14 +1071,20 @@ def main():
         help="Session name to auto-discover test/code files.",
         required=False,
     )
-    parser.add_argument("--testfile", help="Path to generated test file.", required=False)
-    parser.add_argument("--codefile", help="Path to candidate code file to test.", required=False)
+    parser.add_argument(
+        "--testfile", help="Path to generated test file.", required=False
+    )
+    parser.add_argument(
+        "--codefile", help="Path to candidate code file to test.", required=False
+    )
     parser.add_argument(
         "--agentic",
         action="store_true",
         help="Enable quantum+RL multi-agent swarm mode.",
     )
-    parser.add_argument("--diff", nargs=2, help="Show a unified diff between two files and exit.")
+    parser.add_argument(
+        "--diff", nargs=2, help="Show a unified diff between two files and exit."
+    )
     parser.add_argument(
         "--summary", action="store_true", help="Print summary only (suppress logs)."
     )
@@ -1023,7 +1109,9 @@ def main():
         help="Container image for remote job.",
         default="your-org/sim-runner:latest",
     )
-    parser.add_argument("--resource-cpu", help="CPU request/limit for remote job.", default="2")
+    parser.add_argument(
+        "--resource-cpu", help="CPU request/limit for remote job.", default="2"
+    )
     parser.add_argument(
         "--resource-mem", help="Memory request/limit for remote job.", default="4Gi"
     )
@@ -1036,7 +1124,9 @@ def main():
         type=int,
         help="Maximum allowed runtime for the simulation (seconds).",
     )
-    parser.add_argument("--retries", type=int, default=2, help="Number of retries for remote jobs.")
+    parser.add_argument(
+        "--retries", type=int, default=2, help="Number of retries for remote jobs."
+    )
     parser.add_argument(
         "--notify",
         action="store_true",
@@ -1047,7 +1137,9 @@ def main():
     parser.add_argument(
         "--run-plugin",
         choices=(
-            list(_registered_plugin_entrypoints.keys()) if _registered_plugin_entrypoints else None
+            list(_registered_plugin_entrypoints.keys())
+            if _registered_plugin_entrypoints
+            else None
         ),
         help=f"Run a specific plugin's main entrypoint. Available plugins: {', '.join(sorted(_registered_plugin_entrypoints.keys())) if _registered_plugin_entrypoints else 'None'}",
         required=False,
@@ -1058,7 +1150,9 @@ def main():
         nargs=argparse.REMAINDER,
         help="Arbitrary arguments to pass to the selected plugin entrypoint as key=value pairs.",
     )
-    parser.add_argument("--validate", action="store_true", help="Validate deployment and exit.")
+    parser.add_argument(
+        "--validate", action="store_true", help="Validate deployment and exit."
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -1107,7 +1201,9 @@ def main():
         if STREAMLIT_AVAILABLE:
             display_simulation_dashboard(plugin_load_errors=plugin_load_errors)
         else:
-            main_runner_logger.error("Streamlit is not installed. Cannot launch dashboard.")
+            main_runner_logger.error(
+                "Streamlit is not installed. Cannot launch dashboard."
+            )
             sys.exit(1)
         sys.exit(0)
 
@@ -1124,7 +1220,9 @@ def main():
 
     actor = os.environ.get("SIM_USER", "system")
     if not check_rbac_permission(actor, "run_simulation", "main_sim_runner"):
-        main_runner_logger.error(f"RBAC policy denied action 'run_simulation' for user '{actor}'")
+        main_runner_logger.error(
+            f"RBAC policy denied action 'run_simulation' for user '{actor}'"
+        )
         sys.exit(1)
 
     # OTEL context propagation
@@ -1150,7 +1248,9 @@ def main():
         if args.run_plugin:
             plugin_name = args.run_plugin
             if plugin_name not in _registered_plugin_entrypoints:
-                main_runner_logger.error(f"Plugin '{plugin_name}' not found or not registered.")
+                main_runner_logger.error(
+                    f"Plugin '{plugin_name}' not found or not registered."
+                )
                 notify_if_enabled("plugin_error", f"Plugin '{plugin_name}' not found.")
                 sys.exit(1)
             if args.dry_run:
@@ -1172,7 +1272,9 @@ def main():
                         s3 = boto3.client("s3")
                         bucket = os.environ["SIM_RUNNER_BUCKET"]
                         key = f"jobs/{os.environ['JOB_ID']}/result.json"
-                        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
+                        with tempfile.NamedTemporaryFile(
+                            "w", delete=False, encoding="utf-8"
+                        ) as tf:
                             json.dump(plugin_output, tf)
                             temp_path = tf.name
                         try:
@@ -1195,7 +1297,9 @@ def main():
                         s3 = boto3.client("s3")
                         bucket = os.environ["SIM_RUNNER_BUCKET"]
                         key = f"jobs/{os.environ['JOB_ID']}/result.json"
-                        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
+                        with tempfile.NamedTemporaryFile(
+                            "w", delete=False, encoding="utf-8"
+                        ) as tf:
                             json.dump(plugin_output, tf)
                             temp_path = tf.name
                         try:
@@ -1222,8 +1326,12 @@ def main():
                     discovered_test, discovered_code = discovered[0], discovered[1]
                 # dict path
                 elif isinstance(discovered, dict):
-                    discovered_test = discovered.get("test") or discovered.get("test_file")
-                    discovered_code = discovered.get("code") or discovered.get("code_file")
+                    discovered_test = discovered.get("test") or discovered.get(
+                        "test_file"
+                    )
+                    discovered_code = discovered.get("code") or discovered.get(
+                        "code_file"
+                    )
                 # object with attrs
                 else:
                     discovered_test = getattr(discovered, "test", None) or getattr(
@@ -1312,7 +1420,9 @@ def main():
                             wrapper_res = run_plugin_in_sandbox(
                                 plugin_name, args, sandbox=not args.insecure
                             )
-                            plugin_result = wrapper_res.get("plugin_output", wrapper_res)
+                            plugin_result = wrapper_res.get(
+                                "plugin_output", wrapper_res
+                            )
                         else:
                             plugin_result = entrypoint(args)
 
@@ -1320,7 +1430,9 @@ def main():
                             {"plugin_name": plugin_name, "result": plugin_result}
                         )
                         if prometheus_available:
-                            plugin_runs_total.labels(plugin=plugin_name, status="success").inc()
+                            plugin_runs_total.labels(
+                                plugin=plugin_name, status="success"
+                            ).inc()
                     except Exception as e:
                         span = trace.get_current_span()
                         span.record_exception(e)
@@ -1336,8 +1448,12 @@ def main():
                             }
                         )
                         if prometheus_available:
-                            plugin_runs_total.labels(plugin=plugin_name, status="error").inc()
-                        notify_if_enabled("plugin_error", f"Plugin {plugin_name} failed: {e}")
+                            plugin_runs_total.labels(
+                                plugin=plugin_name, status="error"
+                            ).inc()
+                        notify_if_enabled(
+                            "plugin_error", f"Plugin {plugin_name} failed: {e}"
+                        )
                     finally:
                         if prometheus_available:
                             plugin_run_duration.labels(plugin=plugin_name).observe(
@@ -1365,7 +1481,9 @@ def main():
                 s3 = boto3.client("s3")
                 bucket = os.environ["SIM_RUNNER_BUCKET"]
                 key = f"jobs/{os.environ['JOB_ID']}/result.json"
-                with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
+                with tempfile.NamedTemporaryFile(
+                    "w", delete=False, encoding="utf-8"
+                ) as tf:
                     json.dump(final_result, tf)
                     temp_path = tf.name
                 try:
@@ -1389,11 +1507,15 @@ def main():
                 else:
                     print(f"\033[32mResults saved to {out_path}\033[0m\n")
                     print("\033[35m" + utils.summarize_result(final_result) + "\033[0m")
-                    if "flaky_plot" in final_result and os.path.exists(final_result["flaky_plot"]):
+                    if "flaky_plot" in final_result and os.path.exists(
+                        final_result["flaky_plot"]
+                    ):
                         print(
                             f"\033[36mFlakiness plot saved to {final_result['flaky_plot']}\033[0m"
                         )
-                    if args.agentic and final_result.get("healer", {}).get("llm_summary"):
+                    if args.agentic and final_result.get("healer", {}).get(
+                        "llm_summary"
+                    ):
                         print(
                             f"\033[1;35m[AI Healer Suggestion]\n{final_result['healer']['llm_summary']}\033[0m"
                         )
@@ -1426,9 +1548,13 @@ def main():
                 "env": env_vars,
                 "args": sys.argv[1:],
                 "retries": args.retries,
-                "service_account": os.environ.get("SIM_RUNNER_SERVICE_ACCOUNT", "sim-job-sa"),
+                "service_account": os.environ.get(
+                    "SIM_RUNNER_SERVICE_ACCOUNT", "sim-job-sa"
+                ),
                 "ttl_after_finished": 600,
-                "max_wait_seconds": int(os.environ.get("SIM_RUNNER_REMOTE_TIMEOUT", "1800")),
+                "max_wait_seconds": int(
+                    os.environ.get("SIM_RUNNER_REMOTE_TIMEOUT", "1800")
+                ),
             }
             package_dir = current_dir
             main_runner_logger.debug(
@@ -1439,11 +1565,17 @@ def main():
                 main_runner_logger.error(f"Remote execution failed: {remote_result}")
                 notify_if_enabled("remote_error", f"Remote job failed: {remote_result}")
                 sys.exit(2)
-            print(json.dumps(remote_result, indent=2))  # Avoid color in remote CLI context
+            print(
+                json.dumps(remote_result, indent=2)
+            )  # Avoid color in remote CLI context
             sys.exit(0)
         elif args.watch:
             utils.watch_mode(
-                ([test_file_path, code_file_path] if code_file_path else [test_file_path]),
+                (
+                    [test_file_path, code_file_path]
+                    if code_file_path
+                    else [test_file_path]
+                ),
                 run_and_report,
             )
         else:

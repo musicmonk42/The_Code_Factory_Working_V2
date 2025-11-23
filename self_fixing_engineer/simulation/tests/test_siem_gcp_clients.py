@@ -5,14 +5,15 @@ Tests GCP Cloud Logging client functionality including health checks,
 log sending, querying, and batch operations.
 """
 
-import pytest
 import asyncio
+import datetime
 import os
 import sys
-import datetime
 import uuid
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()
@@ -202,7 +203,9 @@ class GcpLoggingClient(BaseSIEMClient):
             gcp_config_data = config.get("gcplogging", config.get("gcp_logging", {}))
             validated_config = GcpLoggingConfig(**gcp_config_data)
         except (ValueError, KeyError) as e:
-            raise SIEMClientConfigurationError(f"Invalid GCP Logging config: {e}", self.client_type)
+            raise SIEMClientConfigurationError(
+                f"Invalid GCP Logging config: {e}", self.client_type
+            )
 
         self.project_id = validated_config.project_id
         self.log_name = validated_config.log_name
@@ -216,7 +219,9 @@ class GcpLoggingClient(BaseSIEMClient):
         self._temp_credentials_path = None
         self._creds_lock = asyncio.Lock()
 
-        self.logger.extra.update({"project_id": self.project_id, "log_name": self.log_name})
+        self.logger.extra.update(
+            {"project_id": self.project_id, "log_name": self.log_name}
+        )
 
     async def _ensure_credentials_loaded(self):
         """Load credentials from secrets if needed."""
@@ -232,12 +237,16 @@ class GcpLoggingClient(BaseSIEMClient):
                 if provider == "gcp":
                     backend = GCPSecretManagerBackend(self.project_id)
                     await backend.get_secret(self.credentials_secret_id)
-                    self._temp_credentials_path = f"/tmp/gcp_sa_key_{uuid.uuid4().hex}.json"
+                    self._temp_credentials_path = (
+                        f"/tmp/gcp_sa_key_{uuid.uuid4().hex}.json"
+                    )
                     self.credentials_path = self._temp_credentials_path
                     await backend.close()
                     return
 
-            raise SIEMClientConfigurationError("Failed to load credentials", self.client_type)
+            raise SIEMClientConfigurationError(
+                "Failed to load credentials", self.client_type
+            )
 
     def _encoded_log_id(self):
         """URL-encode log name."""
@@ -271,11 +280,15 @@ class GcpLoggingClient(BaseSIEMClient):
         except NotFound as e:
             raise SIEMClientConfigurationError(f"Not found: {e}", self.client_type)
         except Exception as e:
-            raise SIEMClientConnectivityError(f"Health check failed: {e}", self.client_type)
+            raise SIEMClientConnectivityError(
+                f"Health check failed: {e}", self.client_type
+            )
 
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
         """Send single log entry."""
-        success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)
+        success, msg, failed = await self.send_logs(
+            [log_entry], validate_schema, correlation_id
+        )
         if success:
             return True, "Log sent to GCP Cloud Logging."
         if failed:
@@ -313,7 +326,9 @@ class GcpLoggingClient(BaseSIEMClient):
             )
         return True, f"Batch of {len(log_entries)} logs sent to GCP Cloud Logging.", []
 
-    async def query_logs(self, query_string, time_range="24h", limit=100, correlation_id=None):
+    async def query_logs(
+        self, query_string, time_range="24h", limit=100, correlation_id=None
+    ):
         """Query logs from GCP."""
         await self._get_gcp_client()
 
@@ -416,10 +431,14 @@ class TestConfiguration:
 
         # Invalid project ID format
         with pytest.raises(ValueError):
-            GcpLoggingConfig(project_id="INVALID-PROJECT", credentials_secret_id="secret")
+            GcpLoggingConfig(
+                project_id="INVALID-PROJECT", credentials_secret_id="secret"
+            )
 
         # Valid project ID
-        config = GcpLoggingConfig(project_id="test-project-123", credentials_secret_id="secret")
+        config = GcpLoggingConfig(
+            project_id="test-project-123", credentials_secret_id="secret"
+        )
         assert config.project_id == "test-project-123"
 
     def test_production_requires_credentials(self):
@@ -486,7 +505,9 @@ class TestHealthCheck:
         client = GcpLoggingClient(default_config)
 
         # Force health check to fail
-        with patch.object(client, "_get_gcp_client", side_effect=Exception("Connection failed")):
+        with patch.object(
+            client, "_get_gcp_client", side_effect=Exception("Connection failed")
+        ):
             with pytest.raises(SIEMClientConnectivityError):
                 await client.health_check()
 
@@ -513,7 +534,9 @@ class TestLogSending:
         client._logging_client = mock_gcp_client
 
         log_entries = [{"message": f"Log {i}"} for i in range(100)]
-        success, message, failed = await client.send_logs(log_entries, validate_schema=False)
+        success, message, failed = await client.send_logs(
+            log_entries, validate_schema=False
+        )
 
         assert success is True
         assert "Batch of 100 logs sent" in message
@@ -527,7 +550,9 @@ class TestLogSending:
 
         # Create 2500 logs (should be 3 batches)
         log_entries = [{"message": f"Log {i}"} for i in range(2500)]
-        success, message, failed = await client.send_logs(log_entries, validate_schema=False)
+        success, message, failed = await client.send_logs(
+            log_entries, validate_schema=False
+        )
 
         assert success is True
         assert "Batch of 2500 logs sent" in message

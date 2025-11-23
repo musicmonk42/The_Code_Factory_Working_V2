@@ -1,8 +1,9 @@
+import logging
 import os
 import sys
-import pytest
-import logging
 from unittest.mock import MagicMock
+
+import pytest
 
 
 def pytest_configure(config):

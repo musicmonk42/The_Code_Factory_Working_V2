@@ -5,17 +5,18 @@ End-to-End Test Suite for Self-Healing Import Fixer Analyzer
 Tests the complete workflow from code analysis to report generation
 """
 
-import os
-import sys
-import json
-import yaml
-import shutil
-import tempfile
 import glob
+import json
+import logging
+import os
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
-import logging
+import yaml
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -43,12 +44,7 @@ mock_audit_module.get_audit_logger = lambda: mock_audit_module.audit_logger
 sys.modules["analyzer.core_audit"] = mock_audit_module
 
 # Now import the analyzer modules
-from analyzer import (
-    analyzer,
-    core_graph,
-    core_report,
-    core_utils,
-)
+from analyzer import analyzer, core_graph, core_report, core_utils
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -62,7 +58,9 @@ class TestAnalyzerE2E:
     def setup_and_teardown(self):
         """Setup test environment and cleanup after tests"""
         # Clean up any existing test directories first
-        for existing_dir in glob.glob(os.path.join(tempfile.gettempdir(), "analyzer_e2e_*")):
+        for existing_dir in glob.glob(
+            os.path.join(tempfile.gettempdir(), "analyzer_e2e_*")
+        ):
             try:
                 shutil.rmtree(existing_dir, ignore_errors=True)
             except:
@@ -158,11 +156,13 @@ def helper():
 
         # Sign the policy file
         policy_content = json.dumps(policies, sort_keys=True, ensure_ascii=False)
-        import hmac
         import hashlib
+        import hmac
 
         hmac_key = os.environ.get("ANALYZER_POLICY_HMAC_KEY", "").encode()
-        signature = hmac.new(hmac_key, policy_content.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(
+            hmac_key, policy_content.encode(), hashlib.sha256
+        ).hexdigest()
         policies["signature"] = signature
 
         policy_file = os.path.join(self.config_dir, "policies.json")

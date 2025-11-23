@@ -3,28 +3,28 @@ Test suite for logging_utils.py
 Tests PII redaction, structured logging, audit trails, and security features.
 """
 
-import unittest
-import logging
 import json
-import tempfile
+import logging
 import os
+import re
 import sys
+import tempfile
 import threading
 import time
+import unittest
 from unittest.mock import Mock
-import re
 
 # Import the module to test
 from arbiter.logging_utils import (
-    PIIRedactorFilter,
-    StructuredFormatter,
     AuditLogger,
     LogLevel,
-    get_logger,
+    PIIRedactorFilter,
+    StructuredFormatter,
     configure_logging,
+    get_logger,
+    get_redaction_patterns,
     logging_context,
     redact_text,
-    get_redaction_patterns,
 )
 
 
@@ -134,13 +134,17 @@ class TestPIIRedactorFilter(unittest.TestCase):
         # Test AWS secret separately (the pattern may match as generic secret)
         text2 = "Secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         redacted2 = self.filter._redact_text(text2)
-        self.assertTrue("[SECRET_REDACTED]" in redacted2 or "[AWS_SECRET_REDACTED]" in redacted2)
+        self.assertTrue(
+            "[SECRET_REDACTED]" in redacted2 or "[AWS_SECRET_REDACTED]" in redacted2
+        )
 
     def test_jwt_token_redaction(self):
         """Test JWT token redaction."""
         # Test with just the JWT token to avoid conflicts with other patterns
         jwt_part1 = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-        jwt_part2 = "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
+        jwt_part2 = (
+            "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
+        )
         jwt_part3 = "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
         jwt = f"{jwt_part1}.{jwt_part2}.{jwt_part3}"
         text = f"token={jwt}"
@@ -182,7 +186,9 @@ class TestPIIRedactorFilter(unittest.TestCase):
 
         for path in paths:
             redacted = self.filter._redact_text(path)
-            self.assertTrue("[USER_PATH_REDACTED]" in redacted or "[WIN_PATH_REDACTED]" in redacted)
+            self.assertTrue(
+                "[USER_PATH_REDACTED]" in redacted or "[WIN_PATH_REDACTED]" in redacted
+            )
 
     def test_mixed_pii_redaction(self):
         """Test redaction of multiple PII types in one message."""
@@ -218,7 +224,9 @@ class TestPIIRedactorFilter(unittest.TestCase):
 
     def test_custom_patterns(self):
         """Test custom redaction patterns."""
-        custom_patterns = [(re.compile(r"\bEMP\d{6}\b"), "[EMPLOYEE_ID_REDACTED]", "employee_id")]
+        custom_patterns = [
+            (re.compile(r"\bEMP\d{6}\b"), "[EMPLOYEE_ID_REDACTED]", "employee_id")
+        ]
         filter_custom = PIIRedactorFilter(patterns=custom_patterns)
 
         text = "Employee EMP123456 accessed the system"
@@ -742,9 +750,7 @@ class TestThreadSafety(unittest.TestCase):
             try:
                 for i in range(10):
                     # Use unique text for each iteration to avoid caching
-                    text = (
-                        f"Thread {thread_id} iteration {i} email: test{thread_id}_{i}@example.com"
-                    )
+                    text = f"Thread {thread_id} iteration {i} email: test{thread_id}_{i}@example.com"
                     redacted = filter_obj._redact_text(text)
                     results.append(redacted)
                     time.sleep(0.001)  # Small delay to increase contention

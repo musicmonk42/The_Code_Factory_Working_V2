@@ -11,26 +11,27 @@ Key improvements:
 """
 
 import asyncio
-import json
-import time
-from typing import Any, Dict, Optional, Type, List, Literal, Final
 import atexit
+import json
 import os
-from pydantic import BaseModel, Field, validator, ValidationError
+import time
 from datetime import datetime
+from typing import Any, Dict, Final, List, Literal, Optional, Type
+
+from pydantic import BaseModel, Field, ValidationError, validator
 
 from .dlt_base import (
+    AUDIT,
+    PRODUCTION_MODE,
     BaseDLTClient,
     BaseOffChainClient,
     DLTClientConfigurationError,
     DLTClientError,
     DLTClientLoggerAdapter,
-    scrub_secrets,
+    _base_logger,
     alert_operator,
-    AUDIT,
-    PRODUCTION_MODE,
+    scrub_secrets,
 )
-from .dlt_base import _base_logger
 
 # Import specific DLT client implementations conditionally
 from .dlt_simple_clients import SimpleDLTClient
@@ -38,19 +39,27 @@ from .dlt_simple_clients import SimpleDLTClient
 try:
     from .dlt_fabric_clients import FabricClientWrapper
 except ImportError as e:
-    _base_logger.warning(f"FabricClientWrapper import failed: {e}. Fabric support disabled.")
+    _base_logger.warning(
+        f"FabricClientWrapper import failed: {e}. Fabric support disabled."
+    )
 try:
     from .dlt_evm_clients import EthereumClientWrapper
 except ImportError as e:
-    _base_logger.warning(f"EthereumClientWrapper import failed: {e}. EVM support disabled.")
+    _base_logger.warning(
+        f"EthereumClientWrapper import failed: {e}. EVM support disabled."
+    )
 try:
     from .dlt_corda_clients import CordaClientWrapper
 except ImportError as e:
-    _base_logger.warning(f"CordaClientWrapper import failed: {e}. Corda support disabled.")
+    _base_logger.warning(
+        f"CordaClientWrapper import failed: {e}. Corda support disabled."
+    )
 try:
     from .dlt_quorum_clients import QuorumClientWrapper
 except ImportError as e:
-    _base_logger.warning(f"QuorumClientWrapper import failed: {e}. Quorum support disabled.")
+    _base_logger.warning(
+        f"QuorumClientWrapper import failed: {e}. Quorum support disabled."
+    )
 
 # Import specific off-chain client implementations conditionally
 from .dlt_offchain_clients import InMemoryOffChainClient
@@ -101,7 +110,9 @@ try:
         ),
     }
 except Exception:
-    _base_logger.warning("Prometheus client not available for Factory-specific metrics.")
+    _base_logger.warning(
+        "Prometheus client not available for Factory-specific metrics."
+    )
     FACTORY_METRICS = {}
 
 # --- DLT Client Registry (Static - No Dynamic Re-registration in Prod) ---
@@ -138,8 +149,12 @@ class FactoryConfig(BaseModel):
     Validates inputs for compliance with regulatory requirements (e.g., SOX, SOC2).
     """
 
-    off_chain_storage_type: Literal["s3", "gcs", "azure_blob", "ipfs", "in_memory"] = "in_memory"
-    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(default_factory=list)
+    off_chain_storage_type: Literal["s3", "gcs", "azure_blob", "ipfs", "in_memory"] = (
+        "in_memory"
+    )
+    secrets_providers: List[Literal["aws", "azure", "gcp"]] = Field(
+        default_factory=list
+    )
     secrets_provider_config: Optional[Dict[str, Any]] = None
     log_format: str = Field("json", pattern=r"^(json|text)$")
     close_timeout: float = Field(5.0, ge=0.1)
@@ -155,15 +170,15 @@ class FactoryConfig(BaseModel):
                     raise ValueError(
                         f"Invalid secrets_provider: {provider}. Must be one of 'aws', 'azure', 'gcp'."
                     )
-                if provider == "azure" and not (values.get("secrets_provider_config") or {}).get(
-                    "vault_url"
-                ):
+                if provider == "azure" and not (
+                    values.get("secrets_provider_config") or {}
+                ).get("vault_url"):
                     raise ValueError(
                         "secrets_provider_config.vault_url required for Azure Key Vault."
                     )
-                if provider == "gcp" and not (values.get("secrets_provider_config") or {}).get(
-                    "project_id"
-                ):
+                if provider == "gcp" and not (
+                    values.get("secrets_provider_config") or {}
+                ).get("project_id"):
                     raise ValueError(
                         "secrets_provider_config.project_id required for GCP Secret Manager."
                     )
@@ -225,7 +240,9 @@ class DLTFactory:
 
             cls._manager = Manager()
             cls._temp_files = cls._manager.dict()  # shared state
-            cls._logger.info("Initialized multiprocessing.Manager for temporary file tracking.")
+            cls._logger.info(
+                "Initialized multiprocessing.Manager for temporary file tracking."
+            )
 
     @classmethod
     async def cleanup_temp_files(cls) -> None:
@@ -240,7 +257,9 @@ class DLTFactory:
                 cls._temp_files.pop(temp_file, None)  # remove from tracking
                 cls._logger.info(f"Factory cleaned up temporary file: {temp_file}")
             except OSError as e:
-                cls._logger.warning(f"Factory failed to clean up temporary file {temp_file}: {e}")
+                cls._logger.warning(
+                    f"Factory failed to clean up temporary file {temp_file}: {e}"
+                )
 
         if cls._manager:
             # Shut down multiprocessing manager
@@ -358,21 +377,23 @@ class DLTFactory:
 
                 # Prepare off-chain client config (inject factory-level settings)
                 off_chain_config_for_client = config.get(off_chain_type, {}).copy()
-                off_chain_config_for_client["log_format"] = validated_factory_config.get(
-                    "log_format", "json"
+                off_chain_config_for_client["log_format"] = (
+                    validated_factory_config.get("log_format", "json")
                 )
-                off_chain_config_for_client["secrets_providers"] = validated_factory_config.get(
-                    "secrets_providers", []
+                off_chain_config_for_client["secrets_providers"] = (
+                    validated_factory_config.get("secrets_providers", [])
                 )
                 off_chain_config_for_client["secrets_provider_config"] = (
                     validated_factory_config.get("secrets_provider_config", {})
                 )
-                off_chain_config_for_client["temp_file_ttl"] = validated_factory_config.get(
-                    "temp_file_ttl", 3600.0
+                off_chain_config_for_client["temp_file_ttl"] = (
+                    validated_factory_config.get("temp_file_ttl", 3600.0)
                 )
 
                 try:
-                    current_off_chain_client = off_chain_client_class(off_chain_config_for_client)
+                    current_off_chain_client = off_chain_client_class(
+                        off_chain_config_for_client
+                    )
                     cls._format_log(
                         "info",
                         f"Initialized off-chain client: {off_chain_type}",
@@ -399,7 +420,9 @@ class DLTFactory:
                             "error_type": "offchain_init_failed",
                         },
                     )
-                    msg = f"Failed to initialize off-chain client '{off_chain_type}': {e}"
+                    msg = (
+                        f"Failed to initialize off-chain client '{off_chain_type}': {e}"
+                    )
                     cls._format_log(
                         "critical",
                         msg,
@@ -409,7 +432,9 @@ class DLTFactory:
                         },
                     )
                     await alert_operator(f"CRITICAL: {msg}", level="CRITICAL")
-                    raise DLTClientConfigurationError(msg, cls.client_type, original_exception=e)
+                    raise DLTClientConfigurationError(
+                        msg, cls.client_type, original_exception=e
+                    )
 
             # Initialize DLT client
             try:
@@ -421,7 +446,11 @@ class DLTFactory:
                     else (
                         "chaincode"
                         if dlt_type == "fabric"
-                        else ("block_number" if dlt_type in ("evm", "quorum") else "timestamp")
+                        else (
+                            "block_number"
+                            if dlt_type in ("evm", "quorum")
+                            else "timestamp"
+                        )
                     )
                 )
                 cls._format_log(
@@ -431,7 +460,9 @@ class DLTFactory:
                         "correlation_id": correlation_id,
                         "dlt_type": dlt_type,
                         "versioning_strategy": versioning_strategy,
-                        "config_version": validated_factory_config.get("config_version"),
+                        "config_version": validated_factory_config.get(
+                            "config_version"
+                        ),
                         "log_format": validated_factory_config.get("log_format"),
                     },
                 )
@@ -473,7 +504,9 @@ class DLTFactory:
                     {"correlation_id": correlation_id, "dlt_type": dlt_type},
                 )
                 await alert_operator(f"CRITICAL: {msg}", level="CRITICAL")
-                raise DLTClientConfigurationError(msg, cls.client_type, original_exception=e)
+                raise DLTClientConfigurationError(
+                    msg, cls.client_type, original_exception=e
+                )
 
         except ValidationError as e:
             cls._metrics_inc(
@@ -494,7 +527,9 @@ class DLTFactory:
                 },
             )
             await alert_operator(f"CRITICAL: {msg}", level="CRITICAL")
-            raise DLTClientConfigurationError(msg, cls.client_type, original_exception=e)
+            raise DLTClientConfigurationError(
+                msg, cls.client_type, original_exception=e
+            )
         except (DLTClientConfigurationError, DLTClientError):
             # Re-raise our custom exceptions without catching them again
             raise
@@ -513,7 +548,9 @@ class DLTFactory:
             raise DLTClientError(msg, cls.client_type, original_exception=e)
 
     @classmethod
-    def _format_log(cls, level: str, message: str, extra: Dict[str, Any] = None) -> None:
+    def _format_log(
+        cls, level: str, message: str, extra: Dict[str, Any] = None
+    ) -> None:
         """
         Structured logs with JSON body; maps 'audit' level to 'info' for compatibility.
         """
@@ -564,7 +601,9 @@ def _cleanup_at_exit():
             try:
                 os.unlink(temp_file)
                 DLTFactory._temp_files.pop(temp_file, None)
-                _base_logger.info(f"Factory (sync) cleaned up temporary file: {temp_file}")
+                _base_logger.info(
+                    f"Factory (sync) cleaned up temporary file: {temp_file}"
+                )
             except OSError:
                 pass
         # Manager shutdown best-effort (if present)

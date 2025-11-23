@@ -5,17 +5,20 @@ Modern test suite for audit_backend_file_sql.py, compatible with the
 new core architecture (encryption, batching, async-native).
 """
 
+import base64
+import datetime
+import json
+
 # --- env must be set before any package import that touches Dynaconf ---
 import os
-import json
-import base64
 import zlib
-import datetime
 from typing import Dict
 
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 encryption_key = base64.urlsafe_b64encode(b"0" * 32).decode("ascii")
-os.environ["AUDIT_ENCRYPTION_KEYS"] = f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
+os.environ["AUDIT_ENCRYPTION_KEYS"] = (
+    f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
+)
 os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "gzip")
 os.environ.setdefault("AUDIT_COMPRESSION_LEVEL", "6")
 os.environ.setdefault("AUDIT_BATCH_FLUSH_INTERVAL", "5")
@@ -26,17 +29,17 @@ os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
 os.environ.setdefault("AUDIT_TAMPER_DETECTION_ENABLED", "true")
 # --- end env block ---
 
-import sys
-import types
 import asyncio
 import sqlite3
+import sys
+import types
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiofiles
 import pytest
 import pytest_asyncio
-import aiofiles
 from prometheus_client import REGISTRY
 
 # --- Package Shim ---
@@ -99,7 +102,10 @@ def _prepare_v1_entry(entry_data: Dict) -> str:
     if "timestamp" not in entry_data:
         # --- FIX: Ensure timestamp matches core logic (milliseconds + Z) ---
         entry_data["timestamp"] = (
-            datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds") + "Z"
+            datetime.datetime.now(datetime.timezone.utc).isoformat(
+                timespec="milliseconds"
+            )
+            + "Z"
         )
 
     # --- FIX: Compute hash on a copy *before* adding the hash itself ---
@@ -149,10 +155,14 @@ async def mock_alerts_and_otel():
     """Mock alerts and tracing for all tests."""
     with patch(
         "audit_log.audit_backend.audit_backend_core.send_alert", new_callable=AsyncMock
-    ) as mock_alert, patch("audit_log.audit_backend.audit_backend_core.tracer") as mock_tracer:
+    ) as mock_alert, patch(
+        "audit_log.audit_backend.audit_backend_core.tracer"
+    ) as mock_tracer:
 
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
         yield mock_alert, mock_tracer, mock_span
 
 
@@ -222,7 +232,12 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
 
     # Check metrics and traces
     mock_span.set_attribute.assert_any_call("batch.size", 1)
-    assert REGISTRY.get_sample_value("audit_backend_writes_total", {"backend": "FileBackend"}) == 1
+    assert (
+        REGISTRY.get_sample_value(
+            "audit_backend_writes_total", {"backend": "FileBackend"}
+        )
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -250,7 +265,10 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
 
     assert final_entry["action"] == "create_user"
     assert (
-        REGISTRY.get_sample_value("audit_backend_writes_total", {"backend": "SQLiteBackend"}) == 1
+        REGISTRY.get_sample_value(
+            "audit_backend_writes_total", {"backend": "SQLiteBackend"}
+        )
+        == 1
     )
 
 
@@ -432,7 +450,9 @@ async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
     db_file = tmp_path / "audit.db"
     entry_id_v1 = str(uuid.uuid4())
     # --- FIX: Corrected typo _prepare_vv1_entry to _prepare_v1_entry ---
-    v1_entry = json.loads(_prepare_v1_entry({"action": "v1_db_test", "entry_id": entry_id_v1}))
+    v1_entry = json.loads(
+        _prepare_v1_entry({"action": "v1_db_test", "entry_id": entry_id_v1})
+    )
 
     # 1. Create a V1 database manually
     conn = sqlite3.connect(db_file)
@@ -477,7 +497,9 @@ async def test_sqlite_backend_migration(tmp_path, mock_alerts_and_otel):
     # 5. Check table structure
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v1'")
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v1'"
+    )
     assert cursor.fetchone() is None  # v1 table should be gone
     cursor.execute(
         f"SELECT name FROM sqlite_master WHERE type='table' AND name='logs_v{SCHEMA_VERSION}'"

@@ -12,24 +12,25 @@ Extension:
 - Hooks: Use `add_pre_hook` and `add_post_hook` for custom transformations.
 """
 
-import os
-import logging
-import yaml
-import json
 import asyncio
-from typing import Union, Dict, Any, AsyncGenerator, Callable, List, Optional
+import json
+import logging
+import os
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Union
+
 import aiohttp
+import yaml
 
 # --- Conditional SDK Import ---
 try:
     # --- FIX: Import synchronous Anthropic client for count_tokens ---
     from anthropic import (
-        AsyncAnthropic,
         Anthropic,
         AnthropicError,
+        APIConnectionError,
+        AsyncAnthropic,
         AuthenticationError,
         RateLimitError,
-        APIConnectionError,
     )
 
     HAS_ANTHROPIC = True
@@ -53,17 +54,16 @@ except ImportError:
         pass
 
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-
 # ---- Runner foundation imports ------------------------------------------------
 from runner.llm_provider_base import LLMProvider
-from runner.runner_errors import LLMError, ConfigurationError
 from runner.runner_config import load_config  # For loading API key in get_provider
+from runner.runner_errors import ConfigurationError, LLMError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # -------------------------------------------------------------------------------
 
@@ -135,7 +135,9 @@ class ClaudeProvider(LLMProvider):
         else:
             raise ValueError("Unsupported config format. Use YAML or JSON.")
         for model, details in config.get("models", {}).items():
-            self.register_custom_model(model, details["endpoint"], details.get("headers", {}))
+            self.register_custom_model(
+                model, details["endpoint"], details.get("headers", {})
+            )
 
     def register_custom_model(
         self, model_name: str, endpoint: str, headers: Optional[Dict[str, str]] = None
@@ -176,7 +178,9 @@ class ClaudeProvider(LLMProvider):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
     )
-    async def _api_call(self, model: str, processed_prompt: str, stream: bool, **kwargs):
+    async def _api_call(
+        self, model: str, processed_prompt: str, stream: bool, **kwargs
+    ):
         """
         Internal, retriable API call.
         Translates SDK-specific errors to general LLMError.
@@ -311,7 +315,9 @@ class ClaudeProvider(LLMProvider):
                 raise  # Re-raise errors we've already translated
             else:
                 # Wrap unexpected errors
-                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
+                raise LLMError(
+                    detail=f"Unexpected error in call: {e}", provider=self.name
+                ) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """
@@ -321,7 +327,9 @@ class ClaudeProvider(LLMProvider):
             # --- FIX: Use the synchronous client for count_tokens ---
             return await asyncio.to_thread(self.sync_client.count_tokens, text)
         except Exception as e:
-            logger.warning(f"Claude token counting failed: {str(e)}. Approximating tokens.")
+            logger.warning(
+                f"Claude token counting failed: {str(e)}. Approximating tokens."
+            )
             # Fallback to a simple approximation
             return len(text.split())
 
@@ -376,8 +384,8 @@ def get_provider():
 if __name__ == "__main__":
     import argparse
     import asyncio
-    from unittest.mock import AsyncMock, patch, MagicMock
     import unittest
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Setup basic logging for standalone execution
     logging.basicConfig(
@@ -426,8 +434,12 @@ if __name__ == "__main__":
                 self.skipTest("Anthropic SDK not installed")
             provider = ClaudeProvider(api_key="test-key")
             # --- FIX: Patch the sync_client, not the async one ---
-            with patch.object(provider.sync_client, "count_tokens", return_value=3) as mock_count:
-                tokens = await provider.count_tokens("Hello world", "claude-3-haiku-20240307")
+            with patch.object(
+                provider.sync_client, "count_tokens", return_value=3
+            ) as mock_count:
+                tokens = await provider.count_tokens(
+                    "Hello world", "claude-3-haiku-20240307"
+                )
                 self.assertEqual(tokens, 3)
                 mock_count.assert_called_once()
 
@@ -451,7 +463,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--stream", action="store_true", help="Stream response")
     parser.add_argument("--test", action="store_true", help="Run tests")
-    args, unknown = parser.parse_known_args()  # Use parse_known_args for unittest compatibility
+    args, unknown = (
+        parser.parse_known_args()
+    )  # Use parse_known_args for unittest compatibility
 
     async def main_cli():
         # This init will fail if CLAUDE_API_KEY is not set

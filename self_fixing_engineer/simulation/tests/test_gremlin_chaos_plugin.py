@@ -1,10 +1,11 @@
 # tests/test_gremlin_chaos_plugin.py
 
-import pytest
+import itertools
 import os
 import sys
-from unittest.mock import patch, MagicMock, AsyncMock, call
-import itertools
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
 
 # --- Best Practice: Add plugins directory to sys.path for direct imports ---
 PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
@@ -40,15 +41,18 @@ def mock_gremlin_and_env():
             del sys.modules["gremlin_chaos_plugin"]
         import gremlin_chaos_plugin
 
-        with patch("gremlin_chaos_plugin.GremlinApiClient") as MockGremlinApiClient, patch(
-            "gremlin_chaos_plugin._get_client"
-        ) as mock_get_client:
+        with (
+            patch("gremlin_chaos_plugin.GremlinApiClient") as MockGremlinApiClient,
+            patch("gremlin_chaos_plugin._get_client") as mock_get_client,
+        ):
 
             # Create a mock instance of the patched client
             mock_gremlin_client = MockGremlinApiClient.return_value
             mock_gremlin_client.quick_check = AsyncMock(return_value=True)
             mock_gremlin_client.create_attack = AsyncMock(return_value="mock-attack-id")
-            mock_gremlin_client.get_attack_status = AsyncMock(return_value={"state": "SUCCEEDED"})
+            mock_gremlin_client.get_attack_status = AsyncMock(
+                return_value={"state": "SUCCEEDED"}
+            )
             mock_gremlin_client.halt_attack = AsyncMock()
 
             # Have _get_client return our mock instance
@@ -57,35 +61,40 @@ def mock_gremlin_and_env():
             # Use a generator for time.monotonic to avoid StopIteration
             mock_monotonic = MagicMock(side_effect=itertools.count(start=0, step=10))
 
-            with patch.object(
-                gremlin_chaos_plugin.CHAOS_ATTACKS_TOTAL,
-                "labels",
-                return_value=MagicMock(),
-            ), patch.object(
-                gremlin_chaos_plugin.CHAOS_ATTACK_ERRORS_TOTAL,
-                "labels",
-                return_value=MagicMock(),
-            ), patch.object(
-                gremlin_chaos_plugin.CHAOS_ATTACK_DURATION_SECONDS,
-                "labels",
-                return_value=MagicMock(),
-            ), patch.object(
-                gremlin_chaos_plugin.GREMLIN_INFLIGHT_ATTACKS,
-                "inc",
-                return_value=MagicMock(),
-            ), patch.object(
-                gremlin_chaos_plugin.GREMLIN_INFLIGHT_ATTACKS,
-                "dec",
-                return_value=MagicMock(),
-            ), patch.object(
-                gremlin_chaos_plugin.GREMLIN_HTTP_RESPONSES_TOTAL,
-                "labels",
-                return_value=MagicMock(),
-            ), patch(
-                "time.monotonic", new=mock_monotonic
-            ), patch(
-                "asyncio.sleep", new_callable=AsyncMock
-            ) as mock_sleep:
+            with (
+                patch.object(
+                    gremlin_chaos_plugin.CHAOS_ATTACKS_TOTAL,
+                    "labels",
+                    return_value=MagicMock(),
+                ),
+                patch.object(
+                    gremlin_chaos_plugin.CHAOS_ATTACK_ERRORS_TOTAL,
+                    "labels",
+                    return_value=MagicMock(),
+                ),
+                patch.object(
+                    gremlin_chaos_plugin.CHAOS_ATTACK_DURATION_SECONDS,
+                    "labels",
+                    return_value=MagicMock(),
+                ),
+                patch.object(
+                    gremlin_chaos_plugin.GREMLIN_INFLIGHT_ATTACKS,
+                    "inc",
+                    return_value=MagicMock(),
+                ),
+                patch.object(
+                    gremlin_chaos_plugin.GREMLIN_INFLIGHT_ATTACKS,
+                    "dec",
+                    return_value=MagicMock(),
+                ),
+                patch.object(
+                    gremlin_chaos_plugin.GREMLIN_HTTP_RESPONSES_TOTAL,
+                    "labels",
+                    return_value=MagicMock(),
+                ),
+                patch("time.monotonic", new=mock_monotonic),
+                patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+            ):
                 yield {
                     "plugin": gremlin_chaos_plugin,
                     "mock_gremlin_client": mock_gremlin_client,
@@ -112,14 +121,16 @@ async def test_plugin_health_missing_credentials():
 
         result = await gremlin_chaos_plugin.plugin_health()
         assert result["status"] == "error"
-        assert any("Missing GREMLIN_TEAM_ID or GREMLIN_API_KEY" in d for d in result["details"])
+        assert any(
+            "Missing GREMLIN_TEAM_ID or GREMLIN_API_KEY" in d for d in result["details"]
+        )
 
 
 @pytest.mark.asyncio
 async def test_plugin_health_api_error(mock_gremlin_and_env):
     plugin = mock_gremlin_and_env["plugin"]
-    mock_gremlin_and_env["mock_gremlin_client"].quick_check.side_effect = plugin.GremlinApiError(
-        "Unauthorized", status=401
+    mock_gremlin_and_env["mock_gremlin_client"].quick_check.side_effect = (
+        plugin.GremlinApiError("Unauthorized", status=401)
     )
     result = await plugin.plugin_health()
     assert result["status"] == "error"
@@ -152,7 +163,9 @@ async def test_run_chaos_experiment_cpu_hog_success(mock_gremlin_and_env):
         call(experiment_type="cpu_hog", status="succeeded"),
     ]
     plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(expected_calls, any_order=False)
-    assert plugin.CHAOS_ATTACKS_TOTAL.labels.return_value.inc.call_count == len(expected_calls)
+    assert plugin.CHAOS_ATTACKS_TOTAL.labels.return_value.inc.call_count == len(
+        expected_calls
+    )
 
 
 @pytest.mark.asyncio
@@ -186,7 +199,9 @@ async def test_run_chaos_experiment_network_latency_kubernetes_success(
         call(experiment_type="network_latency", status="succeeded"),
     ]
     plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(expected_calls, any_order=False)
-    assert plugin.CHAOS_ATTACKS_TOTAL.labels.return_value.inc.call_count == len(expected_calls)
+    assert plugin.CHAOS_ATTACKS_TOTAL.labels.return_value.inc.call_count == len(
+        expected_calls
+    )
 
 
 @pytest.mark.asyncio
@@ -207,8 +222,8 @@ async def test_run_chaos_experiment_unsupported_type(mock_gremlin_and_env):
 @pytest.mark.asyncio
 async def test_run_chaos_experiment_api_error_on_initiation(mock_gremlin_and_env):
     plugin = mock_gremlin_and_env["plugin"]
-    mock_gremlin_and_env["mock_gremlin_client"].create_attack.side_effect = plugin.GremlinApiError(
-        "Bad Request", status=400
+    mock_gremlin_and_env["mock_gremlin_client"].create_attack.side_effect = (
+        plugin.GremlinApiError("Bad Request", status=400)
     )
     res = await plugin.run_chaos_experiment(
         experiment_type="cpu_hog",
@@ -223,7 +238,9 @@ async def test_run_chaos_experiment_api_error_on_initiation(mock_gremlin_and_env
         call(experiment_type="cpu_hog", status="attempt"),
         call(experiment_type="cpu_hog", status="api_error"),
     ]
-    plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(expected_labels_calls, any_order=False)
+    plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(
+        expected_labels_calls, any_order=False
+    )
     plugin.CHAOS_ATTACK_ERRORS_TOTAL.labels.assert_called_with(
         experiment_type="cpu_hog", error_type="api_error"
     )
@@ -271,7 +288,9 @@ async def test_run_chaos_experiment_monitoring_timeout(mock_gremlin_and_env):
         call(experiment_type="cpu_hog", status="monitoring_timeout"),
         call(experiment_type="cpu_hog", status="failed"),
     ]
-    plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(expected_labels_calls, any_order=False)
+    plugin.CHAOS_ATTACKS_TOTAL.labels.assert_has_calls(
+        expected_labels_calls, any_order=False
+    )
     assert plugin.CHAOS_ATTACKS_TOTAL.labels.return_value.inc.call_count == len(
         expected_labels_calls
     )

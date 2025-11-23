@@ -4,11 +4,12 @@ Test suite for SIEM factory module.
 Tests client instantiation, registry management, and availability checking.
 """
 
-import pytest
 import asyncio
 import sys
+from typing import Any, Dict, Type
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any, Type
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()
@@ -145,7 +146,9 @@ SIEM_CLIENT_REGISTRY: Dict[str, Type[BaseSIEMClient]] = {
 
 
 # Factory functions
-def get_siem_client(siem_type: str, config: Dict[str, Any], metrics_hook=None) -> BaseSIEMClient:
+def get_siem_client(
+    siem_type: str, config: Dict[str, Any], metrics_hook=None
+) -> BaseSIEMClient:
     """
     Factory function to get an initialized SIEM client.
     """
@@ -191,7 +194,9 @@ def list_available_siem_clients():
 
     for siem_type, client_class in SIEM_CLIENT_REGISTRY.items():
         try:
-            description = (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            description = (
+                (client_class.__doc__ or "No description.").strip().split("\n")[0]
+            )
         except Exception:
             description = "No description."
 
@@ -268,7 +273,9 @@ class TestGetSiemClient:
         assert client.metrics_hook == mock_metrics_hook
         assert client.paranoid_mode is False
 
-    def test_unknown_client_type(self, valid_config, mock_metrics_hook, mock_alert_operator):
+    def test_unknown_client_type(
+        self, valid_config, mock_metrics_hook, mock_alert_operator
+    ):
         """Test that unknown SIEM client type raises error."""
         siem_type = "unknown_client"
 
@@ -301,7 +308,9 @@ class TestGetSiemClient:
         with pytest.raises(SIEMClientConfigurationError) as exc_info:
             get_siem_client(siem_type, config, mock_metrics_hook)
 
-        assert "paranoid_mode' must be enabled in PRODUCTION_MODE" in str(exc_info.value)
+        assert "paranoid_mode' must be enabled in PRODUCTION_MODE" in str(
+            exc_info.value
+        )
         mock_alert_operator.assert_called_once()
 
     def test_production_mode_with_paranoid(self, valid_config, mock_metrics_hook):
@@ -317,12 +326,16 @@ class TestGetSiemClient:
         assert isinstance(client, SplunkClient)
         assert client.paranoid_mode is True
 
-    def test_client_init_error_handling(self, valid_config, mock_metrics_hook, mock_alert_operator):
+    def test_client_init_error_handling(
+        self, valid_config, mock_metrics_hook, mock_alert_operator
+    ):
         """Test handling of client initialization errors."""
         siem_type = "splunk"
 
         # Mock SplunkClient to raise an error
-        with patch.object(SplunkClient, "__init__", side_effect=Exception("Init failed")):
+        with patch.object(
+            SplunkClient, "__init__", side_effect=Exception("Init failed")
+        ):
             with pytest.raises(SIEMClientError) as exc_info:
                 get_siem_client(siem_type, valid_config, mock_metrics_hook)
 
@@ -379,7 +392,9 @@ class TestListAvailableClients:
         splunk_info = next(info for info in clients_info if info["type"] == "splunk")
         assert "Splunk SIEM client" in splunk_info["description"]
 
-        aws_info = next(info for info in clients_info if info["type"] == "aws_cloudwatch")
+        aws_info = next(
+            info for info in clients_info if info["type"] == "aws_cloudwatch"
+        )
         assert "AWS CloudWatch" in aws_info["description"]
 
 
@@ -432,7 +447,9 @@ class TestConcurrentOperations:
         for client_type, config in configs.items():
             tasks.extend(
                 [
-                    asyncio.to_thread(get_siem_client, client_type, config, mock_metrics_hook)
+                    asyncio.to_thread(
+                        get_siem_client, client_type, config, mock_metrics_hook
+                    )
                     for _ in range(30)
                 ]
             )
@@ -479,7 +496,9 @@ class TestErrorScenarios:
         class StrictClient(BaseSIEMClient):
             def __init__(self, config, **kwargs):
                 if "required_field" not in config:
-                    raise SIEMClientConfigurationError("Missing required_field", "StrictClient")
+                    raise SIEMClientConfigurationError(
+                        "Missing required_field", "StrictClient"
+                    )
                 super().__init__(config, **kwargs)
 
         SIEM_CLIENT_REGISTRY["strict"] = StrictClient

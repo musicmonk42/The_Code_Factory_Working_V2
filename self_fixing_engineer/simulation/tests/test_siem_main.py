@@ -4,16 +4,17 @@ Test suite for siem_main.py module.
 Tests the main SIEM functionality including test runner and CLI commands.
 """
 
-import pytest
 import asyncio
-import os
-import sys
-import json
-import uuid
 import datetime
 import hashlib
 import hmac
+import json
+import os
+import sys
+import uuid
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Mock all SIEM modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()
@@ -128,7 +129,9 @@ class BaseSIEMClient:
     async def send_logs(self, log_entries, correlation_id=None):
         return True, "Batch sent", []
 
-    async def query_logs(self, query_string, time_range="24h", limit=100, correlation_id=None):
+    async def query_logs(
+        self, query_string, time_range="24h", limit=100, correlation_id=None
+    ):
         return [{"message": "test log"}]
 
 
@@ -236,7 +239,9 @@ async def run_tests():
     print("\n--- Available SIEM Clients and their Dependencies ---")
 
     for client_info in list_available_siem_clients():
-        print(f"  Type: {client_info['type']}, Available: {client_info['is_available']}")
+        print(
+            f"  Type: {client_info['type']}, Available: {client_info['is_available']}"
+        )
 
     # Test metrics hook
     def test_metrics_hook(event_name: str, status: str, data: dict):
@@ -264,13 +269,19 @@ async def run_tests():
             async with get_siem_client(
                 siem_type, test_config, metrics_hook=test_metrics_hook
             ) as client:
-                print(f"Initialized {siem_type} client with correlation ID: {correlation_id}.")
+                print(
+                    f"Initialized {siem_type} client with correlation ID: {correlation_id}."
+                )
 
-                is_healthy, health_msg = await client.health_check(correlation_id=correlation_id)
+                is_healthy, health_msg = await client.health_check(
+                    correlation_id=correlation_id
+                )
                 print(f"Health Check: {is_healthy} - {health_msg}")
 
                 if not is_healthy:
-                    print(f"Skipping send/query for {siem_type} due to failed health check.")
+                    print(
+                        f"Skipping send/query for {siem_type} due to failed health check."
+                    )
                     continue
 
                 # Test send_log
@@ -324,7 +335,9 @@ if CLICK_AVAILABLE:
     def cli():
         """Secure Production CLI for SIEM client operations."""
         if not PRODUCTION_MODE:
-            raise click.ClickException("Production CLI commands are restricted to PRODUCTION_MODE.")
+            raise click.ClickException(
+                "Production CLI commands are restricted to PRODUCTION_MODE."
+            )
 
     @cli.command("health-check")
     @click.option(
@@ -355,7 +368,9 @@ if CLICK_AVAILABLE:
                 ).hexdigest()
 
                 if not hmac.compare_digest(generated_hmac, expected_hmac):
-                    raise click.ClickException("Config file integrity check failed: HMAC mismatch.")
+                    raise click.ClickException(
+                        "Config file integrity check failed: HMAC mismatch."
+                    )
 
             # Run health check asynchronously
             async def run_health_check():
@@ -423,7 +438,9 @@ class TestRunTests:
     async def test_run_tests_handles_client_error(self, mock_env_vars):
         """Test that run_tests handles client errors gracefully."""
         # Mock a client to raise an error
-        with patch.object(SplunkClient, "health_check", side_effect=Exception("Test error")):
+        with patch.object(
+            SplunkClient, "health_check", side_effect=Exception("Test error")
+        ):
             await run_tests()  # Should not raise
 
 
@@ -463,7 +480,9 @@ class TestCLI:
             ["health-check", "--siem-type", "splunk", "--config-file", "dummy.json"],
         )
         assert result.exit_code == 1
-        assert "Production CLI commands are restricted to PRODUCTION_MODE" in result.output
+        assert (
+            "Production CLI commands are restricted to PRODUCTION_MODE" in result.output
+        )
 
     def test_health_check_command_success(self, tmp_path):
         """Test health-check command with valid config."""

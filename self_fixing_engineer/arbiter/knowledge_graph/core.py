@@ -1,15 +1,15 @@
 # Restored on August 20, 2025
-import logging
-import json
-import uuid
-import time
-import re
 import asyncio
 import hashlib
+import json
+import logging
+import re
 import sys
+import time
+import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, List, Optional
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional, Tuple
 
 # Python version compatibility for asyncio.timeout
 if sys.version_info >= (3, 11):
@@ -28,15 +28,12 @@ else:
         yield  # pragma: no cover (unreachable)
 
 
+from langchain.chains import ConversationChain
+
 # Langchain imports
 from langchain.memory import ConversationBufferWindowMemory
-from langchain.chains import ConversationChain
+from langchain_core.messages import HumanMessage, messages_from_dict, messages_to_dict
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import (
-    messages_from_dict,
-    messages_to_dict,
-    HumanMessage,
-)
 
 # LLM Provider Imports
 try:
@@ -47,8 +44,8 @@ except ImportError:
     )
     ChatXAI = None
 
-from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -60,11 +57,12 @@ except ImportError:
 
 # For MetaLearning model persistence
 import pickle
+
 from ratelimit import limits, sleep_and_retry
+from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.exceptions import NotFittedError
 
 # For JWT Validation
 try:
@@ -120,32 +118,32 @@ except ImportError:
     PostgresClient = None
 
 # Local imports
-from .config import Config, load_persona_dict, SensitiveValue, MultiModalData
-from .utils import (
-    async_with_retry,
-    _sanitize_user_input,
-    _sanitize_context,
-    AgentErrorCode,
-    AgentCoreException,
-    AGENT_METRICS,
-    trace_id_var,
-    logger,
-)
+from .config import Config, MultiModalData, SensitiveValue, load_persona_dict
+from .multimodal import DefaultMultiModalProcessor, MultiModalProcessor
 from .prompt_strategies import (
-    PromptStrategy,
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
     BASE_AGENT_PROMPT_TEMPLATE,
-    REFLECTION_PROMPT_TEMPLATE,
     CRITIQUE_PROMPT_TEMPLATE,
+    REFLECTION_PROMPT_TEMPLATE,
     SELF_CORRECT_PROMPT_TEMPLATE,
+    ConcisePromptStrategy,
+    DefaultPromptStrategy,
+    PromptStrategy,
 )
-from .multimodal import MultiModalProcessor, DefaultMultiModalProcessor
+from .utils import (
+    AGENT_METRICS,
+    AgentCoreException,
+    AgentErrorCode,
+    _sanitize_context,
+    _sanitize_user_input,
+    async_with_retry,
+    logger,
+    trace_id_var,
+)
 
 # Imports for StateBackends and AuditLedgerClient
 try:
-    from arbiter.models.redis_client import RedisClient
     from arbiter.models.audit_ledger_client import AuditLedgerClient
+    from arbiter.models.redis_client import RedisClient
 except ImportError:
     logger.warning(
         "Warning: Could not import one or more client classes for state and audit logging. Falling back to mocks."
@@ -186,13 +184,17 @@ class StateBackend(ABC):
 class RedisStateBackend(StateBackend):
     def __init__(self, redis_url):
         if RedisClient is None:
-            raise RuntimeError("RedisClient not available. Cannot use RedisStateBackend.")
+            raise RuntimeError(
+                "RedisClient not available. Cannot use RedisStateBackend."
+            )
         self.client = RedisClient(redis_url)
         logger.info(f"RedisStateBackend initialized with URL: {redis_url}")
 
     async def init_client(self):
         try:
-            await async_with_retry(lambda: self.client.ping(), retries=3, delay=2, backoff=2)
+            await async_with_retry(
+                lambda: self.client.ping(), retries=3, delay=2, backoff=2
+            )
             logger.info("Redis client ping successful.")
         except Exception as e:
             logger.error(f"Failed to connect/ping Redis: {e}", exc_info=True)
@@ -301,13 +303,17 @@ class RedisStateBackend(StateBackend):
 class PostgresStateBackend(StateBackend):
     def __init__(self, db_url):
         if PostgresClient is None:
-            raise RuntimeError("PostgresClient not available. Cannot use PostgresStateBackend.")
+            raise RuntimeError(
+                "PostgresClient not available. Cannot use PostgresStateBackend."
+            )
         self.client = PostgresClient(db_url=db_url)
         logger.info(f"PostgresStateBackend initialized with URL: {db_url}")
 
     async def init_client(self):
         try:
-            await async_with_retry(lambda: self.client.connect(), retries=3, delay=2, backoff=2)
+            await async_with_retry(
+                lambda: self.client.connect(), retries=3, delay=2, backoff=2
+            )
             logger.info("Postgres client connected and schema ensured.")
         except Exception as e:
             logger.error(f"Failed to connect/init PostgreSQL: {e}", exc_info=True)
@@ -420,7 +426,9 @@ class InMemoryStateBackend(StateBackend):
     def __init__(self):
         self._store = {}
         self._lock = asyncio.Lock()
-        logger.warning("Using InMemoryStateBackend. State will be lost on application restart.")
+        logger.warning(
+            "Using InMemoryStateBackend. State will be lost on application restart."
+        )
 
     async def load_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         start_time = time.monotonic()
@@ -520,7 +528,9 @@ class MetaLearning:
         except Exception as e:
             logger.debug(f"Could not load meta-learning data: {e}")
 
-    def log_correction(self, input_text: str, initial_response: str, corrected_response: str):
+    def log_correction(
+        self, input_text: str, initial_response: str, corrected_response: str
+    ):
         """
         Logs a correction tuple for future training.
         """
@@ -564,21 +574,30 @@ class MetaLearning:
         """
         Applies a correction based on the trained model's prediction.
         """
-        if not self.model_pipeline or len(self.corrections) < Config.MIN_RECORDS_FOR_TRAINING:
+        if (
+            not self.model_pipeline
+            or len(self.corrections) < Config.MIN_RECORDS_FOR_TRAINING
+        ):
             return response
         try:
             # Check if the model has been fitted
             _ = self.model_pipeline.predict(["dummy input"])
-            predicted_correction = self.model_pipeline.predict([f"{input_text} {response}"])
+            predicted_correction = self.model_pipeline.predict(
+                [f"{input_text} {response}"]
+            )
             if predicted_correction and predicted_correction[0] != response:
                 logger.info(
                     f"Applying meta-learning correction. Model predicted: {predicted_correction[0][:50]}..."
                 )
                 return predicted_correction[0]
         except NotFittedError:
-            logger.warning("Meta-learning model is not fitted. Cannot apply corrections.")
+            logger.warning(
+                "Meta-learning model is not fitted. Cannot apply corrections."
+            )
         except Exception as e:
-            logger.error(f"Failed to apply meta-learning correction: {e}", exc_info=True)
+            logger.error(
+                f"Failed to apply meta-learning correction: {e}", exc_info=True
+            )
         return response
 
     def persist(self):
@@ -587,7 +606,9 @@ class MetaLearning:
         """
         try:
             with open("meta_learning.pkl", "wb") as f:
-                pickle.dump({"corrections": self.corrections, "model": self.model_pipeline}, f)
+                pickle.dump(
+                    {"corrections": self.corrections, "model": self.model_pipeline}, f
+                )
             logger.debug("Meta-learning data and model persisted.")
         except Exception as e:
             logger.error(f"Failed to persist meta-learning data: {e}", exc_info=True)
@@ -614,7 +635,9 @@ class MetaLearning:
                         ]
                     )
         except FileNotFoundError:
-            logger.info("Meta-learning data file not found. Starting with empty corrections.")
+            logger.info(
+                "Meta-learning data file not found. Starting with empty corrections."
+            )
         except Exception as e:
             logger.error(f"Failed to load meta-learning data: {e}", exc_info=True)
 
@@ -645,14 +668,18 @@ class CollaborativeAgent:
         self.agent_id = agent_id
         self.session_id = session_id
         self.llm_config = llm_config
-        self.persona = load_persona_dict().get(persona, "You are a helpful AI assistant.")
+        self.persona = load_persona_dict().get(
+            persona, "You are a helpful AI assistant."
+        )
         self.language = Config.DEFAULT_LANGUAGE
         self.state_backend = state_backend or InMemoryStateBackend()
         self.meta_learning = meta_learning or MetaLearning()
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy(logger)
         self.mm_processor = mm_processor or DefaultMultiModalProcessor(logger)
         self.audit_ledger = AuditLedgerClient()
-        self.memory = ConversationBufferWindowMemory(memory_key="history", k=Config.MEMORY_WINDOW)
+        self.memory = ConversationBufferWindowMemory(
+            memory_key="history", k=Config.MEMORY_WINDOW
+        )
         self.llm = self._get_llm()
         self._last_success_timestamp = None
         self._last_error_timestamp = None
@@ -673,7 +700,9 @@ class CollaborativeAgent:
                     "Invalid OpenAI API key format.",
                     code=AgentErrorCode.LLM_INIT_FAILED,
                 )
-            elif provider == "anthropic" and not re.match(r"sk-ant-api03-[a-zA-Z0-9]{86}", api_key):
+            elif provider == "anthropic" and not re.match(
+                r"sk-ant-api03-[a-zA-Z0-9]{86}", api_key
+            ):
                 raise AgentCoreException(
                     "Invalid Anthropic API key format.",
                     code=AgentErrorCode.LLM_INIT_FAILED,
@@ -681,21 +710,29 @@ class CollaborativeAgent:
 
         try:
             if provider == "openai":
-                return ChatOpenAI(model_name=model, temperature=temperature, api_key=api_key)
+                return ChatOpenAI(
+                    model_name=model, temperature=temperature, api_key=api_key
+                )
             elif provider == "anthropic":
-                return ChatAnthropic(model=model, temperature=temperature, api_key=api_key)
+                return ChatAnthropic(
+                    model=model, temperature=temperature, api_key=api_key
+                )
             elif provider == "google" and ChatGoogleGenerativeAI:
                 return ChatGoogleGenerativeAI(
                     model=model, temperature=temperature, google_api_key=api_key
                 )
             elif provider == "xai" and ChatXAI:
-                return ChatXAI(model_name=model, temperature=temperature, xai_api_key=api_key)
+                return ChatXAI(
+                    model_name=model, temperature=temperature, xai_api_key=api_key
+                )
             raise AgentCoreException(
                 f"Unsupported LLM provider: {provider}",
                 code=AgentErrorCode.LLM_UNSUPPORTED_PROVIDER,
             )
         except Exception as e:
-            logger.error(f"Failed to initialize LLM for provider {provider}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to initialize LLM for provider {provider}: {e}", exc_info=True
+            )
             raise AgentCoreException(
                 f"LLM initialization failed: {e}",
                 code=AgentErrorCode.LLM_INIT_FAILED,
@@ -704,7 +741,9 @@ class CollaborativeAgent:
 
     def _get_fallback_llm(self) -> Optional[Any]:
         fallback_provider = Config.FALLBACK_PROVIDER
-        if not fallback_provider or fallback_provider == self.llm_config.get("provider"):
+        if not fallback_provider or fallback_provider == self.llm_config.get(
+            "provider"
+        ):
             return None
 
         fallback_config = Config.FALLBACK_LLM_CONFIG.copy()
@@ -733,7 +772,9 @@ class CollaborativeAgent:
             state = await self.state_backend.load_state(self.session_id)
             if state:
                 if "history" in state and isinstance(state["history"], list):
-                    self.memory.chat_memory.messages = messages_from_dict(state["history"])
+                    self.memory.chat_memory.messages = messages_from_dict(
+                        state["history"]
+                    )
                 self.persona = state.get("persona", self.persona)
                 self.language = state.get("language", self.language)
                 logger.debug(
@@ -818,10 +859,14 @@ class CollaborativeAgent:
             response = await async_with_retry(
                 lambda: llm_instance.ainvoke(messages), retries=3, delay=2, backoff=2
             )
-            AGENT_METRICS["llm_calls_total"].labels(provider=provider, model=model).inc()
+            AGENT_METRICS["llm_calls_total"].labels(
+                provider=provider, model=model
+            ).inc()
             return response
         except Exception as e:
-            AGENT_METRICS["llm_errors_total"].labels(provider=provider, model=model).inc()
+            AGENT_METRICS["llm_errors_total"].labels(
+                provider=provider, model=model
+            ).inc()
             raise AgentCoreException(
                 f"LLM call failed: {e}",
                 code=AgentErrorCode.LLM_CALL_FAILED,
@@ -897,7 +942,9 @@ class CollaborativeAgent:
                     )
                     return json.loads(cached_result)
             except Exception as e:
-                logger.warning(f"Failed to check Redis cache: {e}. Trace ID: {current_trace_id}")
+                logger.warning(
+                    f"Failed to check Redis cache: {e}. Trace ID: {current_trace_id}"
+                )
                 redis_client = None  # Reset on error
 
         try:
@@ -920,7 +967,9 @@ class CollaborativeAgent:
                     ).inc()
                     summary = await self.mm_processor.summarize(item)
                     processed_mm.append(
-                        MultiModalData(data_type=item.data_type, data=item.data, metadata=summary)
+                        MultiModalData(
+                            data_type=item.data_type, data=item.data, metadata=summary
+                        )
                     )
 
                 # Get conversation history
@@ -950,11 +999,15 @@ class CollaborativeAgent:
                             self.llm_config["model"],
                         )
                         response_text = (
-                            response.content if hasattr(response, "content") else str(response)
+                            response.content
+                            if hasattr(response, "content")
+                            else str(response)
                         )
                     except AgentCoreException as e:
                         if self.fallback_llm:
-                            logger.warning(f"Primary LLM call failed, attempting fallback: {e}")
+                            logger.warning(
+                                f"Primary LLM call failed, attempting fallback: {e}"
+                            )
                             span.set_attribute("fallback_used", True)
                             response = await self._call_llm_with_retries(
                                 self.fallback_llm,
@@ -963,16 +1016,20 @@ class CollaborativeAgent:
                                 Config.FALLBACK_LLM_CONFIG.get("model"),
                             )
                             response_text = (
-                                response.content if hasattr(response, "content") else str(response)
+                                response.content
+                                if hasattr(response, "content")
+                                else str(response)
                             )
                         else:
                             raise
-                AGENT_METRICS["agent_step_duration_seconds"].labels(step="initial_llm").observe(
-                    time.monotonic() - initial_llm_start
-                )
+                AGENT_METRICS["agent_step_duration_seconds"].labels(
+                    step="initial_llm"
+                ).observe(time.monotonic() - initial_llm_start)
 
                 # Update memory with initial response
-                self.memory.save_context({"input": user_input}, {"output": response_text})
+                self.memory.save_context(
+                    {"input": user_input}, {"output": response_text}
+                )
 
                 # Self-reflection
                 reflection_text = ""
@@ -988,11 +1045,13 @@ class CollaborativeAgent:
                         self.llm_config["model"],
                     )
                     reflection_text = (
-                        reflection.content if hasattr(reflection, "content") else str(reflection)
+                        reflection.content
+                        if hasattr(reflection, "content")
+                        else str(reflection)
                     )
-                AGENT_METRICS["agent_step_duration_seconds"].labels(step="reflection").observe(
-                    time.monotonic() - reflection_start
-                )
+                AGENT_METRICS["agent_step_duration_seconds"].labels(
+                    step="reflection"
+                ).observe(time.monotonic() - reflection_start)
 
                 # Peer critique
                 critique_text = ""
@@ -1008,11 +1067,13 @@ class CollaborativeAgent:
                         self.llm_config["model"],
                     )
                     critique_text = (
-                        critique.content if hasattr(critique, "content") else str(critique)
+                        critique.content
+                        if hasattr(critique, "content")
+                        else str(critique)
                     )
-                AGENT_METRICS["agent_step_duration_seconds"].labels(step="critique").observe(
-                    time.monotonic() - critique_start
-                )
+                AGENT_METRICS["agent_step_duration_seconds"].labels(
+                    step="critique"
+                ).observe(time.monotonic() - critique_start)
 
                 # Self-correction
                 corrected_text = ""
@@ -1030,15 +1091,21 @@ class CollaborativeAgent:
                         self.llm_config["model"],
                     )
                     corrected_text = (
-                        corrected.content if hasattr(corrected, "content") else str(corrected)
+                        corrected.content
+                        if hasattr(corrected, "content")
+                        else str(corrected)
                     )
-                AGENT_METRICS["agent_step_duration_seconds"].labels(step="correction").observe(
-                    time.monotonic() - correction_start
-                )
+                AGENT_METRICS["agent_step_duration_seconds"].labels(
+                    step="correction"
+                ).observe(time.monotonic() - correction_start)
 
                 # Apply meta-learning
-                self.meta_learning.log_correction(user_input, response_text, corrected_text)
-                adjusted_response = self.meta_learning.apply_correction(corrected_text, user_input)
+                self.meta_learning.log_correction(
+                    user_input, response_text, corrected_text
+                )
+                adjusted_response = self.meta_learning.apply_correction(
+                    corrected_text, user_input
+                )
 
                 # Prepare final result
                 result = {
@@ -1055,17 +1122,19 @@ class CollaborativeAgent:
                 await self.save_state(operator_id)
 
                 # Log success
-                AGENT_METRICS["agent_predict_success"].labels(agent_id=self.agent_id).inc()
+                AGENT_METRICS["agent_predict_success"].labels(
+                    agent_id=self.agent_id
+                ).inc()
                 AGENT_METRICS["agent_predict_duration_seconds"].labels(
                     agent_id=self.agent_id
                 ).observe(time.monotonic() - start_time)
                 self._last_success_timestamp = time.time()
-                AGENT_METRICS["agent_last_success_timestamp"].labels(agent_id=self.agent_id).set(
-                    self._last_success_timestamp
-                )
-                AGENT_METRICS["agent_heartbeat_timestamp"].labels(agent_id=self.agent_id).set(
-                    time.time()
-                )
+                AGENT_METRICS["agent_last_success_timestamp"].labels(
+                    agent_id=self.agent_id
+                ).set(self._last_success_timestamp)
+                AGENT_METRICS["agent_heartbeat_timestamp"].labels(
+                    agent_id=self.agent_id
+                ).set(time.time())
 
                 # Log audit
                 await self.audit_ledger.log_event(
@@ -1102,12 +1171,12 @@ class CollaborativeAgent:
                 agent_id=self.agent_id, error_code=AgentErrorCode.TIMEOUT.value
             ).inc()
             self._last_error_timestamp = time.time()
-            AGENT_METRICS["agent_last_error_timestamp"].labels(agent_id=self.agent_id).set(
-                self._last_error_timestamp
-            )
-            AGENT_METRICS["agent_heartbeat_timestamp"].labels(agent_id=self.agent_id).set(
-                time.time()
-            )
+            AGENT_METRICS["agent_last_error_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(self._last_error_timestamp)
+            AGENT_METRICS["agent_heartbeat_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(time.time())
             logger.error(
                 f"Prediction timed out for agent {self.agent_id}. Trace ID: {current_trace_id}",
                 exc_info=True,
@@ -1131,12 +1200,12 @@ class CollaborativeAgent:
                 agent_id=self.agent_id, error_code=e.code.value
             ).inc()
             self._last_error_timestamp = time.time()
-            AGENT_METRICS["agent_last_error_timestamp"].labels(agent_id=self.agent_id).set(
-                self._last_error_timestamp
-            )
-            AGENT_METRICS["agent_heartbeat_timestamp"].labels(agent_id=self.agent_id).set(
-                time.time()
-            )
+            AGENT_METRICS["agent_last_error_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(self._last_error_timestamp)
+            AGENT_METRICS["agent_heartbeat_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(time.time())
             logger.error(
                 f"Agent prediction failed for {self.agent_id}: {e}. Trace ID: {current_trace_id}",
                 exc_info=True,
@@ -1157,12 +1226,12 @@ class CollaborativeAgent:
                 agent_id=self.agent_id, error_code=AgentErrorCode.UNEXPECTED_ERROR.value
             ).inc()
             self._last_error_timestamp = time.time()
-            AGENT_METRICS["agent_last_error_timestamp"].labels(agent_id=self.agent_id).set(
-                self._last_error_timestamp
-            )
-            AGENT_METRICS["agent_heartbeat_timestamp"].labels(agent_id=self.agent_id).set(
-                time.time()
-            )
+            AGENT_METRICS["agent_last_error_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(self._last_error_timestamp)
+            AGENT_METRICS["agent_heartbeat_timestamp"].labels(
+                agent_id=self.agent_id
+            ).set(time.time())
             logger.error(
                 f"Unexpected error in agent prediction for {self.agent_id}: {e}. Trace ID: {current_trace_id}",
                 exc_info=True,
@@ -1400,7 +1469,9 @@ async def get_or_create_agent(
         if Config.REDIS_URL and RedisClient is not None:
             try:
                 sb = RedisStateBackend(redis_url=Config.REDIS_URL)
-                await async_with_retry(lambda: sb.init_client(), retries=3, delay=2, backoff=2)
+                await async_with_retry(
+                    lambda: sb.init_client(), retries=3, delay=2, backoff=2
+                )
                 final_state_backend = sb
                 logger.info("Using RedisStateBackend for state management.")
             except Exception as e:
@@ -1412,7 +1483,9 @@ async def get_or_create_agent(
         elif Config.POSTGRES_DB_URL and PostgresClient is not None:
             try:
                 sb = PostgresStateBackend(db_url=Config.POSTGRES_DB_URL)
-                await async_with_retry(lambda: sb.init_client(), retries=3, delay=2, backoff=2)
+                await async_with_retry(
+                    lambda: sb.init_client(), retries=3, delay=2, backoff=2
+                )
                 final_state_backend = sb
                 logger.info("Using PostgresStateBackend for state management.")
             except Exception as e:
@@ -1442,7 +1515,9 @@ async def get_or_create_agent(
     )
     await agent.load_state(operator_id=operator_id)
     if "agent_creation_duration_seconds" in AGENT_METRICS:
-        AGENT_METRICS["agent_creation_duration_seconds"].observe(time.monotonic() - start_time)
+        AGENT_METRICS["agent_creation_duration_seconds"].observe(
+            time.monotonic() - start_time
+        )
     logger.info(
         json.dumps(
             {
@@ -1491,7 +1566,9 @@ async def setup_conversation(
             "temperature": llm.temperature,
             "api_key": getattr(llm, "anthropic_api_key", None),
         }
-    elif hasattr(llm, "__class__") and llm.__class__.__name__ == "ChatGoogleGenerativeAI":
+    elif (
+        hasattr(llm, "__class__") and llm.__class__.__name__ == "ChatGoogleGenerativeAI"
+    ):
         llm_config_from_langchain = {
             "provider": "google",
             "model": llm.model,
@@ -1512,7 +1589,9 @@ async def setup_conversation(
             "temperature": getattr(llm, "temperature", 0.7),
         }
 
-    agent = await get_or_create_agent(session_id=session_id, llm_config=llm_config_from_langchain)
+    agent = await get_or_create_agent(
+        session_id=session_id, llm_config=llm_config_from_langchain
+    )
     await agent.set_persona(persona)
     agent.language = language
     # For legacy compatibility, create a ConversationChain wrapper

@@ -16,27 +16,27 @@ Features:
 
 from __future__ import annotations
 
-import os
-import sys
-import json
-import logging
-import re
-from typing import Dict, Any, List, Optional, Tuple
 import asyncio
 import hashlib
+import json
+import logging
+import os
+import re
+import sys
 import threading
 import time
+from typing import Any, Dict, List, Optional, Tuple
 
 # Pydantic v2 imports
 from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    PrivateAttr,
     AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    ValidationError,
     field_validator,
     model_validator,
-    ConfigDict,
 )
 
 # --- Optional Dependencies for Production Readiness ---
@@ -137,7 +137,9 @@ def get_or_create_metric(
         _METRICS[name] = metric
         return metric
     except ValueError:
-        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
+        logger.warning(
+            f"Metric '{name}' already registered. Using no-op for this instance."
+        )
         metric = _noop_metric(metric_type)
         _METRICS[name] = metric
         return metric
@@ -195,7 +197,9 @@ GENERIC_SECRET_KV_RE = re.compile(
     r"(?i)(private_key|password|api_key|secret|token|jwt)[\"'\s]*[:=][\"'\s]*([a-zA-Z0-9\-_./+=]+)"
 )
 AWS_ACCESS_KEY_RE = re.compile(r"aws_access_key_id=([A-Za-z0-9]+)", re.IGNORECASE)
-AWS_SECRET_KEY_RE = re.compile(r"aws_secret_access_key=([A-Za-z0-9/+=]+)", re.IGNORECASE)
+AWS_SECRET_KEY_RE = re.compile(
+    r"aws_secret_access_key=([A-Za-z0-9/+=]+)", re.IGNORECASE
+)
 CLIENT_SECRET_RE = re.compile(r"client_secret=([A-Za-z0-9\-_]+)", re.IGNORECASE)
 GENERIC_SECRET_VALUE_RE = re.compile(
     r"(private_key|password|api_key|secret|token|jwt|access_key|secret_key|credentials)",
@@ -258,10 +262,14 @@ def _load_secret_from_aws_secrets_manager(secret_name: str) -> Optional[str]:
         if "SecretString" in response:
             return response["SecretString"]
         elif "SecretBinary" in response:
-            return response["SecretBinary"].decode("utf-8")  # Assume UTF-8 for binary secrets
+            return response["SecretBinary"].decode(
+                "utf-8"
+            )  # Assume UTF-8 for binary secrets
         return None
     except ClientError as e:
-        logger.error(f"Failed to retrieve secret '{secret_name}' from AWS Secrets Manager: {e}")
+        logger.error(
+            f"Failed to retrieve secret '{secret_name}' from AWS Secrets Manager: {e}"
+        )
         return None
     except Exception as e:
         logger.error(
@@ -273,7 +281,9 @@ def _load_secret_from_aws_secrets_manager(secret_name: str) -> Optional[str]:
 
 # --- Configuration Schemas (Pydantic v2) ---
 class S3OffChainConfig(BaseModel):
-    bucket_name: str = Field(..., description="AWS S3 bucket name for off-chain storage.")
+    bucket_name: str = Field(
+        ..., description="AWS S3 bucket name for off-chain storage."
+    )
     region_name: Optional[str] = Field(
         None, description="AWS region, defaults to env AWS_REGION or 'us-east-1'."
     )
@@ -302,7 +312,9 @@ class GcsOffChainConfig(BaseModel):
 
 
 class AzureBlobOffChainConfig(BaseModel):
-    connection_string: str = Field(..., description="Azure Storage account connection string.")
+    connection_string: str = Field(
+        ..., description="Azure Storage account connection string."
+    )
     container_name: str = Field(..., description="Azure Blob container name.")
 
     model_config = ConfigDict(extra="forbid")
@@ -320,8 +332,12 @@ class FabricDLTConfig(BaseModel):
     channel_name: str = Field(..., description="Name of the Fabric channel.")
     chaincode_name: str = Field(..., description="Name of the deployed chaincode.")
     org_name: str = Field(..., description="Name of the Fabric organization.")
-    user_name: str = Field(..., description="Name of the user identity for transactions.")
-    network_profile_path: str = Field(..., description="Path to the Fabric network.json file.")
+    user_name: str = Field(
+        ..., description="Name of the user identity for transactions."
+    )
+    network_profile_path: str = Field(
+        ..., description="Path to the Fabric network.json file."
+    )
     peer_names: List[str] = Field(
         default_factory=list,
         description="List of peer names for transaction endorsement/query.",
@@ -329,7 +345,9 @@ class FabricDLTConfig(BaseModel):
     invoke_timeout: int = Field(
         60, description="Timeout for chaincode invoke operations in seconds."
     )
-    query_timeout: int = Field(30, description="Timeout for chaincode query operations in seconds.")
+    query_timeout: int = Field(
+        30, description="Timeout for chaincode query operations in seconds."
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -349,7 +367,9 @@ class EvmDLTConfig(BaseModel):
     contract_address: str = Field(
         ..., description="Address of the deployed Checkpoint smart contract."
     )
-    contract_abi_path: str = Field(..., description="Path to the smart contract ABI JSON file.")
+    contract_abi_path: str = Field(
+        ..., description="Path to the smart contract ABI JSON file."
+    )
     private_key: Optional[str] = Field(
         None,
         description="Hex string of the private key for transaction signing (sensitive).",
@@ -361,7 +381,9 @@ class EvmDLTConfig(BaseModel):
         False,
         description="Set to True for Proof-of-Authority (PoA) chains (e.g., Ganache, Besu).",
     )
-    default_gas_limit: int = Field(2_000_000, description="Default gas limit for transactions.")
+    default_gas_limit: int = Field(
+        2_000_000, description="Default gas limit for transactions."
+    )
     default_max_fee_per_gas: Optional[int] = Field(
         None, description="Default maxFeePerGas (in Gwei) for EIP-1559 transactions."
     )
@@ -390,13 +412,17 @@ class EvmDLTConfig(BaseModel):
             return v
         # Strict 0x-prefixed, 20-byte address check
         if not re.fullmatch(r"0x[a-fA-F0-9]{40}", v):
-            raise ValueError("contract_address must be a 0x-prefixed 20-byte hex string.")
+            raise ValueError(
+                "contract_address must be a 0x-prefixed 20-byte hex string."
+            )
         return v
 
     @model_validator(mode="after")
     def enforce_private_key_presence(self) -> "EvmDLTConfig":
         if not self.private_key and self.private_key_secret_id:
-            loaded_key = _load_secret_from_aws_secrets_manager(self.private_key_secret_id)
+            loaded_key = _load_secret_from_aws_secrets_manager(
+                self.private_key_secret_id
+            )
             if loaded_key:
                 self.private_key = loaded_key
             elif PRODUCTION_MODE:
@@ -410,8 +436,12 @@ class EvmDLTConfig(BaseModel):
                 "In PRODUCTION_MODE, EVM config requires a private_key or private_key_secret_id."
             )
         # If private_key present, validate hex format 0x + 64 hex chars (32 bytes)
-        if self.private_key and not re.fullmatch(r"0x[a-fA-F0-9]{64}", self.private_key):
-            raise ValueError("private_key must be a 0x-prefixed 32-byte hex string (64 hex chars).")
+        if self.private_key and not re.fullmatch(
+            r"0x[a-fA-F0-9]{64}", self.private_key
+        ):
+            raise ValueError(
+                "private_key must be a 0x-prefixed 32-byte hex string (64 hex chars)."
+            )
         # Non-negative numeric values
         for field_name in (
             "default_gas_limit",
@@ -427,7 +457,9 @@ class EvmDLTConfig(BaseModel):
         # Optional file existence check
         should_check = (PRODUCTION_MODE and ENFORCE_PATHS_IN_PROD) or VALIDATE_PATHS
         if should_check and not os.path.exists(self.contract_abi_path):
-            raise ValueError(f"EVM contract_abi_path does not exist: {self.contract_abi_path}")
+            raise ValueError(
+                f"EVM contract_abi_path does not exist: {self.contract_abi_path}"
+            )
         return self
 
 
@@ -451,7 +483,9 @@ class CordaDLTConfig(BaseModel):
     @model_validator(mode="after")
     def enforce_password_presence(self) -> "CordaDLTConfig":
         if self.password_secret_id:
-            loaded_password = _load_secret_from_aws_secrets_manager(self.password_secret_id)
+            loaded_password = _load_secret_from_aws_secrets_manager(
+                self.password_secret_id
+            )
             if loaded_password:
                 self.password = loaded_password
             elif PRODUCTION_MODE:
@@ -475,7 +509,9 @@ class DLTNetworkConfig(BaseModel):
         ...,
         description="Unique name for this DLT network configuration (e.g., 'mainnet-fabric', 'goerli-evm').",
     )
-    dlt_type: str = Field(..., description="Type of DLT ('fabric', 'evm', 'corda', 'simple').")
+    dlt_type: str = Field(
+        ..., description="Type of DLT ('fabric', 'evm', 'corda', 'simple')."
+    )
     off_chain_storage_type: str = Field(
         "s3",
         description="Type of off-chain storage ('s3', 'gcs', 'azure_blob', 'ipfs', 'in_memory').",
@@ -494,7 +530,9 @@ class DLTNetworkConfig(BaseModel):
     default_timeout_seconds: int = Field(
         30, description="Default timeout for DLT operations in seconds."
     )
-    retry_attempts: int = Field(5, description="Number of retry attempts for DLT operations.")
+    retry_attempts: int = Field(
+        5, description="Number of retry attempts for DLT operations."
+    )
     retry_backoff_factor: float = Field(
         2.0, description="Factor for exponential backoff between retries."
     )
@@ -528,15 +566,21 @@ class DLTNetworkConfig(BaseModel):
     def validate_off_chain_config(self) -> "DLTNetworkConfig":
         if self.off_chain_storage_type != "in_memory":
             if self.off_chain_storage_type == "s3" and not self.s3:
-                raise ValueError("Off-chain storage type 's3' requires 's3' configuration.")
+                raise ValueError(
+                    "Off-chain storage type 's3' requires 's3' configuration."
+                )
             if self.off_chain_storage_type == "gcs" and not self.gcs:
-                raise ValueError("Off-chain storage type 'gcs' requires 'gcs' configuration.")
+                raise ValueError(
+                    "Off-chain storage type 'gcs' requires 'gcs' configuration."
+                )
             if self.off_chain_storage_type == "azure_blob" and not self.azure_blob:
                 raise ValueError(
                     "Off-chain storage type 'azure_blob' requires 'azure_blob' configuration."
                 )
             if self.off_chain_storage_type == "ipfs" and not self.ipfs:
-                raise ValueError("Off-chain storage type 'ipfs' requires 'ipfs' configuration.")
+                raise ValueError(
+                    "Off-chain storage type 'ipfs' requires 'ipfs' configuration."
+                )
         return self
 
     @classmethod
@@ -545,7 +589,9 @@ class DLTNetworkConfig(BaseModel):
         try:
             # Strip internal fields before validation
             internal_keys = ["_CONFIG_SCHEMA_VERSION"]
-            cleaned_data = {k: v for k, v in migrated_data.items() if k not in internal_keys}
+            cleaned_data = {
+                k: v for k, v in migrated_data.items() if k not in internal_keys
+            }
             return cls.model_validate(cleaned_data)  # Pydantic v2
         except ValidationError as e:
             logger.error(
@@ -569,7 +615,9 @@ class DLTNetworkConfig(BaseModel):
             )
             # Example migration: old 'evm_private_key' -> evm.private_key
             if "evm_private_key" in migrated:
-                migrated.setdefault("evm", {})["private_key"] = migrated.pop("evm_private_key")
+                migrated.setdefault("evm", {})["private_key"] = migrated.pop(
+                    "evm_private_key"
+                )
             migrated["_CONFIG_SCHEMA_VERSION"] = 1
         # Normalize name to lowercase for consistency across sources
         if "name" in migrated and isinstance(migrated["name"], str):
@@ -678,7 +726,9 @@ class DLTNetworkConfigManager:
 
         # Individual env vars
         for env_var_name, env_var_value in os.environ.items():
-            if env_var_name.startswith("DLT_NETWORK_CONFIG_") and env_var_name.endswith("_JSON"):
+            if env_var_name.startswith("DLT_NETWORK_CONFIG_") and env_var_name.endswith(
+                "_JSON"
+            ):
                 config_name_from_env = env_var_name[
                     len("DLT_NETWORK_CONFIG_") : -len("_JSON")
                 ].lower()
@@ -729,14 +779,18 @@ class DLTNetworkConfigManager:
             # Compute hash consistently from raw data (normalized, secrets stripped)
             self.__class__._last_config_hash = _compute_raw_configs_hash(raw_map)
 
-        metrics["load_latency"].labels(phase="load_all").observe(time.monotonic() - start)
+        metrics["load_latency"].labels(phase="load_all").observe(
+            time.monotonic() - start
+        )
         logger.info(
             f"Loaded {len(loaded_configs)} DLT network configurations.",
             extra={"current_configs": list(loaded_configs.keys())},
         )
         metrics["load_total"].labels(status="success").inc()
 
-    def _add_config(self, config_data: Dict[str, Any], target_dict: Dict[str, DLTNetworkConfig]):
+    def _add_config(
+        self, config_data: Dict[str, Any], target_dict: Dict[str, DLTNetworkConfig]
+    ):
         scrubbed_config_data = scrub_secrets(config_data.copy())
         try:
             validated_config = DLTNetworkConfig.load_and_validate(config_data)
@@ -865,7 +919,10 @@ if __name__ == "__main__":
 
         # Clear potentially conflicting env keys
         for key in list(os.environ.keys()):
-            if key.startswith("DLT_NETWORK_CONFIG_") or key == "DLT_NETWORK_CONFIGS_JSON":
+            if (
+                key.startswith("DLT_NETWORK_CONFIG_")
+                or key == "DLT_NETWORK_CONFIGS_JSON"
+            ):
                 del os.environ[key]
 
         # Ensure PRODUCTION_MODE is False for tests
@@ -960,7 +1017,9 @@ if __name__ == "__main__":
 
         print(f"Loaded {len(configs)} configurations:")
         for name, cfg in configs.items():
-            print(f"  - {name}: DLT Type={cfg.dlt_type}, Off-chain={cfg.off_chain_storage_type}")
+            print(
+                f"  - {name}: DLT Type={cfg.dlt_type}, Off-chain={cfg.off_chain_storage_type}"
+            )
             if cfg.evm:
                 print(
                     f"    EVM private_key loaded: {'present' if bool(cfg.evm.private_key) else 'absent'}"
@@ -1031,11 +1090,15 @@ if __name__ == "__main__":
             try:
                 await mgr.refresh_configs_if_changed()
                 assert "insecure-evm" not in mgr.get_all_configs()
-                print("Test 3.1 PASSED: Insecure HttpUrl was rejected in production mode.")
+                print(
+                    "Test 3.1 PASSED: Insecure HttpUrl was rejected in production mode."
+                )
             except DLTClientConfigurationError:
                 print("Test 3.1 PASSED: Expected error on insecure HttpUrl.")
 
-            print("\nTest 3.2: Missing private_key_secret_id/private_key in prod for EVM")
+            print(
+                "\nTest 3.2: Missing private_key_secret_id/private_key in prod for EVM"
+            )
             os.environ["DLT_NETWORK_CONFIG_MISSING_KEY_EVM_JSON"] = json.dumps(
                 {
                     "name": "missing-key-evm",
@@ -1052,9 +1115,13 @@ if __name__ == "__main__":
             try:
                 await mgr.refresh_configs_if_changed()
                 assert "missing-key-evm" not in mgr.get_all_configs()
-                print("Test 3.2 PASSED: Missing private_key was rejected in production mode.")
+                print(
+                    "Test 3.2 PASSED: Missing private_key was rejected in production mode."
+                )
             except DLTClientConfigurationError:
-                print("Test 3.2 PASSED: Expected error on missing private key in production.")
+                print(
+                    "Test 3.2 PASSED: Expected error on missing private key in production."
+                )
         else:
             print("Production-mode specific tests skipped (PRODUCTION_MODE=false).")
 

@@ -3,33 +3,34 @@ Test suite for omnicore_engine/security_integration.py
 Tests enterprise security integration with FastAPI and OmniCore components.
 """
 
-import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch, AsyncMock
+import os
 
 # Add the parent directory to path for imports
 import sys
-import os
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
 from omnicore_engine.security_integration import (
-    UserRole,
-    Permission,
     AuthenticationRequest,
-    SessionContext,
+    EncryptionAdapter,
+    Permission,
     SecurityEvent,
     SecurityIntegrationManager,
     SecurityMiddleware,
-    EncryptionAdapter,
+    SessionContext,
+    UserRole,
+    configure_app_security,
+    get_security_integration_manager,
     secure_endpoint,
     validate_input,
-    get_security_integration_manager,
-    configure_app_security,
 )
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
 
 class TestEnums:
@@ -143,7 +144,9 @@ class TestSecurityIntegrationManager:
     @pytest.fixture
     def manager(self, mock_config, mock_security_utils):
         """Create SecurityIntegrationManager instance"""
-        with patch("omnicore_engine.security_integration.get_security_utils") as mock_get_utils:
+        with patch(
+            "omnicore_engine.security_integration.get_security_utils"
+        ) as mock_get_utils:
             mock_get_utils.return_value = mock_security_utils
 
             manager = SecurityIntegrationManager(
@@ -399,7 +402,9 @@ class TestSecurityMiddleware:
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded(self, middleware):
         """Test rate limiting"""
-        middleware.security_manager.security_utils._rate_limiter.is_allowed.return_value = False
+        middleware.security_manager.security_utils._rate_limiter.is_allowed.return_value = (
+            False
+        )
 
         request = Mock()
         request.client.host = "192.168.1.1"
@@ -533,7 +538,9 @@ class TestSingleton:
 
     def test_get_security_integration_manager_singleton(self):
         """Test manager singleton"""
-        with patch("omnicore_engine.security_integration._security_integration_manager", None):
+        with patch(
+            "omnicore_engine.security_integration._security_integration_manager", None
+        ):
             manager1 = get_security_integration_manager()
             manager2 = get_security_integration_manager()
 

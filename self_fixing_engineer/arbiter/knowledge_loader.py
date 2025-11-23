@@ -1,14 +1,15 @@
 # knowledge_loader.py
 
-import os
-import json
 import asyncio
-import tempfile
+import json
 import logging
+import os
+import tempfile
 import threading
-from typing import Dict, Any, Optional, Union
 from copy import deepcopy
-from arbiter.arbiter_plugin_registry import register, PlugInKind
+from typing import Any, Dict, Optional, Union
+
+from arbiter.arbiter_plugin_registry import PlugInKind, register
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,9 @@ class KnowledgeLoader:
                                          within the knowledge_data_path.
         """
         self.knowledge_data_path = knowledge_data_path
-        self.master_knowledge_file = os.path.join(knowledge_data_path, master_knowledge_file)
+        self.master_knowledge_file = os.path.join(
+            knowledge_data_path, master_knowledge_file
+        )
         self.loaded_knowledge: Dict[str, Any] = {}
         self._lock = threading.Lock()
 
@@ -264,12 +267,16 @@ class KnowledgeLoader:
             master_data = _load_knowledge_sync(self.master_knowledge_file)
             if master_data:
                 self.loaded_knowledge = master_data
-                logger.info(f"  Loaded knowledge from master file: {self.master_knowledge_file}")
+                logger.info(
+                    f"  Loaded knowledge from master file: {self.master_knowledge_file}"
+                )
                 return
 
             # If no master file, proceed with merging logic
             temp_loaded_data = {}
-            if os.path.exists(self.knowledge_data_path) and os.path.isdir(self.knowledge_data_path):
+            if os.path.exists(self.knowledge_data_path) and os.path.isdir(
+                self.knowledge_data_path
+            ):
                 for filename in os.listdir(self.knowledge_data_path):
                     if filename.endswith(".json") and filename != os.path.basename(
                         self.master_knowledge_file
@@ -308,7 +315,9 @@ class KnowledgeLoader:
             if not hasattr(arbiter_instance, "state") or not isinstance(
                 arbiter_instance.state, dict
             ):
-                logger.error("Arbiter instance does not have a valid 'state' dictionary.")
+                logger.error(
+                    "Arbiter instance does not have a valid 'state' dictionary."
+                )
                 return
 
             logger.info(
@@ -330,17 +339,29 @@ class KnowledgeLoader:
                     mem[domain_name] = deepcopy(domain_data)
                     logger.debug(f"  Added new domain '{domain_name}'.")
                 else:
-                    if isinstance(domain_data, dict) and isinstance(mem.get(domain_name), dict):
+                    if isinstance(domain_data, dict) and isinstance(
+                        mem.get(domain_name), dict
+                    ):
                         merge_dict(mem[domain_name], deepcopy(domain_data))
-                        logger.debug(f"  Merged data into existing domain '{domain_name}'.")
-                    elif isinstance(domain_data, list) and isinstance(mem.get(domain_name), list):
+                        logger.debug(
+                            f"  Merged data into existing domain '{domain_name}'."
+                        )
+                    elif isinstance(domain_data, list) and isinstance(
+                        mem.get(domain_name), list
+                    ):
                         for item in domain_data:
                             if item not in mem[domain_name]:
                                 mem[domain_name].append(item)
-                        logger.debug(f"  Extended list in existing domain '{domain_name}'.")
+                        logger.debug(
+                            f"  Extended list in existing domain '{domain_name}'."
+                        )
                     else:
-                        mem[domain_name] = deepcopy(domain_data)  # Overwrite on type mismatch
-                        logger.warning(f"  Overwrote domain '{domain_name}' due to type mismatch.")
+                        mem[domain_name] = deepcopy(
+                            domain_data
+                        )  # Overwrite on type mismatch
+                        logger.warning(
+                            f"  Overwrote domain '{domain_name}' due to type mismatch."
+                        )
 
             logger.info(
                 f"Knowledge injection complete for {getattr(arbiter_instance, 'name', 'unnamed-arbiter')}."

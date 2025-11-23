@@ -1,20 +1,18 @@
 # arbiter/learner/audit.py
 
 import hashlib
-import structlog
 import os
-from typing import List, Tuple, Dict, Any, Optional
 from datetime import datetime, timezone
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Gauge
+from typing import Any, Dict, List, Optional, Tuple
+
+import structlog
 
 # Assuming `audit_log` and `metrics` modules are available in the project root.
-from arbiter.audit_log import (
-    log_event as audit_log,
-)
-from .metrics import (
-    learn_error_counter,
-)
+from arbiter.audit_log import log_event as audit_log
+from prometheus_client import Gauge
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from .metrics import learn_error_counter
 
 logger = structlog.get_logger(__name__)
 
@@ -53,9 +51,13 @@ class CircuitBreaker:
         if self.failures >= self.failure_threshold and not self.is_open:
             self.is_open = True
             circuit_breaker_state.labels(name=self.name).set(1)
-            logger.warning("Circuit breaker opened", name=self.name, failures=self.failures)
+            logger.warning(
+                "Circuit breaker opened", name=self.name, failures=self.failures
+            )
         else:
-            logger.debug("Circuit breaker failures", name=self.name, failures=self.failures)
+            logger.debug(
+                "Circuit breaker failures", name=self.name, failures=self.failures
+            )
 
     async def record_success(self):
         if self.failures > 0 or self.is_open:
@@ -90,7 +92,9 @@ class CircuitBreaker:
                 else 0
             ),
         )
-        logger.warning("Circuit breaker open", name=self.name, remaining_cooldown=remaining)
+        logger.warning(
+            "Circuit breaker open", name=self.name, remaining_cooldown=remaining
+        )
         return False
 
 
@@ -212,7 +216,9 @@ async def _persist_knowledge_inner(
                 "Audit log for learning skipped due to open circuit breaker",
                 name=circuit_breaker.name,
             )
-            learn_error_counter.labels(domain=domain, error_type="audit_circuit_open_learn").inc()
+            learn_error_counter.labels(
+                domain=domain, error_type="audit_circuit_open_learn"
+            ).inc()
     except Exception as e:
         learn_error_counter.labels(domain=domain, error_type="db_save_failure").inc()
         await circuit_breaker.record_failure()
@@ -248,7 +254,9 @@ async def persist_knowledge(
 async def _persist_knowledge_batch_inner(
     db: Any,
     circuit_breaker: CircuitBreaker,
-    entries: List[Tuple[str, str, Dict[str, Any], str, str, List[Tuple[str, str]], str]],
+    entries: List[
+        Tuple[str, str, Dict[str, Any], str, str, List[Tuple[str, str]], str]
+    ],
     user_id: Optional[str],
 ):
     """Inner function that performs the actual batch persistence logic."""
@@ -288,7 +296,9 @@ async def _persist_knowledge_batch_inner(
                 domain="batch", error_type="audit_circuit_open_batch_learn"
             ).inc()
     except Exception as e:
-        learn_error_counter.labels(domain="batch", error_type="db_save_failure_batch").inc()
+        learn_error_counter.labels(
+            domain="batch", error_type="db_save_failure_batch"
+        ).inc()
         await circuit_breaker.record_failure()
         raise e
 
@@ -297,7 +307,9 @@ async def _persist_knowledge_batch_inner(
 async def persist_knowledge_batch(
     db: Any,
     circuit_breaker: CircuitBreaker,
-    entries: List[Tuple[str, str, Dict[str, Any], str, str, List[Tuple[str, str]], str]],
+    entries: List[
+        Tuple[str, str, Dict[str, Any], str, str, List[Tuple[str, str]], str]
+    ],
     user_id: Optional[str],
 ):
     """Persist knowledge and create audit events in batch with retry logic."""

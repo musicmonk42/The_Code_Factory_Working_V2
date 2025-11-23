@@ -19,21 +19,21 @@ Author: Arbiter Platform Team
 Version: 2.0.0
 """
 
-import os
-import sys  # Added missing import
-import socket
-import logging
-import threading
-import json
-import hashlib
 import asyncio  # Added for async detection in trace_operation decorator
-from enum import Enum
-from typing import Optional, Dict, Any, List, Callable
-from dataclasses import dataclass, field
-from functools import wraps
-from contextlib import contextmanager
+import hashlib
+import json
+import logging
+import os
+import socket
+import sys  # Added missing import
+import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional
 
 # Third-party imports
 try:
@@ -54,24 +54,24 @@ from circuitbreaker import circuit
 
 # OpenTelemetry imports with comprehensive fallback
 try:
-    from opentelemetry import trace, metrics, baggage, context
+    from opentelemetry import baggage, context, metrics, trace
+    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
+    from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.propagators.b3 import B3MultiFormat
+    from opentelemetry.propagators.composite import CompositePropagator
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
     from opentelemetry.sdk.trace import TracerProvider, sampling
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
         ConsoleSpanExporter,
         SimpleSpanProcessor,
     )
-    from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
-    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
-    from opentelemetry.propagate import set_global_textmap
-    from opentelemetry.propagators.b3 import B3MultiFormat
-    from opentelemetry.propagators.composite import CompositePropagator
+    from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
     from opentelemetry.trace.propagation.tracecontext import (
         TraceContextTextMapPropagator,
     )
-    from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
-    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
     # Exporter imports with fallback
     try:
@@ -274,7 +274,9 @@ class SamplingStrategy:
     adaptive_enabled: bool = True
     target_spans_per_second: int = 100
 
-    def should_sample(self, span_name: str, service_name: str, attributes: Dict) -> bool:
+    def should_sample(
+        self, span_name: str, service_name: str, attributes: Dict
+    ) -> bool:
         """Determine if a span should be sampled based on strategy."""
         # Check for explicit operation override
         if span_name in self.operation_rates:
@@ -400,7 +402,9 @@ class OpenTelemetryConfig:
             )
 
             self._initialized = True
-            logger.info(f"OpenTelemetry initialized for {self.environment.value} environment")
+            logger.info(
+                f"OpenTelemetry initialized for {self.environment.value} environment"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize OpenTelemetry: {e}", exc_info=True)
@@ -485,14 +489,19 @@ class OpenTelemetryConfig:
                 CollectorEndpoint(
                     url=primary_url,
                     protocol=os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc"),
-                    headers=self._parse_headers(os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")),
+                    headers=self._parse_headers(
+                        os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")
+                    ),
                     tls_cert_path=os.getenv("OTEL_EXPORTER_OTLP_CERTIFICATE"),
-                    insecure=os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "false").lower() == "true",
+                    insecure=os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "false").lower()
+                    == "true",
                 )
             )
 
         # Fallback endpoints
-        fallback_urls = os.getenv("OTEL_EXPORTER_OTLP_FALLBACK_ENDPOINTS", "").split(",")
+        fallback_urls = os.getenv("OTEL_EXPORTER_OTLP_FALLBACK_ENDPOINTS", "").split(
+            ","
+        )
         for url in fallback_urls:
             if url.strip():
                 endpoints.append(CollectorEndpoint(url=url.strip()))
@@ -507,8 +516,12 @@ class OpenTelemetryConfig:
         """Validate that an endpoint is reachable and properly configured."""
         if self.environment == Environment.PRODUCTION:
             # In production, require TLS unless explicitly marked insecure
-            if not endpoint.insecure and not endpoint.url.startswith(("https://", "grpcs://")):
-                logger.warning(f"Rejecting non-TLS endpoint in production: {endpoint.url}")
+            if not endpoint.insecure and not endpoint.url.startswith(
+                ("https://", "grpcs://")
+            ):
+                logger.warning(
+                    f"Rejecting non-TLS endpoint in production: {endpoint.url}"
+                )
                 return False
 
         # Check reachability
@@ -591,7 +604,9 @@ class OpenTelemetryConfig:
         """Create appropriate sampler based on environment and strategy."""
         if self.environment == Environment.PRODUCTION:
             # Use parent-based sampling with ratio for production
-            return ParentBased(root=TraceIdRatioBased(self._sampling_strategy.base_rate))
+            return ParentBased(
+                root=TraceIdRatioBased(self._sampling_strategy.base_rate)
+            )
         else:
             # Sample everything in development/staging
             return sampling.ALWAYS_ON

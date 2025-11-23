@@ -25,25 +25,17 @@ Upgrades from the original file:
 
 from __future__ import annotations
 
-import logging
-import time
 import json
-import re
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    Tuple,
-)
-from collections import defaultdict
-import types
-import numpy as np
+import logging
 import os
+import re
 import threading  # FIXED: Added import threading to resolve NameError
+import time
+import types
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+
+import numpy as np
 
 # ---- App/Internal Imports ----
 # Defensive lazy settings accessor to avoid import-time side-effects
@@ -97,7 +89,7 @@ def settings():
 
 
 try:
-    from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
+    from omnicore_engine.message_bus import Message, MessageFilter, ShardedMessageBus
 except ImportError:
     # Allow tests to import without message_bus dependency
     ShardedMessageBus = None  # type: ignore
@@ -117,7 +109,8 @@ except ImportError:
 DASK_AVAILABLE = False
 try:
     import dask.array as da
-    from dask.distributed import Client as DaskClient, LocalCluster
+    from dask.distributed import Client as DaskClient
+    from dask.distributed import LocalCluster
 
     DASK_AVAILABLE = True
 except ImportError:
@@ -404,7 +397,9 @@ def sanitize_array_input(data: Any, backend_module=None) -> Any:
         backend_module = np
 
     if not isinstance(data, (list, tuple, np.ndarray, int, float)):
-        raise TypeError("Invalid array input type. Must be a list, tuple, number or numpy array.")
+        raise TypeError(
+            "Invalid array input type. Must be a list, tuple, number or numpy array."
+        )
 
     # Convert and validate
     arr = backend_module.asarray(data)
@@ -428,7 +423,9 @@ class Benchmarker:
         func()
         duration = time.time() - start
         self.results[operation].append(duration)
-        get_logger().debug(f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}")
+        get_logger().debug(
+            f"Benchmark for {operation}: {duration:.6f} seconds using {xp.__name__}"
+        )
 
     def get_results(self) -> Dict[str, List[float]]:
         return dict(self.results)
@@ -532,7 +529,9 @@ class ArrayBackend:
             return self.xp.array(sanitized, dtype=dtype)
         return self.xp.array(sanitized)
 
-    def zeros(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def zeros(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an array of zeros with the given shape and data type.
         Args:
@@ -544,7 +543,9 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.zeros(shape, dtype=dtype)
 
-    def ones(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def ones(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an array of ones with the given shape and data type.
         Args:
@@ -574,7 +575,9 @@ class ArrayBackend:
         validate_array_size(shape)
         return self.xp.full(shape, fill_value, dtype=dtype)
 
-    def empty(self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None) -> Any:
+    def empty(
+        self, shape: Union[int, Tuple[int, ...]], dtype: Optional[Any] = None
+    ) -> Any:
         """
         Creates an empty array with the given shape and data type.
         Args:
@@ -1022,7 +1025,9 @@ class ArrayBackend:
         """
         return self.xp.diff(a, n=n, axis=axis)
 
-    def trapz(self, y: Any, x: Optional[Any] = None, dx: float = 1.0, axis: int = -1) -> Any:
+    def trapz(
+        self, y: Any, x: Optional[Any] = None, dx: float = 1.0, axis: int = -1
+    ) -> Any:
         """
         Integrates y along the given axis using the composite trapezoidal rule.
         Args:
@@ -1112,7 +1117,9 @@ class ArrayBackend:
         """
         return self.xp.linalg.inv(a)
 
-    def linalg_norm(self, x: Any, ord: Optional[Any] = None, axis: Optional[int] = None) -> Any:
+    def linalg_norm(
+        self, x: Any, ord: Optional[Any] = None, axis: Optional[int] = None
+    ) -> Any:
         """
         Computes the matrix or vector norm.
         Args:
@@ -1198,7 +1205,9 @@ class ArrayBackend:
         self.xp = self._init_backend()
         self.benchmarker = BackendBenchmarker()
         # Control benchmarking overhead with a setting
-        self.enable_benchmarking = getattr(settings(), "enable_array_backend_benchmarking", False)
+        self.enable_benchmarking = getattr(
+            settings(), "enable_array_backend_benchmarking", False
+        )
         if self.enable_benchmarking:
             self.logger.info("ArrayBackend benchmarking is enabled.")
         else:
@@ -1325,7 +1334,9 @@ class ArrayBackend:
                 data = payload_data.get("data")
                 newshape = payload_data.get("newshape")
                 if data is None or newshape is None:
-                    raise ValueError("Missing 'data' or 'newshape' for reshape operation.")
+                    raise ValueError(
+                        "Missing 'data' or 'newshape' for reshape operation."
+                    )
                 arr_data = self.array(data)
                 result = self.reshape(arr_data, newshape)
                 self.logger.info("Performed reshape operation computation.")
@@ -1342,7 +1353,11 @@ class ArrayBackend:
             else:
                 await self.message_bus.publish(
                     f"computation.result.{message.trace_id}",
-                    (self.asnumpy(result).tolist() if hasattr(result, "tolist") else result),
+                    (
+                        self.asnumpy(result).tolist()
+                        if hasattr(result, "tolist")
+                        else result
+                    ),
                     priority=5,
                     encrypt=True,
                 )
@@ -1376,8 +1391,12 @@ class ArrayBackend:
                 if not hasattr(self, "_dask_client") or (
                     self._dask_client and self._dask_client.status == "closed"
                 ):
-                    self.logger.info("ArrayBackend: Initializing Dask LocalCluster and Client.")
-                    self.cluster = LocalCluster(n_workers=os.cpu_count() or 1, threads_per_worker=1)
+                    self.logger.info(
+                        "ArrayBackend: Initializing Dask LocalCluster and Client."
+                    )
+                    self.cluster = LocalCluster(
+                        n_workers=os.cpu_count() or 1, threads_per_worker=1
+                    )
                     self._dask_client = DaskClient(self.cluster)
                     self.logger.info(
                         f"ArrayBackend: Dask client initialized: {self._dask_client.dashboard_link}"
@@ -1397,7 +1416,9 @@ class ArrayBackend:
             self.logger.info("ArrayBackend: Initializing Quantum (Qiskit) backend.")
             return self._quantum_backend()
         if self.mode == "neuromorphic" and self.use_neuromorphic and HAS_NENGO_LOIHI:
-            self.logger.info("ArrayBackend: Initializing Neuromorphic (NengoLoihi) backend.")
+            self.logger.info(
+                "ArrayBackend: Initializing Neuromorphic (NengoLoihi) backend."
+            )
             return self._neuromorphic_backend()
 
         self.logger.info(
@@ -1488,11 +1509,15 @@ class ArrayBackend:
 
                 with nengo.Network(seed=np.random.randint(10000)) as net:
                     noise_node = nengo.Node(
-                        nengo.processes.WhiteNoise(dist=nengo.dists.Gaussian(loc, scale))
+                        nengo.processes.WhiteNoise(
+                            dist=nengo.dists.Gaussian(loc, scale)
+                        )
                     )
                     p_noise = nengo.Probe(noise_node)
 
-                sim_context = Simulator(net) if HAS_NENGO_LOIHI else nengo.Simulator(net)
+                sim_context = (
+                    Simulator(net) if HAS_NENGO_LOIHI else nengo.Simulator(net)
+                )
 
                 with sim_context as sim:
                     sim.run(sim.dt * num_steps)

@@ -12,32 +12,33 @@ flexible with different sandbox environments and log storage solutions.
 # SPDX-License-Identifier: MIT
 
 import asyncio
+import collections
 import hashlib
 import json
-import time
-import random
-import collections
 import logging
+import os
+import random
 import threading
+import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Callable, Coroutine, Union
 from statistics import mean, median, stdev
-from sqlalchemy import Column, String, JSON, DateTime, select
-from sqlalchemy.orm import declarative_base
-from tenacity import retry, stop_after_attempt, wait_exponential
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
+
 import aiohttp
 from aiolimiter import AsyncLimiter
 from prometheus_client import Counter
-import os
+from sqlalchemy import JSON, Column, DateTime, String, select
+from sqlalchemy.orm import declarative_base
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Mock/Plausholder imports for a self-contained fix
 try:
-    from arbiter.postgres_client import PostgresClient
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
-    from arbiter_plugin_registry import registry, PlugInKind
+    from arbiter.config import ArbiterConfig
     from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.otel_config import get_tracer
+    from arbiter.postgres_client import PostgresClient
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class PostgresClient:
@@ -128,7 +129,9 @@ Base = declarative_base()
 tracer = get_tracer(__name__)
 
 # Configure logging for real-time visibility with PII redaction
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -164,14 +167,18 @@ class LogDB:
     """A production-ready database for storing experiment logs."""
 
     def __init__(self, config: ArbiterConfig):
-        self.db_client = PostgresClient(config.DATABASE_URL, pool_size=5, max_overflow=10)
+        self.db_client = PostgresClient(
+            config.DATABASE_URL, pool_size=5, max_overflow=10
+        )
         self._lock = asyncio.Lock()
 
     async def save_experiment_log(self, log_entry: Dict[str, Any]):
         """Saves a single experiment log entry to the database."""
         async with self._lock:
             try:
-                log_entry["id"] = hashlib.sha256(json.dumps(log_entry).encode()).hexdigest()
+                log_entry["id"] = hashlib.sha256(
+                    json.dumps(log_entry).encode()
+                ).hexdigest()
                 log_entry["timestamp"] = datetime.now(timezone.utc).isoformat()
                 async with self.db_client.get_session() as session:
                     session.add(
@@ -182,7 +189,9 @@ class LogDB:
                         )
                     )
                     await session.commit()
-                    logger.debug(f"Experiment log saved: {log_entry.get('experiment_id')}")
+                    logger.debug(
+                        f"Experiment log saved: {log_entry.get('experiment_id')}"
+                    )
             except Exception as e:
                 logger.error(f"Failed to save experiment log: {e}", exc_info=True)
                 raise ExperimentExecutionError(f"Save failed: {e}") from e
@@ -197,9 +206,13 @@ class LogDB:
                     )
                     log_entry = result.scalar_one_or_none()
                     if log_entry:
-                        logger.debug(f"Retrieved experiment log for ID: {experiment_id}")
+                        logger.debug(
+                            f"Retrieved experiment log for ID: {experiment_id}"
+                        )
                         return log_entry.data
-                    logger.warning(f"Experiment log with ID '{experiment_id}' not found")
+                    logger.warning(
+                        f"Experiment log with ID '{experiment_id}' not found"
+                    )
                     return None
             except Exception as e:
                 logger.error(f"Failed to get experiment log: {e}", exc_info=True)
@@ -219,7 +232,9 @@ class LogDB:
                             for key, value in query.items()
                         )
                     ]
-                    logger.debug(f"Found {len(logs)} experiment logs for query: {query}")
+                    logger.debug(
+                        f"Found {len(logs)} experiment logs for query: {query}"
+                    )
                     return logs
             except Exception as e:
                 logger.error(f"Failed to find experiments: {e}", exc_info=True)
@@ -263,7 +278,9 @@ class MySandboxEnv:
         Dummy evaluation method for agent variants.
         """
         score = 1 + (hash(str(variant)) % 100) / 100
-        logger.debug(f"Evaluated variant {getattr(variant, 'name', 'unknown')} with score: {score}")
+        logger.debug(
+            f"Evaluated variant {getattr(variant, 'name', 'unknown')} with score: {score}"
+        )
         return score
 
     async def test_agent(self, agent: Any, **kwargs) -> Dict[str, Any]:
@@ -271,7 +288,9 @@ class MySandboxEnv:
         Dummy method to simulate testing an agent.
         """
         score = random.uniform(0, 1)
-        logger.debug(f"Tested agent {getattr(agent, 'name', 'unknown')} with score: {score}")
+        logger.debug(
+            f"Tested agent {getattr(agent, 'name', 'unknown')} with score: {score}"
+        )
         return {"agent_name": getattr(agent, "name", "unknown"), "score": score}
 
 
@@ -317,7 +336,9 @@ class Explorer:
         self.sandbox_env = sandbox_env
         self.config = config or ArbiterConfig()
         self.log_db = log_db if log_db is not None else LogDB(self.config)
-        self.registered_experiments: Dict[str, Callable[..., Coroutine[Any, Any, Dict]]] = {
+        self.registered_experiments: Dict[
+            str, Callable[..., Coroutine[Any, Any, Dict]]
+        ] = {
             "ab_test": self._run_ab_test,
             "evolution": self._run_evolution_experiment,
         }
@@ -398,7 +419,9 @@ class Explorer:
         with tracer.start_as_current_span(f"explorer_execute_{action}"):
             try:
                 result = await inner_execute()
-                explorer_ops_total.labels(explorer_id=self.explorer_id, operation=action).inc()
+                explorer_ops_total.labels(
+                    explorer_id=self.explorer_id, operation=action
+                ).inc()
                 return result
             except Exception as e:
                 logger.error(f"Failed to execute action '{action}': {e}", exc_info=True)
@@ -421,7 +444,9 @@ class Explorer:
             ExperimentExecutionError: If the experiment fails.
         """
         try:
-            experiment_id = self._generate_experiment_id(experiment_config.get("type", "generic"))
+            experiment_id = self._generate_experiment_id(
+                experiment_config.get("type", "generic")
+            )
             time.time()
             exp_type = experiment_config.get("type", "A/B")
             variants = experiment_config.get("variants", [])
@@ -431,7 +456,9 @@ class Explorer:
                 result = await self.sandbox_env.evaluate(
                     variant, metric=experiment_config.get("metric")
                 )
-                results.append({"variant": getattr(variant, "name", "unknown"), "result": result})
+                results.append(
+                    {"variant": getattr(variant, "name", "unknown"), "result": result}
+                )
 
             metrics = self._calculate_metrics(results, metrics=["score"])
             log_entry = {
@@ -464,15 +491,21 @@ class Explorer:
         try:
             log_health = await self.log_db.health_check()
             return {
-                "health": ("good" if log_health.get("status") == "healthy" else "degraded"),
+                "health": (
+                    "good" if log_health.get("status") == "healthy" else "degraded"
+                ),
                 "last_crawl": {
                     "errors": [],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             }
         except Exception as e:
-            logger.error(f"[{self.explorer_id}] Status check failed: {e}", exc_info=True)
-            explorer_errors_total.labels(explorer_id=self.explorer_id, error_type="status").inc()
+            logger.error(
+                f"[{self.explorer_id}] Status check failed: {e}", exc_info=True
+            )
+            explorer_errors_total.labels(
+                explorer_id=self.explorer_id, error_type="status"
+            ).inc()
             return {
                 "health": "degraded",
                 "last_crawl": {
@@ -501,10 +534,14 @@ class Explorer:
                     if file.endswith(".html"):
                         urls.append(f"http://localhost/{os.path.join(root, file)}")
             result = urls if urls else ["http://default-frontend.com"]
-            explorer_ops_total.labels(explorer_id=self.explorer_id, operation="discover_urls").inc()
+            explorer_ops_total.labels(
+                explorer_id=self.explorer_id, operation="discover_urls"
+            ).inc()
             return result
         except Exception as e:
-            logger.error(f"[{self.explorer_id}] URL discovery failed: {e}", exc_info=True)
+            logger.error(
+                f"[{self.explorer_id}] URL discovery failed: {e}", exc_info=True
+            )
             explorer_errors_total.labels(
                 explorer_id=self.explorer_id, error_type="discover_urls"
             ).inc()
@@ -548,10 +585,14 @@ class Explorer:
                         explorer_errors_total.labels(
                             explorer_id=self.explorer_id, error_type="crawl"
                         ).inc()
-        explorer_ops_total.labels(explorer_id=self.explorer_id, operation="crawl_urls").inc()
+        explorer_ops_total.labels(
+            explorer_id=self.explorer_id, operation="crawl_urls"
+        ).inc()
         return {"crawled_urls": results}
 
-    async def explore_and_fix(self, arbiter, fix_paths: Optional[List[str]]) -> Dict[str, Any]:
+    async def explore_and_fix(
+        self, arbiter, fix_paths: Optional[List[str]]
+    ) -> Dict[str, Any]:
         """
         Explores the codebase and applies fixes based on analyzer results.
 
@@ -582,7 +623,9 @@ class Explorer:
             ).inc()
             return {"status": "explore_and_fix_complete", "fixed_paths": fixed_paths}
         except Exception as e:
-            logger.error(f"[{self.explorer_id}] Explore and fix failed: {e}", exc_info=True)
+            logger.error(
+                f"[{self.explorer_id}] Explore and fix failed: {e}", exc_info=True
+            )
             explorer_errors_total.labels(
                 explorer_id=self.explorer_id, error_type="explore_and_fix"
             ).inc()
@@ -615,14 +658,18 @@ class Explorer:
             original_env = self.sandbox_env
             if new_sandbox_env:
                 self.sandbox_env = new_sandbox_env
-                logger.info(f"Using new sandbox environment for replay of {experiment_id}.")
+                logger.info(
+                    f"Using new sandbox environment for replay of {experiment_id}."
+                )
 
         logger.info(f"Replaying experiment: {experiment_id}")
 
         initial_random_state_str = log_entry.get("initial_random_state")
         if initial_random_state_str:
             try:
-                initial_random_state = _deserialize_random_state(initial_random_state_str)
+                initial_random_state = _deserialize_random_state(
+                    initial_random_state_str
+                )
                 random.setstate(initial_random_state)
                 logger.debug(f"Random state reset for replay of {experiment_id}.")
             except (json.JSONDecodeError, TypeError) as e:
@@ -631,7 +678,9 @@ class Explorer:
                 )
 
         try:
-            replay_results = await self.run_experiment(log_entry["kind"], log_entry["config"])
+            replay_results = await self.run_experiment(
+                log_entry["kind"], log_entry["config"]
+            )
             replay_results["original_experiment_id"] = experiment_id
             replay_results["replay_of_timestamp"] = log_entry["timestamp_utc"]
             logger.info(f"Replay of experiment {experiment_id} completed.")
@@ -661,7 +710,9 @@ class Explorer:
         )
         if not hasattr(self.sandbox_env, "test_agent"):
             logger.error("Sandbox environment lacks 'test_agent' method for A/B test.")
-            raise ValueError("Sandbox environment must have a 'test_agent' method for A/B testing.")
+            raise ValueError(
+                "Sandbox environment must have a 'test_agent' method for A/B testing."
+            )
 
         results = {"variant_a": {}, "variant_b": {}, "summary": {}}
 
@@ -674,7 +725,9 @@ class Explorer:
             logger.debug(f"Variant A run {i+1}/{runs} result: {run_result_a}")
         results["variant_a"]["raw_results"] = a_runs_data
         results["variant_a"]["metrics"] = self._calculate_metrics(a_runs_data, metrics)
-        logger.info(f"Variant A metrics for {experiment_id}: {results['variant_a']['metrics']}")
+        logger.info(
+            f"Variant A metrics for {experiment_id}: {results['variant_a']['metrics']}"
+        )
 
         # Run Variant B
         logger.debug(f"Running Variant B for experiment {experiment_id}.")
@@ -685,7 +738,9 @@ class Explorer:
             logger.debug(f"Variant B run {i+1}/{runs} result: {run_result_b}")
         results["variant_b"]["raw_results"] = b_runs_data
         results["variant_b"]["metrics"] = self._calculate_metrics(b_runs_data, metrics)
-        logger.info(f"Variant B metrics for {experiment_id}: {results['variant_b']['metrics']}")
+        logger.info(
+            f"Variant B metrics for {experiment_id}: {results['variant_b']['metrics']}"
+        )
 
         # Compare
         results["summary"] = self._compare_variants(
@@ -711,7 +766,9 @@ class Explorer:
         evolution_trace = []
 
         for gen in range(generations):
-            logger.debug(f"Evolution experiment {experiment_id}: Generation {gen+1}/{generations}.")
+            logger.debug(
+                f"Evolution experiment {experiment_id}: Generation {gen+1}/{generations}."
+            )
             if not current_population:
                 logger.warning(
                     f"Population became empty at generation {gen} for experiment {experiment_id}. Stopping evolution."
@@ -755,8 +812,12 @@ class Explorer:
                 next_population.append(self._create_mutated_agent(best_agent, gen))
             current_population = next_population
 
-        final_best_agent_name = getattr(best_agent, "name", "N/A") if best_agent else "N/A"
-        final_best_fitness = evolution_trace[-1]["best_fitness"] if evolution_trace else "N/A"
+        final_best_agent_name = (
+            getattr(best_agent, "name", "N/A") if best_agent else "N/A"
+        )
+        final_best_fitness = (
+            evolution_trace[-1]["best_fitness"] if evolution_trace else "N/A"
+        )
         logger.info(
             f"Evolution experiment {experiment_id} finished. Final best agent: {final_best_agent_name}, Final best fitness: {final_best_fitness}"
         )
@@ -796,7 +857,11 @@ class Explorer:
             return {}
         calculated_metrics = {}
         for metric_name in metrics:
-            values = [run.get(metric_name) for run in runs_data if run.get(metric_name) is not None]
+            values = [
+                run.get(metric_name)
+                for run in runs_data
+                if run.get(metric_name) is not None
+            ]
 
             if values and all(isinstance(v, (int, float)) for v in values):
                 try:
@@ -814,7 +879,9 @@ class Explorer:
                     )
                     calculated_metrics[f"{metric_name}_error"] = str(e)
             elif values:
-                calculated_metrics[f"{metric_name}_counts"] = collections.Counter(values)
+                calculated_metrics[f"{metric_name}_counts"] = collections.Counter(
+                    values
+                )
             else:
                 calculated_metrics[f"{metric_name}_avg"] = None
                 calculated_metrics[f"{metric_name}_stddev"] = None
@@ -887,14 +954,18 @@ class MockLogDB:
         """Saves a single experiment log entry to the mock database."""
         with self._lock:
             self._experiments.append(log_entry)
-            logger.debug(f"MockLogDB: Saved experiment log: {log_entry.get('experiment_id')}")
+            logger.debug(
+                f"MockLogDB: Saved experiment log: {log_entry.get('experiment_id')}"
+            )
 
     async def get_experiment_log(self, experiment_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves a single experiment log entry by its ID."""
         with self._lock:
             for exp in self._experiments:
                 if exp.get("experiment_id") == experiment_id:
-                    logger.debug(f"MockLogDB: Retrieved experiment log for ID: {experiment_id}")
+                    logger.debug(
+                        f"MockLogDB: Retrieved experiment log for ID: {experiment_id}"
+                    )
                     return exp
             logger.warning(f"Experiment log with ID '{experiment_id}' not found.")
             return None
@@ -904,9 +975,13 @@ class MockLogDB:
         with self._lock:
             results = []
             for exp in self._experiments:
-                if all(key in exp and exp[key] == value for key, value in query.items()):
+                if all(
+                    key in exp and exp[key] == value for key, value in query.items()
+                ):
                     results.append(exp)
-            logger.debug(f"MockLogDB: Found {len(results)} experiment logs for query: {query}")
+            logger.debug(
+                f"MockLogDB: Found {len(results)} experiment logs for query: {query}"
+            )
             return results
 
     async def health_check(self) -> Dict[str, Any]:
@@ -917,7 +992,9 @@ class MockLogDB:
 class ArbiterExplorer:
     """Explorer for arbiter system with experiment management capabilities"""
 
-    def __init__(self, sandbox_env: Any = None, log_db: Optional[Union[LogDB, MockLogDB]] = None):
+    def __init__(
+        self, sandbox_env: Any = None, log_db: Optional[Union[LogDB, MockLogDB]] = None
+    ):
         """
         Initializes the ArbiterExplorer with a sandbox environment and log database.
 
@@ -973,8 +1050,12 @@ class ArbiterExplorer:
                     result = await self.sandbox_env.test_agent(variant_a)
                     results_a.append({"metrics": {metric: score}})
                 except Exception as e:
-                    logger.error(f"Experiment {experiment_name} failed: {str(e)}", exc_info=True)
-                    raise ExperimentExecutionError(f"Experiment {experiment_name} failed: {str(e)}")
+                    logger.error(
+                        f"Experiment {experiment_name} failed: {str(e)}", exc_info=True
+                    )
+                    raise ExperimentExecutionError(
+                        f"Experiment {experiment_name} failed: {str(e)}"
+                    )
 
             # Run tests for variant B
             for _ in range(num_runs):
@@ -1055,8 +1136,12 @@ class ArbiterExplorer:
                     current_population = [initial_agent] * population_size
 
                 except Exception as e:
-                    logger.error(f"Experiment {experiment_name} failed: {str(e)}", exc_info=True)
-                    raise ExperimentExecutionError(f"Experiment {experiment_name} failed: {str(e)}")
+                    logger.error(
+                        f"Experiment {experiment_name} failed: {str(e)}", exc_info=True
+                    )
+                    raise ExperimentExecutionError(
+                        f"Experiment {experiment_name} failed: {str(e)}"
+                    )
 
             result = {
                 "experiment_id": experiment_id,

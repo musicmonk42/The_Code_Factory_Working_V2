@@ -1,12 +1,12 @@
 # tests/test_analyzer_integration.py
-import json
-import time
 import asyncio
-import subprocess
-from pathlib import Path
-from typing import Any, Dict, List
 import importlib
 import importlib.util
+import json
+import subprocess
+import time
+from pathlib import Path
+from typing import Any, Dict, List
 
 import pytest
 
@@ -127,7 +127,9 @@ def make_tiny_project(base: Path) -> Path:
     pkg = proj / "pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("VERSION='0.1.0'\n")
-    (pkg / "a.py").write_text("import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n")
+    (pkg / "a.py").write_text(
+        "import pkg.b\n" "def greet():\n" "    return 'hi ' + pkg.b.name()\n"
+    )
     (pkg / "b.py").write_text(
         "def name():\n"
         "    from pkg.a import greet  # cycle\n"
@@ -210,7 +212,9 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
         pass
 
     # --- Stub security tool subprocess calls
-    def fake_run(cmd, timeout=60, capture_output=True, text=True, check=False, **kwargs):
+    def fake_run(
+        cmd, timeout=60, capture_output=True, text=True, check=False, **kwargs
+    ):
         joined = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
         if "bandit" in joined.lower():
             # Minimal Bandit JSON with 1 low-sev issue

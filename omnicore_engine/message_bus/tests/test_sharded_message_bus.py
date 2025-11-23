@@ -1,24 +1,24 @@
 # test_sharded_message_bus.py
 
-import unittest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from message_bus.message_types import Message
 from message_bus.sharded_message_bus import (
-    ShardedMessageBus,
+    MAX_MESSAGE_SIZE,
     RateLimiter,
     RateLimitError,
-    validate_message_size,
+    ShardedMessageBus,
     sign_message,
+    validate_message_size,
     verify_message,
-    MAX_MESSAGE_SIZE,
 )
-from message_bus.message_types import Message
 
 
 class TestRateLimiter(unittest.TestCase):
@@ -95,7 +95,9 @@ class TestMessageValidation(unittest.TestCase):
 
     def test_sign_and_verify_message(self):
         """Test message signing and verification."""
-        message = Message(topic="test.topic", payload={"data": "test"}, trace_id="trace_123")
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, trace_id="trace_123"
+        )
 
         key = b"secret_key_12345"
 
@@ -147,7 +149,9 @@ class TestShardedMessageBus(unittest.TestCase):
         self.mock_audit.add_entry_async = AsyncMock()
 
         # Patch security_utils
-        self.security_patcher = patch("message_bus.sharded_message_bus.get_security_utils")
+        self.security_patcher = patch(
+            "message_bus.sharded_message_bus.get_security_utils"
+        )
         mock_get_security = self.security_patcher.start()
         self.mock_security_utils = Mock()
         self.mock_security_utils.encrypt_data = Mock(return_value="encrypted_data")
@@ -186,7 +190,9 @@ class TestShardedMessageBus(unittest.TestCase):
             # Mock the internal publish method
             bus._publish_to_shard = AsyncMock(return_value=True)
 
-            result = await bus.publish(topic="test.topic", payload={"data": "test"}, priority=3)
+            result = await bus.publish(
+                topic="test.topic", payload={"data": "test"}, priority=3
+            )
 
             self.assertTrue(result)
             bus._publish_to_shard.assert_called_once()
@@ -220,7 +226,9 @@ class TestShardedMessageBus(unittest.TestCase):
 
             bus._publish_to_shard = AsyncMock(return_value=True)
 
-            result = await bus.publish(topic="test.topic", payload={"data": "test"}, encrypt=True)
+            result = await bus.publish(
+                topic="test.topic", payload={"data": "test"}, encrypt=True
+            )
 
             self.assertTrue(result)
 
@@ -363,7 +371,9 @@ class TestShardedMessageBus(unittest.TestCase):
         """Test graceful shutdown."""
         with patch("message_bus.sharded_message_bus.KafkaBridge") as mock_kafka, patch(
             "message_bus.sharded_message_bus.RedisBridge"
-        ) as mock_redis, patch("message_bus.sharded_message_bus.DeadLetterQueue") as mock_dlq:
+        ) as mock_redis, patch(
+            "message_bus.sharded_message_bus.DeadLetterQueue"
+        ) as mock_dlq:
 
             # Setup mocks
             mock_kafka_instance = Mock()

@@ -1,10 +1,10 @@
-import logging
-import os
 import asyncio
 import cProfile
-from typing import Dict, Any, Callable, Optional, TypedDict, Awaitable
-from functools import partial
 import inspect
+import logging
+import os
+from functools import partial
+from typing import Any, Awaitable, Callable, Dict, Optional, TypedDict
 
 # -----------------------------------------------------------------------------
 # Optional Tenacity (retries are no-op if not installed)
@@ -35,13 +35,15 @@ except ImportError:
 # -----------------------------------------------------------------------------
 try:
     import langgraph
-    from langgraph.graph import StateGraph, END
     from langgraph.checkpoint.memory import MemorySaver
     from langgraph.checkpoint.redis import RedisSaver
+    from langgraph.graph import END, StateGraph
 
     LANGGRAPH_AVAILABLE = True
 except ImportError:
-    logging.warning("LangGraph not installed. Using a custom sequential fallback agent workflow.")
+    logging.warning(
+        "LangGraph not installed. Using a custom sequential fallback agent workflow."
+    )
     LANGGRAPH_AVAILABLE = False
     StateGraph = object
     END = object
@@ -67,10 +69,14 @@ except ImportError:
             return self
 
         async def ainvoke(self, state, config):
-            raise NotImplementedError("ainvoke is not available without LangGraph. Using fallback.")
+            raise NotImplementedError(
+                "ainvoke is not available without LangGraph. Using fallback."
+            )
 
         async def astream(self, *args, **kwargs):
-            raise NotImplementedError("astream is not available without LangGraph. Using fallback.")
+            raise NotImplementedError(
+                "astream is not available without LangGraph. Using fallback."
+            )
 
     class END:
         pass
@@ -88,13 +94,13 @@ except ImportError:
 
 
 from test_generation.gen_agent.agents import (
-    planner_agent,
+    adaptive_test_executor_agent,
     generator_agent,
     judge_agent,
-    refiner_agent,
-    adaptive_test_executor_agent,
-    security_agent,
     performance_agent,
+    planner_agent,
+    refiner_agent,
+    security_agent,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,7 +142,8 @@ class FallbackGraph:
                     or not isinstance(plan, dict)
                     or not plan.get("steps")
                     or (
-                        isinstance(plan.get("steps"), (list, tuple)) and len(plan.get("steps")) == 0
+                        isinstance(plan.get("steps"), (list, tuple))
+                        and len(plan.get("steps")) == 0
                     )
                 ):
                     return {}
@@ -211,7 +218,9 @@ graph_retry = _retry(
 # -----------------------------------------------------------------------------
 # Decision function
 # -----------------------------------------------------------------------------
-def _decide_to_refine(state: TestAgentState, config: Optional[Dict[str, Any]] = None) -> str:
+def _decide_to_refine(
+    state: TestAgentState, config: Optional[Dict[str, Any]] = None
+) -> str:
     """
     Decide whether to refine or execute based on judge feedback, execution status
     and configurable thresholds.
@@ -269,7 +278,9 @@ def _decide_to_refine(state: TestAgentState, config: Optional[Dict[str, Any]] = 
 
     # Condition 3: Negative textual feedback
     neg = feedback.lower()
-    if neg and ("failed" in neg or "error" in neg or "exception" in neg or "traceback" in neg):
+    if neg and (
+        "failed" in neg or "error" in neg or "exception" in neg or "traceback" in neg
+    ):
         logger.info("Decision: Refining based on judge feedback text.")
         if repair_attempts >= max_repairs:
             logger.warning(
@@ -309,7 +320,9 @@ def build_graph(llm: Any, checkpointer: Optional[Any] = None) -> Any:
                     checkpointer = RedisSaver.from_conn_string(redis_url)
                     logger.info("Using RedisSaver for state persistence.")
                 except Exception as e:
-                    logger.warning("RedisSaver init failed (%s). Falling back to MemorySaver.", e)
+                    logger.warning(
+                        "RedisSaver init failed (%s). Falling back to MemorySaver.", e
+                    )
                     checkpointer = MemorySaver()
             else:
                 checkpointer = MemorySaver()
@@ -345,7 +358,7 @@ def build_graph(llm: Any, checkpointer: Optional[Any] = None) -> Any:
 
     # Fallback Path
     try:
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         if isinstance(llm, MagicMock) and not isinstance(llm, AsyncMock):
             # If a synchronous mock is provided for an async interface,
@@ -418,11 +431,15 @@ async def invoke_graph(
         initial_state["thresholds"].setdefault(
             "refine_threshold", _get_float_env("REFINE_THRESHOLD", 80.0)
         )
-        initial_state["thresholds"].setdefault("max_repairs", _get_int_env("MAX_REPAIRS", 3))
+        initial_state["thresholds"].setdefault(
+            "max_repairs", _get_int_env("MAX_REPAIRS", 3)
+        )
         initial_state["thresholds"].update(cfg_th)
 
         _tick()
-        final_state = await asyncio.wait_for(graph.ainvoke(initial_state, config=config), timeout)
+        final_state = await asyncio.wait_for(
+            graph.ainvoke(initial_state, config=config), timeout
+        )
         _tick()
         return final_state
 

@@ -1,8 +1,7 @@
 import logging
 from typing import Optional, Type, Union
 
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, CollectorRegistry
-
+from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +75,9 @@ def get_or_create_metric(
         pass
     except Exception as e:
         # Catch any other unexpected errors during the check
-        logger.error(f"Unexpected error while checking for metric '{name}': {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error while checking for metric '{name}': {e}", exc_info=True
+        )
 
     # Create the new metric
     kwargs = {"labelnames": custom_labels} if custom_labels else {}

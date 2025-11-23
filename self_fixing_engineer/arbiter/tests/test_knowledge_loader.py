@@ -1,28 +1,27 @@
-import pytest
-from unittest.mock import patch, mock_open, ANY
-import os
 import json
 import logging
+import os
 import threading
+from unittest.mock import ANY, AsyncMock, mock_open, patch
+
+import pytest
 from knowledge_loader import (
+    KnowledgeLoader,
+    load_knowledge,
     merge_dict,
     save_knowledge_atomic,
-    load_knowledge,
-    KnowledgeLoader,
 )
-from unittest.mock import AsyncMock
 
 
 # Fixture for mock logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(logging.getLogger(__name__), "info") as mock_info, patch.object(
-        logging.getLogger(__name__), "debug"
-    ) as mock_debug, patch.object(
-        logging.getLogger(__name__), "warning"
-    ) as mock_warning, patch.object(
-        logging.getLogger(__name__), "error"
-    ) as mock_error:
+    with (
+        patch.object(logging.getLogger(__name__), "info") as mock_info,
+        patch.object(logging.getLogger(__name__), "debug") as mock_debug,
+        patch.object(logging.getLogger(__name__), "warning") as mock_warning,
+        patch.object(logging.getLogger(__name__), "error") as mock_error,
+    ):
         yield mock_info, mock_debug, mock_warning, mock_error
 
 
@@ -74,7 +73,9 @@ def test_save_knowledge_atomic_success(
 @patch("tempfile.mkstemp", return_value=(3, "/tmp/temp.json"))
 @patch("os.fdopen", side_effect=IOError("mock error"))
 @patch("os.remove")
-def test_save_knowledge_atomic_failure(mock_remove, mock_fdopen, mock_mkstemp, mock_logger):
+def test_save_knowledge_atomic_failure(
+    mock_remove, mock_fdopen, mock_mkstemp, mock_logger
+):
     _, _, _, error = mock_logger
     data = {"test": "data"}
     with pytest.raises(IOError, match="Failed to save knowledge file test.json"):
@@ -117,7 +118,9 @@ def test_load_knowledge_invalid_json(mock_json_load, mock_open, mock_logger):
 @patch("os.walk")
 @patch(
     "knowledge_loader.load_knowledge",
-    side_effect=lambda f: ({os.path.basename(f): {"data": "test"}} if "test" in f else None),
+    side_effect=lambda f: (
+        {os.path.basename(f): {"data": "test"}} if "test" in f else None
+    ),
 )
 def test_knowledge_loader_init(mock_load, mock_walk, mock_logger):
     mock_walk.return_value = [("", [], ["test1.json", "test2.json"])]
@@ -184,7 +187,9 @@ def test_inject_to_arbiter_invalid_state(mock_logger):
     arbiter = MockArbiter()
     loader.inject_to_arbiter(arbiter)
     _, _, _, error = mock_logger
-    error.assert_called_with("Arbiter instance does not have a valid 'state' dictionary.")
+    error.assert_called_with(
+        "Arbiter instance does not have a valid 'state' dictionary."
+    )
 
 
 # Test inject_to_arbiter type mismatch
@@ -221,7 +226,9 @@ def test_inject_to_arbiter_thread_safety():
     for t in threads:
         t.join()
 
-    assert arbiter.state["memory"] == {"domain": {"key": "value"}}  # Only merged once effectively
+    assert arbiter.state["memory"] == {
+        "domain": {"key": "value"}
+    }  # Only merged once effectively
 
 
 # Test load_and_aggregate with malformed files
@@ -245,7 +252,9 @@ def test_aggregate_knowledge_master_error(mock_load, mock_logger):
     with pytest.raises(Exception, match="master error"):
         loader.aggregate_knowledge()
     _, _, _, error = mock_logger
-    error.assert_called_with("Failed to load master knowledge file master.json: master error")
+    error.assert_called_with(
+        "Failed to load master knowledge file master.json: master error"
+    )
 
 
 # Test save_current_knowledge empty

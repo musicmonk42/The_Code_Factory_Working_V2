@@ -30,8 +30,8 @@ except ImportError:
     HAS_GEMINI = False
 
 from runner.providers.gemini_provider import GeminiProvider, get_provider  # type: ignore
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 @pytest.fixture
@@ -126,7 +126,9 @@ async def test_count_tokens_fallback(provider: GeminiProvider) -> None:
     # --- FIX: Patch the class where it's *used* (in the provider's namespace) ---
     with patch("runner.providers.gemini_provider.GenerativeModel") as MockModel:
         mock_instance = MockModel.return_value
-        mock_instance.count_tokens_async = AsyncMock(side_effect=RuntimeError("API error"))
+        mock_instance.count_tokens_async = AsyncMock(
+            side_effect=RuntimeError("API error")
+        )
 
         count = await provider.count_tokens("Hello world", "gemini-pro")
         # Should fall back to approximation
@@ -188,7 +190,9 @@ async def test_api_call_invalid_argument(provider: GeminiProvider) -> None:
     from google.api_core.exceptions import InvalidArgument
 
     mock_client = MagicMock()
-    mock_client.generate_content_async = AsyncMock(side_effect=InvalidArgument("Invalid"))
+    mock_client.generate_content_async = AsyncMock(
+        side_effect=InvalidArgument("Invalid")
+    )
 
     with pytest.raises(LLMError, match="Invalid request"):
         await provider._api_call(mock_client, "test", False, "test-run")
@@ -202,7 +206,9 @@ async def test_api_call_permission_denied(provider: GeminiProvider) -> None:
     from google.api_core.exceptions import PermissionDenied
 
     mock_client = MagicMock()
-    mock_client.generate_content_async = AsyncMock(side_effect=PermissionDenied("Denied"))
+    mock_client.generate_content_async = AsyncMock(
+        side_effect=PermissionDenied("Denied")
+    )
 
     with pytest.raises(LLMError, match="Invalid API Key"):
         await provider._api_call(mock_client, "test", False, "test-run")

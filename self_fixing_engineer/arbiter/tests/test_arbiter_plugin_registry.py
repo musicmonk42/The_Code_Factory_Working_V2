@@ -1,8 +1,9 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import time
 import os
 import sys
+import time
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add the parent directory to path if needed
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,12 +15,12 @@ self_healing_path = os.path.abspath(
 sys.path.insert(0, self_healing_path)
 
 from arbiter_plugin_registry import (
+    PLUGIN_REGISTRY,
     PluginBase,
+    PluginDependencyError,
+    PlugInKind,
     PluginMeta,
     PluginRegistry,
-    PlugInKind,
-    PluginDependencyError,
-    PLUGIN_REGISTRY,
     logger,
 )
 
@@ -113,9 +114,11 @@ def mock_test_generation_utils():
 # Fixture to mock logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(logger, "info") as mock_info, patch.object(
-        logger, "error"
-    ) as mock_error, patch.object(logger, "warning") as mock_warning:
+    with (
+        patch.object(logger, "info") as mock_info,
+        patch.object(logger, "error") as mock_error,
+        patch.object(logger, "warning") as mock_warning,
+    ):
         yield mock_info, mock_error, mock_warning
 
 
@@ -213,7 +216,9 @@ async def test_register_dependencies(reset_registry):
     # Register plugin with dependency
     deps = [{"kind": "core_service", "name": "BaseDep", "version": ">=1.0"}]
 
-    @reg.register(kind=kind, name="DepPlugin", version="1.0.0", author="Test", dependencies=deps)
+    @reg.register(
+        kind=kind, name="DepPlugin", version="1.0.0", author="Test", dependencies=deps
+    )
     class DepPlugin(MockPlugin):
         pass
 
@@ -346,7 +351,9 @@ async def test_health_check_all(reset_registry):
 
     # Register healthy plugin
     healthy_instance = MockPlugin()
-    reg.register_instance(kind, "HealthyPlugin", healthy_instance, version="1.0.0", author="Test")
+    reg.register_instance(
+        kind, "HealthyPlugin", healthy_instance, version="1.0.0", author="Test"
+    )
 
     # Register unhealthy plugin
     class UnhealthyPlugin(MockPlugin):
@@ -487,7 +494,9 @@ def test_circular_dependency(reset_registry):
         pass
 
     # Register A with dependency on B
-    @reg.register(kind=kind, name="PluginA", version="1.0.0", author="Test", dependencies=deps_a)
+    @reg.register(
+        kind=kind, name="PluginA", version="1.0.0", author="Test", dependencies=deps_a
+    )
     class PluginA(MockPlugin):
         pass
 
@@ -495,7 +504,9 @@ def test_circular_dependency(reset_registry):
     deps_c = [{"kind": "core_service", "name": "PluginA", "version": ">=1.0"}]
 
     # This should work as there's no cycle yet
-    @reg.register(kind=kind, name="PluginC", version="1.0.0", author="Test", dependencies=deps_c)
+    @reg.register(
+        kind=kind, name="PluginC", version="1.0.0", author="Test", dependencies=deps_c
+    )
     class PluginC(MockPlugin):
         pass
 
@@ -532,9 +543,13 @@ async def test_reload(reset_registry):
 
     try:
         # Patch importlib functions in the arbiter_plugin_registry module directly
-        with patch(
-            "arbiter_plugin_registry.importlib.import_module", return_value=mock_module
-        ), patch("arbiter_plugin_registry.importlib.reload", return_value=mock_module):
+        with (
+            patch(
+                "arbiter_plugin_registry.importlib.import_module",
+                return_value=mock_module,
+            ),
+            patch("arbiter_plugin_registry.importlib.reload", return_value=mock_module),
+        ):
             result = await reg.reload(kind, name)
             assert result is True
     finally:
@@ -557,9 +572,10 @@ def test_sandboxed_plugin(reset_registry):
         pass
 
     # Mock multiprocessing components
-    with patch("multiprocessing.Queue") as mock_queue_class, patch(
-        "multiprocessing.Process"
-    ) as mock_process_class:
+    with (
+        patch("multiprocessing.Queue") as mock_queue_class,
+        patch("multiprocessing.Process") as mock_process_class,
+    ):
 
         mock_queue = MagicMock()
         mock_queue_class.return_value = mock_queue
@@ -710,7 +726,9 @@ async def test_quarantined_plugin_health_check(reset_registry):
     name = "QuarantinedPlugin"
 
     # Create a quarantined plugin
-    meta = PluginMeta(name=name, kind=kind, version="1.0.0", author="Test", is_quarantined=True)
+    meta = PluginMeta(
+        name=name, kind=kind, version="1.0.0", author="Test", is_quarantined=True
+    )
 
     plugin = MockPlugin()
     reg._plugins[kind] = {name: plugin}

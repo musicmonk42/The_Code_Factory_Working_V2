@@ -1,14 +1,14 @@
 import asyncio
-import logging
-import time
+import gzip  # For compressed JSON
 import hashlib
 import json
+import logging
 import os
-import gzip  # For compressed JSON
-from typing import List, Any, Optional, Tuple, Type, Union, Dict
 import shutil
 import tempfile
 import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 # Import tenacity for retries with exponential backoff
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -58,8 +58,12 @@ except ImportError:
                 else []
             )
 
-    def verify_inclusion(root: bytes, leaf: bytes, proof: List[Tuple[bytes, str]]) -> bool:
-        logging.getLogger(__name__).warning("Mock verify_inclusion always returns True.")
+    def verify_inclusion(
+        root: bytes, leaf: bytes, proof: List[Tuple[bytes, str]]
+    ) -> bool:
+        logging.getLogger(__name__).warning(
+            "Mock verify_inclusion always returns True."
+        )
         return True
 
 
@@ -71,7 +75,7 @@ logger.addHandler(logging.NullHandler())
 
 # Prometheus Metrics
 try:
-    from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
+    from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -148,10 +152,14 @@ def _get_or_create_metric(
                 buckets=buckets,
                 registry=METRICS_REGISTRY,
             )
-        return metric_class(name, documentation, labelnames=labelnames, registry=METRICS_REGISTRY)
+        return metric_class(
+            name, documentation, labelnames=labelnames, registry=METRICS_REGISTRY
+        )
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
-            existing_metric = getattr(METRICS_REGISTRY, "_names_to_collectors", {}).get(name)
+            existing_metric = getattr(METRICS_REGISTRY, "_names_to_collectors", {}).get(
+                name
+            )
             if existing_metric and isinstance(existing_metric, metric_class):
                 return existing_metric
         raise
@@ -264,7 +272,9 @@ class MerkleTree:
             self._tree = MerkleLibTree(self._hashed_leaves())
             logger.info("MerkleTree initialized with merklelib.")
         else:
-            logger.critical("merklelib not available. MerkleTree functionality is disabled.")
+            logger.critical(
+                "merklelib not available. MerkleTree functionality is disabled."
+            )
             self._tree = MerkleLibTree([])
 
         self._update_metrics()
@@ -287,9 +297,13 @@ class MerkleTree:
         with self._rwlock:
             leaves = self._leaves
             if self._store_raw and len(leaves) > HASH_OFFLOAD_THRESHOLD:
-                hashed = await asyncio.to_thread(lambda: [self._hash_leaf(b) for b in leaves])
+                hashed = await asyncio.to_thread(
+                    lambda: [self._hash_leaf(b) for b in leaves]
+                )
             else:
-                hashed = [self._hash_leaf(b) for b in leaves] if self._store_raw else leaves
+                hashed = (
+                    [self._hash_leaf(b) for b in leaves] if self._store_raw else leaves
+                )
             self._tree = MerkleLibTree(hashed)
             self._update_metrics()
 
@@ -327,7 +341,9 @@ class MerkleTree:
                 return self._tree.get_proof(idx)
             except TypeError:
                 target = (
-                    self._leaves[idx] if not self._store_raw else self._hash_leaf(self._leaves[idx])
+                    self._leaves[idx]
+                    if not self._store_raw
+                    else self._hash_leaf(self._leaves[idx])
                 )
                 return self._tree.get_proof(target)
         raise MerkleTreeError("Unsupported merklelib version: cannot get proof.")
@@ -344,15 +360,23 @@ class MerkleTree:
             with self._rwlock:
                 with tracer.start_as_current_span("merkle_add_leaf") as span:
                     start_time = time.monotonic()
-                    MERKLE_OPS_TOTAL.labels(operation="add_leaf", status="attempt").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="add_leaf", status="attempt"
+                    ).inc()
                     try:
-                        leaf_bytes = data.encode("utf-8") if isinstance(data, str) else data
+                        leaf_bytes = (
+                            data.encode("utf-8") if isinstance(data, str) else data
+                        )
                         if not MERKLELIB_AVAILABLE or not self._tree:
                             raise MerkleTreeError(
                                 "MerkleTree not initialized or merklelib not available."
                             )
 
-                        new_item = leaf_bytes if self._store_raw else self._hash_leaf(leaf_bytes)
+                        new_item = (
+                            leaf_bytes
+                            if self._store_raw
+                            else self._hash_leaf(leaf_bytes)
+                        )
                         self._leaves.append(new_item)
 
                         if MERKLELIB_AVAILABLE and hasattr(self._tree, "add_leaf"):
@@ -363,16 +387,24 @@ class MerkleTree:
                         else:
                             await self._update_tree()
 
-                        MERKLE_OPS_TOTAL.labels(operation="add_leaf", status="success").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="add_leaf", status="success"
+                        ).inc()
                         span.set_status(Status(StatusCode.OK))
                         logger.debug(
                             f"Added leaf to Merkle tree. Current leaves: {len(self._leaves)}"
                         )
                     except Exception as e:
-                        MERKLE_OPS_TOTAL.labels(operation="add_leaf", status="failure").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="add_leaf", status="failure"
+                        ).inc()
                         span.record_exception(e)
-                        span.set_status(Status(StatusCode.ERROR, f"Failed to add leaf: {e}"))
-                        logger.error(f"Failed to add leaf to Merkle tree: {e}", exc_info=True)
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"Failed to add leaf: {e}")
+                        )
+                        logger.error(
+                            f"Failed to add leaf to Merkle tree: {e}", exc_info=True
+                        )
                         raise
                     finally:
                         MERKLE_OPS_LATENCY_SECONDS.labels(operation="add_leaf").observe(
@@ -390,7 +422,9 @@ class MerkleTree:
                 with tracer.start_as_current_span("merkle_add_leaves") as span:
                     span.set_attribute("merkle.num_leaves_added", len(data_list))
                     start_time = time.monotonic()
-                    MERKLE_OPS_TOTAL.labels(operation="add_leaves", status="attempt").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="add_leaves", status="attempt"
+                    ).inc()
                     try:
                         if not MERKLELIB_AVAILABLE or not self._tree:
                             raise MerkleTreeError(
@@ -398,7 +432,8 @@ class MerkleTree:
                             )
 
                         new_items_raw = [
-                            d.encode("utf-8") if isinstance(d, str) else d for d in data_list
+                            d.encode("utf-8") if isinstance(d, str) else d
+                            for d in data_list
                         ]
 
                         # Never hash into _leaves when store_raw=True. Hashing is done in _update_tree().
@@ -416,21 +451,29 @@ class MerkleTree:
 
                         await self._update_tree()
 
-                        MERKLE_OPS_TOTAL.labels(operation="add_leaves", status="success").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="add_leaves", status="success"
+                        ).inc()
                         span.set_status(Status(StatusCode.OK))
                         logger.debug(
                             f"Added {len(data_list)} leaves to Merkle tree. Current leaves: {len(self._leaves)}"
                         )
                     except Exception as e:
-                        MERKLE_OPS_TOTAL.labels(operation="add_leaves", status="failure").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="add_leaves", status="failure"
+                        ).inc()
                         span.record_exception(e)
-                        span.set_status(Status(StatusCode.ERROR, f"Failed to add leaves: {e}"))
-                        logger.error(f"Failed to add leaves to Merkle tree: {e}", exc_info=True)
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"Failed to add leaves: {e}")
+                        )
+                        logger.error(
+                            f"Failed to add leaves to Merkle tree: {e}", exc_info=True
+                        )
                         raise
                     finally:
-                        MERKLE_OPS_LATENCY_SECONDS.labels(operation="add_leaves").observe(
-                            time.monotonic() - start_time
-                        )
+                        MERKLE_OPS_LATENCY_SECONDS.labels(
+                            operation="add_leaves"
+                        ).observe(time.monotonic() - start_time)
 
     def get_root(self) -> str:
         with self._rwlock:
@@ -439,25 +482,37 @@ class MerkleTree:
                 MERKLE_OPS_TOTAL.labels(operation="get_root", status="attempt").inc()
                 try:
                     if not self._leaves or not self._tree:
-                        raise MerkleTreeEmptyError("Merkle tree is empty or not initialized.")
+                        raise MerkleTreeEmptyError(
+                            "Merkle tree is empty or not initialized."
+                        )
 
                     root_bytes = self._root_bytes()
                     root = root_bytes.hex()
 
-                    MERKLE_OPS_TOTAL.labels(operation="get_root", status="success").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_root", status="success"
+                    ).inc()
                     span.set_status(Status(StatusCode.OK))
                     logger.debug(f"Retrieved Merkle root: {root[:8]}...")
                     return root
                 except MerkleTreeEmptyError as e:
-                    MERKLE_OPS_TOTAL.labels(operation="get_root", status="failure").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_root", status="failure"
+                    ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to get root: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to get root: {e}")
+                    )
                     logger.warning(f"Failed to get Merkle root: {e}")
                     raise
                 except Exception as e:
-                    MERKLE_OPS_TOTAL.labels(operation="get_root", status="failure").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_root", status="failure"
+                    ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to get root: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to get root: {e}")
+                    )
                     logger.error(f"Failed to get Merkle root: {e}", exc_info=True)
                     raise
                 finally:
@@ -489,23 +544,36 @@ class MerkleTree:
                     proof_tuples = self._proof_for_index(index)
 
                     formatted_proof = [
-                        {"node": node.hex(), "position": pos} for node, pos in proof_tuples
+                        {"node": node.hex(), "position": pos}
+                        for node, pos in proof_tuples
                     ]
 
-                    MERKLE_OPS_TOTAL.labels(operation="get_proof", status="success").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_proof", status="success"
+                    ).inc()
                     span.set_status(Status(StatusCode.OK))
                     return formatted_proof
                 except (IndexError, MerkleTreeEmptyError) as e:
-                    MERKLE_OPS_TOTAL.labels(operation="get_proof", status="failure").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_proof", status="failure"
+                    ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to get proof: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to get proof: {e}")
+                    )
                     logger.warning(f"Failed to get proof for index {index}: {e}")
                     raise
                 except Exception as e:
-                    MERKLE_OPS_TOTAL.labels(operation="get_proof", status="failure").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="get_proof", status="failure"
+                    ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to get proof: {e}"))
-                    logger.error(f"Failed to get proof for index {index}: {e}", exc_info=True)
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to get proof: {e}")
+                    )
+                    logger.error(
+                        f"Failed to get proof for index {index}: {e}", exc_info=True
+                    )
                     raise MerkleProofError(f"Error generating proof: {e}") from e
                 finally:
                     MERKLE_OPS_LATENCY_SECONDS.labels(operation="get_proof").observe(
@@ -513,7 +581,9 @@ class MerkleTree:
                     )
 
     @staticmethod
-    def verify_proof(root: str, leaf_data: Union[str, bytes], proof: List[Dict[str, str]]) -> bool:
+    def verify_proof(
+        root: str, leaf_data: Union[str, bytes], proof: List[Dict[str, str]]
+    ) -> bool:
         """
         Verifies a Merkle proof for a given leaf against a Merkle root.
         Args:
@@ -534,7 +604,11 @@ class MerkleTree:
                     return False
 
                 root_bytes = bytes.fromhex(root)
-                leaf_raw = leaf_data.encode("utf-8") if isinstance(leaf_data, str) else leaf_data
+                leaf_raw = (
+                    leaf_data.encode("utf-8")
+                    if isinstance(leaf_data, str)
+                    else leaf_data
+                )
                 leaf_once = hashlib.sha256(leaf_raw).digest()
                 leaf_twice = hashlib.sha256(leaf_once).digest()
 
@@ -544,8 +618,12 @@ class MerkleTree:
                         try:
                             pos = node_data["position"].lower()
                             if pos not in ("left", "right"):
-                                raise MerkleProofError(f"Invalid proof node position: {pos!r}")
-                            proof_for_lib.append((bytes.fromhex(node_data["node"]), pos))
+                                raise MerkleProofError(
+                                    f"Invalid proof node position: {pos!r}"
+                                )
+                            proof_for_lib.append(
+                                (bytes.fromhex(node_data["node"]), pos)
+                            )
                         except ValueError:
                             raise MerkleProofError(
                                 f"Invalid hex string in proof node: {node_data['node']}"
@@ -571,15 +649,21 @@ class MerkleTree:
                 logger.debug(f"Merkle proof verification result: {is_valid}")
                 return is_valid
             except MerkleProofError as e:
-                MERKLE_OPS_TOTAL.labels(operation="verify_proof", status="failure").inc()
+                MERKLE_OPS_TOTAL.labels(
+                    operation="verify_proof", status="failure"
+                ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Proof format error: {e}"))
                 logger.error(f"Merkle proof format error: {e}", exc_info=True)
                 return False
             except Exception as e:
-                MERKLE_OPS_TOTAL.labels(operation="verify_proof", status="failure").inc()
+                MERKLE_OPS_TOTAL.labels(
+                    operation="verify_proof", status="failure"
+                ).inc()
                 span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, f"Failed to verify proof: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Failed to verify proof: {e}")
+                )
                 logger.error(f"Failed to verify Merkle proof: {e}", exc_info=True)
                 return False
             finally:
@@ -605,30 +689,40 @@ class MerkleTree:
                 with tracer.start_as_current_span("merkle_save_tree") as span:
                     span.set_attribute("merkle.save_path", filepath)
                     start_time = time.monotonic()
-                    MERKLE_OPS_TOTAL.labels(operation="save_tree", status="attempt").inc()
+                    MERKLE_OPS_TOTAL.labels(
+                        operation="save_tree", status="attempt"
+                    ).inc()
                     try:
                         payload = {
                             "version": 1,
                             "store_raw": self._store_raw,
                             "leaves": [leaf.hex() for leaf in self._leaves],
                         }
-                        await asyncio.to_thread(_write_compressed_json, filepath, payload)
+                        await asyncio.to_thread(
+                            _write_compressed_json, filepath, payload
+                        )
                         logger.info(f"Merkle tree state saved to {filepath}.")
-                        MERKLE_OPS_TOTAL.labels(operation="save_tree", status="success").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="save_tree", status="success"
+                        ).inc()
                         span.set_status(Status(StatusCode.OK))
                     except Exception as e:
-                        MERKLE_OPS_TOTAL.labels(operation="save_tree", status="failure").inc()
+                        MERKLE_OPS_TOTAL.labels(
+                            operation="save_tree", status="failure"
+                        ).inc()
                         span.record_exception(e)
-                        span.set_status(Status(StatusCode.ERROR, f"Failed to save tree: {e}"))
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"Failed to save tree: {e}")
+                        )
                         logger.error(
                             f"Failed to save Merkle tree state to {filepath}: {e}",
                             exc_info=True,
                         )
                         raise
                     finally:
-                        MERKLE_OPS_LATENCY_SECONDS.labels(operation="save_tree").observe(
-                            time.monotonic() - start_time
-                        )
+                        MERKLE_OPS_LATENCY_SECONDS.labels(
+                            operation="save_tree"
+                        ).observe(time.monotonic() - start_time)
 
     @classmethod
     async def load(cls, filepath: Optional[str] = None) -> "MerkleTree":
@@ -652,7 +746,9 @@ class MerkleTree:
 
                 if isinstance(payload, dict) and "leaves" in payload:
                     if not isinstance(payload.get("leaves"), list):
-                        raise ValueError("Invalid persisted state: 'leaves' must be a list")
+                        raise ValueError(
+                            "Invalid persisted state: 'leaves' must be a list"
+                        )
                     store_raw = bool(payload.get("store_raw", False))
                     loaded_leaves = [bytes.fromhex(x) for x in payload["leaves"]]
                 elif isinstance(payload, list):
@@ -739,11 +835,15 @@ async def main():
     leaf_index_to_prove = 1
     leaf_data_to_prove = leaves_data[leaf_index_to_prove]
     proof = tree.get_proof(leaf_index_to_prove)
-    logger.info(f"Proof for leaf '{leaf_data_to_prove}' at index {leaf_index_to_prove}: {proof}")
+    logger.info(
+        f"Proof for leaf '{leaf_data_to_prove}' at index {leaf_index_to_prove}: {proof}"
+    )
 
     if MERKLELIB_AVAILABLE:
         is_valid = MerkleTree.verify_proof(root, leaf_data_to_prove, proof)
-        logger.info(f"Proof verification for leaf '{leaf_data_to_prove}' is: {is_valid}")
+        logger.info(
+            f"Proof verification for leaf '{leaf_data_to_prove}' is: {is_valid}"
+        )
         assert is_valid, "Proof verification failed!"
 
         tampered_leaf_data = "transaction_A_details_123_TAMPERED"
@@ -778,7 +878,9 @@ async def main():
     assert loaded_root == root, "Loaded tree root does not match original!"
 
     loaded_proof = loaded_tree.get_proof(leaf_index_to_prove)
-    is_valid_loaded = MerkleTree.verify_proof(loaded_root, leaf_data_to_prove, loaded_proof)
+    is_valid_loaded = MerkleTree.verify_proof(
+        loaded_root, leaf_data_to_prove, loaded_proof
+    )
     logger.info(
         f"Proof verification on loaded tree for leaf '{leaf_data_to_prove}' is: {is_valid_loaded}"
     )

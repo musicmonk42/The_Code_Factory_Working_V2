@@ -1,15 +1,18 @@
 # tests/test_example_plugin.py
 
-import os
-import sys
-import pytest
 import json
+import os
 import shutil
+import sys
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Fix the import path - add the plugins directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "plugins"))
+)
 
 # Mock cachetools before importing the plugin since it might not be installed
 sys.modules["cachetools"] = MagicMock()
@@ -19,11 +22,11 @@ sys.modules["cachetools"].TTLCache = MagicMock(return_value={})
 import example_plugin
 from example_plugin import (
     PLUGIN_MANIFEST,
+    _scrub_secrets,
+    check_compatibility,
+    perform_custom_security_audit,
     plugin_health,
     run_custom_chaos_experiment,
-    perform_custom_security_audit,
-    check_compatibility,
-    _scrub_secrets,
 )
 
 # ==============================================================================
@@ -65,9 +68,11 @@ def mock_prometheus_client():
         15.0,
     )
 
-    with patch("example_plugin.Counter", MagicMock()), patch(
-        "example_plugin.Histogram", mock_histogram
-    ), patch("example_plugin.Gauge", MagicMock()):
+    with (
+        patch("example_plugin.Counter", MagicMock()),
+        patch("example_plugin.Histogram", mock_histogram),
+        patch("example_plugin.Gauge", MagicMock()),
+    ):
         yield
 
 
@@ -133,9 +138,13 @@ def mock_metrics():
     mock_findings_counter = MagicMock()
     mock_duration_histogram = MagicMock()
 
-    with patch.object(example_plugin, "CHAOS_EXPERIMENT_TOTAL", mock_chaos_counter), patch.object(
-        example_plugin, "SECURITY_FINDINGS_TOTAL", mock_findings_counter
-    ), patch.object(example_plugin, "SECURITY_AUDIT_DURATION", mock_duration_histogram):
+    with (
+        patch.object(example_plugin, "CHAOS_EXPERIMENT_TOTAL", mock_chaos_counter),
+        patch.object(example_plugin, "SECURITY_FINDINGS_TOTAL", mock_findings_counter),
+        patch.object(
+            example_plugin, "SECURITY_AUDIT_DURATION", mock_duration_histogram
+        ),
+    ):
         yield {
             "chaos": mock_chaos_counter,
             "findings": mock_findings_counter,
@@ -246,7 +255,9 @@ def test_run_custom_chaos_experiment_simulated_error(mock_metrics):
 # ==============================================================================
 
 
-def test_perform_custom_security_audit_success_no_findings(mock_plugin_config, mock_metrics):
+def test_perform_custom_security_audit_success_no_findings(
+    mock_plugin_config, mock_metrics
+):
     """Test a security audit on a clean file with no findings."""
     temp_dir = mock_plugin_config
     file_path = os.path.join(temp_dir, "clean_code.py")
@@ -292,7 +303,9 @@ def test_perform_custom_security_audit_with_findings(mock_plugin_config, mock_me
     mock_metrics["duration"].labels.return_value.observe.assert_called()
 
 
-def test_perform_custom_security_audit_path_traversal_attack(mock_plugin_config, mock_metrics):
+def test_perform_custom_security_audit_path_traversal_attack(
+    mock_plugin_config, mock_metrics
+):
     """Test that a path traversal attempt is blocked."""
     result = perform_custom_security_audit("../../../etc/passwd")
 

@@ -1,15 +1,16 @@
-import os
 import asyncio
-import time
+import datetime
+import hashlib
+import hmac
 import json
 import logging
-import sys
+import os
 import re
-import hmac
-import hashlib
-import datetime
+import sys
+import time
+from typing import Any, Dict, List, Literal, Optional, Tuple
+
 import redis.asyncio as redis
-from typing import Dict, Any, Optional, List, Literal, Tuple
 
 # --- OpenTelemetry Tracing ---
 try:
@@ -53,7 +54,9 @@ PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 logger = logging.getLogger("rabbitmq_audit_plugin")
 if not logger.handlers:
     if PRODUCTION_MODE:
-        LOG_FILE_PATH = os.getenv("RABBITMQ_PLUGIN_LOG_FILE", "/var/log/rabbitmq_plugin.log")
+        LOG_FILE_PATH = os.getenv(
+            "RABBITMQ_PLUGIN_LOG_FILE", "/var/log/rabbitmq_plugin.log"
+        )
         try:
             os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
             handler = logging.FileHandler(LOG_FILE_PATH)
@@ -64,7 +67,9 @@ if not logger.handlers:
                 exc_info=True,
             )
             handler = logging.StreamHandler(sys.stdout)
-            sys.stderr.write("CRITICAL: RabbitMQ plugin file logging failed. Aborting startup.\n")
+            sys.stderr.write(
+                "CRITICAL: RabbitMQ plugin file logging failed. Aborting startup.\n"
+            )
             sys.exit(1)
 
         class JsonFormatter(logging.Formatter):
@@ -109,9 +114,10 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from plugins.core_utils import alert_operator, scrub_secrets as scrub_sensitive_data
     from plugins.core_audit import audit_logger
     from plugins.core_secrets import SECRETS_MANAGER
+    from plugins.core_utils import alert_operator
+    from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for RabbitMQ plugin: {e}. Aborting startup."
@@ -126,26 +132,30 @@ except ImportError as e:
     logger.critical(
         f"CRITICAL: aiormq not found. RabbitMQ plugin functionality is critical. Aborting startup: {e}."
     )
-    alert_operator("CRITICAL: aiormq missing. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator(
+        "CRITICAL: aiormq missing. RabbitMQ plugin aborted.", level="CRITICAL"
+    )
     sys.exit(1)
 
 try:
-    from pydantic import BaseModel, ValidationError, Field, validator
+    from pydantic import BaseModel, Field, ValidationError, validator
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
         f"CRITICAL: pydantic or pydantic-settings not found. Schema validation is critical. Aborting startup: {e}."
     )
-    alert_operator("CRITICAL: pydantic missing. RabbitMQ plugin aborted.", level="CRITICAL")
+    alert_operator(
+        "CRITICAL: pydantic missing. RabbitMQ plugin aborted.", level="CRITICAL"
+    )
     sys.exit(1)
 
 try:
     from prometheus_client import (
+        CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
         generate_latest,
-        CollectorRegistry,
     )
 except ImportError as e:
     logger.critical(
@@ -172,7 +182,9 @@ try:
         decode_responses=True,
     )
 except Exception as e:
-    logger.warning(f"Failed to connect to Redis for caching: {e}. Caching will be disabled.")
+    logger.warning(
+        f"Failed to connect to Redis for caching: {e}. Caching will be disabled."
+    )
     REDIS_CLIENT = None
 
 
@@ -245,7 +257,9 @@ class RabbitMQSettings(BaseSettings):
         description="List of allowed RabbitMQ routing keys (regex allowed) in production.",
     )
 
-    dry_run: bool = Field(False, description="If true, events are logged but not sent to RabbitMQ.")
+    dry_run: bool = Field(
+        False, description="If true, events are logged but not sent to RabbitMQ."
+    )
 
     @validator("url")
     def validate_url_in_prod(cls, v, values):
@@ -257,7 +271,9 @@ class RabbitMQSettings(BaseSettings):
 
         if PRODUCTION_MODE:
             if not v:
-                raise ValueError("In PRODUCTION_MODE, 'url' must be provided via 'url_secret_id'.")
+                raise ValueError(
+                    "In PRODUCTION_MODE, 'url' must be provided via 'url_secret_id'."
+                )
 
             if "guest:guest" in v.lower():
                 raise ValueError(
@@ -270,7 +286,10 @@ class RabbitMQSettings(BaseSettings):
                 )
 
             allowed_exchanges = asyncio.run(cls._get_allowed_exchange_names())
-            if allowed_exchanges and values.get("exchange_name") not in allowed_exchanges:
+            if (
+                allowed_exchanges
+                and values.get("exchange_name") not in allowed_exchanges
+            ):
                 raise ValueError(
                     f"Exchange name '{values.get('exchange_name')}' is not in the 'allowed_exchange_names' list."
                 )
@@ -439,7 +458,9 @@ class AuditEvent(BaseModel):
     service_name: str = Field(..., min_length=1)
     timestamp: float = Field(default_factory=time.time, ge=0)
     details: Dict[str, Any] = Field(default_factory=dict)
-    signature: Optional[str] = Field(None, description="HMAC signature of the event payload.")
+    signature: Optional[str] = Field(
+        None, description="HMAC signature of the event payload."
+    )
 
     @validator("details")
     def validate_details_for_pii(cls, v):
@@ -452,9 +473,9 @@ class AuditEvent(BaseModel):
 
     def _sign_event(self) -> str:
         event_payload = self.model_dump(exclude={"signature"})
-        event_json_str = json.dumps(event_payload, sort_keys=True, ensure_ascii=False).encode(
-            "utf-8"
-        )
+        event_json_str = json.dumps(
+            event_payload, sort_keys=True, ensure_ascii=False
+        ).encode("utf-8")
         rabbitmq_hmac_key = SECRETS_MANAGER.get_secret(
             "RABBITMQ_HMAC_KEY", required=True if PRODUCTION_MODE else False
         )
@@ -486,8 +507,12 @@ class CircuitBreaker:
                 self._is_open = False
                 self._failure_count = 0
                 self._metrics.CIRCUIT_BREAKER_STATUS.set(0)
-                logger.warning("Circuit breaker has been reset. Resuming publish attempts.")
-                audit_logger.log_event("rabbitmq_circuit_breaker_reset", status="closed")
+                logger.warning(
+                    "Circuit breaker has been reset. Resuming publish attempts."
+                )
+                audit_logger.log_event(
+                    "rabbitmq_circuit_breaker_reset", status="closed"
+                )
                 alert_operator(
                     "INFO: RabbitMQ Circuit Breaker RESET. Resuming publishes.",
                     level="INFO",
@@ -504,7 +529,9 @@ class CircuitBreaker:
                 self._is_open = True
                 self._last_failure_time = time.monotonic()
                 self._metrics.CIRCUIT_BREAKER_STATUS.set(1)
-                logger.error("Circuit breaker tripped due to excessive publish failures.")
+                logger.error(
+                    "Circuit breaker tripped due to excessive publish failures."
+                )
                 audit_logger.log_event(
                     "rabbitmq_circuit_breaker_tripped",
                     status="open",
@@ -575,7 +602,9 @@ class RabbitMQGateway:
         audit_logger.log_event(
             "rabbitmq_gateway_init",
             url_host=(
-                self.settings.url.split("@")[-1] if "@" in self.settings.url else self.settings.url
+                self.settings.url.split("@")[-1]
+                if "@" in self.settings.url
+                else self.settings.url
             ),
             exchange=self.settings.exchange_name,
             max_queue_size=self.settings.max_queue_size,
@@ -589,7 +618,9 @@ class RabbitMQGateway:
                     "RabbitMQ connection established.",
                     extra={"context": {"url": self.settings.url}},
                 )
-                audit_logger.log_event("rabbitmq_connect_success", url=self.settings.url)
+                audit_logger.log_event(
+                    "rabbitmq_connect_success", url=self.settings.url
+                )
                 return conn
             except AMQPConnectionError as e:
                 logger.warning(
@@ -638,7 +669,8 @@ class RabbitMQGateway:
             )
 
             self._worker_tasks = [
-                asyncio.create_task(self._worker()) for _ in range(self.settings.num_workers)
+                asyncio.create_task(self._worker())
+                for _ in range(self.settings.num_workers)
             ]
             logger.info(
                 f"RabbitMQ Gateway started with {self.settings.num_workers} workers.",
@@ -676,7 +708,9 @@ class RabbitMQGateway:
                 f"RabbitMQ Gateway worker tasks timed out during shutdown. {remaining_events} events remain unsent."
             )
         except Exception as e:
-            raise AnalyzerCriticalError(f"Unexpected error during worker task shutdown: {e}.")
+            raise AnalyzerCriticalError(
+                f"Unexpected error during worker task shutdown: {e}."
+            )
 
         if self._connection_pool:
             while not self._connection_pool.empty():
@@ -706,7 +740,8 @@ class RabbitMQGateway:
     ):
         if PRODUCTION_MODE and self.settings.allowed_routing_keys:
             if not any(
-                re.fullmatch(pattern, routing_key) for pattern in self.settings.allowed_routing_keys
+                re.fullmatch(pattern, routing_key)
+                for pattern in self.settings.allowed_routing_keys
             ):
                 audit_logger.log_event(
                     "rabbitmq_routing_key_forbidden",
@@ -718,7 +753,9 @@ class RabbitMQGateway:
                 )
 
         try:
-            event = AuditEvent(event_name=event_name, service_name=service_name, details=details)
+            event = AuditEvent(
+                event_name=event_name, service_name=service_name, details=details
+            )
             event.signature = event._sign_event()
 
             self._event_queue.put_nowait((event, routing_key))
@@ -767,7 +804,9 @@ class RabbitMQGateway:
             audit_logger.log_event("rabbitmq_event_enqueue_error", error=str(e))
             alert_operator(f"CRITICAL: {e}", level="CRITICAL")
         except Exception as e:
-            raise AnalyzerCriticalError(f"Unexpected error enqueueing event '{event_name}': {e}")
+            raise AnalyzerCriticalError(
+                f"Unexpected error enqueueing event '{event_name}': {e}"
+            )
 
     async def _publish_batch(self, batch: List[Tuple[AuditEvent, str]]):
         with _tracer.start_as_current_span(
@@ -814,9 +853,9 @@ class RabbitMQGateway:
                 self._connection_pool.put_nowait(channel)
 
                 duration = time.monotonic() - start_time
-                self.metrics.PUBLISH_LATENCY.labels(exchange=self.settings.exchange_name).observe(
-                    duration
-                )
+                self.metrics.PUBLISH_LATENCY.labels(
+                    exchange=self.settings.exchange_name
+                ).observe(duration)
                 self.metrics.EVENTS_PUBLISHED_SUCCESS.labels(
                     exchange=self.settings.exchange_name
                 ).inc(len(batch))
@@ -849,7 +888,9 @@ class RabbitMQGateway:
                 if span:
                     span.record_exception(e)
                 if span:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, "Publish failed"))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, "Publish failed")
+                    )
                 audit_logger.log_event(
                     "rabbitmq_publish_failure",
                     batch_size=len(batch),
@@ -871,7 +912,9 @@ class RabbitMQGateway:
                 if span:
                     span.record_exception(e)
                 if span:
-                    span.set_status(trace.Status(trace.StatusCode.ERROR, "Unhandled publish error"))
+                    span.set_status(
+                        trace.Status(trace.StatusCode.ERROR, "Unhandled publish error")
+                    )
                 audit_logger.log_event(
                     "rabbitmq_publish_failure",
                     batch_size=len(batch),
@@ -883,7 +926,9 @@ class RabbitMQGateway:
                     f"CRITICAL: Unhandled exception during RabbitMQ publish: {e}. Aborting.",
                     level="CRITICAL",
                 )
-                raise AnalyzerCriticalError("Unhandled exception during RabbitMQ publish.")
+                raise AnalyzerCriticalError(
+                    "Unhandled exception during RabbitMQ publish."
+                )
 
     async def _worker(self):
         while True:
@@ -914,7 +959,9 @@ class RabbitMQGateway:
                         "[DRY RUN] Would publish batch.",
                         extra={"context": {"batch_size": len(batch)}},
                     )
-                    audit_logger.log_event("rabbitmq_dry_run_publish", batch_size=len(batch))
+                    audit_logger.log_event(
+                        "rabbitmq_dry_run_publish", batch_size=len(batch)
+                    )
                     for event in batch:
                         self._event_queue.task_done()
                     continue
@@ -927,7 +974,9 @@ class RabbitMQGateway:
                 logger.info("RabbitMQ worker task cancelled.")
                 break
             except Exception as e:
-                raise AnalyzerCriticalError(f"Unhandled exception in RabbitMQ worker: {e}.")
+                raise AnalyzerCriticalError(
+                    f"Unhandled exception in RabbitMQ worker: {e}."
+                )
 
         logger.info("Event processor task finished.")
 
@@ -952,7 +1001,9 @@ async def run_health_check_server():
                 "status": "healthy",
                 "queue_size": rabbitmq_gateway._event_queue.qsize(),
                 "circuit_breaker_status": (
-                    "closed" if not rabbitmq_gateway.circuit_breaker._is_open else "open"
+                    "closed"
+                    if not rabbitmq_gateway.circuit_breaker._is_open
+                    else "open"
                 ),
             }
         )
@@ -1002,7 +1053,9 @@ if not PRODUCTION_MODE:
                 routing_key="billing.payment.success",
             )
 
-            logger.info("Main application logic continues immediately after publishing.")
+            logger.info(
+                "Main application logic continues immediately after publishing."
+            )
 
             await asyncio.sleep(5)
 
@@ -1012,7 +1065,9 @@ if not PRODUCTION_MODE:
         except SystemExit:
             pass
         except Exception as e:
-            logger.critical(f"Unhandled exception during example run: {e}", exc_info=True)
+            logger.critical(
+                f"Unhandled exception during example run: {e}", exc_info=True
+            )
             alert_operator(
                 f"CRITICAL: Unhandled exception during RabbitMQ example run: {e}.",
                 level="CRITICAL",

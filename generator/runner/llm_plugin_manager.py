@@ -15,20 +15,21 @@ Design:
 - Pluggable via `get_provider()` in each *_provider module.
 """
 
-import importlib.util
 import asyncio
-import logging
+import contextlib
 import hashlib
+import importlib.util
 import json
-from pathlib import Path
-from dynaconf import Dynaconf, Validator
-from typing import Dict, Any, Optional, List
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import logging
 import os
 import sys
 import tempfile
-import contextlib
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from dynaconf import Dynaconf, Validator
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # ============================================================================
 # Logging
@@ -85,7 +86,9 @@ try:
     from prometheus_client import Counter, Gauge
     from runner.runner_metrics import LLM_PROVIDER_HEALTH as BASE_LLM_PROVIDER_HEALTH
 except ImportError:
-    logger.warning("prometheus_client or runner.runner_metrics not found. Using dummy metrics.")
+    logger.warning(
+        "prometheus_client or runner.runner_metrics not found. Using dummy metrics."
+    )
 
     class DummyCounter:
         def labels(self, *args, **kwargs):
@@ -209,7 +212,9 @@ class PluginReloader(FileSystemEventHandler):
                     event,
                 )
             except Exception as e:
-                logger.error(f"Failed to enqueue reload event from watchdog thread: {e}")
+                logger.error(
+                    f"Failed to enqueue reload event from watchdog thread: {e}"
+                )
 
 
 # ============================================================================
@@ -273,8 +278,13 @@ class LLMPluginManager:
         """
         if getattr(settings, "AUTO_RELOAD", False):
             self._start_watcher()
-            if self._watcher_consumer_task is None or self._watcher_consumer_task.done():
-                self._watcher_consumer_task = asyncio.create_task(self._watcher_consumer())
+            if (
+                self._watcher_consumer_task is None
+                or self._watcher_consumer_task.done()
+            ):
+                self._watcher_consumer_task = asyncio.create_task(
+                    self._watcher_consumer()
+                )
 
     def _start_watcher(self):
         if self._watcher:
@@ -348,7 +358,9 @@ class LLMPluginManager:
         if self._manifest:
             expected_hash = self._manifest.get(filepath.name, expected_hash)
             if not expected_hash:
-                logger.error(f"Hash for {filepath.name} not found in manifest. Denying load.")
+                logger.error(
+                    f"Hash for {filepath.name} not found in manifest. Denying load."
+                )
                 return False
 
         def compute() -> str:
@@ -379,7 +391,9 @@ class LLMPluginManager:
             data = json.loads(manifest_path.read_text())
             return data.get(modname, "INTEGRITY_CHECK_DISABLED")
         except Exception as e:
-            logger.error(f"Failed to read or parse legacy manifest {manifest_path}: {e}")
+            logger.error(
+                f"Failed to read or parse legacy manifest {manifest_path}: {e}"
+            )
             return "INTEGRITY_CHECK_DISABLED"
 
     # ---------------------------------------------------------------------- #
@@ -442,7 +456,9 @@ class LLMPluginManager:
                 for method in ("call", "health_check"):
                     attr = getattr(provider, method, None)
                     if not attr or not asyncio.iscoroutinefunction(attr):
-                        raise PluginValidationError(f"Missing async {method}() on provider {name}")
+                        raise PluginValidationError(
+                            f"Missing async {method}() on provider {name}"
+                        )
 
                 # Registration
                 self.registry[name] = provider
@@ -534,7 +550,11 @@ class LLMPluginManager:
         Stop watcher, cancel background tasks, and clean up resources.
         """
         # CRITICAL FIX: Cancel the initial _load_task if it's still running
-        if hasattr(self, "_load_task") and self._load_task and not self._load_task.done():
+        if (
+            hasattr(self, "_load_task")
+            and self._load_task
+            and not self._load_task.done()
+        ):
             self._load_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._load_task

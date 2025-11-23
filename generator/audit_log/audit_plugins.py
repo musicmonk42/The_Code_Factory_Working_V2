@@ -32,7 +32,7 @@ except ImportError:
 
 # Integrate with audit_metrics if it exists, otherwise provide dummy classes
 try:
-    from prometheus_client import Counter, Gauge, REGISTRY  # <-- ADDED REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge  # <-- ADDED REGISTRY
 except ImportError:
     logger = logging.getLogger(__name__)  # Need logger defined early
 
@@ -117,7 +117,9 @@ except ImportError:
             "audit_log.py not found or circular dependency. log_action will be a dummy function."
         )
 
-        async def real_log_action(*args, **kwargs):  # Make dummy async to match expected signature
+        async def real_log_action(
+            *args, **kwargs
+        ):  # Make dummy async to match expected signature
             logging.info(f"Dummy log_action: {args}, {kwargs}")
 
 
@@ -175,7 +177,9 @@ EVENTS = [
 
 # Hooks registry: defaultdict for easy management of multiple hooks per event
 # --- FIX: Removed redundant closing bracket ']' from type hint ---
-hooks: Dict[str, List[Callable[[Any], Optional[Any]]]] = defaultdict(list)  # Event: hooks
+hooks: Dict[str, List[Callable[[Any], Optional[Any]]]] = defaultdict(
+    list
+)  # Event: hooks
 
 
 class AuditPlugin(ABC):
@@ -237,7 +241,9 @@ class DefaultPlugin(AuditPlugin):
             and "password" in data["details"]
         ):
             data["details"]["password"] = "[REDACTED]"
-            PLUGIN_MODIFICATIONS.labels(plugin=self.get_plugin_name(), type="redact").inc()
+            PLUGIN_MODIFICATIONS.labels(
+                plugin=self.get_plugin_name(), type="redact"
+            ).inc()
         return data
 
 
@@ -269,7 +275,9 @@ class BillingPlugin(CommercialPlugin):
         if "sensitive_info" in modified_data and POLICY_CONTROLS["redact"]:
             modified_data["sensitive_info"] = "[REDACTED_BY_BILLING_PLUGIN]"
             self.redacted_fields_count += 1
-            PLUGIN_MODIFICATIONS.labels(plugin=self.get_plugin_name(), type="redact").inc()
+            PLUGIN_MODIFICATIONS.labels(
+                plugin=self.get_plugin_name(), type="redact"
+            ).inc()
             COMMERCIAL_PLUGIN_USAGE.labels(
                 plugin=self.get_plugin_name(), feature="redacted_fields"
             ).inc()  # Also track as commercial usage
@@ -280,7 +288,9 @@ class BillingPlugin(CommercialPlugin):
             modified_data["additional_context"] = added_data
             added_bytes = len(added_data.encode("utf-8"))
             self.augmented_data_size += added_bytes  # Track size in bytes
-            PLUGIN_MODIFICATIONS.labels(plugin=self.get_plugin_name(), type="augment").inc()
+            PLUGIN_MODIFICATIONS.labels(
+                plugin=self.get_plugin_name(), type="augment"
+            ).inc()
             COMMERCIAL_PLUGIN_USAGE.labels(
                 plugin=self.get_plugin_name(), feature="augmented_data_bytes"
             ).inc(
@@ -356,7 +366,9 @@ def discover_plugins():
                                 instance = cls(**params)
                                 # B. PATCH: Remove .lower() normalization
                                 plugins[name] = instance
-                                logger.info(f"Loaded plugin '{name}' from config: {cls.__name__}")
+                                logger.info(
+                                    f"Loaded plugin '{name}' from config: {cls.__name__}"
+                                )
                             else:
                                 logger.warning(
                                     f"Class {cls.__name__} from config is not a valid AuditPlugin or is an abstract base; skipping."
@@ -381,7 +393,9 @@ def discover_plugins():
 
         try:
             # Use importlib.util for more explicit and safer module loading
-            spec = importlib.util.spec_from_file_location(module_name, str(file))  # Use str(file)
+            spec = importlib.util.spec_from_file_location(
+                module_name, str(file)
+            )  # Use str(file)
             if spec and spec.loader:
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
@@ -405,7 +419,9 @@ def discover_plugins():
                     f"Could not get spec for module {module_name} from file {file.name}."
                 )
         except Exception as e:
-            logger.error(f"Failed to load plugin from file {file.name}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to load plugin from file {file.name}: {e}", exc_info=True
+            )
         finally:
             # Always restore original sys.path to prevent side effects
             sys.path[:] = original_sys_path
@@ -417,7 +433,9 @@ def discover_plugins():
 # --- END: FIX 2 ---
 
 
-def register_plugin(name: str, plugin: AuditPlugin, controls: Optional[Dict[str, bool]] = None):
+def register_plugin(
+    name: str, plugin: AuditPlugin, controls: Optional[Dict[str, bool]] = None
+):
     """
     Manually registers a plugin instance. Used primarily by unit tests.
     """
@@ -441,7 +459,9 @@ def register_hook(event: str, hook: Callable[[Any], Optional[Any]]):
         TypeError: If the hook is not callable.
     """
     if event not in EVENTS:
-        raise ValueError(f"Unknown event: {event}. Supported events are: {', '.join(EVENTS)}")
+        raise ValueError(
+            f"Unknown event: {event}. Supported events are: {', '.join(EVENTS)}"
+        )
     if not callable(hook):
         raise TypeError("hook must be a callable function.")
     hooks[event].append(hook)
@@ -477,7 +497,9 @@ async def execute_hooks_sync(event: str, data: Any) -> Any:
             logger.error(
                 f"Error in synchronous hook '{hook_name}' for event '{event}': {e}\n{traceback.format_exc()}"
             )
-            PLUGIN_ERRORS.labels(event=event, plugin=hook_name, type=type(e).__name__).inc()
+            PLUGIN_ERRORS.labels(
+                event=event, plugin=hook_name, type=type(e).__name__
+            ).inc()
             # Policy for hook failure: continue or halt. Currently continues.
         finally:
             PLUGIN_LATENCY.labels(event=event, plugin=hook_name).set(
@@ -512,7 +534,9 @@ async def execute_hooks_async(event: str, data: Any) -> Any:
             logger.error(
                 f"Error in asynchronous hook '{hook_name}' for event '{event}': {e}\n{traceback.format_exc()}"
             )
-            PLUGIN_ERRORS.labels(event=event, plugin=hook_name, type=type(e).__name__).inc()
+            PLUGIN_ERRORS.labels(
+                event=event, plugin=hook_name, type=type(e).__name__
+            ).inc()
             # Policy for hook failure: continue or halt. Currently continues.
         finally:
             PLUGIN_LATENCY.labels(event=event, plugin=hook_name).set(
@@ -545,7 +569,9 @@ def _sandboxed_worker(
             resource.setrlimit(
                 resource.RLIMIT_CPU, (MAX_PLUGIN_CPU_SECONDS, MAX_PLUGIN_CPU_SECONDS)
             )
-            resource.setrlimit(resource.RLIMIT_AS, (MAX_PLUGIN_MEM_BYTES, MAX_PLUGIN_MEM_BYTES))
+            resource.setrlimit(
+                resource.RLIMIT_AS, (MAX_PLUGIN_MEM_BYTES, MAX_PLUGIN_MEM_BYTES)
+            )
 
         # The plugin instance is passed directly and deserialized here.
         plugin_instance = plugin
@@ -554,7 +580,9 @@ def _sandboxed_worker(
             raise RuntimeError("Plugin instance not available in worker process.")
 
         # Plugin's process method is executed synchronously inside the sandbox
-        result = plugin_instance.process(event, entry)  # NOTE: event, data order changed from test
+        result = plugin_instance.process(
+            event, entry
+        )  # NOTE: event, data order changed from test
 
         # CRITICAL FIX 1: Send back both the result (modified data) AND the updated plugin instance (with counters)
         q.put((result, plugin_instance))
@@ -564,11 +592,15 @@ def _sandboxed_worker(
         # Log the failure before exiting
         # Use plugin_instance.get_plugin_name() if available, otherwise fallback
         plugin_name = getattr(plugin, "get_plugin_name", lambda: "unknown_plugin")()
-        logging.error(f"Plugin '{plugin_name}' sandbox worker failed: {e}", exc_info=True)
+        logging.error(
+            f"Plugin '{plugin_name}' sandbox worker failed: {e}", exc_info=True
+        )
 
 
 # --- Synchronous helper for polling the queue with a timeout ---
-def _poll_queue(q: multiprocessing.Queue, timeout: float) -> Optional[Union[tuple, Exception]]:
+def _poll_queue(
+    q: multiprocessing.Queue, timeout: float
+) -> Optional[Union[tuple, Exception]]:
     """Synchronous, blocking poll with a fixed timeout."""
     try:
         # The internal queue.get() call should not be indefinite if a timeout is provided.
@@ -667,13 +699,17 @@ async def sandboxed_execute(
 
             # If still alive after join timeout, terminate it
             if p.is_alive():
-                logger.warning("Plugin process still alive after join timeout, terminating...")
+                logger.warning(
+                    "Plugin process still alive after join timeout, terminating..."
+                )
                 p.terminate()
                 p.join(timeout=2)
 
                 # Last resort: kill if terminate didn't work
                 if p.is_alive():
-                    logger.error("Plugin process didn't respond to terminate, killing...")
+                    logger.error(
+                        "Plugin process didn't respond to terminate, killing..."
+                    )
                     p.kill()
                     p.join(timeout=1)
         # --- END: FIX 3 ---
@@ -703,7 +739,9 @@ async def sandboxed_execute(
             # Case where result_or_exception is the data itself (old logic) or unexpected
             final_modified_data = result_or_exception
 
-        PLUGIN_LATENCY.labels(event=event, plugin=plugin_name).set(time.perf_counter() - start_time)
+        PLUGIN_LATENCY.labels(event=event, plugin=plugin_name).set(
+            time.perf_counter() - start_time
+        )
 
     return final_modified_data
 
@@ -753,7 +791,9 @@ async def trigger_event(event: str, data: Any) -> Any:
         # Commercial Plugins: Handle specific billing_report event outside regular processing
         if isinstance(plugin, CommercialPlugin) and event == "billing_report":
             usage_data = plugin.get_usage_data()
-            logger.info(f"Commercial plugin '{name}' usage data for billing: {usage_data}")
+            logger.info(
+                f"Commercial plugin '{name}' usage data for billing: {usage_data}"
+            )
             # In a real system, `usage_data` would be sent to an external billing service.
             # After successful reporting, reset usage data for the next billing cycle.
             plugin.reset_usage_data()
@@ -789,7 +829,9 @@ async def trigger_event(event: str, data: Any) -> Any:
                     PLUGIN_INVOCATIONS.labels(event=event, plugin=name).inc()
                 except Exception as e:
                     logger.error(f"Inline test plugin '{name}' failed: {e}")
-                    PLUGIN_ERRORS.labels(event=event, plugin=name, type="exception").inc()
+                    PLUGIN_ERRORS.labels(
+                        event=event, plugin=name, type="exception"
+                    ).inc()
                     modified_data = None
             else:
                 # Sandbox for real plugins only
@@ -861,7 +903,9 @@ async def trigger_event(event: str, data: Any) -> Any:
                 logger.warning(
                     f"Plugin '{name}' attempted unauthorized modification of type '{modification_type}' for event '{event}'. Original data retained."
                 )
-                PLUGIN_ERRORS.labels(event=event, plugin=name, type="policy_denial").inc()
+                PLUGIN_ERRORS.labels(
+                    event=event, plugin=name, type="policy_denial"
+                ).inc()
         else:
             logger.warning(
                 f"Plugin '{name}' for event '{event}' returned None (e.g., error/timeout in sandbox). Original data retained."

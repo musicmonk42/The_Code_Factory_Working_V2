@@ -1,57 +1,38 @@
 import asyncio
 import collections
 import hashlib
+import json
 import logging
 import os
 import random
 import sys
 import time
-from functools import wraps
-from typing import (
-    Any,
-    Callable,
-    Coroutine,
-    Dict,
-    List,
-    Optional,
-    Set,
-    ClassVar,
-)
-from datetime import datetime, timezone
-import json
-import httpx
-from sqlalchemy import (
-    Column,
-    String,
-    Text,
-    select,
-    update,
-    BigInteger,
-    DateTime,
-)
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from pydantic import BaseModel, HttpUrl, SecretStr, Field, validator
-from pydantic_settings import BaseSettings
-from dotenv import load_dotenv, dotenv_values
-from tenacity import retry, stop_after_attempt, wait_exponential
 from collections import deque
+from datetime import datetime, timezone
+from functools import wraps
+from logging.handlers import RotatingFileHandler
+from typing import Any, Callable, ClassVar, Coroutine, Dict, List, Optional, Set
+
+import aiohttp
+import httpx
 import numpy as np
-from prometheus_client import (
-    REGISTRY,
-    push_to_gateway,
-)
+from aiohttp import ClientSession
+from aiolimiter import AsyncLimiter
 from arbiter.metrics import (
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_summary,
 )
-from logging.handlers import RotatingFileHandler
 from cryptography.fernet import Fernet
-import aiohttp
-from aiohttp import ClientSession
-from aiolimiter import AsyncLimiter
+from dotenv import dotenv_values, load_dotenv
+from prometheus_client import REGISTRY, push_to_gateway
+from pydantic import BaseModel, Field, HttpUrl, SecretStr, validator
+from pydantic_settings import BaseSettings
+from sqlalchemy import BigInteger, Column, DateTime, String, Text, select, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.orm import declarative_base
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 try:
     import gymnasium as gym
@@ -121,8 +102,12 @@ class MyArbiterConfig(BaseSettings):
     ENABLE_CRITICAL_FAILURES: bool = False
     AI_API_TIMEOUT: int = 30
     MEMORY_LIMIT: int = 40
-    OMNICORE_URL: HttpUrl = Field("https://api.example.com", description="OmniCore API endpoint")
-    ARBITER_URL: HttpUrl = Field("https://arbiter.example.com", description="Arbiter API endpoint")
+    OMNICORE_URL: HttpUrl = Field(
+        "https://api.example.com", description="OmniCore API endpoint"
+    )
+    ARBITER_URL: HttpUrl = Field(
+        "https://arbiter.example.com", description="Arbiter API endpoint"
+    )
     AUDIT_LOG_PATH: str = "./omnicore_audit.log"
     PLUGINS_ENABLED: bool = True
     ROLE_MAP: Dict[str, int] = {"guest": 0, "user": 1, "explorer_user": 2, "admin": 3}
@@ -131,11 +116,15 @@ class MyArbiterConfig(BaseSettings):
     SENTRY_DSN: Optional[str] = None
     PROMETHEUS_GATEWAY: Optional[HttpUrl] = None
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
-    RL_MODEL_PATH: str = Field("./models/ppo_model.zip", description="Path to save/load RL model")
+    RL_MODEL_PATH: str = Field(
+        "./models/ppo_model.zip", description="Path to save/load RL model"
+    )
     SLACK_AUTH_TOKEN: Optional[SecretStr] = Field(
         None, description="Slack webhook authentication token"
     )
-    REDIS_MAX_CONNECTIONS: int = Field(10, description="Maximum Redis connections in pool")
+    REDIS_MAX_CONNECTIONS: int = Field(
+        10, description="Maximum Redis connections in pool"
+    )
     EMAIL_SMTP_SERVER: Optional[str] = None
     EMAIL_SMTP_PORT: Optional[int] = None
     EMAIL_SMTP_USERNAME: Optional[str] = None
@@ -153,7 +142,9 @@ class MyArbiterConfig(BaseSettings):
         ["sandbox", "live"], description="Available modes for the arbiter"
     )
     LLM_ADAPTER: str = Field("mock_ollama_adapter", description="LLM adapter to use")
-    OLLAMA_API_URL: str = Field("http://localhost:1144", description="URL for the Ollama API")
+    OLLAMA_API_URL: str = Field(
+        "http://localhost:1144", description="URL for the Ollama API"
+    )
     LLM_MODEL: str = Field("llama3", description="Name of the LLM model to use")
 
     class Config:
@@ -228,11 +219,12 @@ if os.getenv("SENTRY_DSN"):
 
 # Assuming these are available in the project structure
 try:
-    from arbiter.feedback import FeedbackManager
-    from arbiter.agent_state import Base, AgentState as AgentStateModel
-    from arbiter.monitoring import Monitor as BaseMonitor
-    from arbiter.human_loop import HumanInLoop
+    from arbiter.agent_state import AgentState as AgentStateModel
+    from arbiter.agent_state import Base
     from arbiter.config import ArbiterConfig
+    from arbiter.feedback import FeedbackManager
+    from arbiter.human_loop import HumanInLoop
+    from arbiter.monitoring import Monitor as BaseMonitor
     from arbiter.utils import get_system_metrics_async
 
     ARBITER_PACKAGE_AVAILABLE = True
@@ -251,11 +243,8 @@ except ImportError as e:
     get_system_metrics_async = None
 
 
-from arbiter.arbiter_plugin_registry import (
-    registry as PLUGIN_REGISTRY,
-    PlugInKind,
-    PluginBase,
-)
+from arbiter.arbiter_plugin_registry import PluginBase, PlugInKind
+from arbiter.arbiter_plugin_registry import registry as PLUGIN_REGISTRY
 from simulation.simulation_module import UnifiedSimulationModule
 
 try:
@@ -377,7 +366,9 @@ class Monitor:
             "description": event.get("description", ""),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        event_counter.labels(agent=event_data["agent"], event_type=event_data["type"]).inc()
+        event_counter.labels(
+            agent=event_data["agent"], event_type=event_data["type"]
+        ).inc()
 
         try:
             with open(self.log_file, "a") as f:
@@ -406,7 +397,9 @@ class Monitor:
                     f"Failed to log event to database: {e}", exc_info=True
                 )
                 if self.db_client:
-                    await self.db_client.log_error(e, {"agent_name": event_data["agent"]})
+                    await self.db_client.log_error(
+                        e, {"agent_name": event_data["agent"]}
+                    )
 
     def get_recent_events(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
@@ -486,10 +479,14 @@ class Explorer:
                 urls = kwargs.get("urls", [])
                 return await self.crawl_urls(urls)
             elif action == "explore_and_fix":
-                return await self.explore_and_fix(kwargs.get("arbiter"), kwargs.get("fix_paths"))
+                return await self.explore_and_fix(
+                    kwargs.get("arbiter"), kwargs.get("fix_paths")
+                )
             return {"status": "unknown_action"}
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10)
+    )
     async def get_status(self):
         return {
             "health": "good",
@@ -509,7 +506,9 @@ class Explorer:
                         urls.append(f"http://localhost/{os.path.join(root, file)}")
             return urls if urls else ["http://default-frontend.com"]
         except Exception as e:
-            logging.getLogger(__name__).error(f"Error discovering URLs: {e}", exc_info=True)
+            logging.getLogger(__name__).error(
+                f"Error discovering URLs: {e}", exc_info=True
+            )
             return ["http://default-frontend.com"]
 
     async def crawl_urls(self, urls: List[str]):
@@ -528,7 +527,9 @@ class Explorer:
                             }
                         )
                 except aiohttp.ClientError as e:
-                    logging.getLogger(__name__).error(f"Error crawling {url}: {e}", exc_info=True)
+                    logging.getLogger(__name__).error(
+                        f"Error crawling {url}: {e}", exc_info=True
+                    )
                     results.append({"url": url, "status": "error", "error": str(e)})
         return {"crawled_urls": results}
 
@@ -565,7 +566,9 @@ if GYM_AVAILABLE:
         def __init__(self):
             super().__init__()
             self.action_space = gym.spaces.Discrete(3)
-            self.observation_space = gym.spaces.Box(low=0, high=100, shape=(2,), dtype=np.float32)
+            self.observation_space = gym.spaces.Box(
+                low=0, high=100, shape=(2,), dtype=np.float32
+            )
             self.state = np.array([50.0, 50.0], dtype=np.float32)
             self.name = ""
 
@@ -656,7 +659,9 @@ class HumanInLoop:
                     "text": f"Approval Request for {issue_data['agent']}:\nIssue: {issue_data['issue']}\nAction: {issue_data['action']}"
                 }
                 headers = (
-                    {"Authorization": f"Bearer {self.settings.SLACK_AUTH_TOKEN.get_secret_value()}"}
+                    {
+                        "Authorization": f"Bearer {self.settings.SLACK_AUTH_TOKEN.get_secret_value()}"
+                    }
                     if self.settings.SLACK_AUTH_TOKEN
                     else {}
                 )
@@ -715,7 +720,9 @@ class AuditLogManager:
             )
             session.add(audit_entry)
             await session.commit()
-            logging.getLogger(__name__).info(f"[{entry.get('agent_name')}] Audit log entry added.")
+            logging.getLogger(__name__).info(
+                f"[{entry.get('agent_name')}] Audit log entry added."
+            )
 
 
 # --- Production-Ready ExplainableReasoner ---
@@ -778,7 +785,9 @@ class ExplainableReasoner(PluginBase):
                 return {
                     "explanation": f"Suggested feature '{suggestion.get('feature_name', 'unknown')}' due to: {suggestion.get('rationale', 'no rationale')}"
                 }
-            return {"explanation": f"No specific explanation for type: {explanation_type}"}
+            return {
+                "explanation": f"No specific explanation for type: {explanation_type}"
+            }
 
         if action == "reason":
             return {
@@ -901,7 +910,9 @@ class SimulationEngine:
     def __init__(self):
         self.name = "SimulationEngine"
 
-    async def run(self, config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(
+        self, config: Dict[str, Any], context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Runs a simulation based on the provided configuration.
         """
@@ -911,7 +922,8 @@ class SimulationEngine:
 
         if sim_type == "monte_carlo":
             results = [
-                np.random.uniform(0, 1) * params.get("alpha", 1.0) for _ in range(iterations)
+                np.random.uniform(0, 1) * params.get("alpha", 1.0)
+                for _ in range(iterations)
             ]
             return {
                 "status": "success",
@@ -931,7 +943,9 @@ class SimulationEngine:
             }
         raise ValueError(f"Unknown simulation type: {sim_type}")
 
-    async def perform_quantum_op(self, op_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def perform_quantum_op(
+        self, op_type: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Performs a simulation-based quantum operation.
         """
@@ -975,7 +989,9 @@ action_counter = get_or_create_counter(
     "actions_total", "Total actions executed", ("agent", "action")
 )
 energy_gauge = get_or_create_gauge("energy", "Current energy level", ("agent",))
-memory_gauge = get_or_create_gauge("memory_items", "Number of items in agent memory", ("agent",))
+memory_gauge = get_or_create_gauge(
+    "memory_items", "Number of items in agent memory", ("agent",)
+)
 db_health_gauge = get_or_create_gauge(
     "db_health", "Database health status (1=healthy, 0=unhealthy)"
 )
@@ -1057,13 +1073,19 @@ class AgentStateManager:
                         self.y = state.y
                         self.energy = state.energy
                         self.inventory = (
-                            json.loads(self.fernet.decrypt(state.inventory.encode()).decode())
+                            json.loads(
+                                self.fernet.decrypt(state.inventory.encode()).decode()
+                            )
                             if state.inventory
                             else []
                         )
-                        self.language = set(json.loads(state.language)) if state.language else set()
+                        self.language = (
+                            set(json.loads(state.language)) if state.language else set()
+                        )
                         self.memory = (
-                            json.loads(self.fernet.decrypt(state.memory.encode()).decode())
+                            json.loads(
+                                self.fernet.decrypt(state.memory.encode()).decode()
+                            )
                             if state.memory
                             else []
                         )
@@ -1093,7 +1115,9 @@ class AgentStateManager:
                 )
                 self._initialize_default_state_in_memory()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5)
+    )
     async def save_state(self):
         """
         Asynchronously saves the current agent's state to the database with retries.
@@ -1117,7 +1141,9 @@ class AgentStateManager:
                         json.dumps(self.inventory).encode()
                     ).decode()
                     state.language = json.dumps(list(self.language))
-                    state.memory = self.fernet.encrypt(json.dumps(self.memory).encode()).decode()
+                    state.memory = self.fernet.encrypt(
+                        json.dumps(self.memory).encode()
+                    ).decode()
                     state.personality = json.dumps(self.personality)
                     state.world_size = self.world_size
                     state.agent_type = self.agent_type
@@ -1171,7 +1197,9 @@ class AgentStateManager:
             if len(self.state_queue) >= 10:
                 await self.process_state_queue()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5)
+    )
     async def process_state_queue(self):
         """Processes the state queue, batching updates to the database."""
         if not self.state_queue:
@@ -1207,7 +1235,9 @@ class AgentStateManager:
                     )
                     await session.execute(stmt)
                 await session.commit()
-                logging.getLogger(__name__).info(f"[{self.name}] Processed and saved state batch.")
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] Processed and saved state batch."
+                )
             except SQLAlchemyError as e:
                 await session.rollback()
                 logging.getLogger(__name__).error(
@@ -1246,14 +1276,18 @@ def save_rl_model(model: PPO, path: str):
         model.save(path)
         logging.getLogger(__name__).info(f"RL model saved to {path}")
     except Exception as e:
-        logging.getLogger(__name__).error(f"Failed to save RL model: {e}", exc_info=True)
+        logging.getLogger(__name__).error(
+            f"Failed to save RL model: {e}", exc_info=True
+        )
         raise
 
 
 def load_rl_model(path: str, env) -> PPO:
     """Loads a pre-trained RL model or initializes a new one."""
     if not STABLE_BASELINES3_AVAILABLE:
-        logging.warning("Stable Baselines3 not available. Cannot load/initialize RL model.")
+        logging.warning(
+            "Stable Baselines3 not available. Cannot load/initialize RL model."
+        )
         return None
     try:
         if os.path.exists(path):
@@ -1266,7 +1300,9 @@ def load_rl_model(path: str, env) -> PPO:
             )
             return PPO("MlpPolicy", env, verbose=1)
     except Exception as e:
-        logging.getLogger(__name__).error(f"Failed to load RL model: {e}", exc_info=True)
+        logging.getLogger(__name__).error(
+            f"Failed to load RL model: {e}", exc_info=True
+        )
         raise
 
 
@@ -1330,7 +1366,9 @@ class Arbiter:
             else None
         )
         self.monitor = monitor or Monitor(
-            log_file=os.path.join(self.settings.REPORTS_DIRECTORY, f"{self.name}_monitor_log.json"),
+            log_file=os.path.join(
+                self.settings.REPORTS_DIRECTORY, f"{self.name}_monitor_log.json"
+            ),
             db_client=self.db_client,
         )
         self.human_in_loop = (
@@ -1351,7 +1389,9 @@ class Arbiter:
                 "text_processing": {"enabled": True},
             }
         )
-        self.knowledge_graph = Neo4jKnowledgeGraph(audit_logger=AuditLogManager(self.db_client))
+        self.knowledge_graph = Neo4jKnowledgeGraph(
+            audit_logger=AuditLogManager(self.db_client)
+        )
 
         if self.code_health_env:
             self.code_health_env.name = name
@@ -1379,19 +1419,25 @@ class Arbiter:
         self.peer_listener_task = None
         self.redis_pool = None
 
-        self.growth_manager = PLUGIN_REGISTRY.get(PlugInKind.GROWTH_MANAGER, "arbiter_growth")
+        self.growth_manager = PLUGIN_REGISTRY.get(
+            PlugInKind.GROWTH_MANAGER, "arbiter_growth"
+        )
         if self.growth_manager:
             self.growth_manager.arbiter_name = self.name
             logging.getLogger(__name__).info(
                 f"[{self.name}] ArbiterGrowthManager initialized for Arbiter"
             )
 
-        self.benchmarking_engine = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, "benchmarking")
+        self.benchmarking_engine = PLUGIN_REGISTRY.get(
+            PlugInKind.CORE_SERVICE, "benchmarking"
+        )
         self.explainable_reasoner = PLUGIN_REGISTRY.get(
             PlugInKind.AI_ASSISTANT, "explainable_reasoner"
         )
 
-        os.makedirs(os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True)
+        os.makedirs(
+            os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True
+        )
 
     async def orchestrate(self, task: dict) -> dict:
         """
@@ -1401,7 +1447,9 @@ class Arbiter:
         engine_name = task.get("engine", "simulation")
         if engine_name in self.engines:
             result = await self.engines[engine_name].execute(task)
-            await self.publish_to_omnicore("arbiter_task", {"task": task, "result": result})
+            await self.publish_to_omnicore(
+                "arbiter_task", {"task": task, "result": result}
+            )
             return result
         return {"status": "error", "message": f"Engine {engine_name} not found"}
 
@@ -1430,7 +1478,9 @@ class Arbiter:
         """
         from .arbiter_plugin_registry import registry
 
-        await registry.register(kind, name, plugin, version="1.0.0", author="Arbiter Team")
+        await registry.register(
+            kind, name, plugin, version="1.0.0", author="Arbiter Team"
+        )
 
     async def publish_to_omnicore(self, event_type: str, data: dict):
         """
@@ -1442,12 +1492,20 @@ class Arbiter:
                     f"{self.omnicore_url}/events",
                     json={"event_type": event_type, "data": data},
                 )
-                logging.getLogger(__name__).info(f"Published to omnicore_engine: {event_type}")
+                logging.getLogger(__name__).info(
+                    f"Published to omnicore_engine: {event_type}"
+                )
             except Exception as e:
-                logging.getLogger(__name__).error(f"Failed to publish to omnicore_engine: {e}")
+                logging.getLogger(__name__).error(
+                    f"Failed to publish to omnicore_engine: {e}"
+                )
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5))
-    async def run_test_generation(self, code: str, language: str = "python", config: dict = None):
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5)
+    )
+    async def run_test_generation(
+        self, code: str, language: str = "python", config: dict = None
+    ):
         """
         Triggers test generation via OmniCore's FastAPI endpoint (HTTP call) with retries and timeouts.
 
@@ -1471,12 +1529,16 @@ class Arbiter:
             language: str
             config: Dict[str, Any] = {}
 
-        input_data = TestGenerationInput(code=code, language=language, config=config or {})
+        input_data = TestGenerationInput(
+            code=code, language=language, config=config or {}
+        )
         payload = input_data.model_dump_json()
         url = f"{self.omnicore_url}/scenarios/test_generation/run"
 
         try:
-            async with httpx.AsyncClient(timeout=self.settings.AI_API_TIMEOUT) as client:
+            async with httpx.AsyncClient(
+                timeout=self.settings.AI_API_TIMEOUT
+            ) as client:
                 resp = await client.post(
                     url, data=payload, headers={"Content-Type": "application/json"}
                 )
@@ -1489,7 +1551,9 @@ class Arbiter:
             )
             return {"status": "error", "error": f"HTTP error: {e}"}
         except httpx.RequestError as e:
-            logging.getLogger(__name__).error(f"HTTP call to OmniCore failed: {e}", exc_info=True)
+            logging.getLogger(__name__).error(
+                f"HTTP call to OmniCore failed: {e}", exc_info=True
+            )
             await self.db_client.log_error(e, {"agent_name": self.name})
             return {"status": "error", "error": f"HTTP request failed: {e}"}
         except Exception as e:
@@ -1550,7 +1614,9 @@ class Arbiter:
 
         # Validate minimal interface before invoking
         if not (hasattr(plugin_instance, "execute") or callable(plugin_instance)):
-            logging.getLogger(__name__).error("Found plugin lacks required callable interface.")
+            logging.getLogger(__name__).error(
+                "Found plugin lacks required callable interface."
+            )
             return {
                 "status": "error",
                 "error": "Test generation plugin interface invalid.",
@@ -1571,7 +1637,11 @@ class Arbiter:
                 plugin_execution_time.labels(plugin="generate_tests").observe(
                     time.time() - start_time
                 )
-            return result if isinstance(result, dict) else {"status": "ok", "result": result}
+            return (
+                result
+                if isinstance(result, dict)
+                else {"status": "ok", "result": result}
+            )
         except asyncio.TimeoutError:
             logging.getLogger(__name__).error("In-process test generation timed out.")
             return {"status": "error", "error": "In-process plugin call timed out."}
@@ -1598,7 +1668,9 @@ class Arbiter:
                 }
             )
         )
-        logging.getLogger(__name__).debug(f"[{self.name}] Event Logged: {event_description}")
+        logging.getLogger(__name__).debug(
+            f"[{self.name}] Event Logged: {event_description}"
+        )
 
     async def evolve(self, arena: Any = None, **kwargs: Any) -> Dict[str, Any]:
         """
@@ -1638,7 +1710,9 @@ class Arbiter:
                     and GYM_AVAILABLE
                     and ENVS_AVAILABLE
                 ):
-                    self.log_event("Starting RL-based code health optimization loop...", "rl_start")
+                    self.log_event(
+                        "Starting RL-based code health optimization loop...", "rl_start"
+                    )
                     await self.publish_to_omnicore("rl_start", {"agent": self.name})
                     try:
                         vec_env = make_vec_env(lambda: self.code_health_env, n_envs=4)
@@ -1654,7 +1728,9 @@ class Arbiter:
                             observation, _ = vec_env.reset()
                             done = np.array([False])
                             while not done.all():
-                                action, _states = rl_model.predict(observation, deterministic=True)
+                                action, _states = rl_model.predict(
+                                    observation, deterministic=True
+                                )
                                 observation, reward, done, info = vec_env.step(action)
                                 rl_reward_gauge.labels(agent=self.name).set(reward[0])
                                 self.log_event(
@@ -1663,7 +1739,9 @@ class Arbiter:
                                 )
                     except Exception as e:
                         sentry_sdk.capture_exception(e)
-                        self.log_event(f"RL-based optimization failed: {e}", "rl_failure")
+                        self.log_event(
+                            f"RL-based optimization failed: {e}", "rl_failure"
+                        )
                         await self.db_client.log_error(e, {"agent_name": self.name})
                         await self.publish_to_omnicore(
                             "rl_failure", {"agent": self.name, "error": str(e)}
@@ -1694,7 +1772,9 @@ class Arbiter:
             raise
         except Exception as e:
             sentry_sdk.capture_exception(e)
-            await self.publish_to_omnicore("evolve_error", {"agent": self.name, "error": str(e)})
+            await self.publish_to_omnicore(
+                "evolve_error", {"agent": self.name, "error": str(e)}
+            )
             return {"status": "error", "error": f"Unexpected error: {e}"}
 
     def choose_action_from_policy(self, observation):
@@ -1711,16 +1791,22 @@ class Arbiter:
         int
             The selected action.
         """
-        logging.getLogger(__name__).info(f"Choosing action for observation: {observation}")
+        logging.getLogger(__name__).info(
+            f"Choosing action for observation: {observation}"
+        )
         if not STABLE_BASELINES3_AVAILABLE or not GYM_AVAILABLE or not ENVS_AVAILABLE:
             logging.warning(
                 "Stable Baselines3, Gymnasium, or envs package not available. Using random action selection."
             )
             return random.choice([0, 1, 2])
-        model_path = os.path.join(self.settings.REPORTS_DIRECTORY, "models", "ppo_model.zip")
+        model_path = os.path.join(
+            self.settings.REPORTS_DIRECTORY, "models", "ppo_model.zip"
+        )
         try:
             if PPO and DummyVecEnv and self.code_health_env:
-                rl_model = PPO.load(model_path, env=DummyVecEnv([lambda: self.code_health_env]))
+                rl_model = PPO.load(
+                    model_path, env=DummyVecEnv([lambda: self.code_health_env])
+                )
                 action, _states = rl_model.predict(observation, deterministic=True)
                 return int(action[0])
             else:
@@ -1771,7 +1857,9 @@ class Arbiter:
                     "primary_explorer_observation_error",
                 )
         else:
-            self.log_event("No primary explorer available for observation.", "mock_observation")
+            self.log_event(
+                "No primary explorer available for observation.", "mock_observation"
+            )
 
         return observation
 
@@ -1798,7 +1886,9 @@ class Arbiter:
             elif "explorer_error" in observation or (
                 observation.get("explorer_status", {}).get("health") == "degraded"
                 or len(
-                    observation.get("explorer_status", {}).get("last_crawl", {}).get("errors", [])
+                    observation.get("explorer_status", {})
+                    .get("last_crawl", {})
+                    .get("errors", [])
                 )
                 > 0
             ):
@@ -1848,13 +1938,17 @@ class Arbiter:
                                 "discover_frontend_urls", html_discovery_dir="public"
                             )
                             if not frontend_urls:
-                                raise ValueError("No frontend URLs available for exploration.")
+                                raise ValueError(
+                                    "No frontend URLs available for exploration."
+                                )
 
                             crawl_results = await self.explorer.execute(
                                 "crawl_frontend", urls=frontend_urls
                             )
                             self.state_manager.energy -= 5
-                            await self.log_social_event("explored a new area", "environment", 1)
+                            await self.log_social_event(
+                                "explored a new area", "environment", 1
+                            )
                             outcome["crawl_results"] = crawl_results
                             await self.coordinate_with_peers(
                                 {
@@ -1864,7 +1958,9 @@ class Arbiter:
                                 }
                             )
                         else:
-                            raise RuntimeError("Primary explorer not configured or available.")
+                            raise RuntimeError(
+                                "Primary explorer not configured or available."
+                            )
                     elif action == "recharge":
                         self.state_manager.energy += 20
                         outcome["new_energy"] = self.state_manager.energy
@@ -1882,7 +1978,9 @@ class Arbiter:
                             )
                     elif action == "diagnose_explorer":
                         if self.explorer:
-                            diag_result = await self.explorer.execute("get_explorer_status")
+                            diag_result = await self.explorer.execute(
+                                "get_explorer_status"
+                            )
                             outcome["diagnosis"] = f"Explorer status: {diag_result}"
                             diagnosis_explanation_context = {
                                 "agent_name": self.name,
@@ -1928,7 +2026,9 @@ class Arbiter:
 
                 if self.settings.ENABLE_CRITICAL_FAILURES and random.random() < 0.01:
                     outcome["status"] = "critical_failure"
-                    outcome["error"] = "Simulated critical system failure during action execution."
+                    outcome["error"] = (
+                        "Simulated critical system failure during action execution."
+                    )
                     if ARBITER_PACKAGE_AVAILABLE:
                         await self.human_in_loop.request_approval(
                             {
@@ -1973,7 +2073,9 @@ class Arbiter:
                 outcome["error"] = str(e)
                 async with self._lock:
                     self.state_manager.energy -= 5
-                self.log_event(f"Handled exception during action {action}: {e}", "action_exception")
+                self.log_event(
+                    f"Handled exception during action {action}: {e}", "action_exception"
+                )
 
                 exception_explanation_context = {
                     "agent_name": self.name,
@@ -2002,7 +2104,9 @@ class Arbiter:
                     f"Unhandled exception during action {action}: {e}",
                     "action_exception_unhandled",
                 )
-                outcome["exception_explanation"] = "An unexpected, unhandled error occurred."
+                outcome["exception_explanation"] = (
+                    "An unexpected, unhandled error occurred."
+                )
                 await self.state_manager.batch_save_state()
         return outcome
 
@@ -2035,7 +2139,9 @@ class Arbiter:
                     explanation_type="reflection_summary",
                     context=reflection_context,
                 )
-                explanation = explanation_raw.get("explanation", "No explanation provided.")
+                explanation = explanation_raw.get(
+                    "explanation", "No explanation provided."
+                )
                 insight += f" Explainer's view: {explanation}"
             except Exception as e:
                 sentry_sdk.capture_exception(e)
@@ -2066,7 +2172,9 @@ class Arbiter:
                 reason = f"Reasoning unavailable due to an error: {e}"
                 await self.db_client.log_error(e, {"agent_name": self.name})
         else:
-            reason = "Reasoning unavailable: Reasoner not initialized or plugin not found."
+            reason = (
+                "Reasoning unavailable: Reasoner not initialized or plugin not found."
+            )
 
         self.log_event(f"Answered why query: '{query}' with '{reason}'", "why_query")
         return reason
@@ -2083,9 +2191,13 @@ class Arbiter:
                 }
             )
             if len(self.state_manager.memory) > self.settings.MEMORY_LIMIT:
-                self.state_manager.memory = self.state_manager.memory[-self.settings.MEMORY_LIMIT :]
+                self.state_manager.memory = self.state_manager.memory[
+                    -self.settings.MEMORY_LIMIT :
+                ]
             await self.state_manager.save_state()
-        self.log_event(f"Logged social event: '{event}' with '{with_whom}'", "social_event")
+        self.log_event(
+            f"Logged social event: '{event}' with '{with_whom}'", "social_event"
+        )
         memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
 
     async def sync_with_explorer(self, explorer_knowledge: Dict[str, Any]):
@@ -2098,9 +2210,13 @@ class Arbiter:
                 }
             )
             if len(self.state_manager.memory) > self.settings.MEMORY_LIMIT:
-                self.state_manager.memory = self.state_manager.memory[-self.settings.MEMORY_LIMIT :]
+                self.state_manager.memory = self.state_manager.memory[
+                    -self.settings.MEMORY_LIMIT :
+                ]
             await self.state_manager.save_state()
-        self.log_event(f"Synced explorer knowledge: {explorer_knowledge}", "explorer_sync")
+        self.log_event(
+            f"Synced explorer knowledge: {explorer_knowledge}", "explorer_sync"
+        )
         memory_gauge.labels(agent=self.name).set(len(self.state_manager.memory))
 
     async def start_async_services(self):
@@ -2132,7 +2248,9 @@ class Arbiter:
             "arbiter_growth"
         )
         if not growth_manager_plugin:
-            logging.getLogger(__name__).critical("GrowthManager plugin is required for production.")
+            logging.getLogger(__name__).critical(
+                "GrowthManager plugin is required for production."
+            )
             raise RuntimeError("Missing critical plugin: GrowthManager")
         self.growth_manager = growth_manager_plugin
         self.growth_manager.arbiter_name = self.name
@@ -2140,9 +2258,9 @@ class Arbiter:
         self.benchmarking_engine = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, {}).get(
             "benchmarking"
         )
-        self.explainable_reasoner = PLUGIN_REGISTRY.get(PlugInKind.AI_ASSISTANT, {}).get(
-            "explainable_reasoner"
-        )
+        self.explainable_reasoner = PLUGIN_REGISTRY.get(
+            PlugInKind.AI_ASSISTANT, {}
+        ).get("explainable_reasoner")
 
         for name, instance in [
             ("Explainable Reasoner", self.explainable_reasoner),
@@ -2166,7 +2284,9 @@ class Arbiter:
                     )
                     await self.db_client.log_error(e, {"agent_name": self.name})
             else:
-                logging.getLogger(__name__).warning(f"[{self.name}] {name} plugin not available.")
+                logging.getLogger(__name__).warning(
+                    f"[{self.name}] {name} plugin not available."
+                )
 
         if AIOREDIS_AVAILABLE:
             self.redis_pool = redis.from_url(
@@ -2181,19 +2301,27 @@ class Arbiter:
 
     async def work_cycle(self) -> Dict[str, Any]:
         """A single work cycle for the agent, which calls the evolve method."""
-        logging.getLogger(__name__).info(f"[{self.name}] Performing work_cycle (calling evolve).")
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Performing work_cycle (calling evolve)."
+        )
         return await self.evolve()
 
-    async def explore_and_fix(self, fix_paths: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def explore_and_fix(
+        self, fix_paths: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """Initiates a sequence to explore the codebase and apply fixes."""
-        logging.getLogger(__name__).info(f"[{self.name}] Initiating explore_and_fix sequence.")
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Initiating explore_and_fix sequence."
+        )
         if self.explorer:
             try:
                 frontend_urls = await self.explorer.execute(
                     "discover_frontend_urls", html_discovery_dir="public"
                 )
                 if not frontend_urls:
-                    raise ValueError("No frontend URLs configured or discovered for exploration.")
+                    raise ValueError(
+                        "No frontend URLs configured or discovered for exploration."
+                    )
                 results = await self.explorer.execute(
                     action="explore_and_fix", arbiter=self, fix_paths=fix_paths
                 )
@@ -2223,7 +2351,9 @@ class Arbiter:
         async with self._lock:
             try:
                 if not SKLEARN_AVAILABLE:
-                    logging.warning("scikit-learn not available, skipping learning from data.")
+                    logging.warning(
+                        "scikit-learn not available, skipping learning from data."
+                    )
                     return {
                         "status": "skipped",
                         "details": "scikit-learn not available.",
@@ -2259,7 +2389,9 @@ class Arbiter:
                 model.fit(X_train, y_train)
                 accuracy = model.score(X_test, y_test)
 
-                self.state_manager.personality["agreeableness"] = float(model.coef_[0][0])
+                self.state_manager.personality["agreeableness"] = float(
+                    model.coef_[0][0]
+                )
                 await self.state_manager.save_state()
 
                 return {
@@ -2302,11 +2434,13 @@ class Arbiter:
 
                 if current_energy_efficiency < 2.0:
                     self.state_manager.personality["recharge_preference"] = (
-                        self.state_manager.personality.get("recharge_preference", 0.5) + 0.1
+                        self.state_manager.personality.get("recharge_preference", 0.5)
+                        + 0.1
                     )
                 else:
                     self.state_manager.personality["recharge_preference"] = (
-                        self.state_manager.personality.get("recharge_preference", 0.5) - 0.1
+                        self.state_manager.personality.get("recharge_preference", 0.5)
+                        - 0.1
                     )
 
                 self.state_manager.personality["recharge_preference"] = max(
@@ -2333,7 +2467,9 @@ class Arbiter:
         """Generates and reports findings, optionally using an intent capture engine."""
         with sentry_sdk.push_scope() as scope:
             scope.set_tag("agent", self.name)
-            logging.getLogger(__name__).info(f"[{self.name}] Generating and reporting findings.")
+            logging.getLogger(__name__).info(
+                f"[{self.name}] Generating and reporting findings."
+            )
 
             if self.intent_capture_engine:
                 try:
@@ -2355,7 +2491,9 @@ class Arbiter:
 
     async def self_debug(self) -> Dict[str, Any]:
         """Performs diagnostic checks for critical components."""
-        logging.getLogger(__name__).info(f"[{self.name}] Initiating self-debug sequence.")
+        logging.getLogger(__name__).info(
+            f"[{self.name}] Initiating self-debug sequence."
+        )
         async with self._lock:
             issues = []
 
@@ -2426,7 +2564,9 @@ class Arbiter:
                     await self.db_client.log_error(e, {"agent_name": self.name})
 
             if issues:
-                self.log_event(f"Self-debug found {len(issues)} issues.", "self_debug_issues")
+                self.log_event(
+                    f"Self-debug found {len(issues)} issues.", "self_debug_issues"
+                )
                 return {"status": "debug_complete_with_issues", "issues": issues}
             else:
                 self.log_event(
@@ -2466,7 +2606,9 @@ class Arbiter:
                     suggestion["full_rationale"] = explanation_raw.get("explanation")
                 except Exception as e:
                     sentry_sdk.capture_exception(e)
-                    suggestion["full_rationale"] = "Could not generate detailed rationale."
+                    suggestion["full_rationale"] = (
+                        "Could not generate detailed rationale."
+                    )
                     await self.db_client.log_error(e, {"agent_name": self.name})
 
         self.log_event(f"Suggested feature: {feature_name}", "feature_suggestion")
@@ -2497,7 +2639,9 @@ class Arbiter:
             "filter_companies",
         )
 
-        company_data_plugin = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, {}).get("company_data")
+        company_data_plugin = PLUGIN_REGISTRY.get(PlugInKind.CORE_SERVICE, {}).get(
+            "company_data"
+        )
 
         if company_data_plugin:
             try:
@@ -2506,7 +2650,9 @@ class Arbiter:
 
                 for ticker in validated_preferences.tickers:
                     company_data = await company_data_plugin.execute(ticker=ticker)
-                    esg_score = company_data.get("category_scores", {}).get("Environment", 0)
+                    esg_score = company_data.get("category_scores", {}).get(
+                        "Environment", 0
+                    )
                     financial_score = company_data.get("category_scores", {}).get(
                         "Financial Health", 0
                     )
@@ -2536,9 +2682,13 @@ class Arbiter:
                                 "financial_score": financial_score,
                             }
                         )
-                        explain_log.append({"ticker": ticker, "reason": "Meets all criteria."})
+                        explain_log.append(
+                            {"ticker": ticker, "reason": "Meets all criteria."}
+                        )
                     else:
-                        explain_log.append({"ticker": ticker, "reason": "; ".join(reason)})
+                        explain_log.append(
+                            {"ticker": ticker, "reason": "; ".join(reason)}
+                        )
 
                 return {
                     "companies": filtered_companies_list,
@@ -2556,7 +2706,9 @@ class Arbiter:
                     "explain_log": [{"error": f"Failed to filter companies: {e}"}],
                 }
         else:
-            logging.getLogger(__name).warning("Company data plugin not available for filtering.")
+            logging.getLogger(__name).warning(
+                "Company data plugin not available for filtering."
+            )
             return {
                 "companies": [],
                 "explain_log": [{"error": "Company data plugin not available."}],
@@ -2599,7 +2751,9 @@ class Arbiter:
                 "memory_items": len(self.state_manager.memory),
                 "personality_traits": self.state_manager.personality,
                 "feedback_summary": (
-                    await self.feedback.get_summary() if self.feedback else "Feedback not available"
+                    await self.feedback.get_summary()
+                    if self.feedback
+                    else "Feedback not available"
                 ),
                 "monitor_report": self.monitor.generate_reports(),
             }
@@ -2612,7 +2766,9 @@ class Arbiter:
     async def run_benchmark(self, *args, **kwargs):
         """Runs a benchmark using the benchmarking engine plugin."""
         if self.benchmarking_engine:
-            return await self.benchmarking_engine.execute("run_benchmark", *args, **kwargs)
+            return await self.benchmarking_engine.execute(
+                "run_benchmark", *args, **kwargs
+            )
         else:
             return {"error": "Benchmarking Engine not available."}
 
@@ -2620,7 +2776,9 @@ class Arbiter:
         """Requests an explanation from the explainable reasoner plugin."""
         start_time = time.time()
         if self.explainable_reasoner:
-            explanation_result = await self.explainable_reasoner.execute("explain", *args, **kwargs)
+            explanation_result = await self.explainable_reasoner.execute(
+                "explain", *args, **kwargs
+            )
             plugin_execution_time.labels(plugin="explainable_reasoner").observe(
                 time.time() - start_time
             )
@@ -2647,7 +2805,9 @@ class Arbiter:
                 )
                 await self.db_client.log_error(e, {"agent_name": self.name})
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5)
+    )
     async def alert_critical_issue(self, issue: str):
         """
         Sends a critical alert via the configured webhook with retries.
@@ -2680,7 +2840,9 @@ class Arbiter:
             async with self.redis_pool as redis:
                 # Security: Use SHA-256 instead of MD5 for hashing
                 message_id = hashlib.sha256(json.dumps(message).encode()).hexdigest()
-                await redis.setex(f"arbiter_message:{message_id}", 3600, json.dumps(message))
+                await redis.setex(
+                    f"arbiter_message:{message_id}", 3600, json.dumps(message)
+                )
                 await redis.publish("arbiter_channel", message_id)
                 logging.getLogger(__name__).info(
                     f"[{self.name}] Published message {message_id} to peers."
@@ -2717,18 +2879,25 @@ class Arbiter:
                                     "timestamp": datetime.now(timezone.utc).isoformat(),
                                 }
                             )
-                            if len(self.state_manager.memory) > self.settings.MEMORY_LIMIT:
+                            if (
+                                len(self.state_manager.memory)
+                                > self.settings.MEMORY_LIMIT
+                            ):
                                 self.state_manager.memory = self.state_manager.memory[
                                     -self.settings.MEMORY_LIMIT :
                                 ]
                             if data.get("action") == "explored":
-                                await self.sync_with_explorer({"urls": data.get("urls", [])})
+                                await self.sync_with_explorer(
+                                    {"urls": data.get("urls", [])}
+                                )
                             elif data.get("action") == "critical_failure":
                                 await self.alert_critical_issue(
                                     f"Peer {data.get('agent')} reported critical failure: {data.get('error')}"
                                 )
         except asyncio.CancelledError:
-            logging.getLogger(__name__).info(f"[{self.name}] Peer listener task cancelled.")
+            logging.getLogger(__name__).info(
+                f"[{self.name}] Peer listener task cancelled."
+            )
         except Exception as e:
             sentry_sdk.capture_exception(e)
             logging.getLogger(__name__).error(
@@ -2820,7 +2989,9 @@ def main():
 
         logging.getLogger(__name__).info("\n--- Running a second cycle ---")
         result_clean = await alice.evolve()
-        logging.getLogger(__name__).info(f"Second evolve cycle result: {result_clean['status']}")
+        logging.getLogger(__name__).info(
+            f"Second evolve cycle result: {result_clean['status']}"
+        )
 
         logging.getLogger(__name__).info(
             "\n--- Running learning, optimization, debug and feature suggestion routines ---"
@@ -2829,7 +3000,9 @@ def main():
         logging.getLogger(__name__).info(f"Learning result: {learn_result['status']}")
 
         optimize_result = await alice.auto_optimize()
-        logging.getLogger(__name__).info(f"Optimization result: {optimize_result['status']}")
+        logging.getLogger(__name__).info(
+            f"Optimization result: {optimize_result['status']}"
+        )
 
         debug_result = await alice.self_debug()
         logging.getLogger(__name__).info(f"Debug result: {debug_result['status']}")
@@ -2840,7 +3013,9 @@ def main():
         )
 
         health_result = await alice.health_check()
-        logging.getLogger(__name__).info(f"Health check status: {health_result['status']}")
+        logging.getLogger(__name__).info(
+            f"Health check status: {health_result['status']}"
+        )
 
         await alice.stop_async_services()
         logging.getLogger(__name__).info("\n--- All tests complete ---\n")

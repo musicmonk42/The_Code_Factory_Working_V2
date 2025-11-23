@@ -1,9 +1,9 @@
-import os
 import json
-import pytest
+import os
 from unittest.mock import MagicMock
 
 import dlt_backend
+import pytest
 
 # --- Test Fixtures and Setup ---
 
@@ -80,7 +80,9 @@ def redis_mock(monkeypatch):
 def s3_and_fabric_dummy(monkeypatch):
     # Provide dummy S3 and Fabric clients
     monkeypatch.setattr(dlt_backend, "S3OffChainClient", dlt_backend.S3OffChainClient)
-    monkeypatch.setattr(dlt_backend, "FabricClientWrapper", dlt_backend.FabricClientWrapper)
+    monkeypatch.setattr(
+        dlt_backend, "FabricClientWrapper", dlt_backend.FabricClientWrapper
+    )
 
 
 @pytest.fixture
@@ -346,8 +348,8 @@ async def test_maybe_sign_checkpoint_and_verify(monkeypatch):
     sig = dlt_backend._maybe_sign_checkpoint(data)
     # Manually verify
     payload = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    import hmac
     import hashlib
+    import hmac
 
     manual = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
     assert sig == manual
@@ -367,7 +369,9 @@ async def test_encrypt_decrypt(monkeypatch):
 @pytest.mark.asyncio
 async def test_save_blob_max_size(monkeypatch):
     # Patch compress_json to return a huge blob
-    monkeypatch.setattr(dlt_backend, "compress_json", lambda data: b"x" * (17 * 1024 * 1024))
+    monkeypatch.setattr(
+        dlt_backend, "compress_json", lambda data: b"x" * (17 * 1024 * 1024)
+    )
     await dlt_backend.initialize_dlt_backend(
         {
             "off_chain_storage_type": "s3",
@@ -397,7 +401,9 @@ def test_deep_diff():
 @pytest.mark.asyncio
 async def test_unsupported_op(dummy_checkpoint_manager, dummy_alert_operator):
     with pytest.raises(NotImplementedError):
-        await dlt_backend.dlt_backend(dummy_checkpoint_manager, "unknownop", "checkpoint1")
+        await dlt_backend.dlt_backend(
+            dummy_checkpoint_manager, "unknownop", "checkpoint1"
+        )
     dummy_alert_operator.assert_called()
 
 

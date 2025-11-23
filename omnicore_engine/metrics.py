@@ -5,20 +5,23 @@ Import from this file in all modules that need to increment metrics.
 This file also provides compatibility and legacy helpers for older code.
 """
 
+import json
 import logging
 import os
-import json
-from typing import Optional, Dict, Any, Union
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
-from prometheus_client.metrics import MetricWrapperBase
 from datetime import datetime
+from typing import Any, Dict, Optional, Union
+
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
+from prometheus_client.metrics import MetricWrapperBase
 
 # Setup logger for metrics module
 logger = logging.getLogger(__name__)
 # Set a default logging handler for the metrics file
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -43,7 +46,9 @@ def _get_or_create_metric(
             )
         return existing_metric
     if buckets is not None and collector_class == Histogram:
-        metric = collector_class(name, documentation, labelnames=labelnames, buckets=buckets)
+        metric = collector_class(
+            name, documentation, labelnames=labelnames, buckets=buckets
+        )
     else:
         metric = collector_class(name, documentation, labelnames=labelnames)
     return metric

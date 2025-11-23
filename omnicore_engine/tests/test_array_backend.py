@@ -3,22 +3,23 @@ Test suite for omnicore_engine/array_backend.py
 Tests array operations across multiple computational backends.
 """
 
-import pytest
 import json
-import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
-import sys
 import os
+import sys
+from unittest.mock import AsyncMock, Mock, patch
+
+import numpy as np
+import pytest
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.array_backend import (
-    ArrayBackend,
-    validate_array_size,
-    sanitize_array_input,
     MAX_ARRAY_SIZE,
+    ArrayBackend,
     Benchmarker,
+    sanitize_array_input,
+    validate_array_size,
 )
 
 

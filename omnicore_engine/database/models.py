@@ -7,22 +7,13 @@ All models are fully type-annotated and compatible with SQLAlchemy 2.0+.
 
 from __future__ import annotations
 
-from typing import Optional, Dict, Any
-from sqlalchemy import (
-    ForeignKey,
-    String,
-    Integer,
-    Float,
-    JSON,
-    Index,
-)
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column,
-)
+from typing import Any, Dict, Optional
 
 # Import the EXACT Base and parent model from arbiter
-from arbiter.agent_state import Base, AgentState as ArbiterAgentState
+from arbiter.agent_state import AgentState as ArbiterAgentState
+from arbiter.agent_state import Base
+from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 # ----------------------------------------------------------------------
@@ -134,7 +125,9 @@ class SFEAgentState(AgentState):
     )
 
     fixed_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    analysis_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     trust_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     __mapper_args__ = {
@@ -142,7 +135,9 @@ class SFEAgentState(AgentState):
     }
 
     def __repr__(self) -> str:
-        return f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
+        return (
+            f"<SFEAgentState(id={self.id}, name={self.name}, trust={self.trust_score})>"
+        )
 
 
 # ----------------------------------------------------------------------

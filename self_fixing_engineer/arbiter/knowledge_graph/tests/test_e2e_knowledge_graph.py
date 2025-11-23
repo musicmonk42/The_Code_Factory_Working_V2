@@ -11,43 +11,42 @@ from unittest.mock import MagicMock
 sys.modules["gnosis"] = MagicMock()
 sys.modules["gnosis.safe"] = MagicMock()
 
-import pytest
+import hashlib
 import json
 import os
 import sys
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, mock_open
-import hashlib
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
-# Import knowledge_graph components
-from arbiter.knowledge_graph.core import (
-    CollaborativeAgent,
-    AgentTeam,
-    get_or_create_agent,
-    InMemoryStateBackend,
-    RedisStateBackend,
-    MetaLearning,
-)
-from arbiter.knowledge_graph.multimodal import (
-    DefaultMultiModalProcessor,
-)
-from arbiter.knowledge_graph.prompt_strategies import (
-    DefaultPromptStrategy,
-    ConcisePromptStrategy,
-)
+import pytest
 from arbiter.knowledge_graph.config import (
     MetaLearningConfig,
     MultiModalData,
-    load_persona_dict,
     SensitiveValue,
+    load_persona_dict,
+)
+
+# Import knowledge_graph components
+from arbiter.knowledge_graph.core import (
+    AgentTeam,
+    CollaborativeAgent,
+    InMemoryStateBackend,
+    MetaLearning,
+    RedisStateBackend,
+    get_or_create_agent,
+)
+from arbiter.knowledge_graph.multimodal import DefaultMultiModalProcessor
+from arbiter.knowledge_graph.prompt_strategies import (
+    ConcisePromptStrategy,
+    DefaultPromptStrategy,
 )
 from arbiter.knowledge_graph.utils import (
-    AuditLedgerClient,
-    trace_id_var,
-    AgentErrorCode,
     AgentCoreException,
+    AgentErrorCode,
+    AuditLedgerClient,
     _sanitize_context,
     _sanitize_user_input,
     async_with_retry,
+    trace_id_var,
 )
 
 
@@ -106,7 +105,9 @@ class TestKnowledgeGraphE2EWorkflow:
 
         with patch.dict(os.environ, env_vars):
             with patch("arbiter.knowledge_graph.core.ChatOpenAI") as mock_llm:
-                with patch("arbiter.knowledge_graph.config.load_persona_dict") as mock_personas:
+                with patch(
+                    "arbiter.knowledge_graph.config.load_persona_dict"
+                ) as mock_personas:
                     mock_personas.return_value = {
                         "default": "Knowledge Graph Assistant",
                         "expert": "Expert Analyst",
@@ -156,9 +157,13 @@ class TestKnowledgeGraphE2EWorkflow:
             ]
 
             for data_type, data in test_cases:
-                item = MultiModalData(data_type=data_type, data=data, metadata={"source": "test"})
+                item = MultiModalData(
+                    data_type=data_type, data=data, metadata={"source": "test"}
+                )
 
-                with patch("arbiter.knowledge_graph.multimodal.audit_ledger_client") as mock_audit:
+                with patch(
+                    "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+                ) as mock_audit:
                     mock_audit.log_event = AsyncMock()
 
                     result = await processor.summarize(item)
@@ -176,18 +181,24 @@ class TestKnowledgeGraphE2EWorkflow:
                 data_type="audio", data=b"fake_audio_bytes", metadata={"source": "test"}
             )
 
-            with patch("arbiter.knowledge_graph.multimodal.audit_ledger_client") as mock_audit:
+            with patch(
+                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+            ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
 
                 # Mock the pydub AudioSegment to avoid ffmpeg dependency
-                with patch("arbiter.knowledge_graph.multimodal.pydub.AudioSegment") as mock_audio:
+                with patch(
+                    "arbiter.knowledge_graph.multimodal.pydub.AudioSegment"
+                ) as mock_audio:
                     mock_segment = Mock()
                     mock_segment.__len__ = Mock(return_value=1000)  # 1 second
                     mock_audio.from_file.return_value = mock_segment
 
                     # Also mock the audio transcriber to avoid ffmpeg calls
                     original_transcriber = processor.audio_transcriber
-                    processor.audio_transcriber = None  # Disable transcriber temporarily
+                    processor.audio_transcriber = (
+                        None  # Disable transcriber temporarily
+                    )
 
                     try:
                         result = await processor.summarize(audio_item)
@@ -359,7 +370,9 @@ class TestKnowledgeGraphE2EWorkflow:
             assert len(ml.corrections) == 3
 
             # Test training (with enough data)
-            with patch("arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 3):
+            with patch(
+                "arbiter.knowledge_graph.core.Config.MIN_RECORDS_FOR_TRAINING", 3
+            ):
                 ml.train_model()
                 # Model should be trained now
 
@@ -413,7 +426,9 @@ class TestKnowledgeGraphE2EWorkflow:
 
             item = MultiModalData(data_type="image", data=large_data)
 
-            with patch("arbiter.knowledge_graph.multimodal.audit_ledger_client") as mock_audit:
+            with patch(
+                "arbiter.knowledge_graph.multimodal.audit_ledger_client"
+            ) as mock_audit:
                 mock_audit.log_event = AsyncMock()
                 result = await processor.summarize(item)
 
@@ -483,7 +498,9 @@ class TestKnowledgeGraphE2EWorkflow:
                 agent.audit_ledger.log_event = AsyncMock()
 
                 # Execute prediction
-                with patch("arbiter.knowledge_graph.core.AGENT_METRICS") as mock_metrics:
+                with patch(
+                    "arbiter.knowledge_graph.core.AGENT_METRICS"
+                ) as mock_metrics:
                     result = await agent.predict(
                         user_input="Analyze this knowledge graph",
                         context=context,
@@ -520,7 +537,9 @@ class TestKnowledgeGraphE2EWorkflow:
             # Test persona loading
             with patch(
                 "builtins.open",
-                mock_open(read_data=json.dumps({"knowledge": "Knowledge Graph Specialist"})),
+                mock_open(
+                    read_data=json.dumps({"knowledge": "Knowledge Graph Specialist"})
+                ),
             ):
                 personas = load_persona_dict()
                 assert "knowledge" in personas or "default" in personas
@@ -585,7 +604,9 @@ class TestKnowledgeGraphPerformance:
             )
 
             # Simulate some operations
-            agent.memory.save_context({"input": f"Question {i}"}, {"output": f"Answer {i}"})
+            agent.memory.save_context(
+                {"input": f"Question {i}"}, {"output": f"Answer {i}"}
+            )
 
             # Clear references
             del agent

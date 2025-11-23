@@ -1,21 +1,13 @@
-import os
 import datetime
-import logging
 import hashlib
-import re
 import json
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Union,
-    List,
-    get_origin,
-    get_args,
-)
+import logging
+import os
+import re
 from collections import deque
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
 
-from prometheus_client import Counter, REGISTRY
+from prometheus_client import REGISTRY, Counter
 
 # Configure logging for metric debugging
 logging.basicConfig(
@@ -174,7 +166,9 @@ def redact_pii(details: Dict[str, Any], settings: Any = None) -> Dict[str, Any]:
             "bearer",
         },
     )
-    custom_regexes = [re.compile(p) for p in getattr(settings, "PII_CUSTOM_REGEXES", [])]
+    custom_regexes = [
+        re.compile(p) for p in getattr(settings, "PII_CUSTOM_REGEXES", [])
+    ]
     mask_level = getattr(settings, "PII_MASK_LEVEL", "full")
 
     # Regex for common PII patterns
@@ -183,9 +177,15 @@ def redact_pii(details: Dict[str, Any], settings: Any = None) -> Dict[str, Any]:
         r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"
     )
     secret_pattern = re.compile(r"(?i)(?:token|key|secret|password)\s*[:=]\s*[\w.-]+")
-    phone_pattern = re.compile(r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b")
-    uuid_pattern = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
-    jwt_pattern = re.compile(r"eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*")
+    phone_pattern = re.compile(
+        r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b"
+    )
+    uuid_pattern = re.compile(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"
+    )
+    jwt_pattern = re.compile(
+        r"eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*"
+    )
 
     patterns = {
         "email": (email_pattern, "[REDACTED_EMAIL]"),
@@ -357,7 +357,9 @@ def apply_settings_validation(settings_obj: Any) -> None:
         env_var = f"ARBITER_{field.upper()}"
         if env_var in os.environ:
             try:
-                env_value = parse_env(env_var, getattr(settings_obj, field), expected_type)
+                env_value = parse_env(
+                    env_var, getattr(settings_obj, field), expected_type
+                )
                 setattr(settings_obj, field, env_value)
             except (ValueError, TypeError) as e:
                 logger.error(
@@ -375,7 +377,9 @@ def apply_settings_validation(settings_obj: Any) -> None:
     errors = validate_settings(settings_obj, required_fields)
     if errors:
         error_message = f"Invalid settings: {', '.join(errors)}"
-        logger.error(json.dumps({"event": "settings_validation_failed", "errors": errors}))
+        logger.error(
+            json.dumps({"event": "settings_validation_failed", "errors": errors})
+        )
         raise ValueError(error_message)
 
 
@@ -395,13 +399,19 @@ def validate_input_details(details: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if details is None:
         return {}
     if not isinstance(details, dict):
-        logger.error(f"Invalid custom_details type: expected dict, got {type(details).__name__}")
-        raise ValueError(f"custom_details must be a dictionary, got {type(details).__name__}")
+        logger.error(
+            f"Invalid custom_details type: expected dict, got {type(details).__name__}"
+        )
+        raise ValueError(
+            f"custom_details must be a dictionary, got {type(details).__name__}"
+        )
 
     # Limit depth to prevent recursion issues
     def check_depth(obj: Any, depth: int, max_depth: int = 5) -> None:
         if depth > max_depth:
-            raise ValueError(f"custom_details exceeds maximum nesting depth of {max_depth}")
+            raise ValueError(
+                f"custom_details exceeds maximum nesting depth of {max_depth}"
+            )
         if isinstance(obj, dict):
             for v in obj.values():
                 check_depth(v, depth + 1, max_depth)
@@ -427,7 +437,9 @@ class BugManagerError(Exception):
             raise TypeError("Error message must be a string.")
         super().__init__(message)
         self.error_id = (
-            error_id if error_id is not None else hashlib.sha256(message.encode()).hexdigest()[:8]
+            error_id
+            if error_id is not None
+            else hashlib.sha256(message.encode()).hexdigest()[:8]
         )
         self.timestamp = (
             timestamp
@@ -499,6 +511,8 @@ class RemediationError(BugManagerError):
 class MLRemediationError(BugManagerError):
     """Raised when an ML-based remediation operation fails."""
 
-    def __init__(self, message: str, model_endpoint: Optional[str] = None, **kwargs: Any):
+    def __init__(
+        self, message: str, model_endpoint: Optional[str] = None, **kwargs: Any
+    ):
         super().__init__(message, **kwargs)
         self.model_endpoint = model_endpoint

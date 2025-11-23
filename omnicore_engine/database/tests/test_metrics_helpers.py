@@ -2,11 +2,11 @@
 Comprehensive test suite for omnicore_engine/database/metrics_helpers.py
 """
 
-import pytest
+import os
+import sys
 from unittest.mock import Mock, patch
 
-import sys
-import os
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,7 +15,7 @@ from metrics_helpers import (
     get_or_create_gauge_local,
     get_or_create_histogram_local,
 )
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +93,9 @@ class TestGetOrCreateCounter:
 
     def test_counter_operations(self):
         """Test that created counter can perform operations."""
-        counter = get_or_create_counter_local("operation_counter", "Test operations", ("op_type",))
+        counter = get_or_create_counter_local(
+            "operation_counter", "Test operations", ("op_type",)
+        )
 
         # Test increment
         counter.labels(op_type="read").inc()
@@ -179,7 +181,9 @@ class TestGetOrCreateHistogram:
         labelnames = ("endpoint",)
         buckets = (0.1, 0.5, 1.0, 5.0, 10.0)
 
-        histogram = get_or_create_histogram_local(name, documentation, labelnames, buckets)
+        histogram = get_or_create_histogram_local(
+            name, documentation, labelnames, buckets
+        )
 
         assert isinstance(histogram, Histogram)
         assert histogram._name == name
@@ -228,7 +232,9 @@ class TestGetOrCreateHistogram:
         name = "test_histogram"
         documentation = "Test documentation"
 
-        with patch("metrics_helpers.Histogram", side_effect=Exception("Creation failed")):
+        with patch(
+            "metrics_helpers.Histogram", side_effect=Exception("Creation failed")
+        ):
             with patch("metrics_helpers.logger") as mock_logger:
                 with pytest.raises(Exception):
                     get_or_create_histogram_local(name, documentation)

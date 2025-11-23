@@ -1,13 +1,13 @@
+import asyncio
+import json
 import logging
 import os
 import subprocess
 import sys
 import threading
 import time
-import json
-from typing import Any, Callable, Dict, List, Optional
-import asyncio
 from contextlib import contextmanager
+from typing import Any, Callable, Dict, List, Optional
 
 # Pydantic for input validation and configuration
 try:
@@ -15,8 +15,8 @@ try:
         BaseModel,
         Field,
         ValidationError,
-        field_validator,
         ValidationInfo,
+        field_validator,
     )
 
     PYDANTIC_AVAILABLE = True
@@ -29,10 +29,10 @@ except ImportError:
 # --- Metrics (Idempotent and Thread-Safe Registration) ---
 try:
     from prometheus_client import (
+        CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
-        CollectorRegistry,
         generate_latest,
     )
 
@@ -40,7 +40,9 @@ try:
     _metrics_registry = CollectorRegistry(auto_describe=True)
     _metrics_lock = threading.Lock()
 
-    def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
+    def get_or_create_metric(
+        metric_type, name, documentation, labelnames=None, buckets=None
+    ):
         if labelnames is None:
             labelnames = ()
         with _metrics_lock:
@@ -151,7 +153,7 @@ except ImportError:
     )
 
 try:
-    from tenacity import retry, stop_after_attempt, wait_exponential, reraise
+    from tenacity import reraise, retry, stop_after_attempt, wait_exponential
 
     TENACITY_AVAILABLE = True
 except ImportError:
@@ -348,7 +350,9 @@ def _load_docker_credentials() -> Dict[str, str]:
         runners_logger.critical(f"Failed to load Docker credentials: {e}")
         raise
     except Exception as e:
-        runners_logger.critical(f"Unexpected error loading Docker credentials: {e}", exc_info=True)
+        runners_logger.critical(
+            f"Unexpected error loading Docker credentials: {e}", exc_info=True
+        )
         raise
 
 
@@ -378,7 +382,9 @@ def _execute_subprocess_safely(
             )
             for k, v in env.items()
         }
-        runners_logger.info(f"Subprocess environment variables (redacted): {redacted_env}")
+        runners_logger.info(
+            f"Subprocess environment variables (redacted): {redacted_env}"
+        )
         full_env.update(env)
 
     runners_logger.info(
@@ -486,7 +492,9 @@ def _execute_subprocess_safely(
         }
 
 
-def _perform_integrity_check(file_path: str, expected_mime_type: Optional[str] = None) -> bool:
+def _perform_integrity_check(
+    file_path: str, expected_mime_type: Optional[str] = None
+) -> bool:
     if not os.path.exists(file_path):
         runners_logger.error(f"Integrity check failed: File not found at {file_path}")
         return False
@@ -503,14 +511,18 @@ def _perform_integrity_check(file_path: str, expected_mime_type: Optional[str] =
 
 
 @register_runner("python_script", dependencies=["sys", "subprocess"])
-def run_python_script(config: PythonRunnerConfig, job_id: str, user_id: str) -> Dict[str, Any]:
+def run_python_script(
+    config: PythonRunnerConfig, job_id: str, user_id: str
+) -> Dict[str, Any]:
     if not check_runner_dependencies("python_script"):
         return {
             "status": "DEPENDENCY_MISSING",
             "error": "Required Python environment for script execution is not available.",
         }
 
-    if not _perform_integrity_check(config.script_path, expected_mime_type="text/x-python"):
+    if not _perform_integrity_check(
+        config.script_path, expected_mime_type="text/x-python"
+    ):
         runners_logger.error(
             f"Integrity check failed for Python script: {config.script_path}. Aborting."
         )
@@ -545,9 +557,9 @@ def run_python_script(config: PythonRunnerConfig, job_id: str, user_id: str) -> 
 
     duration = time.time() - start_time
     if PROMETHEUS_AVAILABLE:
-        RUNNER_METRICS["runner_duration_seconds"].labels(runner_type="python_script").observe(
-            duration
-        )
+        RUNNER_METRICS["runner_duration_seconds"].labels(
+            runner_type="python_script"
+        ).observe(duration)
     if result["status"] == "SUCCESS":
         if PROMETHEUS_AVAILABLE:
             RUNNER_METRICS["runner_execution_total"].labels(
@@ -566,7 +578,9 @@ def run_python_script(config: PythonRunnerConfig, job_id: str, user_id: str) -> 
 
 
 @register_runner("container", dependencies=["subprocess"])
-def run_container(config: ContainerRunnerConfig, job_id: str, user_id: str) -> Dict[str, Any]:
+def run_container(
+    config: ContainerRunnerConfig, job_id: str, user_id: str
+) -> Dict[str, Any]:
     if not check_runner_dependencies("container"):
         return {
             "status": "DEPENDENCY_MISSING",
@@ -575,7 +589,9 @@ def run_container(config: ContainerRunnerConfig, job_id: str, user_id: str) -> D
 
     try:
         if BOTO3_AVAILABLE:
-            _ = _load_docker_credentials()  # Load credentials for use, if needed by docker
+            _ = (
+                _load_docker_credentials()
+            )  # Load credentials for use, if needed by docker
     except Exception as e:
         runners_logger.error(f"Failed to load container credentials: {e}")
         return {
@@ -623,7 +639,9 @@ def run_container(config: ContainerRunnerConfig, job_id: str, user_id: str) -> D
 
     duration = time.time() - start_time
     if PROMETHEUS_AVAILABLE:
-        RUNNER_METRICS["runner_duration_seconds"].labels(runner_type="container").observe(duration)
+        RUNNER_METRICS["runner_duration_seconds"].labels(
+            runner_type="container"
+        ).observe(duration)
     if result["status"] == "SUCCESS":
         if PROMETHEUS_AVAILABLE:
             RUNNER_METRICS["runner_execution_total"].labels(
@@ -650,7 +668,9 @@ def run_agent(agent_config: Dict[str, Any]) -> Dict[str, Any]:
             job_id = validated_config.job_id
             user_id = validated_config.user_id
         else:
-            runners_logger.warning("Pydantic not available. Skipping AgentConfig validation.")
+            runners_logger.warning(
+                "Pydantic not available. Skipping AgentConfig validation."
+            )
             runner_type = agent_config.get("runner_type")
             runner_config_data = agent_config.get("runner_config", {})
             job_id = agent_config.get("job_id", f"job-{os.urandom(4).hex()}")
@@ -811,7 +831,9 @@ def run_agent(agent_config: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 )
             except Exception as dlt_e:
-                runners_logger.error(f"Failed to log DLT entry for unhandled exception: {dlt_e}")
+                runners_logger.error(
+                    f"Failed to log DLT entry for unhandled exception: {dlt_e}"
+                )
 
         return {"status": "ERROR", "message": f"Unhandled exception: {e}"}
 

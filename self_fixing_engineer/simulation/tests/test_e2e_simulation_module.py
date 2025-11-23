@@ -1,13 +1,14 @@
 # tests/test_e2e_simulation_module.py
 
-import os
-import sys
 import asyncio
+import os
 import shutil
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, Mock
+import sys
 import types
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 # --- Add simulation and plugins directories to the Python path ---
 TEST_DIR = Path(__file__).parent
@@ -99,9 +100,9 @@ sys.modules["dwave.system"] = mock_dwave_system
 
 # Now import the simulation modules (after mocking problematic dependencies)
 try:
-    from simulation import agentic, parallel, explain, quantum, runners, sandbox
-    from simulation.plugins import plugin_manager
     import simulation.core as core
+    from simulation import agentic, explain, parallel, quantum, runners, sandbox
+    from simulation.plugins import plugin_manager
 except ImportError as e:
     print(f"Warning: Could not import simulation modules: {e}")
     # Create minimal mocks for testing
@@ -203,7 +204,9 @@ def create_mock_core_functions():
                     "enabled": True,
                 }
             ],
-            "notifications": {"slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"},
+            "notifications": {
+                "slack_webhook_url": "https://hooks.slack.com/services/mock/webhook"
+            },
         }
 
     if not hasattr(core, "load_rbac_policy"):
@@ -252,23 +255,27 @@ async def test_simulation_module_end_to_end(setup_test_environment):
             print(f"Could not copy plugins: {e}")
 
     # Mock external services locally
-    with patch("simulation.runners.process.os.execve", new=AsyncMock()), patch(
-        "simulation.explain.psutil.__spec__", new=MagicMock()
+    with (
+        patch("simulation.runners.process.os.execve", new=AsyncMock()),
+        patch("simulation.explain.psutil.__spec__", new=MagicMock()),
     ):
 
         # Patch getpass.getuser to return test_user BEFORE loading configs
         with patch("getpass.getuser", return_value="test_user"):
             # Patch core module paths
-            with patch.object(
-                core,
-                "CONFIG_FILE",
-                str(setup_test_environment["configs_dir"] / "config.yaml"),
-                create=True,
-            ), patch.object(
-                core,
-                "RBAC_POLICY_FILE",
-                str(setup_test_environment["configs_dir"] / "rbac_policy.yaml"),
-                create=True,
+            with (
+                patch.object(
+                    core,
+                    "CONFIG_FILE",
+                    str(setup_test_environment["configs_dir"] / "config.yaml"),
+                    create=True,
+                ),
+                patch.object(
+                    core,
+                    "RBAC_POLICY_FILE",
+                    str(setup_test_environment["configs_dir"] / "rbac_policy.yaml"),
+                    create=True,
+                ),
             ):
 
                 # Load configurations

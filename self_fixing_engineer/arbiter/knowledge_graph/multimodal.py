@@ -1,13 +1,13 @@
 # D:\Code_Factory\self_fixing_engineer\arbiter\knowledge_graph\multimodal.py
-import hashlib
 import asyncio
-import tempfile
-import os
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-import logging
-import json
+import hashlib
 import io
+import json
+import logging
+import os
+import tempfile
+from abc import ABC, abstractmethod
+from typing import Any, Dict
 
 # Conditional imports for external libraries
 try:
@@ -57,16 +57,17 @@ except ImportError:
     PDF_PROCESSING_AVAILABLE = False
     PdfReader = None
 
+from .config import Config, MultiModalData
+
 # Local imports
 from .utils import (
+    AGENT_METRICS,
     AgentCoreException,
     AgentErrorCode,
-    trace_id_var,
-    AGENT_METRICS,
-    audit_ledger_client,
     async_with_retry,
+    audit_ledger_client,
+    trace_id_var,
 )
-from .config import MultiModalData, Config
 
 
 # A base class for multimodal processing.
@@ -102,7 +103,9 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
         if not self._audio_processing_available:
             self._logger.warning("pydub not found. Audio processing is disabled.")
         if not self._transformers_available:
-            self._logger.warning("transformers not found. Advanced summarization is disabled.")
+            self._logger.warning(
+                "transformers not found. Advanced summarization is disabled."
+            )
         if not self._video_processing_available:
             self._logger.warning("moviepy not found. Video processing is disabled.")
         if not self._pdf_processing_available:
@@ -144,11 +147,15 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
             loop = asyncio.get_event_loop()
             self.image_captioner = await loop.run_in_executor(
                 None,
-                lambda: pipeline("image-to-text", model="Salesforce/blip-image-captioning-base"),
+                lambda: pipeline(
+                    "image-to-text", model="Salesforce/blip-image-captioning-base"
+                ),
             )
             self.audio_transcriber = await loop.run_in_executor(
                 None,
-                lambda: pipeline("automatic-speech-recognition", model="openai/whisper-tiny"),
+                lambda: pipeline(
+                    "automatic-speech-recognition", model="openai/whisper-tiny"
+                ),
             )
             self.text_summarizer = await loop.run_in_executor(
                 None, lambda: pipeline("summarization", model="facebook/bart-large-cnn")
@@ -192,7 +199,9 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
                     ).inc()
                     return json.loads(cached_result)
             except Exception as e:
-                self._logger.warning(f"Redis cache check failed: {e}. Proceeding without cache.")
+                self._logger.warning(
+                    f"Redis cache check failed: {e}. Proceeding without cache."
+                )
 
         # Size validation
         if len(item.data) > Config.MAX_MM_DATA_SIZE_MB * 1024 * 1024:
@@ -405,7 +414,9 @@ class DefaultMultiModalProcessor(MultiModalProcessor):
 
                 if self.image_captioner:
                     frame = clip.get_frame(0)
-                    caption = self.image_captioner(Image.fromarray(frame))[0]["generated_text"]
+                    caption = self.image_captioner(Image.fromarray(frame))[0][
+                        "generated_text"
+                    ]
                     summary += f" First frame caption: {caption}"
 
             return {"status": "success", "summary": summary, "data_hash": data_hash}

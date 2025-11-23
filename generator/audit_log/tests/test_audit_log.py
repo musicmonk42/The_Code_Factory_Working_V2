@@ -23,12 +23,12 @@ import base64
 import json
 import os
 import sys
-from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
 # --- FIX: Import uuid ---
 import uuid
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -52,7 +52,9 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode("utf-8")
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
+    "utf-8"
+)
 
 # We also provide an ENCRYPTION_KEYS-style bundle, in case audit_log uses it.
 encryption_keys_payload = json.dumps(
@@ -177,9 +179,7 @@ sys.modules[utils_name] = utils_module
 # 3. Import module under test (now using stubbed backend_core)
 # --------------------------------------------------------------------------- #
 
-from generator.audit_log.audit_log import (
-    api_app,
-)
+from generator.audit_log.audit_log import api_app
 
 # gRPC protos are optional; if missing, we won't fail tests.
 try:
@@ -281,8 +281,12 @@ def mock_crypto_provider_factory(mock_software_key_master):
     # Mock the CryptoProvider instance returned by the factory
     mock_provider = MagicMock()
     mock_provider.supported_algos = ["ed25519"]
-    mock_provider.settings = SimpleNamespace(SUPPORTED_ALGOS=["ed25519"])  # Added settings mock
-    mock_provider.generate_key = AsyncMock(return_value=str(uuid.uuid4()))  # Use UUID for key ID
+    mock_provider.settings = SimpleNamespace(
+        SUPPORTED_ALGOS=["ed25519"]
+    )  # Added settings mock
+    mock_provider.generate_key = AsyncMock(
+        return_value=str(uuid.uuid4())
+    )  # Use UUID for key ID
     mock_provider.rotate_key = AsyncMock(return_value=str(uuid.uuid4()))
     mock_provider.sign_data = AsyncMock(return_value=b"mock-signature")
     mock_provider.verify_signature = AsyncMock(return_value=True)
@@ -308,9 +312,7 @@ def mock_crypto_provider_factory(mock_software_key_master):
         ):
             # Re-initialize the global AUDIT_LOG instance after patching the factory
             # to ensure AuditLog.__init__ uses the mock.
-            from generator.audit_log.audit_log import (
-                initialize_audit_log_instance,
-            )
+            from generator.audit_log.audit_log import initialize_audit_log_instance
 
             # The global AUDIT_LOG needs to be re-initialized after the factory is mocked
             new_audit_log = initialize_audit_log_instance()

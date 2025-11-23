@@ -3,18 +3,19 @@ Patch file to fix the E2E test failures.
 Save this as plugins/tests/test_plugins_e2e_fixed.py
 """
 
+import asyncio
+import hashlib
+import hmac
+import importlib
+import json
+import logging
 import os
 import sys
-import asyncio
-import logging
-import json
-import pytest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
-import importlib
-import tempfile
-import hmac
-import hashlib
+
+import pytest
 
 # Set test environment
 os.environ["PROD_MODE"] = "false"
@@ -179,7 +180,9 @@ def test_plugin_import(plugin_name):
         else:
             # Log the errors but don't fail - plugin might have dependencies
             logger.warning(f"Could not import {plugin_name}: {import_errors}")
-            pytest.skip(f"Plugin {plugin_name} cannot be imported (may have missing dependencies)")
+            pytest.skip(
+                f"Plugin {plugin_name} cannot be imported (may have missing dependencies)"
+            )
 
     except Exception as e:
         logger.error(f"Unexpected error importing {plugin_name}: {e}")
@@ -191,8 +194,8 @@ def test_plugin_import(plugin_name):
 async def test_core_utils_integration():
     """Test core_utils module integration."""
     try:
-        from core_utils import AlertOperator, get_alert_operator
         from core_secrets import SecretsManager
+        from core_utils import AlertOperator, get_alert_operator
 
         # Test singleton pattern
         operator1 = get_alert_operator()
@@ -234,7 +237,7 @@ async def test_core_audit_integration():
 def test_core_secrets_integration():
     """Test core_secrets module integration."""
     try:
-        from core_secrets import SecretsManager, SECRETS_MANAGER
+        from core_secrets import SECRETS_MANAGER, SecretsManager
 
         # Test singleton
         assert SECRETS_MANAGER is not None
@@ -303,8 +306,12 @@ async def test_grpc_runner_functions():
 
         # Calculate the signature using the same key
         hmac_key = os.environ.get("MANIFEST_HMAC_KEY", "test-manifest-key")
-        manifest_str = json.dumps(test_manifest, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        signature = hmac.new(hmac_key.encode("utf-8"), manifest_str, hashlib.sha256).hexdigest()
+        manifest_str = json.dumps(
+            test_manifest, sort_keys=True, ensure_ascii=False
+        ).encode("utf-8")
+        signature = hmac.new(
+            hmac_key.encode("utf-8"), manifest_str, hashlib.sha256
+        ).hexdigest()
 
         # Add the signature to the manifest
         test_manifest["signature"] = signature

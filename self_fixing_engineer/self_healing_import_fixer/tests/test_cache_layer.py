@@ -20,16 +20,16 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # Import the cache layer via the package-qualified path
 from self_healing_import_fixer.import_fixer.cache_layer import (
-    get_cache,
-    _InMemoryCache,
-    _FileCache,
     _connect_redis,
+    _FileCache,
+    _InMemoryCache,
+    get_cache,
 )
 
 PKG_PATH = "self_healing_import_fixer.import_fixer.cache_layer"
@@ -90,12 +90,12 @@ def mock_metrics():
     mock_histogram.time.return_value.__exit__ = MagicMock()
     mock_histogram.observe.return_value = None
 
-    with patch(f"{PKG_PATH}.cache_hits", mock_counter), patch(
-        f"{PKG_PATH}.cache_misses", mock_counter
-    ), patch(f"{PKG_PATH}.cache_op_latency", mock_histogram), patch(
-        f"{PKG_PATH}.redis_connection_failures", mock_counter
-    ), patch(
-        f"{PKG_PATH}.file_hmac_failures", mock_counter
+    with (
+        patch(f"{PKG_PATH}.cache_hits", mock_counter),
+        patch(f"{PKG_PATH}.cache_misses", mock_counter),
+        patch(f"{PKG_PATH}.cache_op_latency", mock_histogram),
+        patch(f"{PKG_PATH}.redis_connection_failures", mock_counter),
+        patch(f"{PKG_PATH}.file_hmac_failures", mock_counter),
     ):
         yield
 
@@ -145,7 +145,9 @@ async def test_get_cache_uses_in_memory_when_no_redis_and_no_project_root(monkey
 
 
 @pytest.mark.asyncio
-async def test_get_cache_uses_file_cache_when_project_root_provided(tmp_path, monkeypatch):
+async def test_get_cache_uses_file_cache_when_project_root_provided(
+    tmp_path, monkeypatch
+):
     with patch(f"{PKG_PATH}._HAS_REDIS", False):
         root = tmp_path / "proj"
         root.mkdir(parents=True)
@@ -166,8 +168,10 @@ async def test_get_cache_uses_file_cache_when_project_root_provided(tmp_path, mo
 async def test_get_cache_prefers_redis_when_available(monkeypatch):
     fake_redis_mod = FakeRedisModule()
 
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(f"{PKG_PATH}._redis", fake_redis_mod), patch(
-        f"{PKG_PATH}.json_logger.info"
+    with (
+        patch(f"{PKG_PATH}._HAS_REDIS", True),
+        patch(f"{PKG_PATH}._redis", fake_redis_mod),
+        patch(f"{PKG_PATH}.json_logger.info"),
     ):
         cache = await get_cache(project_root=None)
         # The redis path returns the underlying client (FakeRedisClient)
@@ -198,7 +202,9 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
         def get_secret(self, key: str):
             return "dev-hmac-key"
 
-    cache = _FileCache(tmp_path, secrets_manager=_Secrets())  # secrets required by implementation
+    cache = _FileCache(
+        tmp_path, secrets_manager=_Secrets()
+    )  # secrets required by implementation
     await cache.setex("fk", 1, json.dumps({"a": 1}))
     assert json.loads(await cache.get("fk")) == {"a": 1}
     await asyncio.sleep(1.1)
@@ -214,8 +220,10 @@ async def test_file_cache_roundtrip_and_expiration(tmp_path):
 async def test__connect_redis_success(monkeypatch):
     """Ensure _connect_redis returns a client and pings it."""
     fake = FakeRedisModule()
-    with patch(f"{PKG_PATH}._HAS_REDIS", True), patch(f"{PKG_PATH}._redis", fake), patch(
-        f"{PKG_PATH}.json_logger.info"
+    with (
+        patch(f"{PKG_PATH}._HAS_REDIS", True),
+        patch(f"{PKG_PATH}._redis", fake),
+        patch(f"{PKG_PATH}.json_logger.info"),
     ):
         client = await _connect_redis()
         assert hasattr(client, "ping")
@@ -248,9 +256,10 @@ async def test__connect_redis_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_fallback_warning_helper_is_called(monkeypatch):
     # Force the "no redis" path and ensure the fallback helper is invoked at least once
-    with patch(f"{PKG_PATH}._HAS_REDIS", False), patch(
-        f"{PKG_PATH}._check_fallback_usage", new=AsyncMock()
-    ) as mock_fallback:
+    with (
+        patch(f"{PKG_PATH}._HAS_REDIS", False),
+        patch(f"{PKG_PATH}._check_fallback_usage", new=AsyncMock()) as mock_fallback,
+    ):
         await get_cache(project_root=None)
         mock_fallback.assert_awaited()
         # call many times to ensure it doesn't explode; we don't assert call count

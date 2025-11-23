@@ -1,15 +1,16 @@
 # test_runner_config.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 
-import unittest
 import os
+import shutil
 import sys
 import tempfile
-import shutil
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from pydantic import ValidationError
+from unittest.mock import MagicMock, patch
+
 from cryptography.fernet import Fernet
+from pydantic import ValidationError
 
 # Mock external dependencies
 sys.modules["hvac"] = MagicMock()
@@ -18,11 +19,7 @@ sys.modules["watchfiles"] = MagicMock()
 sys.modules["aiohttp"] = MagicMock()
 
 # Import runner modules
-from runner.runner_config import (
-    RunnerConfig,
-    load_config,
-    ConfigWatcher,
-)
+from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
 from runner.runner_errors import ConfigurationError
 
 
@@ -66,11 +63,15 @@ api_key: sk-abc123
         self.patch_hvac.start()
 
         self.mock_deepdiff = MagicMock()
-        self.patch_deepdiff = patch("runner.runner_config.DeepDiff", new=self.mock_deepdiff)
+        self.patch_deepdiff = patch(
+            "runner.runner_config.DeepDiff", new=self.mock_deepdiff
+        )
         self.patch_deepdiff.start()
 
         self.mock_watchfiles = MagicMock()
-        self.patch_watchfiles = patch("runner.runner_config.watchfiles", new=self.mock_watchfiles)
+        self.patch_watchfiles = patch(
+            "runner.runner_config.watchfiles", new=self.mock_watchfiles
+        )
         self.patch_watchfiles.start()
 
         # --- Correct aiohttp ClientSession mock with async context managers ---
@@ -263,7 +264,9 @@ instance_id: test-remote-loaded
         await watcher.fetch_remote("http://remote/config")
 
         # FIX: Assert against the correct mock instance
-        self.mock_aiohttp_session_cls.return_value.get.assert_called_with("http://remote/config")
+        self.mock_aiohttp_session_cls.return_value.get.assert_called_with(
+            "http://remote/config"
+        )
         # Check that the config was actually updated
         self.assertEqual(watcher.current_config.backend, "local")
 

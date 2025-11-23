@@ -1,8 +1,7 @@
 import types
-import pytest
 
 import agents.codegen_agent.codegen_prompt as codegen_prompt
-
+import pytest
 
 pytestmark = pytest.mark.asyncio
 
@@ -75,7 +74,9 @@ def _patch_minimal_env(monkeypatch):
                 features=",".join(ctx.get("requirements", {}).get("features", [])),
                 best_len=len(ctx.get("best_practices", []) or []),
                 rag_context=ctx.get("rag_context") or "",
-                has_img=bool(ctx.get("image_descriptions") or ctx.get("diagram_descriptions")),
+                has_img=bool(
+                    ctx.get("image_descriptions") or ctx.get("diagram_descriptions")
+                ),
                 target_language=ctx.get("target_language"),
             )
 
@@ -151,8 +152,12 @@ async def test_build_prompt_valid_minimal(monkeypatch):
     def fake_log_audit_event(event_type, payload=None):
         events.append((event_type, payload or {}))
 
-    monkeypatch.setattr(codegen_prompt, "count_tokens", fake_count_tokens, raising=False)
-    monkeypatch.setattr(codegen_prompt, "log_audit_event", fake_log_audit_event, raising=False)
+    monkeypatch.setattr(
+        codegen_prompt, "count_tokens", fake_count_tokens, raising=False
+    )
+    monkeypatch.setattr(
+        codegen_prompt, "log_audit_event", fake_log_audit_event, raising=False
+    )
 
     requirements = {"features": ["feature one", "feature two"]}
     state_summary = "System is green."
@@ -260,7 +265,9 @@ async def test_translate_requirements_no_keys(monkeypatch):
         def get(self, key: str):
             return None
 
-    monkeypatch.setattr(codegen_prompt, "secrets_manager", DummySecrets(), raising=False)
+    monkeypatch.setattr(
+        codegen_prompt, "secrets_manager", DummySecrets(), raising=False
+    )
 
     out = await codegen_prompt.translate_requirements_if_needed(dict(reqs))
     assert out["features"] == reqs["features"]
@@ -274,8 +281,10 @@ async def test_process_multi_modal_input_disabled(monkeypatch):
     _patch_minimal_env(monkeypatch)
     monkeypatch.setattr(codegen_prompt, "VISION_ENABLED", False, raising=False)
 
-    image_descriptions, diagram_descriptions = await codegen_prompt.process_multi_modal_input(
-        {"image_urls": ["https://example.com/x.png"]}
+    image_descriptions, diagram_descriptions = (
+        await codegen_prompt.process_multi_modal_input(
+            {"image_urls": ["https://example.com/x.png"]}
+        )
     )
 
     assert image_descriptions is None
@@ -317,7 +326,11 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
             # Simulate a model response with critique content
             return {
                 "choices": [
-                    {"message": {"content": "Tighten constraints and clarify inputs/outputs."}}
+                    {
+                        "message": {
+                            "content": "Tighten constraints and clarify inputs/outputs."
+                        }
+                    }
                 ]
             }
 
@@ -364,9 +377,15 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
         # Simple redactor used only to verify it's invoked
         return text.replace("SECRET", "")
 
-    monkeypatch.setattr(codegen_prompt, "count_tokens", fake_count_tokens, raising=False)
-    monkeypatch.setattr(codegen_prompt, "log_audit_event", fake_log_audit_event, raising=False)
-    monkeypatch.setattr(codegen_prompt, "redact_secrets", fake_redact_secrets, raising=False)
+    monkeypatch.setattr(
+        codegen_prompt, "count_tokens", fake_count_tokens, raising=False
+    )
+    monkeypatch.setattr(
+        codegen_prompt, "log_audit_event", fake_log_audit_event, raising=False
+    )
+    monkeypatch.setattr(
+        codegen_prompt, "redact_secrets", fake_redact_secrets, raising=False
+    )
 
     requirements = {"features": ["do something safe"]}
 

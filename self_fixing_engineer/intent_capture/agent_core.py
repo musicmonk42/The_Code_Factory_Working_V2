@@ -70,8 +70,8 @@ import os
 import re
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 from contextlib import contextmanager  # <--- ADDED contextlib IMPORT
+from typing import Any, Dict, List, Optional
 
 # --- Production-Grade Library Imports ---
 import jwt
@@ -307,7 +307,9 @@ class LLMProviderFactory:
 
         if REDIS_AVAILABLE and os.getenv("REDIS_URL"):
             try:
-                redis_client = await aredis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+                redis_client = await aredis.from_url(
+                    os.getenv("REDIS_URL"), decode_responses=True
+                )
                 bad_keys = await redis_client.smembers(f"bad_keys:{provider}")
                 await redis_client.close()
                 return [k for k in keys if k and k not in bad_keys]
@@ -318,8 +320,12 @@ class LLMProviderFactory:
     @staticmethod
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential_jitter(initial=1, max=5),  # UPGRADE: Added jitter to retry
-        retry=retry_if_exception_type(Exception),  # More specific exceptions could be used here
+        wait=wait_exponential_jitter(
+            initial=1, max=5
+        ),  # UPGRADE: Added jitter to retry
+        retry=retry_if_exception_type(
+            Exception
+        ),  # More specific exceptions could be used here
     )
     async def get_llm(
         provider: str, model: str, temperature: float, retry_providers: List[str]
@@ -361,7 +367,9 @@ class LLMProviderFactory:
 
                     llm_instance = llm_class(**init_params)
                     LLMProviderFactory._llm_instance_cache[cache_key] = llm_instance
-                    logger.info(f"Successfully initialized LLM for {prov} with model {model}")
+                    logger.info(
+                        f"Successfully initialized LLM for {prov} with model {model}"
+                    )
                     return llm_instance
                 except Exception as e:
                     logger.error(f"Failed to initialize LLM provider '{prov}': {e}")
@@ -392,7 +400,9 @@ class RedisStateBackend(StateBackend):
     @classmethod
     async def create(cls, redis_url: str):
         try:
-            client = await aredis.from_url(redis_url, decode_responses=True, max_connections=100)
+            client = await aredis.from_url(
+                redis_url, decode_responses=True, max_connections=100
+            )
             await client.ping()
             return cls(client)
         except (aredis.RedisError, ConnectionRefusedError) as e:
@@ -405,7 +415,9 @@ class RedisStateBackend(StateBackend):
     async def save_state(self, session_id: str, state: Dict[str, Any]):
         # UPGRADE: Add comment on GDPR/CCPA data lifecycle. In a real app, this expiry
         # would be tied to user consent and data retention policies.
-        await self.client.set(f"{self.state_prefix}{session_id}", json.dumps(state), ex=86400)
+        await self.client.set(
+            f"{self.state_prefix}{session_id}", json.dumps(state), ex=86400
+        )
 
 
 # --- Security & Utility Functions ---
@@ -413,17 +425,25 @@ def sanitize_input(input_text: str) -> str:
     """Hardened sanitizer against prompt injection, SSRF (CVE-2025-2828), and XSS."""
     if re.search(r"\b(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)\b", input_text):
         # UPGRADE: Log security events for monitoring
-        logger.warning("Potential SSRF attempt blocked: input contained internal IP pattern.")
-        raise ValueError("Input contains a potentially malicious pattern (internal IP).")
+        logger.warning(
+            "Potential SSRF attempt blocked: input contained internal IP pattern."
+        )
+        raise ValueError(
+            "Input contains a potentially malicious pattern (internal IP)."
+        )
     return clean(input_text, tags=[], attributes={}, strip=True).strip()
 
 
 def anonymize_pii(text: str) -> str:
     """Anonymizes PII like emails and phone numbers for compliance."""
     # UPGRADE: More robust regex patterns
-    text = re.sub(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]", text)
+    text = re.sub(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[REDACTED_EMAIL]", text
+    )
     text = re.sub(r"(\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b)", "[REDACTED_PHONE]", text)
-    text = re.sub(r"\b\d{16}\b", "[REDACTED_CREDIT_CARD]", text)  # Example for credit cards
+    text = re.sub(
+        r"\b\d{16}\b", "[REDACTED_CREDIT_CARD]", text
+    )  # Example for credit cards
     return text
 
 
@@ -431,7 +451,9 @@ def anonymize_pii(text: str) -> str:
 class AgentResponse(BaseModel):
     """Defines the structured output for the agent's response."""
 
-    response: str = Field(description="The final, user-facing response from the AI assistant.")
+    response: str = Field(
+        description="The final, user-facing response from the AI assistant."
+    )
     confidence_score: float = Field(
         description="A score from 0.0 to 1.0 indicating the AI's confidence in its answer.",
         ge=0.0,
@@ -481,7 +503,9 @@ class CollaborativeAgent:
         self.state_backend = state_backend
         self.chat_history: List[BaseMessage] = []
         self.use_vector_memory = kwargs.get("use_vector_memory", False)
-        self.vector_memory: Optional[VectorStoreRetrieverMemory] = kwargs.get("vector_memory")
+        self.vector_memory: Optional[VectorStoreRetrieverMemory] = kwargs.get(
+            "vector_memory"
+        )
         self.vector_store_path = kwargs.get("vector_store_path")
         self.safety_guard = SafetyGuard()  # UPGRADE: Instantiate safety guard
         self._runnable = self._setup_runnable()
@@ -500,23 +524,29 @@ class CollaborativeAgent:
         # UPGRADE: Switched to Pinecone for scalable RAG
         if os.getenv("USE_VECTOR_MEMORY", "false").lower() == "true":
             try:
-                from pinecone import Pinecone
                 from langchain_pinecone import PineconeVectorStore
+                from pinecone import Pinecone
 
                 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
                 index_name = f"agent-sessions-{os.getenv('ENVIRONMENT', 'dev')}"
                 if index_name not in pc.list_indexes().names():
-                    pc.create_index(name=index_name, dimension=384)  # all-MiniLM-L6-v2 dimension
+                    pc.create_index(
+                        name=index_name, dimension=384
+                    )  # all-MiniLM-L6-v2 dimension
 
                 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
                 vectorstore = PineconeVectorStore.from_existing_index(
                     index_name, embeddings, namespace=session_id
                 )
-                logger.info(f"Connected to Pinecone index '{index_name}' for session {session_id}")
+                logger.info(
+                    f"Connected to Pinecone index '{index_name}' for session {session_id}"
+                )
 
                 retriever = vectorstore.as_retriever(search_kwargs=dict(k=2))
                 kwargs["use_vector_memory"] = True
-                kwargs["vector_memory"] = VectorStoreRetrieverMemory(retriever=retriever)
+                kwargs["vector_memory"] = VectorStoreRetrieverMemory(
+                    retriever=retriever
+                )
 
             except Exception as e:
                 logger.error(
@@ -549,7 +579,9 @@ class CollaborativeAgent:
         # UPGRADE: Enforce structured output
         structured_llm = self.llm.with_structured_output(AgentResponse)
         chain_with_structure = (
-            RunnablePassthrough.assign(context=self._get_rag_context) | prompt | structured_llm
+            RunnablePassthrough.assign(context=self._get_rag_context)
+            | prompt
+            | structured_llm
         )
 
         return RunnableWithMessageHistory(
@@ -579,7 +611,9 @@ class CollaborativeAgent:
         if state:
             self.chat_history = messages_from_dict(state.get("chat_history", []))
 
-    async def _run_self_correction_cycle(self, user_input: str, timeout: int) -> Dict[str, Any]:
+    async def _run_self_correction_cycle(
+        self, user_input: str, timeout: int
+    ) -> Dict[str, Any]:
         """Runs the full self-correction cycle to generate a robust response."""
         AGENT_CYCLE_COUNT.labels(agent_id=self.agent_id).inc()
 
@@ -652,7 +686,9 @@ class CollaborativeAgent:
                 "output": final_response,
                 "confidence": result.get("confidence"),
                 "trace_id": (
-                    trace.get_current_span().get_span_context().trace_id if tracer else "N/A"
+                    trace.get_current_span().get_span_context().trace_id
+                    if tracer
+                    else "N/A"
                 ),
             }
             audit_logger.info(json.dumps(audit_log_entry))
@@ -662,7 +698,9 @@ class CollaborativeAgent:
             AGENT_PREDICTION_ERRORS_TOTAL.labels(
                 agent_id=self.agent_id, error_type=type(e).__name__
             ).inc()
-            logger.error(f"Error during prediction for agent {self.agent_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error during prediction for agent {self.agent_id}: {e}", exc_info=True
+            )
             if SENTRY_AVAILABLE:
                 sentry_sdk.capture_exception(e)
             # Re-raise to be handled by the application framework
@@ -672,7 +710,9 @@ class CollaborativeAgent:
 # --- Session Management with Hardened Security ---
 # UPGRADE: Use Redis for distributed session caching, not just state.
 # AGENT_SESSIONS_CACHE = TTLCache(maxsize=1000, ttl=3600) -> Replaced with Redis
-AGENT_CREATION_SEMAPHORE = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT_AGENTS", 10)))
+AGENT_CREATION_SEMAPHORE = asyncio.Semaphore(
+    int(os.environ.get("MAX_CONCURRENT_AGENTS", 10))
+)
 
 
 async def validate_session_token(token: str) -> Dict[str, Any]:
@@ -731,7 +771,9 @@ async def get_or_create_agent(session_token: str) -> CollaborativeAgent:
             "provider": os.getenv("LLM_PROVIDER", "openai"),
             "model": os.getenv("LLM_MODEL", "gpt-4o-mini"),
             "temperature": float(os.getenv("LLM_TEMPERATURE", 0.7)),
-            "retry_providers": os.getenv("LLM_RETRY_PROVIDERS", "anthropic,google").split(","),
+            "retry_providers": os.getenv(
+                "LLM_RETRY_PROVIDERS", "anthropic,google"
+            ).split(","),
         }
 
         agent = await CollaborativeAgent.create(
@@ -887,7 +929,9 @@ if __name__ == "__main__":
         "JWT_SECRET",
         "a_very_strong_and_long_secret_key_for_demo_thirty_two_chars_or_more",
     )
-    os.environ.setdefault("OPENAI_API_KEYS", "your_openai_api_key_here")  # Replace with your key
+    os.environ.setdefault(
+        "OPENAI_API_KEYS", "your_openai_api_key_here"
+    )  # Replace with your key
     os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
     # Example of enabling RAG with Pinecone

@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import os
 import asyncio
+import datetime
 import json
 import logging
-import time
-import tempfile
-import uuid
+import os
 import shutil
-from typing import Dict, Any, Optional, Tuple, Callable, List
-from urllib.parse import urlparse
-import datetime
+import tempfile
+import time
+import uuid
 from contextlib import contextmanager
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 # --- Logger Setup (initialize before anything that might log) ---
 logger = logging.getLogger(__name__)
@@ -20,15 +20,17 @@ if not logger.handlers:
     import sys
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 # --- Conditional Imports for GitPython ---
 try:
     import git  # GitPython library
-    from git.repo import Repo
     from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
+    from git.repo import Repo
 
     GITPYTHON_AVAILABLE = True
 except ImportError:
@@ -46,9 +48,9 @@ except ImportError:
 try:
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
     )
 
     TENACITY_AVAILABLE = True
@@ -83,7 +85,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 # --- Prometheus Metrics (Idempotent Definition) ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
     from simulation.utils import get_or_create_metric
 
     # Use the safe metric creation function from simulation.utils
@@ -198,7 +200,9 @@ GIT_CONFIG = {
     "clone_timeout_seconds": int(os.getenv("GIT_CLONE_TIMEOUT_SECONDS", "300")),
     "push_timeout_seconds": int(os.getenv("GIT_PUSH_TIMEOUT_SECONDS", "90")),
     "git_op_timeout_seconds": int(os.getenv("GIT_OP_TIMEOUT_SECONDS", "120")),
-    "pr_api_base_url": os.getenv("GIT_PR_API_BASE_URL", "https://api.github.com"),  # For GitHub
+    "pr_api_base_url": os.getenv(
+        "GIT_PR_API_BASE_URL", "https://api.github.com"
+    ),  # For GitHub
     "pr_api_token": os.getenv("GIT_PR_API_TOKEN"),  # For creating PRs
     "retry_attempts": int(os.getenv("GIT_RETRY_ATTEMPTS", "3")),
     "retry_backoff_factor": float(os.getenv("GIT_RETRY_BACKOFF_FACTOR", "2.0")),
@@ -223,7 +227,9 @@ except ImportError:
     )
 
     class MockAuditLogger:
-        async def log_event(self, event_type: str, details: Dict[str, Any], **kwargs: Any):
+        async def log_event(
+            self, event_type: str, details: Dict[str, Any], **kwargs: Any
+        ):
             logger.info(f"[AUDIT] {event_type}: {details}")
 
     _sfe_audit_logger = MockAuditLogger()
@@ -305,7 +311,9 @@ def _is_safe_path(base: str, path: str) -> bool:
     base_abs = os.path.abspath(base)
     path_abs = os.path.abspath(path)
     try:
-        return os.path.commonpath([base_abs]) == os.path.commonpath([base_abs, path_abs])
+        return os.path.commonpath([base_abs]) == os.path.commonpath(
+            [base_abs, path_abs]
+        )
     except Exception:
         return False
 
@@ -376,14 +384,20 @@ class GitRepoManager:
 
     @retry(
         stop=stop_after_attempt(GIT_CONFIG["retry_attempts"]),
-        wait=wait_exponential(multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10),
-        retry=retry_if_exception_type((GitCommandError, NoSuchPathError, asyncio.TimeoutError)),
+        wait=wait_exponential(
+            multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10
+        ),
+        retry=retry_if_exception_type(
+            (GitCommandError, NoSuchPathError, asyncio.TimeoutError)
+        ),
     )
     async def clone_repo(self) -> None:
         """Clones the repository asynchronously with optional HTTPS token or SSH key support."""
         start_time = time.monotonic()
         try:
-            if os.path.exists(self.temp_clone_path) and os.listdir(self.temp_clone_path):
+            if os.path.exists(self.temp_clone_path) and os.listdir(
+                self.temp_clone_path
+            ):
                 logger.info(
                     f"[{self.refactor_id}] Directory {self.temp_clone_path} already exists, assuming cloned."
                 )
@@ -442,7 +456,9 @@ class GitRepoManager:
                     remote = await asyncio.to_thread(self._repo.remote, "origin")
                     clean_fetch_url = self.repo_url
                     push_url = clean_fetch_url
-                    if self.credentials.get("token") and self.credentials.get("username"):
+                    if self.credentials.get("token") and self.credentials.get(
+                        "username"
+                    ):
                         push_url = _build_https_push_url(
                             clean_fetch_url,
                             self.credentials["username"],
@@ -451,7 +467,9 @@ class GitRepoManager:
                     await asyncio.to_thread(remote.set_url, clean_fetch_url)
                     await asyncio.to_thread(remote.set_url, push_url, True)  # push URL
                 except Exception as e:
-                    logger.warning(f"[{self.refactor_id}] Failed to set sanitized remote URLs: {e}")
+                    logger.warning(
+                        f"[{self.refactor_id}] Failed to set sanitized remote URLs: {e}"
+                    )
 
         except Exception as e:
             CROSS_REPO_REFACTOR_ERRORS.labels(error_type="clone_failed").inc()
@@ -463,7 +481,9 @@ class GitRepoManager:
 
     @retry(
         stop=stop_after_attempt(GIT_CONFIG["retry_attempts"]),
-        wait=wait_exponential(multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10),
+        wait=wait_exponential(
+            multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10
+        ),
         retry=retry_if_exception_type((GitCommandError, asyncio.TimeoutError)),
     )
     async def prepare_branch(self, base_branch: str, refactor_branch: str) -> None:
@@ -529,7 +549,9 @@ class GitRepoManager:
 
     @retry(
         stop=stop_after_attempt(GIT_CONFIG["retry_attempts"]),
-        wait=wait_exponential(multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10),
+        wait=wait_exponential(
+            multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10
+        ),
         retry=retry_if_exception_type((GitCommandError, asyncio.TimeoutError)),
     )
     async def add_and_commit(self, file_paths: List[str], commit_message: str) -> str:
@@ -548,7 +570,9 @@ class GitRepoManager:
                 )
                 await asyncio.to_thread(cw.release)
             except Exception as e:
-                logger.warning(f"[{self.refactor_id}] Failed to set local author info: {e}")
+                logger.warning(
+                    f"[{self.refactor_id}] Failed to set local author info: {e}"
+                )
 
             await _to_thread_timeout(
                 repo.index.add, file_paths, timeout=GIT_CONFIG["git_op_timeout_seconds"]
@@ -575,7 +599,9 @@ class GitRepoManager:
 
     @retry(
         stop=stop_after_attempt(GIT_CONFIG["retry_attempts"]),
-        wait=wait_exponential(multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10),
+        wait=wait_exponential(
+            multiplier=GIT_CONFIG["retry_backoff_factor"], min=1, max=10
+        ),
         retry=retry_if_exception_type((GitCommandError, asyncio.TimeoutError)),
     )
     async def push_branch(self, branch_name: str, remote_name: str = "origin") -> None:
@@ -660,7 +686,9 @@ class GitRepoManager:
 
             timeout = aiohttp.ClientTimeout(total=GIT_CONFIG["push_timeout_seconds"])
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(api_endpoint, headers=headers, json=payload) as response:
+                async with session.post(
+                    api_endpoint, headers=headers, json=payload
+                ) as response:
                     resp_text = await response.text()
                     if response.status >= 400:
                         # Try to extract message for 422 validation errors
@@ -718,7 +746,9 @@ async def plugin_health() -> Dict[str, Any]:
             raise RuntimeError("Git CLI found but returned non-zero exit code.")
     except (FileNotFoundError, RuntimeError) as e:
         status = "error"
-        details.append(f"Git CLI not found in PATH or error: {e}. Cannot perform Git operations.")
+        details.append(
+            f"Git CLI not found in PATH or error: {e}. Cannot perform Git operations."
+        )
         logger.error(details[-1])
 
     # Optional remote validation (non-destructive)
@@ -748,7 +778,9 @@ async def plugin_health() -> Dict[str, Any]:
                 )
                 status = "degraded" if status == "ok" else status
         except Exception as e:
-            details.append(f"Remote connectivity check error for sample: {sample} - {e}")
+            details.append(
+                f"Remote connectivity check error for sample: {sample} - {e}"
+            )
             status = "degraded" if status == "ok" else status
 
     # Check PR API credentials if configured
@@ -761,7 +793,9 @@ async def plugin_health() -> Dict[str, Any]:
     elif GIT_CONFIG.get("pr_api_token"):
         details.append("Git PR API token found (PR creation enabled).")
     else:
-        details.append("PR creation not configured (GIT_PR_API_BASE_URL/TOKEN not set).")
+        details.append(
+            "PR creation not configured (GIT_PR_API_BASE_URL/TOKEN not set)."
+        )
 
     logger.info(f"Plugin health check: {status}")
     return {"status": status, "details": details}
@@ -833,7 +867,9 @@ async def _process_repo(
         if not changes:
             raise ValueError("No changes defined for repository.")
 
-        logger.info(f"[{refactor_id}] Processing repository: {_mask_token_in_url(repo_url)}")
+        logger.info(
+            f"[{refactor_id}] Processing repository: {_mask_token_in_url(repo_url)}"
+        )
         repo_temp_dir = tempfile.mkdtemp(prefix=f"sfe-repo-{uuid.uuid4().hex[:8]}_")
         repo_result["cloned_path"] = repo_temp_dir
         temp_dirs_to_clean.append(repo_temp_dir)
@@ -895,16 +931,22 @@ async def _process_repo(
             return repo_result
 
         if dry_run:
-            repo_result["reason"] = "Dry run: Changes applied locally, not committed or pushed."
+            repo_result["reason"] = (
+                "Dry run: Changes applied locally, not committed or pushed."
+            )
             repo_result["status"] = "DRY_RUN_SUCCESS"
             logger.info(f"[{refactor_id}] {repo_result['reason']}")
             return repo_result
 
         # Commit
         try:
-            commit_sha = await repo_manager.add_and_commit(applied_files, commit_message)
+            commit_sha = await repo_manager.add_and_commit(
+                applied_files, commit_message
+            )
             repo_result["commit_sha"] = commit_sha
-            logger.info(f"[{refactor_id}] Committed {commit_sha} in {_mask_token_in_url(repo_url)}")
+            logger.info(
+                f"[{refactor_id}] Committed {commit_sha} in {_mask_token_in_url(repo_url)}"
+            )
         except Exception:
             repo_result["error_type"] = "commit_failed"
             raise
@@ -942,11 +984,15 @@ async def _process_repo(
                 repo_result["status"] = "SUCCESS_PR_CREATED"
                 logger.info(f"[{refactor_id}] PR created: {pr_url}")
             else:
-                repo_result["reason"] = "Changes committed and pushed, but PR creation failed."
+                repo_result["reason"] = (
+                    "Changes committed and pushed, but PR creation failed."
+                )
                 repo_result["status"] = "SUCCESS_NO_PR"
                 logger.warning(f"[{refactor_id}] {repo_result['reason']}")
         else:
-            repo_result["reason"] = "Changes committed and pushed (PR creation skipped)."
+            repo_result["reason"] = (
+                "Changes committed and pushed (PR creation skipped)."
+            )
             repo_result["status"] = "SUCCESS_NO_PR_REQUESTED"
 
         repo_result["success"] = True
@@ -1028,7 +1074,9 @@ async def perform_cross_repo_refactor(
         )
         duration = time.monotonic() - start_time
         try:
-            GIT_OPERATION_LATENCY_SECONDS.labels(operation="total_refactor").observe(duration)
+            GIT_OPERATION_LATENCY_SECONDS.labels(operation="total_refactor").observe(
+                duration
+            )
         except Exception:
             pass
         return {
@@ -1066,7 +1114,9 @@ async def perform_cross_repo_refactor(
         overall_reason = f"Overall refactoring failed: {e}"
         overall_success = False
         logger.critical(f"[{refactor_id}] {overall_reason}", exc_info=True)
-        CROSS_REPO_REFACTOR_ERRORS.labels(error_type="overall_orchestration_failure").inc()
+        CROSS_REPO_REFACTOR_ERRORS.labels(
+            error_type="overall_orchestration_failure"
+        ).inc()
         await _audit_event(
             "cross_repo_refactor_overall_failed",
             {"refactor_id": refactor_id, "error": overall_reason},
@@ -1081,9 +1131,13 @@ async def perform_cross_repo_refactor(
                 try:
                     if os.path.exists(d):
                         shutil.rmtree(d)
-                        logger.debug(f"[{refactor_id}] Cleaned up temporary repo clone: {d}")
+                        logger.debug(
+                            f"[{refactor_id}] Cleaned up temporary repo clone: {d}"
+                        )
                 except Exception as e:
-                    logger.warning(f"[{refactor_id}] Failed to clean up temp dir {d}: {e}")
+                    logger.warning(
+                        f"[{refactor_id}] Failed to clean up temp dir {d}: {e}"
+                    )
         else:
             # Optional: scrub tokenized pushUrl when retaining for debugging
             if GIT_CONFIG["scrub_pushurl_on_retain"]:
@@ -1097,7 +1151,9 @@ async def perform_cross_repo_refactor(
                                 fetch_urls = list(origin.urls)
                                 clean_url = fetch_urls[0] if fetch_urls else None
                                 if clean_url:
-                                    await asyncio.to_thread(origin.set_url, clean_url, True)
+                                    await asyncio.to_thread(
+                                        origin.set_url, clean_url, True
+                                    )
                             except Exception:
                                 pass
                     except Exception:
@@ -1114,7 +1170,9 @@ async def perform_cross_repo_refactor(
                 CROSS_REPO_REFACTOR_ATTEMPTS.labels(status="success").inc()
             else:
                 CROSS_REPO_REFACTOR_ATTEMPTS.labels(status="failure").inc()
-            GIT_OPERATION_LATENCY_SECONDS.labels(operation="total_refactor").observe(duration)
+            GIT_OPERATION_LATENCY_SECONDS.labels(operation="total_refactor").observe(
+                duration
+            )
         except Exception:
             pass
 
@@ -1125,7 +1183,9 @@ async def perform_cross_repo_refactor(
                 "overall_success": overall_success,
                 "reason": overall_reason,
                 "duration": duration,
-                "results_summary": [{r["repo_url"]: r["status"]} for r in results_per_repo],
+                "results_summary": [
+                    {r["repo_url"]: r["status"]} for r in results_per_repo
+                ],
             },
         )
 
@@ -1156,12 +1216,16 @@ if __name__ == "__main__":
     # --- Mocking for Standalone Execution ---
     _mock_registered_plugins = {}
 
-    def _mock_register_plugin(name: str, executor_func: Callable, capabilities: List[str]):
+    def _mock_register_plugin(
+        name: str, executor_func: Callable, capabilities: List[str]
+    ):
         _mock_registered_plugins[name] = {
             "executor_func": executor_func,
             "capabilities": capabilities,
         }
-        print(f"Mocked registration: Registered plugin '{name}' with capabilities: {capabilities}.")
+        print(
+            f"Mocked registration: Registered plugin '{name}' with capabilities: {capabilities}."
+        )
 
     # Register our plugin's entrypoints with the mock registry
     register_plugin_entrypoints(_mock_register_plugin)
@@ -1259,7 +1323,9 @@ if __name__ == "__main__":
         print("\nLive Run Result:")
         print(json.dumps(live_run_result, indent=2))
         if live_run_result["success"]:
-            print("\nSuccessfully refactored! Check your repository for new branch and PR:")
+            print(
+                "\nSuccessfully refactored! Check your repository for new branch and PR:"
+            )
             for repo_res in live_run_result["results_per_repo"]:
                 print(f"- Repo: {repo_res['repo_url']}")
                 print(f"  Branch: {repo_res.get('pushed_branch')}")

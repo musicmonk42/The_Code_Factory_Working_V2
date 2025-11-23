@@ -5,8 +5,8 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 import aiohttp
+import pytest
 
 # Add the parent directory of 'simulation' to the path for correct imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -67,8 +67,12 @@ def mock_prometheus_metrics(monkeypatch):
         return factory
 
     # Patch prometheus_client before importing the module
-    monkeypatch.setattr("prometheus_client.Counter", create_metric_double("Counter"), raising=False)
-    monkeypatch.setattr("prometheus_client.Gauge", create_metric_double("Gauge"), raising=False)
+    monkeypatch.setattr(
+        "prometheus_client.Counter", create_metric_double("Counter"), raising=False
+    )
+    monkeypatch.setattr(
+        "prometheus_client.Gauge", create_metric_double("Gauge"), raising=False
+    )
     monkeypatch.setattr(
         "prometheus_client.Histogram", create_metric_double("Histogram"), raising=False
     )
@@ -108,8 +112,8 @@ def llm_provider(valid_config_dict, monkeypatch):
 
     # Import after mocking
     from simulation.plugins.custom_llm_provider_plugin import (
-        LLMConfig,
         CustomLLMProvider,
+        LLMConfig,
     )
 
     # Create provider
@@ -154,7 +158,9 @@ class TestLLMConfiguration:
             LLMConfig(**valid_config_dict).validate()
         assert "HTTPS is required in production" in str(exc.value)
 
-    def test_known_hosts_enforcement_in_production(self, valid_config_dict, monkeypatch):
+    def test_known_hosts_enforcement_in_production(
+        self, valid_config_dict, monkeypatch
+    ):
         """Test that known hosts are enforced in production."""
         from simulation.plugins.custom_llm_provider_plugin import LLMConfig
 
@@ -238,7 +244,9 @@ class TestCustomLLMProvider:
         fallback_provider._acall = AsyncMock(return_value="Fallback response")
 
         # Mock _get_fallback_provider to return our fallback
-        with patch.object(llm_provider, "_get_fallback_provider", return_value=fallback_provider):
+        with patch.object(
+            llm_provider, "_get_fallback_provider", return_value=fallback_provider
+        ):
             # Mock _make_request to raise ClientError
             with patch.object(
                 llm_provider,
@@ -318,7 +326,9 @@ class TestCustomLLMProvider:
         with patch.object(
             llm_provider, "_make_request", return_value=mock_response_content
         ) as mock_make_request:
-            with patch.object(llm_provider, "_get_cached_response", AsyncMock()) as mock_get_cached:
+            with patch.object(
+                llm_provider, "_get_cached_response", AsyncMock()
+            ) as mock_get_cached:
                 with patch.object(
                     llm_provider, "_set_cached_response", AsyncMock()
                 ) as mock_set_cached:
@@ -340,7 +350,9 @@ class TestCustomLLMProvider:
                     mock_get_cached.return_value = "Cached response"
                     result2 = await llm_provider._acall(messages)
                     assert result2 == "Cached response"
-                    mock_get_cached.assert_called_once_with(cache_key, llm_provider.config.model)
+                    mock_get_cached.assert_called_once_with(
+                        cache_key, llm_provider.config.model
+                    )
                     mock_make_request.assert_not_called()
                     mock_set_cached.assert_not_called()
 
@@ -370,7 +382,9 @@ class TestCustomLLMProvider:
         from simulation.plugins.custom_llm_provider_plugin import plugin_health
 
         mock_session = AsyncMock()
-        mock_session.get = AsyncMock(side_effect=aiohttp.ClientError("Connection failed"))
+        mock_session.get = AsyncMock(
+            side_effect=aiohttp.ClientError("Connection failed")
+        )
 
         health = await plugin_health(session=mock_session)
 
@@ -415,9 +429,7 @@ class TestPluginFunctions:
             call_count += 1
             return f"key-{call_count}"
 
-        from simulation.plugins.custom_llm_provider_plugin import (
-            CustomLLMProvider,
-        )
+        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         # Patch the module-level function
         monkeypatch.setattr(
@@ -446,9 +458,7 @@ class TestPluginFunctions:
             call_count += 1
             raise Exception("Vault unavailable")
 
-        from simulation.plugins.custom_llm_provider_plugin import (
-            CustomLLMProvider,
-        )
+        from simulation.plugins.custom_llm_provider_plugin import CustomLLMProvider
 
         monkeypatch.setattr(
             "simulation.plugins.custom_llm_provider_plugin.get_vault_key",
@@ -486,7 +496,9 @@ class TestPluginFunctions:
             raise RuntimeError("request failed")
 
         # Replace _acall with our mock implementation
-        with patch.object(llm_provider, "_acall", side_effect=mock_acall_that_increments_failure):
+        with patch.object(
+            llm_provider, "_acall", side_effect=mock_acall_that_increments_failure
+        ):
             # Trigger failures up to threshold
             for i in range(llm_provider.circuit_breaker_threshold):
                 with pytest.raises(RuntimeError) as excinfo:

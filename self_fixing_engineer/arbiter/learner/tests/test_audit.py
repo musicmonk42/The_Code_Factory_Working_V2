@@ -1,11 +1,11 @@
 # test_audit.py
 
-import pytest
 import asyncio
 import hashlib
 from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch
-from tenacity import RetryError
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Import the classes and functions to test
 from arbiter.learner.audit import (
@@ -14,6 +14,7 @@ from arbiter.learner.audit import (
     persist_knowledge,
     persist_knowledge_batch,
 )
+from tenacity import RetryError
 
 
 class TestCircuitBreaker:
@@ -23,7 +24,9 @@ class TestCircuitBreaker:
     def circuit_breaker(self):
         """Create a CircuitBreaker instance for testing."""
         with patch("arbiter.learner.audit.circuit_breaker_state"):
-            cb = CircuitBreaker(failure_threshold=3, cooldown_seconds=1, name="test_breaker")
+            cb = CircuitBreaker(
+                failure_threshold=3, cooldown_seconds=1, name="test_breaker"
+            )
             yield cb
 
     @pytest.mark.asyncio
@@ -413,7 +416,9 @@ class TestPersistKnowledgeBatch:
         ]
 
     @pytest.mark.asyncio
-    async def test_persist_batch_success(self, mock_db, mock_circuit_breaker, sample_entries):
+    async def test_persist_batch_success(
+        self, mock_db, mock_circuit_breaker, sample_entries
+    ):
         """Test successful batch persistence."""
         with patch("arbiter.learner.audit.audit_log") as mock_audit_log:
             mock_audit_log.log_event = AsyncMock()
@@ -437,7 +442,9 @@ class TestPersistKnowledgeBatch:
             mock_circuit_breaker.record_success.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_persist_batch_circuit_open(self, mock_db, mock_circuit_breaker, sample_entries):
+    async def test_persist_batch_circuit_open(
+        self, mock_db, mock_circuit_breaker, sample_entries
+    ):
         """Test batch persistence when circuit breaker is open."""
         mock_circuit_breaker.can_proceed = AsyncMock(return_value=False)
 

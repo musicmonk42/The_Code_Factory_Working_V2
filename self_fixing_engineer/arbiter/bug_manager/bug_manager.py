@@ -1,38 +1,36 @@
 import asyncio
+import contextvars
 import datetime
-import logging
-import traceback
-import hashlib
-import os
-import time
 import functools
+import hashlib
 import inspect
 import json
+import logging
+import os
+import time
+import traceback
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Union
-import contextvars
 
 import redis.asyncio as redis
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 from pydantic import BaseModel
+
+from ..arbiter_plugin_registry import PlugInKind
+from .audit_log import AuditLogManager
+from .notifications import NotificationService
+from .remediations import BugFixerRegistry, MLRemediationModel
 
 # Assuming these local modules exist and provide the necessary components
 from .utils import (
-    redact_pii,
-    Severity,
-    validate_input_details,
-    apply_settings_validation,
     NotificationError,
     RateLimitExceededError,
+    Severity,
+    apply_settings_validation,
     get_or_create_metric,
+    redact_pii,
+    validate_input_details,
 )
-from .notifications import NotificationService
-from .audit_log import AuditLogManager
-from .remediations import (
-    MLRemediationModel,
-    BugFixerRegistry,
-)
-from ..arbiter_plugin_registry import PlugInKind
 
 
 # Create register decorator
@@ -175,7 +173,9 @@ class RateLimiter:
                 await self.redis.ping()
                 logger.info("Successfully connected to Redis for rate limiting.")
             except Exception as e:
-                logger.error(f"Redis ping failed: {e}. Falling back to in-memory rate limiting.")
+                logger.error(
+                    f"Redis ping failed: {e}. Falling back to in-memory rate limiting."
+                )
                 self.redis = None
 
     def rate_limit(self, func):
@@ -232,7 +232,9 @@ class RateLimiter:
                 else:
                     # Existing in-memory logic
                     self._call_timestamps[rate_limit_key] = [
-                        t for t in self._call_timestamps[rate_limit_key] if now - t < period
+                        t
+                        for t in self._call_timestamps[rate_limit_key]
+                        if now - t < period
                     ]
 
                     if len(self._call_timestamps) > self._max_size:
@@ -269,7 +271,9 @@ class BugManager:
         try:
             self.notification_service = NotificationService(self.settings)
         except ImportError as e:
-            logger.error(f"Failed to initialize NotificationService due to missing dependency: {e}")
+            logger.error(
+                f"Failed to initialize NotificationService due to missing dependency: {e}"
+            )
             self.notification_service = None
         self.audit_log_manager = AuditLogManager(settings=self.settings)
         self.ml_remediation_model = None
@@ -277,7 +281,9 @@ class BugManager:
         # 4.1: Metrics for ML and notification failures
         if self.settings.ML_REMEDIATION_ENABLED:
             try:
-                if not self.settings.ML_MODEL_ENDPOINT.startswith(("http://", "https://")):
+                if not self.settings.ML_MODEL_ENDPOINT.startswith(
+                    ("http://", "https://")
+                ):
                     raise ValueError("Invalid ML model endpoint URL.")
                 self.ml_remediation_model = MLRemediationModel(
                     self.settings.ML_MODEL_ENDPOINT, self.settings
@@ -361,7 +367,9 @@ class BugManager:
         severity_enum = None
 
         # 2.2: Context-aware logging
-        bug_signature = self._generate_bug_signature(error_data, location, custom_details)
+        bug_signature = self._generate_bug_signature(
+            error_data, location, custom_details
+        )
         # Fixed: Use module-level ContextVar instead of creating new one
         _bug_id_var.set(bug_signature[:8])
 
@@ -398,7 +406,9 @@ class BugManager:
                     )
                     if fixed:
                         BUG_AUTO_FIX_SUCCESS.inc()
-                        logger.info(f"Bug fixed automatically: {error_details['message']}")
+                        logger.info(
+                            f"Bug fixed automatically: {error_details['message']}"
+                        )
                 except Exception as e:
                     logger.error(
                         json.dumps(
@@ -435,7 +445,9 @@ class BugManager:
             if self.settings.AUDIT_LOG_ENABLED:
                 if not severity_enum:
                     severity_enum = (
-                        Severity.MEDIUM if not isinstance(severity, Severity) else severity
+                        Severity.MEDIUM
+                        if not isinstance(severity, Severity)
+                        else severity
                     )
 
                 parsed_details = self._parse_error_data(
@@ -479,15 +491,21 @@ class BugManager:
         elif isinstance(error_data, dict):
             details.update(error_data)
             if "message" not in details:
-                details["message"] = "Error reported as dictionary without 'message' key."
+                details["message"] = (
+                    "Error reported as dictionary without 'message' key."
+                )
                 logger.warning("Error dictionary provided without a 'message' key.")
             if "stack_trace" not in details:
                 details["stack_trace"] = self._get_stack_trace_from_caller()
         else:
-            details["message"] = f"Unrecognized error data type: {type(error_data).__name__}"
+            details["message"] = (
+                f"Unrecognized error data type: {type(error_data).__name__}"
+            )
             details["exception_type"] = "unknown_type"
             logger.error(
-                json.dumps({"event": "unrecognized_error", "type": type(error_data).__name__})
+                json.dumps(
+                    {"event": "unrecognized_error", "type": type(error_data).__name__}
+                )
             )
 
         if custom_details:
@@ -522,7 +540,10 @@ class BugManager:
             logger.debug("No relevant stack frames found.")
             return None
         return redact_pii(
-            {"traceback": "Traceback (most recent call last):\n" + "\n".join(reversed(stack_lines))}
+            {
+                "traceback": "Traceback (most recent call last):\n"
+                + "\n".join(reversed(stack_lines))
+            }
         ).get("traceback")
 
     def _generate_bug_signature(
@@ -553,14 +574,16 @@ class BugManager:
 
     async def _dispatch_notifications(self, error_details: Dict[str, Any]) -> None:
         severity_value = error_details.get("severity", Severity.MEDIUM.value).lower()
-        message_prefix = f"[{error_details['timestamp']}] ARBITER BUG ({severity_value.upper()}): "
-        message_body = (
-            f"{error_details['message']}\nLocation: {error_details.get('location', 'N/A')}\n"
+        message_prefix = (
+            f"[{error_details['timestamp']}] ARBITER BUG ({severity_value.upper()}): "
         )
+        message_body = f"{error_details['message']}\nLocation: {error_details.get('location', 'N/A')}\n"
         if error_details.get("exception_type"):
             message_body += f"Type: {error_details['exception_type']}\n"
         if error_details.get("custom_details"):
-            message_body += f"Details: {json.dumps(error_details['custom_details'], indent=2)}\n"
+            message_body += (
+                f"Details: {json.dumps(error_details['custom_details'], indent=2)}\n"
+            )
         if error_details.get("stack_trace"):
             message_body += f"Stack Trace:\n```\n{error_details['stack_trace']}\n```"
 
@@ -577,7 +600,9 @@ class BugManager:
             BUG_NOTIFICATION_DISPATCH.labels(channel="slack").inc()
 
         if "email" in self.settings.ENABLED_NOTIFICATION_CHANNELS:
-            email_subject = f"ARBITER BUG {severity_value.upper()}: {error_details['message'][:70]}"
+            email_subject = (
+                f"ARBITER BUG {severity_value.upper()}: {error_details['message'][:70]}"
+            )
             email_body = message_prefix + redacted_message_body
             notification_tasks.append(
                 self.notification_service._notify_email_with_decorators(
@@ -589,10 +614,14 @@ class BugManager:
             )
             BUG_NOTIFICATION_DISPATCH.labels(channel="email").inc()
 
-        if "pagerduty" in self.settings.ENABLED_NOTIFICATION_CHANNELS and severity_value in [
-            Severity.CRITICAL.value,
-            Severity.HIGH.value,
-        ]:
+        if (
+            "pagerduty" in self.settings.ENABLED_NOTIFICATION_CHANNELS
+            and severity_value
+            in [
+                Severity.CRITICAL.value,
+                Severity.HIGH.value,
+            ]
+        ):
             pd_event_type = "trigger"
             pd_description = f"Arbiter Bug: {error_details['message'][:100]}"
             pd_details = {
@@ -647,12 +676,16 @@ class BugManagerArena(BugManager):
             asyncio.create_task(super().report(error, **kwargs))
             logger.debug("Bug report scheduled as an asyncio task.")
         except RuntimeError:
-            logger.warning("No running asyncio loop found. Running bug report synchronously.")
+            logger.warning(
+                "No running asyncio loop found. Running bug report synchronously."
+            )
             try:
                 asyncio.run(super().report(error, **kwargs))
                 logger.debug("Bug report completed synchronously.")
             except Exception as e:
-                logger.error(f"Synchronous BugManager.report failed: {e}", exc_info=True)
+                logger.error(
+                    f"Synchronous BugManager.report failed: {e}", exc_info=True
+                )
                 BUG_REPORT_FAILED.inc()
 
 

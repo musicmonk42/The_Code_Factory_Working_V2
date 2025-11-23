@@ -12,11 +12,11 @@ Key properties:
 
 import asyncio
 import json
+import sys
 import time
 import uuid
-import sys
-from typing import Any, Dict, Optional, Tuple, Union
 from datetime import datetime
+from typing import Any, Dict, Optional, Tuple, Union
 
 import aiohttp
 
@@ -29,34 +29,34 @@ except ImportError:
 
 from pydantic import (
     BaseModel,
-    HttpUrl,
     Field,
+    HttpUrl,
     ValidationError,
     field_validator,
     model_validator,
 )
 
-
 from .dlt_base import (
-    BaseDLTClient,
-    BaseOffChainClient,
-    DLTClientValidationError,
-    DLTClientConnectivityError,
-    DLTClientAuthError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientTimeoutError,
-    DLTClientCircuitBreakerError,
-    DLTClientError,
-    async_retry,
-    TRACER,
-    Status,
-    StatusCode,
-    SECRETS_MANAGER,
     AUDIT,
     PRODUCTION_MODE,
+    SECRETS_MANAGER,
+    TRACER,
+    BaseDLTClient,
+    BaseOffChainClient,
+    DLTClientAuthError,
+    DLTClientCircuitBreakerError,
+    DLTClientConnectivityError,
+    DLTClientError,
+    DLTClientQueryError,
+    DLTClientTimeoutError,
+    DLTClientTransactionError,
+    DLTClientValidationError,
+    Status,
+    StatusCode,
+    _base_logger,
+    async_retry,
+    scrub_secrets,
 )
-from .dlt_base import _base_logger, scrub_secrets
 
 
 # ---------------------------
@@ -101,9 +101,9 @@ class CordaClientWrapper(BaseDLTClient):
             corda_cfg["user"] = corda_cfg.get("user") or SECRETS_MANAGER.get_secret(
                 "CORDA_USER", required=True
             )
-            corda_cfg["password"] = corda_cfg.get("password") or SECRETS_MANAGER.get_secret(
-                "CORDA_PASSWORD", required=True
-            )
+            corda_cfg["password"] = corda_cfg.get(
+                "password"
+            ) or SECRETS_MANAGER.get_secret("CORDA_PASSWORD", required=True)
 
             validated_corda = CordaConfig(**corda_cfg).model_dump()
 
@@ -114,12 +114,18 @@ class CordaClientWrapper(BaseDLTClient):
                 user_lower = (validated_corda.get("user") or "").strip().lower()
                 password_lower = (validated_corda.get("password") or "").strip().lower()
                 if user_lower in forbidden:
-                    raise ValueError("Corda user appears unset or dummy in production mode")
+                    raise ValueError(
+                        "Corda user appears unset or dummy in production mode"
+                    )
                 if password_lower in forbidden:
-                    raise ValueError("Corda password appears unset or dummy in production mode")
+                    raise ValueError(
+                        "Corda password appears unset or dummy in production mode"
+                    )
 
         except ValidationError as e:
-            raise DLTClientValidationError(f"Invalid Corda client configuration: {e}", "Corda")
+            raise DLTClientValidationError(
+                f"Invalid Corda client configuration: {e}", "Corda"
+            )
         except Exception as e:
             raise DLTClientValidationError(
                 f"Failed to load Corda client secrets or configuration: {e}",
@@ -136,7 +142,9 @@ class CordaClientWrapper(BaseDLTClient):
         )
         base_cfg = {k: config[k] for k in base_cfg_keys if k in config}
         # Fallback: ensure default_timeout_seconds is present from client config if not provided at base level
-        base_cfg.setdefault("default_timeout_seconds", validated_corda["timeout_seconds"])
+        base_cfg.setdefault(
+            "default_timeout_seconds", validated_corda["timeout_seconds"]
+        )
 
         super().__init__(base_cfg, off_chain_client)
 
@@ -173,7 +181,9 @@ class CordaClientWrapper(BaseDLTClient):
 
     # ------------- internal helpers -------------
 
-    def _format_log(self, level: str, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    def _format_log(
+        self, level: str, message: str, extra: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         Formats logs as JSON or text based on configuration.
         Also emits critical events to the AUDIT trail.
@@ -224,7 +234,9 @@ class CordaClientWrapper(BaseDLTClient):
         async with self._session_lock:
             if self._session is None or self._session.closed:
                 self._session = aiohttp.ClientSession(
-                    timeout=aiohttp.ClientTimeout(total=self.client_config["timeout_seconds"]),
+                    timeout=aiohttp.ClientTimeout(
+                        total=self.client_config["timeout_seconds"]
+                    ),
                     auth=aiohttp.BasicAuth(self.user, self.password),
                     connector=aiohttp.TCPConnector(limit=self.max_connections),
                 )
@@ -242,7 +254,9 @@ class CordaClientWrapper(BaseDLTClient):
 
     # ------------- public API -------------
 
-    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Performs a health check by accessing a Corda endpoint.
         Returns status, message, and details.
@@ -296,7 +310,9 @@ class CordaClientWrapper(BaseDLTClient):
                 }
 
             except aiohttp.ClientResponseError as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"HTTP Error: {e.status}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"HTTP Error: {e.status}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -341,7 +357,9 @@ class CordaClientWrapper(BaseDLTClient):
                 # Already logged/escalated by CB/exception base
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Unexpected error: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Unexpected error: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -428,7 +446,9 @@ class CordaClientWrapper(BaseDLTClient):
 
                     if resp.status >= 400:
                         msg = f"Corda Flow failed with HTTP status {resp.status}: {response_json.get('message', 'Unknown error')}"
-                        self._format_log("error", msg, {"correlation_id": correlation_id})
+                        self._format_log(
+                            "error", msg, {"correlation_id": correlation_id}
+                        )
                         raise DLTClientTransactionError(
                             msg,
                             self.client_type,
@@ -445,7 +465,9 @@ class CordaClientWrapper(BaseDLTClient):
                 tx_id = response_json.get("id", str(uuid.uuid4()))
                 return_value = response_json.get("returnValue")
                 if return_value and "result" in return_value:
-                    version = int(return_value["result"].get("version", int(time.time() * 1000)))
+                    version = int(
+                        return_value["result"].get("version", int(time.time() * 1000))
+                    )
                 else:
                     version = int(time.time() * 1000)
 
@@ -466,7 +488,9 @@ class CordaClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Corda write failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Corda write failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -538,7 +562,9 @@ class CordaClientWrapper(BaseDLTClient):
 
                     if resp.status >= 400:
                         msg = f"Corda Query Flow failed with HTTP {resp.status}: {response_json.get('message', 'Unknown error')}"
-                        self._format_log("error", msg, {"correlation_id": correlation_id})
+                        self._format_log(
+                            "error", msg, {"correlation_id": correlation_id}
+                        )
                         raise DLTClientQueryError(
                             msg,
                             self.client_type,
@@ -602,7 +628,9 @@ class CordaClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Corda read failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Corda read failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -674,7 +702,9 @@ class CordaClientWrapper(BaseDLTClient):
 
                     if resp.status >= 400:
                         msg = f"Corda Rollback Flow failed with HTTP {resp.status}: {response_json.get('message', 'Unknown error')}"
-                        self._format_log("error", msg, {"correlation_id": correlation_id})
+                        self._format_log(
+                            "error", msg, {"correlation_id": correlation_id}
+                        )
                         raise DLTClientTransactionError(
                             msg,
                             self.client_type,
@@ -688,10 +718,14 @@ class CordaClientWrapper(BaseDLTClient):
                         pass
 
                 tx_id = response_json.get("id", str(uuid.uuid4()))
-                rolled_back_entry = response_json.get("returnValue", {}).get("result", {})
+                rolled_back_entry = response_json.get("returnValue", {}).get(
+                    "result", {}
+                )
 
                 span.set_attribute("tx_id", tx_id)
-                span.set_attribute("new_version", rolled_back_entry.get("version", "N/A"))
+                span.set_attribute(
+                    "new_version", rolled_back_entry.get("version", "N/A")
+                )
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
                     "info",
@@ -711,7 +745,9 @@ class CordaClientWrapper(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Corda rollback failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Corda rollback failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -742,7 +778,9 @@ class CordaClientWrapper(BaseDLTClient):
                     if ASYNC_TIMEOUT_AVAILABLE:
                         try:
                             # async-timeout 4.x supports context manager
-                            async with async_timeout.timeout(self.client_config["timeout_seconds"]):
+                            async with async_timeout.timeout(
+                                self.client_config["timeout_seconds"]
+                            ):
                                 await self._session.close()
                         except TypeError:
                             # If version mismatch, fall back to a simple wait
@@ -843,4 +881,6 @@ try:
     if PRODUCTION_MODE:
         _register_with_plugin_manager()
 except ImportError:
-    _base_logger.debug("Plugin manager not available, skipping auto-registration of Corda client.")
+    _base_logger.debug(
+        "Plugin manager not available, skipping auto-registration of Corda client."
+    )

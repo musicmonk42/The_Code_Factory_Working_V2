@@ -1,16 +1,16 @@
 # test_context.py
 
-import unittest
 import asyncio
 import concurrent.futures
-from unittest.mock import Mock, AsyncMock
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from message_bus.context import ExecutionContext, ContextPropagationMiddleware
+from message_bus.context import ContextPropagationMiddleware, ExecutionContext
 from message_bus.message_types import Message
 
 
@@ -42,7 +42,9 @@ class TestExecutionContext(unittest.TestCase):
 
     def test_set_multiple_values(self):
         """Test setting multiple context values."""
-        ExecutionContext.set(user_id="test_user", request_id="req_123", trace_id="trace_456")
+        ExecutionContext.set(
+            user_id="test_user", request_id="req_123", trace_id="trace_456"
+        )
         context = ExecutionContext.get_current()
 
         self.assertEqual(context["user_id"], "test_user")
@@ -188,7 +190,9 @@ class TestContextPropagationMiddleware(unittest.TestCase):
 
         # Create message with existing context
         existing_context = {"existing_key": "existing_value"}
-        message = Message(topic="test.topic", payload={"data": "test"}, context=existing_context)
+        message = Message(
+            topic="test.topic", payload={"data": "test"}, context=existing_context
+        )
 
         # Inject context
         updated_message = self.middleware._inject_context(message)
@@ -272,7 +276,9 @@ class TestContextPropagationMiddleware(unittest.TestCase):
         )
 
         # Make callback raise exception
-        self.mock_message_bus._safe_callback_internal.side_effect = Exception("Callback error")
+        self.mock_message_bus._safe_callback_internal.side_effect = Exception(
+            "Callback error"
+        )
 
         callback = AsyncMock()
 
@@ -318,9 +324,13 @@ class TestContextPropagationMiddleware(unittest.TestCase):
     async def test_context_isolation_between_callbacks(self):
         """Test that context changes in one callback don't affect others."""
         # Create two messages with different contexts
-        message1 = Message(topic="topic1", payload={"data": "test1"}, context={"msg_id": "msg1"})
+        message1 = Message(
+            topic="topic1", payload={"data": "test1"}, context={"msg_id": "msg1"}
+        )
 
-        message2 = Message(topic="topic2", payload={"data": "test2"}, context={"msg_id": "msg2"})
+        message2 = Message(
+            topic="topic2", payload={"data": "test2"}, context={"msg_id": "msg2"}
+        )
 
         callback1 = AsyncMock()
         callback2 = AsyncMock()

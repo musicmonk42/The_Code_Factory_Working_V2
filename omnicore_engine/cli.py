@@ -29,35 +29,36 @@ Commands:
 """
 
 import argparse
-import json
 import asyncio
-import sys
-import os
-import time
-import yaml
-import uvicorn
-from typing import Dict, List, Any, Optional, Coroutine, Callable, Tuple
-from pathlib import Path
 import hashlib
-import redis.asyncio as redis
-from datetime import datetime
-from circuitbreaker import circuit
-from omnicore_engine.retry_compat import retry
-import uuid
+import json
+import os
 import re
 import shlex
+import sys
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
+
+import redis.asyncio as redis
+import uvicorn
+import yaml
+from circuitbreaker import circuit
 
 # OmniCore imports
-from omnicore_engine.core import (
+from omnicore_engine.core import (  # Import logger, safe_serialize, and settings from core
     logger,
     safe_serialize,
     settings,
-)  # Import logger, safe_serialize, and settings from core
+)
+from omnicore_engine.retry_compat import retry
 
 try:
     from omnicore_engine.core import (
-        omnicore_engine as OmniCoreOmega_instance,
-    )  # Import the singleton instance
+        omnicore_engine as OmniCoreOmega_instance,  # Import the singleton instance
+    )
 except ImportError:
     OmniCoreOmega_instance = None
 
@@ -73,10 +74,12 @@ from omnicore_engine.message_bus.message_types import Message
 
 # Import the message_bus_cli from message_bus.py
 try:
-    from omnicore_engine.message_bus import message_bus_cli, RICH_CLI_AVAILABLE
+    from omnicore_engine.message_bus import RICH_CLI_AVAILABLE, message_bus_cli
 
     if not RICH_CLI_AVAILABLE:
-        logger.warning("Rich CLI tools not available. Message bus CLI commands will be disabled.")
+        logger.warning(
+            "Rich CLI tools not available. Message bus CLI commands will be disabled."
+        )
 except ImportError:
     message_bus_cli = None
     RICH_CLI_AVAILABLE = False
@@ -169,13 +172,17 @@ try:
 
     FeedbackType = None  # Define if needed
 except ImportError:
-    logger.warning("FeedbackManager module not found. Feedback features will be unavailable.")
+    logger.warning(
+        "FeedbackManager module not found. Feedback features will be unavailable."
+    )
 
     class FeedbackManager:
         def __init__(self, *args, **kwargs):
             pass
 
-        async def record_feedback(self, user_id: str, feedback_type: Any, details: Dict[str, Any]):
+        async def record_feedback(
+            self, user_id: str, feedback_type: Any, details: Dict[str, Any]
+        ):
             pass
 
         async def log_error(self, *args, **kwargs):
@@ -206,7 +213,9 @@ except ImportError:
 
 # Global instances for CLI context
 # omnicore_engine_global_instance: Optional[OmniCoreOmega] = None # Removed, using imported singleton
-system_audit_merkle_tree_global: Optional[Any] = None  # This will be set from core.py's instance
+system_audit_merkle_tree_global: Optional[Any] = (
+    None  # This will be set from core.py's instance
+)
 
 
 def sanitize_env_vars():
@@ -399,7 +408,9 @@ def main():
     snapshot_world_parser.add_argument(
         "--user_id", type=str, required=True, help="User ID for policy checks"
     )
-    snapshot_world_parser.add_argument("--output", type=str, help="Path to save snapshot ID")
+    snapshot_world_parser.add_argument(
+        "--output", type=str, help="Path to save snapshot ID"
+    )
     snapshot_world_parser.add_argument(
         "--output-format",
         type=str,
@@ -412,7 +423,9 @@ def main():
     restore_world_parser = subparsers.add_parser(
         "restore-world", aliases=["rw"], help="Restore world state from a snapshot"
     )
-    restore_world_parser.add_argument("--snapshot_id", type=str, required=True, help="Snapshot ID")
+    restore_world_parser.add_argument(
+        "--snapshot_id", type=str, required=True, help="Snapshot ID"
+    )
     restore_world_parser.add_argument(
         "--user_id", type=str, required=True, help="User ID for policy checks"
     )
@@ -448,7 +461,9 @@ def main():
     audit_snapshot_parser.add_argument(
         "--user_id", type=str, required=True, help="User ID for policy checks"
     )
-    audit_snapshot_parser.add_argument("--output", type=str, help="Path to save snapshot ID")
+    audit_snapshot_parser.add_argument(
+        "--output", type=str, help="Path to save snapshot ID"
+    )
     audit_snapshot_parser.add_argument(
         "--output-format",
         type=str,
@@ -463,7 +478,9 @@ def main():
         aliases=["ar"],
         help="Replay audit events for troubleshooting or compliance",
     )
-    audit_replay_parser.add_argument("--sim_id", type=str, required=True, help="Simulation ID")
+    audit_replay_parser.add_argument(
+        "--sim_id", type=str, required=True, help="Simulation ID"
+    )
     audit_replay_parser.add_argument(
         "--start_time", type=float, required=True, help="Start timestamp (Unix epoch)"
     )
@@ -539,8 +556,12 @@ def main():
     plugin_rate_parser = subparsers.add_parser(
         "plugin-rate", aliases=["pr"], help="Rate an installed plugin"
     )
-    plugin_rate_parser.add_argument("--kind", type=str, required=True, help="Kind of the plugin")
-    plugin_rate_parser.add_argument("--name", type=str, required=True, help="Name of the plugin")
+    plugin_rate_parser.add_argument(
+        "--kind", type=str, required=True, help="Kind of the plugin"
+    )
+    plugin_rate_parser.add_argument(
+        "--name", type=str, required=True, help="Name of the plugin"
+    )
     plugin_rate_parser.add_argument(
         "--version", type=str, required=True, help="Version of the plugin"
     )
@@ -562,7 +583,9 @@ def main():
     metrics_status_parser = subparsers.add_parser(
         "metrics-status", aliases=["ms"], help="Display current Prometheus metrics"
     )
-    metrics_status_parser.add_argument("--output", type=str, help="Path to save metrics")
+    metrics_status_parser.add_argument(
+        "--output", type=str, help="Path to save metrics"
+    )
 
     # Feature-flag-set command
     feature_flag_set_parser = subparsers.add_parser(
@@ -622,7 +645,9 @@ def main():
         "fix-imports",
         help="Use the AI-powered fixer to suggest refactoring for imports in a file.",
     )
-    fixer_parser.add_argument("target_path", type=str, help="Path to the file to be fixed.")
+    fixer_parser.add_argument(
+        "target_path", type=str, help="Path to the file to be fixed."
+    )
 
     # --- Integrate message_bus_cli (Click-based) ---
     if RICH_CLI_AVAILABLE and message_bus_cli:
@@ -667,7 +692,9 @@ def main():
 
         system_audit_merkle_tree_cli = MockMerkleTreeCLI()
 
-    audit_cli_instance = ExplainAudit(system_audit_merkle_tree=system_audit_merkle_tree_cli)
+    audit_cli_instance = ExplainAudit(
+        system_audit_merkle_tree=system_audit_merkle_tree_cli
+    )
 
     async def load_file(file_path: str) -> Dict[str, Any]:
         """Load and validate JSON/YAML file with sanitization."""
@@ -728,7 +755,9 @@ def main():
         elif output_format == "yaml":
             output_string = yaml.safe_dump(serialized_data, indent=2)
         else:  # 'pretty'
-            output_string = json.dumps(serialized_data, indent=2)  # Default to pretty JSON
+            output_string = json.dumps(
+                serialized_data, indent=2
+            )  # Default to pretty JSON
 
         if output_path:
             try:
@@ -779,7 +808,9 @@ def main():
                 sim_id=str(uuid.uuid4()),
                 agent_id=user_id,
             )
-            async with redis.from_url(settings.REDIS_URL, decode_responses=True) as redis_client:
+            async with redis.from_url(
+                settings.REDIS_URL, decode_responses=True
+            ) as redis_client:
                 await redis_client.publish(
                     "cli_events",
                     json.dumps(
@@ -848,7 +879,9 @@ def main():
         data = await anonymize_data(data, current_args.user_id)
         engine_instance = await _initialize_omnicore_engine()
 
-        financial_plugin = engine_instance.plugin_registry.get("CORE_SERVICE", "financial_engine")
+        financial_plugin = engine_instance.plugin_registry.get(
+            "CORE_SERVICE", "financial_engine"
+        )
 
         functions = [
             lambda x: x * 2,
@@ -993,7 +1026,9 @@ def main():
         engine_instance = await _initialize_omnicore_engine()
         db = engine_instance.database
         await db.restore_world_state(current_args.snapshot_id, current_args.user_id)
-        return {"message": f"World state restored from snapshot {current_args.snapshot_id}"}
+        return {
+            "message": f"World state restored from snapshot {current_args.snapshot_id}"
+        }
 
     async def _run_audit_query_cmd(current_args: argparse.Namespace):
         filters = await load_file(current_args.filters) if current_args.filters else {}
@@ -1037,7 +1072,9 @@ def main():
         )
         await engine.components["message_bus"].publish(message.topic, message.payload)
 
-        result_message = f"Started Code Factory workflow with trace_id: {message.trace_id}"
+        result_message = (
+            f"Started Code Factory workflow with trace_id: {message.trace_id}"
+        )
         logger.info(result_message)
         return {"message": result_message, "trace_id": str(message.trace_id)}
 
@@ -1049,7 +1086,9 @@ def main():
         if hasattr(engine, "array_backend") and hasattr(engine.array_backend, "mode"):
             array_backend_mode = engine.array_backend.mode
         else:
-            logger.warning("Could not determine array backend mode from engine instance.")
+            logger.warning(
+                "Could not determine array backend mode from engine instance."
+            )
 
         info = {
             "system_version": (
@@ -1125,7 +1164,9 @@ def main():
             version_manager=plugin_version_manager,
             audit_client=engine_instance.audit,
         )
-        await marketplace.install_plugin(current_args.kind, current_args.name, current_args.version)
+        await marketplace.install_plugin(
+            current_args.kind, current_args.name, current_args.version
+        )
         return {
             "message": f"Plugin {current_args.name} (v{current_args.version}, kind: {current_args.kind}) installed successfully."
         }
@@ -1184,7 +1225,9 @@ def main():
         await _initialize_omnicore_engine()
         value = True if current_args.value == "true" else False
         setattr(settings, current_args.flag_name.upper(), value)
-        logger.info(f"Feature flag '{current_args.flag_name}' set to {value} in settings.")
+        logger.info(
+            f"Feature flag '{current_args.flag_name}' set to {value} in settings."
+        )
         return {"message": f"Feature flag '{current_args.flag_name}' set to {value}."}
 
     async def _run_generate_test_cases_cmd(current_args: argparse.Namespace):
@@ -1206,7 +1249,9 @@ def main():
 
     async def _run_docs_autogen_cmd(current_args: argparse.Namespace):
         docs_content = "# OmniCore Omega CLI Commands\n\n"
-        docs_content += "This document is auto-generated from the CLI's argparse definitions.\n\n"
+        docs_content += (
+            "This document is auto-generated from the CLI's argparse definitions.\n\n"
+        )
 
         for action in parser._actions:
             if isinstance(action, argparse._SubParsersAction):
@@ -1220,7 +1265,10 @@ def main():
                     docs_content += "**Arguments**:\n\n"
 
                     for sub_action in subparser_obj._actions:
-                        if sub_action.dest != argparse.SUPPRESS and sub_action.dest != "help":
+                        if (
+                            sub_action.dest != argparse.SUPPRESS
+                            and sub_action.dest != "help"
+                        ):
                             arg_name = (
                                 sub_action.option_strings[0]
                                 if sub_action.option_strings
@@ -1318,7 +1366,9 @@ def main():
         print(suggestion)
         return {"suggestion": suggestion}
 
-    command_handlers: Dict[str, Tuple[Callable[[argparse.Namespace], Coroutine], bool]] = {
+    command_handlers: Dict[
+        str, Tuple[Callable[[argparse.Namespace], Coroutine], bool]
+    ] = {
         "simulate": (_run_simulate_cmd, True),
         "sim": (_run_simulate_cmd, True),
         "list-plugins": (_run_list_plugins_cmd, True),
@@ -1385,7 +1435,9 @@ def main():
 
             while True:
                 try:
-                    user_input = await asyncio.to_thread(input, repl_prompt_prefix).strip()
+                    user_input = await asyncio.to_thread(
+                        input, repl_prompt_prefix
+                    ).strip()
                     if not user_input:
                         continue
                     if user_input.lower() == "exit":
@@ -1401,12 +1453,18 @@ def main():
                         continue
 
                     # Special handling for message-bus command in REPL
-                    if RICH_CLI_AVAILABLE and message_bus_cli and shlexed_input[0] == "message-bus":
+                    if (
+                        RICH_CLI_AVAILABLE
+                        and message_bus_cli
+                        and shlexed_input[0] == "message-bus"
+                    ):
                         try:
                             # Re-run the click command with the provided arguments
                             original_sys_argv = sys.argv
                             sys.argv = [original_sys_argv[0], *shlexed_input]
-                            message_bus_cli.main(args=shlexed_input[1:], standalone_mode=False)
+                            message_bus_cli.main(
+                                args=shlexed_input[1:], standalone_mode=False
+                            )
                         except SystemExit as e:
                             if e.code != 0:
                                 logger.error(f"Error in message-bus REPL command: {e}")
@@ -1428,7 +1486,9 @@ def main():
                     if command_tuple:
                         handler_func, has_structured_output = command_tuple
                         try:
-                            result = await run_with_policy_check(handler_func, repl_args)
+                            result = await run_with_policy_check(
+                                handler_func, repl_args
+                            )
 
                             if result is not None:
                                 print_output(

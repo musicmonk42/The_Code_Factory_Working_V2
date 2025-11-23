@@ -1,6 +1,7 @@
 # tests/test_agents.py
 import json
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
 import pytest
 
 # Fix the import to be an absolute path
@@ -25,7 +26,9 @@ async def test_planner_agent_valid_plan():
     """Planner agent should parse valid JSON from LLM and set 'plan' in state."""
     mock_llm = AsyncMock()
     # The mock should return a MagicMock with a 'content' attribute, matching the agents.py implementation.
-    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=json.dumps({"steps": ["a", "b"]})))
+    mock_llm.ainvoke = AsyncMock(
+        return_value=MagicMock(content=json.dumps({"steps": ["a", "b"]}))
+    )
     state = {"spec": "Do X", "spec_format": "gherkin"}
 
     # The tests now pass the mock LLM directly to the agent.
@@ -98,8 +101,12 @@ async def test_security_agent_skips_if_bandit_unavailable():
 @pytest.mark.asyncio
 async def test_security_agent_runs_bandit(mock_subprocess_exec_with_json_output):
     """Security agent should include report from mocked bandit subprocess."""
-    with patch("test_generation.gen_agent.agents.BANDIT_AVAILABLE", True), patch(
-        "test_generation.gen_agent.agents.shutil.which", return_value="/usr/bin/bandit"
+    with (
+        patch("test_generation.gen_agent.agents.BANDIT_AVAILABLE", True),
+        patch(
+            "test_generation.gen_agent.agents.shutil.which",
+            return_value="/usr/bin/bandit",
+        ),
     ):
 
         state = {"code_under_test": "pass", "language": "python"}
@@ -138,7 +145,9 @@ async def test_performance_agent_runs_locust():
 async def test_agents_increment_metrics():
     """All agents should increment Prometheus counters."""
     mock_llm = AsyncMock()
-    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content=json.dumps({"steps": []})))
+    mock_llm.ainvoke = AsyncMock(
+        return_value=MagicMock(content=json.dumps({"steps": []}))
+    )
 
     with patch.object(agents.agent_runs_total, "labels") as mock_counter_labels:
         # The tests now pass the mock LLM directly to the agent.
@@ -171,10 +180,13 @@ async def test_sanitization_fallback(monkeypatch):
     }
 
     # Patch the audit_logger to prevent errors
-    with patch(
-        "test_generation.gen_agent.agents.audit_logger.log_event",
-        new_callable=AsyncMock,
-    ), patch("test_generation.gen_agent.agents.logger"):
+    with (
+        patch(
+            "test_generation.gen_agent.agents.audit_logger.log_event",
+            new_callable=AsyncMock,
+        ),
+        patch("test_generation.gen_agent.agents.logger"),
+    ):
 
         # We need to test what happens when the agent calls `_sanitize_input`.
         with patch("test_generation.gen_agent.agents._sanitize_input") as mock_sanitize:

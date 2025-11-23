@@ -1,4 +1,5 @@
 import os
+
 import pytest
 
 # Force TESTING mode so critique_fixer uses safe local stubs where defined
@@ -6,12 +7,12 @@ os.environ.setdefault("TESTING", "1")
 
 from agents.critique_agent.critique_fixer import (  # type: ignore
     FixHistory,
-    get_file_id,
-    RegexStrategy,
     LLMGenerateStrategy,
+    RegexStrategy,
+    get_file_id,
     hitl_review_fixes,
-    security_check_fix,
     safety_check_fix,
+    security_check_fix,
 )
 
 
@@ -60,7 +61,9 @@ async def test_llm_generate_strategy_python_rename_variable(monkeypatch):
 
 
 def test_hitl_review_fixes_with_callback():
-    fixes = {"main.py": [{"strategy": "regex", "fix": {"pattern": "a", "replacement": "b"}}]}
+    fixes = {
+        "main.py": [{"strategy": "regex", "fix": {"pattern": "a", "replacement": "b"}}]
+    }
 
     def approve_all(f):
         return f

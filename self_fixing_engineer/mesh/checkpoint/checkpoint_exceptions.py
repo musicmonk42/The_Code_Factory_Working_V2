@@ -29,17 +29,18 @@ Setup and Configuration:
 
 __version__ = "2.1.0"
 
+import asyncio
+import hashlib
+import hmac
+
 # ---- Standard Library Imports ----
 import json
+import logging
 import os
 import time
-import asyncio
-import hmac
-import hashlib
-import logging
 from enum import Enum
 from logging.handlers import RotatingFileHandler
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 # ---- Third-Party Imports ----
 import structlog
@@ -51,7 +52,8 @@ MIN_VERSIONS = {
 }
 
 try:
-    from opentelemetry import trace, __version__ as otel_version
+    from opentelemetry import __version__ as otel_version
+    from opentelemetry import trace
 
     if otel_version < MIN_VERSIONS["opentelemetry.trace"]:
         logging.warning(
@@ -100,7 +102,6 @@ except ImportError:
 
 # ---- Local Application Imports ----
 from .checkpoint_utils import scrub_data
-
 
 # ---- Module-level Setup ----
 
@@ -280,8 +281,12 @@ class CheckpointError(Exception):
             raise ValueError(
                 "HMAC secret not provided and EXCEPTION_HMAC_SECRET env var is not set."
             )
-        context_bytes = json.dumps(self.context, sort_keys=True, default=str).encode("utf-8")
-        return hmac.new(secret.encode("utf-8"), context_bytes, hashlib.sha256).hexdigest()
+        context_bytes = json.dumps(self.context, sort_keys=True, default=str).encode(
+            "utf-8"
+        )
+        return hmac.new(
+            secret.encode("utf-8"), context_bytes, hashlib.sha256
+        ).hexdigest()
 
     @classmethod
     async def raise_with_alert(
@@ -412,7 +417,9 @@ def retry_on_exception(max_attempts: int = 3, max_delay_seconds: int = 10):
                     # Create the tenacity-wrapped function
                     @retry(
                         stop=stop_after_attempt(max_attempts),
-                        wait=wait_exponential(multiplier=1, min=2, max=max_delay_seconds),
+                        wait=wait_exponential(
+                            multiplier=1, min=2, max=max_delay_seconds
+                        ),
                         retry_error_cls=CheckpointRetryableError,
                     )
                     async def retryable_func(*inner_args, **inner_kwargs):

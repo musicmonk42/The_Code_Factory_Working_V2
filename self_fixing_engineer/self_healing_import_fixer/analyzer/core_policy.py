@@ -1,21 +1,22 @@
 # self_healing_import_fixer/analyzer/core_policy.py
 
-import os
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import os
+import random
 import re
-import hmac
-import hashlib
-import boto3
-from botocore.exceptions import ClientError
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Set, Literal
-from pydantic import BaseModel, Field, ValidationError, validator
-import asyncio
 import threading
 import time
-import random
 import warnings
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional, Set
+
+import boto3
+from botocore.exceptions import ClientError
+from pydantic import BaseModel, Field, ValidationError, validator
 
 # Make Redis optional
 try:
@@ -55,7 +56,9 @@ try:
     from .core_secrets import SECRETS_MANAGER
     from .core_utils import alert_operator, scrub_secrets
 except ImportError as e:
-    logger.critical(f"CRITICAL: Missing core dependency for core_policy: {e}. Aborting startup.")
+    logger.critical(
+        f"CRITICAL: Missing core dependency for core_policy: {e}. Aborting startup."
+    )
     try:
         from .core_utils import alert_operator
 
@@ -107,7 +110,9 @@ def _get_policy_hmac_key() -> bytes:
 
         if not key_str:
             if PRODUCTION_MODE:
-                raise AnalyzerCriticalError("Policy HMAC key not found in production mode")
+                raise AnalyzerCriticalError(
+                    "Policy HMAC key not found in production mode"
+                )
             else:
                 # Generate a random key for non-production
                 _policy_hmac_key = os.urandom(32)
@@ -165,7 +170,9 @@ def _get_redis_client():
 class PolicyRule(BaseModel):
     id: str = Field(..., description="Unique identifier for the policy rule.")
     name: str = Field(..., description="Human-readable name of the rule.")
-    description: Optional[str] = Field(None, description="Detailed description of the rule.")
+    description: Optional[str] = Field(
+        None, description="Detailed description of the rule."
+    )
     type: Literal[
         "import_restriction",
         "dependency_limit",
@@ -187,7 +194,9 @@ class PolicyRule(BaseModel):
     max_dependencies: Optional[int] = Field(
         None, ge=0, description="Maximum allowed direct dependencies for a module."
     )
-    pattern: Optional[str] = Field(None, description="Regex pattern for naming convention.")
+    pattern: Optional[str] = Field(
+        None, description="Regex pattern for naming convention."
+    )
     apply_to: Optional[Literal["modules", "functions", "classes"]] = Field(
         None, description="Apply naming convention to modules, functions, or classes."
     )
@@ -214,13 +223,20 @@ class PolicyRule(BaseModel):
 class ArchitecturalPolicy(BaseModel):
     policies: List[PolicyRule] = Field(..., description="List of policy rules.")
     version: str = Field("1.0", description="Version of the policy set.")
-    description: Optional[str] = Field(None, description="Overall description of the policy set.")
-    signature: Optional[str] = Field(None, description="HMAC signature of the policy content.")
+    description: Optional[str] = Field(
+        None, description="Overall description of the policy set."
+    )
+    signature: Optional[str] = Field(
+        None, description="HMAC signature of the policy content."
+    )
 
     @validator("policies", pre=True)
     def ensure_policy_rules(cls, v):
         if isinstance(v, list):
-            return [PolicyRule(**rule) if not isinstance(rule, PolicyRule) else rule for rule in v]
+            return [
+                PolicyRule(**rule) if not isinstance(rule, PolicyRule) else rule
+                for rule in v
+            ]
         return v
 
 
@@ -242,7 +258,9 @@ _watcher_thread: Optional[threading.Thread] = None
 _watcher_stop_event = threading.Event()
 
 
-def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> ArchitecturalPolicy:
+def _validate_and_apply(
+    policy_data_bytes: bytes, expect_hmac: bool
+) -> ArchitecturalPolicy:
     """Performs schema and HMAC validation, raising an error on failure."""
     try:
         policy_data = json.loads(policy_data_bytes.decode("utf-8"))
@@ -251,13 +269,17 @@ def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> Architec
 
     # Integrity check
     stored_signature = policy_data.pop("signature", None)
-    policy_content_str = json.dumps(policy_data, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    policy_content_str = json.dumps(
+        policy_data, sort_keys=True, ensure_ascii=False
+    ).encode("utf-8")
     calculated_signature = hmac.new(
         _get_policy_hmac_key(), policy_content_str, hashlib.sha256
     ).hexdigest()
 
     # Always enforce integrity check, regardless of PRODUCTION_MODE, if expect_hmac is True
-    if expect_hmac and (stored_signature is None or stored_signature != calculated_signature):
+    if expect_hmac and (
+        stored_signature is None or stored_signature != calculated_signature
+    ):
         reason = "no_signature" if stored_signature is None else "signature_mismatch"
         from .core_audit import audit_logger
 
@@ -267,10 +289,14 @@ def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> Architec
             expected_signature=stored_signature,
             calculated_signature=calculated_signature,
         )
-        raise AnalyzerCriticalError("Policy integrity check failed (signature mismatch).")
+        raise AnalyzerCriticalError(
+            "Policy integrity check failed (signature mismatch)."
+        )
 
     if policy_data.get("version") != "1.0":
-        raise AnalyzerCriticalError(f"Unsupported policy version: {policy_data.get('version')}.")
+        raise AnalyzerCriticalError(
+            f"Unsupported policy version: {policy_data.get('version')}."
+        )
 
     policy_data["signature"] = stored_signature
     try:
@@ -292,9 +318,15 @@ def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> Architec
                 return pat if pat.startswith("^") else f"^{pat}"
 
             compiled_patterns[rule.id] = {
-                "target_modules": [re.compile(anchor(p)) for p in (rule.target_modules or [])],
-                "allow_imports": [re.compile(anchor(p)) for p in (rule.allow_imports or [])],
-                "deny_imports": [re.compile(anchor(p)) for p in (rule.deny_imports or [])],
+                "target_modules": [
+                    re.compile(anchor(p)) for p in (rule.target_modules or [])
+                ],
+                "allow_imports": [
+                    re.compile(anchor(p)) for p in (rule.allow_imports or [])
+                ],
+                "deny_imports": [
+                    re.compile(anchor(p)) for p in (rule.deny_imports or [])
+                ],
                 "pattern": re.compile(rule.pattern) if rule.pattern else None,
             }
         except re.error as e:
@@ -308,7 +340,9 @@ def _validate_and_apply(policy_data_bytes: bytes, expect_hmac: bool) -> Architec
     from .core_audit import audit_logger
 
     audit_logger.log_event("policy_integrity_verified", signature=stored_signature)
-    logger.info(f"Policy file integrity verified successfully (version: {policies.version}).")
+    logger.info(
+        f"Policy file integrity verified successfully (version: {policies.version})."
+    )
     return policies
 
 
@@ -318,7 +352,9 @@ def _watch_loop(policy_file_path: str, poll_seconds: float = 10.0):
     while not _watcher_stop_event.is_set():
         try:
             if not os.path.exists(policy_file_path):
-                warnings.warn(f"Policy file not found during hot-reload watch: {policy_file_path}")
+                warnings.warn(
+                    f"Policy file not found during hot-reload watch: {policy_file_path}"
+                )
                 time.sleep(backoff + random.uniform(0.0, 0.5))
                 continue
 
@@ -337,7 +373,9 @@ def _watch_loop(policy_file_path: str, poll_seconds: float = 10.0):
                 last_mtime = mtime
                 backoff = poll_seconds
         except Exception as e:
-            logger.error("Policy reload failed; keeping last-good policy.", exc_info=True)
+            logger.error(
+                "Policy reload failed; keeping last-good policy.", exc_info=True
+            )
             alert_operator(
                 f"ERROR: Policy hot-reload failed: {e}. Keeping last valid version.",
                 level="ERROR",
@@ -381,7 +419,9 @@ class PolicyManager:
             f"policy:{hashlib.sha256(policy_file_path.encode('utf-8')).hexdigest()}"
         )
         self._load_policies_sync()
-        logger.info(f"PolicyManager initialized with policies from: {self.policy_file_path}")
+        logger.info(
+            f"PolicyManager initialized with policies from: {self.policy_file_path}"
+        )
         audit_logger.log_event(
             "policy_manager_init",
             policy_file=self.policy_file_path,
@@ -414,7 +454,9 @@ class PolicyManager:
                         "policy_load_cache_hit", policy_file=self.policy_file_path
                     )
             except Exception as e:
-                logger.warning(f"Failed to load policies from cache: {e}. Falling back to source.")
+                logger.warning(
+                    f"Failed to load policies from cache: {e}. Falling back to source."
+                )
 
         if policy_data_bytes is None:
             try:
@@ -428,9 +470,13 @@ class PolicyManager:
                 else:
                     with open(self.policy_file_path, "rb") as f:
                         policy_data_bytes = f.read()
-                    logger.info(f"Policies loaded from local file '{self.policy_file_path}'.")
+                    logger.info(
+                        f"Policies loaded from local file '{self.policy_file_path}'."
+                    )
             except FileNotFoundError:
-                raise AnalyzerCriticalError(f"Policy file not found at {self.policy_file_path}.")
+                raise AnalyzerCriticalError(
+                    f"Policy file not found at {self.policy_file_path}."
+                )
             except ClientError as e:
                 raise AnalyzerCriticalError(
                     f"S3 ClientError for policy file '{self.policy_file_path}': {e.response['Error']['Message']}."
@@ -443,7 +489,9 @@ class PolicyManager:
         if redis_client and policy_data_bytes is not None:
             try:
                 await redis_client.setex(cache_key, 86400, policy_data_bytes)
-                audit_logger.log_event("policy_cache_set", policy_file=self.policy_file_path)
+                audit_logger.log_event(
+                    "policy_cache_set", policy_file=self.policy_file_path
+                )
             except Exception as e:
                 logger.warning(f"Failed to cache validated policies: {e}.")
 
@@ -458,7 +506,9 @@ class PolicyManager:
     ) -> List[PolicyViolation]:
         with _policy_lock:
             if not _last_good_policy:
-                raise AnalyzerCriticalError("Policy enforcement attempted but no policies loaded.")
+                raise AnalyzerCriticalError(
+                    "Policy enforcement attempted but no policies loaded."
+                )
 
             violations: List[PolicyViolation] = []
             logger.info("Starting architectural policy enforcement.")
@@ -470,17 +520,29 @@ class PolicyManager:
 
             for rule in _last_good_policy.policies:
                 try:
-                    logger.debug(f"Enforcing rule: {rule.name} (ID: {rule.id}, Type: {rule.type})")
+                    logger.debug(
+                        f"Enforcing rule: {rule.name} (ID: {rule.id}, Type: {rule.type})"
+                    )
                     if rule.type == "import_restriction":
-                        violations.extend(self._enforce_import_restriction(rule, code_graph))
+                        violations.extend(
+                            self._enforce_import_restriction(rule, code_graph)
+                        )
                     elif rule.type == "dependency_limit":
-                        violations.extend(self._enforce_dependency_limit(rule, code_graph))
+                        violations.extend(
+                            self._enforce_dependency_limit(rule, code_graph)
+                        )
                     elif rule.type == "cycle_prevention":
-                        violations.extend(self._enforce_cycle_prevention(rule, detected_cycles))
+                        violations.extend(
+                            self._enforce_cycle_prevention(rule, detected_cycles)
+                        )
                     elif rule.type == "naming_convention":
-                        violations.extend(self._enforce_naming_convention(rule, module_paths))
+                        violations.extend(
+                            self._enforce_naming_convention(rule, module_paths)
+                        )
                 except Exception as e:
-                    logger.error(f"Failed to enforce rule {rule.id}: {e}", exc_info=True)
+                    logger.error(
+                        f"Failed to enforce rule {rule.id}: {e}", exc_info=True
+                    )
                     violations.append(
                         PolicyViolation(
                             rule_id=rule.id,
@@ -500,7 +562,9 @@ class PolicyManager:
                     )
 
             if violations:
-                logger.warning(f"Policy enforcement complete. Found {len(violations)} violations.")
+                logger.warning(
+                    f"Policy enforcement complete. Found {len(violations)} violations."
+                )
                 for violation in violations:
                     violation_extra = {
                         k: v
@@ -535,7 +599,9 @@ class PolicyManager:
                         )
             else:
                 logger.info("Policy enforcement complete. No violations detected.")
-                audit_logger.log_event("policy_enforcement_complete", status="no_violations")
+                audit_logger.log_event(
+                    "policy_enforcement_complete", status="no_violations"
+                )
 
             return violations
 
@@ -556,11 +622,15 @@ class PolicyManager:
             target_modules_regex = [re.compile("^.*")]
 
         for importer_module, imported_modules in code_graph.items():
-            if not any(pattern.match(importer_module) for pattern in target_modules_regex):
+            if not any(
+                pattern.match(importer_module) for pattern in target_modules_regex
+            ):
                 continue
 
             for imported_module in imported_modules:
-                is_denied = any(pattern.match(imported_module) for pattern in deny_imports_regex)
+                is_denied = any(
+                    pattern.match(imported_module) for pattern in deny_imports_regex
+                )
                 is_allowed = allow_imports_regex and any(
                     pattern.match(imported_module) for pattern in allow_imports_regex
                 )

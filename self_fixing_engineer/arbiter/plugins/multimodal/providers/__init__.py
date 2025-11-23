@@ -4,11 +4,11 @@
 # This makes it easy for other modules to import and register/find processors in a standard way.
 
 from .default_multimodal_providers import (
-    PluginRegistry,
-    DefaultImageProcessor,
     DefaultAudioProcessor,
-    DefaultVideoProcessor,
+    DefaultImageProcessor,
     DefaultTextProcessor,
+    DefaultVideoProcessor,
+    PluginRegistry,
 )
 
 __all__ = [

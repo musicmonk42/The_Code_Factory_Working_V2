@@ -1,19 +1,20 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
 import hashlib
 from datetime import datetime, timezone
-from pydantic import ValidationError
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the actual classes from human_loop.py
 from arbiter.human_loop import (
+    SECRET_SALT,
+    DummyDBClient,
+    FeedbackManager,
     HumanInLoop,
     HumanInLoopConfig,
-    FeedbackManager,
-    DummyDBClient,
     WebSocketManager,
-    SECRET_SALT,
 )
+from pydantic import ValidationError
 
 
 # Fixture for HumanInLoopConfig
@@ -190,7 +191,9 @@ async def test_send_email_notification(hil):
             hil.config.EMAIL_RECIPIENTS = {"reviewer": "reviewer@test.com"}
             hil.config.IS_PRODUCTION = True
 
-            await hil._send_email_approval("test_id", {"action": "test"}, "reviewer@test.com")
+            await hil._send_email_approval(
+                "test_id", {"action": "test"}, "reviewer@test.com"
+            )
 
             mock_smtp.login.assert_called_once_with("user", "pass")
             mock_smtp.send_message.assert_called_once()
@@ -344,7 +347,9 @@ async def test_mock_user_approval(hil):
     """Test the mock user approval mechanism"""
     hil.mock_approval_delay_seconds = 0.01
 
-    with patch.object(hil, "receive_human_feedback", new_callable=AsyncMock) as mock_receive:
+    with patch.object(
+        hil, "receive_human_feedback", new_callable=AsyncMock
+    ) as mock_receive:
         await hil._mock_user_approval("test_id", {"action": "test"})
 
         mock_receive.assert_called_once()

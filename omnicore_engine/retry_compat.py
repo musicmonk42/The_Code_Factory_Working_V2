@@ -5,12 +5,9 @@ but implemented using tenacity which is more actively maintained.
 """
 
 from functools import wraps
-from tenacity import (
-    retry as tenacity_retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+
+from tenacity import retry as tenacity_retry
+from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
 def retry(tries=3, delay=1, backoff=2, exceptions=(Exception,)):

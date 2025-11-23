@@ -1,20 +1,19 @@
-import os
-import sys
-import asyncio
-import logging
-import uuid
-import json
-import functools
-import io
 import argparse
-import hmac
-import hashlib
-import random
+import asyncio
 import atexit
+import functools
+import hashlib
+import hmac
+import io
+import json
+import logging
+import os
+import random
+import sys
+import uuid
 from contextlib import suppress
-
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Callable, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -35,7 +34,9 @@ agentic_logger = logging.getLogger("simulation.agentic")
 agentic_logger.setLevel(logging.INFO)
 if not agentic_logger.hasHandlers():
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     agentic_logger.addHandler(handler)
 
 
@@ -47,7 +48,9 @@ def alert_operator(message: str, level: str = "CRITICAL"):
 import importlib
 
 
-def check_and_import(package_name: str, module_name: Optional[str] = None, critical: bool = False):
+def check_and_import(
+    package_name: str, module_name: Optional[str] = None, critical: bool = False
+):
     try:
         return importlib.import_module(module_name or package_name)
     except ImportError:
@@ -82,8 +85,8 @@ aiokafka = check_and_import("aiokafka")
 opentelemetry = check_and_import("opentelemetry")
 
 try:
-    from test_generation.audit_log import AuditLogger as DLTLogger
     from test_generation.agentic import SecretsManager as GlobalSecretsManager
+    from test_generation.audit_log import AuditLogger as DLTLogger
 
     DLT_LOGGER_AVAILABLE = True
 except ImportError:
@@ -132,7 +135,9 @@ if sentry_sdk and os.getenv("SENTRY_DSN"):
         sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN"), traces_sample_rate=1.0)
         SENTRY_ENABLED = True
     except Exception as e:
-        agentic_logger.warning(f"Sentry SDK failed to initialize: {e}. Sentry disabled.")
+        agentic_logger.warning(
+            f"Sentry SDK failed to initialize: {e}. Sentry disabled."
+        )
 
 
 def log_exception_with_sentry(exc: Exception):
@@ -157,7 +162,9 @@ class SecretsManager:
                 agentic_logger.critical(msg)
                 if SENTRY_ENABLED:
                     sentry_sdk.capture_message(f"Critical: Missing secret {key}")
-                alert_operator(f"Critical: Missing required secret '{key}'.", level="CRITICAL")
+                alert_operator(
+                    f"Critical: Missing required secret '{key}'.", level="CRITICAL"
+                )
                 # Raise exception instead of sys.exit() to allow proper error handling
                 raise RuntimeError(f"Missing required secret: {key}")
             else:
@@ -193,14 +200,19 @@ _ = _get_audit_hmac_key_agentic()
 class AuditLogger:
     DLQ_PATH = os.getenv("AUDIT_DLQ_PATH", "audit_dlq.jsonl")
     AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "agentic_audit.jsonl")
-    AUDIT_INTEGRITY_FILE = os.getenv("AUDIT_INTEGRITY_FILE", "agentic_audit_integrity.json")
+    AUDIT_INTEGRITY_FILE = os.getenv(
+        "AUDIT_INTEGRITY_FILE", "agentic_audit_integrity.json"
+    )
 
     def __init__(self):
         os.makedirs(os.path.dirname(self.AUDIT_LOG_PATH) or ".", exist_ok=True)
         os.makedirs(os.path.dirname(self.DLQ_PATH) or ".", exist_ok=True)
         os.makedirs(os.path.dirname(self.AUDIT_INTEGRITY_FILE) or ".", exist_ok=True)
 
-        self.backend = SECRETS_MANAGER.get_secret("AUDIT_BACKEND", "file", required=False) or "file"
+        self.backend = (
+            SECRETS_MANAGER.get_secret("AUDIT_BACKEND", "file", required=False)
+            or "file"
+        )
         self.url, self.token, self.api_key, self.bc_url, self.bc_key = (
             None,
             None,
@@ -227,12 +239,18 @@ class AuditLogger:
                     level="CRITICAL",
                 )
                 sys.exit(1)
-            self.bc_url = SECRETS_MANAGER.get_secret("BLOCKCHAIN_NODE_URL", required=True)
-            self.bc_key = SECRETS_MANAGER.get_secret("BLOCKCHAIN_SIGN_KEY", required=True)
+            self.bc_url = SECRETS_MANAGER.get_secret(
+                "BLOCKCHAIN_NODE_URL", required=True
+            )
+            self.bc_key = SECRETS_MANAGER.get_secret(
+                "BLOCKCHAIN_SIGN_KEY", required=True
+            )
         elif self.backend == "file":
             agentic_logger.info("Using file-based audit logging.")
         else:
-            agentic_logger.critical(f"Unsupported audit backend '{self.backend}'. Aborting.")
+            agentic_logger.critical(
+                f"Unsupported audit backend '{self.backend}'. Aborting."
+            )
             alert_operator(
                 f"CRITICAL: Unsupported audit backend '{self.backend}'. Aborting.",
                 level="CRITICAL",
@@ -287,7 +305,9 @@ class AuditLogger:
                 with suppress(asyncio.CancelledError):
                     await t
         elif self._loop and self._loop.is_running():
-            fut = asyncio.run_coroutine_threadsafe(self._await_tasks(self._bg_tasks), self._loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self._await_tasks(self._bg_tasks), self._loop
+            )
             with suppress(Exception):
                 fut.result(timeout=0.75)
         else:
@@ -326,7 +346,9 @@ class AuditLogger:
             async with self._audit_log_lock:
                 with open(self.AUDIT_LOG_PATH, "a") as f:
                     f.write(json.dumps(signed_event) + "\n")
-            agentic_logger.info(f"[AuditLogger] Event written to file: {event.get('event_type')}")
+            agentic_logger.info(
+                f"[AuditLogger] Event written to file: {event.get('event_type')}"
+            )
             return
 
         if self.backend in {"splunk", "elk", "datadog"} and httpx and self.url:
@@ -390,11 +412,15 @@ class AuditLogger:
             async with self._dlq_lock:
                 with open(self.DLQ_PATH, "a") as f:
                     f.write(json.dumps(event) + "\n")
-            agentic_logger.warning(f"AuditLogger: Event written to DLQ: {self.DLQ_PATH}")
+            agentic_logger.warning(
+                f"AuditLogger: Event written to DLQ: {self.DLQ_PATH}"
+            )
         except Exception as e:
             agentic_logger.critical(f"AuditLogger: Failed to write event to DLQ: {e}")
             log_exception_with_sentry(e)
-            alert_operator(f"CRITICAL: Failed to write event to DLQ: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: Failed to write event to DLQ: {e}", level="CRITICAL"
+            )
 
     async def replay_dlq(self):
         if not os.path.exists(self.DLQ_PATH):
@@ -444,7 +470,9 @@ class AuditLogger:
             last_verified_time_str = integrity_meta.get("last_verification_time")
             if last_verified_time_str:
                 last_verified_time = datetime.fromisoformat(last_verified_time_str)
-                if datetime.utcnow() - last_verified_time < timedelta(hours=max_age_hours):
+                if datetime.utcnow() - last_verified_time < timedelta(
+                    hours=max_age_hours
+                ):
                     agentic_logger.info(
                         "Audit log integrity recently verified. Skipping full check."
                     )
@@ -560,7 +588,8 @@ AUDIT_LOGGER = AuditLogger()
 class ObjectStorageClient:
     def __init__(self):
         self.backend = (
-            SECRETS_MANAGER.get_secret("OBJ_STORE_BACKEND", "minio", required=False) or "minio"
+            SECRETS_MANAGER.get_secret("OBJ_STORE_BACKEND", "minio", required=False)
+            or "minio"
         )
         self.bucket_name = SECRETS_MANAGER.get_secret("OBJ_BUCKET", "agentic")
         self.max_retries, self.retry_delay_base = 5, 1
@@ -576,9 +605,14 @@ class ObjectStorageClient:
 
                 self.client = Minio(
                     SECRETS_MANAGER.get_secret("MINIO_ENDPOINT", required=True),
-                    access_key=SECRETS_MANAGER.get_secret("MINIO_ACCESS_KEY", required=True),
-                    secret_key=SECRETS_MANAGER.get_secret("MINIO_SECRET_KEY", required=True),
-                    secure=SECRETS_MANAGER.get_secret("MINIO_SECURE", "False").lower() == "true",
+                    access_key=SECRETS_MANAGER.get_secret(
+                        "MINIO_ACCESS_KEY", required=True
+                    ),
+                    secret_key=SECRETS_MANAGER.get_secret(
+                        "MINIO_SECRET_KEY", required=True
+                    ),
+                    secure=SECRETS_MANAGER.get_secret("MINIO_SECURE", "False").lower()
+                    == "true",
                 )
                 if not self.client.bucket_exists(self.bucket_name):
                     self.client.make_bucket(self.bucket_name)
@@ -592,9 +626,13 @@ class ObjectStorageClient:
                 )
 
             if not self.is_connected:
-                raise RuntimeError(f"Object storage backend '{self.backend}' failed to initialize.")
+                raise RuntimeError(
+                    f"Object storage backend '{self.backend}' failed to initialize."
+                )
 
-            agentic_logger.info(f"ObjectStorageClient initialized with backend: {self.backend}")
+            agentic_logger.info(
+                f"ObjectStorageClient initialized with backend: {self.backend}"
+            )
         except Exception as e:
             agentic_logger.critical(
                 f"CRITICAL: Failed to initialize ObjectStorageClient: {e}. Aborting startup."
@@ -607,7 +645,9 @@ class ObjectStorageClient:
 
     async def save_object(self, key: str, data: bytes):
         if not self.is_connected:
-            agentic_logger.error("ObjectStorageClient is not connected. Save operation aborted.")
+            agentic_logger.error(
+                "ObjectStorageClient is not connected. Save operation aborted."
+            )
             return
         for attempt in range(self.max_retries):
             try:
@@ -629,10 +669,14 @@ class ObjectStorageClient:
                     )
                 elif self.backend == "gcs":
                     await asyncio.to_thread(
-                        self.client.bucket(self.bucket_name).blob(key).upload_from_string,
+                        self.client.bucket(self.bucket_name)
+                        .blob(key)
+                        .upload_from_string,
                         data,
                     )
-                agentic_logger.info(f"ObjectStorageClient: Saved '{key}' to {self.backend}.")
+                agentic_logger.info(
+                    f"ObjectStorageClient: Saved '{key}' to {self.backend}."
+                )
                 return
             except Exception as e:
                 agentic_logger.warning(
@@ -652,7 +696,9 @@ class ObjectStorageClient:
 
     async def load_object(self, key: str) -> Optional[bytes]:
         if not self.is_connected:
-            agentic_logger.error("ObjectStorageClient is not connected. Load operation aborted.")
+            agentic_logger.error(
+                "ObjectStorageClient is not connected. Load operation aborted."
+            )
             return None
         for attempt in range(self.max_retries):
             try:
@@ -668,7 +714,9 @@ class ObjectStorageClient:
                     )
                 elif self.backend == "gcs":
                     return await asyncio.to_thread(
-                        lambda: self.client.bucket(self.bucket_name).blob(key).download_as_bytes()
+                        lambda: self.client.bucket(self.bucket_name)
+                        .blob(key)
+                        .download_as_bytes()
                     )
             except Exception as e:
                 agentic_logger.warning(
@@ -708,7 +756,9 @@ class MeshNotifier:
                 "MeshNotifier: No Slack or Teams webhook configured. Notifications will be disabled."
             )
 
-    async def _send_notification(self, url: str, headers: Dict = None, json: Dict = None):
+    async def _send_notification(
+        self, url: str, headers: Dict = None, json: Dict = None
+    ):
         for attempt in range(3):
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
@@ -742,7 +792,9 @@ class MeshNotifier:
 
     async def notify(self, msg: str, channel: str = "default", urgency: str = "info"):
         if not self.is_configured:
-            agentic_logger.debug("MeshNotifier is not configured. Notification skipped.")
+            agentic_logger.debug(
+                "MeshNotifier is not configured. Notification skipped."
+            )
             return
         if not httpx:
             agentic_logger.warning("httpx not available. Cannot send notifications.")
@@ -767,7 +819,9 @@ class MeshNotifier:
                 await asyncio.gather(*tasks, return_exceptions=True)
             agentic_logger.info(f"Notification sent: {msg[:50]}...")
         except Exception as e:
-            agentic_logger.error(f"[MeshNotifier] Failed to send notification (outer catch): {e}")
+            agentic_logger.error(
+                f"[MeshNotifier] Failed to send notification (outer catch): {e}"
+            )
             log_exception_with_sentry(e)
 
 
@@ -777,7 +831,8 @@ MESH_NOTIFIER = MeshNotifier()
 class EventBus:
     def __init__(self):
         self.backend = (
-            SECRETS_MANAGER.get_secret("EVENT_BUS_BACKEND", "memory", required=False) or "memory"
+            SECRETS_MANAGER.get_secret("EVENT_BUS_BACKEND", "memory", required=False)
+            or "memory"
         )
         self.client = None
         self.producer = None
@@ -795,7 +850,9 @@ class EventBus:
                     level="CRITICAL",
                 )
                 sys.exit(1)
-            self.redis_url = SECRETS_MANAGER.get_secret("REDIS_URL", "redis://localhost")
+            self.redis_url = SECRETS_MANAGER.get_secret(
+                "REDIS_URL", "redis://localhost"
+            )
         elif self.backend == "nats":
             if not nats:
                 agentic_logger.critical(
@@ -806,7 +863,9 @@ class EventBus:
                     level="CRITICAL",
                 )
                 sys.exit(1)
-            self.nats_url = SECRETS_MANAGER.get_secret("NATS_URL", "nats://localhost:4222")
+            self.nats_url = SECRETS_MANAGER.get_secret(
+                "NATS_URL", "nats://localhost:4222"
+            )
         elif self.backend == "kafka":
             if not aiokafka:
                 agentic_logger.critical(
@@ -817,13 +876,17 @@ class EventBus:
                     level="CRITICAL",
                 )
                 sys.exit(1)
-            self.kafka_servers = SECRETS_MANAGER.get_secret("KAFKA_SERVERS", "localhost:9092")
+            self.kafka_servers = SECRETS_MANAGER.get_secret(
+                "KAFKA_SERVERS", "localhost:9092"
+            )
         elif self.backend == "memory":
             agentic_logger.warning(
                 "Using memory event bus. This is not suitable for distributed production environments."
             )
         else:
-            agentic_logger.critical(f"Unsupported event bus backend '{self.backend}'. Aborting.")
+            agentic_logger.critical(
+                f"Unsupported event bus backend '{self.backend}'. Aborting."
+            )
             alert_operator(
                 f"CRITICAL: Unsupported event bus backend '{self.backend}'. Aborting.",
                 level="CRITICAL",
@@ -846,9 +909,11 @@ class EventBus:
                 elif self.backend == "nats":
                     self.client = await nats.connect(self.nats_url)
                 elif self.backend == "kafka":
-                    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+                    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
-                    self.producer = AIOKafkaProducer(bootstrap_servers=self.kafka_servers)
+                    self.producer = AIOKafkaProducer(
+                        bootstrap_servers=self.kafka_servers
+                    )
                     self.consumer = AIOKafkaConsumer(
                         "agentic_events",
                         bootstrap_servers=self.kafka_servers,
@@ -857,7 +922,9 @@ class EventBus:
                     await self.producer.start()
                     await self.consumer.start()
                 self.is_connected = True
-                agentic_logger.info(f"Successfully connected to {self.backend} event bus.")
+                agentic_logger.info(
+                    f"Successfully connected to {self.backend} event bus."
+                )
                 return
             except Exception as e:
                 agentic_logger.error(
@@ -922,7 +989,9 @@ class EventBus:
         except Exception as e:
             agentic_logger.error(f"Failed to publish event to topic '{topic}': {e}")
             log_exception_with_sentry(e)
-            alert_operator(f"Event bus publish failed for topic '{topic}': {e}", level="ERROR")
+            alert_operator(
+                f"Event bus publish failed for topic '{topic}': {e}", level="ERROR"
+            )
 
     async def subscribe(self, topic: str, handler: Callable):
         if not self.is_connected:
@@ -941,7 +1010,9 @@ class EventBus:
                     async for message in pubsub.listen():
                         if message["type"] == "message":
                             try:
-                                await handler(json.loads(message["data"].decode("utf-8")))
+                                await handler(
+                                    json.loads(message["data"].decode("utf-8"))
+                                )
                             except Exception as e:
                                 agentic_logger.error(
                                     f"Error in Redis subscriber handler for topic '{topic}': {e}"
@@ -973,7 +1044,9 @@ class EventBus:
         except Exception as e:
             agentic_logger.error(f"Error during subscription to topic '{topic}': {e}")
             log_exception_with_sentry(e)
-            alert_operator(f"Event bus subscription failed for topic '{topic}': {e}", level="ERROR")
+            alert_operator(
+                f"Event bus subscription failed for topic '{topic}': {e}", level="ERROR"
+            )
 
 
 class PolicyManager:
@@ -989,13 +1062,17 @@ class PolicyManager:
         try:
             resp = httpx.post(
                 self.opa_url.rstrip("/") + "/v1/data/agentic/allow",
-                json={"input": {"agent": agent, "action": action, "resource": resource}},
+                json={
+                    "input": {"agent": agent, "action": action, "resource": resource}
+                },
                 timeout=3,
             )
             resp.raise_for_status()
             return resp.json().get("result", False)
         except Exception as e:
-            agentic_logger.error(f"RBAC/OPA check failed: {e}. Defaulting to deny (fail closed).")
+            agentic_logger.error(
+                f"RBAC/OPA check failed: {e}. Defaulting to deny (fail closed)."
+            )
             log_exception_with_sentry(e)
             alert_operator(f"RBAC/OPA check failed: {e}", level="ERROR")
             return False
@@ -1009,7 +1086,9 @@ def rbac_enforce(agent: str, action: str, resource: str):
         @functools.wraps(fn)
         async def wrapper(*args, **kwargs):
             if not policy_manager.has_permission(agent, action, resource):
-                raise PermissionError(f"Agent '{agent}' not permitted to {action} on {resource}")
+                raise PermissionError(
+                    f"Agent '{agent}' not permitted to {action} on {resource}"
+                )
             return await fn(*args, **kwargs)
 
         return wrapper
@@ -1041,7 +1120,11 @@ else:
             self.swarm_id = data.get("swarm_id")
             self.agents = data.get("agents", [])
             self.max_concurrency = int(data.get("max_concurrency", 5))
-            if not self.swarm_id or not isinstance(self.agents, list) or len(self.agents) < 1:
+            if (
+                not self.swarm_id
+                or not isinstance(self.agents, list)
+                or len(self.agents) < 1
+            ):
                 raise ValueError(
                     "Invalid swarm config: swarm_id must be a string, agents must be a non-empty list."
                 )
@@ -1082,7 +1165,9 @@ class GAOptimizer:
             self.toolbox.attr_float,
             n=n_params,
         )
-        self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
+        self.toolbox.register(
+            "population", tools.initRepeat, list, self.toolbox.individual
+        )
         self.toolbox.register("mate", tools.cxBlend, alpha=0.5)
         self.toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=1, indpb=0.2)
         self.toolbox.register("select", tools.selTournament, tournsize=3)
@@ -1163,7 +1248,9 @@ async def run_simulation_swarm(config: Dict[str, Any]) -> Dict[str, Any]:
             async def run_single_agent(agent_config):
                 async with semaphore:
                     agent_id = agent_config.get("id", str(uuid.uuid4()))
-                    agentic_logger.info(f"Starting agent {agent_id} in swarm {swarm_id}...")
+                    agentic_logger.info(
+                        f"Starting agent {agent_id} in swarm {swarm_id}..."
+                    )
 
                     if dlt_logger:
                         await dlt_logger.add_entry(
@@ -1173,7 +1260,9 @@ async def run_simulation_swarm(config: Dict[str, Any]) -> Dict[str, Any]:
                             agent_id=agent_id,
                         )
 
-                    await asyncio.sleep(random.uniform(1, 5))  # Simulate agent execution
+                    await asyncio.sleep(
+                        random.uniform(1, 5)
+                    )  # Simulate agent execution
 
                     result = {"status": "success", "result": "mock_result"}
 
@@ -1278,7 +1367,9 @@ async def main_async():
     )
     parser.add_argument("--topic", help="Topic for publish/subscribe commands")
     parser.add_argument("--message", help="JSON message string for publish command")
-    parser.add_argument("--cycles", type=int, default=3, help="Number of evolution cycles to run.")
+    parser.add_argument(
+        "--cycles", type=int, default=3, help="Number of evolution cycles to run."
+    )
     args = parser.parse_args()
 
     # The AuditLogger now handles its own background task scheduling.

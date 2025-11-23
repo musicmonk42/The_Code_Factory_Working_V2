@@ -1,16 +1,17 @@
-import sys
+import asyncio
+import importlib
 import json
 import logging
-import asyncio
+import sys
 import time
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
-from google.cloud import pubsub_v1
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from google.api_core import exceptions as google_exceptions
-from pydantic import ValidationError
+from google.cloud import pubsub_v1
 from prometheus_client import CollectorRegistry
-import importlib
+from pydantic import ValidationError
 
 # Assuming these are available in a file named pubsub_plugin.py
 # and we are mocking them for the purpose of testing this file in isolation.
@@ -132,7 +133,9 @@ class PubSubGateway:
         if self._event_queue.full():
             raise RuntimeError("Queue is full")
         self._event_queue.put_nowait(
-            AuditEvent(event_name=event_name, service_name=service_name, details=details)
+            AuditEvent(
+                event_name=event_name, service_name=service_name, details=details
+            )
         )
 
     async def _worker(self):
@@ -159,7 +162,9 @@ def setup_logging():
     """Set up logging to capture output for tests."""
     logger.handlers = []
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+    )
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     yield
@@ -216,7 +221,9 @@ def mock_pubsub_publisher(monkeypatch):
     mock_client.get_topic = mock_get_topic
     mock_client.stop = mock_stop
 
-    with patch("google.cloud.pubsub_v1.PublisherClient", return_value=mock_client) as mock_class:
+    with patch(
+        "google.cloud.pubsub_v1.PublisherClient", return_value=mock_client
+    ) as mock_class:
         yield mock_client, mock_publish, mock_get_topic, mock_stop, mock_class
 
 
@@ -310,7 +317,9 @@ def test_pubsub_settings_missing_credentials_prod(set_env, sample_settings_dict)
     """Test missing GCP credentials secret ID fails in production."""
     set_env({"PRODUCTION_MODE": "true"})
     sample_settings_dict["gcp_credentials_secret_id"] = None
-    with pytest.raises(ValidationError, match="'gcp_credentials_secret_id' must be provided"):
+    with pytest.raises(
+        ValidationError, match="'gcp_credentials_secret_id' must be provided"
+    ):
         PubSubSettings(**sample_settings_dict)
 
 
@@ -348,7 +357,9 @@ def test_metrics_init_failure(mock_alert_operator):
 # --- AuditEvent Tests ---
 def test_audit_event_success():
     """Test successful AuditEvent creation."""
-    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"key": "value"}
+    )
     assert event.event_name == "test"
     assert event.service_name == "test-service"
     assert event.schema_version == 1
@@ -365,7 +376,9 @@ def test_audit_event_pii_scrubbing(mock_scrub_sensitive_data):
     assert event.details == {"scrubbed": True}
 
 
-def test_audit_event_pii_detection_aborts(mock_scrub_sensitive_data, mock_alert_operator):
+def test_audit_event_pii_detection_aborts(
+    mock_scrub_sensitive_data, mock_alert_operator
+):
     """Test PII detection aborts."""
     mock_scrub_sensitive_data.side_effect = lambda x: {"changed": True}
     with pytest.raises(RuntimeError):
@@ -558,7 +571,11 @@ async def test_publish_batch_success(
     gateway = PubSubGateway(settings=sample_settings_dict, metrics=sample_metrics)
     gateway._publisher_client = mock_client
     await gateway.startup()
-    batch = [AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})]
+    batch = [
+        AuditEvent(
+            event_name="test", service_name="test-service", details={"key": "value"}
+        )
+    ]
     await gateway._publish_batch(batch)
     mock_publish.assert_called_once()
     await gateway.shutdown()
@@ -578,7 +595,11 @@ async def test_publish_batch_service_unavailable(
     gateway = PubSubGateway(settings=sample_settings_dict, metrics=sample_metrics)
     gateway._publisher_client = mock_client
     await gateway.startup()
-    batch = [AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})]
+    batch = [
+        AuditEvent(
+            event_name="test", service_name="test-service", details={"key": "value"}
+        )
+    ]
     with pytest.raises(SystemExit):
         await gateway._publish_batch(batch)
     alert_args, _ = mock_alert_operator.call_args
@@ -596,7 +617,9 @@ async def test_worker_success(
     gateway = PubSubGateway(settings=sample_settings_dict, metrics=sample_metrics)
     gateway._publisher_client = mock_client
     await gateway.startup()
-    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"key": "value"}
+    )
     await gateway._event_queue.put(event)
     await gateway._event_queue.put(None)  # Shutdown sentinel
     await gateway._worker()
@@ -614,7 +637,9 @@ async def test_worker_dry_run(
     gateway = PubSubGateway(settings=sample_settings_dict, metrics=sample_metrics)
     gateway._publisher_client = mock_client
     await gateway.startup()
-    event = AuditEvent(event_name="test", service_name="test-service", details={"key": "value"})
+    event = AuditEvent(
+        event_name="test", service_name="test-service", details={"key": "value"}
+    )
     await gateway._event_queue.put(event)
     await gateway._event_queue.put(None)  # Shutdown sentinel
     await gateway._worker()

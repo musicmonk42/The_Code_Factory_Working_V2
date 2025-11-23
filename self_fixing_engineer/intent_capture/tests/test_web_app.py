@@ -3,13 +3,14 @@ Comprehensive test suite for web_app.py - FIXED VERSION
 These tests are designed to reveal actual problems in the implementation
 """
 
-import os
-import yaml
-import pytest
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
-from datetime import datetime, timedelta
+import os
 import sys
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
+import yaml
 
 # Setup test environment
 
@@ -132,7 +133,9 @@ class TestAuthenticationSecurity:
         # 6th attempt should be blocked
         mock_state["failed_login_attempts"][username] = 5
         block_key = f"{username}_blocked_until"
-        mock_state["failed_login_attempts"][block_key] = datetime.now() + timedelta(minutes=10)
+        mock_state["failed_login_attempts"][block_key] = datetime.now() + timedelta(
+            minutes=10
+        )
 
         # Check user is blocked
         assert mock_state["failed_login_attempts"][username] >= 5
@@ -316,7 +319,9 @@ class TestErrorHandling:
     def test_redis_error_logging(self):
         """Test that Redis errors are properly logged"""
         with patch("intent_capture.web_app.logger") as mock_logger:
-            with patch("redis.from_url", side_effect=Exception("Redis connection failed")):
+            with patch(
+                "redis.from_url", side_effect=Exception("Redis connection failed")
+            ):
                 with patch("intent_capture.web_app.Config") as mock_config:
                     mock_config.return_value.REDIS_URL = "redis://localhost:6379"
 
@@ -355,7 +360,9 @@ class TestMetrics:
                     # Mock other streamlit components needed for rendering
                     with patch.object(web_app.st, "header"):
                         with patch.object(web_app.st, "chat_message"):
-                            with patch.object(web_app.st, "chat_input", return_value=None):
+                            with patch.object(
+                                web_app.st, "chat_input", return_value=None
+                            ):
                                 # Simulate page views
                                 web_app.render_chat_page()
                                 mock_labels.assert_called_with(path="/chat")

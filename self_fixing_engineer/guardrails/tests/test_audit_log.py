@@ -1,14 +1,15 @@
 # tests/test_audit_log.py
-import os
-import json
-import hashlib
 import asyncio
 import base64
-import sys
+import hashlib
+import json
 import logging
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
+import os
 import shutil
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Fix import path for audit_log module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -60,7 +61,9 @@ def mock_dependencies(monkeypatch):
 
     # Mock serialization
     mock_serialization = MagicMock()
-    mock_serialization.load_pem_private_key = MagicMock(return_value=MockEd25519PrivateKey())
+    mock_serialization.load_pem_private_key = MagicMock(
+        return_value=MockEd25519PrivateKey()
+    )
     mock_serialization.Encoding.PEM = MagicMock()
     mock_serialization.Encoding.Raw = MagicMock()
     mock_serialization.PrivateFormat.PKCS8 = MagicMock()
@@ -225,7 +228,9 @@ async def test_audit_log_event_async(mock_env, temp_log_path):
         mock_instance.add_entry = AsyncMock()
         mock_instance.close = AsyncMock()
         mock_logger.return_value = mock_instance
-        await audit_log.audit_log_event_async("system:test", "test_msg", agent_id="test_agent")
+        await audit_log.audit_log_event_async(
+            "system:test", "test_msg", agent_id="test_agent"
+        )
         mock_instance.add_entry.assert_called()
 
 

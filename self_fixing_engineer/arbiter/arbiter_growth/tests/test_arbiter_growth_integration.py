@@ -7,27 +7,24 @@ These tests verify the interaction between multiple components working together.
 import asyncio
 import logging
 from datetime import datetime, timezone
+
+# Add HealthStatus enum if not in manager
+from enum import Enum
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
-
+from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
+from arbiter.arbiter_growth.config_store import TokenBucketRateLimiter
 from arbiter.arbiter_growth.exceptions import (
     AuditChainTamperedError,
     CircuitBreakerOpenError,
     RateLimitError,
 )
 from arbiter.arbiter_growth.idempotency import IdempotencyStore
-from arbiter.arbiter_growth.arbiter_growth_manager import ArbiterGrowthManager
-from arbiter.arbiter_growth.metrics import (
-    GROWTH_ANOMALY_SCORE,
-    GROWTH_EVENTS,
-)
+from arbiter.arbiter_growth.metrics import GROWTH_ANOMALY_SCORE, GROWTH_EVENTS
 from arbiter.arbiter_growth.models import GrowthEvent
 from pybreaker import CircuitBreakerListener
-from arbiter.arbiter_growth.config_store import TokenBucketRateLimiter
-
-# Add HealthStatus enum if not in manager
-from enum import Enum
 
 
 class HealthStatus(Enum):
@@ -88,7 +85,9 @@ async def mock_config_store():
 
     config.get_config = AsyncMock(side_effect=get_config_side_effect)
     config.get = MagicMock(
-        side_effect=lambda key, default=None: {"storage.backend": "sqlite"}.get(key, default)
+        side_effect=lambda key, default=None: {"storage.backend": "sqlite"}.get(
+            key, default
+        )
     )
 
     yield config
@@ -97,7 +96,9 @@ async def mock_config_store():
 @pytest_asyncio.fixture
 async def mock_idempotency_store():
     """Provides a mock IdempotencyStore."""
-    store = IdempotencyStore(arbiter_name="test_arbiter", redis_url="redis://localhost:6379")
+    store = IdempotencyStore(
+        arbiter_name="test_arbiter", redis_url="redis://localhost:6379"
+    )
     # Mock the redis connection
     store.redis = AsyncMock()
     store.redis.set = AsyncMock(return_value=True)
@@ -204,7 +205,9 @@ async def arbiter_manager_factory(
 
 
 @pytest.mark.asyncio
-async def test_integration_full_event_flow(arbiter_manager_factory, mock_plugin, caplog):
+async def test_integration_full_event_flow(
+    arbiter_manager_factory, mock_plugin, caplog
+):
     """Test the full flow of recording and processing a growth event."""
     manager = arbiter_manager_factory()
     await manager.start()
@@ -252,7 +255,9 @@ async def test_integration_rate_limit_rejection(arbiter_manager_factory):
 
 
 @pytest.mark.asyncio
-async def test_integration_circuit_breaker_open(arbiter_manager_factory, mock_storage_backend):
+async def test_integration_circuit_breaker_open(
+    arbiter_manager_factory, mock_storage_backend
+):
     """Test circuit breaker opening after storage failures."""
     manager = arbiter_manager_factory()
     await manager.start()
@@ -265,14 +270,20 @@ async def test_integration_circuit_breaker_open(arbiter_manager_factory, mock_st
     # Try to record an event - should fail
     with pytest.raises(CircuitBreakerOpenError):
         await manager._push_events(
-            [GrowthEvent(type="test", details={}, timestamp="2024-01-01T00:00:00+00:00")]
+            [
+                GrowthEvent(
+                    type="test", details={}, timestamp="2024-01-01T00:00:00+00:00"
+                )
+            ]
         )
 
     await manager.stop()
 
 
 @pytest.mark.asyncio
-async def test_integration_audit_tamper_detection(arbiter_manager_factory, mock_storage_backend):
+async def test_integration_audit_tamper_detection(
+    arbiter_manager_factory, mock_storage_backend
+):
     """Test that audit chain tampering is detected and reported."""
     manager = arbiter_manager_factory()
     await manager.start()

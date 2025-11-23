@@ -1,11 +1,9 @@
 import json
 import types
 
-import pytest
-
 import agents.codegen_agent.codegen_prompt as codegen_prompt
 import agents.codegen_agent.codegen_response_handler as crh
-
+import pytest
 
 pytestmark = pytest.mark.asyncio
 

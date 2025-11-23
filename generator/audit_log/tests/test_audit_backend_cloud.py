@@ -1,12 +1,12 @@
 # --- env must be set before any package import that touches Dynaconf ---
-import os
-import base64
-import zlib
 import asyncio
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+import base64
 import importlib.util
+import os
 import types  # Added for robust stub creation
+import zlib
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -15,7 +15,9 @@ import pytest_asyncio
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"  # allows relaxed validation in tests
 # Dynaconf prefix is AUDIT_* and needs @json prefix in the VALUE for JSON parsing
 encryption_key = base64.urlsafe_b64encode(b"0" * 32).decode("ascii")
-os.environ["AUDIT_ENCRYPTION_KEYS"] = f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
+os.environ["AUDIT_ENCRYPTION_KEYS"] = (
+    f'@json [{{"key_id": "mock_1", "key": "{encryption_key}"}}]'
+)
 # Satisfy other validators too (harmless defaults if unused)
 os.environ.setdefault("AUDIT_COMPRESSION_ALGO", "gzip")
 os.environ.setdefault("AUDIT_COMPRESSION_LEVEL", "6")
@@ -232,7 +234,9 @@ sys.modules["azure.storage.blob"].ContentSettings = _ContentSettings
 
 # 3) Package shim so relative imports work
 REPO_ROOT = Path(__file__).resolve().parents[2]  # .../generator
-PKG_ROOT = REPO_ROOT / "audit_log" / "audit_backend"  # folder containing audit_backend_cloud.py
+PKG_ROOT = (
+    REPO_ROOT / "audit_log" / "audit_backend"
+)  # folder containing audit_backend_cloud.py
 # ensure generator root on sys.path for any absolute imports the package might do
 p = str(REPO_ROOT)
 if p not in sys.path:
@@ -459,7 +463,9 @@ async def test_s3_query_via_athena(mock_boto3_clients):
     assert out[0]["entry_id"] == "id-1"
     assert out[0]["schema_version"] == 2
     # Query path: start_query_execution -> poll SUCCEEDED -> get_query_results.
-    assert mock_athena.start_query_execution.call_args.kwargs["QueryString"].startswith("SELECT")
+    assert mock_athena.start_query_execution.call_args.kwargs["QueryString"].startswith(
+        "SELECT"
+    )
 
 
 @pytest.mark.asyncio
@@ -501,7 +507,9 @@ async def mock_gcs_clients():
     # --- FIX: Remove redundant patches for Table, LoadJobConfig, etc. ---
     with patch(f"{cloud.__name__}.gcs.Client") as mock_gcs_client_constructor, patch(
         f"{cloud.__name__}.retry_operation"
-    ) as mock_retry, patch("google.cloud.bigquery.Client") as mock_bq_client_constructor:
+    ) as mock_retry, patch(
+        "google.cloud.bigquery.Client"
+    ) as mock_bq_client_constructor:
         # --- END FIX ---
 
         # --- Mock GCS (Storage) ---
@@ -516,7 +524,9 @@ async def mock_gcs_clients():
         # --- Mock BigQuery ---
         mock_bq_client = MagicMock(name="BigQueryClient")
         mock_bq_client_constructor.return_value = mock_bq_client
-        mock_bq_client.dataset.return_value.table.return_value = MagicMock(name="TableRef")
+        mock_bq_client.dataset.return_value.table.return_value = MagicMock(
+            name="TableRef"
+        )
 
         # Mock load job
         mock_load_job = MagicMock(name="LoadJob")
@@ -649,7 +659,9 @@ async def mock_azure_clients():
         # Mock async methods with AsyncMock
         mock_container_client.create_container = AsyncMock(name="create_container")
         mock_container_client.upload_blob = AsyncMock(name="upload_blob")
-        mock_container_client.get_container_properties = AsyncMock(name="get_container_properties")
+        mock_container_client.get_container_properties = AsyncMock(
+            name="get_container_properties"
+        )
         mock_container_client.delete_blobs = AsyncMock(name="delete_blobs")
 
         # --- FIX: Mock list_blobs with a MagicMock that has a side_effect ---
@@ -663,7 +675,9 @@ async def mock_azure_clients():
                 return  # Stop after one
 
         # Assign a MagicMock to list_blobs and set its side_effect to the generator
-        mock_container_client.list_blobs = MagicMock(name="list_blobs_mock", side_effect=_aiter)
+        mock_container_client.list_blobs = MagicMock(
+            name="list_blobs_mock", side_effect=_aiter
+        )
         # --- END FIX ---
 
         # Mock get_blob_client (returns a blob client with async methods)

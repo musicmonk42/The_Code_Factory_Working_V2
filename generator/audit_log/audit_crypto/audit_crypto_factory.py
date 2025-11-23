@@ -43,7 +43,7 @@ import asyncio
 import logging
 import os
 import signal
-from typing import Any, Callable, Dict, Optional, Type, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Optional, Type
 
 # Configuration management
 from dynaconf import Dynaconf, Validator
@@ -55,18 +55,22 @@ from dynaconf.validator import (
 try:
     from prometheus_client import Counter, Gauge, Histogram
 except ImportError:
-    logging.critical("prometheus_client not found. Metrics are critical for production. Exiting.")
+    logging.critical(
+        "prometheus_client not found. Metrics are critical for production. Exiting."
+    )
     raise SystemExit(1)
 
 # OpenTelemetry for tracing
 try:
     from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
     HAS_OPENTELEMETRY = True
-    _span_processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://otel-collector:4317"))
+    _span_processor = BatchSpanProcessor(
+        OTLPSpanExporter(endpoint="http://otel-collector:4317")
+    )
     _tracer_provider = TracerProvider()
     _tracer_provider.add_span_processor(_span_processor)
     trace.set_tracer_provider(_tracer_provider)
@@ -78,7 +82,9 @@ except ImportError:
 except Exception as e:
     tracer = None
     HAS_OPENTELEMETRY = False
-    logging.error(f"Failed to initialize OpenTelemetry: {e}. Tracing disabled.", exc_info=True)
+    logging.error(
+        f"Failed to initialize OpenTelemetry: {e}. Tracing disabled.", exc_info=True
+    )
 
 # AWS KMS for master key fetching
 try:
@@ -95,10 +101,10 @@ except ImportError:
 import aiohttp  # For sending alerts
 
 # Import secret fetching functions
-from .secrets import (
-    aget_kms_master_key_ciphertext_blob,
+from .secrets import (  # Import async secret fetchers
     aget_fallback_hmac_secret,
-)  # Import async secret fetchers
+    aget_kms_master_key_ciphertext_blob,
+)
 
 # Import SecretError from secrets.py
 
@@ -114,7 +120,9 @@ except ImportError:
         extra={"operation": "audit_log_import_fail"},
     )
 
-    async def real_log_action(*args, **kwargs):  # Make dummy async to match expected signature
+    async def real_log_action(
+        *args, **kwargs
+    ):  # Make dummy async to match expected signature
         logging.info(
             f"Dummy log_action: {args}, {kwargs}",
             extra={"operation": "dummy_log_action"},
@@ -196,7 +204,9 @@ def _is_test_or_dev_mode() -> bool:
 
 # --- Configuration Management ---
 # FIX: Detect testing environment and bypass critical 'must_exist' validation
-_IS_TESTING = os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("RUNNING_TESTS") == "True"
+_IS_TESTING = (
+    os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("RUNNING_TESTS") == "True"
+)
 
 # Use multi-env mode only in production
 environments = os.getenv("TESTING") != "1"
@@ -207,11 +217,15 @@ settings = Dynaconf(
     # FIX: Remove conditional validators to prevent RecursionError
     validators=[
         Validator("PROVIDER_TYPE", must_exist=True, is_in=["software", "hsm"]),
-        Validator("DEFAULT_ALGO", must_exist=True, is_in=["rsa", "ecdsa", "ed25519", "hmac"]),
+        Validator(
+            "DEFAULT_ALGO", must_exist=True, is_in=["rsa", "ecdsa", "ed25519", "hmac"]
+        ),
         Validator("KEY_ROTATION_INTERVAL_SECONDS", must_exist=True, gte=3600),
         # KMS/Software requirements (now unconditional or removed, handled in post-validation)
         Validator("SOFTWARE_KEY_DIR", is_type_of=str, default="audit_keys"),
-        Validator("KMS_KEY_ID", is_type_of=str),  # Now unconditional, existence checked manually
+        Validator(
+            "KMS_KEY_ID", is_type_of=str
+        ),  # Now unconditional, existence checked manually
         Validator(
             "AWS_REGION", is_type_of=str, default="us-east-1"
         ),  # Defaulted for non-KMS checks
@@ -219,9 +233,13 @@ settings = Dynaconf(
         Validator("HSM_ENABLED", default=False, is_type_of=bool),
         Validator("HSM_LIBRARY_PATH", is_type_of=str),
         Validator("HSM_SLOT_ID", is_type_of=int, default=0),
-        Validator("ALERT_ENDPOINT", is_type_of=str, default="http://localhost:8080/alert"),
+        Validator(
+            "ALERT_ENDPOINT", is_type_of=str, default="http://localhost:8080/alert"
+        ),
         Validator("FALLBACK_HMAC_SECRET_B64", is_type_of=str, must_exist=False),
-        Validator("HSM_HEALTH_CHECK_INTERVAL_SECONDS", is_type_of=int, default=30, gte=5),
+        Validator(
+            "HSM_HEALTH_CHECK_INTERVAL_SECONDS", is_type_of=int, default=30, gte=5
+        ),
         Validator("ALERT_RETRY_ATTEMPTS", is_type_of=int, default=3, gte=1),
         Validator("ALERT_BACKOFF_FACTOR", is_type_of=float, default=2.0, gte=1.0),
         Validator("ALERT_INITIAL_DELAY", is_type_of=float, default=1.0, gte=0.1),
@@ -243,9 +261,13 @@ def post_validation_checks():
 
     if provider_type == "software":
         if not settings.KMS_KEY_ID and not _is_test_or_dev_mode():
-            errors.append("KMS_KEY_ID is required when PROVIDER_TYPE is 'software' in production")
+            errors.append(
+                "KMS_KEY_ID is required when PROVIDER_TYPE is 'software' in production"
+            )
         if not settings.SOFTWARE_KEY_DIR:
-            errors.append("SOFTWARE_KEY_DIR is required when PROVIDER_TYPE is 'software'")
+            errors.append(
+                "SOFTWARE_KEY_DIR is required when PROVIDER_TYPE is 'software'"
+            )
 
     elif settings.HSM_ENABLED:
         if not settings.HSM_LIBRARY_PATH:
@@ -342,7 +364,9 @@ async def _ensure_software_key_master() -> bytes:
         # Example using async secret helper; replace with your actual logic if different.
         ciphertext = await aget_kms_master_key_ciphertext_blob()
         if not ciphertext:
-            raise CryptoInitializationError("No KMS master key ciphertext blob returned.")
+            raise CryptoInitializationError(
+                "No KMS master key ciphertext blob returned."
+            )
 
         if not HAS_BOTO3:
             raise CryptoInitializationError("boto3 not available for KMS decryption.")
@@ -368,7 +392,9 @@ async def _ensure_software_key_master() -> bytes:
             f"Failed to initialize software key master in production: {e}",
             exc_info=True,
         )
-        raise CryptoInitializationError(f"Failed to initialize software key master: {e}") from e
+        raise CryptoInitializationError(
+            f"Failed to initialize software key master: {e}"
+        ) from e
 
 
 async def _ensure_fallback_hmac_secret() -> bytes:
@@ -387,7 +413,9 @@ async def _ensure_fallback_hmac_secret() -> bytes:
 
     # --- START OF PATCH 2 ---
     if _is_test_or_dev_mode():
-        _FALLBACK_HMAC_SECRET = b"0123456789abcdef0123456789abcdef"  # 32 bytes; deterministic
+        _FALLBACK_HMAC_SECRET = (
+            b"0123456789abcdef0123456789abcdef"  # 32 bytes; deterministic
+        )
         logger.warning("AUDIT_CRYPTO: Using DEV/TEST dummy fallback HMAC secret.")
         return _FALLBACK_HMAC_SECRET
     # --- END OF PATCH 2 ---
@@ -405,11 +433,15 @@ async def _ensure_fallback_hmac_secret() -> bytes:
             f"Failed to initialize fallback HMAC secret in production: {e}",
             exc_info=True,
         )
-        raise CryptoInitializationError(f"Failed to initialize fallback HMAC secret: {e}") from e
+        raise CryptoInitializationError(
+            f"Failed to initialize fallback HMAC secret: {e}"
+        ) from e
 
 
 # --- Metrics ---
-SIGN_OPERATIONS = Counter("audit_crypto_signs_total", "Sign operations", ["algo", "provider_type"])
+SIGN_OPERATIONS = Counter(
+    "audit_crypto_signs_total", "Sign operations", ["algo", "provider_type"]
+)
 VERIFY_OPERATIONS = Counter(
     "audit_crypto_verifies_total",
     "Verify operations",
@@ -418,7 +450,9 @@ VERIFY_OPERATIONS = Counter(
 CRYPTO_ERRORS = Counter(
     "audit_crypto_errors_total", "Crypto errors", ["type", "provider_type", "operation"]
 )
-KEY_ROTATIONS = Counter("audit_crypto_rotations_total", "Key rotations", ["algo", "provider_type"])
+KEY_ROTATIONS = Counter(
+    "audit_crypto_rotations_total", "Key rotations", ["algo", "provider_type"]
+)
 HSM_SESSION_HEALTH = Gauge(
     "audit_crypto_hsm_session_health",
     "HSM session health (1=up, 0=down)",
@@ -484,7 +518,9 @@ async def send_alert(
             f"Alert sent successfully: {message}",
             extra={"operation": "send_alert_success", "severity": severity},
         )
-        await log_action("send_alert", status="success", severity=severity, message=message)
+        await log_action(
+            "send_alert", status="success", severity=severity, message=message
+        )
     except Exception as e:
         logger.error(
             f"Failed to send alert to {endpoint} after multiple retries: {e}. Alert message: {message}",
@@ -586,8 +622,8 @@ async def retry_operation(
 # Import CryptoProvider here to avoid circular dependencies in type hints
 from .audit_crypto_provider import (
     CryptoProvider,
-    SoftwareCryptoProvider,
     HSMCryptoProvider,
+    SoftwareCryptoProvider,
 )
 
 
@@ -606,7 +642,9 @@ class DummyCryptoProvider(CryptoProvider):
         fallback_hmac_secret_accessor: Callable[[], Awaitable[bytes]],
         settings: Dynaconf,
     ):
-        super().__init__(software_key_master_accessor, fallback_hmac_secret_accessor, settings)
+        super().__init__(
+            software_key_master_accessor, fallback_hmac_secret_accessor, settings
+        )
         self.key_id = "test-key-id"
         logger.warning("AUDIT_CRYPTO: Using DummyCryptoProvider. NOT FOR PRODUCTION.")
 
@@ -657,7 +695,9 @@ class CryptoProviderFactory:
                        if it does not implement required methods.
         """
         if not issubclass(provider_cls, CryptoProvider):
-            raise TypeError(f"Class {provider_cls.__name__} must be a subclass of CryptoProvider.")
+            raise TypeError(
+                f"Class {provider_cls.__name__} must be a subclass of CryptoProvider."
+            )
 
         # Validate that the provider class implements all required methods
         # NOTE: 'get_key' is not a standard abstract method; checking for abstract methods is better.
@@ -675,7 +715,9 @@ class CryptoProviderFactory:
                     pass
 
         self._registry[name.lower()] = provider_cls
-        logger.info(f"Registered crypto provider: {name.lower()} -> {provider_cls.__name__}")
+        logger.info(
+            f"Registered crypto provider: {name.lower()} -> {provider_cls.__name__}"
+        )
 
         # Use an event loop if available, otherwise just log and skip the async call
         try:
@@ -692,7 +734,9 @@ class CryptoProviderFactory:
             pass
 
     # --- START OF PATCH 3 ---
-    def get_provider(self, provider_type: str = settings.PROVIDER_TYPE) -> CryptoProvider:
+    def get_provider(
+        self, provider_type: str = settings.PROVIDER_TYPE
+    ) -> CryptoProvider:
         """
         Factory method to get a CryptoProvider instance dynamically based on configuration.
         Ensures proper initialization and provides fallback logic to the 'software' provider if
@@ -726,7 +770,9 @@ class CryptoProviderFactory:
 
         # --- Production/Non-Test Path ---
         if provider_type_lower in self._instances:
-            logger.debug(f"Returning cached instance of {provider_type_lower} crypto provider.")
+            logger.debug(
+                f"Returning cached instance of {provider_type_lower} crypto provider."
+            )
             return self._instances[provider_type_lower]
 
         # >>> REFRESH REGISTRY (honor monkeypatched classes) <<<
@@ -753,10 +799,10 @@ class CryptoProviderFactory:
             )
             provider_cls = self._registry.get("software")
             if not provider_cls:  # Should not happen if 'software' is always registered
-                error_msg = (
-                    "Critical: 'software' crypto provider not found in registry for fallback."
+                error_msg = "Critical: 'software' crypto provider not found in registry for fallback."
+                logger.critical(
+                    error_msg, extra={"operation": "get_provider_no_software_fallback"}
                 )
-                logger.critical(error_msg, extra={"operation": "get_provider_no_software_fallback"})
                 raise CryptoInitializationError(error_msg)
 
         try:
@@ -776,14 +822,18 @@ class CryptoProviderFactory:
             )
             return instance
         except Exception as e:
-            error_msg = f"Critical: Failed to initialize provider '{provider_type}': {e}"
+            error_msg = (
+                f"Critical: Failed to initialize provider '{provider_type}': {e}"
+            )
             logger.error(error_msg, exc_info=True)
 
             # Non-test context, attempt fallback or fail fast
             if provider_type_lower == "software":
                 # No fallback possible from software
                 error_msg = f"Critical: Failed to initialize even the fallback 'software' crypto provider: {e}"
-                logger.critical(error_msg, extra={"operation": "get_provider_software_init_fail"})
+                logger.critical(
+                    error_msg, extra={"operation": "get_provider_software_init_fail"}
+                )
                 raise CryptoInitializationError(error_msg)
 
             try:
@@ -793,7 +843,9 @@ class CryptoProviderFactory:
                     self._registry["software"] = SoftwareCryptoProvider
 
                 if "software" in self._instances:
-                    logger.warning("Returning cached 'software' crypto provider as a fallback.")
+                    logger.warning(
+                        "Returning cached 'software' crypto provider as a fallback."
+                    )
                     return self._instances["software"]
 
                 # Pass only the accessors and settings to fallback instance
@@ -814,7 +866,9 @@ class CryptoProviderFactory:
                     exc_info=True,
                     extra={"operation": "get_provider_fallback_fail"},
                 )
-                raise CryptoInitializationError(f"No crypto provider available: {fallback_e}")
+                raise CryptoInitializationError(
+                    f"No crypto provider available: {fallback_e}"
+                )
 
     # --- END OF PATCH 3 ---
 
@@ -843,14 +897,20 @@ class CryptoProviderFactory:
                 try:
                     # Log action is async, must run in a loop
                     # Using asyncio.run inside the signal handler context
-                    asyncio.run(log_action("close_provider", provider_name=name, status="success"))
+                    asyncio.run(
+                        log_action(
+                            "close_provider", provider_name=name, status="success"
+                        )
+                    )
                 except Exception:
                     logging.warning(
                         "Failed to log provider closure (could not run async log action)."
                     )
 
             except Exception as e:
-                logger.error(f"Error closing crypto provider {name}: {e}", exc_info=True)
+                logger.error(
+                    f"Error closing crypto provider {name}: {e}", exc_info=True
+                )
 
                 try:
                     asyncio.run(

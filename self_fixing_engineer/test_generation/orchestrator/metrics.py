@@ -1,6 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, Optional, List
 import os
+from typing import Any, Callable, Dict, List, Optional
 
 # --- Prometheus Metrics Integration (runtime-aware) ---
 logger = logging.getLogger(__name__)
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 METRICS_AVAILABLE = False
 try:  # import may succeed in prod, fail in minimal test envs
     import prometheus_client  # type: ignore
-    from prometheus_client import Counter, Histogram, Gauge  # type: ignore
+    from prometheus_client import Counter, Gauge, Histogram  # type: ignore
 
     METRICS_AVAILABLE = True
 except ImportError:
@@ -94,7 +94,9 @@ class _MetricProxy:
         Also detect state flips to avoid leaking a cached metric across tests.
         """
         global _WARNED_DISABLED
-        current_state = bool(METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None)
+        current_state = bool(
+            METRICS_AVAILABLE and METRICS_ENABLED and self._factory is not None
+        )
 
         # Invalidate cached metric if the state flipped since last use
         if self._last_state is not None and self._last_state != current_state:
@@ -109,7 +111,9 @@ class _MetricProxy:
             try:
                 self._metric = self._factory()
             except Exception as e:
-                logger.warning("Failed to instantiate metric from factory: %s. Using no-op.", e)
+                logger.warning(
+                    "Failed to instantiate metric from factory: %s. Using no-op.", e
+                )
                 self._metric = self._no_op_metric
         else:
             if not _WARNED_DISABLED:

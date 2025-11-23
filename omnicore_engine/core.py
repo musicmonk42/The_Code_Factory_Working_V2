@@ -1,15 +1,16 @@
-import logging
 import asyncio
-from typing import Any, Dict, Optional, List, Type, Set, Union
-from abc import ABC, abstractmethod
 import hashlib
-from datetime import datetime, date
-from pydantic_settings import BaseSettings
-import structlog
+import logging
+from abc import ABC, abstractmethod
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any, Dict, List, Optional, Set, Type, Union
 from uuid import UUID
+
 import numpy as np
+import structlog
 from arbiter.config import ArbiterConfig
+from pydantic_settings import BaseSettings
 
 # Initialize the configuration object
 settings = ArbiterConfig()
@@ -181,11 +182,15 @@ class ExplainableAI:
                 self.is_initialized = False
                 self.logger.info("Explainable AI core shut down.")
             except Exception as e:
-                self.logger.error(f"Error shutting down Explainable AI: {e}", exc_info=True)
+                self.logger.error(
+                    f"Error shutting down Explainable AI: {e}", exc_info=True
+                )
 
     async def explain_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         if not self.is_initialized or not self.reasoner:
-            self.logger.warning("Explainable AI core not initialized or reasoner unavailable.")
+            self.logger.warning(
+                "Explainable AI core not initialized or reasoner unavailable."
+            )
             return {"error": "Explainable AI core not available."}
         try:
             explanation_result = await self.reasoner.explain(
@@ -193,7 +198,9 @@ class ExplainableAI:
                 context=event_data.get("context", {}),
             )
             return {
-                "explanation": explanation_result.get("explanation", "No explanation provided.")
+                "explanation": explanation_result.get(
+                    "explanation", "No explanation provided."
+                )
             }
         except Exception as e:
             self.logger.error(f"Error generating explanation: {e}", exc_info=True)
@@ -201,14 +208,18 @@ class ExplainableAI:
 
     async def reason_event(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
         if not self.is_initialized or not self.reasoner:
-            self.logger.warning("Explainable AI core not initialized or reasoner unavailable.")
+            self.logger.warning(
+                "Explainable AI core not initialized or reasoner unavailable."
+            )
             return {"error": "Explainable AI core not available."}
         try:
             reasoning_result = await self.reasoner.reason(
                 query=event_data.get("query", "reason about this event"),
                 context=event_data.get("context", {}),
             )
-            return {"reasoning": reasoning_result.get("reasoning", "No reasoning provided.")}
+            return {
+                "reasoning": reasoning_result.get("reasoning", "No reasoning provided.")
+            }
         except Exception as e:
             self.logger.error(f"Error generating reasoning: {e}", exc_info=True)
             return {"error": str(e)}
@@ -250,7 +261,9 @@ class MerkleTree:
         self.root = current_level[0]
         self.logger.debug(f"Merkle root recalculated: {self.root[:10]}...")
 
-    def verify_proof(self, leaf_data: Union[str, bytes], root: str, proof: List[str]) -> bool:
+    def verify_proof(
+        self, leaf_data: Union[str, bytes], root: str, proof: List[str]
+    ) -> bool:
         # Ensure leaf_data is bytes
         if isinstance(leaf_data, str):
             leaf_data = leaf_data.encode("utf-8")
@@ -258,9 +271,13 @@ class MerkleTree:
         current_hash = hashed_leaf
         for p in proof:
             if p < current_hash:
-                current_hash = hashlib.sha256((p + current_hash).encode("utf-8")).hexdigest()
+                current_hash = hashlib.sha256(
+                    (p + current_hash).encode("utf-8")
+                ).hexdigest()
             else:
-                current_hash = hashlib.sha256((current_hash + p).encode("utf-8")).hexdigest()
+                current_hash = hashlib.sha256(
+                    (current_hash + p).encode("utf-8")
+                ).hexdigest()
         return current_hash == root
 
     def get_proof(self, leaf_data: Union[str, bytes]) -> List[str]:
@@ -334,7 +351,9 @@ class OmniCoreEngine:
                 self.components[name] = instance
                 self.logger.info(f"Component '{name}' initialized successfully.")
             except Exception as e:
-                self.logger.error(f"Failed to initialize component '{name}': {e}", exc_info=True)
+                self.logger.error(
+                    f"Failed to initialize component '{name}': {e}", exc_info=True
+                )
                 raise
 
     async def _get_component_instance(self, name: str) -> Optional[Any]:
@@ -354,31 +373,32 @@ class OmniCoreEngine:
         self.logger.info("OmniCore Engine: Starting application components...")
 
         try:
-            from omnicore_engine.knowledge_graph import KnowledgeGraph
-            from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
-            from omnicore_engine.database import Database
+            from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+            from sqlalchemy.orm import sessionmaker
+
+            from omnicore_engine.arbiter_growth import ArbiterGrowthManager
+            from omnicore_engine.array_backend import ArrayBackend
             from omnicore_engine.audit import ExplainAudit
+            from omnicore_engine.database import Database
+            from omnicore_engine.database.backends.sqlite import (  # Added import
+                SQLiteStorageBackend,
+            )
+            from omnicore_engine.decision_optimizer import DecisionOptimizer
+            from omnicore_engine.explainable_reasoner import ExplainableReasonerPlugin
             from omnicore_engine.feedback_manager import FeedbackManager
+            from omnicore_engine.knowledge_graph import KnowledgeGraph
+            from omnicore_engine.message_bus import (
+                MessageFilter,
+                PluginMessageBusAdapter,
+                ShardedMessageBus,
+            )
             from omnicore_engine.plugin_registry import (
                 PLUGIN_REGISTRY,
-                PlugInKind,
-                start_plugin_observer,
                 Plugin,
+                PlugInKind,
                 PluginMeta,
+                start_plugin_observer,
             )
-            from omnicore_engine.message_bus import (
-                ShardedMessageBus,
-                PluginMessageBusAdapter,
-                MessageFilter,
-            )
-            from omnicore_engine.array_backend import ArrayBackend
-            from omnicore_engine.decision_optimizer import DecisionOptimizer
-            from omnicore_engine.arbiter_growth import ArbiterGrowthManager
-            from omnicore_engine.database.backends.sqlite import (
-                SQLiteStorageBackend,
-            )  # Added import
-            from sqlalchemy.orm import sessionmaker
-            from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
         except ImportError as e:
             self.logger.error(f"Failed to import required modules: {e}", exc_info=True)
             raise RuntimeError(f"Module import failed: {e}")
@@ -425,9 +445,13 @@ class OmniCoreEngine:
             self.array_backend = None
 
         try:
-            self.message_bus = ShardedMessageBus(config=self.settings, db=None, audit_client=None)
+            self.message_bus = ShardedMessageBus(
+                config=self.settings, db=None, audit_client=None
+            )
         except Exception as e:
-            self.logger.error(f"Failed to initialize ShardedMessageBus: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize ShardedMessageBus: {e}", exc_info=True
+            )
             raise RuntimeError(f"MessageBus initialization failed: {e}")
 
         try:
@@ -478,29 +502,41 @@ class OmniCoreEngine:
                             ),
                             "shutdown": lambda self_comp: self.message_bus.shutdown(),
                             "health_check": lambda self_comp: {
-                                "status": ("ok" if self.message_bus.running else "stopped"),
+                                "status": (
+                                    "ok" if self.message_bus.running else "stopped"
+                                ),
                                 "queue_sizes_normal": {
                                     f"shard_{i}": q.qsize()
                                     for i, q in enumerate(self.message_bus.queues)
                                 },
                                 "queue_sizes_hp": {
                                     f"shard_{i}": q.qsize()
-                                    for i, q in enumerate(self.message_bus.high_priority_queues)
+                                    for i, q in enumerate(
+                                        self.message_bus.high_priority_queues
+                                    )
                                 },
                                 "kafka_circuit": self.message_bus.kafka_circuit.state,
                                 "redis_circuit": self.message_bus.redis_circuit.state,
                                 "total_subscribers": sum(
-                                    len(v) for v in self.message_bus.subscribers.values()
+                                    len(v)
+                                    for v in self.message_bus.subscribers.values()
                                 )
-                                + sum(len(v) for v in self.message_bus.regex_subscribers.values()),
+                                + sum(
+                                    len(v)
+                                    for v in self.message_bus.regex_subscribers.values()
+                                ),
                             },
-                            "is_healthy": property(lambda self_comp: self.message_bus.running),
+                            "is_healthy": property(
+                                lambda self_comp: self.message_bus.running
+                            ),
                         },
                     ),
                     settings=self.settings,
                 )
         except Exception as e:
-            self.logger.error(f"Failed to finalize message bus setup: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to finalize message bus setup: {e}", exc_info=True
+            )
             raise RuntimeError(f"MessageBus final setup failed: {e}")
 
         try:
@@ -510,7 +546,9 @@ class OmniCoreEngine:
                 PLUGIN_REGISTRY.set_message_bus(self.message_bus)
 
             async def _plugin_registry_initialize(self_comp_instance):
-                await PLUGIN_REGISTRY.load_from_directory(self_comp_instance.settings.plugin_dir)
+                await PLUGIN_REGISTRY.load_from_directory(
+                    self_comp_instance.settings.plugin_dir
+                )
 
             await self._initialize_component_instance(
                 "plugin_registry",
@@ -519,10 +557,14 @@ class OmniCoreEngine:
                     (Base,),
                     {
                         "initialize": _plugin_registry_initialize,
-                        "shutdown": lambda self_comp: self.logger.info("Plugin registry shutdown"),
+                        "shutdown": lambda self_comp: self.logger.info(
+                            "Plugin registry shutdown"
+                        ),
                         "health_check": lambda self_comp: {
                             "status": "ok",
-                            "plugins_loaded": sum(len(k) for k in PLUGIN_REGISTRY.plugins.values()),
+                            "plugins_loaded": sum(
+                                len(k) for k in PLUGIN_REGISTRY.plugins.values()
+                            ),
                         },
                         "is_healthy": property(lambda self_comp: True),
                     },
@@ -534,7 +576,9 @@ class OmniCoreEngine:
 
             PLUGIN_REGISTRY.load_ai_assistant_plugins()
         except Exception as e:
-            self.logger.error(f"Failed to initialize plugin registry: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize plugin registry: {e}", exc_info=True
+            )
             raise RuntimeError(f"Plugin registry initialization failed: {e}")
 
         try:
@@ -545,9 +589,13 @@ class OmniCoreEngine:
                 redis_url=self.settings.redis_url,
                 encryption_key=self.settings.encryption_key.get_secret_value(),
             )
-            self.feedback_manager = await self._get_component_instance("feedback_manager")
+            self.feedback_manager = await self._get_component_instance(
+                "feedback_manager"
+            )
         except Exception as e:
-            self.logger.error(f"Failed to initialize feedback manager: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize feedback manager: {e}", exc_info=True
+            )
             raise RuntimeError(f"Feedback manager initialization failed: {e}")
 
         try:
@@ -577,7 +625,9 @@ class OmniCoreEngine:
             )
             self.explainable_ai = await self._get_component_instance("explainable_ai")
         except Exception as e:
-            self.logger.error(f"Failed to initialize explainable AI: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize explainable AI: {e}", exc_info=True
+            )
             raise RuntimeError(f"Explainable AI initialization failed: {e}")
 
         try:
@@ -605,7 +655,9 @@ class OmniCoreEngine:
                         kind=PlugInKind.GROWTH_MANAGER.value,
                         description="Manages Arbiter's growth and skill progression.",
                     )
-                    growth_plugin_instance = Plugin(meta=meta, fn=self.arbiter_growth_manager)
+                    growth_plugin_instance = Plugin(
+                        meta=meta, fn=self.arbiter_growth_manager
+                    )
                     PLUGIN_REGISTRY.register(
                         PlugInKind.GROWTH_MANAGER.value,
                         "arbiter_growth",
@@ -617,7 +669,9 @@ class OmniCoreEngine:
                     "Database or KnowledgeGraph not initialized. Skipping ArbiterGrowthManager initialization."
                 )
         except Exception as e:
-            self.logger.error(f"Failed to initialize ArbiterGrowthManager: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to initialize ArbiterGrowthManager: {e}", exc_info=True
+            )
             raise RuntimeError(f"ArbiterGrowthManager initialization failed: {e}")
 
         for component_instance, name_str in [
@@ -648,7 +702,9 @@ class OmniCoreEngine:
                             if hasattr(self.component_instance, "execute") and callable(
                                 self.component_instance.execute
                             ):
-                                return await self.component_instance.execute(*args, **kwargs)
+                                return await self.component_instance.execute(
+                                    *args, **kwargs
+                                )
                             if self.meta.name == "array_backend" and hasattr(
                                 self.component_instance, "handle_computation_task"
                             ):
@@ -664,7 +720,9 @@ class OmniCoreEngine:
                                 "kwargs": kwargs,
                             }
 
-                    plugin_bus_adapter = PluginMessageBusAdapter(self.message_bus, name_str)
+                    plugin_bus_adapter = PluginMessageBusAdapter(
+                        self.message_bus, name_str
+                    )
                     component_kind = (
                         PlugInKind.GROWTH_MANAGER.value
                         if name_str == "arbiter_growth_manager"
@@ -695,7 +753,9 @@ class OmniCoreEngine:
         try:
             if self.message_bus:
                 self.message_bus.subscribe("system.shutdown", self._handle_shutdown)
-                self.message_bus.subscribe("system.config_changed", self._handle_config_change)
+                self.message_bus.subscribe(
+                    "system.config_changed", self._handle_config_change
+                )
                 self.message_bus.subscribe(
                     "system.error",
                     self._handle_system_error,
@@ -722,7 +782,9 @@ class OmniCoreEngine:
                     await component.shutdown()
                     self.logger.info(f"Component '{name}' shut down successfully.")
                 except Exception as e:
-                    self.logger.error(f"Error shutting down component '{name}': {e}", exc_info=True)
+                    self.logger.error(
+                        f"Error shutting down component '{name}': {e}", exc_info=True
+                    )
         self._is_initialized = False
         self.logger.info("OmniCore Engine: All components shut down.")
 

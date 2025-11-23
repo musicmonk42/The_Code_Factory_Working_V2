@@ -1,27 +1,27 @@
 import json
 import logging
-from unittest.mock import patch, MagicMock, mock_open
-import pytest
-from pydantic import ValidationError
+from unittest.mock import MagicMock, mock_open, patch
 
 # Import the module under test
 import intent_capture.config as config_module  # Import the module itself to patch its internals
+import pytest
 
 # Import what's actually available from the config module
+from intent_capture.config import PiiMaskingFormatter  # This exists
 from intent_capture.config import (
-    PiiMaskingFormatter,  # This exists
-    setup_logging,
-    fetch_from_vault,
-    _fetch_config_from_service,
-    ConfigEncryptor,
     Config,
-    PluginManager,
     ConfigChangeHandler,
+    ConfigEncryptor,
     GlobalConfigManager,
+    PluginManager,
+    _fetch_config_from_service,
+    fetch_from_vault,
     log_audit_event,
     prune_audit_logs,
+    setup_logging,
     startup_validation,
 )
+from pydantic import ValidationError
 
 
 # --- Test Fixtures ---
@@ -257,7 +257,9 @@ def test_plugin_manager_discover_and_apply_plugins(temp_plugin_dir, monkeypatch)
     """Test PluginManager discovers plugins."""
     monkeypatch.setattr("os.path.isdir", lambda x: True if "plugins" in x else False)
     monkeypatch.setattr("os.listdir", lambda x: ["test_plugin"])
-    monkeypatch.setattr("os.path.exists", lambda x: True if "plugin_config.json" in x else False)
+    monkeypatch.setattr(
+        "os.path.exists", lambda x: True if "plugin_config.json" in x else False
+    )
 
     with patch("builtins.open", mock_open(read_data='{"name": "test_plugin"}')):
         PluginManager.discover_and_apply_plugins(None)
@@ -350,7 +352,9 @@ def test_startup_validation_missing_fields(monkeypatch):
     # Reset the singleton
     GlobalConfigManager._instance = None
 
-    with pytest.raises(Exception):  # Will raise either ValidationError or pydantic error
+    with pytest.raises(
+        Exception
+    ):  # Will raise either ValidationError or pydantic error
         startup_validation()
 
 

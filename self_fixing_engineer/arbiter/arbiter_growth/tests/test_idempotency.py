@@ -4,20 +4,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from redis.asyncio import Redis
-from redis.exceptions import RedisError
+
+# Assuming all modules are in a discoverable path
+from arbiter.arbiter_growth.idempotency import (
+    IDEMPOTENCY_HITS_TOTAL,
+    IdempotencyStore,
+    IdempotencyStoreError,
+)
 from opentelemetry import trace  # Added for the tracer fixture
 
 # FIX: Added imports to set up a real OpenTelemetry context for tests
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter
-
-# Assuming all modules are in a discoverable path
-from arbiter.arbiter_growth.idempotency import (
-    IdempotencyStore,
-    IdempotencyStoreError,
-    IDEMPOTENCY_HITS_TOTAL,
-)
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 # --- Fixtures ---
 
@@ -115,9 +115,13 @@ async def test_check_and_set_miss(idempotency_store, mock_redis):
     result = await idempotency_store.check_and_set("new_key")
 
     assert result is True
-    mock_redis.set.assert_awaited_with("app:idempotency:new_key", "processed", nx=True, ex=3600)
+    mock_redis.set.assert_awaited_with(
+        "app:idempotency:new_key", "processed", nx=True, ex=3600
+    )
 
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
+    assert (
+        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -128,7 +132,9 @@ async def test_check_and_set_hit(idempotency_store, mock_redis, tracer):
     with tracer.start_as_current_span("test-span"):
         await idempotency_store.check_and_set("existing_key")
     # Verify metrics
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
+    assert (
+        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -138,7 +144,9 @@ async def test_check_and_set_hit(idempotency_store, mock_redis):
     result = await idempotency_store.check_and_set("existing_key")
 
     assert result is False
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() == 1
+    assert (
+        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -147,7 +155,9 @@ async def test_check_and_set_redis_error(idempotency_store, mock_redis, tracer):
     mock_redis.set.side_effect = RedisError("Connection failed")
 
     with tracer.start_as_current_span("test-span"):
-        with pytest.raises(IdempotencyStoreError, match="Failed to check/set idempotency key"):
+        with pytest.raises(
+            IdempotencyStoreError, match="Failed to check/set idempotency key"
+        ):
             await idempotency_store.check_and_set("error_key")
 
 
@@ -201,7 +211,9 @@ async def test_start_idempotent(set_env_redis_url):
         await store.start()
         await store.start()
 
-    with patch("redis.asyncio.from_url", return_value=mock_redis_client) as mock_from_url:
+    with patch(
+        "redis.asyncio.from_url", return_value=mock_redis_client
+    ) as mock_from_url:
         await store.start()
         await store.start()  # Second call should do nothing
 
@@ -329,8 +341,12 @@ async def test_concurrent_check_and_set(idempotency_store, mock_redis):
     assert results.count(False) == 49
 
     # Verify metrics reflect the outcome
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
-    assert IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() == 49
+    assert (
+        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="false")._value.get() == 1
+    )
+    assert (
+        IDEMPOTENCY_HITS_TOTAL.labels(arbiter="default", hit="true")._value.get() == 49
+    )
     assert mock_redis.set.call_count == 50
 
 
@@ -358,7 +374,9 @@ async def test_cluster_mode_initialization(set_env_redis_url):
         "arbiter.arbiter_growth.idempotency.RedisCluster.from_url",
         return_value=mock_cluster,
     ) as mock_from_url:
-        with patch("redis.asyncio.cluster.RedisCluster.from_url", return_value=mock_cluster):
+        with patch(
+            "redis.asyncio.cluster.RedisCluster.from_url", return_value=mock_cluster
+        ):
             await store.start()
             mock_from_url.assert_called_once()
             assert store.redis is mock_cluster

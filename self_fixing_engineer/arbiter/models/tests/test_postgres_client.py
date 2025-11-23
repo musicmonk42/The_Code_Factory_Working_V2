@@ -2,24 +2,25 @@ import asyncio
 import logging
 import os
 import uuid
-import pytest
-import pytest_asyncio
-from pytest_mock import MockerFixture
 from datetime import datetime, timezone
 from typing import Dict
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+import pytest
+import pytest_asyncio
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 # Import from the correct module
 from postgres_client import (
+    DB_CALLS_ERRORS,
+    DB_CALLS_TOTAL,
+    DB_CONNECTIONS_CURRENT,
     PostgresClient,
     PostgresClientConnectionError,
-    DB_CALLS_TOTAL,
-    DB_CALLS_ERRORS,
-    DB_CONNECTIONS_CURRENT,
 )
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(
@@ -113,7 +114,9 @@ async def pg_client(mocker: MockerFixture):
     mock_pool.is_closed.return_value = False
 
     # Mock create_pool
-    mocker.patch("postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool))
+    mocker.patch(
+        "postgres_client.asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool)
+    )
 
     client = PostgresClient()
     client.max_retries = 2  # Reduce for faster tests
@@ -191,7 +194,9 @@ async def test_connect_failure(mocker: MockerFixture):
     )
 
     client = PostgresClient()
-    with pytest.raises(PostgresClientConnectionError, match="Failed to connect to PostgreSQL"):
+    with pytest.raises(
+        PostgresClientConnectionError, match="Failed to connect to PostgreSQL"
+    ):
         await client.connect()
 
     assert (
@@ -236,7 +241,9 @@ async def test_disconnect_success(pg_client):
     assert get_metric_value(DB_CONNECTIONS_CURRENT, db_type="postgresql") == 0
 
     spans = in_memory_exporter.get_finished_spans()
-    disconnect_span = next((span for span in spans if span.name == "db_disconnect"), None)
+    disconnect_span = next(
+        (span for span in spans if span.name == "db_disconnect"), None
+    )
     assert disconnect_span is not None
     assert disconnect_span.status.is_ok
 
@@ -282,7 +289,9 @@ async def test_save_success(pg_client, mocker: MockerFixture):
 
     # Mock fetch to return the saved ID
     mock_conn = pg_client._pool.acquire.return_value.__aenter__.return_value
-    mock_conn.fetch = mocker.AsyncMock(return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}])
+    mock_conn.fetch = mocker.AsyncMock(
+        return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}]
+    )
 
     saved_id = await pg_client.save("feedback", SAMPLE_FEEDBACK_DATA)
     assert saved_id == SAMPLE_FEEDBACK_DATA["id"]
@@ -393,7 +402,9 @@ async def test_update_success(pg_client, mocker: MockerFixture):
 
     # Mock fetch to return the updated ID
     mock_conn = pg_client._pool.acquire.return_value.__aenter__.return_value
-    mock_conn.fetch = mocker.AsyncMock(return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}])
+    mock_conn.fetch = mocker.AsyncMock(
+        return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}]
+    )
 
     updated = await pg_client.update(
         "feedback",
@@ -420,7 +431,9 @@ async def test_delete_success(pg_client, mocker: MockerFixture):
 
     # Mock fetch to return the deleted ID
     mock_conn = pg_client._pool.acquire.return_value.__aenter__.return_value
-    mock_conn.fetch = mocker.AsyncMock(return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}])
+    mock_conn.fetch = mocker.AsyncMock(
+        return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}]
+    )
 
     deleted = await pg_client.delete("feedback", SAMPLE_FEEDBACK_DATA["id"])
     assert deleted
@@ -625,7 +638,9 @@ async def test_context_manager(pg_client, mocker: MockerFixture):
     """Test async context manager for connect/disconnect."""
     # Mock fetch to return saved ID
     mock_conn = pg_client._pool.acquire.return_value.__aenter__.return_value
-    mock_conn.fetch = mocker.AsyncMock(return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}])
+    mock_conn.fetch = mocker.AsyncMock(
+        return_value=[{"id": SAMPLE_FEEDBACK_DATA["id"]}]
+    )
 
     async with pg_client:
         assert pg_client._pool is not None
@@ -682,7 +697,9 @@ async def test_agent_knowledge_operations(pg_client, mocker: MockerFixture):
     # Mock for save
     mock_conn = pg_client._pool.acquire.return_value.__aenter__.return_value
     mock_conn.fetch = mocker.AsyncMock(
-        return_value=[{"domain": knowledge_data["domain"], "key": knowledge_data["key"]}]
+        return_value=[
+            {"domain": knowledge_data["domain"], "key": knowledge_data["key"]}
+        ]
     )
 
     # Test save
@@ -704,7 +721,9 @@ async def test_agent_knowledge_operations(pg_client, mocker: MockerFixture):
 
     # Mock for delete
     mock_conn.fetch = mocker.AsyncMock(
-        return_value=[{"domain": knowledge_data["domain"], "key": knowledge_data["key"]}]
+        return_value=[
+            {"domain": knowledge_data["domain"], "key": knowledge_data["key"]}
+        ]
     )
 
     # Test delete with composite key

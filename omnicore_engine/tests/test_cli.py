@@ -3,23 +3,24 @@ Test suite for omnicore_engine/cli.py
 Tests CLI commands, argument parsing, and command execution.
 """
 
-import pytest
 import json
-import yaml
-import sys
 import os
+import sys
 import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
 from argparse import Namespace
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+import yaml
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.cli import (
     main,
-    sanitize_env_vars,
     safe_command,
+    sanitize_env_vars,
     validate_file_path,
 )
 
@@ -38,7 +39,9 @@ class TestUtilityFunctions:
 
         assert os.environ["TEST_PASSWORD"] == "[REDACTED]"
         assert os.environ["API_KEY"] == "[REDACTED]"
-        assert os.environ["NORMAL_VAR"] == "normal_value"  # Doesn't contain sensitive keywords
+        assert (
+            os.environ["NORMAL_VAR"] == "normal_value"
+        )  # Doesn't contain sensitive keywords
 
         # Cleanup
         del os.environ["TEST_PASSWORD"]
@@ -154,7 +157,9 @@ class TestListPluginsCommand:
         mock_engine = Mock()
         mock_engine.is_initialized = True
         mock_engine.plugin_registry = Mock()
-        mock_engine.plugin_registry.get_plugin_names = Mock(return_value=["plugin1", "plugin2"])
+        mock_engine.plugin_registry.get_plugin_names = Mock(
+            return_value=["plugin1", "plugin2"]
+        )
 
         # Test would verify the command calls the right methods
 
@@ -212,7 +217,9 @@ class TestPluginManagementCommands:
         mock_engine.plugin_registry = Mock()
 
         with patch("omnicore_engine.cli.OmniCoreOmega_instance", mock_engine):
-            with patch("omnicore_engine.cli.PluginMarketplace") as mock_marketplace_class:
+            with patch(
+                "omnicore_engine.cli.PluginMarketplace"
+            ) as mock_marketplace_class:
                 mock_marketplace = Mock()
                 mock_marketplace.install_plugin = AsyncMock()
                 mock_marketplace_class.return_value = mock_marketplace
@@ -262,8 +269,8 @@ class TestOutputFormatting:
 
     def test_json_output_format(self):
         """Test JSON output formatting"""
-        from io import StringIO
         import sys
+        from io import StringIO
 
         data = {"key": "value", "number": 42}
 
@@ -476,7 +483,9 @@ class TestImportFixerCommand:
 
             with patch("omnicore_engine.cli.AIManager") as mock_ai_class:
                 mock_ai = Mock()
-                mock_ai.get_refactoring_suggestion = Mock(return_value="Suggested refactoring")
+                mock_ai.get_refactoring_suggestion = Mock(
+                    return_value="Suggested refactoring"
+                )
                 mock_ai_class.return_value = mock_ai
 
                 # Test execution

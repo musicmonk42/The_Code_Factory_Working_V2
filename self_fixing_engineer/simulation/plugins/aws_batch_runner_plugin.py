@@ -1,30 +1,31 @@
-import os
 import asyncio
+import fnmatch
+import inspect
 import json
 import logging
-import time
-import tempfile
-import tarfile
-import fnmatch
+import os
 import random
-import shutil
-import inspect
-import secrets
-from typing import Dict, Any, Optional, List, Callable
-from pydantic import BaseModel, Field, validator, ValidationError
-from prometheus_client import Counter, Histogram
 import re
+import secrets
+import shutil
+import tarfile
+import tempfile
+import time
+from typing import Any, Callable, Dict, List, Optional
+
 import aiohttp
+from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, Field, ValidationError, validator
 
 try:
     import boto3
     from botocore.exceptions import (
         ClientError,
-        NoCredentialsError,
-        EndpointConnectionError,
-        ReadTimeoutError,
         ConnectionClosedError,
+        EndpointConnectionError,
+        NoCredentialsError,
         PartialCredentialsError,
+        ReadTimeoutError,
     )
 
     AWS_AVAILABLE = True
@@ -43,7 +44,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -147,7 +150,9 @@ async def _maybe_await(v):
 class JobConfig(BaseModel):
     jobDefinition: str = Field(..., description="AWS Batch Job Definition name or ARN")
     jobQueue: str = Field(..., description="AWS Batch Job Queue name or ARN")
-    command: Optional[List[str]] = Field(None, description="Command to run in the container")
+    command: Optional[List[str]] = Field(
+        None, description="Command to run in the container"
+    )
     environment: List[Dict[str, str]] = Field(
         default_factory=list, description="Environment variables for the container"
     )
@@ -157,13 +162,25 @@ class JobConfig(BaseModel):
     container_overrides: Dict[str, Any] = Field(
         default_factory=dict, description="Raw container overrides"
     )
-    max_duration_seconds: int = Field(3600, ge=1, description="Max job run time in seconds")
+    max_duration_seconds: int = Field(
+        3600, ge=1, description="Max job run time in seconds"
+    )
     input_s3_bucket: str = Field(..., description="S3 bucket for input artifacts")
-    output_s3_bucket: Optional[str] = Field(None, description="S3 bucket for output results")
-    output_s3_key_prefix: str = Field("batch_results", description="Prefix for output in S3")
-    output_filename: str = Field("result.json", description="Filename for output artifact")
-    cleanup_s3_input: bool = Field(True, description="Delete input artifact after job completion")
-    retain_temp_archive: bool = Field(False, description="Retain local archive after upload")
+    output_s3_bucket: Optional[str] = Field(
+        None, description="S3 bucket for output results"
+    )
+    output_s3_key_prefix: str = Field(
+        "batch_results", description="Prefix for output in S3"
+    )
+    output_filename: str = Field(
+        "result.json", description="Filename for output artifact"
+    )
+    cleanup_s3_input: bool = Field(
+        True, description="Delete input artifact after job completion"
+    )
+    retain_temp_archive: bool = Field(
+        False, description="Retain local archive after upload"
+    )
     aws_region: Optional[str] = Field(None, description="AWS region")
     include_patterns: Optional[List[str]] = Field(
         None, description="Glob patterns to include when archiving project_root"
@@ -194,7 +211,9 @@ class JobConfig(BaseModel):
         False,
         description="Enable server-side encryption for S3 uploads (SSE-S3 by default)",
     )
-    sse_kms_key_id: Optional[str] = Field(None, description="KMS Key ID for SSE-KMS encryption")
+    sse_kms_key_id: Optional[str] = Field(
+        None, description="KMS Key ID for SSE-KMS encryption"
+    )
     poll_interval_seconds: int = Field(
         15, ge=1, le=300, description="Polling interval for job status checks"
     )
@@ -219,14 +238,18 @@ class JobConfig(BaseModel):
         if not re.match(r"^[a-z0-9][a-z0-9\-\.]{1,61}[a-z0-9]$", v):
             raise ValueError("Invalid S3 bucket name format")
         if ".." in v or ".-" in v or "-." in v:
-            raise ValueError("Invalid S3 bucket name (consecutive dots or dot-hyphen combos)")
+            raise ValueError(
+                "Invalid S3 bucket name (consecutive dots or dot-hyphen combos)"
+            )
         return v
 
 
 async def _load_credentials_from_vault(vault_url: str) -> Optional[Dict[str, str]]:
     vault_token = os.environ.get("VAULT_TOKEN")
     if not vault_url or not vault_token:
-        logger.warning("Vault URL or token not configured, falling back to environment variables")
+        logger.warning(
+            "Vault URL or token not configured, falling back to environment variables"
+        )
         return None
 
     if not vault_url.lower().startswith("https://"):
@@ -242,7 +265,9 @@ async def _load_credentials_from_vault(vault_url: str) -> Optional[Dict[str, str
             ) as response:
                 if response.status != 200:
                     text = await response.text()
-                    logger.error(f"Vault returned non-200 status {response.status}: {text[:256]}")
+                    logger.error(
+                        f"Vault returned non-200 status {response.status}: {text[:256]}"
+                    )
                     return None
                 data = await response.json()
                 inner = data.get("data", {})
@@ -298,8 +323,13 @@ async def _create_filtered_archive(
                     pruned_dirs = []
                     for d in list(dirs):
                         d_path = os.path.join(root, d)
-                        rel_dir = os.path.relpath(d_path, project_root).replace(os.sep, "/")
-                        if any(fnmatch.fnmatch(rel_dir, pat) for pat in (exclude_patterns or [])):
+                        rel_dir = os.path.relpath(d_path, project_root).replace(
+                            os.sep, "/"
+                        )
+                        if any(
+                            fnmatch.fnmatch(rel_dir, pat)
+                            for pat in (exclude_patterns or [])
+                        ):
                             continue
                         pruned_dirs.append(d)
                     dirs[:] = pruned_dirs
@@ -460,7 +490,9 @@ async def run_batch_job(job_config: dict, project_root: str, output_dir: str) ->
 
     job_name = f"sfe-sim-job-{secrets.token_hex(4)}"
     archive_base_name = f"sfe-job-{job_name}"
-    temp_archive_path = os.path.join(tempfile.gettempdir(), f"{archive_base_name}.tar.gz")
+    temp_archive_path = os.path.join(
+        tempfile.gettempdir(), f"{archive_base_name}.tar.gz"
+    )
 
     try:
         if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -524,7 +556,9 @@ async def run_batch_job(job_config: dict, project_root: str, output_dir: str) ->
             try:
                 os.remove(temp_archive_path)
             except OSError as e:
-                logger.warning(f"Failed to remove local archive {temp_archive_path}: {e}")
+                logger.warning(
+                    f"Failed to remove local archive {temp_archive_path}: {e}"
+                )
 
     async def _cleanup_input():
         if uploaded and cfg.cleanup_s3_input:
@@ -560,10 +594,14 @@ async def run_batch_job(job_config: dict, project_root: str, output_dir: str) ->
         submit_job_params["containerOverrides"]["command"] = cfg.command
 
     if cfg.resourceRequirements:
-        submit_job_params["containerOverrides"]["resourceRequirements"] = cfg.resourceRequirements
+        submit_job_params["containerOverrides"][
+            "resourceRequirements"
+        ] = cfg.resourceRequirements
 
     try:
-        submit_response = await asyncio.to_thread(batch_client.submit_job, **submit_job_params)
+        submit_response = await asyncio.to_thread(
+            batch_client.submit_job, **submit_job_params
+        )
         job_id = submit_response.get("jobId")
         if not job_id:
             result["reason"] = "Batch submit failed: missing jobId in response"
@@ -641,7 +679,9 @@ async def run_batch_job(job_config: dict, project_root: str, output_dir: str) ->
                     limit=10,
                 )
                 raw_log = [
-                    e.get("message") for e in (log_resp or {}).get("events", []) if "message" in e
+                    e.get("message")
+                    for e in (log_resp or {}).get("events", [])
+                    if "message" in e
                 ]
             except Exception as e:
                 logger.error(f"Failed to get logs for job {job_id}: {e}")

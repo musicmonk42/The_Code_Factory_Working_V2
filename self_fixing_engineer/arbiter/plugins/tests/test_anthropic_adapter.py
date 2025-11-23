@@ -1,20 +1,21 @@
 # test_anthropic_adapter.py
-import pytest
 import time
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
+import anthropic
+import pytest
 
 # Import the adapter and related exceptions
 from arbiter.plugins.anthropic_adapter import AnthropicAdapter
 from arbiter.plugins.llm_client import (
-    LLMClientError,
+    APIError,
     AuthError,
+    CircuitBreakerOpenError,
+    LLMClientError,
     RateLimitError,
     TimeoutError,
-    APIError,
-    CircuitBreakerOpenError,
 )
-import anthropic
 from tenacity import RetryError
 
 
@@ -311,7 +312,9 @@ class TestAnthropicAdapter:
         with patch("arbiter.plugins.anthropic_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
-            mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close error"))
+            mock_instance.aclose_session = AsyncMock(
+                side_effect=Exception("Close error")
+            )
 
             async with AnthropicAdapter(valid_settings):
                 pass  # Should not raise even if close fails
@@ -321,11 +324,14 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_success(self, adapter):
         """Test that metrics are recorded on successful generation."""
-        with patch(
-            "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
-        ) as mock_latency, patch(
-            "arbiter.plugins.anthropic_adapter.anthropic_call_success_total"
-        ) as mock_success:
+        with (
+            patch(
+                "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+            ) as mock_latency,
+            patch(
+                "arbiter.plugins.anthropic_adapter.anthropic_call_success_total"
+            ) as mock_success,
+        ):
 
             adapter.client.generate_text.return_value = "Success"
             await adapter.generate("Test", correlation_id="metrics-test")
@@ -336,11 +342,14 @@ class TestAnthropicAdapter:
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_failure(self, adapter):
         """Test that metrics are recorded on failed generation."""
-        with patch(
-            "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
-        ) as mock_latency, patch(
-            "arbiter.plugins.anthropic_adapter.anthropic_call_errors_total"
-        ) as mock_errors:
+        with (
+            patch(
+                "arbiter.plugins.anthropic_adapter.anthropic_call_latency_seconds"
+            ) as mock_latency,
+            patch(
+                "arbiter.plugins.anthropic_adapter.anthropic_call_errors_total"
+            ) as mock_errors,
+        ):
 
             adapter.client.generate_text.side_effect = Exception("Test error")
 

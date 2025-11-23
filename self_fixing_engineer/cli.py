@@ -3,8 +3,8 @@ CLI module for the Self-Fixing Engineer platform
 """
 
 import asyncio
-import sys
 import subprocess
+import sys
 
 
 class SFEPlatform:
@@ -91,7 +91,9 @@ async def main_cli_loop():
             elif command == "":
                 continue
             else:
-                print(f"Unknown command: {command}. Type 'help' for available commands.")
+                print(
+                    f"Unknown command: {command}. Type 'help' for available commands."
+                )
 
         except KeyboardInterrupt:
             print("\nUse 'quit' to exit.")

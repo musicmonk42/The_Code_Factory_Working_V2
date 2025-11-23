@@ -1,13 +1,14 @@
+import asyncio
+import gzip
+import importlib.util
+import logging
 import os
 import sys
-import logging
-import asyncio
 import time
-import pytest
-import gzip
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import Dict
-import importlib.util
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
 if sys.platform.startswith("win"):
@@ -99,9 +100,10 @@ os.environ["SIEM_GATEWAY_ADMIN_API_KEY"] = "test-admin-key"
 os.environ["SIEM_AUDIT_LOG_HMAC_KEY"] = "test-hmac-key"
 os.environ["SIEM_WAL_HMAC_KEY"] = "test-wal-hmac-key"
 
+import aiohttp
+
 # Now import required libraries
 from pydantic import ValidationError
-import aiohttp
 
 # Fix the SIEM plugin before importing
 test_dir = os.path.dirname(os.path.abspath(__file__))
@@ -123,7 +125,9 @@ siem_code = siem_code.replace(
     '    SENSITIVE_KEYS = re.compile(r".*(password|secret|key|token|pii|ssn|credit_card).*", re.IGNORECASE)',
     '    SENSITIVE_KEYS: ClassVar = re.compile(r".*\\b(password|secret|api_key|access_key|private_key|token|pii|ssn|credit_card)\\b.*", re.IGNORECASE)',
 )
-siem_code = siem_code.replace("    SENSITIVE_PATTERNS = [", "    SENSITIVE_PATTERNS: ClassVar = [")
+siem_code = siem_code.replace(
+    "    SENSITIVE_PATTERNS = [", "    SENSITIVE_PATTERNS: ClassVar = ["
+)
 
 # Fix the TokenBucket rate limiting to adjust rate immediately on 429
 siem_code = siem_code.replace(
@@ -190,7 +194,9 @@ def setup_logging():
     if hasattr(siem_plugin, "main_logger"):
         siem_plugin.main_logger.handlers = []
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s"))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
+        )
         siem_plugin.main_logger.addHandler(handler)
         siem_plugin.main_logger.setLevel(logging.DEBUG)
     yield
@@ -332,8 +338,12 @@ def sample_metrics():
 def test_siem_target_validate_url_protocol_prod(monkeypatch):
     """Test HTTPS requirement for SIEMTarget in production."""
     monkeypatch.setattr(siem_plugin, "PROD_MODE", True)
-    with pytest.raises(ValidationError, match="In production, SIEM target URLs must use HTTPS"):
-        siem_plugin.SIEMTarget(name="test", url="http://siem.example.com", token="token")
+    with pytest.raises(
+        ValidationError, match="In production, SIEM target URLs must use HTTPS"
+    ):
+        siem_plugin.SIEMTarget(
+            name="test", url="http://siem.example.com", token="token"
+        )
 
 
 def test_siem_gateway_settings_success(sample_settings_dict):
@@ -365,7 +375,9 @@ def test_siem_gateway_settings_admin_api_host_prod(monkeypatch, sample_settings_
     sample_settings_dict["targets"] = [
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
     ]
-    with pytest.raises(ValidationError, match="admin API must only be exposed on localhost"):
+    with pytest.raises(
+        ValidationError, match="admin API must only be exposed on localhost"
+    ):
         siem_plugin.SIEMGatewaySettings(**sample_settings_dict)
 
 
@@ -376,7 +388,9 @@ def test_siem_gateway_settings_immutable_prod(monkeypatch, sample_settings_dict)
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
     ]
     settings = siem_plugin.SIEMGatewaySettings(**sample_settings_dict)
-    with pytest.raises(AttributeError, match="Configuration is immutable in production mode"):
+    with pytest.raises(
+        AttributeError, match="Configuration is immutable in production mode"
+    ):
         settings.dry_run = True
 
 
@@ -409,7 +423,9 @@ def test_siem_metrics_update_system_metrics(mock_psutil):
 # --- SIEMEvent Tests ---
 def test_siem_event_success():
     """Test successful SIEMEvent creation."""
-    event = siem_plugin.SIEMEvent(event_name="test", source="app", details={"key": "value"})
+    event = siem_plugin.SIEMEvent(
+        event_name="test", source="app", details={"key": "value"}
+    )
     assert event.event_name == "test"
     assert event.source == "app"
     assert event.details == {"key": "value"}
@@ -519,7 +535,9 @@ def test_circuit_breaker_check_open_raises(sample_metrics):
     )
     cb._is_open = True
     cb._last_failure_time = time.monotonic()
-    with pytest.raises(ConnectionAbortedError, match="Circuit breaker for test is open"):
+    with pytest.raises(
+        ConnectionAbortedError, match="Circuit breaker for test is open"
+    ):
         cb.check()
 
 
@@ -570,7 +588,9 @@ async def test_token_bucket_refill(sample_metrics):
 # --- SIEMGateway Tests ---
 def test_siem_gateway_init(sample_settings_dict, sample_metrics):
     """Test successful SIEMGateway initialization."""
-    target = siem_plugin.SIEMTarget(name="security", url="https://siem.example.com", token="token")
+    target = siem_plugin.SIEMTarget(
+        name="security", url="https://siem.example.com", token="token"
+    )
     sample_settings_dict["targets"] = [
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
     ]
@@ -584,7 +604,9 @@ def test_siem_gateway_init(sample_settings_dict, sample_metrics):
 
 def test_siem_gateway_pause_resume(sample_settings_dict, sample_metrics):
     """Test pause and resume functionality."""
-    target = siem_plugin.SIEMTarget(name="security", url="https://siem.example.com", token="token")
+    target = siem_plugin.SIEMTarget(
+        name="security", url="https://siem.example.com", token="token"
+    )
     sample_settings_dict["targets"] = [
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
     ]
@@ -644,7 +666,9 @@ async def test_siem_gateway_manager_startup_prod_checks(
         await manager.startup()
 
 
-def test_siem_gateway_manager_publish_unknown_target(sample_settings_dict, sample_metrics):
+def test_siem_gateway_manager_publish_unknown_target(
+    sample_settings_dict, sample_metrics
+):
     """Test publishing to unknown target."""
     sample_settings_dict["targets"] = [
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
@@ -657,7 +681,9 @@ def test_siem_gateway_manager_publish_unknown_target(sample_settings_dict, sampl
 
 
 @pytest.mark.asyncio
-async def test_siem_gateway_manager_health_check(sample_settings_dict, sample_metrics, temp_dir):
+async def test_siem_gateway_manager_health_check(
+    sample_settings_dict, sample_metrics, temp_dir
+):
     """Test health check."""
     sample_settings_dict["targets"] = [
         siem_plugin.SIEMTarget(**t) for t in sample_settings_dict["targets"]
@@ -680,7 +706,9 @@ async def test_siem_gateway_manager_health_check(sample_settings_dict, sample_me
 @pytest.mark.asyncio
 async def test_dead_letter_to_file(temp_dir):
     """Test dead letter to file."""
-    event = siem_plugin.SIEMEvent(event_name="test", source="app", details={"key": "value"})
+    event = siem_plugin.SIEMEvent(
+        event_name="test", source="app", details={"key": "value"}
+    )
 
     # Track if the file operations were called
     file_operations = {

@@ -1,20 +1,21 @@
 # tests/test_guardrails_integration.py
+import asyncio
 import os
 import sys
-import pytest
-import asyncio
-import yaml
 from unittest.mock import patch
+
+import pytest
+import yaml
 
 # Fix import paths for both modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import audit_log
 from compliance_mapper import (
-    generate_report,
     ComplianceEnforcementError,
     _log_to_central_audit,
-    main_cli,
+    generate_report,
     health_check,
+    main_cli,
 )
 
 
@@ -50,7 +51,9 @@ def temp_config_and_log(tmp_path):
 async def test_integration_load_and_audit(temp_config_and_log, monkeypatch):
     """Test integration: Load compliance map and trigger audit log via exception."""
     config_path, log_path = temp_config_and_log
-    monkeypatch.setenv("APP_ENV", "development")  # Changed from production to avoid exit
+    monkeypatch.setenv(
+        "APP_ENV", "development"
+    )  # Changed from production to avoid exit
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
 
     # Test that ComplianceEnforcementError triggers logging
@@ -82,10 +85,14 @@ async def test_integration_generate_report_with_gaps(temp_config_and_log, monkey
 
 
 @pytest.mark.asyncio
-async def test_integration_main_cli_in_production(temp_config_and_log, monkeypatch, capsys):
+async def test_integration_main_cli_in_production(
+    temp_config_and_log, monkeypatch, capsys
+):
     """Test main_cli in production with gaps, verifying exit code."""
     config_path, log_path = temp_config_and_log
-    monkeypatch.setenv("APP_ENV", "development")  # Use development to avoid production checks
+    monkeypatch.setenv(
+        "APP_ENV", "development"
+    )  # Use development to avoid production checks
     monkeypatch.setenv("CREW_CONFIG_PATH", config_path)
     monkeypatch.setenv("AUDIT_LOG_PATH", log_path)
 
@@ -152,8 +159,12 @@ async def test_audit_chain_creation(temp_config_and_log, monkeypatch):
 
     # Create an audit logger and add some entries
     logger = audit_log.AuditLogger(log_path=log_path)
-    await logger.add_entry("compliance", "gap_detected", {"control": "AC-2"}, "compliance_mapper")
-    await logger.add_entry("compliance", "report_generated", {"gaps_found": 1}, "compliance_mapper")
+    await logger.add_entry(
+        "compliance", "gap_detected", {"control": "AC-2"}, "compliance_mapper"
+    )
+    await logger.add_entry(
+        "compliance", "report_generated", {"gaps_found": 1}, "compliance_mapper"
+    )
 
     # Verify the chain is valid
     is_valid = audit_log.verify_audit_chain(log_path)

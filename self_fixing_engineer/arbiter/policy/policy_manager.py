@@ -43,11 +43,11 @@ Metrics
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import os
 import re
-import errno
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,8 +55,8 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 # OpenTelemetry: only acquire tracer; assume provider is set elsewhere
 try:
@@ -105,7 +105,9 @@ def _sanitize_label(value: Any) -> str:
 
 
 policy_ops_total = Counter("policy_ops_total", "Total policy operations", ["operation"])
-policy_errors_total = Counter("policy_errors_total", "Total policy errors", ["operation"])
+policy_errors_total = Counter(
+    "policy_errors_total", "Total policy errors", ["operation"]
+)
 policy_file_read_latency = Histogram(
     "policy_file_read_latency_seconds",
     "Latency of policy file reads",
@@ -140,8 +142,8 @@ except Exception:  # pragma: no cover - fallback to local Base
     _ProjectBase = None
 
 try:
-    from sqlalchemy.orm import declarative_base, Mapped, mapped_column
     from sqlalchemy import String
+    from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
     try:
         from sqlalchemy import JSON as _JSONType  # cross-dialect JSON
@@ -263,7 +265,9 @@ class PolicyConfig(BaseModel):
             if _v.parse(ver) < _v.parse(compat):
                 raise ValueError(f"Policy version {ver} < compatibility {compat}")
         except Exception as e:
-            raise ValueError(f"Invalid version/compatibility in file_metadata: {e}") from e
+            raise ValueError(
+                f"Invalid version/compatibility in file_metadata: {e}"
+            ) from e
         # Minimal global_settings sanity
         if not isinstance(self.global_settings, dict):
             raise ValueError("global_settings must be a dict")
@@ -345,7 +349,9 @@ class PolicyManager:
                 "ENCRYPTION_KEY not configured. Set ENCRYPTION_KEY or ENCRYPTION_KEY_FILE."
             )
         if len(key.encode("utf-8")) != 44:
-            raise ValueError("ENCRYPTION_KEY must be a 32-byte base64-encoded (44 char) Fernet key")
+            raise ValueError(
+                "ENCRYPTION_KEY must be a 32-byte base64-encoded (44 char) Fernet key"
+            )
         try:
             return Fernet(key.encode("utf-8"))
         except Exception as e:
@@ -387,16 +393,20 @@ class PolicyManager:
                 return data
             except InvalidToken as e:
                 span.record_exception(e)
-                policy_errors_total.labels(operation=_sanitize_label("file_decrypt")).inc()
+                policy_errors_total.labels(
+                    operation=_sanitize_label("file_decrypt")
+                ).inc()
                 raise ValueError("Failed to decrypt policy file (invalid key)") from e
             except json.JSONDecodeError as e:
                 span.record_exception(e)
-                policy_errors_total.labels(operation=_sanitize_label("file_json_decode")).inc()
+                policy_errors_total.labels(
+                    operation=_sanitize_label("file_json_decode")
+                ).inc()
                 raise ValueError("Policy file is not valid JSON after decrypt") from e
             finally:
-                policy_file_read_latency.labels(operation=_sanitize_label("read")).observe(
-                    asyncio.get_running_loop().time() - start
-                )
+                policy_file_read_latency.labels(
+                    operation=_sanitize_label("read")
+                ).observe(asyncio.get_running_loop().time() - start)
 
     async def _write_encrypted_json(self, payload: Dict[str, Any]) -> None:
         start = asyncio.get_running_loop().time()
@@ -420,9 +430,9 @@ class PolicyManager:
                 else:
                     raise
             span.set_attribute("status", "ok")
-            policy_file_write_latency.labels(operation=_sanitize_label("write")).observe(
-                asyncio.get_running_loop().time() - start
-            )
+            policy_file_write_latency.labels(
+                operation=_sanitize_label("write")
+            ).observe(asyncio.get_running_loop().time() - start)
 
     # --- Public methods ---
 
@@ -439,19 +449,25 @@ class PolicyManager:
                     )
                     self.policies = PolicyConfig.default()
                     await self._write_encrypted_json(self.policies.model_dump())
-                    policy_ops_total.labels(operation=_sanitize_label("init_default")).inc()
+                    policy_ops_total.labels(
+                        operation=_sanitize_label("init_default")
+                    ).inc()
                     if self.db_client:
                         await self.save_to_database()
                     return
                 except Exception as e:
                     span.record_exception(e)
-                    policy_errors_total.labels(operation=_sanitize_label("load_file")).inc()
+                    policy_errors_total.labels(
+                        operation=_sanitize_label("load_file")
+                    ).inc()
                     raise
                 try:
                     self.policies = PolicyConfig(**data)
                 except ValidationError as e:
                     span.record_exception(e)
-                    policy_errors_total.labels(operation=_sanitize_label("pydantic_validate")).inc()
+                    policy_errors_total.labels(
+                        operation=_sanitize_label("pydantic_validate")
+                    ).inc()
                     raise ValueError(f"Policy validation failed: {e}") from e
                 policy_ops_total.labels(operation=_sanitize_label("load")).inc()
                 if self.db_client:
@@ -480,7 +496,9 @@ class PolicyManager:
     async def load_from_database(self) -> None:
         """Load policies from DB into memory. Falls back to file if nothing stored."""
         if not self.db_client or Base is None:
-            raise RuntimeError("Database client not configured or SQLAlchemy unavailable.")
+            raise RuntimeError(
+                "Database client not configured or SQLAlchemy unavailable."
+            )
         async with self._lock:
             with tracer.start_as_current_span("load_policies_db") as span:
                 try:
@@ -488,13 +506,19 @@ class PolicyManager:
                         row = await session.get(PolicyORM, "current")
                         if row and getattr(row, "data", None):
                             self.policies = PolicyConfig(**row.data)
-                            policy_ops_total.labels(operation=_sanitize_label("load_db")).inc()
+                            policy_ops_total.labels(
+                                operation=_sanitize_label("load_db")
+                            ).inc()
                         else:
-                            logger.warning("No DB policy row found; falling back to file.")
+                            logger.warning(
+                                "No DB policy row found; falling back to file."
+                            )
                             await self.load_policies()
                 except Exception as e:
                     span.record_exception(e)
-                    policy_errors_total.labels(operation=_sanitize_label("load_db")).inc()
+                    policy_errors_total.labels(
+                        operation=_sanitize_label("load_db")
+                    ).inc()
                     raise ValueError(f"Database load failed: {e}") from e
 
     async def save_to_database(self) -> None:
@@ -521,9 +545,9 @@ class PolicyManager:
                 policy_errors_total.labels(operation=_sanitize_label("save_db")).inc()
                 raise ValueError(f"Database save failed: {e}") from e
             finally:
-                policy_db_upsert_latency.labels(operation=_sanitize_label("upsert")).observe(
-                    asyncio.get_running_loop().time() - start
-                )
+                policy_db_upsert_latency.labels(
+                    operation=_sanitize_label("upsert")
+                ).observe(asyncio.get_running_loop().time() - start)
 
     def get_policies(self) -> Optional[PolicyConfig]:
         return self.policies
@@ -538,7 +562,9 @@ class PolicyManager:
         Accepts a base64 (44-char) Fernet key.
         """
         if len(new_key_b64.encode("utf-8")) != 44:
-            raise ValueError("new_key_b64 must be a 32-byte base64-encoded Fernet key (44 chars)")
+            raise ValueError(
+                "new_key_b64 must be a 32-byte base64-encoded Fernet key (44 chars)"
+            )
         async with self._lock:
             with tracer.start_as_current_span("rotate_key"):
                 # ensure we can load current payload
@@ -552,7 +578,9 @@ class PolicyManager:
                 try:
                     self._fernet = Fernet(new_key_b64.encode("utf-8"))
                     await self._write_encrypted_json(payload)
-                    policy_ops_total.labels(operation=_sanitize_label("rotate_key")).inc()
+                    policy_ops_total.labels(
+                        operation=_sanitize_label("rotate_key")
+                    ).inc()
                 finally:
                     self._fernet = old
 
@@ -588,7 +616,9 @@ class PolicyManager:
         try:
             from arbiter.permission_manager import PermissionManager  # type: ignore
         except Exception as e:
-            raise RuntimeError("PermissionManager not available in this environment") from e
+            raise RuntimeError(
+                "PermissionManager not available in this environment"
+            ) from e
         mgr = PermissionManager(self.config)
         # Assume a sync or async check; support both
         res = mgr.check(role, permission)

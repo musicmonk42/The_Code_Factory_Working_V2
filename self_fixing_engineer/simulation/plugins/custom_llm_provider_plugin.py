@@ -1,26 +1,17 @@
 from __future__ import annotations
 
-import os
 import asyncio
+import hashlib
+import inspect
 import json
 import logging
-import time
-import hashlib
-import uuid
+import os
 import re
-import inspect
 import sys
+import time
+import uuid
+from typing import Any, AsyncGenerator, Callable, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    List,
-    Tuple,
-    Callable,
-    AsyncGenerator,
-    Iterable,
-)
 
 # Add the module to sys.modules with the flat name for testability
 sys.modules.setdefault("custom_llm_provider_plugin", sys.modules[__name__])
@@ -82,7 +73,7 @@ class _NoopGauge:
 
 # Prometheus (metrics) imports
 try:
-    from prometheus_client import Counter, Histogram, Gauge  # noqa: F401
+    from prometheus_client import Counter, Gauge, Histogram  # noqa: F401
 
     PROM_AVAILABLE = True
 except Exception as e:
@@ -114,16 +105,16 @@ except ImportError:
 
 # LangChain imports
 try:
+    from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
     from langchain_core.language_models import BaseChatModel
-    from langchain_core.outputs import ChatGenerationChunk, ChatResult, ChatGeneration
     from langchain_core.messages import (
         AIMessage,
+        AIMessageChunk,
+        BaseMessage,
         HumanMessage,
         SystemMessage,
-        BaseMessage,
-        AIMessageChunk,
     )
-    from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+    from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
@@ -132,7 +123,9 @@ except ImportError as e:
     BaseChatModel = object
 
     class ChatGenerationChunk:
-        def __init__(self, text: Optional[str] = None, message: Optional[Any] = None, **data: Any):
+        def __init__(
+            self, text: Optional[str] = None, message: Optional[Any] = None, **data: Any
+        ):
             self.text = text
             self.message = message
 
@@ -176,12 +169,12 @@ except ImportError as e:
 # Tenacity imports for optional retry logic
 try:
     from tenacity import (
+        RetryError,
+        before_sleep_log,
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
-        before_sleep_log,
-        RetryError,
     )
 
     TENACITY_AVAILABLE = True
@@ -207,8 +200,8 @@ try:
     import aiohttp
     from aiohttp.client_exceptions import (
         ClientError,
-        ClientResponseError,
         ClientPayloadError,
+        ClientResponseError,
         ContentTypeError,
     )
 
@@ -271,16 +264,24 @@ else:
 DEFAULT_LLM_CONFIG.setdefault(
     "api_base_url", os.getenv("CUSTOM_LLM_API_BASE_URL", "http://localhost:11434/v1/")
 )
-DEFAULT_LLM_CONFIG.setdefault("api_key", os.getenv("CUSTOM_LLM_API_KEY", "your_custom_llm_api_key"))
+DEFAULT_LLM_CONFIG.setdefault(
+    "api_key", os.getenv("CUSTOM_LLM_API_KEY", "your_custom_llm_api_key")
+)
 DEFAULT_LLM_CONFIG.setdefault(
     "default_model", os.getenv("CUSTOM_LLM_DEFAULT_MODEL", "llama2:7b-chat-q4_K_M")
 )
 DEFAULT_LLM_CONFIG.setdefault(
     "default_temperature", float(os.getenv("CUSTOM_LLM_DEFAULT_TEMP", "0.7"))
 )
-DEFAULT_LLM_CONFIG.setdefault("max_tokens", int(os.getenv("CUSTOM_LLM_MAX_TOKENS", "512")))
-DEFAULT_LLM_CONFIG.setdefault("timeout_seconds", int(os.getenv("CUSTOM_LLM_TIMEOUT_SECONDS", "60")))
-DEFAULT_LLM_CONFIG.setdefault("retry_attempts", int(os.getenv("CUSTOM_LLM_RETRY_ATTEMPTS", "3")))
+DEFAULT_LLM_CONFIG.setdefault(
+    "max_tokens", int(os.getenv("CUSTOM_LLM_MAX_TOKENS", "512"))
+)
+DEFAULT_LLM_CONFIG.setdefault(
+    "timeout_seconds", int(os.getenv("CUSTOM_LLM_TIMEOUT_SECONDS", "60"))
+)
+DEFAULT_LLM_CONFIG.setdefault(
+    "retry_attempts", int(os.getenv("CUSTOM_LLM_RETRY_ATTEMPTS", "3"))
+)
 DEFAULT_LLM_CONFIG.setdefault(
     "retry_backoff_factor", float(os.getenv("CUSTOM_LLM_RETRY_BACKOFF_FACTOR", "2.0"))
 )
@@ -290,7 +291,9 @@ DEFAULT_LLM_CONFIG.setdefault(
 DEFAULT_LLM_CONFIG.setdefault(
     "cache_ttl_seconds", int(os.getenv("CUSTOM_LLM_CACHE_TTL_SECONDS", "3600"))
 )
-DEFAULT_LLM_CONFIG.setdefault("redis_url", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+DEFAULT_LLM_CONFIG.setdefault(
+    "redis_url", os.getenv("REDIS_URL", "redis://localhost:6379/0")
+)
 DEFAULT_LLM_CONFIG.setdefault(
     "rate_limit_requests_per_minute", int(os.getenv("LLM_RATE_LIMIT_RPM", "60"))
 )
@@ -300,7 +303,9 @@ DEFAULT_LLM_CONFIG.setdefault(
 DEFAULT_LLM_CONFIG.setdefault("vault_url", os.getenv("VAULT_URL"))
 DEFAULT_LLM_CONFIG.setdefault("vault_token", os.getenv("VAULT_TOKEN"))
 DEFAULT_LLM_CONFIG.setdefault("vault_kv_mount", os.getenv("VAULT_KV_MOUNT", "secret"))
-DEFAULT_LLM_CONFIG.setdefault("vault_secret_path", os.getenv("VAULT_SECRET_PATH", "llm-api-key"))
+DEFAULT_LLM_CONFIG.setdefault(
+    "vault_secret_path", os.getenv("VAULT_SECRET_PATH", "llm-api-key")
+)
 DEFAULT_LLM_CONFIG.setdefault("vault_data_key", os.getenv("VAULT_DATA_KEY", "api_key"))
 DEFAULT_LLM_CONFIG.setdefault(
     "api_key_vault_cache_ttl_seconds",
@@ -534,11 +539,15 @@ async def _get_redis_client() -> Optional[Any]:
             try:
                 redis_url = DEFAULT_LLM_CONFIG["redis_url"]
                 if _is_production() and not redis_url.lower().startswith("rediss://"):
-                    raise ValueError("Redis URL must use TLS (rediss://) in production.")
+                    raise ValueError(
+                        "Redis URL must use TLS (rediss://) in production."
+                    )
                 _REDIS_CLIENT_SHARED = Redis.from_url(redis_url)  # type: ignore
                 logger.info("Initialized shared Redis client for distributed caching.")
             except Exception as e:
-                logger.warning(f"Redis cache get failed: {e}. Falling back to in-memory cache.")
+                logger.warning(
+                    f"Redis cache get failed: {e}. Falling back to in-memory cache."
+                )
                 _REDIS_CLIENT_SHARED = None
         return _REDIS_CLIENT_SHARED
 
@@ -616,7 +625,9 @@ class AsyncCircuitBreaker:
                 if elapsed > self.cooldown_seconds:
                     self.state = self.HALF_OPEN
                     self.metrics_gauge.set(self.HALF_OPEN)
-                    logger.warning(f"Circuit for '{self.name}' is half-open. Probing...")
+                    logger.warning(
+                        f"Circuit for '{self.name}' is half-open. Probing..."
+                    )
                 else:
                     raise CircuitBreakerError(
                         f"Circuit for '{self.name}' is open. Cooldown remaining: {self.cooldown_seconds - elapsed:.1f}s"
@@ -802,14 +813,17 @@ class CustomLLMProvider:
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = (
-            config or LLMConfig(api_base_url="https://api.example.com/v1/", api_key="test-key")
+            config
+            or LLMConfig(api_base_url="https://api.example.com/v1/", api_key="test-key")
         ).validate()
         self.circuit_breaker_threshold = int(self.config.circuit_breaker_threshold)
         self._failure_count = 0
         self._max_retries = 3
         self._circuit_breaker = AsyncCircuitBreaker(
             failures_threshold=self.circuit_breaker_threshold,
-            cooldown_seconds=DEFAULT_LLM_CONFIG.get("circuit_breaker_cooldown_seconds", 300),
+            cooldown_seconds=DEFAULT_LLM_CONFIG.get(
+                "circuit_breaker_cooldown_seconds", 300
+            ),
             name=self.config.model,
         )
 
@@ -837,12 +851,20 @@ class CustomLLMProvider:
             "stop": stop or [],
             "prompt": prompt,
             "base": self.config.api_base_url,
-            "fmt": ("messages" if DEFAULT_LLM_CONFIG.get("send_openai_messages") else "prompt"),
+            "fmt": (
+                "messages"
+                if DEFAULT_LLM_CONFIG.get("send_openai_messages")
+                else "prompt"
+            ),
         }
-        blob = json.dumps(key_obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        blob = json.dumps(key_obj, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         return "llm_cache:" + hashlib.sha256(blob).hexdigest()
 
-    async def _get_cached_response(self, cache_key: str, model_name: str) -> Optional[str]:
+    async def _get_cached_response(
+        self, cache_key: str, model_name: str
+    ) -> Optional[str]:
         if not DEFAULT_LLM_CONFIG.get("enable_caching", True):
             return None
         now = time.time()
@@ -874,7 +896,9 @@ class CustomLLMProvider:
 
         return None
 
-    async def _set_cached_response(self, cache_key: str, model_name: str, response: str) -> None:
+    async def _set_cached_response(
+        self, cache_key: str, model_name: str, response: str
+    ) -> None:
         if not DEFAULT_LLM_CONFIG.get("enable_caching", True):
             return None
         ttl = int(DEFAULT_LLM_CONFIG.get("cache_ttl_seconds", 3600))
@@ -929,14 +953,18 @@ class CustomLLMProvider:
                         logger.warning(
                             f"Attempt {attempt+1} failed with transient status {response.status}, retrying..."
                         )
-                        last_exception = Exception(f"Transient error with status {response.status}")
+                        last_exception = Exception(
+                            f"Transient error with status {response.status}"
+                        )
                         if attempt < self._max_retries - 1:
                             await asyncio.sleep(2**attempt)
                         continue
 
                 self._failure_count = 0
                 normalized = _normalize_text_chunk(response)
-                await self._set_cached_response(cache_key, self.config.model, normalized)
+                await self._set_cached_response(
+                    cache_key, self.config.model, normalized
+                )
                 return normalized
 
             except ClientError as e:
@@ -990,7 +1018,9 @@ class CustomLLMProvider:
             yield normalized
 
     @classmethod
-    async def _get_cached_vault_key(cls, key_name: str, ttl_seconds: int) -> Optional[str]:
+    async def _get_cached_vault_key(
+        cls, key_name: str, ttl_seconds: int
+    ) -> Optional[str]:
         now = time.monotonic()
         if key_name in cls._vault_key_cache:
             value, expires_at, is_negative = cls._vault_key_cache[key_name]
@@ -1023,7 +1053,9 @@ class CustomLLMProvider:
         pass
 
 
-async def plugin_health(session: Optional[Any] = None, url: Optional[str] = None) -> Dict[str, Any]:
+async def plugin_health(
+    session: Optional[Any] = None, url: Optional[str] = None
+) -> Dict[str, Any]:
     if session is None:
         return {"status": "ok"}
 
@@ -1126,8 +1158,12 @@ class CustomLLMChatModel(BaseChatModel):
         self.timeout = data.get("timeout", 60)
 
         self._circuit_breaker = AsyncCircuitBreaker(
-            failures_threshold=DEFAULT_LLM_CONFIG.get("circuit_breaker_failures_threshold", 5),
-            cooldown_seconds=DEFAULT_LLM_CONFIG.get("circuit_breaker_cooldown_seconds", 300),
+            failures_threshold=DEFAULT_LLM_CONFIG.get(
+                "circuit_breaker_failures_threshold", 5
+            ),
+            cooldown_seconds=DEFAULT_LLM_CONFIG.get(
+                "circuit_breaker_cooldown_seconds", 300
+            ),
             name=self.model_name,
         )
 
@@ -1144,7 +1180,9 @@ class CustomLLMChatModel(BaseChatModel):
 
     async def _get_client_session(self) -> Any:
         async with self._session_lock:
-            if self._client_session is None or getattr(self._client_session, "closed", True):
+            if self._client_session is None or getattr(
+                self._client_session, "closed", True
+            ):
                 import aiohttp
 
                 timeout_obj = aiohttp.ClientTimeout(
@@ -1152,7 +1190,9 @@ class CustomLLMChatModel(BaseChatModel):
                     connect=min(10, self.timeout),
                     sock_read=self.timeout,
                 )
-                connector = aiohttp.TCPConnector(limit_per_host=100, enable_cleanup_closed=True)
+                connector = aiohttp.TCPConnector(
+                    limit_per_host=100, enable_cleanup_closed=True
+                )
                 self._client_session = aiohttp.ClientSession(
                     timeout=timeout_obj, connector=connector
                 )
@@ -1161,7 +1201,9 @@ class CustomLLMChatModel(BaseChatModel):
 
     async def aclose_session(self) -> None:
         async with self._session_lock:
-            if self._client_session and not getattr(self._client_session, "closed", False):
+            if self._client_session and not getattr(
+                self._client_session, "closed", False
+            ):
                 await self._client_session.close()
                 self._client_session = None
                 logger.info("Closed aiohttp ClientSession.")
@@ -1188,7 +1230,9 @@ class CustomLLMChatModel(BaseChatModel):
             payload.append({"role": role, "content": str(getattr(msg, "content", ""))})
         return payload
 
-    def _cache_key(self, prompt: str, model_name: str, stop: Optional[List[str]]) -> str:
+    def _cache_key(
+        self, prompt: str, model_name: str, stop: Optional[List[str]]
+    ) -> str:
         key_obj = {
             "model": model_name,
             "temp": round(self.temperature, 6),
@@ -1196,12 +1240,20 @@ class CustomLLMChatModel(BaseChatModel):
             "stop": stop or [],
             "prompt": prompt,
             "base": self.api_base_url,
-            "fmt": ("messages" if DEFAULT_LLM_CONFIG.get("send_openai_messages") else "prompt"),
+            "fmt": (
+                "messages"
+                if DEFAULT_LLM_CONFIG.get("send_openai_messages")
+                else "prompt"
+            ),
         }
-        blob = json.dumps(key_obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        blob = json.dumps(key_obj, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         return "llm_cache:" + hashlib.sha256(blob).hexdigest()
 
-    async def _get_cached_response(self, cache_key: str, model_name: str) -> Optional[str]:
+    async def _get_cached_response(
+        self, cache_key: str, model_name: str
+    ) -> Optional[str]:
         if not DEFAULT_LLM_CONFIG.get("enable_caching", True):
             return None
         now = time.time()
@@ -1230,7 +1282,9 @@ class CustomLLMChatModel(BaseChatModel):
                 return value
         return None
 
-    async def _set_cached_response(self, cache_key: str, model_name: str, response: str) -> None:
+    async def _set_cached_response(
+        self, cache_key: str, model_name: str, response: str
+    ) -> None:
         if not DEFAULT_LLM_CONFIG.get("enable_caching", True):
             return None
         ttl = int(DEFAULT_LLM_CONFIG.get("cache_ttl_seconds", 3600))
@@ -1268,9 +1322,7 @@ class CustomLLMChatModel(BaseChatModel):
         headers: Dict[str, str],
         payload: Dict[str, Any],
     ) -> str:
-        from aiohttp.client_exceptions import (
-            ClientError,
-        )
+        from aiohttp.client_exceptions import ClientError
 
         async def _attempt_once():
             try:
@@ -1292,14 +1344,20 @@ class CustomLLMChatModel(BaseChatModel):
                         ).inc()
 
                     if status in (429, 503):
-                        reason = "rate_limit" if status == 429 else "service_unavailable"
+                        reason = (
+                            "rate_limit" if status == 429 else "service_unavailable"
+                        )
                         if PROM_AVAILABLE:
-                            CUSTOM_LLM_ERROR_TOTAL.labels(model_to_use, error_type=reason).inc()
+                            CUSTOM_LLM_ERROR_TOTAL.labels(
+                                model_to_use, error_type=reason
+                            ).inc()
                             CUSTOM_LLM_RETRY_EVENTS_TOTAL.labels(
                                 model_to_use, reason=str(status)
                             ).inc()
                         _negative_cache[cache_key] = (time.time() + 5, status)
-                        logger.warning(f"[{request_id}] Transient {status}, triggering retry...")
+                        logger.warning(
+                            f"[{request_id}] Transient {status}, triggering retry..."
+                        )
                         raise aiohttp.ClientResponseError(
                             request_info=resp.request_info,
                             history=resp.history,
@@ -1308,17 +1366,23 @@ class CustomLLMChatModel(BaseChatModel):
                         )
                     await _maybe_await(resp.raise_for_status)
                     data = await resp.json()
-                    final_text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    final_text = (
+                        data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                    )
 
                     if PROM_AVAILABLE:
                         CUSTOM_LLM_API_LATENCY_SECONDS.labels(model_to_use).observe(
                             time.monotonic() - start
                         )
-                        CUSTOM_LLM_RESPONSE_LENGTH.labels(model_to_use).observe(len(final_text))
-                        usage = data.get("usage", {})
-                        CUSTOM_LLM_TOKEN_USAGE.labels(model_name=model_to_use, type="prompt").inc(
-                            usage.get("prompt_tokens", 0) or 0
+                        CUSTOM_LLM_RESPONSE_LENGTH.labels(model_to_use).observe(
+                            len(final_text)
                         )
+                        usage = data.get("usage", {})
+                        CUSTOM_LLM_TOKEN_USAGE.labels(
+                            model_name=model_to_use, type="prompt"
+                        ).inc(usage.get("prompt_tokens", 0) or 0)
                         CUSTOM_LLM_TOKEN_USAGE.labels(
                             model_name=model_to_use, type="completion"
                         ).inc(usage.get("completion_tokens", 0) or 0)
@@ -1327,9 +1391,13 @@ class CustomLLMChatModel(BaseChatModel):
                     return final_text
             except (aiohttp.ContentTypeError, json.JSONDecodeError) as e:
                 if PROM_AVAILABLE:
-                    CUSTOM_LLM_RETRY_EVENTS_TOTAL.labels(model_to_use, reason="json_decode").inc()
+                    CUSTOM_LLM_RETRY_EVENTS_TOTAL.labels(
+                        model_to_use, reason="json_decode"
+                    ).inc()
                 _negative_cache[cache_key] = (time.time() + 5, 503)
-                logger.warning(f"[{request_id}] JSON parse error from provider, will retry: {e}")
+                logger.warning(
+                    f"[{request_id}] JSON parse error from provider, will retry: {e}"
+                )
                 raise aiohttp.ClientPayloadError(f"Invalid JSON payload: {e}")
 
         if TENACITY_AVAILABLE:
@@ -1384,7 +1452,10 @@ class CustomLLMChatModel(BaseChatModel):
         if not LANGCHAIN_AVAILABLE and not any(
             isinstance(m, (SystemMessage, AIMessage, HumanMessage)) for m in messages
         ):
-            return "Mocked response for non-langchain messages: " + self._generate_prompt(messages)
+            return (
+                "Mocked response for non-langchain messages: "
+                + self._generate_prompt(messages)
+            )
 
         request_id = uuid.uuid4().hex[:8]
         model_to_use = kwargs.get("model_name_override", self.model_name)
@@ -1395,8 +1466,9 @@ class CustomLLMChatModel(BaseChatModel):
         if neg:
             expiry, status = neg
             if expiry > time.time():
-                from aiohttp.client_exceptions import ClientResponseError
                 from unittest.mock import MagicMock
+
+                from aiohttp.client_exceptions import ClientResponseError
 
                 raise ClientResponseError(
                     MagicMock(),
@@ -1457,9 +1529,13 @@ class CustomLLMChatModel(BaseChatModel):
                     and DEFAULT_LLM_CONFIG.get("fallback_api_base_url")
                     and DEFAULT_LLM_CONFIG.get("fallback_api_key")
                 ):
-                    logger.info(f"[{request_id}] Attempting fallback to secondary LLM provider...")
+                    logger.info(
+                        f"[{request_id}] Attempting fallback to secondary LLM provider..."
+                    )
                     if PROM_AVAILABLE:
-                        CUSTOM_LLM_FALLBACK_USED_TOTAL.labels(model_name=model_to_use).inc()
+                        CUSTOM_LLM_FALLBACK_USED_TOTAL.labels(
+                            model_name=model_to_use
+                        ).inc()
                     fallback_model = CustomLLMChatModel(
                         api_base_url=DEFAULT_LLM_CONFIG["fallback_api_base_url"],
                         api_key=str(DEFAULT_LLM_CONFIG["fallback_api_key"]),
@@ -1563,9 +1639,13 @@ class CustomLLMChatModel(BaseChatModel):
                         ).inc()
 
                     if status in (429, 503):
-                        reason = "rate_limit" if status == 429 else "service_unavailable"
+                        reason = (
+                            "rate_limit" if status == 429 else "service_unavailable"
+                        )
                         if PROM_AVAILABLE:
-                            CUSTOM_LLM_ERROR_TOTAL.labels(model_to_use, error_type=reason).inc()
+                            CUSTOM_LLM_ERROR_TOTAL.labels(
+                                model_to_use, error_type=reason
+                            ).inc()
                             CUSTOM_LLM_RETRY_EVENTS_TOTAL.labels(
                                 model_to_use, reason=str(status)
                             ).inc()
@@ -1611,7 +1691,9 @@ class CustomLLMChatModel(BaseChatModel):
                     CUSTOM_LLM_STREAMING_PERFORMANCE.labels(model_to_use).observe(
                         time.monotonic() - start
                     )
-                    CUSTOM_LLM_RESPONSE_LENGTH.labels(model_to_use).observe(len(full_response))
+                    CUSTOM_LLM_RESPONSE_LENGTH.labels(model_to_use).observe(
+                        len(full_response)
+                    )
                 await self._set_cached_response(cache_key, model_to_use, full_response)
             except aiohttp.ClientError as e:
                 if PROM_AVAILABLE:
@@ -1624,9 +1706,13 @@ class CustomLLMChatModel(BaseChatModel):
                     and DEFAULT_LLM_CONFIG.get("fallback_api_base_url")
                     and DEFAULT_LLM_CONFIG.get("fallback_api_key")
                 ):
-                    logger.info(f"[{request_id}] Attempting fallback to non-streaming call...")
+                    logger.info(
+                        f"[{request_id}] Attempting fallback to non-streaming call..."
+                    )
                     if PROM_AVAILABLE:
-                        CUSTOM_LLM_FALLBACK_USED_TOTAL.labels(model_name=model_to_use).inc()
+                        CUSTOM_LLM_FALLBACK_USED_TOTAL.labels(
+                            model_name=model_to_use
+                        ).inc()
                     fallback_model = CustomLLMChatModel(
                         api_base_url=DEFAULT_LLM_CONFIG["fallback_api_base_url"],
                         api_key=str(DEFAULT_LLM_CONFIG["fallback_api_key"]),
@@ -1640,7 +1726,9 @@ class CustomLLMChatModel(BaseChatModel):
                             messages, stop, run_manager, allow_fallback=False, **kwargs
                         )
                         if LANGCHAIN_AVAILABLE:
-                            yield ChatGenerationChunk(message=AIMessageChunk(content=response_text))
+                            yield ChatGenerationChunk(
+                                message=AIMessageChunk(content=response_text)
+                            )
                         else:
                             yield ChatGenerationChunk(text=response_text)
                     finally:

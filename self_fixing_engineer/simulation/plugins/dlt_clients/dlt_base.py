@@ -1,30 +1,32 @@
-import logging
-import re
 import asyncio
+import atexit
+import functools
+import hashlib
+import hmac
+import inspect
 import json
+import logging
+import os
+import random
+import re
+import sys
+import threading
 import time
 import uuid
-import sys
-import hmac
-import hashlib
-import threading
-import os
-import functools
-import random
-import inspect
-import atexit
-from contextlib import suppress
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, Type, Callable, Union
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 # --- Logging Setup (Local to this module) ---
 _base_logger = logging.getLogger("simulation.dlt.client")
 _base_logger.setLevel(logging.INFO)
 if not _base_logger.hasHandlers():
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - [%(client_type)s] - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - [%(levelname)s] - [%(client_type)s] - %(message)s"
+    )
     handler.setFormatter(formatter)
     _base_logger.addHandler(handler)
 
@@ -96,7 +98,9 @@ try:
 
     AIOHTTP_AVAILABLE = True
 except ImportError:
-    _base_logger.critical("CRITICAL: Required dependency 'aiohttp' not found. Aborting startup.")
+    _base_logger.critical(
+        "CRITICAL: Required dependency 'aiohttp' not found. Aborting startup."
+    )
     _schedule_alert(
         "CRITICAL: Missing required dependency 'aiohttp'. DLT client cannot start.",
         level="CRITICAL",
@@ -107,15 +111,17 @@ try:
     import tenacity
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
         wait_random_exponential,
     )
 
     TENACITY_AVAILABLE = True
 except ImportError:
-    _base_logger.critical("CRITICAL: Required dependency 'tenacity' not found. Aborting startup.")
+    _base_logger.critical(
+        "CRITICAL: Required dependency 'tenacity' not found. Aborting startup."
+    )
     _schedule_alert(
         "CRITICAL: Missing required dependency 'tenacity'. DLT client cannot start.",
         level="CRITICAL",
@@ -123,7 +129,7 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from pydantic import BaseModel, ValidationError, Field, validator
+    from pydantic import BaseModel, Field, ValidationError, validator
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
@@ -138,18 +144,20 @@ except ImportError:
 
 try:
     from prometheus_client import (
-        Counter,
-        Histogram,
         CollectorRegistry,
-        generate_latest,
+        Counter,
         Gauge,
+        Histogram,
+        generate_latest,
     )
 
     PROMETHEUS_AVAILABLE = True
     _metrics_registry = CollectorRegistry(auto_describe=True)
     _metrics_lock = threading.Lock()
 
-    def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
+    def get_or_create_metric(
+        metric_type, name, documentation, labelnames=None, buckets=None
+    ):
         if labelnames is None:
             labelnames = ()
         with _metrics_lock:
@@ -242,7 +250,9 @@ try:
 
     S3_AVAILABLE = True
 except ImportError:
-    _base_logger.warning("aioboto3 not found. AWS S3 off-chain storage might be limited.")
+    _base_logger.warning(
+        "aioboto3 not found. AWS S3 off-chain storage might be limited."
+    )
 
 try:
     import boto3
@@ -259,13 +269,15 @@ try:
 
     GCS_AVAILABLE = True
 except ImportError:
-    _base_logger.warning("google-cloud-storage not found. GCS off-chain storage will be disabled.")
+    _base_logger.warning(
+        "google-cloud-storage not found. GCS off-chain storage will be disabled."
+    )
 
 try:
-    from azure.storage.blob.aio import BlobServiceClient as AzureBlobServiceClient
     from azure.core.exceptions import (
         ResourceNotFoundError as AzureResourceNotFoundError,
     )
+    from azure.storage.blob.aio import BlobServiceClient as AzureBlobServiceClient
 
     AZURE_BLOB_AVAILABLE = True
 except ImportError:
@@ -279,22 +291,24 @@ except ImportError:
 
 try:
     from hfc.fabric import Client as FabricSDKClient
-    from hfc.util.keyvaluestore import FileKeyValueStore
     from hfc.fabric.certificate import User as FabricUser
+    from hfc.util.keyvaluestore import FileKeyValueStore
 
     FABRIC_AVAILABLE = True
 except ImportError:
-    _base_logger.warning("hfc.fabric not found. Hyperledger Fabric DLT client will be disabled.")
+    _base_logger.warning(
+        "hfc.fabric not found. Hyperledger Fabric DLT client will be disabled."
+    )
 
 try:
-    from web3 import Web3, AsyncHTTPProvider
-    from web3.middleware import geth_poa_middleware
+    from eth_account import Account
+    from web3 import AsyncHTTPProvider, Web3
     from web3.exceptions import (
-        TransactionNotFound,
         ContractCustomError,
         ContractLogicError,
+        TransactionNotFound,
     )
-    from eth_account import Account
+    from web3.middleware import geth_poa_middleware
 
     WEB3_AVAILABLE = True
 except ImportError:
@@ -302,10 +316,10 @@ except ImportError:
 
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import Status, StatusCode
-    from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import Status, StatusCode
 
     try:
         from opentelemetry.exporter.jaeger.thrift import JaegerExporter
@@ -393,7 +407,9 @@ class BaseOffChainConfig(BaseModel):
 class CircuitBreaker:
     """Simple circuit breaker to prevent repeated failures."""
 
-    def __init__(self, client_type: str, failure_threshold: int = 5, reset_timeout: float = 60):
+    def __init__(
+        self, client_type: str, failure_threshold: int = 5, reset_timeout: float = 60
+    ):
         self.client_type = client_type
         self.failure_threshold = failure_threshold
         self.reset_timeout = reset_timeout
@@ -441,7 +457,9 @@ class CircuitBreaker:
             self.failures += 1
             self.last_failure_time = time.time()
             if PROMETHEUS_AVAILABLE:
-                circuit_breaker_failures.labels(client_type=self.client_type).set(self.failures)
+                circuit_breaker_failures.labels(client_type=self.client_type).set(
+                    self.failures
+                )
 
             if self.failures >= self.failure_threshold:
                 self.state = "OPEN"
@@ -505,7 +523,9 @@ class DLTClientConfigurationError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"CRITICAL: DLT Client Configuration Error ({self.client_type}): {message}",
             level="CRITICAL",
@@ -521,7 +541,9 @@ class DLTClientConnectivityError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"ERROR: DLT Client Connectivity Error ({self.client_type}): {message}",
             level="ERROR",
@@ -537,7 +559,9 @@ class DLTClientAuthError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"CRITICAL: DLT Client Authentication Error ({self.client_type}): {message}",
             level="CRITICAL",
@@ -553,7 +577,9 @@ class DLTClientTransactionError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"ERROR: DLT Client Transaction Error ({self.client_type}): {message}",
             level="ERROR",
@@ -569,7 +595,9 @@ class DLTClientQueryError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"WARNING: DLT Client Query Error ({self.client_type}): {message}",
             level="WARNING",
@@ -585,7 +613,9 @@ class DLTClientResourceError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"ERROR: DLT Client Resource Error ({self.client_type}): {message}",
             level="ERROR",
@@ -601,7 +631,9 @@ class DLTClientTimeoutError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"WARNING: DLT Client Timeout Error ({self.client_type}): {message}",
             level="WARNING",
@@ -617,7 +649,9 @@ class DLTClientValidationError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"CRITICAL: DLT Client Validation Error ({self.client_type}): {message}",
             level="CRITICAL",
@@ -633,7 +667,9 @@ class DLTClientCircuitBreakerError(DLTClientError):
         details: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         _schedule_alert(
             f"WARNING: DLT Client Circuit Breaker Open ({self.client_type}): {message}",
             level="WARNING",
@@ -642,7 +678,9 @@ class DLTClientCircuitBreakerError(DLTClientError):
 
 # --- Async Retry Decorator ---
 def async_retry(
-    catch_exceptions: Optional[Union[Type[Exception], Tuple[Type[Exception], ...]]] = None,
+    catch_exceptions: Optional[
+        Union[Type[Exception], Tuple[Type[Exception], ...]]
+    ] = None,
 ):
     def decorator(fn):
         @functools.wraps(fn)
@@ -750,7 +788,9 @@ def scrub_secrets(data: Any, patterns: Optional[List[str]] = None) -> Any:
 
     Note: @lru_cache decorator removed to support unhashable types (dict, list, set).
     """
-    all_patterns = [re.compile(p, re.IGNORECASE) for p in (patterns or _global_secret_patterns)]
+    all_patterns = [
+        re.compile(p, re.IGNORECASE) for p in (patterns or _global_secret_patterns)
+    ]
     seen = set()
 
     def _scrub(item: Any) -> Any:
@@ -805,7 +845,9 @@ _dlt_audit_hmac_key: Optional[bytes] = None
 def _get_dlt_audit_hmac_key() -> bytes:
     global _dlt_audit_hmac_key
     if _dlt_audit_hmac_key is None:
-        key_str = SECRETS_MANAGER.get_secret(AUDIT_HMAC_KEY_ENV, required=PRODUCTION_MODE)
+        key_str = SECRETS_MANAGER.get_secret(
+            AUDIT_HMAC_KEY_ENV, required=PRODUCTION_MODE
+        )
         if not key_str and PRODUCTION_MODE:
             msg = "CRITICAL: DLT_AUDIT_HMAC_KEY is required in PRODUCTION_MODE but not found."
             _base_logger.critical(msg)
@@ -877,7 +919,9 @@ class AuditManager:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     self._loop = loop
-                    self._bg_tasks.append(loop.create_task(self._periodic_integrity_check()))
+                    self._bg_tasks.append(
+                        loop.create_task(self._periodic_integrity_check())
+                    )
             except RuntimeError:
                 self._loop = None
 
@@ -894,7 +938,9 @@ class AuditManager:
         }
         event_json_str = json.dumps(event_data, sort_keys=True, ensure_ascii=False)
 
-        h = hmac.new(_get_dlt_audit_hmac_key(), event_json_str.encode("utf-8"), hashlib.sha256)
+        h = hmac.new(
+            _get_dlt_audit_hmac_key(), event_json_str.encode("utf-8"), hashlib.sha256
+        )
         signed_event = {"event": event_data, "signature": h.hexdigest()}
 
         async with self._log_lock:
@@ -926,7 +972,9 @@ class AuditManager:
                 with suppress(asyncio.CancelledError):
                     await t
         elif self._loop and self._loop.is_running():
-            fut = asyncio.run_coroutine_threadsafe(self._await_tasks(self._bg_tasks), self._loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self._await_tasks(self._bg_tasks), self._loop
+            )
             with suppress(Exception):
                 fut.result(timeout=0.75)
         self._bg_tasks.clear()
@@ -955,8 +1003,12 @@ class AuditManager:
             last_verified_time_str = integrity_meta.get("last_verification_time")
             if last_verified_time_str:
                 last_verified_time = datetime.fromisoformat(last_verified_time_str)
-                if datetime.utcnow() - last_verified_time < timedelta(hours=max_age_hours):
-                    _base_logger.info("Audit log integrity recently verified. Skipping full check.")
+                if datetime.utcnow() - last_verified_time < timedelta(
+                    hours=max_age_hours
+                ):
+                    _base_logger.info(
+                        "Audit log integrity recently verified. Skipping full check."
+                    )
                     if PROMETHEUS_AVAILABLE:
                         audit_log_integrity_status.set(1)
                     return True
@@ -1074,7 +1126,9 @@ class BaseOffChainClient(ABC):
                 f"Invalid off-chain client configuration: {e}", self.__class__.__name__
             )
         self.config = validated_config
-        self.logger = DLTClientLoggerAdapter(_base_logger, {"client_type": self.__class__.__name__})
+        self.logger = DLTClientLoggerAdapter(
+            _base_logger, {"client_type": self.__class__.__name__}
+        )
         self._circuit_breaker = CircuitBreaker(
             client_type=self.__class__.__name__,
             failure_threshold=self.config.get("circuit_breaker_threshold", 5),
@@ -1082,7 +1136,9 @@ class BaseOffChainClient(ABC):
         )
         self.client_type = self.__class__.__name__
 
-    async def _run_blocking_in_executor(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+    async def _run_blocking_in_executor(
+        self, func: Callable, *args: Any, **kwargs: Any
+    ) -> Any:
         global_executor = getattr(_base_logger, "_global_executor", None)
         if global_executor is None:
             global_executor = ThreadPoolExecutor(
@@ -1090,7 +1146,9 @@ class BaseOffChainClient(ABC):
             )
             setattr(_base_logger, "_global_executor", global_executor)
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(global_executor, lambda: func(*args, **kwargs))
+        return await loop.run_in_executor(
+            global_executor, lambda: func(*args, **kwargs)
+        )
 
     @abstractmethod
     async def save_blob(
@@ -1099,7 +1157,9 @@ class BaseOffChainClient(ABC):
         pass
 
     @abstractmethod
-    async def get_blob(self, off_chain_id: str, correlation_id: Optional[str] = None) -> bytes:
+    async def get_blob(
+        self, off_chain_id: str, correlation_id: Optional[str] = None
+    ) -> bytes:
         pass
 
     async def close(self) -> None:
@@ -1124,7 +1184,9 @@ class BaseDLTClient(ABC):
             )
         self.config = validated_config
         self.off_chain_client = off_chain_client
-        self.logger = DLTClientLoggerAdapter(_base_logger, {"client_type": self.__class__.__name__})
+        self.logger = DLTClientLoggerAdapter(
+            _base_logger, {"client_type": self.__class__.__name__}
+        )
         self._circuit_breaker = CircuitBreaker(
             client_type=self.__class__.__name__,
             failure_threshold=self.config.get("circuit_breaker_threshold", 5),
@@ -1139,7 +1201,9 @@ class BaseDLTClient(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
 
-    async def _run_blocking_in_executor(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+    async def _run_blocking_in_executor(
+        self, func: Callable, *args: Any, **kwargs: Any
+    ) -> Any:
         global_executor = getattr(_base_logger, "_global_executor", None)
         if global_executor is None:
             global_executor = ThreadPoolExecutor(
@@ -1147,10 +1211,14 @@ class BaseDLTClient(ABC):
             )
             setattr(_base_logger, "_global_executor", global_executor)
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(global_executor, lambda: func(*args, **kwargs))
+        return await loop.run_in_executor(
+            global_executor, lambda: func(*args, **kwargs)
+        )
 
     @abstractmethod
-    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -1211,22 +1279,30 @@ def register_plugin_entrypoints(register_func: Callable):
     """Register plugin entry points with the plugin manager."""
     register_func(
         name="dlt_write_checkpoint",
-        executor_func=lambda client, *args, **kwargs: client.write_checkpoint(*args, **kwargs),
+        executor_func=lambda client, *args, **kwargs: client.write_checkpoint(
+            *args, **kwargs
+        ),
         capabilities=["dlt_operations"],
     )
     register_func(
         name="dlt_read_checkpoint",
-        executor_func=lambda client, *args, **kwargs: client.read_checkpoint(*args, **kwargs),
+        executor_func=lambda client, *args, **kwargs: client.read_checkpoint(
+            *args, **kwargs
+        ),
         capabilities=["dlt_operations"],
     )
     register_func(
         name="dlt_get_version_tx",
-        executor_func=lambda client, *args, **kwargs: client.get_version_tx(*args, **kwargs),
+        executor_func=lambda client, *args, **kwargs: client.get_version_tx(
+            *args, **kwargs
+        ),
         capabilities=["dlt_operations"],
     )
     register_func(
         name="dlt_rollback_checkpoint",
-        executor_func=lambda client, *args, **kwargs: client.rollback_checkpoint(*args, **kwargs),
+        executor_func=lambda client, *args, **kwargs: client.rollback_checkpoint(
+            *args, **kwargs
+        ),
         capabilities=["dlt_operations"],
     )
     register_func(

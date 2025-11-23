@@ -19,18 +19,20 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, List, Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from hypothesis import given, strategies as st
 
 # --- FIX: Import Fernet for key generation ---
 from cryptography.fernet import Fernet
+from hypothesis import given
+from hypothesis import strategies as st
 
 # --------------------------------------------------------------------------- #
 # Import module under test – only symbols that exist
 # --------------------------------------------------------------------------- #
 # FIX: Import the local registries/functions from the module
+from runner.runner_security_utils import _secret_cache  # Import for cleaning up
 from runner.runner_security_utils import (
     DECRYPTORS,
     ENCRYPTORS,
@@ -45,7 +47,6 @@ from runner.runner_security_utils import (
     register_redactor,
     scan_for_secrets,
     scan_for_vulnerabilities,
-    _secret_cache,  # Import for cleaning up
 )
 
 # Setup logging for tests
@@ -72,10 +73,11 @@ def clean_registries_and_cache():
     _secret_cache.clear()
 
     # Re-register defaults from the module
-    from runner.runner_security_utils import regex_basic_redactor, nlp_presidio_redactor
     from runner.runner_security_utils import (
-        fernet_encrypt_decrypt,
         aes_cbc_encrypt_decrypt,
+        fernet_encrypt_decrypt,
+        nlp_presidio_redactor,
+        regex_basic_redactor,
     )
 
     register_redactor("regex_basic", regex_basic_redactor)
@@ -100,7 +102,9 @@ def mock_aiohttp():
     with patch("runner.runner_security_utils.aiohttp") as m:
         client = AsyncMock()
         client.post.return_value.__aenter__.return_value.status = 200
-        client.post.return_value.__aenter__.return_value.json.return_value = {"secret": "value"}
+        client.post.return_value.__aenter__.return_value.json.return_value = {
+            "secret": "value"
+        }
         m.ClientSession.return_value = client
         yield m
 
@@ -222,7 +226,9 @@ async def test_encrypt_decrypt_roundtrip(algorithm: str):
 async def test_encrypt_data_invalid_algo():
     # FIX: Await the call inside pytest.raises
     # FIX: Match the exact error message from the module
-    with pytest.raises(ValueError, match="Encryption algorithm 'invalid' not registered."):
+    with pytest.raises(
+        ValueError, match="Encryption algorithm 'invalid' not registered."
+    ):
         await encrypt_data(b"data", b"key", "invalid")  # FIX: Add await
 
 
@@ -297,14 +303,18 @@ def test_scan_for_secrets_basic(text: str, expected_leaks: int):
 async def test_scan_for_vulnerabilities_success(temp_dir: Path):
     code_file = temp_dir / "code.py"
     code_file.write_text("import os; os.system('rm -rf /')")
-    result = await scan_for_vulnerabilities(code_file, scan_type="code")  # FIX: Add await
+    result = await scan_for_vulnerabilities(
+        code_file, scan_type="code"
+    )  # FIX: Add await
     assert result["vulnerabilities_found"] > 0
 
 
 @pytest.mark.asyncio
 async def test_scan_for_vulnerabilities_fallback_no_deps(temp_dir: Path):
     with patch("runner.runner_security_utils.scan_for_secrets", return_value=[]):
-        result = await scan_for_vulnerabilities("data", scan_type="data")  # FIX: Add await
+        result = await scan_for_vulnerabilities(
+            "data", scan_type="data"
+        )  # FIX: Add await
         assert result["vulnerabilities_found"] == 0
 
 

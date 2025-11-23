@@ -1,11 +1,11 @@
 # test_cache.py
 
-import unittest
-import time
 import concurrent.futures
-from unittest.mock import patch
 import sys
+import time
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

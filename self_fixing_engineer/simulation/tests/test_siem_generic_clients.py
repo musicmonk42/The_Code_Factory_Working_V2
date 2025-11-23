@@ -4,15 +4,16 @@ Test suite for generic SIEM clients (Splunk, Elasticsearch, Datadog).
 Tests configuration validation, health checks, log sending, and querying.
 """
 
-import pytest
 import asyncio
-import sys
-import time
 import datetime
 import json
 import re
-from unittest.mock import AsyncMock, MagicMock
+import sys
+import time
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Mock modules before importing
 sys.modules["simulation.plugins.siem_base"] = MagicMock()
@@ -68,7 +69,9 @@ class SIEMClientResponseError(SIEMClientError):
         details=None,
         correlation_id=None,
     ):
-        super().__init__(message, client_type, original_exception, details, correlation_id)
+        super().__init__(
+            message, client_type, original_exception, details, correlation_id
+        )
         self.status_code = status_code
         self.response_text = response_text
 
@@ -140,7 +143,9 @@ async def _get_secret(key: str, default: Any = None, required: bool = False) -> 
 # Mock configuration classes
 class SplunkConfig:
     def __init__(self, **kwargs):
-        self.url = kwargs.get("url", "https://splunk.example.com:8088/services/collector/event")
+        self.url = kwargs.get(
+            "url", "https://splunk.example.com:8088/services/collector/event"
+        )
         self.token = kwargs.get("token", "dummy_token")
         self.source = kwargs.get("source", "sfe_audit")
         self.sourcetype = kwargs.get("sourcetype", "_json")
@@ -151,7 +156,9 @@ class SplunkConfig:
         if PRODUCTION_MODE:
             if not self.url.startswith("https"):
                 raise ValueError("Splunk URL must use HTTPS in PRODUCTION_MODE")
-            if any(s in self.url.lower() for s in ("dummy", "mock", "test", "example.com")):
+            if any(
+                s in self.url.lower() for s in ("dummy", "mock", "test", "example.com")
+            ):
                 raise ValueError(f"Dummy/test URL detected: {self.url}")
             if any(s in self.token.lower() for s in ("dummy", "mock", "test")):
                 raise ValueError("Dummy/test token detected")
@@ -181,7 +188,9 @@ class ElasticConfig:
         if PRODUCTION_MODE:
             if not self.url.startswith("https"):
                 raise ValueError("Elasticsearch URL must use HTTPS in PRODUCTION_MODE")
-            if any(s in self.url.lower() for s in ("dummy", "mock", "test", "example.com")):
+            if any(
+                s in self.url.lower() for s in ("dummy", "mock", "test", "example.com")
+            ):
                 raise ValueError(f"Dummy/test URL detected: {self.url}")
 
     def dict(self, exclude_unset=False):
@@ -196,8 +205,12 @@ class ElasticConfig:
 
 class DatadogConfig:
     def __init__(self, **kwargs):
-        self.url = kwargs.get("url", "https://http-intake.logs.datadoghq.com/api/v2/logs")
-        self.query_url = kwargs.get("query_url", "https://api.datadoghq.com/api/v1/logs-queries")
+        self.url = kwargs.get(
+            "url", "https://http-intake.logs.datadoghq.com/api/v2/logs"
+        )
+        self.query_url = kwargs.get(
+            "query_url", "https://api.datadoghq.com/api/v1/logs-queries"
+        )
         self.api_key = kwargs.get("api_key", "dummy_key")
         self.application_key = kwargs.get("application_key", "dummy_app_key")
         self.service = kwargs.get("service", "sfe-agent")
@@ -320,7 +333,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
 
             config_data = self.config.get("splunk", {})
             config_data["url"] = await _get_secret("SIEM_SPLUNK_HEC_URL", required=True)
-            config_data["token"] = await _get_secret("SIEM_SPLUNK_HEC_TOKEN", required=True)
+            config_data["token"] = await _get_secret(
+                "SIEM_SPLUNK_HEC_TOKEN", required=True
+            )
 
             validated = SplunkConfig(**config_data)
             self.url = validated.url
@@ -346,7 +361,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
         session = await self._get_session()
         health_url = self._hec_health_url()
 
-        response = await session.get(health_url, headers={"Authorization": f"Splunk {self.token}"})
+        response = await session.get(
+            health_url, headers={"Authorization": f"Splunk {self.token}"}
+        )
         async with response:
             if response.status == 200:
                 return True, "Splunk HEC is healthy."
@@ -355,7 +372,9 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
             )
 
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
-        success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)
+        success, msg, failed = await self.send_logs(
+            [log_entry], validate_schema, correlation_id
+        )
         if success:
             return True, "Log sent to Splunk HEC."
         raise SIEMClientPublishError(
@@ -368,7 +387,8 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_batch_size = 1000
         batches = [
-            log_entries[i : i + max_batch_size] for i in range(0, len(log_entries), max_batch_size)
+            log_entries[i : i + max_batch_size]
+            for i in range(0, len(log_entries), max_batch_size)
         ]
 
         failed_logs = []
@@ -398,7 +418,10 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
             async with response:
                 if response.status >= 400:
                     failed_logs.extend(
-                        [{"log": log, "error": f"HTTP {response.status}"} for log in batch]
+                        [
+                            {"log": log, "error": f"HTTP {response.status}"}
+                            for log in batch
+                        ]
                     )
                 else:
                     total_sent += len(batch)
@@ -411,12 +434,16 @@ class SplunkClient(AiohttpClientMixin, BaseSIEMClient):
             )
         return True, f"Batch of {len(log_entries)} logs sent to Splunk HEC.", []
 
-    async def query_logs(self, query_string, time_range="24h", limit=100, correlation_id=None):
+    async def query_logs(
+        self, query_string, time_range="24h", limit=100, correlation_id=None
+    ):
         await self._ensure_config_loaded()
         session = await self._get_session()
 
         search_url = f"{self.search_url_base.rstrip('/')}/jobs/export"
-        response = await session.post(search_url, json={"search": query_string, "count": limit})
+        response = await session.post(
+            search_url, json={"search": query_string, "count": limit}
+        )
         async with response:
             text = await response.text()
             results = []
@@ -436,11 +463,19 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
             if self._config_loaded:
                 return
 
-            config_data = self.config.get("elasticsearch", self.config.get("elastic", {}))
+            config_data = self.config.get(
+                "elasticsearch", self.config.get("elastic", {})
+            )
             config_data["url"] = await _get_secret("SIEM_ELASTIC_URL", required=True)
-            config_data["api_key"] = await _get_secret("SIEM_ELASTIC_API_KEY", required=False)
-            config_data["username"] = await _get_secret("SIEM_ELASTIC_USERNAME", required=False)
-            config_data["password"] = await _get_secret("SIEM_ELASTIC_PASSWORD", required=False)
+            config_data["api_key"] = await _get_secret(
+                "SIEM_ELASTIC_API_KEY", required=False
+            )
+            config_data["username"] = await _get_secret(
+                "SIEM_ELASTIC_USERNAME", required=False
+            )
+            config_data["password"] = await _get_secret(
+                "SIEM_ELASTIC_PASSWORD", required=False
+            )
 
             validated = ElasticConfig(**config_data)
             self.url = validated.url
@@ -455,7 +490,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
         session = await self._get_session()
 
         # Configure the mock to return a health status
-        session.get.return_value = MockAsyncResponse(status=200, json_data={"status": "green"})
+        session.get.return_value = MockAsyncResponse(
+            status=200, json_data={"status": "green"}
+        )
 
         health_url = f"{self.url.rstrip('/')}/_cluster/health"
         headers = {}
@@ -472,7 +509,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
             raise SIEMClientConnectivityError("Health check failed", self.client_type)
 
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
-        success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)
+        success, msg, failed = await self.send_logs(
+            [log_entry], validate_schema, correlation_id
+        )
         if success:
             return True, "Log sent to Elasticsearch."
         raise SIEMClientPublishError(
@@ -494,7 +533,8 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_bulk_size = 1000
         batches = [
-            log_entries[i : i + max_bulk_size] for i in range(0, len(log_entries), max_bulk_size)
+            log_entries[i : i + max_bulk_size]
+            for i in range(0, len(log_entries), max_bulk_size)
         ]
 
         failed_logs = []
@@ -525,7 +565,10 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
             async with response:
                 if response.status >= 400:
                     failed_logs.extend(
-                        [{"log": log, "error": f"HTTP {response.status}"} for log in batch]
+                        [
+                            {"log": log, "error": f"HTTP {response.status}"}
+                            for log in batch
+                        ]
                     )
                 else:
                     data = await response.json()
@@ -533,7 +576,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
                     for i, item in enumerate(items):
                         status = item.get("index", {}).get("status", 200)
                         if status >= 400:
-                            failed_logs.append({"log": batch[i], "error": f"Status {status}"})
+                            failed_logs.append(
+                                {"log": batch[i], "error": f"Status {status}"}
+                            )
                         else:
                             total_sent += 1
 
@@ -541,7 +586,9 @@ class ElasticClient(AiohttpClientMixin, BaseSIEMClient):
             return False, f"Batch sent with {len(failed_logs)} failures.", failed_logs
         return True, f"Batch of {len(log_entries)} logs sent to Elasticsearch.", []
 
-    async def query_logs(self, query_string, time_range="24h", limit=100, correlation_id=None):
+    async def query_logs(
+        self, query_string, time_range="24h", limit=100, correlation_id=None
+    ):
         await self._ensure_config_loaded()
         session = await self._get_session()
 
@@ -587,7 +634,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
                 "SIEM_DATADOG_QUERY_URL",
                 "https://api.datadoghq.com/api/v1/logs-queries",
             )
-            config_data["api_key"] = await _get_secret("SIEM_DATADOG_API_KEY", required=True)
+            config_data["api_key"] = await _get_secret(
+                "SIEM_DATADOG_API_KEY", required=True
+            )
             config_data["application_key"] = await _get_secret(
                 "SIEM_DATADOG_APPLICATION_KEY", required=True
             )
@@ -613,7 +662,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
             raise SIEMClientConnectivityError("Health check failed", self.client_type)
 
     async def send_log(self, log_entry, validate_schema=True, correlation_id=None):
-        success, msg, failed = await self.send_logs([log_entry], validate_schema, correlation_id)
+        success, msg, failed = await self.send_logs(
+            [log_entry], validate_schema, correlation_id
+        )
         if success:
             return True, "Log sent to Datadog Logs."
         raise SIEMClientPublishError(
@@ -626,7 +677,8 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
 
         max_batch_size = 1000
         batches = [
-            log_entries[i : i + max_batch_size] for i in range(0, len(log_entries), max_batch_size)
+            log_entries[i : i + max_batch_size]
+            for i in range(0, len(log_entries), max_batch_size)
         ]
 
         failed_logs = []
@@ -652,7 +704,10 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
             async with response:
                 if response.status >= 400:
                     failed_logs.extend(
-                        [{"log": log, "error": f"HTTP {response.status}"} for log in batch]
+                        [
+                            {"log": log, "error": f"HTTP {response.status}"}
+                            for log in batch
+                        ]
                     )
                 else:
                     total_sent += len(batch)
@@ -661,7 +716,9 @@ class DatadogClient(AiohttpClientMixin, BaseSIEMClient):
             return False, f"Batch sent with {len(failed_logs)} failures.", failed_logs
         return True, f"Batch of {len(log_entries)} logs sent to Datadog Logs.", []
 
-    async def query_logs(self, query_string, time_range="24h", limit=100, correlation_id=None):
+    async def query_logs(
+        self, query_string, time_range="24h", limit=100, correlation_id=None
+    ):
         await self._ensure_config_loaded()
         session = await self._get_session()
 
@@ -792,7 +849,9 @@ class TestSplunkClient:
     async def test_send_single_log(self, splunk_config):
         """Test sending single log to Splunk."""
         client = SplunkClient(splunk_config)
-        success, message = await client.send_log({"message": "test"}, validate_schema=False)
+        success, message = await client.send_log(
+            {"message": "test"}, validate_schema=False
+        )
         assert success is True
         assert "sent" in message.lower()
 

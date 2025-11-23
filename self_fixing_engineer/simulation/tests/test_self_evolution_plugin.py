@@ -1,15 +1,18 @@
 # tests/test_self_evolution_plugin.py
 
-import pytest
+import json
 import os
 import sys
-import json
-from unittest.mock import patch, MagicMock, AsyncMock
 from typing import Tuple
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the plugin from the correct directory
 plugin_paths = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
+    ),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -20,15 +23,15 @@ for path in plugin_paths:
 
 try:
     from self_evolution_plugin import (
-        plugin_health,
-        initiate_evolution_cycle,
+        ADAPTATION_TYPES,
+        EVOLUTION_ADAPTATIONS_SUCCESS,
+        EVOLUTION_CYCLES_TOTAL,
+        EVOLUTION_ERRORS,
         EvolutionConfig,
         _load_config,
+        initiate_evolution_cycle,
+        plugin_health,
         validate_agents,
-        EVOLUTION_CYCLES_TOTAL,
-        EVOLUTION_ADAPTATIONS_SUCCESS,
-        EVOLUTION_ERRORS,
-        ADAPTATION_TYPES,
     )
 except ImportError as e:
     print(f"Failed to import self_evolution_plugin. Searched in: {plugin_paths}")
@@ -93,19 +96,23 @@ def mock_audit_logger():
 
 
 @pytest.fixture(autouse=True)
-def dependency_patches(mock_meta_learning, mock_policy_engine, mock_llm, mock_audit_logger):
-    with patch(
-        "self_evolution_plugin._get_meta_learning",
-        AsyncMock(return_value=mock_meta_learning),
-    ), patch(
-        "self_evolution_plugin._get_policy_engine",
-        AsyncMock(return_value=mock_policy_engine),
-    ), patch(
-        "self_evolution_plugin._get_core_llm", AsyncMock(return_value=mock_llm)
-    ), patch(
-        "self_evolution_plugin._sfe_audit_logger.log", new=mock_audit_logger
-    ), patch(
-        "self_evolution_plugin._check_content_safety", new=mock_check_content_safety
+def dependency_patches(
+    mock_meta_learning, mock_policy_engine, mock_llm, mock_audit_logger
+):
+    with (
+        patch(
+            "self_evolution_plugin._get_meta_learning",
+            AsyncMock(return_value=mock_meta_learning),
+        ),
+        patch(
+            "self_evolution_plugin._get_policy_engine",
+            AsyncMock(return_value=mock_policy_engine),
+        ),
+        patch("self_evolution_plugin._get_core_llm", AsyncMock(return_value=mock_llm)),
+        patch("self_evolution_plugin._sfe_audit_logger.log", new=mock_audit_logger),
+        patch(
+            "self_evolution_plugin._check_content_safety", new=mock_check_content_safety
+        ),
     ):
         yield
 
@@ -164,7 +171,9 @@ async def test_plugin_health_success():
 
 
 @pytest.mark.asyncio
-async def test_initiate_evolution_cycle_success(mock_meta_learning, mock_policy_engine, mock_llm):
+async def test_initiate_evolution_cycle_success(
+    mock_meta_learning, mock_policy_engine, mock_llm
+):
     result = await initiate_evolution_cycle(
         target_agents=["agent_alpha"], evolution_strategy="prompt_optimization"
     )
@@ -271,7 +280,9 @@ async def test_audit_event_secret_scrubbing():
     # This test ensures the audit logger receives scrubbed (redacted) secrets
     from self_evolution_plugin import _audit_event
 
-    with patch("self_evolution_plugin._sfe_audit_logger.log", new=AsyncMock()) as mock_audit:
+    with patch(
+        "self_evolution_plugin._sfe_audit_logger.log", new=AsyncMock()
+    ) as mock_audit:
         details = {"api_key": "sk-test_secretkey1234567890", "comment": "This is fine"}
         await _audit_event("test_event", details)
         called_details = mock_audit.call_args[0][1]

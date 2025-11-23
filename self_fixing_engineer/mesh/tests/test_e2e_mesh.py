@@ -9,9 +9,9 @@ import os
 import sys
 import tempfile
 import time
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -72,7 +72,7 @@ sys.modules["redis.asyncio"] = mock_redis_module
 sys.modules["redis"] = MagicMock()
 
 # Import mesh components after environment setup and mocking
-from mesh import event_bus, mesh_policy, mesh_adapter
+from mesh import event_bus, mesh_adapter, mesh_policy
 from mesh.checkpoint import CheckpointManager
 from pydantic import BaseModel
 
@@ -116,7 +116,9 @@ class StateSchema(BaseModel):
 async def services():
     """Fixture to set up all required services for E2E tests."""
     # Initialize Policy Components
-    policy_backend = mesh_policy.MeshPolicyBackend(backend_type="local", local_dir=str(TEST_DIR))
+    policy_backend = mesh_policy.MeshPolicyBackend(
+        backend_type="local", local_dir=str(TEST_DIR)
+    )
     policy_enforcer = mesh_policy.MeshPolicyEnforcer(
         policy_id=TEST_POLICY_ID, backend=policy_backend
     )
@@ -191,7 +193,9 @@ class TestFullWorkflow:
             assert checkpoint_hash is not None
 
             # Verify checkpoint can be loaded
-            loaded_data = await services["checkpoint_manager"].load("workflow_checkpoint")
+            loaded_data = await services["checkpoint_manager"].load(
+                "workflow_checkpoint"
+            )
             assert loaded_data["workflow_id"] == "test_workflow_001"
 
         # Step 3: Publish event after checkpoint
@@ -207,7 +211,9 @@ class TestFullWorkflow:
             )
 
             # Verify the mock was called
-            assert services["redis_mock"].publish.called, "Redis publish should have been called"
+            assert services[
+                "redis_mock"
+            ].publish.called, "Redis publish should have been called"
 
         # Step 4: Test adapter publish/subscribe flow
         test_message = {"test": "data", "workflow_id": "test_workflow_001"}
@@ -220,7 +226,9 @@ class TestFullWorkflow:
         await services["pubsub"].publish("test_channel", test_message)
 
         # Check that publish was called
-        assert services["redis_mock"].publish.called, "Adapter publish should have been called"
+        assert services[
+            "redis_mock"
+        ].publish.called, "Adapter publish should have been called"
 
 
 class TestFailureAndRecovery:
@@ -314,8 +322,12 @@ class TestSecurityIntegration:
         )
 
         # Step 5: Verify both old and new checkpoints can be loaded
-        old_checkpoint = await services["checkpoint_manager"].load("encrypted_checkpoint")
-        new_checkpoint = await services["checkpoint_manager"].load("post_rotation_checkpoint")
+        old_checkpoint = await services["checkpoint_manager"].load(
+            "encrypted_checkpoint"
+        )
+        new_checkpoint = await services["checkpoint_manager"].load(
+            "post_rotation_checkpoint"
+        )
 
         assert old_checkpoint["workflow_id"] == "encryption_test"
         assert new_checkpoint["workflow_id"] == "post_rotation"

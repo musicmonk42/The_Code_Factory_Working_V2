@@ -1,13 +1,13 @@
-from self_healing_import_fixer.analyzer.core_report import (
-    ReportGenerator,
-    AnalyzerCriticalError,
-    app,  # for Flask test client
-)
-
-import pytest
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+from self_healing_import_fixer.analyzer.core_report import app  # for Flask test client
+from self_healing_import_fixer.analyzer.core_report import (
+    AnalyzerCriticalError,
+    ReportGenerator,
+)
 
 
 # --- ReportGenerator Initialization Tests ---
@@ -90,7 +90,9 @@ def test_generate_pdf_report_calls_weasyprint(tmp_path, monkeypatch):
         called["called"] = True
         return DummyHtml(string)
 
-    monkeypatch.setitem(__import__("sys").modules, "weasyprint", MagicMock(HTML=dummy_html))
+    monkeypatch.setitem(
+        __import__("sys").modules, "weasyprint", MagicMock(HTML=dummy_html)
+    )
     sample_results = {"section": [{"field": "secret_token_abc"}]}
     file_path = generator.generate_report(sample_results, report_format="pdf")
     assert file_path.endswith(".pdf")
@@ -104,7 +106,9 @@ def test_generate_report_catches_formatting_errors(tmp_path):
     output_dir = tmp_path / "reports"
     generator = ReportGenerator(str(output_dir), approved_report_dirs=[str(tmp_path)])
     sample_results = {"section": [{"field": "secret_token_abc"}]}
-    with patch.object(generator, "_format_html_report", side_effect=ValueError("Bad format")):
+    with patch.object(
+        generator, "_format_html_report", side_effect=ValueError("Bad format")
+    ):
         file_path = generator.generate_report(sample_results, report_format="html")
     with open(file_path, "r") as f:
         content = f.read()
@@ -156,7 +160,9 @@ def test_dashboard_login_success(monkeypatch):
         "self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER",
         MagicMock(
             get_secret=lambda k: (
-                "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"
+                "admin_secure_password"
+                if k == "DASHBOARD_ADMIN_PASSWORD"
+                else "jwtsecret"
             )
         ),
     )
@@ -180,7 +186,9 @@ def test_dashboard_login_failure(monkeypatch):
         "self_healing_import_fixer.analyzer.core_report.SECRETS_MANAGER",
         MagicMock(
             get_secret=lambda k: (
-                "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"
+                "admin_secure_password"
+                if k == "DASHBOARD_ADMIN_PASSWORD"
+                else "jwtsecret"
             )
         ),
     )
@@ -189,7 +197,9 @@ def test_dashboard_login_failure(monkeypatch):
         MagicMock(log_event=MagicMock()),
     )
     with app.test_client() as client:
-        resp = client.post("/login", json={"username": "admin", "password": "wrong_password"})
+        resp = client.post(
+            "/login", json={"username": "admin", "password": "wrong_password"}
+        )
         assert resp.status_code == 401
         assert "Bad username or password" in resp.json.get("msg", "")
 
@@ -210,7 +220,9 @@ def test_get_report_endpoint_success_no_encryption(tmp_path, monkeypatch):
         "SECRETS_MANAGER",
         MagicMock(
             get_secret=lambda k: (
-                "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"
+                "admin_secure_password"
+                if k == "DASHBOARD_ADMIN_PASSWORD"
+                else "jwtsecret"
             )
         ),
     )
@@ -247,7 +259,9 @@ def test_get_report_endpoint_with_encryption_in_prod(tmp_path, monkeypatch):
         "SECRETS_MANAGER",
         MagicMock(
             get_secret=lambda k: (
-                "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"
+                "admin_secure_password"
+                if k == "DASHBOARD_ADMIN_PASSWORD"
+                else "jwtsecret"
             )
         ),
     )
@@ -282,7 +296,9 @@ def test_get_report_endpoint_path_traversal_prevention(tmp_path, monkeypatch):
         "SECRETS_MANAGER",
         MagicMock(
             get_secret=lambda k: (
-                "admin_secure_password" if k == "DASHBOARD_ADMIN_PASSWORD" else "jwtsecret"
+                "admin_secure_password"
+                if k == "DASHBOARD_ADMIN_PASSWORD"
+                else "jwtsecret"
             )
         ),
     )

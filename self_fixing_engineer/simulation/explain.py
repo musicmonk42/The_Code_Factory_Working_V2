@@ -1,32 +1,33 @@
 # (full file with the applied fixes)
-import os
-from pathlib import Path
-import sqlite3
-import logging
-import random
-import json
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from dataclasses import dataclass
-import re
-from typing import Any, Dict, Optional, List, Callable
-from datetime import datetime, date, time
-import collections.abc
 import asyncio
-import uuid
-from logging import Formatter
+import collections.abc
+import json
+import logging
+import os
+import random
+import re
+import sqlite3
 import sys
 import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from dataclasses import dataclass
+from datetime import date, datetime, time
 from functools import partial
+from logging import Formatter
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 # Prometheus client for metrics
 try:
     from prometheus_client import (
-        Counter,
-        Histogram,
-        Gauge,
         REGISTRY,
-        generate_latest,
         CollectorRegistry,
+        Counter,
+        Gauge,
+        Histogram,
+        generate_latest,
     )
 
     PROMETHEUS_AVAILABLE = True
@@ -49,9 +50,9 @@ except ImportError:
 
 # LLM Integration
 try:
-    from langchain_openai import ChatOpenAI
-    from langchain_core.prompts import PromptTemplate
     from langchain_core.language_models import BaseChatModel
+    from langchain_core.prompts import PromptTemplate
+    from langchain_openai import ChatOpenAI
 
     LANGCHAIN_OPENAI_AVAILABLE = True
 except ImportError:
@@ -65,15 +66,17 @@ except ImportError:
 
 # DLT Integration
 try:
-    from test_generation.audit_log import AuditLogger as DLTLogger
     from test_generation.agentic import SecretsManager as GlobalSecretsManager
+    from test_generation.audit_log import AuditLogger as DLTLogger
 
     DLT_LOGGER_AVAILABLE = True
 except ImportError:
     DLT_LOGGER_AVAILABLE = False
     DLTLogger = None
     GlobalSecretsManager = None
-    logging.getLogger(__name__).warning("DLTLogger not available. Audit logging will be disabled.")
+    logging.getLogger(__name__).warning(
+        "DLTLogger not available. Audit logging will be disabled."
+    )
 
 # aiosqlite for async DB access
 try:
@@ -131,13 +134,13 @@ class ArbiterConfig:
 
 TRANSFORMERS_AVAILABLE = False
 try:
+    import torch
     from transformers import (
-        pipeline,
         AutoModelForCausalLM,
         AutoTokenizer,
         BitsAndBytesConfig,
+        pipeline,
     )
-    import torch
 
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -247,7 +250,9 @@ class DummyMetric:
         pass
 
 
-def get_or_create_metric(metric_type, name, documentation, labelnames=None, buckets=None):
+def get_or_create_metric(
+    metric_type, name, documentation, labelnames=None, buckets=None
+):
     """Get or create a metric, handling both mock and real metric types"""
     try:
         with _metrics_lock:
@@ -258,7 +263,9 @@ def get_or_create_metric(metric_type, name, documentation, labelnames=None, buck
 
             # Create new metric
             if buckets is not None:
-                metric = metric_type(name, documentation, labelnames or [], buckets=buckets)
+                metric = metric_type(
+                    name, documentation, labelnames or [], buckets=buckets
+                )
             else:
                 metric = metric_type(name, documentation, labelnames or [])
             return metric
@@ -382,12 +389,16 @@ def _run_in_thread(fn: Callable, *args: Any, timeout: int = 15, **kwargs: Any) -
         METRICS["inference_errors"].labels(type="timeout", error_code="TIMEOUT").inc()
         raise ReasonerError("Model inference timed out", code="TIMEOUT")
     except Exception as e:
-        METRICS["inference_errors"].labels(type="inference", error_code="INFERENCE_FAILED").inc()
+        METRICS["inference_errors"].labels(
+            type="inference", error_code="INFERENCE_FAILED"
+        ).inc()
         raise ReasonerError(f"Model inference failed: {e}", code="INFERENCE_FAILED")
 
 
 class ReasonerError(Exception):
-    def __init__(self, message: str, code: str, original_exception: Optional[Exception] = None):
+    def __init__(
+        self, message: str, code: str, original_exception: Optional[Exception] = None
+    ):
         self.message = message
         self.code = code
         self.original_exception = original_exception
@@ -402,11 +413,15 @@ def _sanitize_input(text: str, max_length: int = 1024) -> str:
     text = re.sub(r"<[^>]*>", "", text)
     text = text[:max_length]
     if not text:
-        raise ReasonerError("Input is empty or invalid after sanitization", code="EMPTY_INPUT")
+        raise ReasonerError(
+            "Input is empty or invalid after sanitization", code="EMPTY_INPUT"
+        )
     return text
 
 
-def _sanitize_context(context: Dict[str, Any], max_size_bytes: int = 4096) -> Dict[str, Any]:
+def _sanitize_context(
+    context: Dict[str, Any], max_size_bytes: int = 4096
+) -> Dict[str, Any]:
     if not isinstance(context, dict):
         raise ReasonerError("Context must be a dictionary", code="INVALID_CONTEXT")
 
@@ -463,7 +478,9 @@ def _sanitize_context(context: Dict[str, Any], max_size_bytes: int = 4096) -> Di
 
     try:
         sanitized_for_dumps = _deep_sanitize(context)
-        context_json = json.dumps(sanitized_for_dumps, sort_keys=True, ensure_ascii=False)
+        context_json = json.dumps(
+            sanitized_for_dumps, sort_keys=True, ensure_ascii=False
+        )
 
         if len(context_json.encode("utf-8")) > max_size_bytes:
             logger.warning(
@@ -502,7 +519,9 @@ def _sanitize_context(context: Dict[str, Any], max_size_bytes: int = 4096) -> Di
             try:
                 return json.loads(truncated_json_str)
             except json.JSONDecodeError:
-                logger.error("Truncating context broke JSON format. Returning minimal context.")
+                logger.error(
+                    "Truncating context broke JSON format. Returning minimal context."
+                )
                 return {
                     "_truncated_context_error": f"Original context too large ({len(context_json.encode('utf-8'))} bytes) and truncated. Content may be incomplete."
                 }
@@ -536,13 +555,17 @@ def _rule_based_fallback(query: str, context: Dict[str, Any], mode: str) -> str:
             f"[Fallback] In the absence of a detailed model, simple logic applied to '{query}' within context '{summary}' indicates a straightforward deduction.",
         ],
     }
-    return random.choice(response_phrases.get(mode, [f"[Fallback] Could not process '{query}'."]))
+    return random.choice(
+        response_phrases.get(mode, [f"[Fallback] Could not process '{query}'."])
+    )
 
 
 class HistoryManager:
     def __init__(self, db_path: str, max_size: int):
         if not AIOSQLITE_AVAILABLE:
-            raise ImportError("aiosqlite is not available, HistoryManager cannot be used.")
+            raise ImportError(
+                "aiosqlite is not available, HistoryManager cannot be used."
+            )
         self.db_path = db_path
         self.max_size = max_size
         self._db_lock = asyncio.Lock()
@@ -573,7 +596,9 @@ class HistoryManager:
                 METRICS["health_status"].labels(component="history_db").set(1)
         except (sqlite3.Error, aiosqlite.Error) as e:
             logger.error(f"Failed to initialize reasoner history database: {e}")
-            METRICS["history_operations_total"].labels(operation="init_db", status="error").inc()
+            METRICS["history_operations_total"].labels(
+                operation="init_db", status="error"
+            ).inc()
             METRICS["health_status"].labels(component="history_db").set(0)
             raise ReasonerError(
                 "Database initialization failed",
@@ -620,10 +645,14 @@ class HistoryManager:
                 METRICS["history_operations_total"].labels(
                     operation="add_entry", status="success"
                 ).inc()
-                logger.debug(f"Added history entry {entry.id}, current size: {current_size}")
+                logger.debug(
+                    f"Added history entry {entry.id}, current size: {current_size}"
+                )
         except (sqlite3.Error, aiosqlite.Error) as e:
             logger.error(f"Failed to add history entry: {e}")
-            METRICS["history_operations_total"].labels(operation="add_entry", status="error").inc()
+            METRICS["history_operations_total"].labels(
+                operation="add_entry", status="error"
+            ).inc()
             raise ReasonerError(
                 "Failed to add history entry",
                 code="DB_WRITE_FAILED",
@@ -711,7 +740,9 @@ class HistoryManager:
                 return size
         except (sqlite3.Error, aiosqlite.Error) as e:
             logger.error(f"Failed to get history size: {e}")
-            METRICS["history_operations_total"].labels(operation="get_size", status="error").inc()
+            METRICS["history_operations_total"].labels(
+                operation="get_size", status="error"
+            ).inc()
             raise ReasonerError(
                 "Failed to get history size",
                 code="DB_READ_FAILED",
@@ -728,7 +759,9 @@ class ExplainableReasoner:
         self.next_pipeline_idx = 0
         self._pipeline_lock = asyncio.Lock()
 
-        db_path_from_settings = getattr(settings, "DB_PATH", "sqlite:///./local_database.db")
+        db_path_from_settings = getattr(
+            settings, "DB_PATH", "sqlite:///./local_database.db"
+        )
 
         if db_path_from_settings.startswith("sqlite:///"):
             base_db_dir = Path(db_path_from_settings.replace("sqlite:///", "")).parent
@@ -752,7 +785,9 @@ class ExplainableReasoner:
         self._owns_executor = True  # track ownership so shutdown can be correct
         self._health_check_task: Optional[asyncio.Task] = None
 
-        logger.info("ExplainableReasoner initialized (await async_init for full setup).")
+        logger.info(
+            "ExplainableReasoner initialized (await async_init for full setup)."
+        )
 
     async def async_init(self):
         # Only obtain the global async executor if an instance-level executor hasn't been set.
@@ -775,9 +810,13 @@ class ExplainableReasoner:
             METRICS["health_status"].labels(component="llm_models").set(1)
             return
 
-        transformers_offline_setting = getattr(self.settings, "TRANSFORMERS_OFFLINE", False)
+        transformers_offline_setting = getattr(
+            self.settings, "TRANSFORMERS_OFFLINE", False
+        )
         if isinstance(transformers_offline_setting, str):
-            transformers_offline_setting = transformers_offline_setting.lower() == "true"
+            transformers_offline_setting = (
+                transformers_offline_setting.lower() == "true"
+            )
 
         if not TRANSFORMERS_AVAILABLE:
             self.logger.warning(
@@ -815,12 +854,20 @@ class ExplainableReasoner:
                         "local_files_only": transformers_offline_setting,
                     }
 
-                    if device >= 0 and "torch" in sys.modules and torch.cuda.is_available():
+                    if (
+                        device >= 0
+                        and "torch" in sys.modules
+                        and torch.cuda.is_available()
+                    ):
                         current_quantization_config = BitsAndBytesConfig(
-                            load_in_4bit=quantization_cfg_params.get("load_in_4bit", True),
+                            load_in_4bit=quantization_cfg_params.get(
+                                "load_in_4bit", True
+                            ),
                             bnb_4bit_compute_dtype=getattr(
                                 torch,
-                                quantization_cfg_params.get("bnb_4bit_compute_dtype", "float16"),
+                                quantization_cfg_params.get(
+                                    "bnb_4bit_compute_dtype", "float16"
+                                ),
                             ),
                             bnb_4bit_quant_type=quantization_cfg_params.get(
                                 "bnb_4bit_quant_type", "nf4"
@@ -830,11 +877,15 @@ class ExplainableReasoner:
                             ),
                             bnb_4bit_quant_storage=getattr(
                                 torch,
-                                quantization_cfg_params.get("bnb_4bit_quant_storage", "uint8"),
+                                quantization_cfg_params.get(
+                                    "bnb_4bit_quant_storage", "uint8"
+                                ),
                                 torch.uint8,
                             ),
                         )
-                        model_kwargs["quantization_config"] = current_quantization_config
+                        model_kwargs["quantization_config"] = (
+                            current_quantization_config
+                        )
                         model_kwargs["torch_dtype"] = getattr(
                             torch, quantization_cfg_params.get("torch_dtype", "float16")
                         )
@@ -849,7 +900,9 @@ class ExplainableReasoner:
 
                     tokenizer = await asyncio.get_event_loop().run_in_executor(
                         self.executor,
-                        partial(AutoTokenizer.from_pretrained, model_name, **model_kwargs),
+                        partial(
+                            AutoTokenizer.from_pretrained, model_name, **model_kwargs
+                        ),
                     )
                     model_obj = await asyncio.get_event_loop().run_in_executor(
                         self.executor,
@@ -860,15 +913,17 @@ class ExplainableReasoner:
                         ),
                     )
 
-                    text_generation_pipeline = await asyncio.get_event_loop().run_in_executor(
-                        self.executor,
-                        partial(
-                            pipeline,
-                            "text-generation",
-                            model=model_obj,
-                            device=device,
-                            tokenizer=tokenizer,
-                        ),
+                    text_generation_pipeline = (
+                        await asyncio.get_event_loop().run_in_executor(
+                            self.executor,
+                            partial(
+                                pipeline,
+                                "text-generation",
+                                model=model_obj,
+                                device=device,
+                                tokenizer=tokenizer,
+                            ),
+                        )
                     )
 
                     if text_generation_pipeline.tokenizer.pad_token_id is None:
@@ -892,17 +947,23 @@ class ExplainableReasoner:
                     self.logger.warning(
                         f"Transformers library not available during retry for {model_name}. Operating in fallback mode."
                     )
-                    METRICS["model_load_errors"].labels(model_name=model_name, device=device).inc()
+                    METRICS["model_load_errors"].labels(
+                        model_name=model_name, device=device
+                    ).inc()
                     break
                 except Exception as e:
                     self.logger.error(
                         f"Failed to load NLP model '{model_name}' on device {device} (attempt {attempt + 1}): {e}",
                         exc_info=True,
                     )
-                    METRICS["model_load_errors"].labels(model_name=model_name, device=device).inc()
+                    METRICS["model_load_errors"].labels(
+                        model_name=model_name, device=device
+                    ).inc()
                     if attempt < retries - 1:
                         sleep_time = initial_delay * (2**attempt)
-                        self.logger.info(f"Retrying model load in {sleep_time} seconds...")
+                        self.logger.info(
+                            f"Retrying model load in {sleep_time} seconds..."
+                        )
                         await asyncio.sleep(sleep_time)
                     else:
                         self.logger.error(
@@ -976,7 +1037,9 @@ class ExplainableReasoner:
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
         prompt_length_tokens = input_ids.shape[1]
 
-        effective_max_new_tokens = min(max_new_tokens, model_max_length - prompt_length_tokens)
+        effective_max_new_tokens = min(
+            max_new_tokens, model_max_length - prompt_length_tokens
+        )
         effective_max_new_tokens = max(1, effective_max_new_tokens)
 
         if prompt_length_tokens >= model_max_length:
@@ -1009,7 +1072,11 @@ class ExplainableReasoner:
             "eos_token_id": tokenizer.eos_token_id,
         }
 
-        if pipeline_info["device"] >= 0 and "torch" in sys.modules and torch.cuda.is_available():
+        if (
+            pipeline_info["device"] >= 0
+            and "torch" in sys.modules
+            and torch.cuda.is_available()
+        ):
             input_ids = input_ids.to(f'cuda:{pipeline_info["device"]}')
             model_pipeline.model.to(f'cuda:{pipeline_info["device"]}')
 
@@ -1032,7 +1099,9 @@ class ExplainableReasoner:
                 "Model returned an unexpected output format.", code="BAD_MODEL_OUTPUT"
             )
 
-    async def _async_generate_text(self, prompt: str, max_length: int, temperature: float) -> str:
+    async def _async_generate_text(
+        self, prompt: str, max_length: int, temperature: float
+    ) -> str:
         pipeline_info = await self._get_next_pipeline()
         if pipeline_info is None:
             raise ReasonerError(
@@ -1052,7 +1121,9 @@ class ExplainableReasoner:
             )
             return result
         except FuturesTimeoutError:
-            METRICS["inference_errors"].labels(type="timeout", error_code="TIMEOUT").inc()
+            METRICS["inference_errors"].labels(
+                type="timeout", error_code="TIMEOUT"
+            ).inc()
             raise ReasonerError("Model inference timed out", code="TIMEOUT")
         except Exception as e:
             error_code = "GENERATION_ERROR"
@@ -1061,9 +1132,7 @@ class ExplainableReasoner:
                 e
             ) or "The attention mask is not all zeros" in str(e):
                 error_code = "INVALID_INPUT_LENGTH"
-                message = (
-                    f"Model generation received invalid input length or attention mask issue: {e}"
-                )
+                message = f"Model generation received invalid input length or attention mask issue: {e}"
             elif "CUDA out of memory" in str(e):
                 error_code = "CUDA_OUT_OF_MEMORY"
                 message = f"CUDA out of memory during generation: {e}"
@@ -1071,7 +1140,9 @@ class ExplainableReasoner:
                 error_code = "MODEL_NOT_READY"
                 message = f"Model was not ready for generation: {e}"
 
-            METRICS["inference_errors"].labels(type="generation", error_code=error_code).inc()
+            METRICS["inference_errors"].labels(
+                type="generation", error_code=error_code
+            ).inc()
             self.logger.error(
                 f"Error during text generation for model {pipeline_info['model_name']} on device {pipeline_info['device']}: {message}",
                 exc_info=True,
@@ -1100,7 +1171,9 @@ class ExplainableReasoner:
             f"Reasoning:"
         )
 
-    async def explain(self, query: str, context: Dict[str, Any] = None) -> ExplanationResult:
+    async def explain(
+        self, query: str, context: Dict[str, Any] = None
+    ) -> ExplanationResult:
         context = context or {}
         sanitized_context = _sanitize_context(context)
         sanitized_query = _sanitize_input(query)
@@ -1118,7 +1191,9 @@ class ExplainableReasoner:
                     history_str = "\n--- Recent Interactions ---\n"
                     for entry in recent_history:
                         history_str += f"Query: {entry.query}\n"
-                        history_str += f"Response ({entry.response_type}): {entry.response}\n\n"
+                        history_str += (
+                            f"Response ({entry.response_type}): {entry.response}\n\n"
+                        )
                     history_str += "---------------------------\n\n"
 
                 if self.config.mock_mode or not self.pipelines:
@@ -1200,12 +1275,16 @@ class ExplainableReasoner:
                             "code": e.code,
                             "message": e.message,
                             "original_exception": (
-                                str(e.original_exception) if e.original_exception else None
+                                str(e.original_exception)
+                                if e.original_exception
+                                else None
                             ),
                         }
                     )
                 )
-                METRICS["inference_errors"].labels(type="explain", error_code=e.code).inc()
+                METRICS["inference_errors"].labels(
+                    type="explain", error_code=e.code
+                ).inc()
                 raise
             except Exception as e:
                 self.logger.error(
@@ -1228,7 +1307,9 @@ class ExplainableReasoner:
                     original_exception=e,
                 )
 
-    async def reason(self, query: str, context: Dict[str, Any] = None) -> ReasoningResult:
+    async def reason(
+        self, query: str, context: Dict[str, Any] = None
+    ) -> ReasoningResult:
         context = context or {}
         sanitized_context = _sanitize_context(context)
         sanitized_query = _sanitize_input(query)
@@ -1246,7 +1327,9 @@ class ExplainableReasoner:
                     history_str = "\n--- Recent Interactions ---\n"
                     for entry in recent_history:
                         history_str += f"Query: {entry.query}\n"
-                        history_str += f"Response ({entry.response_type}): {entry.response}\n\n"
+                        history_str += (
+                            f"Response ({entry.response_type}): {entry.response}\n\n"
+                        )
                     history_str += "---------------------------\n\n"
 
                 if self.config.mock_mode or not self.pipelines:
@@ -1328,12 +1411,16 @@ class ExplainableReasoner:
                             "code": e.code,
                             "message": e.message,
                             "original_exception": (
-                                str(e.original_exception) if e.original_exception else None
+                                str(e.original_exception)
+                                if e.original_exception
+                                else None
                             ),
                         }
                     )
                 )
-                METRICS["inference_errors"].labels(type="reason", error_code=e.code).inc()
+                METRICS["inference_errors"].labels(
+                    type="reason", error_code=e.code
+                ).inc()
                 raise
             except Exception as e:
                 self.logger.error(
@@ -1388,7 +1475,9 @@ class ExplainableReasoner:
             METRICS["health_status"].labels(component="executor").set(0)
             self.logger.error("Executor unhealthy or shut down.")
 
-        if os.getenv("OPENAI_API_KEY") or getattr(self.settings, "LLM_API_KEY_LOADED", False):
+        if os.getenv("OPENAI_API_KEY") or getattr(
+            self.settings, "LLM_API_KEY_LOADED", False
+        ):
             METRICS["health_status"].labels(component="api_key_access").set(1)
             self.logger.debug("API Key access appears healthy.")
         else:
@@ -1400,7 +1489,9 @@ class ExplainableReasoner:
             try:
                 await self._perform_health_check()
             except Exception as e:
-                self.logger.error(f"Error during periodic health check: {e}", exc_info=True)
+                self.logger.error(
+                    f"Error during periodic health check: {e}", exc_info=True
+                )
             await asyncio.sleep(interval_seconds)
 
 
@@ -1504,7 +1595,9 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
                 )
 
         except ValidationError as e:
-            logger.error(f"Input validation failed for explain_result: {e}", exc_info=True)
+            logger.error(
+                f"Input validation failed for explain_result: {e}", exc_info=True
+            )
             if self.dlt_logger:
                 await self.dlt_logger.add_entry(
                     kind="explain",
@@ -1522,7 +1615,9 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
                 code="INPUT_VALIDATION_ERROR",
             )
         except ValueError as e:
-            logger.error(f"Input validation failed for explain_result: {e}", exc_info=True)
+            logger.error(
+                f"Input validation failed for explain_result: {e}", exc_info=True
+            )
             if self.dlt_logger:
                 await self.dlt_logger.add_entry(
                     kind="explain",
@@ -1541,7 +1636,11 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
             )
 
         explanation_text = ""
-        with METRICS["explanation_latency"].labels(result_id=validated_result.result_id).time():
+        with (
+            METRICS["explanation_latency"]
+            .labels(result_id=validated_result.result_id)
+            .time()
+        ):
             try:
                 if not LANGCHAIN_OPENAI_AVAILABLE:
                     explanation_text = _rule_based_fallback(
@@ -1650,7 +1749,9 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             else:
-                raise ValueError(f"Unknown action for ExplainableReasonerPlugin: {action}")
+                raise ValueError(
+                    f"Unknown action for ExplainableReasonerPlugin: {action}"
+                )
         except ReasonerError as e:
             self.logger.critical(
                 f"Critical ReasonerError during execute action '{action}': {e.message} (Code: {e.code})",

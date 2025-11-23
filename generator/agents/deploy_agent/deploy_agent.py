@@ -1,51 +1,51 @@
 # agents/deploy_agent.py
 import asyncio
-import uuid
-import logging
-import json
-import os
-import glob
-import time
-import aiosqlite  # <-- FIX: Add aiosqlite import
 import difflib
-import re
-from datetime import datetime
-from typing import Dict, List, Optional, Any, Callable, Awaitable
-from abc import ABC, abstractmethod
-from pathlib import Path
+import glob
 import importlib.util
+import json
+import logging
+import os
+import re
 import sys
+import time
+import uuid
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-import aiohttp
 import aiofiles
+import aiohttp
+import aiosqlite  # <-- FIX: Add aiosqlite import
+import networkx as nx
 import prometheus_client
 import tiktoken
-import networkx as nx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from opentelemetry.trace import Status, StatusCode
+from pydantic import BaseModel
+from runner.llm_client import call_ensemble_api, call_llm_api
+from runner.runner_errors import LLMError, RunnerError
+from runner.runner_file_utils import get_commits
+
+# --- FIX: Import log_audit_event and alias it to log_action ---
+from runner.runner_logging import add_provenance
+from runner.runner_logging import log_audit_event as log_action
+from runner.runner_logging import logger
+from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
+from runner.runner_metrics import (
+    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
+)
+from runner.runner_security_utils import redact_secrets
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # --- FIX 1: Import the class, not the method ---
 from .deploy_prompt import DeployPromptAgent
 
 # --- FIX: Import HandlerRegistry to instantiate it ---
-from .deploy_response_handler import handle_deploy_response, HandlerRegistry
+from .deploy_response_handler import HandlerRegistry, handle_deploy_response
 from .deploy_validator import ValidatorRegistry
-
-from runner.llm_client import call_llm_api, call_ensemble_api
-from runner.runner_file_utils import get_commits
-
-# --- FIX: Import log_audit_event and alias it to log_action ---
-from runner.runner_logging import logger, add_provenance, log_audit_event as log_action
-from runner.runner_metrics import (
-    LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
-    LLM_ERRORS_TOTAL,
-    LLM_LATENCY_SECONDS,
-)
-from runner.runner_errors import RunnerError, LLMError
-from runner.runner_security_utils import redact_secrets
 
 # Safe tracer import: works even if runner.tracer is not available
 try:
@@ -207,7 +207,9 @@ async def approve_config(request: ApprovalRequest) -> ApprovalResponse:
     approval_ui = os.getenv("APPROVAL_UI_URL", "http://localhost:8001/approval-ui")
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(approval_ui, json=request.dict(), timeout=300) as resp:
+            async with session.post(
+                approval_ui, json=request.dict(), timeout=300
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     approved = bool(data.get("approved", False))
@@ -219,7 +221,9 @@ async def approve_config(request: ApprovalRequest) -> ApprovalResponse:
                     return ApprovalResponse(approved=approved, comments=comments)
 
                 detail = f"Approval UI error {resp.status}: {await resp.text()}"
-                HUMAN_APPROVAL_STATUS.labels(run_id=request.run_id, status="error").inc()
+                HUMAN_APPROVAL_STATUS.labels(
+                    run_id=request.run_id, status="error"
+                ).inc()
                 raise HTTPException(status_code=500, detail=detail)
     except asyncio.TimeoutError:
         HUMAN_APPROVAL_STATUS.labels(run_id=request.run_id, status="timeout").inc()
@@ -299,7 +303,8 @@ class PluginRegistry(FileSystemEventHandler):
     def _load_plugin_file(self, plugin_file: str) -> None:
         module_name_base = Path(plugin_file).stem
         unique_name = (
-            f"{self.plugin_dir.replace(os.sep, '.')}" f".{module_name_base}_{uuid.uuid4().hex}"
+            f"{self.plugin_dir.replace(os.sep, '.')}"
+            f".{module_name_base}_{uuid.uuid4().hex}"
         )
 
         spec = importlib.util.spec_from_file_location(unique_name, plugin_file)
@@ -387,7 +392,9 @@ class DeployAgent:
     ) -> None:
         self.repo_path = Path(repo_path)
         if not self.repo_path.is_dir():
-            raise ValueError(f"Repository path does not exist or is not a directory: {repo_path}")
+            raise ValueError(
+                f"Repository path does not exist or is not a directory: {repo_path}"
+            )
 
         self.languages_supported = languages_supported or [
             "python",
@@ -448,9 +455,15 @@ class DeployAgent:
                 self.target_graph.add_node(t)
 
         # Hooks
-        self.pre_gather_hooks: List[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = []
-        self.post_gather_hooks: List[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = []
-        self.pre_gen_hooks: List[Callable[[Dict[str, Any], str], Awaitable[Dict[str, Any]]]] = []
+        self.pre_gather_hooks: List[
+            Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
+        ] = []
+        self.post_gather_hooks: List[
+            Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
+        ] = []
+        self.pre_gen_hooks: List[
+            Callable[[Dict[str, Any], str], Awaitable[Dict[str, Any]]]
+        ] = []
         self.post_gen_hooks: List[Callable[[Any, str], Awaitable[Any]]] = []
 
         self.last_result: Optional[Dict[str, Any]] = None
@@ -475,7 +488,9 @@ class DeployAgent:
     # --- FIX: Convert to async with aiosqlite ---
     async def get_previous_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT result FROM history WHERE id=?", (run_id,)) as cursor:
+            async with db.execute(
+                "SELECT result FROM history WHERE id=?", (run_id,)
+            ) as cursor:
                 row = await cursor.fetchone()
                 return json.loads(row[0]) if row else None
 
@@ -521,16 +536,24 @@ class DeployAgent:
             try:
                 for rel in target_files:
                     path = self.repo_path / rel
-                    if path.name == "requirements.txt" and "python" in self.languages_supported:
+                    if (
+                        path.name == "requirements.txt"
+                        and "python" in self.languages_supported
+                    ):
                         async with aiofiles.open(path, "r", encoding="utf-8") as f:
-                            ctx["dependencies"]["python"] = (await f.read()).splitlines()
+                            ctx["dependencies"]["python"] = (
+                                await f.read()
+                            ).splitlines()
                     elif path.name == "package.json" and any(
-                        x in self.languages_supported for x in ["javascript", "typescript"]
+                        x in self.languages_supported
+                        for x in ["javascript", "typescript"]
                     ):
                         async with aiofiles.open(path, "r", encoding="utf-8") as f:
                             pkg = json.loads(await f.read())
                         ctx["dependencies"]["javascript"] = pkg.get("dependencies", {})
-                        ctx["dependencies"]["dev_javascript"] = pkg.get("devDependencies", {})
+                        ctx["dependencies"]["dev_javascript"] = pkg.get(
+                            "devDependencies", {}
+                        )
                     elif path.name == "go.mod" and "go" in self.languages_supported:
                         async with aiofiles.open(path, "r", encoding="utf-8") as f:
                             mod = await f.read()
@@ -551,7 +574,9 @@ class DeployAgent:
             # recent commits
             try:
                 commits = await get_commits(str(self.repo_path), limit=5)
-                if isinstance(commits, str) and commits.startswith("Failed to retrieve"):
+                if isinstance(commits, str) and commits.startswith(
+                    "Failed to retrieve"
+                ):
                     logger.warning(
                         commits,
                         extra={"run_id": self.run_id},
@@ -576,7 +601,9 @@ class DeployAgent:
             return ctx
 
     # --- helpers ----------------------------------------------------
-    async def validate_configs_final(self, config_string: str, target: str) -> Dict[str, Any]:
+    async def validate_configs_final(
+        self, config_string: str, target: str
+    ) -> Dict[str, Any]:
         with tracer.start_as_current_span(f"deploy.validate_final.{target}"):
             # --- FIX: Use singleton registry ---
             validator = self.validator_registry.get_validator(target)
@@ -592,7 +619,9 @@ class DeployAgent:
         # minimal placeholder; full scans live elsewhere
         return []
 
-    async def simulate_deployment_final(self, config_string: str, target: str) -> Dict[str, Any]:
+    async def simulate_deployment_final(
+        self, config_string: str, target: str
+    ) -> Dict[str, Any]:
         plugin = self.plugin_registry.get_plugin(target)
         if not plugin:
             return {
@@ -707,7 +736,9 @@ Respond in plain prose only (no JSON / no code fences).
                 # generation per target
                 for t in order:
                     async with self.sem:
-                        with tracer.start_as_current_span(f"deploy.generate.{t}") as tspan:
+                        with tracer.start_as_current_span(
+                            f"deploy.generate.{t}"
+                        ) as tspan:
                             try:
                                 for hook in self.pre_gen_hooks:
                                     context = await hook(context, t)
@@ -743,7 +774,9 @@ Respond in plain prose only (no JSON / no code fences).
                                             llm_model,
                                             stream=stream,
                                         )
-                                    LLM_CALLS_TOTAL.labels(provider="deploy", model=llm_model).inc()
+                                    LLM_CALLS_TOTAL.labels(
+                                        provider="deploy", model=llm_model
+                                    ).inc()
                                     LLM_LATENCY_SECONDS.labels(
                                         provider="deploy", model=llm_model
                                     ).observe(time.time() - start_llm)
@@ -753,7 +786,9 @@ Respond in plain prose only (no JSON / no code fences).
                                         model=llm_model,
                                         error_type=type(le).__name__,
                                     ).inc()
-                                    raise LLMError(f"LLM call failed for target {t}") from le
+                                    raise LLMError(
+                                        f"LLM call failed for target {t}"
+                                    ) from le
 
                                 raw = resp if stream else resp.get("content", "")
                                 out_format = t if t != "docs" else "markdown"
@@ -789,7 +824,9 @@ Respond in plain prose only (no JSON / no code fences).
                                     or v_report.get("compliance_score", 0.0) < 0.5
                                 ):
                                     VALIDATION_ERRORS.labels(run_type=t).inc()
-                                    raise RunnerError(f"Config validation failed for {t}")
+                                    raise RunnerError(
+                                        f"Config validation failed for {t}"
+                                    )
 
                                 configs[t] = handled["final_config_output"]
 
@@ -847,7 +884,9 @@ Respond in plain prose only (no JSON / no code fences).
                         raise ValueError("Configuration rejected by human reviewer")
 
                 duration = time.time() - start
-                GENERATION_DURATION.labels(run_type=doc_type, model=llm_model).observe(duration)
+                GENERATION_DURATION.labels(run_type=doc_type, model=llm_model).observe(
+                    duration
+                )
                 SUCCESSFUL_GENERATIONS.labels(run_type=doc_type).inc()
                 CONFIG_SIZE.labels(run_type=doc_type).set(
                     sum(len(v) for v in configs.values() if isinstance(v, str))
@@ -867,7 +906,9 @@ Respond in plain prose only (no JSON / no code fences).
                         "generated_by": "DeployAgent",
                         "version": "1.0",
                         "duration_seconds": duration,
-                        "config_status": ("Approved" if human_approval else "Skipped_Approval"),
+                        "config_status": (
+                            "Approved" if human_approval else "Skipped_Approval"
+                        ),
                     },
                 }
                 self.last_result = result
@@ -929,7 +970,9 @@ Respond in plain prose only (no JSON / no code fences).
                 raise
 
     # --- run_deployment ---------------------------------------------
-    async def run_deployment(self, target: str, requirements: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_deployment(
+        self, target: str, requirements: Dict[str, Any]
+    ) -> Dict[str, Any]:
         with tracer.start_as_current_span("deploy.run_deployment") as span:
             start = time.time()
             DEPLOY_RUNS.labels(status="started").inc()
@@ -1067,7 +1110,9 @@ Respond in plain prose only (no JSON / no code fences).
     async def compliance_check(self, config: Dict[str, Any]) -> List[str]:
         return await self.compliance_check_final(json.dumps(config))
 
-    async def simulate_deployment(self, config: Dict[str, Any], target: str) -> Dict[str, Any]:
+    async def simulate_deployment(
+        self, config: Dict[str, Any], target: str
+    ) -> Dict[str, Any]:
         plugin = self.plugin_registry.get_plugin(target)
         if plugin:
             return await plugin.simulate_deployment(config)
@@ -1277,7 +1322,10 @@ Propose corrected configurations as JSON keyed by target.
 
                         badges = await self.generate_badges(
                             list(validations.values()),
-                            [v if isinstance(v, list) else [] for v in compliances.values()],
+                            [
+                                v if isinstance(v, list) else []
+                                for v in compliances.values()
+                            ],
                         )
 
                         healed = {
@@ -1432,7 +1480,9 @@ Propose corrected configurations as JSON keyed by target.
             provenance = result.get("provenance", {})
 
             report_lines: List[str] = []
-            report_lines.append(f"# Deployment Configuration Report (Run ID: `{run_id}`)")
+            report_lines.append(
+                f"# Deployment Configuration Report (Run ID: `{run_id}`)"
+            )
             report_lines.append(f"**Timestamp**: {timestamp}")
             report_lines.append("")
             report_lines.append("**Provenance**:")
@@ -1453,7 +1503,9 @@ Propose corrected configurations as JSON keyed by target.
                 report_lines.append(f"## Target: {target}")
                 report_lines.append("")
                 report_lines.append("### Explanation")
-                report_lines.append(explanations.get(target, "No explanation available."))
+                report_lines.append(
+                    explanations.get(target, "No explanation available.")
+                )
                 report_lines.append("")
                 report_lines.append("### Configuration")
                 report_lines.append("```text")

@@ -1,7 +1,7 @@
 # generator/runner/tests/conftest.py
 import os
-import tempfile
 import pathlib
+import tempfile
 
 # --- CRITICAL ENVIRONMENT SETUP (MUST BE FIRST) ---
 # Set TESTING flags for conditional logic in runner modules
@@ -40,9 +40,10 @@ import sys
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+import asyncio
+
 # === 4. Pytest config & Fixtures ===
 import pytest
-import asyncio
 from runner import (
     llm_client,
 )  # Import the module namespace to access the global variable

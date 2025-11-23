@@ -1,16 +1,16 @@
-import pytest
-from unittest.mock import patch, MagicMock
 import os
 import threading
-from cryptography.fernet import Fernet
-from pydantic import SecretStr
+from unittest.mock import MagicMock, patch
 
+import pytest
 from arbiter.config import (
     ArbiterConfig,
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_histogram,
 )
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 
 # Clear globals fixture
@@ -151,7 +151,9 @@ def test_encrypt_sensitive_fields():
 
 
 def test_invalid_email_recipients_list():
-    with pytest.raises(ValueError, match="EMAIL_RECIPIENTS must be a comma-separated string"):
+    with pytest.raises(
+        ValueError, match="EMAIL_RECIPIENTS must be a comma-separated string"
+    ):
         ArbiterConfig(EMAIL_RECIPIENTS=123)
 
 

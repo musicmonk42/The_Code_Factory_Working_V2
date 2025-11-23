@@ -32,24 +32,24 @@ Notes:
 - All metric labels are sanitized to alphanumeric, underscore, or hyphen characters to prevent corruption.
 """
 
-from typing import Union, Tuple, Optional, Type, Dict, Any
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-import os
-import logging
-import threading
 import asyncio
-import re
 import atexit
+import logging
+import os
+import re
+import threading
 import time
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 # Use centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # Initialize tracer
 tracer = get_tracer(__name__)
@@ -61,7 +61,9 @@ parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
 # Define compliance config path
 COMPLIANCE_CONFIG_PATH = os.environ.get(
     "CREW_CONFIG_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "..", "agent_orchestration", "crew_config.yaml"),
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "agent_orchestration", "crew_config.yaml"
+    ),
 )
 
 # Assume ArbiterConfig is available for dynamic configuration
@@ -71,7 +73,9 @@ try:
     ArbiterConfig = type(get_config())
 except ImportError:
     logger = logging.getLogger(__name__)
-    logger.warning("Warning: Could not import ArbiterConfig. Using default configuration.")
+    logger.warning(
+        "Warning: Could not import ArbiterConfig. Using default configuration."
+    )
 
     class ArbiterConfig:
         def __init__(self):
@@ -149,7 +153,9 @@ def get_or_create_metric(
         attributes={"metric_name": name, "metric_type": metric_type_name},
     ) as span:
         if not re.match(r"^[a-zA-Z_:][a-zA-Z0-9_:]*$", name):
-            logger.error(f"Invalid metric name: {name}. Must match [a-zA-Z_:][a-zA-Z0-9_:]*")
+            logger.error(
+                f"Invalid metric name: {name}. Must match [a-zA-Z_:][a-zA-Z0-9_:]*"
+            )
             span.record_exception(ValueError(f"Invalid metric name: {name}"))
             raise ValueError(f"Invalid metric name: {name}")
 
@@ -159,7 +165,9 @@ def get_or_create_metric(
             is_valid_type = issubclass(metric_class, valid_metric_types)
         except TypeError:
             # metric_class is not a class or is a Mock
-            logger.warning(f"Invalid metric class type for {name}. Using Counter as fallback.")
+            logger.warning(
+                f"Invalid metric class type for {name}. Using Counter as fallback."
+            )
             metric_class = Counter
             is_valid_type = True
 
@@ -175,9 +183,9 @@ def get_or_create_metric(
         labelnames = labelnames or ()
 
         if buckets:
-            if not all(isinstance(b, (int, float)) and b > 0 for b in buckets) or buckets != tuple(
-                sorted(buckets)
-            ):
+            if not all(
+                isinstance(b, (int, float)) and b > 0 for b in buckets
+            ) or buckets != tuple(sorted(buckets)):
                 logger.error(
                     f"Invalid buckets for metric {name}: {buckets}. Must be positive and sorted."
                 )
@@ -263,17 +271,23 @@ policy_last_reload_timestamp = get_or_create_metric(
     "Timestamp of the last policy file reload",
 )
 # Get settings safely with defaults
-decision_optimizer_settings = getattr(config_instance, "DECISION_OPTIMIZER_SETTINGS", None)
+decision_optimizer_settings = getattr(
+    config_instance, "DECISION_OPTIMIZER_SETTINGS", None
+)
 if decision_optimizer_settings is None:
     decision_optimizer_settings = {}
 
 feedback_buckets = (
-    decision_optimizer_settings.get("feedback_processing_buckets", (0.001, 0.01, 0.1, 1, 10))
+    decision_optimizer_settings.get(
+        "feedback_processing_buckets", (0.001, 0.01, 0.1, 1, 10)
+    )
     if isinstance(decision_optimizer_settings, dict)
     else (0.001, 0.01, 0.1, 1, 10)
 )
 llm_buckets = (
-    decision_optimizer_settings.get("llm_call_latency_buckets", (0.1, 0.5, 1, 2, 5, 10, 30, 60))
+    decision_optimizer_settings.get(
+        "llm_call_latency_buckets", (0.1, 0.5, 1, 2, 5, 10, 30, 60)
+    )
     if isinstance(decision_optimizer_settings, dict)
     else (0.1, 0.5, 1, 2, 5, 10, 30, 60)
 )
@@ -359,7 +373,9 @@ METRIC_REFRESH_LATENCY = get_or_create_metric(
 try:
     from guardrails.compliance_mapper import load_compliance_map
 except ImportError:
-    logger.critical("Failed to import compliance_mapper. Using fallback compliance map.")
+    logger.critical(
+        "Failed to import compliance_mapper. Using fallback compliance map."
+    )
 
     def load_compliance_map(config_path: str = None) -> Dict[str, Any]:
         return {
@@ -393,7 +409,9 @@ VALID_VIOLATION_TYPES = {"access_denied", "policy_violation", "unauthorized"}
 VALID_ACTION_TYPES = {"auto_learn", "enforce", "audit"}
 
 
-def record_policy_decision(allowed: str, domain: str, user_type: str, reason_code: str) -> None:
+def record_policy_decision(
+    allowed: str, domain: str, user_type: str, reason_code: str
+) -> None:
     """Records a policy decision with sanitized and validated labels."""
     with tracer.start_as_current_span(
         "record_policy_decision",
@@ -456,7 +474,9 @@ def record_compliance_violation(control_id: str, violation_type: str) -> None:
                 f"Invalid violation_type: {violation_type}. Must be one of {VALID_VIOLATION_TYPES}",
                 "invalid_violation_type",
             )
-            span.record_exception(ValueError(f"Invalid violation_type: {violation_type}"))
+            span.record_exception(
+                ValueError(f"Invalid violation_type: {violation_type}")
+            )
         COMPLIANCE_VIOLATIONS_TOTAL.labels(
             control_id=_sanitize_label(control_id),
             violation_type=sanitized_violation_type,
@@ -477,7 +497,9 @@ def record_compliance_action(control_id: str, result: str, action_type: str) -> 
         sanitized_control_id = _sanitize_label(control_id)
         sanitized_result = _sanitize_label(result)
         sanitized_action_type = (
-            _sanitize_label(action_type) if action_type in VALID_ACTION_TYPES else "invalid"
+            _sanitize_label(action_type)
+            if action_type in VALID_ACTION_TYPES
+            else "invalid"
         )
         if sanitized_action_type == "invalid":
             _log_error_rate_limited(
@@ -519,13 +541,18 @@ def register_shutdown_handler() -> None:
                     if "loop" in locals() and not loop.is_closed():
                         loop.close()
 
-            if hasattr(load_compliance_map, "_redis_pool") and load_compliance_map._redis_pool:
+            if (
+                hasattr(load_compliance_map, "_redis_pool")
+                and load_compliance_map._redis_pool
+            ):
                 try:
                     loop = asyncio.get_event_loop()
                     if loop.is_closed():
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                    loop.run_until_complete(load_compliance_map._redis_pool.disconnect())
+                    loop.run_until_complete(
+                        load_compliance_map._redis_pool.disconnect()
+                    )
                     logger.debug("Redis connection pool cleaned up during shutdown.")
                 except (RuntimeError, Exception) as e:
                     logger.error(f"Error cleaning up Redis pool during shutdown: {e}")
@@ -547,13 +574,16 @@ async def cleanup_compliance_metrics() -> None:
         try:
             current_controls = set(load_compliance_map(COMPLIANCE_CONFIG_PATH).keys())
             registered_controls = set(
-                labels["control_id"] for labels in COMPLIANCE_CONTROL_STATUS._metrics.keys()
+                labels["control_id"]
+                for labels in COMPLIANCE_CONTROL_STATUS._metrics.keys()
             )
             stale_controls = registered_controls - current_controls
             for control_id in stale_controls:
                 sanitized_control_id = _sanitize_label(control_id)
                 # Prometheus metrics cannot be easily removed. Log and let them persist.
-                logger.debug(f"Control {sanitized_control_id} is stale (metrics persist)")
+                logger.debug(
+                    f"Control {sanitized_control_id} is stale (metrics persist)"
+                )
                 span.set_attribute(f"control.{sanitized_control_id}.stale", True)
             span.set_attribute("stale_controls_detected", len(stale_controls))
 
@@ -571,7 +601,9 @@ async def cleanup_compliance_metrics() -> None:
                     span.set_attribute("redis_pool_cleanup", "failed")
             logger.info("Stale compliance metrics cleaned up.")
         except Exception as e:
-            _log_error_rate_limited(f"Error cleaning up compliance metrics: {e}", "cleanup_failed")
+            _log_error_rate_limited(
+                f"Error cleaning up compliance metrics: {e}", "cleanup_failed"
+            )
             span.record_exception(e)
 
 
@@ -607,7 +639,9 @@ def initialize_compliance_metrics():
             _log_error_rate_limited(
                 f"Compliance control limit ({max_controls}) exceeded", "limit_exceeded"
             )
-            span.record_exception(ValueError(f"Compliance control limit ({max_controls}) exceeded"))
+            span.record_exception(
+                ValueError(f"Compliance control limit ({max_controls}) exceeded")
+            )
             raise ValueError(f"Compliance control limit ({max_controls}) exceeded")
 
         for control_id, control_info in ALL_COMPLIANCE_CONTROLS.items():
@@ -623,18 +657,26 @@ def initialize_compliance_metrics():
                     "invalid_data",
                 )
                 span.record_exception(
-                    ValueError(f"Invalid compliance control data for {sanitized_control_id}")
+                    ValueError(
+                        f"Invalid compliance control data for {sanitized_control_id}"
+                    )
                 )
                 continue
 
             # Update the Gauge to reflect the configured status from the file
-            control_status_value = 1.0 if control_info.get("status") == "enforced" else 0.0
+            control_status_value = (
+                1.0 if control_info.get("status") == "enforced" else 0.0
+            )
             COMPLIANCE_CONTROL_STATUS.labels(
                 control_id=sanitized_control_id,
-                status_detail=_sanitize_label(control_info.get("status", "not_specified")),
+                status_detail=_sanitize_label(
+                    control_info.get("status", "not_specified")
+                ),
                 required=str(control_info.get("required", True)).lower(),
             ).set(control_status_value)
-            span.set_attribute(f"control.{sanitized_control_id}.status", control_status_value)
+            span.set_attribute(
+                f"control.{sanitized_control_id}.status", control_status_value
+            )
 
         COMPLIANCE_CONTROL_ACTIVE.set(len(ALL_COMPLIANCE_CONTROLS))
         logger.info("Dynamic compliance control metrics initialized.")
@@ -679,7 +721,9 @@ async def refresh_compliance_metrics() -> None:
             # Rate-limiting to prevent excessive refreshes
             current_time = time.monotonic()
             if current_time - _last_refresh_time < _min_refresh_interval:
-                await asyncio.sleep(_min_refresh_interval - (current_time - _last_refresh_time))
+                await asyncio.sleep(
+                    _min_refresh_interval - (current_time - _last_refresh_time)
+                )
 
             try:
                 await cleanup_compliance_metrics()

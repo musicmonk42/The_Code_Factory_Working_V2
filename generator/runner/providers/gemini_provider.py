@@ -8,31 +8,31 @@ observability (metrics, logging, tracing), and security (redaction)
 are handled by the llm_client.py manager that calls this plugin.
 """
 
-import os
-import logging
-import uuid
-import time
-import json
-import yaml
 import asyncio
-from typing import Union, Dict, Any, AsyncGenerator, Callable, List
+import json
+import logging
+import os
+import time
+import uuid
+from typing import Any, AsyncGenerator, Callable, Dict, List, Union
+
 import aiohttp
+import yaml
 
 # --- Conditional SDK Import ---
 try:
-    from google.generativeai import GenerativeModel, configure
-    from google.generativeai.types import GenerateContentResponse
-
     # Import specific error types for translation
     from google.api_core.exceptions import (
-        InvalidArgument,
-        PermissionDenied,
-        NotFound,
-        InternalServerError,
-        ServiceUnavailable,
         DeadlineExceeded,
+        InternalServerError,
+        InvalidArgument,
+        NotFound,
+        PermissionDenied,
         ResourceExhausted,
+        ServiceUnavailable,
     )
+    from google.generativeai import GenerativeModel, configure
+    from google.generativeai.types import GenerateContentResponse
 
     HAS_GEMINI = True
 except ImportError:
@@ -64,17 +64,16 @@ except ImportError:
         pass
 
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
-
 # ---- Runner foundation imports ------------------------------------------------
 from runner.llm_provider_base import LLMProvider
-from runner.runner_errors import LLMError, ConfigurationError
 from runner.runner_config import load_config  # For loading API key in get_provider
+from runner.runner_errors import ConfigurationError, LLMError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # -------------------------------------------------------------------------------
 
@@ -85,7 +84,7 @@ logger = logging.getLogger(__name__)
 # These are plugin-specific and not managed by the central llm_client
 
 # --- FIX: Import shared metrics from runner_metrics ---
-from runner.runner_metrics import stream_chunks_total, stream_chunk_latency
+from runner.runner_metrics import stream_chunk_latency, stream_chunks_total
 
 # --- END FIX ---
 
@@ -208,12 +207,16 @@ class GeminiProvider(LLMProvider):
             else:
                 return await client.generate_content_async(scrubbed_prompt)
         except (InvalidArgument, ValueError) as e:
-            error_msg = f"Invalid request: {str(e)}. Check prompt format or model capabilities."
+            error_msg = (
+                f"Invalid request: {str(e)}. Check prompt format or model capabilities."
+            )
             raise LLMError(
                 detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR"
             ) from e
         except PermissionDenied as e:
-            error_msg = f"API error: Invalid API Key or insufficient permissions. {str(e)}"
+            error_msg = (
+                f"API error: Invalid API Key or insufficient permissions. {str(e)}"
+            )
             raise LLMError(
                 detail=error_msg, provider=self.name, error_code="LLM_PROVIDER_ERROR"
             ) from e
@@ -276,7 +279,9 @@ class GeminiProvider(LLMProvider):
 
                             # Keep local, plugin-specific stream metrics
                             chunk_latency = time.time() - chunk_start
-                            stream_chunk_latency.labels(model=model).observe(chunk_latency)
+                            stream_chunk_latency.labels(model=model).observe(
+                                chunk_latency
+                            )
                             stream_chunks_total.labels(model=model).inc()
                             chunk_start = time.time()
                     except Exception as e:
@@ -306,7 +311,9 @@ class GeminiProvider(LLMProvider):
                 raise  # Re-raise errors we've already translated
             else:
                 # Wrap unexpected errors
-                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
+                raise LLMError(
+                    detail=f"Unexpected error in call: {e}", provider=self.name
+                ) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """
@@ -373,8 +380,8 @@ def get_provider():
 if __name__ == "__main__":
     import argparse
     import sys
-    from unittest.mock import patch, AsyncMock, MagicMock
     import unittest
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Setup basic logging for standalone execution
     logging.basicConfig(

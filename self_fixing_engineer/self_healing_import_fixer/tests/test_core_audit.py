@@ -3,11 +3,12 @@ test_core_audit.py - Test Suite to Find Issues in core_audit.py
 This test suite is designed to expose what's actually broken in the module
 """
 
-import pytest
+import importlib.util
 import os
 import sys
 from unittest.mock import Mock, patch
-import importlib.util
+
+import pytest
 
 # Setup paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +79,9 @@ def test_missing_methods():
 
 def test_splunk_client_initialization():
     """Test 2: Check if splunk_client is properly initialized"""
-    with patch.dict(os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}):
+    with patch.dict(
+        os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}
+    ):
         # Add stub methods for missing ones
         RegulatoryAuditLogger._write_initial_log_entry = lambda self: None
         RegulatoryAuditLogger._initialize_integrity_file = lambda self: None
@@ -96,7 +99,9 @@ def test_splunk_client_initialization():
 @pytest.mark.asyncio
 async def test_log_critical_event_references():
     """Test 3: Check if log_critical_event has undefined references"""
-    with patch.dict(os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}):
+    with patch.dict(
+        os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}
+    ):
         # Add all missing methods
         RegulatoryAuditLogger._write_initial_log_entry = lambda self: None
         RegulatoryAuditLogger._initialize_integrity_file = lambda self: None
@@ -168,7 +173,9 @@ def test_os_chown_windows_compatibility():
             if "os.chown" in method_source:
                 # Check if it's properly protected
                 if "PRODUCTION_MODE" not in method_source:
-                    pytest.fail("os.chown used without PRODUCTION_MODE check on Windows")
+                    pytest.fail(
+                        "os.chown used without PRODUCTION_MODE check on Windows"
+                    )
 
                 # Test that it doesn't crash in test mode
                 with patch.dict(
@@ -210,7 +217,9 @@ def test_integrity_monitor_thread():
                 issues.append("Daemon thread may cause shutdown warnings")
 
             if "asyncio.run" in source and "while True" in source:
-                issues.append("Infinite loop with asyncio.run in thread can cause issues")
+                issues.append(
+                    "Infinite loop with asyncio.run in thread can cause issues"
+                )
     except:
         pass  # If we can't read the source, that's ok for this test
 
@@ -233,7 +242,9 @@ def test_undefined_imports():
 
 def test_file_operations_error_handling():
     """Test 8: Check if file operations handle errors properly"""
-    with patch.dict(os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}):
+    with patch.dict(
+        os.environ, {"PRODUCTION_MODE": "false", "REGULATORY_MODE": "false"}
+    ):
         # Add missing methods
         RegulatoryAuditLogger._write_initial_log_entry = lambda self: None
         RegulatoryAuditLogger._initialize_integrity_file = lambda self: None
@@ -249,7 +260,9 @@ def test_file_operations_error_handling():
             # This is expected
             pass
         except SystemExit:
-            pytest.fail("SystemExit called instead of handling error gracefully in test mode")
+            pytest.fail(
+                "SystemExit called instead of handling error gracefully in test mode"
+            )
 
 
 # Summary test to list all issues found
@@ -297,7 +310,9 @@ def test_summary_of_issues():
     # Platform issues
     if os.name == "nt":  # Windows
         issues["Platform Compatibility"].append("os.chown not available on Windows")
-        issues["Platform Compatibility"].append("pwd/grp modules not available on Windows")
+        issues["Platform Compatibility"].append(
+            "pwd/grp modules not available on Windows"
+        )
 
     # Print summary
     print("\n=== ISSUES FOUND IN core_audit.py ===")

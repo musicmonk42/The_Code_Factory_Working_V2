@@ -1,39 +1,34 @@
-import os
-import time
-import logging
 import asyncio
 import difflib
 import json
+import logging
+import os
+import sys
 import threading
-from typing import List, Dict, Optional, Any
-from pathlib import Path
+import time
 from datetime import datetime, timedelta
-import yaml
-import aiohttp
-from aiolimiter import AsyncLimiter
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from tenacity import retry, stop_after_attempt, wait_exponential
+from email.mime.text import MIMEText
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import aiofiles
+import aiohttp
+import aiosmtplib
+import boto3
 import redis.asyncio as redis
-from pydantic import BaseModel, Field, validator
 import typer
-from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-    REGISTRY,
-)
+import yaml
+from aiohttp import web
+from aiolimiter import AsyncLimiter
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from aiohttp import web
-import boto3
-import aiosmtplib
-from email.mime.text import MIMEText
+from arbiter.arbiter_plugin_registry import PlugInKind, register
 from dotenv import load_dotenv
-import sys
-from arbiter.arbiter_plugin_registry import register, PlugInKind
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, Field, validator
+from tenacity import retry, stop_after_attempt, wait_exponential
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 # Try to import LLMClient
 try:
@@ -96,8 +91,12 @@ class AlerterConfig(BaseModel):
 class AWSConfig(BaseModel):
     bucket: str = ""
     region: str = "us-east-1"
-    access_key_id: str = Field(default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", ""))
-    secret_access_key: str = Field(default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", ""))
+    access_key_id: str = Field(
+        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "")
+    )
+    secret_access_key: str = Field(
+        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    )
 
 
 class LLMConfig(BaseModel):
@@ -105,7 +104,9 @@ class LLMConfig(BaseModel):
     openai_api_key: str = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     ollama_url: str = "http://localhost:11434/api/generate"
     ollama_model: str = "llama3"
-    anthropic_api_key: str = Field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    anthropic_api_key: str = Field(
+        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
+    )
     gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     model: str = "gpt-4o-mini"
     prompt_template: str = "Summarize this {ext} file:\n\n{code}"
@@ -208,7 +209,9 @@ def load_config_with_env(config_path: Optional[str]) -> Config:
                 else None
             ),
             "skip_patterns": (
-                os.getenv("SKIP_PATTERNS", "").split(",") if os.getenv("SKIP_PATTERNS") else None
+                os.getenv("SKIP_PATTERNS", "").split(",")
+                if os.getenv("SKIP_PATTERNS")
+                else None
             ),
             "cooldown_seconds": os.getenv("COOLDOWN_SECONDS"),
             "batch_mode": os.getenv("BATCH_MODE"),
@@ -434,10 +437,14 @@ async def send_to_api(filename: str, content: str, summary: str) -> bool:
         json_data = {"filename": filename, "content": content, "summary": summary}
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(config.api.upload_url, json=json_data, timeout=10) as resp:
+                async with session.post(
+                    config.api.upload_url, json=json_data, timeout=10
+                ) as resp:
                     if resp.status == 200:
                         logger.info(f"Uploaded {filename}")
-                        await log_audit("api_upload", {"filename": filename, "status": "success"})
+                        await log_audit(
+                            "api_upload", {"filename": filename, "status": "success"}
+                        )
                         return True
                     else:
                         logger.error(
@@ -527,7 +534,9 @@ async def upload_to_s3(filename: str, content: str) -> bool:
         return True
     except Exception as e:
         logger.error(f"S3 upload failed for {filename}: {e}", exc_info=True)
-        await log_audit("s3_upload", {"filename": filename, "status": "failed", "error": str(e)})
+        await log_audit(
+            "s3_upload", {"filename": filename, "status": "failed", "error": str(e)}
+        )
         errors.inc()
         return False
 
@@ -616,7 +625,9 @@ async def send_notification(filename: str, status: str, summary: str) -> None:
 async def trigger_deployment(filename: str, content: str) -> bool:
     """Trigger deployment, CI/CD, S3 upload, and notifications."""
     global config
-    if not (config.deploy.command or config.deploy.ci_cd_url or config.deploy.aws_s3.bucket):
+    if not (
+        config.deploy.command or config.deploy.ci_cd_url or config.deploy.aws_s3.bucket
+    ):
         return True
 
     deployments.inc()
@@ -657,7 +668,9 @@ async def trigger_deployment(filename: str, content: str) -> bool:
             if not await upload_to_s3(filename, content):
                 raise Exception("S3 upload failed")
 
-        await send_notification(filename, "success", "Deployment, CI/CD, and S3 upload triggered")
+        await send_notification(
+            filename, "success", "Deployment, CI/CD, and S3 upload triggered"
+        )
         logger.info(f"Deployment, CI/CD, and S3 upload triggered for {filename}")
         return True
     except Exception as e:
@@ -683,7 +696,9 @@ async def trigger_deployment(filename: str, content: str) -> bool:
                     await send_notification(filename, "rollback", "Rollback executed")
             except Exception as re:
                 logger.error(f"Rollback execution failed: {re}")
-                await send_notification(filename, "failed", f"Rollback execution failed: {str(re)}")
+                await send_notification(
+                    filename, "failed", f"Rollback execution failed: {str(re)}"
+                )
         deployments.dec()
         errors.inc()
         return False
@@ -712,7 +727,9 @@ async def write_changelog(
     )
 
     try:
-        async with aiofiles.open(config.reporting.changelog_file, "a", encoding="utf-8") as f:
+        async with aiofiles.open(
+            config.reporting.changelog_file, "a", encoding="utf-8"
+        ) as f:
             await f.write(entry)
     except Exception as e:
         logger.error(f"Failed to write to changelog file: {e}")
@@ -735,7 +752,9 @@ async def write_changelog(
                         + "\n"
                     )
             elif fmt == "html":
-                html_report_path = Path(config.reporting.changelog_file).parent / "index.html"
+                html_report_path = (
+                    Path(config.reporting.changelog_file).parent / "index.html"
+                )
 
                 # HTML template for the changelog entry
                 html_entry = f"""
@@ -777,7 +796,9 @@ async def write_changelog(
                 logger.info(f"Updated HTML changelog report: {html_report_path}")
 
         except Exception as e:
-            logger.error(f"Failed to generate changelog in {fmt} format: {e}", exc_info=True)
+            logger.error(
+                f"Failed to generate changelog in {fmt} format: {e}", exc_info=True
+            )
             errors.inc()
 
     logger.info(f"Updated changelog for {filename}")
@@ -900,9 +921,9 @@ class CodeChangeHandler(FileSystemEventHandler):
 
         with self.lock:
             # Debounce file events within the cooldown period
-            if filepath in last_processed and (current_time - last_processed[filepath]) < timedelta(
-                seconds=config.watch.cooldown_seconds
-            ):
+            if filepath in last_processed and (
+                current_time - last_processed[filepath]
+            ) < timedelta(seconds=config.watch.cooldown_seconds):
                 logger.debug(f"Skipping {filepath} due to cooldown.")
                 return
 
@@ -923,7 +944,9 @@ class CodeChangeHandler(FileSystemEventHandler):
 
             if await send_to_api(filename_relative, content, summary):
                 if await trigger_deployment(filename_relative, content):
-                    await write_changelog(filename_relative, summary, old_content, content)
+                    await write_changelog(
+                        filename_relative, summary, old_content, content
+                    )
                     self.previous_content[filepath] = content
                     processed_files.inc()
 
@@ -981,10 +1004,14 @@ async def batch_process(semaphore: asyncio.Semaphore) -> None:
                 filepath = os.path.join(root, file)
                 if is_valid_file(filepath):
                     try:
-                        async with aiofiles.open(filepath, "r", encoding="utf-8") as f_read:
+                        async with aiofiles.open(
+                            filepath, "r", encoding="utf-8"
+                        ) as f_read:
                             handler.previous_content[filepath] = await f_read.read()
                     except Exception as e:
-                        logger.warning(f"Could not read {filepath} for batch previous content: {e}")
+                        logger.warning(
+                            f"Could not read {filepath} for batch previous content: {e}"
+                        )
 
         tasks = []
         for root, _, files in os.walk(config.watch.folder):
@@ -1021,7 +1048,9 @@ class MetricsAndHealthServer:
         await self.runner.setup()
         # Security: Use environment variable for host binding (default to localhost)
         metrics_host = os.getenv("METRICS_HOST", "127.0.0.1")
-        site = web.TCPSite(self.runner, metrics_host, self.config.metrics.prometheus_port)
+        site = web.TCPSite(
+            self.runner, metrics_host, self.config.metrics.prometheus_port
+        )
         await site.start()
         logger.info(
             f"Metrics and Health server started on {metrics_host}:{self.config.metrics.prometheus_port}"
@@ -1037,7 +1066,9 @@ class MetricsAndHealthServer:
         auth_header = request.headers.get("Authorization")
         expected_token = self.config.metrics.auth_token
 
-        if expected_token and (not auth_header or auth_header.split(" ")[-1] != expected_token):
+        if expected_token and (
+            not auth_header or auth_header.split(" ")[-1] != expected_token
+        ):
             raise web.HTTPUnauthorized(reason="Unauthorized access to metrics")
 
         return web.Response(
@@ -1048,7 +1079,9 @@ class MetricsAndHealthServer:
         auth_header = request.headers.get("Authorization")
         expected_token = self.config.metrics.auth_token
 
-        if expected_token and (not auth_header or auth_header.split(" ")[-1] != expected_token):
+        if expected_token and (
+            not auth_header or auth_header.split(" ")[-1] != expected_token
+        ):
             raise web.HTTPUnauthorized(reason="Unauthorized access to health check")
 
         redis_status = "healthy"
@@ -1164,7 +1197,9 @@ def register_plugin():
 
 @app.command()
 def run(
-    config_path: Optional[str] = typer.Option(None, "--config", help="Path to YAML config file")
+    config_path: Optional[str] = typer.Option(
+        None, "--config", help="Path to YAML config file"
+    )
 ):
     """Run the file watcher."""
     asyncio.run(start_watch(config_path))
@@ -1172,7 +1207,9 @@ def run(
 
 @app.command()
 def batch(
-    config_path: Optional[str] = typer.Option(None, "--config", help="Path to YAML config file")
+    config_path: Optional[str] = typer.Option(
+        None, "--config", help="Path to YAML config file"
+    )
 ):
     """Run batch processing only."""
     global config
@@ -1216,7 +1253,9 @@ async def deploy_code(cmd: str) -> dict:
         return {"success": False, "error": str(e)}
 
 
-async def notify_changes(filename: str, diff: str, summary: str, deploy_result: dict) -> None:
+async def notify_changes(
+    filename: str, diff: str, summary: str, deploy_result: dict
+) -> None:
     # Keep this minimal; tests usually patch email/slack/PD
     try:
         await send_email_alert(f"Change detected: {filename}", summary or diff)
@@ -1261,7 +1300,9 @@ async def process_file(path: str) -> Optional[dict]:
         deploy_result = {"success": True}
         # Check for deploy config on the global config object
         global_config = globals().get("config")
-        if global_config and getattr(getattr(global_config, "deploy", None), "command", False):
+        if global_config and getattr(
+            getattr(global_config, "deploy", None), "command", False
+        ):
             deploy_cmd = getattr(global_config.deploy, "command", "")
             if deploy_cmd:
                 deploy_result = await deploy_code(deploy_cmd)

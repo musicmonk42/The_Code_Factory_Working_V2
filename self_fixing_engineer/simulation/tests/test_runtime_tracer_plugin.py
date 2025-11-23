@@ -1,19 +1,22 @@
 # tests/test_runtime_tracer_plugin.py
 
-import pytest
 import asyncio
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path  # Added missing import
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 from prometheus_client import CollectorRegistry
 
 # Import the plugin from the parent directory
 # Try multiple possible locations for the plugin
 plugin_paths = [
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "plugins")),  # /plugins/
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
+    ),  # /plugins/
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "plugins")
     ),  # /simulation/plugins/
@@ -23,17 +26,16 @@ for path in plugin_paths:
         sys.path.insert(0, path)
 
 try:
-    from runtime_tracer_plugin import (
-        plugin_health,
-        analyze_runtime_behavior,
-        TRACER_CONFIG,
-        _run_target_code_in_subprocess,
-        TRACE_ANALYSIS_ATTEMPTS,
+    from runtime_tracer_plugin import (  # Added missing import
         DYNAMIC_CALLS_DETECTED,
         RUNTIME_EXCEPTIONS_CAPTURED,
+        TRACE_ANALYSIS_ATTEMPTS,
         TRACE_ANALYSIS_ERRORS,
-        # Added missing import
+        TRACER_CONFIG,
         _get_or_create_metric,
+        _run_target_code_in_subprocess,
+        analyze_runtime_behavior,
+        plugin_health,
     )
 except ImportError as e:
     print(f"Failed to import runtime_tracer_plugin. Searched in: {plugin_paths}")
@@ -97,23 +99,20 @@ def mock_external_dependencies():
     """
     Mocks external libraries and environment variables for complete isolation.
     """
-    with patch(
-        "runtime_tracer_plugin.asyncio.create_subprocess_exec"
-    ) as mock_subprocess_exec, patch(
-        "runtime_tracer_plugin.shutil.which"
-    ) as mock_shutil_which, patch(
-        "runtime_tracer_plugin._sfe_audit_logger.log", new=AsyncMock()
-    ) as mock_audit_log, patch(
-        "runtime_tracer_plugin.os.path.exists", return_value=True
-    ), patch(
-        "runtime_tracer_plugin.os.remove"
-    ), patch(
-        "runtime_tracer_plugin.os.makedirs"
-    ), patch(
-        "runtime_tracer_plugin.shutil.rmtree"
-    ), patch(
-        "runtime_tracer_plugin.subprocess.run"
-    ) as mock_subprocess_run:
+    with (
+        patch(
+            "runtime_tracer_plugin.asyncio.create_subprocess_exec"
+        ) as mock_subprocess_exec,
+        patch("runtime_tracer_plugin.shutil.which") as mock_shutil_which,
+        patch(
+            "runtime_tracer_plugin._sfe_audit_logger.log", new=AsyncMock()
+        ) as mock_audit_log,
+        patch("runtime_tracer_plugin.os.path.exists", return_value=True),
+        patch("runtime_tracer_plugin.os.remove"),
+        patch("runtime_tracer_plugin.os.makedirs"),
+        patch("runtime_tracer_plugin.shutil.rmtree"),
+        patch("runtime_tracer_plugin.subprocess.run") as mock_subprocess_run,
+    ):
 
         # Mock core subprocess call
         mock_proc = MagicMock()
@@ -130,7 +129,9 @@ def mock_external_dependencies():
         )
 
         # Use a fresh Prometheus registry for each test
-        with patch("runtime_tracer_plugin.REGISTRY", new=CollectorRegistry(auto_describe=True)):
+        with patch(
+            "runtime_tracer_plugin.REGISTRY", new=CollectorRegistry(auto_describe=True)
+        ):
             yield {
                 "mock_subprocess_exec": mock_subprocess_exec,
                 "mock_shutil_which": mock_shutil_which,
@@ -231,7 +232,9 @@ async def test_plugin_health_docker_not_found(mock_external_dependencies):
         result = await plugin_health()
 
     assert result["status"] == "error"
-    assert "Docker/Podman sandboxing is enabled but not functional" in str(result["details"])
+    assert "Docker/Podman sandboxing is enabled but not functional" in str(
+        result["details"]
+    )
 
 
 @pytest.mark.asyncio
@@ -292,19 +295,22 @@ async def test_analyze_runtime_behavior_success(mock_filesystem):
     get_metric_value(DYNAMIC_CALLS_DETECTED, call_type="eval/exec/__import__")
     get_metric_value(RUNTIME_EXCEPTIONS_CAPTURED, exception_type="ValueError")
 
-    with patch(
-        "runtime_tracer_plugin._run_target_code_in_subprocess",
-        new=AsyncMock(
-            return_value={
-                "return_code": 0,
-                "stdout": "Success",
-                "stderr": "",
-                "duration_seconds": 1.0,
-            }
+    with (
+        patch(
+            "runtime_tracer_plugin._run_target_code_in_subprocess",
+            new=AsyncMock(
+                return_value={
+                    "return_code": 0,
+                    "stdout": "Success",
+                    "stderr": "",
+                    "duration_seconds": 1.0,
+                }
+            ),
         ),
-    ), patch(
-        "builtins.open",
-        mock_open(read_data="\n".join(json.dumps(d) for d in mock_log_content)),
+        patch(
+            "builtins.open",
+            mock_open(read_data="\n".join(json.dumps(d) for d in mock_log_content)),
+        ),
     ):
 
         result = await analyze_runtime_behavior(
@@ -319,7 +325,8 @@ async def test_analyze_runtime_behavior_success(mock_filesystem):
     # Check that insights were generated - look for exec or dynamic call mentions
     insights_str = " ".join(result["behavioral_healing_insights"]).lower()
     assert any(
-        keyword in insights_str for keyword in ["exec", "dynamic call", "eval", "__import__"]
+        keyword in insights_str
+        for keyword in ["exec", "dynamic call", "eval", "__import__"]
     )
 
     # Check metrics incremented
@@ -334,7 +341,9 @@ async def test_analyze_runtime_behavior_subprocess_failure(mock_filesystem):
     Test that the plugin handles a non-zero exit code from the subprocess.
     """
     initial_attempts = get_metric_value(TRACE_ANALYSIS_ATTEMPTS)
-    initial_errors = get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="subprocess_failed")
+    initial_errors = get_metric_value(
+        TRACE_ANALYSIS_ERRORS, error_type="subprocess_failed"
+    )
 
     with patch(
         "runtime_tracer_plugin._run_target_code_in_subprocess",
@@ -355,7 +364,10 @@ async def test_analyze_runtime_behavior_subprocess_failure(mock_filesystem):
     assert result["success"] is False
     assert "execution failed" in result["reason"]
     assert get_metric_value(TRACE_ANALYSIS_ATTEMPTS) > initial_attempts
-    assert get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="subprocess_failed") > initial_errors
+    assert (
+        get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="subprocess_failed")
+        > initial_errors
+    )
 
 
 @pytest.mark.asyncio
@@ -363,7 +375,9 @@ async def test_analyze_runtime_behavior_timeout():
     """
     Test that the plugin correctly handles a subprocess timeout.
     """
-    with patch("runtime_tracer_plugin.asyncio.create_subprocess_exec") as mock_subprocess_exec:
+    with patch(
+        "runtime_tracer_plugin.asyncio.create_subprocess_exec"
+    ) as mock_subprocess_exec:
 
         mock_proc = MagicMock()
         mock_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError)
@@ -402,7 +416,9 @@ async def test_analyze_runtime_behavior_target_not_found():
     """
     Test that the plugin handles missing target code gracefully.
     """
-    initial_errors = get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="target_code_not_found")
+    initial_errors = get_metric_value(
+        TRACE_ANALYSIS_ERRORS, error_type="target_code_not_found"
+    )
 
     with patch("runtime_tracer_plugin.os.path.exists", return_value=False):
         result = await analyze_runtime_behavior(
@@ -412,7 +428,8 @@ async def test_analyze_runtime_behavior_target_not_found():
     assert result["success"] is False
     assert "not found" in result["reason"].lower()
     assert (
-        get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="target_code_not_found") > initial_errors
+        get_metric_value(TRACE_ANALYSIS_ERRORS, error_type="target_code_not_found")
+        > initial_errors
     )
 
 
@@ -421,18 +438,19 @@ async def test_analyze_runtime_behavior_empty_trace_log(mock_filesystem):
     """
     Test handling of an empty trace log file.
     """
-    with patch(
-        "runtime_tracer_plugin._run_target_code_in_subprocess",
-        new=AsyncMock(
-            return_value={
-                "return_code": 0,
-                "stdout": "Success",
-                "stderr": "",
-                "duration_seconds": 1.0,
-            }
+    with (
+        patch(
+            "runtime_tracer_plugin._run_target_code_in_subprocess",
+            new=AsyncMock(
+                return_value={
+                    "return_code": 0,
+                    "stdout": "Success",
+                    "stderr": "",
+                    "duration_seconds": 1.0,
+                }
+            ),
         ),
-    ), patch(
-        "builtins.open", mock_open(read_data="")
+        patch("builtins.open", mock_open(read_data="")),
     ):  # Empty file
 
         result = await analyze_runtime_behavior(
@@ -451,7 +469,9 @@ async def test_analyze_runtime_behavior_malformed_json_in_trace():
     """
     Test that malformed JSON lines in trace log are handled gracefully.
     """
-    mixed_content = "{'invalid': json}\n" + json.dumps({"type": "call", "function": "test"}) + "\n"
+    mixed_content = (
+        "{'invalid': json}\n" + json.dumps({"type": "call", "function": "test"}) + "\n"
+    )
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -459,23 +479,27 @@ async def test_analyze_runtime_behavior_malformed_json_in_trace():
         with open(target_code_path, "w") as f:
             f.write("print('test')")
 
-        with patch(
-            "runtime_tracer_plugin._run_target_code_in_subprocess",
-            new=AsyncMock(
-                return_value={
-                    "return_code": 0,
-                    "stdout": "Success",
-                    "stderr": "",
-                    "duration_seconds": 1.0,
-                }
+        with (
+            patch(
+                "runtime_tracer_plugin._run_target_code_in_subprocess",
+                new=AsyncMock(
+                    return_value={
+                        "return_code": 0,
+                        "stdout": "Success",
+                        "stderr": "",
+                        "duration_seconds": 1.0,
+                    }
+                ),
             ),
-        ), patch("builtins.open", mock_open(read_data=mixed_content)), patch.dict(
-            "runtime_tracer_plugin.TRACER_CONFIG",
-            {
-                "base_temp_dir": temp_dir,
-                "use_docker_sandbox": False,
-                "allow_unsafe_non_containerized_run": True,
-            },
+            patch("builtins.open", mock_open(read_data=mixed_content)),
+            patch.dict(
+                "runtime_tracer_plugin.TRACER_CONFIG",
+                {
+                    "base_temp_dir": temp_dir,
+                    "use_docker_sandbox": False,
+                    "allow_unsafe_non_containerized_run": True,
+                },
+            ),
         ):
 
             result = await analyze_runtime_behavior(

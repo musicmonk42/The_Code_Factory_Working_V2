@@ -1,30 +1,30 @@
 import asyncio
-import logging
-import time
-import sys
 import datetime
-import os
 import json
+import logging
+import os
 import re
-from typing import Dict, Any, Optional, List, Callable, Union, Tuple
+import sys
+import time
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Conditional Imports for FastAPI, Pydantic, etc. ---
 try:
+    import uvicorn
     from fastapi import (
         APIRouter,
+        Depends,
+        FastAPI,
+        HTTPException,
         Request,
+        Response,
         WebSocket,
         WebSocketDisconnect,
-        Response,
         status,
-        HTTPException,
-        FastAPI,
-        Depends,
     )
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, Field, ValidationError
-    import uvicorn
 
     FASTAPI_AVAILABLE = True
     PYDANTIC_AVAILABLE = True
@@ -47,7 +47,7 @@ except ImportError:
     uvicorn = None
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 
@@ -75,7 +75,9 @@ try:
 
 except ImportError:
     PROMETHEUS_AVAILABLE = False
-    logging.warning("Prometheus client not found. Metrics for dashboard plugin will be disabled.")
+    logging.warning(
+        "Prometheus client not found. Metrics for dashboard plugin will be disabled."
+    )
 
     class DummyMetric:
         # Add DEFAULT_BUCKETS to match Histogram.DEFAULT_BUCKETS
@@ -116,9 +118,9 @@ except ImportError:
 try:
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
     )
 
     TENACITY_AVAILABLE = True
@@ -159,7 +161,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -186,7 +190,9 @@ else:
 
 # --- Load Config from File or Env ---
 def _load_config() -> DashboardConfig:
-    config_file_path = Path(__file__).parent / "configs" / "web_ui_dashboard_config.json"
+    config_file_path = (
+        Path(__file__).parent / "configs" / "web_ui_dashboard_config.json"
+    )
     config_dict = {}
     if config_file_path.exists():
         try:
@@ -230,7 +236,9 @@ def _load_config() -> DashboardConfig:
         "homepage": "https://www.self-fixing.engineer",
         "required_frontend_version": ">=1.0.0",
     }
-    config_dict["plugin_manifest"] = config_dict.get("plugin_manifest", default_manifest)
+    config_dict["plugin_manifest"] = config_dict.get(
+        "plugin_manifest", default_manifest
+    )
 
     if PYDANTIC_AVAILABLE:
         try:
@@ -325,7 +333,9 @@ async def update_dashboard_state(update_data: Dict[str, Any]):
     if CONFIG.state_storage == "redis" and REDIS_AVAILABLE and CONFIG.redis_url:
         try:
             redis_client = Redis.from_url(CONFIG.redis_url)
-            current_state = await get_dashboard_state()  # Get latest state including from Redis
+            current_state = (
+                await get_dashboard_state()
+            )  # Get latest state including from Redis
             current_state.update(update_data)
             await redis_client.set("dashboard_state", json.dumps(current_state))
             await redis_client.close()
@@ -339,7 +349,9 @@ async def update_dashboard_state(update_data: Dict[str, Any]):
     else:
         _DASHBOARD_MEMORY_STATE.update(update_data)
 
-    _DASHBOARD_MEMORY_STATE["last_update"] = time.time()  # Update memory state timestamp regardless
+    _DASHBOARD_MEMORY_STATE["last_update"] = (
+        time.time()
+    )  # Update memory state timestamp regardless
     if PROMETHEUS_AVAILABLE:
         DASHBOARD_STATE_UPDATES.inc()
 
@@ -501,7 +513,9 @@ if FASTAPI_AVAILABLE:
         return _scrub_secrets(state)
 
     class UpdateStateRequest(BaseModel):
-        update: Dict[str, Any] = Field(..., description="Partial update for the dashboard state.")
+        update: Dict[str, Any] = Field(
+            ..., description="Partial update for the dashboard state."
+        )
 
     @router.post("/state/update", response_model=Dict[str, Any])
     async def update_dashboard_api_state(
@@ -623,7 +637,9 @@ if FASTAPI_AVAILABLE:
                         )
                     except (RuntimeError, WebSocketDisconnect, ConnectionError) as e:
                         # Connection is closed, exit gracefully
-                        logger.debug(f"WebSocket send failed, connection likely closed: {e}")
+                        logger.debug(
+                            f"WebSocket send failed, connection likely closed: {e}"
+                        )
                         break
 
                     # Wait for the next update interval or disconnection
@@ -646,7 +662,9 @@ if FASTAPI_AVAILABLE:
                 logger.error(f"Unexpected WebSocket error: {e}", exc_info=True)
                 # Try to close gracefully with error code
                 try:
-                    await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(e)[:125])
+                    await websocket.close(
+                        code=status.WS_1011_INTERNAL_ERROR, reason=str(e)[:125]
+                    )
                 except:
                     pass  # Connection already closed
             finally:

@@ -24,20 +24,21 @@ __all__ = [
     "PathError",
 ]
 
+import asyncio
+import importlib
+import logging
 import os
 import sys
-import logging
-import asyncio
 import traceback
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from importlib.metadata import (
-    version,
-    PackageNotFoundError,
-)  # Migrated from pkg_resources to importlib.metadata per PEP 420
-from packaging.version import Version
 import types
-import importlib
+from importlib.metadata import (  # Migrated from pkg_resources to importlib.metadata per PEP 420
+    PackageNotFoundError,
+    version,
+)
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from packaging.version import Version
 
 # --- Set up basic logging before any other imports to catch early errors ---
 logging.basicConfig(
@@ -114,14 +115,12 @@ except Exception:
 # Correctly handle the import of internal and external dependencies
 try:
     from . import utils as _utils
-    from .utils import (
-        PathError,
-        validate_and_resolve_path as validate_path,
-        secure_write_file as sanitize_path,
-    )
-    from .onboard import onboard, OnboardConfig, ONBOARD_DEFAULTS, CORE_VERSION
     from .backends import BackendRegistry
-    from .policy_and_audit import PolicyEngine, EventBus
+    from .onboard import CORE_VERSION, ONBOARD_DEFAULTS, OnboardConfig, onboard
+    from .policy_and_audit import EventBus, PolicyEngine
+    from .utils import PathError
+    from .utils import secure_write_file as sanitize_path
+    from .utils import validate_and_resolve_path as validate_path
 
     # Core utils version check
     try:
@@ -148,7 +147,9 @@ try:
         )
 
 except ImportError as e:
-    logger.warning(f"Warning: Failed to import a core component: {e}. Using stubs for testing.")
+    logger.warning(
+        f"Warning: Failed to import a core component: {e}. Using stubs for testing."
+    )
 
 
 def validate_project_root(project_root_str: str):
@@ -197,7 +198,9 @@ def validate_project_root(project_root_str: str):
 
         # Iterate through path parts to check for symlinks and hidden components
         for part in project_root.parts:
-            path_so_far = Path(*project_root.parts[: project_root.parts.index(part) + 1])
+            path_so_far = Path(
+                *project_root.parts[: project_root.parts.index(part) + 1]
+            )
             if path_so_far.is_symlink():
                 error_msg = f"Project root path contains a symbolic link: {path_so_far}"
                 logger.critical(f"CRITICAL: {error_msg}")
@@ -211,9 +214,7 @@ def validate_project_root(project_root_str: str):
                 sys.exit(1)
 
             if part.startswith("."):
-                error_msg = (
-                    f"Project root path contains hidden file/directory components: {project_root}"
-                )
+                error_msg = f"Project root path contains hidden file/directory components: {project_root}"
                 logger.critical(f"CRITICAL: {error_msg}")
                 asyncio.run(
                     audit_logger.log_event(
@@ -248,12 +249,13 @@ def validate_project_root(project_root_str: str):
 _project_root_path = os.getenv("PROJECT_ROOT", str(Path(__file__).parent.parent))
 validate_project_root(_project_root_path)
 
+import importlib.util
+import logging
+
 # --- Compat shim: expose top-level plugin as test_generation.gen_agent.gen_plugins ---
 import os
 import sys
 import types
-import importlib.util
-import logging
 
 _pkg_dir = os.path.dirname(__file__)
 

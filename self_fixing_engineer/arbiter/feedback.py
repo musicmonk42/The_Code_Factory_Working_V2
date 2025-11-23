@@ -1,22 +1,23 @@
 import asyncio
 import collections
-import logging
+import hashlib
 import json
+import logging
 import os
+import random
+import statistics
 import sys
 import threading
-from datetime import datetime, timezone, timedelta
-import random
-import hashlib
-import statistics
 import traceback
-from typing import Dict, Any, Optional, List, Union, Tuple, Type
-from sqlalchemy import Column, String, JSON, DateTime
-from sqlalchemy.orm import declarative_base
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
+
 import aiofiles
-from prometheus_client import Counter, Gauge, Histogram, Summary, REGISTRY
-from tenacity import retry, stop_after_attempt, wait_exponential
 from arbiter.otel_config import get_tracer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary
+from sqlalchemy import JSON, Column, DateTime, String
+from sqlalchemy.orm import declarative_base
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 try:
     import psycopg2
@@ -27,23 +28,18 @@ except ImportError:
     PSYCOPG2_AVAILABLE = False
     logging.warning("psycopg2 not available. PostgreSQL features will be disabled.")
 import aiosqlite
-from arbiter.arbiter_plugin_registry import (
-    register,
-    PlugInKind,
-    registry as arbiter_registry,
-)
+from arbiter.arbiter_plugin_registry import PlugInKind, register
+from arbiter.arbiter_plugin_registry import registry as arbiter_registry
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter.postgres_client import PostgresClient
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
-    from arbiter_plugin_registry import (
-        registry as mock_registry,
-        PlugInKind as MockPlugInKind,
-    )
-    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.agent_state import Base
+    from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter.postgres_client import PostgresClient
+    from arbiter_plugin_registry import PlugInKind as MockPlugInKind
+    from arbiter_plugin_registry import registry as mock_registry
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
@@ -300,7 +296,9 @@ class SQLiteClient:
         """Retrieves feedback entries from the database based on a query."""
         async with aiosqlite.connect(self.db_file) as db:
             if not query:
-                cursor = await db.execute("SELECT data FROM feedback ORDER BY timestamp ASC")
+                cursor = await db.execute(
+                    "SELECT data FROM feedback ORDER BY timestamp ASC"
+                )
             else:
                 where_clauses = []
                 params = []
@@ -316,7 +314,9 @@ class SQLiteClient:
             rows = await cursor.fetchall()
             return [json.loads(row[0]) for row in rows]
 
-    async def update_feedback_entry(self, query: Dict[str, Any], updates: Dict[str, Any]) -> bool:
+    async def update_feedback_entry(
+        self, query: Dict[str, Any], updates: Dict[str, Any]
+    ) -> bool:
         """
         Updates one or more feedback entries matching the query with new data.
         Returns True if any entry was updated, False otherwise.
@@ -331,7 +331,9 @@ class SQLiteClient:
 
             # Use json_patch or a similar approach for atomic updates if possible.
             # For now, we perform a select-then-update to be safe.
-            cursor = await db.execute(f"SELECT id, data FROM feedback WHERE {where_sql}", params)
+            cursor = await db.execute(
+                f"SELECT id, data FROM feedback WHERE {where_sql}", params
+            )
             rows = await cursor.fetchall()
             if not rows:
                 return False
@@ -378,12 +380,28 @@ class FeedbackManager:
                 f"FeedbackManager initialized with provided DB client: {type(db_client).__name__}."
             )
         elif db_url:
-            if db_url.startswith("postgresql") and DB_CLIENTS_AVAILABLE and POSTGRES_AVAILABLE:
-                self.db_client = PostgresClient(db_url=db_url, pool_size=5, max_overflow=10)
-                logger.info("FeedbackManager: Using PostgresClient for database interactions.")
-            elif db_url.startswith("sqlite") and DB_CLIENTS_AVAILABLE and SQLLITE_AVAILABLE:
-                self.db_client = ConcreteSQLiteClient(db_file=db_url.replace("sqlite:///", ""))
-                logger.info("FeedbackManager: Using SQLiteClient for database interactions.")
+            if (
+                db_url.startswith("postgresql")
+                and DB_CLIENTS_AVAILABLE
+                and POSTGRES_AVAILABLE
+            ):
+                self.db_client = PostgresClient(
+                    db_url=db_url, pool_size=5, max_overflow=10
+                )
+                logger.info(
+                    "FeedbackManager: Using PostgresClient for database interactions."
+                )
+            elif (
+                db_url.startswith("sqlite")
+                and DB_CLIENTS_AVAILABLE
+                and SQLLITE_AVAILABLE
+            ):
+                self.db_client = ConcreteSQLiteClient(
+                    db_file=db_url.replace("sqlite:///", "")
+                )
+                logger.info(
+                    "FeedbackManager: Using SQLiteClient for database interactions."
+                )
             else:
                 if IS_PRODUCTION:
                     raise RuntimeError(
@@ -416,7 +434,9 @@ class FeedbackManager:
 
     async def disconnect_db(self):
         """Disconnects from the underlying database client."""
-        if hasattr(self.db_client, "disconnect") and callable(self.db_client.disconnect):
+        if hasattr(self.db_client, "disconnect") and callable(
+            self.db_client.disconnect
+        ):
             await self.db_client.disconnect()
 
     def _ensure_log_file_exists(self):
@@ -452,7 +472,9 @@ class FeedbackManager:
                 exc_info=True,
             )
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
     async def add_feedback(self, decision_id: str, feedback: Dict[str, Any]) -> None:
         """Stores feedback for a decision."""
         with tracer.start_as_current_span("add_feedback"):
@@ -481,7 +503,9 @@ class FeedbackManager:
                 feedback_errors_total.labels(component="add_feedback").inc()
                 raise ValueError(f"Feedback storage failed: {e}") from e
 
-    async def record_metric(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):
+    async def record_metric(
+        self, name: str, value: float, tags: Optional[Dict[str, str]] = None
+    ):
         """Records a single metric."""
         if not isinstance(name, str) or not name.strip():
             logger.error(f"Invalid metric name: {name}")
@@ -527,7 +551,9 @@ class FeedbackManager:
 
         try:
             await self.db_client.save_feedback_entry(error_info)
-            feedback_errors_total.labels(component=error_info.get("component", "general")).inc()
+            feedback_errors_total.labels(
+                component=error_info.get("component", "general")
+            ).inc()
             last_feedback_timestamp.set(datetime.now(timezone.utc).timestamp())
             logger.error(f"Error logged by FeedbackManager: {error_info.get('error')}")
         except Exception as e:
@@ -569,7 +595,10 @@ class FeedbackManager:
                         async with self.db_client.get_session() as session:
                             await session.execute(
                                 "DELETE FROM feedback_logs WHERE timestamp < :threshold",
-                                {"threshold": datetime.now(timezone.utc) - timedelta(days=30)},
+                                {
+                                    "threshold": datetime.now(timezone.utc)
+                                    - timedelta(days=30)
+                                },
                             )
                             await session.commit()
                         feedback_ops_total.labels(operation="purge_metrics").inc()
@@ -593,8 +622,12 @@ class FeedbackManager:
         """Generates a summary report of all feedback data."""
         with feedback_processing_time.time():
             try:
-                all_metrics_entries = await self.db_client.get_feedback_entries({"type": "metric"})
-                all_error_logs = await self.db_client.get_feedback_entries({"type": "error_log"})
+                all_metrics_entries = await self.db_client.get_feedback_entries(
+                    {"type": "metric"}
+                )
+                all_error_logs = await self.db_client.get_feedback_entries(
+                    {"type": "error_log"}
+                )
                 all_user_feedback = await self.db_client.get_feedback_entries(
                     {"type": "user_feedback"}
                 )
@@ -608,12 +641,16 @@ class FeedbackManager:
                 summary = {
                     "metrics_summary": {},
                     "recent_errors": all_error_logs[-5:] if all_error_logs else [],
-                    "recent_user_feedback": (all_user_feedback[-5:] if all_user_feedback else []),
+                    "recent_user_feedback": (
+                        all_user_feedback[-5:] if all_user_feedback else []
+                    ),
                     "approval_requests_summary": {
                         "total_requests": len(all_approval_requests),
                         "total_responses": len(all_approval_responses),
                         "pending": sum(
-                            1 for r in all_approval_requests if r.get("status") == "pending"
+                            1
+                            for r in all_approval_requests
+                            if r.get("status") == "pending"
                         ),
                         "approved_count": sum(
                             1
@@ -639,7 +676,9 @@ class FeedbackManager:
                     ):
                         metrics_by_name[entry["name"]].append(entry["value"])
                     else:
-                        logger.warning(f"Skipping malformed metric entry in summary: {entry}")
+                        logger.warning(
+                            f"Skipping malformed metric entry in summary: {entry}"
+                        )
 
                 for name, values in metrics_by_name.items():
                     if values:
@@ -660,7 +699,9 @@ class FeedbackManager:
                     "approval_requests_summary": {},
                 }
 
-    async def log_approval_request(self, decision_id: str, decision_context: Dict[str, Any]):
+    async def log_approval_request(
+        self, decision_id: str, decision_context: Dict[str, Any]
+    ):
         """Logs a request for human approval."""
         log_entry = {
             "type": "approval_request",
@@ -706,7 +747,9 @@ class FeedbackManager:
             )
             feedback_received_total.labels(type="approval_response").inc()
         except Exception as e:
-            logger.error(f"Failed to log approval response for {decision_id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to log approval response for {decision_id}: {e}", exc_info=True
+            )
             feedback_errors_total.labels(component="log_approval_response").inc()
 
     async def get_pending_approvals(self) -> List[Dict[str, Any]]:
@@ -720,10 +763,14 @@ class FeedbackManager:
             feedback_errors_total.labels(component="get_pending_approvals").inc()
             return []
 
-    async def get_feedback_by_decision_id(self, decision_id: str) -> List[Dict[str, Any]]:
+    async def get_feedback_by_decision_id(
+        self, decision_id: str
+    ) -> List[Dict[str, Any]]:
         """Retrieves all feedback entries associated with a specific decision ID."""
         try:
-            return await self.db_client.get_feedback_entries({"decision_id": decision_id})
+            return await self.db_client.get_feedback_entries(
+                {"decision_id": decision_id}
+            )
         except Exception as e:
             logger.error(
                 f"Failed to get feedback by decision ID {decision_id}: {e}",
@@ -750,14 +797,18 @@ class FeedbackManager:
             responses_and_requests = await self.db_client.get_feedback_entries(
                 {"type": "approval_response"}
             )
-            all_requests = await self.db_client.get_feedback_entries({"type": "approval_request"})
+            all_requests = await self.db_client.get_feedback_entries(
+                {"type": "approval_request"}
+            )
             requests_map = {r.get("decision_id"): r for r in all_requests}
 
             filtered_responses = []
             for res in responses_and_requests:
                 res_time_str = res.get("timestamp")
                 if not res_time_str:
-                    logger.warning(f"Skipping approval response with missing timestamp: {res}")
+                    logger.warning(
+                        f"Skipping approval response with missing timestamp: {res}"
+                    )
                     continue
                 try:
                     res_time = datetime.fromisoformat(res_time_str)
@@ -769,7 +820,9 @@ class FeedbackManager:
                     logger.warning(
                         f"Skipping approval time calculation due to invalid timestamp format for response {res.get('decision_id')}: {ve}"
                     )
-                    feedback_errors_total.labels(component="approval_stats_bad_timestamp").inc()
+                    feedback_errors_total.labels(
+                        component="approval_stats_bad_timestamp"
+                    ).inc()
 
             stats: Dict[str, Any] = {}
             if group_by_reviewer:
@@ -785,13 +838,15 @@ class FeedbackManager:
                 stats["by_reviewer"] = dict(reviewer_stats)
 
             if group_by_decision_type:
-                decision_type_stats: Dict[str, Dict[str, int]] = collections.defaultdict(
-                    lambda: {"approved": 0, "denied": 0}
+                decision_type_stats: Dict[str, Dict[str, int]] = (
+                    collections.defaultdict(lambda: {"approved": 0, "denied": 0})
                 )
                 for res in filtered_responses:
                     decision_id = res.get("decision_id")
                     request = requests_map.get(decision_id, {})
-                    decision_action = request.get("context", {}).get("action", "unknown_action")
+                    decision_action = request.get("context", {}).get(
+                        "action", "unknown_action"
+                    )
 
                     if res["response"].get("approved") is True:
                         decision_type_stats[decision_action]["approved"] += 1
@@ -817,7 +872,9 @@ class FeedbackManager:
                         logger.warning(
                             f"Skipping approval time calculation due to invalid timestamp format for decision_id {req.get('decision_id')}: {ve}"
                         )
-                        feedback_errors_total.labels(component="approval_stats_bad_time_calc").inc()
+                        feedback_errors_total.labels(
+                            component="approval_stats_bad_time_calc"
+                        ).inc()
 
             if approval_times:
                 stats["approval_times"] = {
@@ -835,7 +892,9 @@ class FeedbackManager:
             return stats
         except Exception as e:
             logger.error(f"Failed to get approval stats: {e}", exc_info=True)
-            feedback_errors_total.labels(component="get_approval_stats_general_error").inc()
+            feedback_errors_total.labels(
+                component="get_approval_stats_general_error"
+            ).inc()
             return {
                 "by_reviewer": {},
                 "by_decision_type": {},
@@ -862,7 +921,9 @@ class FeedbackManager:
             except asyncio.CancelledError:
                 logger.info("FeedbackManager purge task cancelled successfully.")
             except Exception as e:
-                logger.error(f"Error while waiting for purge task to stop: {e}", exc_info=True)
+                logger.error(
+                    f"Error while waiting for purge task to stop: {e}", exc_info=True
+                )
         logger.info("FeedbackManager async services stopped.")
 
 

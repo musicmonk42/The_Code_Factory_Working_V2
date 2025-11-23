@@ -4,17 +4,17 @@ End-to-End tests for the message bus system.
 These tests verify the complete flow with minimal mocking.
 """
 
-import unittest
 import asyncio
-import time
-import uuid
-import random
-from typing import List, Any
-from dataclasses import dataclass
-from unittest.mock import Mock, AsyncMock, patch
-import sys
-from pathlib import Path
 import logging
+import random
+import sys
+import time
+import unittest
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, List
+from unittest.mock import AsyncMock, Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -143,7 +143,9 @@ class MessageBusE2ETest(unittest.TestCase):
         await bus._subscribe_async("test.topic", handler)
 
         # Publish
-        result = await bus.publish(topic="test.topic", payload={"data": "test_value"}, priority=1)
+        result = await bus.publish(
+            topic="test.topic", payload={"data": "test_value"}, priority=1
+        )
 
         self.assertTrue(result)
 
@@ -332,7 +334,9 @@ class MessageBusE2ETest(unittest.TestCase):
         # Create multiple publisher tasks
         async def publisher(publisher_id, count):
             for i in range(count):
-                await bus.publish("concurrent.topic", {"publisher": publisher_id, "seq": i})
+                await bus.publish(
+                    "concurrent.topic", {"publisher": publisher_id, "seq": i}
+                )
                 await asyncio.sleep(random.uniform(0.001, 0.01))
 
         # Run publishers concurrently
@@ -384,7 +388,9 @@ class MessageBusE2ETest(unittest.TestCase):
         )
 
         # Publish messages that will succeed
-        await bus.publish("error.topic", {"should_fail": False, "id": "success_1"}, priority=10)
+        await bus.publish(
+            "error.topic", {"should_fail": False, "id": "success_1"}, priority=10
+        )
 
         # Wait for processing
         await asyncio.sleep(0.5)

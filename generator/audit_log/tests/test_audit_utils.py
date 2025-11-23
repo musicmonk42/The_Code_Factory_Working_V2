@@ -14,6 +14,9 @@ Run with:
 from __future__ import annotations
 
 import asyncio
+import copy
+import hashlib
+import importlib.util  # CRITICAL FIX: Added for dynamic loading
 import json
 import logging
 import os
@@ -21,19 +24,16 @@ import sys
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import importlib.util  # CRITICAL FIX: Added for dynamic loading
 
 import pytest
 from _pytest.logging import LogCaptureFixture
-from faker import Faker
-from freezegun import freeze_time
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 
 # CRITICAL FIX 1: Ensure all cryptography imports are available at test collection time
 from cryptography.hazmat.backends import default_backend
-import hashlib
-import copy
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from faker import Faker
+from freezegun import freeze_time
 
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
@@ -49,7 +49,9 @@ if str(REPO_ROOT) not in sys.path:
 os.environ["RUNNING_TESTS"] = "true"
 
 module_path = Path(__file__).parent.parent / "audit_utils.py"
-spec = importlib.util.spec_from_file_location("generator.audit_log.audit_utils", str(module_path))
+spec = importlib.util.spec_from_file_location(
+    "generator.audit_log.audit_utils", str(module_path)
+)
 
 if spec is None:
     raise ImportError(f"Could not find module spec for {module_path}")
@@ -62,24 +64,24 @@ spec.loader.exec_module(audit_utils_module)
 
 # Now safely import all necessary symbols from the loaded module
 from generator.audit_log.audit_utils import (  # type: ignore
-    compute_hash,
-    redact_sensitive_data,
-    rotate_key,
-    register_hash_algo,
-    register_provenance_logic,
-    secure_log,
-    generate_provenance_chain,
-    lock_registries,
-    default_hash_impl,
-    default_provenance_chain_impl,
+    DEFAULT_HASH_ALGO,
     PRESIDIO_AVAILABLE,
     HashingModes,
-    self_test_hash_performance,
-    self_test_redaction,
-    self_test_provenance,
-    run_self_tests,
-    DEFAULT_HASH_ALGO,
     _set_sign_entry_func,
+    compute_hash,
+    default_hash_impl,
+    default_provenance_chain_impl,
+    generate_provenance_chain,
+    lock_registries,
+    redact_sensitive_data,
+    register_hash_algo,
+    register_provenance_logic,
+    rotate_key,
+    run_self_tests,
+    secure_log,
+    self_test_hash_performance,
+    self_test_provenance,
+    self_test_redaction,
 )
 
 # --------------------------------------------------------------------------- #
@@ -98,7 +100,9 @@ def reset_registries():
     manually set the lock state, and re-register the defaults. This is the most
     stable way to handle module-level global state for unit tests.
     """
-    with patch.object(audit_utils_module, "_registries_locked", False, create=True) as mock_lock:
+    with patch.object(
+        audit_utils_module, "_registries_locked", False, create=True
+    ) as mock_lock:
         with patch.dict(audit_utils_module.hash_registry, clear=True):
             with patch.dict(audit_utils_module.provenance_registry, clear=True):
 
@@ -115,7 +119,9 @@ def reset_registries():
                 # The _set_sign_entry_func expects a function that returns bytes (raw signature)
                 def dummy_signer(data, key_id):
                     # Return deterministic bytes for a valid signature
-                    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).digest()
+                    return hashlib.sha256(
+                        json.dumps(data, sort_keys=True).encode()
+                    ).digest()
 
                 _set_sign_entry_func(dummy_signer, is_real=False)
 
@@ -134,7 +140,9 @@ def reset_registries():
 def mock_audit_log():
     # log_action is called synchronously in secure_log, so use regular MagicMock
     # Patch the lazy loader reference in the utility module
-    with patch("generator.audit_log.audit_utils.log_action", new=MagicMock(return_value=None)) as m:
+    with patch(
+        "generator.audit_log.audit_utils.log_action", new=MagicMock(return_value=None)
+    ) as m:
         yield m
 
 
@@ -223,9 +231,7 @@ def test_compute_hash_both_redaction_modes(reset_registries):
 # FIX: Removed async/await as redaction is synchronous
 def test_redact_sensitive_data_str():
     # Updated test data to ensure multiple patterns are hit
-    sensitive = (
-        "John Doe lives in New York, SSN 123-45-6789, email is test@example.com, and key=abcDEF123."
-    )
+    sensitive = "John Doe lives in New York, SSN 123-45-6789, email is test@example.com, and key=abcDEF123."
     redacted = redact_sensitive_data(sensitive)
 
     # Always check SSN and API key (regex patterns)
@@ -234,8 +240,13 @@ def test_redact_sensitive_data_str():
     assert "test@example.com" not in redacted
 
     # Check ML/PII if configured
-    if PRESIDIO_AVAILABLE and os.getenv("ML_REDACTION_ENABLED", "False").lower() == "true":
-        assert ("<PERSON>" in redacted and "<LOCATION>" in redacted) or ("REDACTED" in redacted)
+    if (
+        PRESIDIO_AVAILABLE
+        and os.getenv("ML_REDACTION_ENABLED", "False").lower() == "true"
+    ):
+        assert ("<PERSON>" in redacted and "<LOCATION>" in redacted) or (
+            "REDACTED" in redacted
+        )
     else:
         assert "[REDACTED]" in redacted  # General check
 
@@ -446,7 +457,9 @@ def test_run_self_tests(mock_rfc3161ng, reset_registries):
 # FIX: Removed async/await as certificate loading is synchronous
 def test_certificate_loading(mock_audit_log):
     # This test verifies that certificate loading can be mocked
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
+    key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
     cert_der = key.public_key().public_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -460,7 +473,9 @@ def test_certificate_loading(mock_audit_log):
         # Call the actual function via the imported reference
         from generator.audit_log import audit_utils
 
-        cert = audit_utils.load_der_x509_certificate(cert_der, backend=default_backend())
+        cert = audit_utils.load_der_x509_certificate(
+            cert_der, backend=default_backend()
+        )
 
         assert cert == mock_cert
         mock_load.assert_called_once()

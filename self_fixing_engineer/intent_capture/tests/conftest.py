@@ -4,11 +4,11 @@ Test configuration for intent_capture tests.
 Handles both relative and absolute imports.
 """
 
-import sys
-import os
-from pathlib import Path
-import warnings
 import logging
+import os
+import sys
+import warnings
+from pathlib import Path
 
 # Setup paths
 test_dir = Path(__file__).parent
@@ -44,8 +44,9 @@ warnings.filterwarnings("ignore", message=".*pkg_resources.*")
 warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-import pytest
 import unittest.mock as mock
+
+import pytest
 
 # Mock Streamlit session state globally to prevent errors
 mock_session_state = mock.MagicMock()

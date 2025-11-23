@@ -1,26 +1,27 @@
-import logging
-import re
-import threading
-from typing import Any, Dict, Optional
-from pathlib import Path
-import smtplib
-from email.message import EmailMessage
-from email.utils import parsedate_to_datetime
-import requests
-from logging.handlers import RotatingFileHandler
-import sys
-import queue
-import time
-import random
-import ssl
+import atexit
 import json
+import logging
+import queue
+import random
+import re
+import smtplib
+import ssl
+import sys
+import threading
+import time
 from collections import deque
 from datetime import datetime, timezone
+from email.message import EmailMessage
+from email.utils import parsedate_to_datetime
 from hashlib import sha256
-import atexit
+from logging.handlers import RotatingFileHandler
 from os import path as _ospath
-from core_secrets import SecretsManager
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import requests
 from core_audit import AuditLogger
+from core_secrets import SecretsManager
 
 # --- Helper Functions ---
 _SENSITIVE_KV = re.compile(
@@ -94,7 +95,9 @@ class AlertDispatcher(threading.Thread):
         super().__init__(daemon=True, name="alert-dispatcher")
         self.operator = operator
         self.queue = queue.Queue(
-            maxsize=self.operator.secrets_manager.get_int("ALERT_QUEUE_MAX_SIZE", default=1000)
+            maxsize=self.operator.secrets_manager.get_int(
+                "ALERT_QUEUE_MAX_SIZE", default=1000
+            )
         )
         self._stop_event = threading.Event()
         self._accepting = True
@@ -173,7 +176,9 @@ class AlertDispatcher(threading.Thread):
             self.operator.logger.warning("Alert queue is full. Dropping message.")
             self.operator._log_rate_limited_alert("queue_full")
 
-    def _post_with_retry(self, url: str, payload: dict, timeout: int, attempts: int) -> None:
+    def _post_with_retry(
+        self, url: str, payload: dict, timeout: int, attempts: int
+    ) -> None:
         """Handles HTTP POST requests with retries and exponential backoff."""
         last_exc = None
         connect_timeout = timeout[0] if isinstance(timeout, tuple) else timeout
@@ -181,7 +186,9 @@ class AlertDispatcher(threading.Thread):
 
         for i in range(attempts):
             try:
-                r = self._session.post(url, json=payload, timeout=(connect_timeout, read_timeout))
+                r = self._session.post(
+                    url, json=payload, timeout=(connect_timeout, read_timeout)
+                )
                 if r.status_code in (429, 500, 502, 503, 504):
                     jitter = random.uniform(0, 1.0)
                     if r.status_code == 429:
@@ -196,10 +203,14 @@ class AlertDispatcher(threading.Thread):
                                     # parsedate_to_datetime returns a naive datetime object
                                     # Assume UTC timezone for comparison
                                     if retry_time.tzinfo is None:
-                                        retry_time = retry_time.replace(tzinfo=timezone.utc)
+                                        retry_time = retry_time.replace(
+                                            tzinfo=timezone.utc
+                                        )
                                     base = max(
                                         0,
-                                        (retry_time - datetime.now(timezone.utc)).total_seconds(),
+                                        (
+                                            retry_time - datetime.now(timezone.utc)
+                                        ).total_seconds(),
                                     )
                                 except Exception:
                                     base = 2**i
@@ -235,7 +246,9 @@ class AlertDispatcher(threading.Thread):
             return
 
         timeout = self.operator.secrets_manager.get_int("SLACK_TIMEOUT", default=5)
-        attempts = self.operator.secrets_manager.get_int("SLACK_RETRY_ATTEMPTS", default=3)
+        attempts = self.operator.secrets_manager.get_int(
+            "SLACK_RETRY_ATTEMPTS", default=3
+        )
 
         payload = {
             "text": f"[{data['level']}] {data['message']}",
@@ -254,9 +267,15 @@ class AlertDispatcher(threading.Thread):
         """Configures and returns an SMTP client with TLS support."""
         host = self.operator.secrets_manager.get_secret("ALERT_SMTP_SERVER")
         port = self.operator.secrets_manager.get_int("ALERT_SMTP_PORT", default=587)
-        timeout = self.operator.secrets_manager.get_int("ALERT_SMTP_TIMEOUT", default=10)
-        use_ssl = self.operator.secrets_manager.get_bool("ALERT_SMTP_SSL", default=False)
-        use_starttls = self.operator.secrets_manager.get_bool("ALERT_SMTP_STARTTLS", default=True)
+        timeout = self.operator.secrets_manager.get_int(
+            "ALERT_SMTP_TIMEOUT", default=10
+        )
+        use_ssl = self.operator.secrets_manager.get_bool(
+            "ALERT_SMTP_SSL", default=False
+        )
+        use_starttls = self.operator.secrets_manager.get_bool(
+            "ALERT_SMTP_STARTTLS", default=True
+        )
 
         ctx = ssl.create_default_context()
         if use_ssl:
@@ -288,18 +307,24 @@ class AlertDispatcher(threading.Thread):
         smtp_user = self.operator.secrets_manager.get_secret("ALERT_SMTP_USER")
         smtp_pass = self.operator.secrets_manager.get_secret("ALERT_SMTP_PASS")
 
-        recipients = [recip.strip() for recip in re.split(r"[,;]", email_to) if recip.strip()]
+        recipients = [
+            recip.strip() for recip in re.split(r"[,;]", email_to) if recip.strip()
+        ]
         if not recipients:
             self.operator.logger.error("No valid email recipients found.")
             return
 
         message = _truncate(
             data["message"],
-            self.operator.secrets_manager.get_int("ALERT_MAX_MESSAGE_LEN", default=3500),
+            self.operator.secrets_manager.get_int(
+                "ALERT_MAX_MESSAGE_LEN", default=3500
+            ),
         )
         subject = _truncate(
             f'[ALERT][{data["level"]}] {subject_data}',
-            self.operator.secrets_manager.get_int("ALERT_EMAIL_SUBJECT_MAX", default=200),
+            self.operator.secrets_manager.get_int(
+                "ALERT_EMAIL_SUBJECT_MAX", default=200
+            ),
         )
 
         msg = EmailMessage()
@@ -335,13 +360,17 @@ class AlertOperator:
                 cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, secrets_manager: SecretsManager = None, audit_logger: AuditLogger = None):
+    def __init__(
+        self, secrets_manager: SecretsManager = None, audit_logger: AuditLogger = None
+    ):
         """
         Initialize the AlertOperator with configuration from SecretsManager and AuditLogger.
         """
         if not self._initialized:
             self.secrets_manager = secrets_manager or SecretsManager()
-            self.audit_logger = audit_logger or AuditLogger(secrets_manager=self.secrets_manager)
+            self.audit_logger = audit_logger or AuditLogger(
+                secrets_manager=self.secrets_manager
+            )
             self._lock = threading.Lock()
             self.logger = logging.getLogger("alert_operator")
             self._configure_logger()
@@ -372,7 +401,9 @@ class AlertOperator:
         log_file_path = self.secrets_manager.get_secret("ALERT_LOG_FILE", default=None)
 
         if log_file_path:
-            log_file = Path(_ospath.expanduser(_ospath.expandvars(log_file_path))).resolve()
+            log_file = Path(
+                _ospath.expanduser(_ospath.expandvars(log_file_path))
+            ).resolve()
             log_file.parent.mkdir(parents=True, exist_ok=True)
             try:
                 log_file.touch(exist_ok=True)
@@ -389,7 +420,9 @@ class AlertOperator:
                 maxBytes=self.secrets_manager.get_int(
                     "ALERT_LOG_MAX_BYTES", default=10 * 1024 * 1024
                 ),
-                backupCount=self.secrets_manager.get_int("ALERT_LOG_BACKUP_COUNT", default=5),
+                backupCount=self.secrets_manager.get_int(
+                    "ALERT_LOG_BACKUP_COUNT", default=5
+                ),
                 encoding="utf-8",
                 delay=True,
             )
@@ -403,14 +436,20 @@ class AlertOperator:
         handler.setFormatter(fmt)
         self.logger.addHandler(handler)
 
-        level = self.secrets_manager.get_secret("ALERT_LOG_LEVEL", default="INFO").upper()
+        level = self.secrets_manager.get_secret(
+            "ALERT_LOG_LEVEL", default="INFO"
+        ).upper()
         self.logger.setLevel(getattr(logging, level, logging.INFO))
 
     def _load_context(self) -> Dict[str, Any]:
         """Load global context metadata from SecretsManager."""
         return {
-            "app_name": self.secrets_manager.get_secret("APP_NAME", default="unknown_app"),
-            "environment": self.secrets_manager.get_secret("ENVIRONMENT", default="unknown"),
+            "app_name": self.secrets_manager.get_secret(
+                "APP_NAME", default="unknown_app"
+            ),
+            "environment": self.secrets_manager.get_secret(
+                "ENVIRONMENT", default="unknown"
+            ),
         }
 
     def _get_signature(self, message: str) -> str:
@@ -441,7 +480,9 @@ class AlertOperator:
             now = time.time()
             q = self._rl.get(key)
             if q is None:
-                if len(self._rl) >= self.secrets_manager.get_int("ALERT_RL_MAX_KEYS", default=2000):
+                if len(self._rl) >= self.secrets_manager.get_int(
+                    "ALERT_RL_MAX_KEYS", default=2000
+                ):
                     self._rl.pop(next(iter(self._rl)))
                 q = self._rl[key] = deque()
 

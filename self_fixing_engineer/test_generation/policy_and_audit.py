@@ -1,18 +1,19 @@
-import os
-import json
 import asyncio
+import json
 import logging
-import shutil
-import warnings
+import os
 import re
+import shutil
 import traceback
-from typing import Dict, Any, Optional, Tuple, Callable, Awaitable, Set
-from importlib.metadata import version, PackageNotFoundError
-from packaging.version import Version
-from dataclasses import dataclass
-from urllib.parse import urlparse
+import warnings
 from abc import ABC, abstractmethod
 from asyncio import Lock
+from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
+from typing import Any, Awaitable, Callable, Dict, Optional, Set, Tuple
+from urllib.parse import urlparse
+
+from packaging.version import Version
 
 # --- Safe Defaults to prevent circular imports with orchestrator ---
 logger = logging.getLogger(__name__)
@@ -120,7 +121,10 @@ class Configuration:
             or os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
             audit_enabled=os.getenv("AUDIT_ENABLED", "true").lower() == "true",
             demo_mode=os.getenv("DEMO_MODE", "false").lower() == "true",
-            opa_integration_enabled=os.getenv("OPA_INTEGRATION_ENABLED", "false").lower() == "true",
+            opa_integration_enabled=os.getenv(
+                "OPA_INTEGRATION_ENABLED", "false"
+            ).lower()
+            == "true",
             opa_server_url=os.getenv("OPA_SERVER_URL", "https://localhost:8181"),
             critical_events_for_mq=(
                 os.getenv("CRITICAL_EVENTS_FOR_MQ", "").split(",")
@@ -130,10 +134,14 @@ class Configuration:
             webhook_hooks=json.loads(os.getenv("WEBHOOK_HOOKS", "{}")),
             slack_webhook_url=os.getenv("SLACK_WEBHOOK_URL"),
             slack_events=(
-                os.getenv("SLACK_EVENTS", "").split(",") if os.getenv("SLACK_EVENTS") else []
+                os.getenv("SLACK_EVENTS", "").split(",")
+                if os.getenv("SLACK_EVENTS")
+                else []
             ),
             webhook_events=(
-                os.getenv("WEBHOOK_EVENTS", "").split(",") if os.getenv("WEBHOOK_EVENTS") else []
+                os.getenv("WEBHOOK_EVENTS", "").split(",")
+                if os.getenv("WEBHOOK_EVENTS")
+                else []
             ),
             allowed_notification_hosts=(
                 set(os.getenv("ALLOWED_NOTIFICATION_HOSTS", "").split(","))
@@ -149,7 +157,9 @@ try:
     from test_generation.orchestrator.audit import audit_event as _real_audit_event
 
     class _RealAuditLogger:
-        async def log_event(self, event_type: str, details: Dict[str, Any], critical: bool = False):
+        async def log_event(
+            self, event_type: str, details: Dict[str, Any], critical: bool = False
+        ):
             await _real_audit_event(event_type, details, critical=critical)
 
     AUDIT_LOGGER_AVAILABLE = True
@@ -207,7 +217,9 @@ def redact_sensitive(obj: Any) -> Any:
             new_dict = {}
             for k, v in item.items():
                 if isinstance(v, str) and re.search(url_param_regex, v):
-                    new_dict[k] = re.sub(url_param_regex, "[REDACTED_SENSITIVE_PARAM]", v)
+                    new_dict[k] = re.sub(
+                        url_param_regex, "[REDACTED_SENSITIVE_PARAM]", v
+                    )
                     redacted_items += 1
                 elif (
                     k.lower() in Constants.SENSITIVE_KEYS
@@ -258,7 +270,9 @@ try:
     if Version(prom_version) >= Version("0.22.1"):
         METRICS_AVAILABLE = True
     else:
-        logger.warning("Warning: prometheus_client version < 0.22.1. Metrics will be disabled.")
+        logger.warning(
+            "Warning: prometheus_client version < 0.22.1. Metrics will be disabled."
+        )
 except PackageNotFoundError:
     logger.warning("Warning: prometheus_client not found. Metrics will be disabled.")
 except Exception as e:
@@ -323,7 +337,9 @@ try:
             f"Warning: An error occurred during tenacity version check: {e}. Retries disabled."
         )
 except ImportError:
-    logger.warning("Warning: 'aiohttp' not available. Notifications and OPA integration disabled.")
+    logger.warning(
+        "Warning: 'aiohttp' not available. Notifications and OPA integration disabled."
+    )
 
     class aiohttp:
         ClientSession = None
@@ -331,7 +347,9 @@ except ImportError:
 
 # Define fallback retry decorator if tenacity is not available
 if not TENACITY_AVAILABLE:
-    logger.warning("Tenacity is not available or version is too old. Retries will be disabled.")
+    logger.warning(
+        "Tenacity is not available or version is too old. Retries will be disabled."
+    )
 
     def retry(*args, **kwargs):
         def wrap(f):
@@ -375,7 +393,9 @@ class AuditLogger:
             async def add_entry(self_inner, component: str, event: str, details: dict):
                 from test_generation.orchestrator.audit import audit_event
 
-                await audit_event(event, details, critical=bool(details.get("critical")))
+                await audit_event(
+                    event, details, critical=bool(details.get("critical"))
+                )
 
         self.dlt_logger = _DLTAdapter()
 
@@ -472,7 +492,9 @@ class PolicyClient(ABC):
 class OPAPolicyClient(PolicyClient):
     """Client for evaluating policies against an OPA server."""
 
-    def __init__(self, config: Configuration, audit_logger: Any, metrics_client: MetricsClient):
+    def __init__(
+        self, config: Configuration, audit_logger: Any, metrics_client: MetricsClient
+    ):
         self.config = config
         self.audit_logger = audit_logger
         self.metrics_client = metrics_client
@@ -566,7 +588,9 @@ class OPAPolicyClient(PolicyClient):
             return result, "OPA allowed" if result else "OPA denied"
         if isinstance(result, dict):
             allowed = result.get("allow", False)
-            return allowed, result.get("reason", "OPA allowed" if allowed else "OPA denied")
+            return allowed, result.get(
+                "reason", "OPA allowed" if allowed else "OPA denied"
+            )
         if isinstance(result, list) and result:
             first_decision = result[0]
             if isinstance(first_decision, dict):
@@ -574,7 +598,9 @@ class OPAPolicyClient(PolicyClient):
                 return allowed, first_decision.get(
                     "reason", "OPA allowed" if allowed else "OPA denied"
                 )
-            return bool(first_decision), ("OPA allowed" if first_decision else "OPA denied")
+            return bool(first_decision), (
+                "OPA allowed" if first_decision else "OPA denied"
+            )
         return False, "OPA denied by default rule."
 
 
@@ -637,7 +663,8 @@ class PolicyEngine:
     async def _load_policies(self):
         """Loads and validates policies from the configuration file."""
         if self.policy_config_path and (
-            ".." in self.policy_config_path or not self.policy_config_path.endswith(".json")
+            ".." in self.policy_config_path
+            or not self.policy_config_path.endswith(".json")
         ):
             raise ValueError("Invalid policy_config_path")
 
@@ -654,7 +681,9 @@ class PolicyEngine:
                 )
             return
 
-        full_policy_config_path = os.path.join(self.config.project_root, self.policy_config_path)
+        full_policy_config_path = os.path.join(
+            self.config.project_root, self.policy_config_path
+        )
 
         if not self.filesystem.file_exists(full_policy_config_path):
             logger.critical(
@@ -725,7 +754,9 @@ class PolicyEngine:
             raise ValueError("Missing required key in 'integration_rules' policy.")
         integ_rules.setdefault("auto_commit_threshold", 0.85)
 
-        security_threshold = str(policies.get("security_scan_threshold", "NONE")).upper()
+        security_threshold = str(
+            policies.get("security_scan_threshold", "NONE")
+        ).upper()
         if security_threshold not in Constants.SECURITY_LEVELS:
             raise ValueError(
                 f"Invalid security_scan_threshold value: '{security_threshold}'. "
@@ -754,7 +785,9 @@ class PolicyEngine:
 
         full_path = os.path.join(self.config.project_root, self.policy_config_path)
         if not self.filesystem.file_exists(full_path):
-            logger.critical(f"CRITICAL: Policy file {full_path} not found. Using defaults.")
+            logger.critical(
+                f"CRITICAL: Policy file {full_path} not found. Using defaults."
+            )
             self.policies = Constants.DEFAULT_POLICIES.copy()
             self.policy_hash = "NO_POLICY_FILE"
             if self.audit_logger:
@@ -767,7 +800,9 @@ class PolicyEngine:
         try:
             new_policies = self.filesystem.read_json(full_path)
             self._validate_policy_schema(new_policies)
-            new_hash = self.filesystem.generate_file_hash(full_path, self.config.project_root)
+            new_hash = self.filesystem.generate_file_hash(
+                full_path, self.config.project_root
+            )
             self.policies = new_policies
             self.policy_hash = new_hash
             if self.audit_logger:
@@ -796,7 +831,9 @@ class PolicyEngine:
         Logs and returns a policy denial decision.
         """
         redacted_input, redacted_count = redact_sensitive(input_data)
-        self.metrics_client.policy_evaluations_total.labels(result="denied", rule=rule).inc()
+        self.metrics_client.policy_evaluations_total.labels(
+            result="denied", rule=rule
+        ).inc()
         if self.audit_logger:
             if redacted_count > 0:
                 await self.audit_logger.log_event(
@@ -810,12 +847,16 @@ class PolicyEngine:
             )
         return False, reason
 
-    async def _allow(self, rule: str, input_data: Dict[str, Any], reason: str) -> Tuple[bool, str]:
+    async def _allow(
+        self, rule: str, input_data: Dict[str, Any], reason: str
+    ) -> Tuple[bool, str]:
         """
         Logs and returns a policy allowance decision.
         """
         redacted_input, redacted_count = redact_sensitive(input_data)
-        self.metrics_client.policy_evaluations_total.labels(result="allowed", rule=rule).inc()
+        self.metrics_client.policy_evaluations_total.labels(
+            result="allowed", rule=rule
+        ).inc()
         if self.audit_logger:
             if redacted_count > 0:
                 await self.audit_logger.log_event(
@@ -863,7 +904,9 @@ class PolicyEngine:
                     self._gen_cache[cache_key] = result
                     return result
                 except Exception as e:
-                    logger.exception("OPA evaluation failed; falling back to local rules.")
+                    logger.exception(
+                        "OPA evaluation failed; falling back to local rules."
+                    )
                     self.metrics_client.policy_evaluations_total.labels(
                         result="denied", rule="generation_check"
                     ).inc()
@@ -905,7 +948,9 @@ class PolicyEngine:
             full_module_path = os.path.join(self.config.project_root, module_path_like)
             safe_subfolders = generation_rules.get("safe_subfolders", [])
             if safe_subfolders and not any(
-                os.path.commonpath([full_module_path, os.path.join(self.config.project_root, f)])
+                os.path.commonpath(
+                    [full_module_path, os.path.join(self.config.project_root, f)]
+                )
                 == os.path.join(self.config.project_root, f)
                 for f in safe_subfolders
             ):
@@ -1011,8 +1056,12 @@ class PolicyEngine:
                 self._integrate_cache[cache_key] = result
             return result
 
-        security_threshold_level = self.policies.get("security_scan_threshold", "NONE").upper()
-        severity_levels = {level: i for i, level in enumerate(Constants.SECURITY_LEVELS)}
+        security_threshold_level = self.policies.get(
+            "security_scan_threshold", "NONE"
+        ).upper()
+        severity_levels = {
+            level: i for i, level in enumerate(Constants.SECURITY_LEVELS)
+        }
 
         if security_severity_str not in severity_levels:
             if security_severity_str not in self._warned_severities:
@@ -1060,8 +1109,10 @@ class PolicyEngine:
 
         if self.config.opa_integration_enabled:
             try:
-                requires_pr_by_opa, reason_opa = await self.policy_client.evaluate_policy(
-                    Constants.OPA_POLICY_PATHS["pr_required_check"], input_data
+                requires_pr_by_opa, reason_opa = (
+                    await self.policy_client.evaluate_policy(
+                        Constants.OPA_POLICY_PATHS["pr_required_check"], input_data
+                    )
                 )
                 self.metrics_client.policy_evaluations_total.labels(
                     result="requires_pr" if requires_pr_by_opa else "allowed",
@@ -1102,7 +1153,10 @@ class PolicyEngine:
         integration_rules = self.policies.get("integration_rules", {})
 
         lang = (language or "").lower()
-        hr_langs = [l.lower() for l in integration_rules.get("human_review_required_languages", [])]
+        hr_langs = [
+            l.lower()
+            for l in integration_rules.get("human_review_required_languages", [])
+        ]
         if lang in hr_langs:
             reason = f"Policy: Human review required for '{language}' tests before integration."
             self.metrics_client.policy_evaluations_total.labels(
@@ -1234,7 +1288,9 @@ class EventBus:
         self.http_notifications_enabled = AIOHTTP_AVAILABLE and have_external
         self.disabled = not (have_external or have_mq)
 
-        self.session_factory = session_factory if self.http_notifications_enabled else None
+        self.session_factory = (
+            session_factory if self.http_notifications_enabled else None
+        )
         if self.session_factory is None and self.http_notifications_enabled:
             import aiohttp
 
@@ -1286,7 +1342,10 @@ class EventBus:
         if self.disabled:
             return
 
-        if event_name in self.config.critical_events_for_mq and self.message_queue_service:
+        if (
+            event_name in self.config.critical_events_for_mq
+            and self.message_queue_service
+        ):
             try:
                 await self.message_queue_service.publish(event_name, redacted_data)
             except Exception:
@@ -1418,7 +1477,9 @@ class EventBus:
             self.config.allowed_notification_hosts
             and parsed_url.netloc not in self.config.allowed_notification_hosts
         ):
-            raise ValueError(f"Host {parsed_url.netloc} not in allowed hosts for {service_name}")
+            raise ValueError(
+                f"Host {parsed_url.netloc} not in allowed hosts for {service_name}"
+            )
 
         async with self.session_factory() as session:
             async with session.post(

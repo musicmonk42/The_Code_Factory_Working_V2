@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 import types
 from pathlib import Path
 
@@ -99,7 +99,8 @@ def _install_dummy_sentence_transformers():
 
     def semantic_search(query_emb, corpus_embs, top_k=3):
         hits = [
-            {"corpus_id": i, "score": float(i + 1)} for i in range(min(top_k, len(corpus_embs)))
+            {"corpus_id": i, "score": float(i + 1)}
+            for i in range(min(top_k, len(corpus_embs)))
         ]
         return [hits]
 
@@ -176,14 +177,15 @@ print("TESTING=1 → watchers disabled")
 # *** THIS IS THE FIX ***
 #
 
+import shutil
+import tempfile
+from unittest.mock import AsyncMock, patch
+
 # --------------------------------------------------------------
 # 6. ENTERPRISE FIXTURES
 # --------------------------------------------------------------
 import pytest
-import tempfile
-import shutil
 import yaml
-from unittest.mock import AsyncMock, patch
 
 
 @pytest.fixture
@@ -195,7 +197,8 @@ def codegen_env():
     templates.mkdir()
 
     (templates / "python.jinja2").write_text(
-        "Generate: {{ requirements.features }}. " 'JSON: {"files": {"main.py": "def x(): pass"}}',
+        "Generate: {{ requirements.features }}. "
+        'JSON: {"files": {"main.py": "def x(): pass"}}',
         encoding="utf-8",
     )
 

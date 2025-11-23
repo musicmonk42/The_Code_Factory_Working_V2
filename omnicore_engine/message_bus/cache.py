@@ -1,8 +1,8 @@
 # message_bus/cache.py
 
+import logging
 import threading
 import time
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,9 @@ class MessageCache:
         if expired_keys:
             for key in expired_keys:
                 self._remove(key)
-            logger.debug(f"Evicted {len(expired_keys)} expired items from MessageCache.")
+            logger.debug(
+                f"Evicted {len(expired_keys)} expired items from MessageCache."
+            )
         elif self.cache:
             lru_key = min(self.access_times.items(), key=lambda item: item[1])[0]
             self._remove(lru_key)

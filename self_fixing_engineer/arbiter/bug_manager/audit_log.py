@@ -1,22 +1,22 @@
-import os
-import json
-import datetime
 import asyncio
-import logging
 import collections
+import datetime
+import gzip
 import hashlib
-import aiohttp
-import tenacity
+import json
+import logging
+import os
 import shutil
 import time
-import gzip
-from typing import Any, Dict, List, Optional
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+import aiohttp
 import portalocker
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+import tenacity
 from cryptography.fernet import Fernet
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Assuming a local utils module with these components
 from .utils import AuditLogError, validate_input_details
@@ -118,9 +118,15 @@ class AuditLogManager:
         # 1.1 Migrate hardcoded constants to settings
         self.audit_schema_version = getattr(self.settings, "AUDIT_SCHEMA_VERSION", 1)
         self.retry_attempts = getattr(self.settings, "AUDIT_LOG_RETRY_ATTEMPTS", 3)
-        self.retry_delay_seconds = getattr(self.settings, "AUDIT_LOG_RETRY_DELAY_SECONDS", 1)
-        self.min_disk_space_mb = getattr(self.settings, "AUDIT_LOG_MIN_DISK_SPACE_MB", 100)
-        self.enable_compression = getattr(self.settings, "AUDIT_LOG_ENABLE_COMPRESSION", False)
+        self.retry_delay_seconds = getattr(
+            self.settings, "AUDIT_LOG_RETRY_DELAY_SECONDS", 1
+        )
+        self.min_disk_space_mb = getattr(
+            self.settings, "AUDIT_LOG_MIN_DISK_SPACE_MB", 100
+        )
+        self.enable_compression = getattr(
+            self.settings, "AUDIT_LOG_ENABLE_COMPRESSION", False
+        )
         self.temp_cleanup_timeout = getattr(
             self.settings, "AUDIT_LOG_TEMP_CLEANUP_TIMEOUT_SECONDS", 10
         )
@@ -149,7 +155,9 @@ class AuditLogManager:
             )
         )
         self.enabled = (
-            enabled if enabled is not None else getattr(settings, "AUDIT_LOG_ENABLED", True)
+            enabled
+            if enabled is not None
+            else getattr(settings, "AUDIT_LOG_ENABLED", True)
         )
         self.encryption_key = getattr(self.settings, "AUDIT_LOG_ENCRYPTION_KEY", None)
 
@@ -189,7 +197,9 @@ class AuditLogManager:
         if getattr(self.settings, "REMOTE_AUDIT_SERVICE_ENABLED", False):
             if self._session is None or self._session.closed:
                 self._session = aiohttp.ClientSession()
-                logger.info("aiohttp ClientSession initialized for remote audit service.")
+                logger.info(
+                    "aiohttp ClientSession initialized for remote audit service."
+                )
 
     async def shutdown(self) -> None:
         """Gracefully shuts down the manager, ensuring all logs are flushed."""
@@ -200,7 +210,9 @@ class AuditLogManager:
             except asyncio.CancelledError:
                 logger.info("Audit log periodic flush task cancelled.")
             except Exception as e:
-                logger.error(f"Error awaiting flush task cancellation: {e}", exc_info=True)
+                logger.error(
+                    f"Error awaiting flush task cancellation: {e}", exc_info=True
+                )
             finally:
                 self._flush_task = None
 
@@ -215,7 +227,9 @@ class AuditLogManager:
 
         logger.info("AuditLogManager shut down.")
 
-    async def _write_to_dead_letter_queue(self, entry: Dict[str, Any], reason: str) -> None:
+    async def _write_to_dead_letter_queue(
+        self, entry: Dict[str, Any], reason: str
+    ) -> None:
         if not getattr(self.settings, "REMOTE_AUDIT_DEAD_LETTER_ENABLED", True):
             return
         try:
@@ -251,7 +265,9 @@ class AuditLogManager:
     async def _periodic_flush(self) -> None:
         while True:
             try:
-                await asyncio.sleep(getattr(self.settings, "AUDIT_LOG_FLUSH_INTERVAL_SECONDS", 5))
+                await asyncio.sleep(
+                    getattr(self.settings, "AUDIT_LOG_FLUSH_INTERVAL_SECONDS", 5)
+                )
                 await self._flush_buffer()
             except asyncio.CancelledError:
                 logger.info("Audit log periodic flush task cancelled.")
@@ -305,7 +321,9 @@ class AuditLogManager:
                     self._sync_atomic_write_with_retry,
                     processed_logs,
                 )
-                logger.debug(f"Flushed {len(processed_logs)} audit entries to {self.log_path}")
+                logger.debug(
+                    f"Flushed {len(processed_logs)} audit entries to {self.log_path}"
+                )
                 AUDIT_LOG_WRITE_SUCCESS.inc()
                 local_write_successful = True
             except portalocker.LockException:
@@ -332,7 +350,9 @@ class AuditLogManager:
                 await self._send_to_remote_audit_service(processed_logs)
 
     async def _rotate_logs(self) -> None:
-        await asyncio.get_running_loop().run_in_executor(self._io_executor, self._sync_rotate_logs)
+        await asyncio.get_running_loop().run_in_executor(
+            self._io_executor, self._sync_rotate_logs
+        )
 
     # 1.2 Add compression for rotated logs
     def _sync_rotate_logs(self) -> None:
@@ -345,7 +365,9 @@ class AuditLogManager:
             usage = shutil.disk_usage(log_dir)
             free_space_mb = usage.free / (1024 * 1024)
             if free_space_mb < self.min_disk_space_mb:
-                logger.critical(f"Low disk space ({free_space_mb:.2f}MB). Skipping log rotation.")
+                logger.critical(
+                    f"Low disk space ({free_space_mb:.2f}MB). Skipping log rotation."
+                )
                 AUDIT_LOG_DISK_CHECK_FAILED.inc()
                 return
         except OSError as e:
@@ -358,7 +380,9 @@ class AuditLogManager:
         if file_size_mb < max_size:
             return
 
-        logger.info(f"Audit log size ({file_size_mb:.2f}MB) exceeds max ({max_size}MB). Rotating.")
+        logger.info(
+            f"Audit log size ({file_size_mb:.2f}MB) exceeds max ({max_size}MB). Rotating."
+        )
         AUDIT_LOG_ROTATION.inc()
         backup_count = getattr(self.settings, "AUDIT_LOG_BACKUP_COUNT", 5)
         for i in range(backup_count - 1, -1, -1):
@@ -372,7 +396,10 @@ class AuditLogManager:
                     logger.debug(f"Rotated '{src}' to '{dst}'")
                     if self.enable_compression and i > 0:
                         compressed_dst = f"{dst}.gz"
-                        with open(dst, "rb") as f_in, gzip.open(compressed_dst, "wb") as f_out:
+                        with (
+                            open(dst, "rb") as f_in,
+                            gzip.open(compressed_dst, "wb") as f_out,
+                        ):
                             shutil.copyfileobj(f_in, f_out)
                         os.remove(dst)
                         logger.debug(f"Compressed '{dst}' to '{compressed_dst}'")
@@ -399,7 +426,9 @@ class AuditLogManager:
             try:
                 fernet = Fernet(self.encryption_key)
                 encrypted_lines = [
-                    fernet.encrypt(json.dumps(entry, default=str).encode("utf-8")).decode("utf-8")
+                    fernet.encrypt(
+                        json.dumps(entry, default=str).encode("utf-8")
+                    ).decode("utf-8")
                     for entry in entries
                 ]
                 data_to_write = "\n".join(encrypted_lines) + "\n"
@@ -408,7 +437,9 @@ class AuditLogManager:
                 logger.error(f"Failed to encrypt audit log entries: {e}", exc_info=True)
                 raise AuditLogError(f"Encryption failed: {e}")
         else:
-            data_to_write = "".join([json.dumps(entry, default=str) + "\n" for entry in entries])
+            data_to_write = "".join(
+                [json.dumps(entry, default=str) + "\n" for entry in entries]
+            )
 
         try:
             with open(temp_filepath, "w", encoding="utf-8") as temp_f:
@@ -429,13 +460,19 @@ class AuditLogManager:
                         f"Failed to remove temporary audit file {temp_filepath}: {e_remove}"
                     )
 
-    async def _send_to_remote_audit_service(self, entries: List[Dict[str, Any]]) -> None:
+    async def _send_to_remote_audit_service(
+        self, entries: List[Dict[str, Any]]
+    ) -> None:
         remote_url = getattr(self.settings, "REMOTE_AUDIT_SERVICE_URL", None)
         if not remote_url:
             logger.warning("Remote audit service URL not configured.")
             return
 
-        if not hasattr(self, "_session") or self._session is None or self._session.closed:
+        if (
+            not hasattr(self, "_session")
+            or self._session is None
+            or self._session.closed
+        ):
             logger.error(
                 "Cannot send to remote audit service: aiohttp ClientSession is not available."
             )
@@ -444,7 +481,9 @@ class AuditLogManager:
 
         timeout = getattr(self.settings, "REMOTE_AUDIT_SERVICE_TIMEOUT", 3.0)
         try:
-            async with self._session.post(remote_url, json=entries, timeout=timeout) as response:
+            async with self._session.post(
+                remote_url, json=entries, timeout=timeout
+            ) as response:
                 if 200 <= response.status < 300:
                     logger.info(
                         f"Sent {len(entries)} audit entries to remote service successfully."
@@ -460,17 +499,27 @@ class AuditLogManager:
                     )
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             error_reason = (
-                "Timeout" if isinstance(e, asyncio.TimeoutError) else f"ClientError - {str(e)}"
+                "Timeout"
+                if isinstance(e, asyncio.TimeoutError)
+                else f"ClientError - {str(e)}"
             )
-            logger.error(f"Network error sending audit entries: {error_reason}", exc_info=True)
-            await self._handle_remote_send_failure(entries, f"Remote send failed: {error_reason}")
+            logger.error(
+                f"Network error sending audit entries: {error_reason}", exc_info=True
+            )
+            await self._handle_remote_send_failure(
+                entries, f"Remote send failed: {error_reason}"
+            )
         except Exception as e:
-            logger.error(f"Unexpected error during remote audit send: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error during remote audit send: {e}", exc_info=True
+            )
             await self._handle_remote_send_failure(
                 entries, f"Remote send failed: Unexpected error - {e}"
             )
 
-    async def _handle_remote_send_failure(self, entries: List[Dict[str, Any]], reason: str):
+    async def _handle_remote_send_failure(
+        self, entries: List[Dict[str, Any]], reason: str
+    ):
         AUDIT_LOG_REMOTE_SEND_FAILED.inc()
         if getattr(self.settings, "REMOTE_AUDIT_DEAD_LETTER_ENABLED", True):
             for entry in entries:

@@ -1,18 +1,19 @@
-import os
-import sys
-import logging
 import asyncio
-import importlib
-import pkg_resources
-import pkgutil
 import hashlib
-import json
-import traceback
+import importlib
 import inspect
+import json
+import logging
+import os
+import pkgutil
 import re
+import sys
 import time
-from typing import Dict, Any, List, Tuple, Protocol, Optional, runtime_checkable
+import traceback
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
+
+import pkg_resources
 
 # --- Constants & Configuration ---
 SIMULATION_PACKAGE = "simulation"
@@ -68,7 +69,9 @@ def get_audit_logger() -> AuditLogger:
         module = importlib.import_module("test_generation.audit_log")
         return DltAuditLogger(module.emit_audit_event)
     except (ImportError, AttributeError):
-        logger.warning("test_generation.audit_log not available. Using fallback audit logger.")
+        logger.warning(
+            "test_generation.audit_log not available. Using fallback audit logger."
+        )
         return FallbackAuditLogger()
 
 
@@ -205,7 +208,11 @@ class LangChainOutputRefiner(OutputRefiner):
             from langchain_core.messages import HumanMessage
 
             refined_output = await self.chat.ainvoke(
-                [HumanMessage(content=f"{system_prompt}\n\nRaw Output:\n```\n{output}\n```")]
+                [
+                    HumanMessage(
+                        content=f"{system_prompt}\n\nRaw Output:\n```\n{output}\n```"
+                    )
+                ]
             )
             content = refined_output.content.strip()
             if content.startswith("```") and content.endswith("```"):
@@ -240,7 +247,9 @@ def get_output_refiner() -> OutputRefiner:
     """Initialize output refiner with fallback."""
     refiner = LangChainOutputRefiner()
     if refiner.chat is None:
-        logger.warning("LangChainOutputRefiner not initialized. Returning NoOpOutputRefiner.")
+        logger.warning(
+            "LangChainOutputRefiner not initialized. Returning NoOpOutputRefiner."
+        )
         return NoOpOutputRefiner()
     return refiner
 
@@ -292,7 +301,9 @@ def redact_sensitive(text: str) -> str:
 class RunnerPlugin(Protocol):
     """Protocol for runner plugins."""
 
-    async def run(self, target: str, params: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]: ...
+    async def run(
+        self, target: str, params: Dict[str, Any]
+    ) -> Tuple[bool, str, Optional[str]]: ...
 
 
 @runtime_checkable
@@ -418,7 +429,9 @@ async def register_plugin(module: Any, module_name: str, file_path: Optional[str
     try:
         manifest = getattr(module, "PLUGIN_MANIFEST", None)
         if manifest is None:
-            logger.warning(f"Skipping module '{module_name}': No PLUGIN_MANIFEST found.")
+            logger.warning(
+                f"Skipping module '{module_name}': No PLUGIN_MANIFEST found."
+            )
             await audit_logger.emit_audit_event(
                 "module_registration_skipped",
                 {"name": module_name, "reason": "No manifest"},
@@ -434,13 +447,20 @@ async def register_plugin(module: Any, module_name: str, file_path: Optional[str
 
         plugin_type = manifest["type"]
         category = (
-            f"{plugin_type}s" if plugin_type in ["runner", "dlt_client", "siem_client"] else "other"
+            f"{plugin_type}s"
+            if plugin_type in ["runner", "dlt_client", "siem_client"]
+            else "other"
         )
 
         run_attr = getattr(module, "run", None)
         if plugin_type == "runner":
-            if not (asyncio.iscoroutinefunction(run_attr) or inspect.iscoroutinefunction(run_attr)):
-                raise TypeError(f"Plugin '{module_name}' must implement the RunnerPlugin protocol.")
+            if not (
+                asyncio.iscoroutinefunction(run_attr)
+                or inspect.iscoroutinefunction(run_attr)
+            ):
+                raise TypeError(
+                    f"Plugin '{module_name}' must implement the RunnerPlugin protocol."
+                )
 
         SIM_REGISTRY[category][module_name] = module
 
@@ -457,7 +477,9 @@ async def register_plugin(module: Any, module_name: str, file_path: Optional[str
             severity="ERROR",
         )
     except Exception as e:
-        logger.error(f"Unexpected error registering plugin '{module_name}': {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error registering plugin '{module_name}': {e}", exc_info=True
+        )
         await audit_logger.emit_audit_event(
             "module_registration_failed",
             {
@@ -514,7 +536,9 @@ async def discover_and_register_all():
                     severity="ERROR",
                 )
             except Exception as e:
-                logger.error(f"Unexpected error importing module '{name}': {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error importing module '{name}': {e}", exc_info=True
+                )
                 await audit_logger.emit_audit_event(
                     "module_registration_failed",
                     {
@@ -532,7 +556,9 @@ async def discover_and_register_all():
             metrics_provider.observe_load_duration(duration)
         except Exception as e:
             logger.debug(f"Failed to observe registry_load_duration metric: {e}")
-        logger.info(f"Plugin discovery and registration completed in {duration:.3f} seconds.")
+        logger.info(
+            f"Plugin discovery and registration completed in {duration:.3f} seconds."
+        )
 
 
 async def refine_plugin_output(plugin_name: str, output: str) -> str:
@@ -563,7 +589,9 @@ async def run_plugin(
                 "target": target,
                 "success": True,
                 "output_hash": (
-                    hashlib.sha256(final_output.encode()).hexdigest() if final_output else None
+                    hashlib.sha256(final_output.encode()).hexdigest()
+                    if final_output
+                    else None
                 ),
             },
         )
@@ -603,7 +631,9 @@ if __name__ == "__main__":
     async def main():
         await discover_and_register_all()
         if "test_runner_plugin" in SIM_REGISTRY["runners"]:
-            success, message, output = await run_plugin("test_runner_plugin", "example.com", {})
+            success, message, output = await run_plugin(
+                "test_runner_plugin", "example.com", {}
+            )
             logger.info(f"Plugin Result: {success} - {message} - {output}")
 
     if sys.platform == "win32":

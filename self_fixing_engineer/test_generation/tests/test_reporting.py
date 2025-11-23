@@ -1,19 +1,20 @@
-import pytest
-import os
 import json
+import os
 from pathlib import Path
 
 # Fix: Add missing imports for Mock and AsyncMock
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+from test_generation.orchestrator import sanitize_path
+from test_generation.orchestrator.config import HTML_REPORTS_DIR, SARIF_EXPORT_DIR
 
 # Fix: The test needs to import the HTMLReporter and its config path
 from test_generation.orchestrator.reporting import (
-    _write_sarif_atomically,
-    HTMLReporter,
     DummyMetric,
+    HTMLReporter,
+    _write_sarif_atomically,
 )
-from test_generation.orchestrator.config import SARIF_EXPORT_DIR, HTML_REPORTS_DIR
-from test_generation.orchestrator import sanitize_path
 
 
 @pytest.fixture
@@ -29,7 +30,9 @@ def project(tmp_path: Path) -> Path:
 
 @pytest.mark.asyncio
 async def test_write_sarif_success(project: Path, monkeypatch):
-    sarif_path = project / sanitize_path(f"{SARIF_EXPORT_DIR}/test.sarif.json", str(project))
+    sarif_path = project / sanitize_path(
+        f"{SARIF_EXPORT_DIR}/test.sarif.json", str(project)
+    )
     data = {"version": "2.1.0", "runs": []}
     result = await _write_sarif_atomically(sarif_path, data)
     assert result is True
@@ -41,7 +44,9 @@ async def test_write_sarif_success(project: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_write_sarif_failure(project: Path, monkeypatch):
-    sarif_path = project / sanitize_path(f"{SARIF_EXPORT_DIR}/test.sarif.json", str(project))
+    sarif_path = project / sanitize_path(
+        f"{SARIF_EXPORT_DIR}/test.sarif.json", str(project)
+    )
     # Fix: Use the standard unittest.mock.Mock instead of the custom class.
     monkeypatch.setattr(os, "replace", Mock(side_effect=OSError("Disk full")))
     result = await _write_sarif_atomically(sarif_path, {"version": "2.1.0"})
@@ -91,7 +96,9 @@ async def test_generate_html_report_success(project: Path, monkeypatch):
     with patch(
         "test_generation.orchestrator.reporting.atomic_write", new_callable=AsyncMock
     ) as mock_atomic_write:
-        report_path_str = await reporter.generate_html_report(overall_results, mock_policy_engine)
+        report_path_str = await reporter.generate_html_report(
+            overall_results, mock_policy_engine
+        )
 
         # Verify atomic_write was called for the main report and the 'latest' alias
         assert mock_atomic_write.call_count == 2

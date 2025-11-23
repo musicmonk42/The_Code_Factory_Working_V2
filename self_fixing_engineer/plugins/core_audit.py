@@ -52,30 +52,31 @@ Configuration via Environment Variables (through SecretsManager):
 - AUDIT_INCLUDE_TRACES: Set to 'true' to include full stack traces in exception logs. (Default: False)
 - AUDIT_STRICT_WRITES: If 'true', I/O errors will be raised after being logged to stderr. (Default: False)
 """
-import logging
+import atexit
+import hashlib
+import hmac
 import json
-import threading
+import logging
 import os
+import queue
 import socket
 import stat
-import hmac
-import hashlib
-import traceback
-import atexit
-import uuid
 import sys
-import queue
+import threading
 import time
-from typing import Any, Dict, Optional, Literal, List
+import traceback
+import uuid
 from collections import deque
 from datetime import datetime
-from pathlib import Path
 from logging.handlers import (
-    RotatingFileHandler,
-    WatchedFileHandler,
     QueueHandler,
     QueueListener,
+    RotatingFileHandler,
+    WatchedFileHandler,
 )
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
+
 from core_secrets import (
     SecretsManager,
 )  # Assumes core_secrets.py is in the same directory
@@ -110,7 +111,8 @@ class _DropOnFullQueueHandler(QueueHandler):
                     "timestamp": ts,
                 }
                 sys.stderr.write(
-                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n"
+                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
                 )
             except Exception:
                 pass
@@ -205,7 +207,9 @@ class AuditLogger:
             self.logger.propagate = False
             self._app_instance_id = uuid.uuid4().hex
 
-            maxsize = self._get_config_value("AUDIT_QUEUE_MAXSIZE", 10000, int, (1000, 1_000_000))
+            maxsize = self._get_config_value(
+                "AUDIT_QUEUE_MAXSIZE", 10000, int, (1000, 1_000_000)
+            )
             self._log_queue: queue.Queue = queue.Queue(maxsize=maxsize)
             self._queue_handler = _DropOnFullQueueHandler(self._log_queue)
             self.logger.addHandler(self._queue_handler)
@@ -235,7 +239,9 @@ class AuditLogger:
             "app_instance_id": self._app_instance_id,
         }
         try:
-            extra_context_str = self._get_config_value("AUDIT_EXTRA_CONTEXT_JSON", None, str)
+            extra_context_str = self._get_config_value(
+                "AUDIT_EXTRA_CONTEXT_JSON", None, str
+            )
             if extra_context_str:
                 extra_context = json.loads(extra_context_str)
                 if isinstance(extra_context, dict):
@@ -269,7 +275,9 @@ class AuditLogger:
             max_bytes = self._get_config_value(
                 "AUDIT_LOG_MAX_BYTES", 10 * 1024 * 1024, int, (1_000_000, 1_000_000_000)
             )
-            backup_count = self._get_config_value("AUDIT_LOG_BACKUP_COUNT", 5, int, (1, 50))
+            backup_count = self._get_config_value(
+                "AUDIT_LOG_BACKUP_COUNT", 5, int, (1, 50)
+            )
             fh = RotatingFileHandler(
                 file_path_str,
                 maxBytes=max_bytes,
@@ -294,7 +302,8 @@ class AuditLogger:
                         "error": str(perm_err),
                     }
                     sys.stderr.write(
-                        json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n"
+                        json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                        + "\n"
                     )
                 except Exception:
                     pass
@@ -339,9 +348,15 @@ class AuditLogger:
         self.logger.setLevel(getattr(logging, level_str, logging.INFO))
         self._load_context()
 
-        self._rl_window = self._get_config_value("AUDIT_RL_WINDOW_SEC", 10, int, (1, 300))
-        self._rl_limit = self._get_config_value("AUDIT_RL_MAX_EVENTS", 100, int, (10, 10000))
-        self._rl_max_keys = self._get_config_value("AUDIT_RL_MAX_KEYS", 1000, int, (100, 10000))
+        self._rl_window = self._get_config_value(
+            "AUDIT_RL_WINDOW_SEC", 10, int, (1, 300)
+        )
+        self._rl_limit = self._get_config_value(
+            "AUDIT_RL_MAX_EVENTS", 100, int, (10, 10000)
+        )
+        self._rl_max_keys = self._get_config_value(
+            "AUDIT_RL_MAX_KEYS", 1000, int, (100, 10000)
+        )
         self._max_event_bytes = self._get_config_value(
             "AUDIT_EVENT_MAX_BYTES", 256 * 1024, int, (16 * 1024, 2 * 1024 * 1024)
         )
@@ -365,7 +380,9 @@ class AuditLogger:
 
         self._configure_handlers()
 
-    def log_event(self, event_type: str, level: LogLevel = "INFO", **kwargs: Any) -> None:
+    def log_event(
+        self, event_type: str, level: LogLevel = "INFO", **kwargs: Any
+    ) -> None:
         """Logs a structured JSON event with contextual metadata."""
         if self._closed:
             try:
@@ -376,7 +393,8 @@ class AuditLogger:
                     "timestamp": ts,
                 }
                 sys.stderr.write(
-                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False) + "\n"
+                    json.dumps(err_msg, separators=(",", ":"), ensure_ascii=False)
+                    + "\n"
                 )
             except Exception:
                 pass
@@ -443,7 +461,9 @@ class AuditLogger:
             if len(log_json.encode("utf-8")) > self._max_event_bytes:
                 log_entry["truncated"] = True
                 oversized = [
-                    k for k, v in user_data.items() if isinstance(v, str) and len(v) > 1024
+                    k
+                    for k, v in user_data.items()
+                    if isinstance(v, str) and len(v) > 1024
                 ]
                 for k in oversized:
                     log_entry[k] = log_entry[k][:1024] + "...(truncated)"
@@ -515,7 +535,9 @@ class AuditLogger:
                 "timestamp": timestamp,
                 "error": str(e),
             }
-            fallback_json = json.dumps(fallback_entry, separators=(",", ":"), ensure_ascii=False)
+            fallback_json = json.dumps(
+                fallback_entry, separators=(",", ":"), ensure_ascii=False
+            )
             with self._write_lock:
                 try:
                     self.logger.error(fallback_json)
@@ -531,7 +553,9 @@ class AuditLogger:
             exc_info = {
                 "exc_type": type(exc).__name__,
                 "exc_message": str(exc),
-                "trace_hash": hashlib.sha256("".join(tb_lines).encode("utf-8")).hexdigest(),
+                "trace_hash": hashlib.sha256(
+                    "".join(tb_lines).encode("utf-8")
+                ).hexdigest(),
             }
             if self._get_config_value("AUDIT_INCLUDE_TRACES", False, bool):
                 exc_info["traceback"] = "".join(tb_lines)
@@ -546,7 +570,9 @@ class AuditLogger:
     def update_context(self, **kwargs: Any) -> None:
         with self._init_lock:
             self._context.update(kwargs)
-            self.log_event("audit_context_updated", level="DEBUG", updated_keys=list(kwargs.keys()))
+            self.log_event(
+                "audit_context_updated", level="DEBUG", updated_keys=list(kwargs.keys())
+            )
 
     def reload(self) -> None:
         with self._init_lock:

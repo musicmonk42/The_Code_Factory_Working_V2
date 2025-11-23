@@ -1,18 +1,19 @@
 # arbiter/queue_consumer_worker.py
 
 import asyncio
+import hashlib
+import json
 import logging
+import os
 import signal
 import sys
-import os
-import json
 import time
 import uuid
-import hashlib
 from functools import partial
-from typing import Any, Dict, Callable, Optional
+from typing import Any, Callable, Dict, Optional
+
 from aiohttp import web
-from prometheus_client import start_http_server, Counter, Histogram, REGISTRY
+from prometheus_client import REGISTRY, Counter, Histogram, start_http_server
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # --- Initialize logger early before any usage ---
@@ -21,22 +22,22 @@ logger = logging.getLogger("queue_consumer_worker")
 # --- SFE Core Imports and Mock Fallback ---
 SFE_CORE_AVAILABLE = False
 try:
+    from arbiter.bug_manager import AuditLogManager
+    from arbiter.config import ArbiterConfig as Settings
+    from arbiter.logging_utils import PIIRedactorFilter
     from arbiter.message_queue_service import (
+        DecryptionError,
         MessageQueueService,
         MessageQueueServiceError,
         SerializationError,
-        DecryptionError,
     )
-    from arbiter.config import ArbiterConfig as Settings
-    from arbiter.bug_manager import AuditLogManager
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import registry, PlugInKind
-    from opentelemetry import trace, metrics
+    from arbiter_plugin_registry import PlugInKind, registry
+    from opentelemetry import metrics, trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.propagate import get_global_textmap
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.propagate import get_global_textmap
 
     SFE_CORE_AVAILABLE = True
 except ImportError as e:
@@ -124,7 +125,9 @@ if not SFE_CORE_AVAILABLE:
 
         def assert_called_once(self):
             if self.call_count != 1:
-                raise AssertionError(f"{self.name} was called {self.call_count} times, expected 1")
+                raise AssertionError(
+                    f"{self.name} was called {self.call_count} times, expected 1"
+                )
 
         def assert_called(self):
             if self.call_count == 0:
@@ -140,7 +143,9 @@ if not SFE_CORE_AVAILABLE:
             self.disconnect = MockCallTracker("MQ disconnect")
             self.subscribe = MockCallTracker("MQ subscribe")
             self._send_to_dlq = MockCallTracker("MQ send_to_dlq")
-            self.healthcheck = MockCallTracker("MQ healthcheck", return_value={"status": "healthy"})
+            self.healthcheck = MockCallTracker(
+                "MQ healthcheck", return_value={"status": "healthy"}
+            )
 
     MessageQueueService = MockService
 
@@ -171,7 +176,9 @@ if not SFE_CORE_AVAILABLE:
 # --- Logging Setup ---
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -229,7 +236,10 @@ if SFE_CORE_AVAILABLE:
 # --- Prometheus Metrics ---
 def _get_metric(mt, name, doc, labels=(), buckets=None):
     """Safely create or retrieve a Prometheus metric."""
-    if hasattr(REGISTRY, "_names_to_collectors") and name in REGISTRY._names_to_collectors:
+    if (
+        hasattr(REGISTRY, "_names_to_collectors")
+        and name in REGISTRY._names_to_collectors
+    ):
         return REGISTRY._names_to_collectors[name]
     if mt == Histogram and buckets:
         return mt(name, doc, labelnames=labels, buckets=buckets)
@@ -355,7 +365,9 @@ async def send_to_external_notifier(event_type: str, data: Dict[str, Any]) -> bo
     Returns:
         bool: True if at least one handler successfully delivered the message, False otherwise.
     """
-    url_hash = hashlib.sha256(str(data.get("webhook_url", "generic")).encode()).hexdigest()[:8]
+    url_hash = hashlib.sha256(
+        str(data.get("webhook_url", "generic")).encode()
+    ).hexdigest()[:8]
     correlation_id = data.get("correlation_id", str(uuid.uuid4()))
     outgoing_data = data.copy()
     outgoing_data["correlation_id"] = correlation_id
@@ -370,17 +382,19 @@ async def send_to_external_notifier(event_type: str, data: Dict[str, Any]) -> bo
             CONSUMER_DELIVERY_ATTEMPTS_TOTAL.labels(event_type, url_hash).inc()
             try:
                 # Check for a specific 'audit_hook' async method
-                if hasattr(handler_instance, "audit_hook") and asyncio.iscoroutinefunction(
-                    handler_instance.audit_hook
-                ):
+                if hasattr(
+                    handler_instance, "audit_hook"
+                ) and asyncio.iscoroutinefunction(handler_instance.audit_hook):
                     await handler_instance.audit_hook(event_type, outgoing_data)
                 # Check for a partial function wrapped with a handler
-                elif isinstance(handler_instance, partial) and asyncio.iscoroutinefunction(
-                    handler_instance.func
-                ):
+                elif isinstance(
+                    handler_instance, partial
+                ) and asyncio.iscoroutinefunction(handler_instance.func):
                     await handler_instance(event_type, outgoing_data)
                 else:
-                    logger.warning(f"Handler '{handler_name}' has an unsupported interface.")
+                    logger.warning(
+                        f"Handler '{handler_name}' has an unsupported interface."
+                    )
                     continue
 
                 delivered_count += 1
@@ -389,7 +403,9 @@ async def send_to_external_notifier(event_type: str, data: Dict[str, Any]) -> bo
                     f"Delivered {event_type} via {handler_name} [correlation_id={correlation_id}]"
                 )
             except Exception as e:
-                CONSUMER_DELIVERY_FAILURE_TOTAL.labels(event_type, url_hash, type(e).__name__).inc()
+                CONSUMER_DELIVERY_FAILURE_TOTAL.labels(
+                    event_type, url_hash, type(e).__name__
+                ).inc()
                 CONSUMER_ERRORS_TOTAL.labels(
                     event_type=event_type, error_type="external_delivery"
                 ).inc()
@@ -403,7 +419,9 @@ async def send_to_external_notifier(event_type: str, data: Dict[str, Any]) -> bo
 # --- Poison Detection ---
 # Use settings instance for attribute access
 _settings_for_attrs = Settings() if not SFE_CORE_AVAILABLE else Settings
-POISON_MESSAGE_THRESHOLD = getattr(_settings_for_attrs, "MQ_POISON_MESSAGE_THRESHOLD", 5)
+POISON_MESSAGE_THRESHOLD = getattr(
+    _settings_for_attrs, "MQ_POISON_MESSAGE_THRESHOLD", 5
+)
 POISON_MESSAGE_KEY_PREFIX = "poison_msg:"
 
 
@@ -439,14 +457,18 @@ async def process_event(
                 current_retries = int(val)
         except Exception as e:
             logger.error(f"Failed to check poison retry count for '{poison_key}': {e}")
-            CONSUMER_ERRORS_TOTAL.labels(event_type=event_type, error_type="redis_check").inc()
+            CONSUMER_ERRORS_TOTAL.labels(
+                event_type=event_type, error_type="redis_check"
+            ).inc()
 
     if current_retries >= POISON_MESSAGE_THRESHOLD:
         logger.critical(
             f"Poison message for {event_type} [{correlation_id}] exceeded retries; moving to DLQ."
         )
         CONSUMER_POISON_MESSAGES_TOTAL.labels(event_type).inc()
-        CONSUMER_ERRORS_TOTAL.labels(event_type=event_type, error_type="poison_message").inc()
+        CONSUMER_ERRORS_TOTAL.labels(
+            event_type=event_type, error_type="poison_message"
+        ).inc()
         await audit_logger.audit(
             "poison_message_quarantined",
             {
@@ -474,9 +496,15 @@ async def process_event(
                 # Set a TTL for the poison key
                 await mq_service.redis_client.expire(poison_key, 86400)  # 24 hours
             await mq_service._send_to_dlq(event_type, data, "External delivery failed")
-            CONSUMER_MESSAGES_PROCESSED_TOTAL.labels(event_type, "failed_delivery").inc()
-            CONSUMER_ERRORS_TOTAL.labels(event_type=event_type, error_type="delivery_failed").inc()
-            logger.critical(f"{event_type} [{correlation_id}] to DLQ after failed delivery.")
+            CONSUMER_MESSAGES_PROCESSED_TOTAL.labels(
+                event_type, "failed_delivery"
+            ).inc()
+            CONSUMER_ERRORS_TOTAL.labels(
+                event_type=event_type, error_type="delivery_failed"
+            ).inc()
+            logger.critical(
+                f"{event_type} [{correlation_id}] to DLQ after failed delivery."
+            )
             await audit_logger.audit(
                 "message_delivery_failed",
                 {
@@ -489,7 +517,9 @@ async def process_event(
     except Exception as e:
         # Catch-all for unexpected errors during processing, marking as poison.
         CONSUMER_POISON_MESSAGES_TOTAL.labels(event_type).inc()
-        CONSUMER_ERRORS_TOTAL.labels(event_type=event_type, error_type="processing_exception").inc()
+        CONSUMER_ERRORS_TOTAL.labels(
+            event_type=event_type, error_type="processing_exception"
+        ).inc()
         await audit_logger.audit(
             "poison_message_unhandled_error",
             {
@@ -502,7 +532,9 @@ async def process_event(
         )
         await mq_service._send_to_dlq(event_type, data, f"Poison message: {e}")
     finally:
-        url_hash = hashlib.sha256(str(data.get("webhook_url", "generic")).encode()).hexdigest()[:8]
+        url_hash = hashlib.sha256(
+            str(data.get("webhook_url", "generic")).encode()
+        ).hexdigest()[:8]
         CONSUMER_DELIVERY_LATENCY_SECONDS.labels(event_type, url_hash).observe(
             time.monotonic() - start_time
         )
@@ -551,7 +583,9 @@ async def health_check_handler(request: web.Request) -> web.Response:
 
         handler_healths = {}
         for name, handler in _EXTERNAL_NOTIFIER_HANDLERS.items():
-            if hasattr(handler, "health") and asyncio.iscoroutinefunction(handler.health):
+            if hasattr(handler, "health") and asyncio.iscoroutinefunction(
+                handler.health
+            ):
                 try:
                     handler_healths[name] = await handler.health()
                 except Exception as e:

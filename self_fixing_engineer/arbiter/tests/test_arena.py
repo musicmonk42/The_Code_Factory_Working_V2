@@ -2,10 +2,11 @@
 Simple test for ArbiterArena that avoids Pydantic validation issues.
 """
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-import tempfile
 import shutil
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -106,7 +107,9 @@ class TestArbiterArena:
                     arena = ArbiterArena(settings=mock_config, db_engine=mock_db_engine)
 
                     # Mock the start and stop methods
-                    with patch.object(arena, "start_arena_services", new_callable=AsyncMock):
+                    with patch.object(
+                        arena, "start_arena_services", new_callable=AsyncMock
+                    ):
                         with patch.object(arena, "stop_all", new_callable=AsyncMock):
                             async with arena as a:
                                 assert a == arena

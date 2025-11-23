@@ -21,17 +21,17 @@
 
 from __future__ import annotations
 
-import os
-import ssl
 import asyncio
 import json
 import logging
+import os
+import random
+import re
+import ssl
 import time
 import uuid
-import re
-import random
-from typing import Dict, Any, Optional, List, Union, Callable, Literal
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 
 import aiohttp
@@ -40,9 +40,9 @@ import aiohttp
 try:
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
     )
 
     TENACITY_AVAILABLE = True
@@ -67,7 +67,13 @@ except Exception:
 
 # Pydantic v2 with v1 compatibility
 try:
-    from pydantic import BaseModel, Field, ValidationError, model_validator, root_validator  # type: ignore
+    from pydantic import (  # type: ignore
+        BaseModel,
+        Field,
+        ValidationError,
+        model_validator,
+        root_validator,
+    )
 
     PYDANTIC_V2 = True
 except Exception:
@@ -82,7 +88,9 @@ if not logger.handlers:
     import sys
 
     h = logging.StreamHandler(sys.stdout)
-    h.setFormatter(logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"))
+    h.setFormatter(
+        logging.Formatter("%(asctime)s - [%(levelname)s] - %(name)s - %(message)s")
+    )
     logger.addHandler(h)
 
 if not TENACITY_AVAILABLE:
@@ -93,11 +101,13 @@ if not TENACITY_AVAILABLE:
 # Prometheus (optional) safe creators
 PROMETHEUS_AVAILABLE = False
 try:
-    from prometheus_client import Counter, Histogram, Gauge
+    from prometheus_client import Counter, Gauge, Histogram
 
     PROMETHEUS_AVAILABLE = True
 except Exception as _e:
-    logger.warning(f"Prometheus client not available; Gremlin chaos metrics disabled: {_e}")
+    logger.warning(
+        f"Prometheus client not available; Gremlin chaos metrics disabled: {_e}"
+    )
 
 _METRICS: Dict[str, Any] = {}
 
@@ -140,7 +150,9 @@ def _safe_counter(name: str, doc: str, labelnames: tuple = ()):
         _METRICS[name] = m
         return m
     except ValueError:
-        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
+        logger.warning(
+            f"Metric '{name}' already registered. Using no-op for this instance."
+        )
         m = _noop_counter()
         _METRICS[name] = m
         return m
@@ -156,7 +168,9 @@ def _safe_hist(name: str, doc: str, labelnames: tuple = (), buckets=None):
         _METRICS[name] = m
         return m
     except ValueError:
-        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
+        logger.warning(
+            f"Metric '{name}' already registered. Using no-op for this instance."
+        )
         m = _noop_hist()
         _METRICS[name] = m
         return m
@@ -172,7 +186,9 @@ def _safe_gauge(name: str, doc: str, labelnames: tuple = ()):
         _METRICS[name] = m
         return m
     except ValueError:
-        logger.warning(f"Metric '{name}' already registered. Using no-op for this instance.")
+        logger.warning(
+            f"Metric '{name}' already registered. Using no-op for this instance."
+        )
         m = _noop_counter()
         _METRICS[name] = m
         return m
@@ -253,41 +269,61 @@ PLUGIN_MANIFEST = {
 }
 
 # Configuration (env)
-GREMLIN_BASE_URL = os.getenv("GREMLIN_API_BASE_URL", "https://api.gremlin.com").rstrip("/")
+GREMLIN_BASE_URL = os.getenv("GREMLIN_API_BASE_URL", "https://api.gremlin.com").rstrip(
+    "/"
+)
 GREMLIN_TEAM_ID = os.getenv("GREMLIN_TEAM_ID", "")
 GREMLIN_API_KEY = os.getenv("GREMLIN_API_KEY", "")
 GREMLIN_TIMEOUT_SECONDS = int(os.getenv("GREMLIN_API_TIMEOUT_SECONDS", "30"))
 GREMLIN_RETRY_ATTEMPTS = int(os.getenv("GREMLIN_API_RETRY_ATTEMPTS", "3"))
-GREMLIN_RETRY_BACKOFF_FACTOR = float(os.getenv("GREMLIN_API_RETRY_BACKOFF_FACTOR", "2.0"))
+GREMLIN_RETRY_BACKOFF_FACTOR = float(
+    os.getenv("GREMLIN_API_RETRY_BACKOFF_FACTOR", "2.0")
+)
 GREMLIN_VERIFY_SSL = os.getenv("GREMLIN_VERIFY_SSL", "true").strip().lower() in (
     "1",
     "true",
     "yes",
     "on",
 )
-GREMLIN_CA_BUNDLE = os.getenv("GREMLIN_CA_BUNDLE", "").strip()  # optional custom CA bundle path
-GREMLIN_ALLOW_ALL_TARGETS = os.getenv("GREMLIN_ALLOW_ALL_TARGETS", "false").strip().lower() in (
+GREMLIN_CA_BUNDLE = os.getenv(
+    "GREMLIN_CA_BUNDLE", ""
+).strip()  # optional custom CA bundle path
+GREMLIN_ALLOW_ALL_TARGETS = os.getenv(
+    "GREMLIN_ALLOW_ALL_TARGETS", "false"
+).strip().lower() in (
     "1",
     "true",
     "yes",
     "on",
 )
 GREMLIN_MAX_CONCURRENCY = max(1, int(os.getenv("GREMLIN_MAX_CONCURRENCY", "5")))
-GREMLIN_POLL_INTERVAL_SECONDS = max(1, int(os.getenv("GREMLIN_POLL_INTERVAL_SECONDS", "10")))
+GREMLIN_POLL_INTERVAL_SECONDS = max(
+    1, int(os.getenv("GREMLIN_POLL_INTERVAL_SECONDS", "10"))
+)
 GREMLIN_POLL_JITTER_SECONDS = max(0, int(os.getenv("GREMLIN_POLL_JITTER_SECONDS", "5")))
 # Optional base URL allowlist (comma-separated hostnames, e.g., "api.gremlin.com,gremlin-staging.example.com")
 GREMLIN_ALLOWED_BASE_URLS = {
-    h.strip().lower() for h in os.getenv("GREMLIN_ALLOWED_BASE_URLS", "").split(",") if h.strip()
+    h.strip().lower()
+    for h in os.getenv("GREMLIN_ALLOWED_BASE_URLS", "").split(",")
+    if h.strip()
 }
 # Optional Kubernetes allowlist (comma-separated namespaces)
 GREMLIN_K8S_ALLOWED_NAMESPACES = {
-    ns.strip() for ns in os.getenv("GREMLIN_K8S_ALLOWED_NAMESPACES", "").split(",") if ns.strip()
+    ns.strip()
+    for ns in os.getenv("GREMLIN_K8S_ALLOWED_NAMESPACES", "").split(",")
+    if ns.strip()
 }
 # API contract overrides (paths, headers, auth scheme)
 GREMLIN_API_CREATE_PATH = os.getenv("GREMLIN_API_CREATE_PATH", "/v1/attacks")
-GREMLIN_API_STATUS_PATH_FORMAT = os.getenv("GREMLIN_API_STATUS_PATH_FORMAT", "/v1/attacks/{id}")
-GREMLIN_API_HALT_PATH_FORMAT = os.getenv("GREMLIN_API_HALT_PATH_FORMAT", "/v1/attacks/{id}/halt")
-GREMLIN_API_QUICK_CHECK_PATH = os.getenv("GREMLIN_API_QUICK_CHECK_PATH", "/v1/attacks?limit=1")
+GREMLIN_API_STATUS_PATH_FORMAT = os.getenv(
+    "GREMLIN_API_STATUS_PATH_FORMAT", "/v1/attacks/{id}"
+)
+GREMLIN_API_HALT_PATH_FORMAT = os.getenv(
+    "GREMLIN_API_HALT_PATH_FORMAT", "/v1/attacks/{id}/halt"
+)
+GREMLIN_API_QUICK_CHECK_PATH = os.getenv(
+    "GREMLIN_API_QUICK_CHECK_PATH", "/v1/attacks?limit=1"
+)
 GREMLIN_AUTH_HEADER_NAME = os.getenv("GREMLIN_AUTH_HEADER_NAME", "Authorization")
 GREMLIN_TEAM_HEADER_NAME = os.getenv("GREMLIN_TEAM_HEADER_NAME", "X-Gremlin-Team-ID")
 GREMLIN_AUTH_SCHEME = os.getenv("GREMLIN_AUTH_SCHEME", "Key").strip()
@@ -317,7 +353,9 @@ except Exception:
 
     class _MockAudit:
         async def log(self, event_type: str, details: Dict[str, Any], **kwargs: Any):
-            logger.info(f"[AUDIT] {event_type}: {_scrub(json.dumps(details, ensure_ascii=False))}")
+            logger.info(
+                f"[AUDIT] {event_type}: {_scrub(json.dumps(details, ensure_ascii=False))}"
+            )
 
     _audit_logger = _MockAudit()
 
@@ -379,7 +417,9 @@ class TargetSpec(BaseModel):
                     self.count = 1
             elif t == "All":
                 if not GREMLIN_ALLOW_ALL_TARGETS:
-                    raise ValueError("Target type 'All' requires GREMLIN_ALLOW_ALL_TARGETS=true.")
+                    raise ValueError(
+                        "Target type 'All' requires GREMLIN_ALLOW_ALL_TARGETS=true."
+                    )
             return self
 
     else:
@@ -402,9 +442,13 @@ class TargetSpec(BaseModel):
                     and ns
                     and ns not in GREMLIN_K8S_ALLOWED_NAMESPACES
                 ):
-                    raise ValueError(f"Kubernetes namespace '{ns}' not allowed by policy.")
+                    raise ValueError(
+                        f"Kubernetes namespace '{ns}' not allowed by policy."
+                    )
                 if not (
-                    values.get("namespace") or values.get("labels") or values.get("name_regex")
+                    values.get("namespace")
+                    or values.get("labels")
+                    or values.get("name_regex")
                 ):
                     raise ValueError(
                         "Kubernetes target requires at least one of: namespace, labels, name_regex."
@@ -415,7 +459,9 @@ class TargetSpec(BaseModel):
                     values["count"] = 1
             elif t == "All":
                 if not GREMLIN_ALLOW_ALL_TARGETS:
-                    raise ValueError("Target type 'All' requires GREMLIN_ALLOW_ALL_TARGETS=true.")
+                    raise ValueError(
+                        "Target type 'All' requires GREMLIN_ALLOW_ALL_TARGETS=true."
+                    )
             return values
 
 
@@ -458,7 +504,9 @@ class AttackSpec(BaseModel):
                     raise ValueError("network_latency protocol must be 'tcp' or 'udp'.")
             if et == "disk_io":
                 if self.read_bytes_per_sec is None and self.intensity is None:
-                    raise ValueError("disk_io requires read_bytes_per_sec or intensity (MB/s).")
+                    raise ValueError(
+                        "disk_io requires read_bytes_per_sec or intensity (MB/s)."
+                    )
             if et == "cpu_hog":
                 if self.intensity is None:
                     self.intensity = 100.0
@@ -473,7 +521,10 @@ class AttackSpec(BaseModel):
             if et == "process_kill" and not values.get("process_name"):
                 raise ValueError("process_kill requires 'process_name'.")
             if et == "network_latency":
-                if values.get("delay_milliseconds") is None and values.get("intensity") is None:
+                if (
+                    values.get("delay_milliseconds") is None
+                    and values.get("intensity") is None
+                ):
                     raise ValueError(
                         "network_latency requires delay_milliseconds or intensity (ms)."
                     )
@@ -481,8 +532,13 @@ class AttackSpec(BaseModel):
                 if proto and str(proto).lower() not in ("tcp", "udp"):
                     raise ValueError("network_latency protocol must be 'tcp' or 'udp'.")
             if et == "disk_io":
-                if values.get("read_bytes_per_sec") is None and values.get("intensity") is None:
-                    raise ValueError("disk_io requires read_bytes_per_sec or intensity (MB/s).")
+                if (
+                    values.get("read_bytes_per_sec") is None
+                    and values.get("intensity") is None
+                ):
+                    raise ValueError(
+                        "disk_io requires read_bytes_per_sec or intensity (MB/s)."
+                    )
             if et == "cpu_hog":
                 intensity = values.get("intensity")
                 if intensity is None:
@@ -503,7 +559,9 @@ class _AuthHeaders:
 
 
 class GremlinApiError(Exception):
-    def __init__(self, message: str, status: Optional[int] = None, body: Optional[Any] = None):
+    def __init__(
+        self, message: str, status: Optional[int] = None, body: Optional[Any] = None
+    ):
         super().__init__(message)
         self.status = status
         self.body = body
@@ -525,7 +583,11 @@ class GremlinApiClient:
         verify_ssl: bool = True,
     ):
         self.base_url = base_url.rstrip("/")
-        auth_value = f"{GREMLIN_AUTH_SCHEME} {api_key}".strip() if GREMLIN_AUTH_SCHEME else api_key
+        auth_value = (
+            f"{GREMLIN_AUTH_SCHEME} {api_key}".strip()
+            if GREMLIN_AUTH_SCHEME
+            else api_key
+        )
         self._auth = _AuthHeaders(authorization=auth_value, team_id=team_id)
         # More granular timeouts
         connect_timeout = min(10, max(1, timeout // 2))
@@ -542,7 +604,9 @@ class GremlinApiClient:
         if self._verify_ssl and GREMLIN_CA_BUNDLE:
             try:
                 ctx = ssl.create_default_context(
-                    cafile=(GREMLIN_CA_BUNDLE if os.path.exists(GREMLIN_CA_BUNDLE) else None)
+                    cafile=(
+                        GREMLIN_CA_BUNDLE if os.path.exists(GREMLIN_CA_BUNDLE) else None
+                    )
                 )
                 if not os.path.exists(GREMLIN_CA_BUNDLE):
                     logger.warning(
@@ -566,7 +630,9 @@ class GremlinApiClient:
                     ssl=(self._ssl_context if self._verify_ssl else False),
                     limit=GREMLIN_MAX_CONCURRENCY,
                 )
-                self._session = aiohttp.ClientSession(timeout=self._timeout, connector=connector)
+                self._session = aiohttp.ClientSession(
+                    timeout=self._timeout, connector=connector
+                )
             return self._session
 
     def _headers(self) -> Dict[str, str]:
@@ -595,7 +661,9 @@ class GremlinApiClient:
                 attack.delay_milliseconds or int(attack.intensity or 100)
             )
             if attack.packet_loss_percent is not None:
-                payload["args"]["packet_loss_percent"] = float(attack.packet_loss_percent)
+                payload["args"]["packet_loss_percent"] = float(
+                    attack.packet_loss_percent
+                )
             if attack.protocol:
                 payload["args"]["protocol"] = attack.protocol.lower()
             if attack.destination_hosts:
@@ -643,7 +711,9 @@ class GremlinApiClient:
 
         return retry(
             stop=stop_after_attempt(GREMLIN_RETRY_ATTEMPTS),
-            wait=wait_exponential(multiplier=GREMLIN_RETRY_BACKOFF_FACTOR, min=1, max=10),
+            wait=wait_exponential(
+                multiplier=GREMLIN_RETRY_BACKOFF_FACTOR, min=1, max=10
+            ),
             retry=retry_if_exception_type(
                 (aiohttp.ClientError, asyncio.TimeoutError, GremlinApiRetryableError)
             ),
@@ -695,7 +765,9 @@ class GremlinApiClient:
                         body=_scrub(text),
                     )
             except (aiohttp.ClientError, asyncio.TimeoutError):
-                GREMLIN_API_LATENCY_SECONDS.labels(operation=op).observe(time.monotonic() - start)
+                GREMLIN_API_LATENCY_SECONDS.labels(operation=op).observe(
+                    time.monotonic() - start
+                )
                 raise
 
     # API operations (with retries)
@@ -766,7 +838,9 @@ async def _get_client() -> GremlinApiClient:
     async with _client_lock:
         if _client is None:
             if not GREMLIN_BASE_URL.lower().startswith("https://"):
-                logger.warning("GREMLIN_API_BASE_URL is not HTTPS; refusing to operate.")
+                logger.warning(
+                    "GREMLIN_API_BASE_URL is not HTTPS; refusing to operate."
+                )
                 raise GremlinApiError("Insecure GREMLIN_API_BASE_URL (HTTPS required).")
             base_host = _hostname_from_url(GREMLIN_BASE_URL).lower()
             if GREMLIN_ALLOWED_BASE_URLS and base_host not in GREMLIN_ALLOWED_BASE_URLS:
@@ -795,7 +869,9 @@ async def plugin_health() -> Dict[str, Any]:
     base_host = _hostname_from_url(GREMLIN_BASE_URL).lower()
     if GREMLIN_ALLOWED_BASE_URLS and base_host not in GREMLIN_ALLOWED_BASE_URLS:
         status = "error"
-        details.append(f"Base URL host '{base_host}' not in GREMLIN_ALLOWED_BASE_URLS policy.")
+        details.append(
+            f"Base URL host '{base_host}' not in GREMLIN_ALLOWED_BASE_URLS policy."
+        )
         return {"status": status, "details": details}
     try:
         c = await _get_client()
@@ -807,7 +883,9 @@ async def plugin_health() -> Dict[str, Any]:
             details.append("Gremlin API quick check failed (see debug logs).")
     except GremlinApiError as e:
         status = "error"
-        details.append(f"Gremlin API error: status={e.status}, message={_scrub(str(e))}")
+        details.append(
+            f"Gremlin API error: status={e.status}, message={_scrub(str(e))}"
+        )
     except Exception as e:
         status = "error"
         details.append(f"Initialization error: {e}")
@@ -877,7 +955,9 @@ async def run_chaos_experiment(
             pass
         target = TargetSpec(**target_payload)
     except (ValidationError, ValueError) as e:
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="validation_error").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="validation_error"
+        ).inc()
         msg = f"[cid={correlation_id}] Target validation failed: {e}"
         logger.error(_scrub(msg))
         return {
@@ -910,7 +990,9 @@ async def run_chaos_experiment(
             write_bytes_per_sec=kwargs.get("write_bytes_per_sec"),
         )
     except (ValidationError, ValueError) as e:
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="validation_error").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="validation_error"
+        ).inc()
         msg = f"[cid={correlation_id}] Attack validation failed: {e}"
         logger.error(_scrub(msg))
         return {
@@ -932,7 +1014,9 @@ async def run_chaos_experiment(
 
     try:
         client = await _get_client()
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="attempt").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="attempt"
+        ).inc()
         GREMLIN_INFLIGHT_ATTACKS.inc()
         inflight_inc = True
 
@@ -950,7 +1034,9 @@ async def run_chaos_experiment(
         )
 
         attack_id = await client.create_attack(attack, target)
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="initiated").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="initiated"
+        ).inc()
         await _audit_event(
             "chaos_experiment_initiated",
             {
@@ -970,9 +1056,12 @@ async def run_chaos_experiment(
         state = "PENDING"
         status_reason = None
 
-        while state not in terminal_states and (time.monotonic() - poll_start) < max_wait:
+        while (
+            state not in terminal_states and (time.monotonic() - poll_start) < max_wait
+        ):
             await asyncio.sleep(
-                GREMLIN_POLL_INTERVAL_SECONDS + random.uniform(0, GREMLIN_POLL_JITTER_SECONDS)
+                GREMLIN_POLL_INTERVAL_SECONDS
+                + random.uniform(0, GREMLIN_POLL_JITTER_SECONDS)
             )
             status = await client.get_attack_status(attack_id)
             state = str(status.get("state") or status.get("status") or "UNKNOWN")
@@ -1002,7 +1091,9 @@ async def run_chaos_experiment(
             try:
                 await client.halt_attack(attack_id)
                 GREMLIN_HALTS_TOTAL.labels(status="success").inc()
-                logger.info(f"[cid={correlation_id}] Halted timed-out attack {attack_id}")
+                logger.info(
+                    f"[cid={correlation_id}] Halted timed-out attack {attack_id}"
+                )
             except Exception as e:
                 GREMLIN_HALTS_TOTAL.labels(status="failure").inc()
                 logger.warning(
@@ -1011,8 +1102,12 @@ async def run_chaos_experiment(
 
         duration = time.monotonic() - started
         if final_state == "SUCCEEDED":
-            CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="succeeded").inc()
-            CHAOS_ATTACK_DURATION_SECONDS.labels(experiment_type=experiment_type).observe(duration)
+            CHAOS_ATTACKS_TOTAL.labels(
+                experiment_type=experiment_type, status="succeeded"
+            ).inc()
+            CHAOS_ATTACK_DURATION_SECONDS.labels(
+                experiment_type=experiment_type
+            ).observe(duration)
             await _audit_event(
                 "chaos_experiment_succeeded",
                 {
@@ -1035,7 +1130,9 @@ async def run_chaos_experiment(
                 "correlation_id": correlation_id,
             }
         else:
-            CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="failed").inc()
+            CHAOS_ATTACKS_TOTAL.labels(
+                experiment_type=experiment_type, status="failed"
+            ).inc()
             CHAOS_ATTACK_ERRORS_TOTAL.labels(
                 experiment_type=experiment_type, error_type=final_state
             ).inc()
@@ -1066,7 +1163,9 @@ async def run_chaos_experiment(
     except asyncio.CancelledError:
         raise
     except GremlinApiError as e:
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="api_error").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="api_error"
+        ).inc()
         CHAOS_ATTACK_ERRORS_TOTAL.labels(
             experiment_type=experiment_type, error_type="api_error"
         ).inc()
@@ -1094,7 +1193,9 @@ async def run_chaos_experiment(
             "correlation_id": correlation_id,
         }
     except Exception as e:
-        CHAOS_ATTACKS_TOTAL.labels(experiment_type=experiment_type, status="unexpected_error").inc()
+        CHAOS_ATTACKS_TOTAL.labels(
+            experiment_type=experiment_type, status="unexpected_error"
+        ).inc()
         CHAOS_ATTACK_ERRORS_TOTAL.labels(
             experiment_type=experiment_type, error_type="unexpected_exception"
         ).inc()

@@ -1,15 +1,16 @@
-import os
-import json
-import io
 import copy
-import unittest
-import tempfile
-from typing import Dict, Any
-from types import MappingProxyType
+import io
+import json
 import logging
 import logging.config
+import os
 import sys
-from jsonschema import SchemaError, Draft7Validator
+import tempfile
+import unittest
+from types import MappingProxyType
+from typing import Any, Dict
+
+from jsonschema import Draft7Validator, SchemaError
 
 # --- ATCO Artifacts Directories (Relative to PROJECT_ROOT) ---
 # Hardcoded paths have been moved into DEFAULT_CONFIG for externalization
@@ -119,11 +120,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
 }
 
-QUARANTINE_DIR = DEFAULT_CONFIG.get("quarantine_dir", "atco_artifacts/quarantined_tests")
-GENERATED_OUTPUT_DIR = DEFAULT_CONFIG.get("generated_output_dir", "atco_artifacts/generated")
-SARIF_EXPORT_DIR = DEFAULT_CONFIG.get("sarif_export_dir", "atco_artifacts/sarif_reports")
+QUARANTINE_DIR = DEFAULT_CONFIG.get(
+    "quarantine_dir", "atco_artifacts/quarantined_tests"
+)
+GENERATED_OUTPUT_DIR = DEFAULT_CONFIG.get(
+    "generated_output_dir", "atco_artifacts/generated"
+)
+SARIF_EXPORT_DIR = DEFAULT_CONFIG.get(
+    "sarif_export_dir", "atco_artifacts/sarif_reports"
+)
 AUDIT_LOG_FILE = DEFAULT_CONFIG.get("audit_log_file", "atco_artifacts/atco_audit.log")
-COVERAGE_REPORTS_DIR = DEFAULT_CONFIG.get("coverage_reports_dir", "atco_artifacts/coverage_reports")
+COVERAGE_REPORTS_DIR = DEFAULT_CONFIG.get(
+    "coverage_reports_dir", "atco_artifacts/coverage_reports"
+)
 HTML_REPORTS_DIR = DEFAULT_CONFIG.get("html_reports_dir", "atco_artifacts/html_reports")
 VENV_TEMP_DIR = DEFAULT_CONFIG.get("venv_temp_dir", "atco_artifacts/venv_temp")
 
@@ -325,7 +334,9 @@ def sanitize_path(base: str, rel: str) -> str:
     abs_root = os.path.realpath(os.path.abspath(base))
     abs_path = os.path.realpath(os.path.abspath(os.path.join(abs_root, rel)))
     if not abs_path.startswith(abs_root + os.sep) and abs_path != abs_root:
-        raise ValueError(f"Path '{rel}' attempts to traverse outside of project root '{base}'.")
+        raise ValueError(
+            f"Path '{rel}' attempts to traverse outside of project root '{base}'."
+        )
     return abs_path
 
 
@@ -395,7 +406,9 @@ def _deep_merge(dst: Dict[str, Any], src: Dict[str, Any], parent_key: str = "") 
     for k, v_src in src.items():
         v_dst = dst.get(k)
         if isinstance(v_dst, dict) and isinstance(v_src, dict):
-            _deep_merge(v_dst, v_src, parent_key=f"{parent_key}.{k}" if parent_key else k)
+            _deep_merge(
+                v_dst, v_src, parent_key=f"{parent_key}.{k}" if parent_key else k
+            )
         elif isinstance(v_dst, dict) and not isinstance(v_src, dict):
             logging.warning(
                 f"Configuration merge conflict: Cannot merge non-dictionary value '{v_src}' "
@@ -453,7 +466,9 @@ def load_config(project_root: str, config_file: str) -> MappingProxyType:
     if user_config_was_loaded:
         try:
             validator = Draft7Validator(CONFIG_SCHEMA)
-            errors = sorted(validator.iter_errors(merged_config), key=lambda e: str(e.path))
+            errors = sorted(
+                validator.iter_errors(merged_config), key=lambda e: str(e.path)
+            )
 
             if errors:
                 logging.warning(
@@ -466,13 +481,17 @@ def load_config(project_root: str, config_file: str) -> MappingProxyType:
                     if err.validator == "type":
                         expected = err.schema.get("type")
                         got = type(err.instance).__name__
-                        logging.warning(f"'{field}' should be of type '{expected}' (got {got}).")
+                        logging.warning(
+                            f"'{field}' should be of type '{expected}' (got {got})."
+                        )
                     elif err.validator == "additionalProperties":
                         # Try to extract unexpected keys
                         unexpected = None
                         if isinstance(err.instance, dict):
                             allowed = set((err.schema.get("properties") or {}).keys())
-                            unexpected = sorted(k for k in err.instance.keys() if k not in allowed)
+                            unexpected = sorted(
+                                k for k in err.instance.keys() if k not in allowed
+                            )
                         if unexpected:
                             logging.warning(
                                 f"Unexpected config keys at '{'.'.join(map(str, err.path)) or '<root>'}': {unexpected}"
@@ -496,7 +515,9 @@ def load_config(project_root: str, config_file: str) -> MappingProxyType:
                 schema_top_keys = set(CONFIG_SCHEMA["properties"].keys())
                 for k in list(merged_config.keys()):
                     if k not in schema_top_keys:
-                        logging.warning(f"Removing unknown top-level key '{k}' from configuration.")
+                        logging.warning(
+                            f"Removing unknown top-level key '{k}' from configuration."
+                        )
                         del merged_config[k]
 
                 for key in keys_to_revert:
@@ -506,7 +527,9 @@ def load_config(project_root: str, config_file: str) -> MappingProxyType:
                         del merged_config[key]
 
         except SchemaError as e:
-            raise RuntimeError(f"Internal error: Configuration schema is invalid: {e}") from e
+            raise RuntimeError(
+                f"Internal error: Configuration schema is invalid: {e}"
+            ) from e
 
     # Anchor audit log path to project root
     LOGGING_CONFIG["handlers"]["audit_file"]["filename"] = os.path.join(
@@ -516,7 +539,9 @@ def load_config(project_root: str, config_file: str) -> MappingProxyType:
 
     # (Optional) also anchor the regular file handler to project root
     if "file" in LOGGING_CONFIG["handlers"]:
-        LOGGING_CONFIG["handlers"]["file"]["filename"] = os.path.join(PROJECT_ROOT, "atco.log")
+        LOGGING_CONFIG["handlers"]["file"]["filename"] = os.path.join(
+            PROJECT_ROOT, "atco.log"
+        )
 
     CONFIG.clear()
     CONFIG.update(merged_config)
@@ -596,11 +621,16 @@ class TestConfigLoading(unittest.TestCase):
             cfg = load_config(self.test_dir, self.config_file)
             self.assertTrue(any("validation error(s)" in log for log in cm.output))
             self.assertTrue(
-                any("Unexpected config keys at '<root>': ['new_key']" in log for log in cm.output)
+                any(
+                    "Unexpected config keys at '<root>': ['new_key']" in log
+                    for log in cm.output
+                )
             )
 
         self.assertNotIn("new_key", cfg)
-        self.assertEqual(cfg["max_parallel_generation"], DEFAULT_CONFIG["max_parallel_generation"])
+        self.assertEqual(
+            cfg["max_parallel_generation"], DEFAULT_CONFIG["max_parallel_generation"]
+        )
 
     def test_immutability(self):
         self._write_config({})
@@ -616,8 +646,12 @@ class TestConfigLoading(unittest.TestCase):
         with self.assertLogs(level="WARNING") as cm:
             cfg = load_config(self.test_dir, self.config_file)
             # The merge is skipped, so the default value is kept
-            self.assertEqual(cfg["prioritization_rules"]["language_boosts"]["python"], 5)
-            self.assertTrue(any("Configuration merge conflict" in log for log in cm.output))
+            self.assertEqual(
+                cfg["prioritization_rules"]["language_boosts"]["python"], 5
+            )
+            self.assertTrue(
+                any("Configuration merge conflict" in log for log in cm.output)
+            )
 
     def test_missing_config_file(self):
         cfg = load_config(self.test_dir, "non_existent_config.json")
@@ -645,10 +679,14 @@ class TestConfigLoading(unittest.TestCase):
         with self.assertLogs(level="WARNING") as cm:
             cfg = load_config(self.test_dir, self.config_file)
             self.assertTrue(
-                any("Top-level config must be a JSON object" in log for log in cm.output)
+                any(
+                    "Top-level config must be a JSON object" in log for log in cm.output
+                )
             )
 
-        self.assertEqual(cfg["max_parallel_generation"], DEFAULT_CONFIG["max_parallel_generation"])
+        self.assertEqual(
+            cfg["max_parallel_generation"], DEFAULT_CONFIG["max_parallel_generation"]
+        )
 
     def test_non_dict_with_additional_properties_true(self):
         # Test that validation still works for non-dict keys even if 'additionalProperties' is false
@@ -658,7 +696,10 @@ class TestConfigLoading(unittest.TestCase):
         with self.assertLogs(level="WARNING") as cm:
             cfg = load_config(self.test_dir, self.config_file)
             self.assertTrue(
-                any("'jira_integration' should be of type 'object'" in log for log in cm.output)
+                any(
+                    "'jira_integration' should be of type 'object'" in log
+                    for log in cm.output
+                )
             )
         self.assertNotEqual(cfg["jira_integration"], "not-a-dict")
         self.assertEqual(
@@ -695,12 +736,16 @@ class TestConfigLoading(unittest.TestCase):
 
     def test_deep_merge_with_invalid_subfield(self):
         # If a sub-field is invalid, ensure the entire top-level field is reverted
-        user_config = {"prioritization_rules": {"language_boosts": {"python": "not-a-number"}}}
+        user_config = {
+            "prioritization_rules": {"language_boosts": {"python": "not-a-number"}}
+        }
         self._write_config(user_config)
 
         with self.assertLogs(level="WARNING") as cm:
             cfg = load_config(self.test_dir, self.config_file)
-            self.assertTrue(any("'python' should be of type 'number'" in log for log in cm.output))
+            self.assertTrue(
+                any("'python' should be of type 'number'" in log for log in cm.output)
+            )
         self.assertEqual(
             cfg["prioritization_rules"]["language_boosts"]["python"],
             DEFAULT_CONFIG["prioritization_rules"]["language_boosts"]["python"],

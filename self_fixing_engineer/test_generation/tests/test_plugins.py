@@ -1,9 +1,10 @@
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
 from test_generation.gen_agent.gen_plugins import (
+    LANGUAGE_GENERATORS,
     PythonTestGenerator,
     generate_tests,
-    LANGUAGE_GENERATORS,
 )
 
 # Sample code with multiple functions for testing
@@ -119,7 +120,9 @@ def test_ai_fallback_is_not_called_if_ai_succeeds():
     Tests that the internal generator is not called if the AI API returns tests.
     """
     mock_ai_tests = ["ai test 1", "ai test 2"]
-    with patch("test_generation.gen_plugins._call_ai_for_tests", return_value=mock_ai_tests):
+    with patch(
+        "test_generation.gen_plugins._call_ai_for_tests", return_value=mock_ai_tests
+    ):
         with patch.object(
             LANGUAGE_GENERATORS.get("python"), "generate", new=Mock()
         ) as mock_internal_generator:

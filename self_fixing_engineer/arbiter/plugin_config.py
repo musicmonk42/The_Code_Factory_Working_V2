@@ -1,17 +1,17 @@
-import logging
 import asyncio
-from typing import Dict, Any
-from prometheus_client import Counter
+import logging
+from typing import Any, Dict
 
 # Import the centralized tracer configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import Counter
 
 # Mock/Placeholder imports for a self-contained fix
 try:
-    from arbiter_plugin_registry import registry, PlugInKind
-    from arbiter.logging_utils import PIIRedactorFilter
-    from arbiter.config import ArbiterConfig
     from arbiter import PermissionManager
+    from arbiter.config import ArbiterConfig
+    from arbiter.logging_utils import PIIRedactorFilter
+    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:
@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -169,7 +171,9 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
             ValueError: If any import path is invalid or malformed.
         """
         with tracer.start_as_current_span("validate_plugin_registry"):
-            plugins = cls._PLUGINS if hasattr(cls, "_PLUGINS") else cls.__ORIGINAL_PLUGINS
+            plugins = (
+                cls._PLUGINS if hasattr(cls, "_PLUGINS") else cls.__ORIGINAL_PLUGINS
+            )
             for key, value in plugins.items():
                 if not isinstance(key, str) or not isinstance(value, str):
                     plugin_config_errors_total.labels(operation="validate").inc()
@@ -183,7 +187,9 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
                     # Just validate that it's a dotted path with at least 2 parts
                     parts = value.split(".")
                     if len(parts) < 2:
-                        raise ValueError("Import path must have at least module.name format")
+                        raise ValueError(
+                            "Import path must have at least module.name format"
+                        )
                     # Check if it looks like a valid Python identifier path
                     for part in parts:
                         if (

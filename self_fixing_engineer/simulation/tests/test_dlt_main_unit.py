@@ -1,20 +1,21 @@
 # tests/test_dlt_main_unit.py
 
-import pytest
 import json
 import logging
-import click
 from unittest.mock import AsyncMock, patch
+
+import click
+import pytest
 from click.testing import CliRunner
+from simulation.plugins.dlt_clients.dlt_base import (
+    DLTClientConfigurationError,
+    DLTClientError,
+    _base_logger,
+)
+from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
 
 # Import the CLI and core components
 from simulation.plugins.dlt_clients.dlt_main import cli
-from simulation.plugins.dlt_clients.dlt_factory import DLTFactory
-from simulation.plugins.dlt_clients.dlt_base import (
-    DLTClientError,
-    DLTClientConfigurationError,
-    _base_logger,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -31,8 +32,12 @@ def disable_info_logging():
 @pytest.fixture
 def mock_dlt_client():
     mock = AsyncMock()
-    mock.health_check = AsyncMock(return_value={"status": True, "message": "OK", "details": {}})
-    mock.write_checkpoint = AsyncMock(return_value=("mock_tx_id", "mock_off_chain_id", 1))
+    mock.health_check = AsyncMock(
+        return_value={"status": True, "message": "OK", "details": {}}
+    )
+    mock.write_checkpoint = AsyncMock(
+        return_value=("mock_tx_id", "mock_off_chain_id", 1)
+    )
     mock.read_checkpoint = AsyncMock(
         return_value={
             "metadata": {},
@@ -50,12 +55,20 @@ def mock_dlt_client():
 # Mock factory to return the mock client
 @pytest.fixture
 def mock_factory(mocker, mock_dlt_client):
-    mocker.patch.object(DLTFactory, "get_dlt_client", new=AsyncMock(return_value=mock_dlt_client))
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
+    mocker.patch.object(
+        DLTFactory, "get_dlt_client", new=AsyncMock(return_value=mock_dlt_client)
+    )
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
     # Mock alert_operator to avoid actual alerts during tests
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock())
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
+    )
     # Mock scrub_secrets to just return the input unchanged
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+    )
     return mock_dlt_client
 
 
@@ -118,7 +131,9 @@ def test_cli_health_check_failure(mock_factory, mock_config_file):
     assert mock_factory.health_check.called
 
 
-def test_cli_write_checkpoint_success(mock_factory, mock_config_file, mock_payload_file):
+def test_cli_write_checkpoint_success(
+    mock_factory, mock_config_file, mock_payload_file
+):
     """
     Test a successful `write-checkpoint` command execution.
     """
@@ -250,7 +265,9 @@ def test_cli_invalid_config_file(mocker, tmp_path):
     """
     Test that the CLI correctly handles a non-existent configuration file.
     """
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -275,8 +292,12 @@ def test_cli_invalid_json_in_config(mocker, tmp_path):
     """
     Test that the CLI correctly handles an invalid JSON file.
     """
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x)
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+    )
 
     invalid_json_file = tmp_path / "invalid.json"
     with open(invalid_json_file, "w", encoding="utf-8") as f:
@@ -304,14 +325,22 @@ def test_cli_dlt_client_configuration_error(mocker, mock_config_file):
     """
     Test that the CLI handles a DLTClientConfigurationError from the factory.
     """
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
     mocker.patch.object(
         DLTFactory,
         "get_dlt_client",
-        new=AsyncMock(side_effect=DLTClientConfigurationError("Mock config error", "Main")),
+        new=AsyncMock(
+            side_effect=DLTClientConfigurationError("Mock config error", "Main")
+        ),
     )
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock())
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x)
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.alert_operator", new=AsyncMock()
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -331,12 +360,20 @@ def test_cli_dlt_client_error(mocker, mock_config_file):
     Test that the CLI handles a DLTClientError from operations.
     """
     mock_client = AsyncMock()
-    mock_client.health_check = AsyncMock(side_effect=DLTClientError("Mock operation error", "Main"))
+    mock_client.health_check = AsyncMock(
+        side_effect=DLTClientError("Mock operation error", "Main")
+    )
     mock_client.close = AsyncMock()
 
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
-    mocker.patch.object(DLTFactory, "get_dlt_client", new=AsyncMock(return_value=mock_client))
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x)
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
+    mocker.patch.object(
+        DLTFactory, "get_dlt_client", new=AsyncMock(return_value=mock_client)
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -350,12 +387,18 @@ def test_cli_dlt_client_error(mocker, mock_config_file):
     assert "Mock operation error" in result.output
 
 
-def test_cli_write_checkpoint_invalid_metadata(mocker, mock_config_file, mock_payload_file):
+def test_cli_write_checkpoint_invalid_metadata(
+    mocker, mock_config_file, mock_payload_file
+):
     """
     Test write-checkpoint with invalid metadata JSON.
     """
-    mocker.patch.object(DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"])
-    mocker.patch("simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x)
+    mocker.patch.object(
+        DLTFactory, "list_available_dlt_clients", return_value=["simple", "evm"]
+    )
+    mocker.patch(
+        "simulation.plugins.dlt_clients.dlt_main.scrub_secrets", side_effect=lambda x: x
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -380,7 +423,9 @@ def test_cli_write_checkpoint_invalid_metadata(mocker, mock_config_file, mock_pa
 
     # In test mode, we don't signal exit codes to avoid stream issues
     # Just check that the error message is in the output
-    assert "Invalid JSON format for metadata" in result.output or "Error:" in result.output
+    assert (
+        "Invalid JSON format for metadata" in result.output or "Error:" in result.output
+    )
 
 
 def test_cli_verbose_flag(mock_factory, mock_config_file):

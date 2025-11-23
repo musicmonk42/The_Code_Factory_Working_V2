@@ -8,7 +8,7 @@ import os
 import sys
 
 # FIX: Added missing typing imports
-from typing import Dict, Any, Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 # Detect pytest / testing early & reliably
 TESTING = (
@@ -122,7 +122,7 @@ def register_summarizer(name: str):
 # --- CRITICAL FIX: ALWAYS IMPORT SANDBOX FUNCTIONS ---
 # REMOVED THE "if not TESTING:" CONDITION THAT WAS BREAKING IMPORTS
 try:
-    from .runner_core import run_tests_in_sandbox, run_stress_tests
+    from .runner_core import run_stress_tests, run_tests_in_sandbox
 except ImportError:
     # Define working stub functions if import fails
     async def run_tests_in_sandbox(*args, **kwargs):
@@ -175,20 +175,17 @@ if not TESTING:
 
 # --- Backwards compatibility aliases ---
 import sys as _sys
-from . import runner_config as _runner_config
-from . import runner_core as _runner_core
-
-# NEW: Import the contracts module for aliasing
-from . import runner_contracts as _runner_contracts
-
-# NEW: Import the errors module for aliasing
-from . import runner_errors as _runner_errors
-
-# NEW: Import the logging module for aliasing
-from . import runner_logging as _runner_logging
 
 # NEW: Import the feedback_handlers module for aliasing
+# NEW: Import the logging module for aliasing
+# NEW: Import the errors module for aliasing
+# NEW: Import the contracts module for aliasing
 from . import feedback_handlers as _runner_feedback_handlers
+from . import runner_config as _runner_config
+from . import runner_contracts as _runner_contracts
+from . import runner_core as _runner_core
+from . import runner_errors as _runner_errors
+from . import runner_logging as _runner_logging
 
 # Backwards compatibility aliases so older imports used by tests/clients still work.
 # Allows `from runner.config import ...` to resolve to `runner.runner_config`

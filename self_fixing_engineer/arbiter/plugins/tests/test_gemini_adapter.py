@@ -1,20 +1,21 @@
 # test_gemini_adapter.py
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock, patch
+
+import google.api_core.exceptions as google_exceptions
+import pytest
 
 # Import the adapter and related exceptions
 from arbiter.plugins.gemini_adapter import GeminiAdapter
 from arbiter.plugins.llm_client import (
-    LLMClientError,
+    APIError,
     AuthError,
+    CircuitBreakerOpenError,
+    LLMClientError,
     RateLimitError,
     TimeoutError,
-    APIError,
-    CircuitBreakerOpenError,
 )
-import google.api_core.exceptions as google_exceptions
 from tenacity import RetryError
 
 
@@ -306,7 +307,9 @@ class TestGeminiAdapter:
         """Test that circuit breaker enters half-open state after timeout."""
         # Set circuit breaker to open state
         adapter.circuit_breaker_state = "open"
-        adapter.circuit_breaker_last_failure_time = asyncio.get_event_loop().time() - 301
+        adapter.circuit_breaker_last_failure_time = (
+            asyncio.get_event_loop().time() - 301
+        )
         adapter.circuit_breaker_timeout = 300
 
         adapter.client.generate_text.return_value = "Success after recovery"
@@ -415,7 +418,9 @@ class TestGeminiAdapter:
         with patch("arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
-            mock_instance.aclose_session = AsyncMock(side_effect=Exception("Close failed"))
+            mock_instance.aclose_session = AsyncMock(
+                side_effect=Exception("Close failed")
+            )
 
             async with GeminiAdapter(valid_settings):
                 pass  # Should not raise even if close fails
@@ -425,11 +430,14 @@ class TestGeminiAdapter:
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_success(self, adapter):
         """Test that metrics are recorded on successful generation."""
-        with patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
-        ) as mock_latency, patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_success_total"
-        ) as mock_success:
+        with (
+            patch(
+                "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
+            ) as mock_latency,
+            patch(
+                "arbiter.plugins.gemini_adapter.gemini_call_success_total"
+            ) as mock_success,
+        ):
 
             adapter.client.generate_text.return_value = "Success"
             await adapter.generate("Test", correlation_id="metrics-test")
@@ -448,11 +456,14 @@ class TestGeminiAdapter:
     @pytest.mark.asyncio
     async def test_metrics_recorded_on_failure(self, adapter):
         """Test that error metrics are recorded on failed generation."""
-        with patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
-        ) as mock_latency, patch(
-            "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
-        ) as mock_errors:
+        with (
+            patch(
+                "arbiter.plugins.gemini_adapter.gemini_call_latency_seconds"
+            ) as mock_latency,
+            patch(
+                "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
+            ) as mock_errors,
+        ):
 
             adapter.client.generate_text.side_effect = Exception("Test error")
 
@@ -468,7 +479,9 @@ class TestGeminiAdapter:
         adapter.circuit_breaker_state = "open"
         adapter.circuit_breaker_last_failure_time = asyncio.get_event_loop().time()
 
-        with patch("arbiter.plugins.gemini_adapter.gemini_call_errors_total") as mock_errors:
+        with patch(
+            "arbiter.plugins.gemini_adapter.gemini_call_errors_total"
+        ) as mock_errors:
             with pytest.raises(CircuitBreakerOpenError):
                 await adapter.generate("Test", correlation_id="cb-test")
 

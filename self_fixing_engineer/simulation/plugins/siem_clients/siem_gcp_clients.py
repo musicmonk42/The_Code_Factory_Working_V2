@@ -1,33 +1,34 @@
-import os
-import datetime
 import asyncio
+import datetime
 import json
-import tempfile
-import uuid
+import os
 import re
+import tempfile
 import urllib.parse
-from typing import Dict, Any, List, Tuple, Optional, Callable, Literal, Final
+import uuid
 from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
 
-# Import base classes and utilities from siem_base
-from .siem_base import (
-    BaseSIEMClient,
-    SIEMClientConfigurationError,
-    SIEMClientError,
-    SIEMClientAuthError,
-    SIEMClientConnectivityError,
-    SIEMClientQueryError,
-    SIEMClientPublishError,
-    alert_operator,
-    PRODUCTION_MODE,
-    _base_logger,
-)
 from pydantic import (
     BaseModel,
     Field,
     ValidationError,
     validator,
 )  # Re-import for local schemas
+
+# Import base classes and utilities from siem_base
+from .siem_base import (
+    PRODUCTION_MODE,
+    BaseSIEMClient,
+    SIEMClientAuthError,
+    SIEMClientConfigurationError,
+    SIEMClientConnectivityError,
+    SIEMClientError,
+    SIEMClientPublishError,
+    SIEMClientQueryError,
+    _base_logger,
+    alert_operator,
+)
 
 # --- Strict Dependency Checks for GCP SDKs ---
 GCP_AVAILABLE = False
@@ -39,13 +40,13 @@ try:
         from google.cloud import secretmanager as gcp_secretmanager  # v1 (preferred)
     except Exception:
         from google.cloud import secretmanager_v1beta1 as gcp_secretmanager  # fallback
-    from google.oauth2 import service_account
     from google.api_core.exceptions import (
-        GoogleAPIError,
         Forbidden,
-        NotFound,
         GoogleAPICallError,
+        GoogleAPIError,
+        NotFound,
     )
+    from google.oauth2 import service_account
 
     GCP_AVAILABLE = True
 except ImportError as e:
@@ -108,7 +109,9 @@ class GCPSecretManagerBackend(SecretsBackend):
     async def get_secret(self, secret_id: str) -> str:
         try:
             name = f"projects/{self.project_id}/secrets/{secret_id}/versions/latest"
-            response = await asyncio.to_thread(self.client.access_secret_version, name=name)
+            response = await asyncio.to_thread(
+                self.client.access_secret_version, name=name
+            )
             return response.payload.data.decode("UTF-8")
         except Exception as e:
             raise SIEMClientConfigurationError(
@@ -170,7 +173,9 @@ class GcpLoggingConfig(BaseModel):
                     "In PRODUCTION_MODE, 'credentials_secret_id' must be provided for GCP credentials. Direct path/ENV are forbidden."
                 )
             if v and any(s in v.lower() for s in ("dummy", "test", "mock")):
-                raise ValueError("Dummy/test credentials path detected. Not allowed in production.")
+                raise ValueError(
+                    "Dummy/test credentials path detected. Not allowed in production."
+                )
         return v
 
     @validator("secrets_providers")
@@ -206,7 +211,9 @@ class GcpLoggingClient(BaseSIEMClient):
 
         try:
             gcp_config_data = config.get(self.client_type.lower(), {})
-            validated_config = GcpLoggingConfig(**gcp_config_data).dict(exclude_unset=True)
+            validated_config = GcpLoggingConfig(**gcp_config_data).dict(
+                exclude_unset=True
+            )
         except ValidationError as e:
             _base_logger.critical(
                 f"CRITICAL: Invalid GCP Logging client configuration: {e}.",
@@ -227,14 +234,18 @@ class GcpLoggingClient(BaseSIEMClient):
         self.credentials_path = validated_config.get("credentials_path")
         self.credentials_secret_id = validated_config.get("credentials_secret_id")
         self.secrets_providers = validated_config.get("secrets_providers", [])
-        self.secrets_provider_config = validated_config.get("secrets_provider_config", {}) or {}
+        self.secrets_provider_config = (
+            validated_config.get("secrets_provider_config", {}) or {}
+        )
 
         self._logging_client: Optional[gcp_logging_sdk.Client] = None
         self._credentials: Optional[service_account.Credentials] = None
         self._temp_credentials_path: Optional[str] = None  # track temp file for cleanup
         self._creds_lock = asyncio.Lock()
 
-        self.logger.extra.update({"project_id": self.project_id, "log_name": self.log_name})
+        self.logger.extra.update(
+            {"project_id": self.project_id, "log_name": self.log_name}
+        )
         self.logger.info("GcpLoggingClient initialized.")
 
     async def _ensure_credentials_loaded(self):
@@ -250,9 +261,9 @@ class GcpLoggingClient(BaseSIEMClient):
                 backend: Optional[GCPSecretManagerBackend] = None
                 try:
                     if provider_name == "gcp":
-                        provider_proj = (self.secrets_provider_config.get("gcp") or {}).get(
-                            "project_id"
-                        ) or self.project_id
+                        provider_proj = (
+                            self.secrets_provider_config.get("gcp") or {}
+                        ).get("project_id") or self.project_id
                         backend = GCPSecretManagerBackend(provider_proj)
                     else:
                         _base_logger.warning(
@@ -261,7 +272,9 @@ class GcpLoggingClient(BaseSIEMClient):
                         )
                         continue
 
-                    credentials_json = await backend.get_secret(self.credentials_secret_id)
+                    credentials_json = await backend.get_secret(
+                        self.credentials_secret_id
+                    )
                     self._temp_credentials_path = os.path.join(
                         tempfile.gettempdir(), f"gcp_sa_key_{uuid.uuid4().hex}.json"
                     )
@@ -381,7 +394,9 @@ class GcpLoggingClient(BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
         except GoogleAPICallError as e:
-            alert_operator(f"CRITICAL: GCP API error during health check: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: GCP API error during health check: {e}", level="CRITICAL"
+            )
             raise SIEMClientConnectivityError(
                 f"GCP API error: {e}",
                 self.client_type,
@@ -400,9 +415,13 @@ class GcpLoggingClient(BaseSIEMClient):
                 correlation_id=self.logger.extra.get("correlation_id"),
             )
 
-    async def _perform_send_log_logic(self, log_entry: Dict[str, Any]) -> Tuple[bool, str]:
+    async def _perform_send_log_logic(
+        self, log_entry: Dict[str, Any]
+    ) -> Tuple[bool, str]:
         """Internal logic for sending a log to GCP Cloud Logging."""
-        success, msg, failed_logs = await self._perform_send_logs_batch_logic([log_entry])
+        success, msg, failed_logs = await self._perform_send_logs_batch_logic(
+            [log_entry]
+        )
         if success:
             return True, "Log sent to GCP Cloud Logging."
         raise SIEMClientPublishError(
@@ -510,7 +529,9 @@ class GcpLoggingClient(BaseSIEMClient):
             return results
 
         try:
-            entries = await asyncio.shield(self._run_blocking_in_executor(_fetch_entries))
+            entries = await asyncio.shield(
+                self._run_blocking_in_executor(_fetch_entries)
+            )
             results: List[Dict[str, Any]] = []
             for entry in entries:
                 payload = entry.payload
@@ -531,7 +552,9 @@ class GcpLoggingClient(BaseSIEMClient):
                 results.append(payload)
             return results
         except Forbidden as e:
-            alert_operator(f"CRITICAL: GCP permission denied during query: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: GCP permission denied during query: {e}", level="CRITICAL"
+            )
             raise SIEMClientAuthError(
                 f"GCP permission denied during query: {e}",
                 self.client_type,
@@ -561,7 +584,9 @@ class GcpLoggingClient(BaseSIEMClient):
                     original_exception=e,
                     correlation_id=self.logger.extra.get("correlation_id"),
                 )
-            alert_operator(f"CRITICAL: GCP API error during query: {e}", level="CRITICAL")
+            alert_operator(
+                f"CRITICAL: GCP API error during query: {e}", level="CRITICAL"
+            )
             raise SIEMClientQueryError(
                 f"GCP API error during query: {e}",
                 self.client_type,
@@ -605,7 +630,9 @@ class GcpLoggingClient(BaseSIEMClient):
             if self._logging_client:
                 transport = None
                 if hasattr(self._logging_client, "_gapic_api"):
-                    transport = getattr(self._logging_client._gapic_api, "transport", None)
+                    transport = getattr(
+                        self._logging_client._gapic_api, "transport", None
+                    )
                 if not transport:
                     transport = getattr(self._logging_client, "transport", None)
                 if transport and hasattr(transport, "close"):

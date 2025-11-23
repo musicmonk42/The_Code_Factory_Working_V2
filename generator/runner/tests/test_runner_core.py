@@ -1,15 +1,16 @@
 # test_runner_core.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 
-import unittest
 import os
+import shutil
 import sys
 import tempfile
-import shutil
-import uuid
 import time
+import unittest
+import uuid
 from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from prometheus_client import REGISTRY
 
 # Add parent directory to sys.path
@@ -29,18 +30,15 @@ sys.modules["cryptography.hazmat.primitives.asymmetric"] = MagicMock()
 sys.modules["cryptography.hazmat.primitives.serialization"] = MagicMock()
 sys.modules["aiofiles"] = MagicMock()  # Mock aiofiles used in runner_core
 
-# Import runner modules
-from runner.runner_core import Runner, ALL_BACKENDS
 from runner.runner_config import RunnerConfig
 from runner.runner_contracts import TaskPayload, TaskResult
 
+# Import runner modules
+from runner.runner_core import ALL_BACKENDS, Runner
+
 # FIX: Import ExecutionError directly (no alias)
-from runner.runner_errors import (
-    ExecutionError,
-    TimeoutError,
-    ParsingError,
-)
-from runner.runner_metrics import RUN_QUEUE, RUN_PASS_RATE
+from runner.runner_errors import ExecutionError, ParsingError, TimeoutError
+from runner.runner_metrics import RUN_PASS_RATE, RUN_QUEUE
 
 # We mock save_file_content, so this import is for context
 # from runner.runner_file_utils import save_file_content
@@ -96,11 +94,15 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.patch_save_files.start()
 
         # Mock logging
-        self.patch_log_action = patch("runner.runner_logging.log_action", new=AsyncMock())
+        self.patch_log_action = patch(
+            "runner.runner_logging.log_action", new=AsyncMock()
+        )
         self.patch_log_action.start()
 
         # Mock audit logging
-        self.patch_log_audit = patch("runner.runner_logging.log_audit_event", new=AsyncMock())
+        self.patch_log_audit = patch(
+            "runner.runner_logging.log_audit_event", new=AsyncMock()
+        )
         # FIX: Capture the mock object created by the patcher
         self.mock_log_audit = self.patch_log_audit.start()
 
@@ -181,7 +183,9 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
+                return_value=MagicMock(
+                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
+                ),
             ):
                 result = await runner.run_tests(payload)
 
@@ -324,7 +328,9 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
+                return_value=MagicMock(
+                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
+                ),
             ):
                 await runner.run_tests(payload)
 
@@ -383,7 +389,9 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
                 "runner.runner_parsers.parse_coverage_xml",
-                return_value=MagicMock(model_dump=lambda **kw: {"coverage_percentage": 100.0}),
+                return_value=MagicMock(
+                    model_dump=lambda **kw: {"coverage_percentage": 100.0}
+                ),
             ):
                 await runner.run_tests(payload)
 
@@ -393,7 +401,9 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         # with arguments about 'security_redact'. This is expected behavior from redact_secrets.
         # The test should verify the audit event was logged, but the current assertion is too strict.
         # We'll just verify it was called at all
-        self.assertTrue(self.mock_log_audit.await_count >= 0 or self.mock_log_audit.call_count >= 0)
+        self.assertTrue(
+            self.mock_log_audit.await_count >= 0 or self.mock_log_audit.call_count >= 0
+        )
 
         await runner.shutdown_services()
 

@@ -1,9 +1,10 @@
 # arbiter/learner/metrics.py
 
 import os
-from typing import Tuple, Optional, Dict, Any, Type
-from prometheus_client import Counter, Gauge, Histogram, Summary, Info, REGISTRY
+from typing import Any, Dict, Optional, Tuple, Type
+
 import structlog
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Info, Summary
 
 # Structured logging setup
 structlog.configure(
@@ -61,10 +62,14 @@ def _get_or_create_metric(
         if existing_metric and isinstance(existing_metric, metric_class):
             return existing_metric
         if existing_metric:
-            logger.warning("Unregistering existing metric due to type mismatch", metric_name=name)
+            logger.warning(
+                "Unregistering existing metric due to type mismatch", metric_name=name
+            )
             REGISTRY.unregister(existing_metric)
     except Exception as e:
-        logger.error("Error checking/unregistering metric", metric_name=name, error=str(e))
+        logger.error(
+            "Error checking/unregistering metric", metric_name=name, error=str(e)
+        )
 
     # Create metric with combined labels
     if metric_class == Info:

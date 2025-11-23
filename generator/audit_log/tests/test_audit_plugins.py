@@ -18,10 +18,12 @@ Dependencies:
 - audit_log, audit_utils
 """
 
+import base64
+import json
+
 # --- START: Environment setup block ---
 import os
-import json
-import base64
+
 from cryptography.fernet import Fernet
 
 TEST_PLUGIN_DIR = "/tmp/test_audit_plugins"
@@ -31,7 +33,9 @@ os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 os.environ.setdefault("COMPLIANCE_MODE", "true")
 
 # Symmetric key for encryption tests (if used)
-os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode("utf-8")
+os.environ["AUDIT_LOG_ENCRYPTION_KEY"] = base64.b64encode(Fernet.generate_key()).decode(
+    "utf-8"
+)
 
 # Backend config envs
 os.environ["AUDIT_LOG_BACKEND_TYPE"] = "file"
@@ -62,16 +66,17 @@ os.environ.setdefault("AUDIT_CRYPTO_ALERT_INITIAL_DELAY", "0.1")
 
 import asyncio
 import sys
+import uuid
 from pathlib import Path
+from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from faker import Faker
 from freezegun import freeze_time
+from hypothesis import HealthCheck, given, settings  # Added HealthCheck import
+from hypothesis.strategies import dictionaries, text
 from prometheus_client import REGISTRY
-from hypothesis import given, settings, HealthCheck  # Added HealthCheck import
-from hypothesis.strategies import text, dictionaries
-import uuid
-from typing import Dict, Any, Optional
 
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
@@ -84,21 +89,20 @@ if str(REPO_ROOT) not in sys.path:
 if sys.platform != "win32":
     pass
 
+# We also need a local reference to the module for reloading purposes
+import generator.audit_log.audit_plugins as audit_plugins_module
+
 # --------------------------------------------------------------------------- #
 # 2. Import the module under test
 # --------------------------------------------------------------------------- #
 # FIX: Import 'plugins' by its actual name (not an alias like '_PLUGINS') for module reloading
+from generator.audit_log.audit_plugins import plugins  # Added discover_plugins import
 from generator.audit_log.audit_plugins import (
     AuditPlugin,
-    trigger_event,
-    register_plugin,
     CommercialPlugin,
-    plugins,  # Added discover_plugins import
+    register_plugin,
+    trigger_event,
 )
-
-# We also need a local reference to the module for reloading purposes
-import generator.audit_log.audit_plugins as audit_plugins_module
-
 
 # Initialize faker for test data generation
 fake = Faker()
@@ -282,7 +286,9 @@ class TestAuditPlugins:
         assert result["augmented_data"] == "Test augmentation"
         assert test_plugin.processed_entries_count == 1
         assert test_plugin.redacted_fields_count == 1
-        assert test_plugin.augmented_data_size == len("Test augmentation".encode("utf-8"))
+        assert test_plugin.augmented_data_size == len(
+            "Test augmentation".encode("utf-8")
+        )
 
         # Verify metrics (may be 0 if Counter was cleared between tests)
         # --- FIX: The plugin name is 'TestPlugin' (class name) or 'test_plugin' (registration name)
@@ -321,7 +327,9 @@ class TestAuditPlugins:
 
         try:
             # --- FIX: Patch PLUGIN_CONFIG path to point to our test dir ---
-            with patch("generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Mock importlib to return the container module holding our real mock class
                 with patch("importlib.import_module") as mock_import:
 
@@ -354,7 +362,9 @@ class TestAuditPlugins:
                 os.remove(TEST_PLUGIN_CONFIG)
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)  # Reduced timeout from 30, but needs more time for timeout test
+    @pytest.mark.timeout(
+        10
+    )  # Reduced timeout from 30, but needs more time for timeout test
     async def test_plugin_timeout(self, mock_audit_log, mock_compute_hash):
         """Test plugin execution timeout."""
         # Clear existing plugins
@@ -381,7 +391,9 @@ class TestAuditPlugins:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)  # Reduced timeout from 30
-    async def test_plugin_resource_limits(self, test_plugin, mock_audit_log, mock_compute_hash):
+    async def test_plugin_resource_limits(
+        self, test_plugin, mock_audit_log, mock_compute_hash
+    ):
         """Test plugin execution within resource limits."""
         if sys.platform != "win32":
             with patch("resource.setrlimit") as mock_setrlimit:
@@ -472,7 +484,9 @@ class TestAuditPlugins:
     @pytest.mark.timeout(5)  # Reduced timeout from 30
     async def test_invalid_plugin_config(self, cleanup_test_environment):
         """Test handling of invalid plugin configuration."""
-        config_data = {"plugins": {"test_plugin": {"enabled": "invalid"}}}  # Invalid type
+        config_data = {
+            "plugins": {"test_plugin": {"enabled": "invalid"}}
+        }  # Invalid type
 
         # --- FIX: Use synchronous file operations for test setup ---
         # Create the test config directory if it doesn't exist
@@ -484,7 +498,9 @@ class TestAuditPlugins:
 
         try:
             # Patch PLUGIN_CONFIG path to point to our test dir
-            with patch("generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG):
+            with patch(
+                "generator.audit_log.audit_plugins.PLUGIN_CONFIG", TEST_PLUGIN_CONFIG
+            ):
                 # Import and test discover_plugins (which loads the config)
                 import generator.audit_log.audit_plugins as audit_plugins_module
 

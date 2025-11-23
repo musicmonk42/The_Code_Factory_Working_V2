@@ -45,8 +45,8 @@ except Exception:  # pragma: no cover - optional dep
 # Cryptography (required by some functions, but we guard its use)
 try:
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
     _CRYPTO_AVAILABLE = True
 except Exception:  # pragma: no cover - if not available, we still allow module import
@@ -205,8 +205,12 @@ def _hkdf_derive_key(
     if salt is None:
         # Use deterministic salt for key derivation (acceptable when secret is pre-shared and secure)
         # This allows encryption/decryption to work with the same derived key
-        salt = hashlib_sha256(b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii"))
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000)
+        salt = hashlib_sha256(
+            b"omnicore_engine.hkdf." + str(len(secret_bytes)).encode("ascii")
+        )
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(), length=length, salt=salt, iterations=200_000
+    )
     return kdf.derive(secret_bytes)
 
 
@@ -300,7 +304,9 @@ def _fallback_sanitize_html(html_text: str) -> str:
                         v_lower = v_stripped.lower()
                         # SECURITY: Check for dangerous protocols on lowercase version
                         # but preserve original case for legitimate URLs
-                        if v_lower.startswith(("http://", "https://", "#", "mailto:")) and not any(
+                        if v_lower.startswith(
+                            ("http://", "https://", "#", "mailto:")
+                        ) and not any(
                             dangerous in v_lower
                             for dangerous in ["javascript:", "data:", "vbscript:"]
                         ):
@@ -657,7 +663,9 @@ class SecureSessionManager:
             raise AuthenticationError("Invalid session id signature")
         return raw_id
 
-    def create(self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None) -> Session:
+    def create(
+        self, user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None
+    ) -> Session:
         now = int(time.time())
         expires = now + self._ttl
         raw_id = os.urandom(16)
@@ -708,7 +716,9 @@ class SecureSessionManager:
         """
         now = int(time.time())
         with self._lock:
-            expired_ids = [sid for sid, sess in self._store.items() if now > sess.expires_at]
+            expired_ids = [
+                sid for sid, sess in self._store.items() if now > sess.expires_at
+            ]
             for sid in expired_ids:
                 self._store.pop(sid, None)
         return len(expired_ids)
@@ -771,9 +781,13 @@ class EnterpriseSecurityUtils:
         secret: _t.Union[str, bytes] | None = None,
         session_ttl_seconds: int = 3600,
     ):
-        self._secret = secret or os.environ.get("OMNICORE_SECRET", "omnicore-default-secret")
+        self._secret = secret or os.environ.get(
+            "OMNICORE_SECRET", "omnicore-default-secret"
+        )
         self.audit = SecurityAuditLogger()
-        self.sessions = SecureSessionManager(self._secret, ttl_seconds=session_ttl_seconds)
+        self.sessions = SecureSessionManager(
+            self._secret, ttl_seconds=session_ttl_seconds
+        )
         # Rate limiter for request throttling (100 requests per 60 seconds by default)
         self.rate_limiter = RateLimiter(max_calls=100, per_seconds=60)
 
@@ -956,7 +970,9 @@ def verify_password_proxy(password: str, stored: str) -> tuple[bool, bool]:
     return get_security_utils().verify_password(password, stored)
 
 
-def generate_token_proxy(payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True) -> str:
+def generate_token_proxy(
+    payload: dict, ttl_seconds: int = 3600, include_nonce: bool = True
+) -> str:
     return get_security_utils().generate_token(
         payload, ttl_seconds=ttl_seconds, include_nonce=include_nonce
     )
@@ -974,7 +990,9 @@ def decrypt_proxy(token: str) -> bytes:
     return get_security_utils().decrypt(token)
 
 
-def create_session_proxy(user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None) -> Session:
+def create_session_proxy(
+    user_id: _t.Union[int, str], *, data: _t.Optional[dict] = None
+) -> Session:
     return get_security_utils().create_session(user_id, data=data)
 
 

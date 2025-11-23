@@ -1,12 +1,13 @@
-import os
-import pytest
-from pytest_mock import MockerFixture
 import logging
-from pydantic import ValidationError
-from cryptography.fernet import Fernet
+import os
+
+import pytest
 
 # Import the MetaLearningConfig class
 from arbiter.meta_learning_orchestrator.config import MetaLearningConfig
+from cryptography.fernet import Fernet
+from pydantic import ValidationError
+from pytest_mock import MockerFixture
 
 # Configure logging for tests
 logging.basicConfig(
@@ -101,7 +102,9 @@ async def test_config_initialization_success(config_instance, tmp_path):
     assert config_instance.DATA_LAKE_PATH == str(tmp_path / "data" / "data_lake.jsonl")
     assert config_instance.DATA_LAKE_S3_BUCKET == "test-bucket"
     assert config_instance.USE_S3_DATA_LAKE is False
-    assert config_instance.LOCAL_AUDIT_LOG_PATH == str(tmp_path / "data" / "audit_log.jsonl")
+    assert config_instance.LOCAL_AUDIT_LOG_PATH == str(
+        tmp_path / "data" / "audit_log.jsonl"
+    )
     assert config_instance.AUDIT_ENCRYPTION_KEY == SAMPLE_ENV["ML_AUDIT_ENCRYPTION_KEY"]
     assert config_instance.AUDIT_LOG_ROTATION_SIZE_MB == 50
     assert config_instance.KAFKA_BOOTSTRAP_SERVERS == "kafka1:9092,kafka2:9092"
@@ -187,7 +190,9 @@ async def test_config_secure_mode_enforces_keys(mocker: MockerFixture, tmp_path)
                 env_key: "",
                 # Set other keys to valid values
                 "ML_AUDIT_ENCRYPTION_KEY": (
-                    Fernet.generate_key().decode() if env_key != "ML_AUDIT_ENCRYPTION_KEY" else ""
+                    Fernet.generate_key().decode()
+                    if env_key != "ML_AUDIT_ENCRYPTION_KEY"
+                    else ""
                 ),
                 "ML_AUDIT_SIGNING_PRIVATE_KEY": (
                     "key" if env_key != "ML_AUDIT_SIGNING_PRIVATE_KEY" else ""
@@ -200,7 +205,9 @@ async def test_config_secure_mode_enforces_keys(mocker: MockerFixture, tmp_path)
 
         with pytest.raises(ValidationError) as exc_info:
             MetaLearningConfig()
-        assert f"{field_name} must be set when SECURE_MODE is enabled" in str(exc_info.value)
+        assert f"{field_name} must be set when SECURE_MODE is enabled" in str(
+            exc_info.value
+        )
 
 
 # ===========================
@@ -209,7 +216,9 @@ async def test_config_secure_mode_enforces_keys(mocker: MockerFixture, tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_config_kafka_validation_with_empty_string(mocker: MockerFixture, tmp_path):
+async def test_config_kafka_validation_with_empty_string(
+    mocker: MockerFixture, tmp_path
+):
     """Test that empty Kafka brokers are allowed but logged when Kafka is disabled."""
     # When Kafka is disabled, empty brokers should be allowed
     mocker.patch.dict(
@@ -225,7 +234,9 @@ async def test_config_kafka_validation_with_empty_string(mocker: MockerFixture, 
 
 
 @pytest.mark.asyncio
-async def test_config_kafka_brokers_required_when_enabled(mocker: MockerFixture, tmp_path):
+async def test_config_kafka_brokers_required_when_enabled(
+    mocker: MockerFixture, tmp_path
+):
     """Test validation when Kafka is enabled but brokers are empty."""
     # Note: Based on the actual validation logic, if brokers are empty when Kafka is enabled,
     # the validator should raise an error. However, the current implementation seems to
@@ -239,7 +250,9 @@ async def test_config_kafka_brokers_required_when_enabled(mocker: MockerFixture,
 
 
 @pytest.mark.asyncio
-async def test_config_kafka_audit_enabled_empty_brokers(mocker: MockerFixture, tmp_path):
+async def test_config_kafka_audit_enabled_empty_brokers(
+    mocker: MockerFixture, tmp_path
+):
     """Test that USE_KAFKA_AUDIT with empty brokers."""
     mocker.patch.dict(
         os.environ,
@@ -307,7 +320,9 @@ async def test_config_kafka_broker_with_spaces(mocker: MockerFixture, tmp_path):
 async def test_config_invalid_redis_url(mocker: MockerFixture, tmp_path):
     """Test validation failure for invalid Redis URL."""
     mocker.patch.dict(os.environ, {"ML_REDIS_URL": "ftp://invalid.com"})
-    with pytest.raises(ValidationError, match="REDIS_URL must be a valid HTTP or Redis URL scheme"):
+    with pytest.raises(
+        ValidationError, match="REDIS_URL must be a valid HTTP or Redis URL scheme"
+    ):
         MetaLearningConfig()
 
 
@@ -343,7 +358,9 @@ async def test_config_invalid_endpoint_scheme(mocker: MockerFixture, tmp_path):
 
     for endpoint in endpoints:
         mocker.patch.dict(os.environ, {endpoint: "ftp://invalid.com"})
-        with pytest.raises(ValidationError, match="Endpoint .* must use http or https scheme"):
+        with pytest.raises(
+            ValidationError, match="Endpoint .* must use http or https scheme"
+        ):
             MetaLearningConfig()
 
 

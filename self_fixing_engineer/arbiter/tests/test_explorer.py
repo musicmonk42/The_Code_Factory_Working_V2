@@ -1,13 +1,13 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
 import collections
 import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from arbiter.explorer import (
     ArbiterExplorer,
-    MockLogDB,
     ExperimentExecutionError,
+    MockLogDB,
     logger,
 )
 
@@ -15,11 +15,12 @@ from arbiter.explorer import (
 # Fixture to mock logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(logger, "info") as mock_info, patch.object(
-        logger, "debug"
-    ) as mock_debug, patch.object(logger, "warning") as mock_warning, patch.object(
-        logger, "error"
-    ) as mock_error:
+    with (
+        patch.object(logger, "info") as mock_info,
+        patch.object(logger, "debug") as mock_debug,
+        patch.object(logger, "warning") as mock_warning,
+        patch.object(logger, "error") as mock_error,
+    ):
         yield mock_info, mock_debug, mock_warning, mock_error
 
 
@@ -230,9 +231,13 @@ async def test_experiment_id_unique(explorer):
     explorer.sandbox_env.evaluate = AsyncMock(return_value=1)
     explorer.sandbox_env.test_agent = AsyncMock(return_value=True)
 
-    id1_result = await explorer.run_ab_test("test1", "A", "B", num_runs=1, metric="perf")
+    id1_result = await explorer.run_ab_test(
+        "test1", "A", "B", num_runs=1, metric="perf"
+    )
     await asyncio.sleep(0.01)  # Small delay to ensure different timestamps
-    id2_result = await explorer.run_ab_test("test2", "A", "B", num_runs=1, metric="perf")
+    id2_result = await explorer.run_ab_test(
+        "test2", "A", "B", num_runs=1, metric="perf"
+    )
 
     assert id1_result["experiment_id"] != id2_result["experiment_id"]
     assert "test1" in id1_result["experiment_id"]
@@ -261,4 +266,6 @@ async def test_concurrent_experiments(explorer):
 async def test_logging_failure(mock_save, explorer, mock_logger):
     await explorer._log_experiment({"experiment_id": "fail_log"})
     _, _, _, error = mock_logger
-    error.assert_called_with("Failed to log experiment fail_log: log error", exc_info=True)
+    error.assert_called_with(
+        "Failed to log experiment fail_log: log error", exc_info=True
+    )

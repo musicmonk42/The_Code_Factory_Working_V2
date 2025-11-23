@@ -7,7 +7,7 @@ os.environ.setdefault("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
 os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
 
 # --- FIX: Patch Prometheus *before* any project imports ---
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 # This patch starts NOW and will be active when audit_crypto_factory is imported
 prometheus_patcher = patch("prometheus_client.CollectorRegistry.register", MagicMock())
@@ -18,29 +18,31 @@ prometheus_patcher.start()
 # test_audit_keystore.py
 # FIX: All import paths and patch paths have been corrected to be absolute from the 'generator' root.
 
-import unittest
-import tempfile
-import stat
-import json
 import base64
-import time
+import json
+import stat
 import sys  # <-- ADDED for platform check
-from unittest.mock import patch, MagicMock, AsyncMock
+import tempfile
+import time
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest  # <-- Import pytest
 
 # --- Import the module to be tested ---
 try:
-    from generator.audit_log.audit_crypto.audit_keystore import (
-        KeyStore,
-        FileSystemKeyStorageBackend,
-    )
-
     # We also need the real cryptography exceptions for testing
     from cryptography.exceptions import InvalidTag
 
     # --- FIX: Import the factory to get mock handles ---
-    from generator.audit_log.audit_crypto import audit_crypto_factory
-    from generator.audit_log.audit_crypto import audit_crypto_provider
+    from generator.audit_log.audit_crypto import (
+        audit_crypto_factory,
+        audit_crypto_provider,
+    )
+    from generator.audit_log.audit_crypto.audit_keystore import (
+        FileSystemKeyStorageBackend,
+        KeyStore,
+    )
 except ImportError as e:
     print(
         "Error: Could not import audit_keystore. Ensure it's in the same directory or on your PYTHONPATH."
@@ -494,7 +496,9 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
 
         # Flip a bit in the ciphertext (after nonce, before tag)
         tampered_payload = payload_bytes[:15] + b"\x00" + payload_bytes[16:]
-        data["encrypted_payload_b64"] = base64.b64encode(tampered_payload).decode("utf-8")
+        data["encrypted_payload_b64"] = base64.b64encode(tampered_payload).decode(
+            "utf-8"
+        )
 
         with open(filepath, "w") as f:
             json.dump(data, f)
@@ -560,13 +564,19 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
             self.key_id, self.key_data_bytes, self.algo, self.creation_time, self.status
         )
 
-        self.assertTrue(os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json")))
+        self.assertTrue(
+            os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json"))
+        )
 
         result = await self.keystore.delete_key_file(self.key_id)
 
         self.assertTrue(result)
-        self.assertFalse(os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json")))
-        self.mock_log_action.assert_called_with("key_delete", key_id=self.key_id, success=True)
+        self.assertFalse(
+            os.path.exists(os.path.join(self.key_dir, f"{self.key_id}.json"))
+        )
+        self.mock_log_action.assert_called_with(
+            "key_delete", key_id=self.key_id, success=True
+        )
 
     async def test_10_store_key_handles_backend_error(self):
         # Mock the backend to raise an error
@@ -598,7 +608,9 @@ class TestKeyStore(unittest.IsolatedAsyncioTestCase):
             success=False,
             error="Disk full",
         )
-        self.mock_key_store_count.labels.assert_called_with(provider_type="software", status="fail")
+        self.mock_key_store_count.labels.assert_called_with(
+            provider_type="software", status="fail"
+        )
 
 
 if __name__ == "__main__":

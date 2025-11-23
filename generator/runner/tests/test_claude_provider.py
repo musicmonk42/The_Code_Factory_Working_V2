@@ -37,9 +37,9 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
-from runner.providers.claude_provider import ClaudeProvider, get_provider, PRICING  # type: ignore
-from runner.runner_errors import LLMError, ConfigurationError  # type: ignore
+from runner.providers.claude_provider import PRICING, ClaudeProvider, get_provider  # type: ignore
 from runner.runner_config import RunnerConfig  # type: ignore
+from runner.runner_errors import ConfigurationError, LLMError  # type: ignore
 
 
 # Fixtures
@@ -106,7 +106,10 @@ def test_pricing_loaded() -> None:
     assert "claude-3-opus-20240229" in PRICING
     assert "claude-3-sonnet-20240229" in PRICING
     assert "claude-3-haiku-20240307" in PRICING
-    assert PRICING["claude-3-haiku-20240307"]["input"] < PRICING["claude-3-opus-20240229"]["input"]
+    assert (
+        PRICING["claude-3-haiku-20240307"]["input"]
+        < PRICING["claude-3-opus-20240229"]["input"]
+    )
 
 
 # 2. Custom model registration
@@ -115,7 +118,10 @@ def test_register_custom_model(provider: ClaudeProvider) -> None:
         "custom-claude", "https://custom.endpoint.com", {"X-Custom": "header"}
     )
     assert "custom-claude" in provider.custom_models
-    assert provider.custom_models["custom-claude"]["endpoint"] == "https://custom.endpoint.com"
+    assert (
+        provider.custom_models["custom-claude"]["endpoint"]
+        == "https://custom.endpoint.com"
+    )
     assert provider.custom_models["custom-claude"]["headers"]["X-Custom"] == "header"
 
 
@@ -198,8 +204,12 @@ def test_load_config_unsupported_format(provider: ClaudeProvider) -> None:
 
 # 5. API call method with error translation
 @pytest.mark.asyncio
-async def test_api_call_non_stream_standard(provider: ClaudeProvider, mock_claude_response) -> None:
-    with patch.object(provider.client.messages, "create", new_callable=AsyncMock) as mock_create:
+async def test_api_call_non_stream_standard(
+    provider: ClaudeProvider, mock_claude_response
+) -> None:
+    with patch.object(
+        provider.client.messages, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_claude_response
 
         result, is_stream = await provider._api_call(
@@ -211,11 +221,17 @@ async def test_api_call_non_stream_standard(provider: ClaudeProvider, mock_claud
 
 
 @pytest.mark.asyncio
-async def test_api_call_stream_standard(provider: ClaudeProvider, mock_claude_stream) -> None:
-    with patch.object(provider.client.messages, "create", new_callable=AsyncMock) as mock_create:
+async def test_api_call_stream_standard(
+    provider: ClaudeProvider, mock_claude_stream
+) -> None:
+    with patch.object(
+        provider.client.messages, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_claude_stream
 
-        result, is_stream = await provider._api_call("claude-3-haiku-20240307", "test", True)
+        result, is_stream = await provider._api_call(
+            "claude-3-haiku-20240307", "test", True
+        )
         assert is_stream is True
 
         # Verify stream works
@@ -250,7 +266,9 @@ async def test_api_call_authentication_error(provider: ClaudeProvider) -> None:
         pytest.skip("Anthropic SDK not installed")
     from anthropic import AuthenticationError
 
-    with patch.object(provider.client.messages, "create", new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.messages, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = AuthenticationError(
             "Invalid API key", response=MagicMock(), body=None
         )
@@ -267,7 +285,9 @@ async def test_api_call_rate_limit_error(provider: ClaudeProvider) -> None:
         pytest.skip("Anthropic SDK not installed")
     from anthropic import RateLimitError
 
-    with patch.object(provider.client.messages, "create", new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.messages, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = RateLimitError(
             "Rate limit exceeded", response=MagicMock(), body=None
         )
@@ -284,7 +304,9 @@ async def test_api_call_connection_error(provider: ClaudeProvider) -> None:
         pytest.skip("Anthropic SDK not installed")
     from anthropic import APIConnectionError
 
-    with patch.object(provider.client.messages, "create", new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        provider.client.messages, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = APIConnectionError(
             message="Connection failed", request=MagicMock()
         )
@@ -314,7 +336,9 @@ async def test_call_stream(provider: ClaudeProvider, mock_claude_stream) -> None
     with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
         mock_api.return_value = (mock_claude_stream, True)
 
-        result = await provider.call("test prompt", "claude-3-haiku-20240307", stream=True)
+        result = await provider.call(
+            "test prompt", "claude-3-haiku-20240307", stream=True
+        )
 
         chunks = []
         async for chunk in result:
@@ -324,7 +348,9 @@ async def test_call_stream(provider: ClaudeProvider, mock_claude_stream) -> None
 
 
 @pytest.mark.asyncio
-async def test_call_with_pre_hook(provider: ClaudeProvider, mock_claude_response) -> None:
+async def test_call_with_pre_hook(
+    provider: ClaudeProvider, mock_claude_response
+) -> None:
     provider.add_pre_hook(lambda x: x.upper())
 
     with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:
@@ -338,7 +364,9 @@ async def test_call_with_pre_hook(provider: ClaudeProvider, mock_claude_response
 
 
 @pytest.mark.asyncio
-async def test_call_with_post_hook(provider: ClaudeProvider, mock_claude_response) -> None:
+async def test_call_with_post_hook(
+    provider: ClaudeProvider, mock_claude_response
+) -> None:
     provider.add_post_hook(lambda r: {**r, "content": r["content"] + "-modified"})
 
     with patch.object(provider, "_api_call", new_callable=AsyncMock) as mock_api:

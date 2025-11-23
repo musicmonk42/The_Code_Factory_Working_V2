@@ -1,10 +1,11 @@
+import hashlib
+import hmac
 import os
 import sys
-import pytest
-import hmac
-import hashlib
-from pathlib import Path
 import types
+from pathlib import Path
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Bootstrap minimal infra modules BEFORE importing the system under test
@@ -51,10 +52,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 # Import after dummies are in place
 from import_fixer.fixer_plugins import (  # noqa: E402
-    PluginManager,
     AnalyzerCriticalError,
-    PluginValidationError,
     NonCriticalError,
+    PluginManager,
+    PluginValidationError,
     _get_plugin_signature_key,
     _reset_plugin_key_for_tests,
 )
@@ -256,7 +257,9 @@ def test_run_hook_with_exception_raises_and_alerts(monkeypatch):
         alerted["msg"] = msg
         alerted["level"] = level
 
-    monkeypatch.setattr("import_fixer.fixer_plugins.alert_operator", _alert, raising=True)
+    monkeypatch.setattr(
+        "import_fixer.fixer_plugins.alert_operator", _alert, raising=True
+    )
 
     mgr = PluginManager({"stop_on_hook_error": True})  # default True
 

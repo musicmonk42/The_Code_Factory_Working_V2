@@ -2,21 +2,19 @@ import asyncio
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict, AsyncIterator
+from typing import Any, AsyncIterator, Dict
 from unittest.mock import patch
 
 import pytest
-
 from runner import runner_mutation
 from runner.runner_mutation import (
     _MUTATOR_REGISTRY,
-    register_mutator,
-    parse_mutmut_output,
-    mutation_test,
     fuzz_test,
+    mutation_test,
+    parse_mutmut_output,
     property_based_test,
+    register_mutator,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test Helpers
@@ -98,7 +96,9 @@ def reset_registry() -> AsyncIterator[None]:
     """
     _MUTATOR_REGISTRY.clear()
 
-    async def default_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def default_run(
+        temp_dir: Path, strategy: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Default test run function:
         Delegates to runner_mutation._run_subprocess_safe with the prepared cmd/timeout.
@@ -106,7 +106,9 @@ def reset_registry() -> AsyncIterator[None]:
         """
         cmd = params.get("cmd") or ["mutmut", "run"]
         timeout = params.get("timeout", 300)
-        return await runner_mutation._run_subprocess_safe(cmd, cwd=temp_dir, timeout=timeout)
+        return await runner_mutation._run_subprocess_safe(
+            cmd, cwd=temp_dir, timeout=timeout
+        )
 
     # Register the default mutmut mutator in a way compatible with runner_mutation.register_mutator
     register_mutator(
@@ -133,7 +135,9 @@ def test_register_mutator():
     assert "python" in _MUTATOR_REGISTRY
     assert "mutmut" in _MUTATOR_REGISTRY["python"]
 
-    async def mock_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def mock_run(
+        temp_dir: Path, strategy: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         return {"stdout": "", "stderr": "", "returncode": 0}
 
     def mock_parse(raw: Dict[str, Any]) -> Dict[str, int]:
@@ -173,7 +177,9 @@ async def test_mutation_test_success(mock_config: DummyConfig, temp_dir: Path):
     mutation_test should parse and expose those metrics.
     """
 
-    async def fake_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def fake_run(
+        temp_dir: Path, strategy: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         return {
             "stdout": "10 mutants generated. 6 killed, 3 survived, 1 timed out.",
             "stderr": "",
@@ -230,7 +236,9 @@ async def test_mutation_test_error(mock_config: DummyConfig, temp_dir: Path):
     a structured error result rather than crashing.
     """
 
-    async def failing_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def failing_run(
+        temp_dir: Path, strategy: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         raise Exception("subprocess fail")
 
     _MUTATOR_REGISTRY["python"]["mutmut"]["run"] = failing_run
@@ -272,7 +280,9 @@ async def test_fuzz_test_success(mock_config: DummyConfig, temp_dir: Path):
 
 
 @pytest.mark.asyncio
-async def test_fuzz_test_skipped_for_unknown_language(mock_config: DummyConfig, temp_dir: Path):
+async def test_fuzz_test_skipped_for_unknown_language(
+    mock_config: DummyConfig, temp_dir: Path
+):
     """
     If language detection fails / is unsupported, fuzz_test should
     skip gracefully.
@@ -288,7 +298,9 @@ async def test_fuzz_test_skipped_for_unknown_language(mock_config: DummyConfig, 
 
 
 @pytest.mark.asyncio
-async def test_property_based_test_no_hypothesis(mock_config: DummyConfig, temp_dir: Path):
+async def test_property_based_test_no_hypothesis(
+    mock_config: DummyConfig, temp_dir: Path
+):
     """
     Without Hypothesis installed/enabled, property_based_test should
     report 'skipped' cleanly.
@@ -336,7 +348,9 @@ async def test_property_based_test_success_no_fuzz_functions(
 
 
 @pytest.mark.asyncio
-async def test_run_subprocess_safe_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+async def test_run_subprocess_safe_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """
     _run_subprocess_safe should:
       - invoke asyncio.create_subprocess_exec
@@ -357,7 +371,9 @@ async def test_run_subprocess_safe_success(tmp_path: Path, monkeypatch: pytest.M
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
-    result = await runner_mutation._run_subprocess_safe(["echo", "hello"], cwd=tmp_path, timeout=5)
+    result = await runner_mutation._run_subprocess_safe(
+        ["echo", "hello"], cwd=tmp_path, timeout=5
+    )
 
     assert result["stdout"] == "hello"
     assert result["stderr"] == ""
@@ -365,7 +381,9 @@ async def test_run_subprocess_safe_success(tmp_path: Path, monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_run_subprocess_safe_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+async def test_run_subprocess_safe_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """
     If the subprocess does not complete within timeout, _run_subprocess_safe
     should raise the custom TimeoutError from runner_errors.
@@ -398,7 +416,9 @@ async def test_run_subprocess_safe_timeout(tmp_path: Path, monkeypatch: pytest.M
     from runner.runner_errors import TimeoutError as RunnerTimeoutError
 
     with pytest.raises(RunnerTimeoutError):
-        await runner_mutation._run_subprocess_safe(["sleep", "1"], cwd=tmp_path, timeout=0.01)
+        await runner_mutation._run_subprocess_safe(
+            ["sleep", "1"], cwd=tmp_path, timeout=0.01
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +439,9 @@ async def test_full_pipeline(
     """
 
     # Fake mutmut run: 4 total, 3 killed, 1 survived
-    async def fake_run(temp_dir: Path, strategy: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def fake_run(
+        temp_dir: Path, strategy: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         return {
             "stdout": "4 mutants generated. 3 killed, 1 survived, 0 timed out.",
             "stderr": "",

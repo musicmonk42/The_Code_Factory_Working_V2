@@ -1,7 +1,7 @@
 # message_bus/context.py
 
 import threading
-from typing import Any, Dict, Callable, TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 if TYPE_CHECKING:
     from .message_types import Message
@@ -50,7 +50,9 @@ class ContextPropagationMiddleware:
             ExecutionContext.set(**message.context)
 
         try:
-            return await self.message_bus._safe_callback_internal(callback, message, filter)
+            return await self.message_bus._safe_callback_internal(
+                callback, message, filter
+            )
         finally:
             ExecutionContext.clear()
             ExecutionContext.set(**old_context)

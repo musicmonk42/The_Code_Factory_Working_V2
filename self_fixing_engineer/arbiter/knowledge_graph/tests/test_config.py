@@ -1,18 +1,19 @@
-import pytest
 import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, mock_open
-from pydantic import ValidationError
+from unittest.mock import mock_open, patch
+
+import pytest
 
 # Import the module components
 from arbiter.knowledge_graph.config import (
-    SensitiveValue,
     MetaLearningConfig,
     MultiModalData,
+    SensitiveValue,
     load_persona_dict,
 )
+from pydantic import ValidationError
 
 
 # Module-level fixtures that can be used by all test classes
@@ -401,7 +402,9 @@ class TestConfigIntegration:
 
             # Check sensitive value handling
             assert isinstance(config.AUDIT_ENCRYPTION_KEY, SensitiveValue)
-            assert config.AUDIT_ENCRYPTION_KEY.get_actual_value() == "test_encryption_key"
+            assert (
+                config.AUDIT_ENCRYPTION_KEY.get_actual_value() == "test_encryption_key"
+            )
 
     def test_config_persistence(self, temp_data_dir):
         """Test that config values persist correctly"""

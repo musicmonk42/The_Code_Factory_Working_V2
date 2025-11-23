@@ -2,14 +2,14 @@
 
 import os
 import shutil
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
 import self_healing_import_fixer.analyzer.core_secrets as core_secrets
 from self_healing_import_fixer.analyzer.core_secrets import (
-    SecretsManager,
     SecretConfig,
     SecretProvider,
+    SecretsManager,
 )
 
 
@@ -146,7 +146,9 @@ def aws_secrets_manager(monkeypatch):
         "self_healing_import_fixer.analyzer.core_secrets.boto3.client",
         return_value=mock_client,
     ):
-        config = SecretConfig(provider=SecretProvider.AWS_SECRETS_MANAGER, aws_region="us-east-1")
+        config = SecretConfig(
+            provider=SecretProvider.AWS_SECRETS_MANAGER, aws_region="us-east-1"
+        )
         yield SecretsManager(config)
 
 

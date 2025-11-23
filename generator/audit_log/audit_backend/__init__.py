@@ -1,42 +1,43 @@
 # generator/audit_log/audit_backend/__init__.py
 from typing import Any, Dict, Optional, Type
 
+# Cloud Backends
+from .audit_backend_cloud import AzureBlobBackend, GCSBackend, S3Backend
+
 # Core components
 from .audit_backend_core import (
-    LogBackend,
+    retry_operation,
+)  # <-- ADD here (it’s defined in audit_backend_core)
+from .audit_backend_core import (
+    _STATUS_ERROR,
+    _STATUS_OK,
+    SCHEMA_VERSION,
     AuditBackendError,
+    CryptoInitializationError,
+    LogBackend,
     MigrationError,
     TamperDetectionError,
-    CryptoInitializationError,
-    SCHEMA_VERSION,
     compute_hash,
-    _STATUS_OK,
-    _STATUS_ERROR,
     logger,
-    retry_operation,  # <-- ADD here (it’s defined in audit_backend_core)
 )
 
 # File and SQL Backends
 from .audit_backend_file_sql import FileBackend, SQLiteBackend
 
-# Cloud Backends
-from .audit_backend_cloud import S3Backend, GCSBackend, AzureBlobBackend
-
 # Streaming Backends
 from .audit_backend_streaming_backends import (
     HTTPBackend,
+    InMemoryBackend,
     KafkaBackend,
     SplunkBackend,
-    InMemoryBackend,
 )
 
 # Streaming Utilities (public exports expected by tests)
-from .audit_backend_streaming_utils import (
+from .audit_backend_streaming_utils import (  # retry_operation,  # <-- REMOVE this line
+    FileBackedRetryQueue,
+    PersistentRetryQueue,
     SensitiveDataFilter,
     SimpleCircuitBreaker,
-    PersistentRetryQueue,
-    FileBackedRetryQueue,
-    # retry_operation,  # <-- REMOVE this line
 )
 
 # A central registry for easy backend instantiation
@@ -53,7 +54,9 @@ _BACKEND_REGISTRY: Dict[str, Type[LogBackend]] = {
 }
 
 
-def get_backend(backend_type: str, params: Optional[Dict[str, Any]] = None) -> LogBackend:
+def get_backend(
+    backend_type: str, params: Optional[Dict[str, Any]] = None
+) -> LogBackend:
     """Factory for backend instantiation."""
     backend_type_lower = backend_type.lower()
     if backend_type_lower not in _BACKEND_REGISTRY:

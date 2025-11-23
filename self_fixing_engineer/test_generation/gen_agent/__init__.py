@@ -8,6 +8,7 @@ without eagerly importing the whole subpackage (and its optional deps).
 """
 
 from __future__ import annotations
+
 import importlib
 
 __all__ = [

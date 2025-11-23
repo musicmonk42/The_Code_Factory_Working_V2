@@ -1,49 +1,43 @@
 # web_app.py (corrected & hardened)
-import streamlit as st
-import yaml
+import asyncio
+import importlib.util
 import json
 import logging
 import os
-import importlib.util
 import re  # For input validation
-from datetime import datetime, timezone, timedelta
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
-# P6: Retries for Redis/Agent calls
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    before_sleep_log,
-)
+import bcrypt
 
 # UPGRADE: For real-time collaboration
 import redis
-import bcrypt
-from streamlit_autorefresh import st_autorefresh
+import streamlit as st
+import yaml
 
-# UPGRADE: Observability - Prometheus & OpenTelemetry
-from prometheus_client import start_http_server, Counter
+# Import custom modules - Fixed to use absolute imports
+from intent_capture.agent_core import RedisStateBackend, get_or_create_agent
+from intent_capture.config import Config, PluginManager
+from intent_capture.requirements import generate_coverage_report, get_coverage_history
+from intent_capture.spec_utils import generate_spec_from_memory
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
-# Import custom modules - Fixed to use absolute imports
-from intent_capture.agent_core import (
-    get_or_create_agent,
-    RedisStateBackend,
-)
-from intent_capture.spec_utils import (
-    generate_spec_from_memory,
-)
-from intent_capture.requirements import get_coverage_history, generate_coverage_report
-from intent_capture.config import Config, PluginManager
+# UPGRADE: Observability - Prometheus & OpenTelemetry
+from prometheus_client import Counter, start_http_server
+from streamlit_autorefresh import st_autorefresh
+
+# P6: Retries for Redis/Agent calls
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 # Optional content-safety plugin (fail-safe fallback)
 try:
-    from intent_capture.self_evolution_plugin import initiate_evolution_cycle, _check_content_safety  # type: ignore
+    from intent_capture.self_evolution_plugin import (  # type: ignore
+        _check_content_safety,
+        initiate_evolution_cycle,
+    )
 except Exception:
 
     async def _check_content_safety(text: str) -> tuple[bool, str]:
@@ -115,7 +109,9 @@ for handler in logging.root.handlers[:]:
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
 logging.root.addHandler(handler)
-logging.root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())  # Set default level from env
+logging.root.setLevel(
+    os.getenv("LOG_LEVEL", "INFO").upper()
+)  # Set default level from env
 logger = logging.getLogger(__name__)
 
 st.set_page_config(
@@ -137,7 +133,9 @@ try:
     )
 except Exception:
     PROMETHEUS_AVAILABLE = False
-    logger.warning("Prometheus client not initialized. Streamlit metrics will be disabled.")
+    logger.warning(
+        "Prometheus client not initialized. Streamlit metrics will be disabled."
+    )
 
 # Optionally expose a Prometheus endpoint if configured (runs once on first import)
 if PROMETHEUS_AVAILABLE and os.getenv("PROMETHEUS_PORT"):
@@ -154,7 +152,9 @@ if PROMETHEUS_AVAILABLE and os.getenv("PROMETHEUS_PORT"):
 if os.getenv("OTEL_ENABLED", "false").lower() == "true":
     resource = Resource.create(attributes={"service.name": "streamlit-web-app"})
     provider = TracerProvider(resource=resource)
-    processor = BatchSpanProcessor(ConsoleSpanExporter())  # For production, use OTLPSpanExporter
+    processor = BatchSpanProcessor(
+        ConsoleSpanExporter()
+    )  # For production, use OTLPSpanExporter
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
     tracer = trace.get_tracer(__name__)
@@ -171,7 +171,9 @@ def load_locales():
         with open("locales.yaml", "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
     except FileNotFoundError:
-        logger.error("`locales.yaml` not found. Falling back to default English strings.")
+        logger.error(
+            "`locales.yaml` not found. Falling back to default English strings."
+        )
         return {
             "en": {
                 "_language_name": "English",
@@ -256,7 +258,9 @@ def init_session_state():
                 state_backend = None
                 if getattr(app_config, "REDIS_URL", None):
                     try:
-                        state_backend = RedisStateBackend(redis_url=app_config.REDIS_URL)
+                        state_backend = RedisStateBackend(
+                            redis_url=app_config.REDIS_URL
+                        )
                     except Exception:
                         logger.warning(
                             "RedisStateBackend not available, falling back to InMemoryStateBackend."
@@ -282,9 +286,9 @@ try:
     for user in auth_config.get("credentials", {}).get("usernames", {}).values():
         if not str(user.get("password", "")).startswith("$2b$"):  # bcrypt prefix
             salt = bcrypt.gensalt()
-            user["password"] = bcrypt.hashpw(str(user["password"]).encode("utf-8"), salt).decode(
-                "utf-8"
-            )
+            user["password"] = bcrypt.hashpw(
+                str(user["password"]).encode("utf-8"), salt
+            ).decode("utf-8")
     # Persist hashed credentials
     with open(auth_config_path, "w") as file:
         yaml.dump(auth_config, file)
@@ -352,7 +356,11 @@ if not st.session_state.get("authenticated", False):
             st.rerun()
 
         # Password verification
-        user_info = auth_config.get("credentials", {}).get("usernames", {}).get(sanitized_username)
+        user_info = (
+            auth_config.get("credentials", {})
+            .get("usernames", {})
+            .get(sanitized_username)
+        )
         if user_info and bcrypt.checkpw(
             sanitized_password.encode("utf-8"), user_info["password"].encode("utf-8")
         ):
@@ -371,9 +379,9 @@ if not st.session_state.get("authenticated", False):
                 st.session_state.failed_login_attempts.get(sanitized_username, 0) + 1
             )
             if st.session_state.failed_login_attempts[sanitized_username] >= 5:
-                st.session_state.failed_login_attempts[f"{sanitized_username}_blocked_until"] = (
-                    datetime.now() + timedelta(minutes=10)
-                )
+                st.session_state.failed_login_attempts[
+                    f"{sanitized_username}_blocked_until"
+                ] = datetime.now() + timedelta(minutes=10)
             generate_captcha()
             st.rerun()
     st.stop()
@@ -403,13 +411,17 @@ def get_redis_client():
             logger.info("Redis client connected successfully.")
             return client
         except Exception as e:
-            logger.error(f"Failed to connect to Redis at {redis_url}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to connect to Redis at {redis_url}: {e}", exc_info=True
+            )
             if PROMETHEUS_AVAILABLE:
                 APP_ERRORS_TOTAL.labels(
                     component="redis_connection", error_type=type(e).__name__
                 ).inc()
             return None
-    logger.warning("REDIS_URL not configured. Real-time collaboration will be unavailable.")
+    logger.warning(
+        "REDIS_URL not configured. Real-time collaboration will be unavailable."
+    )
     return None
 
 
@@ -454,7 +466,9 @@ with st.sidebar:
             if plugin["status"] == "enabled":
                 try:
                     cfg = Config()
-                    plugin_ui_path = os.path.join(cfg.PLUGINS_DIR, plugin["name"], "web_ui.py")
+                    plugin_ui_path = os.path.join(
+                        cfg.PLUGINS_DIR, plugin["name"], "web_ui.py"
+                    )
                     if os.path.exists(plugin_ui_path):
                         spec = importlib.util.spec_from_file_location(
                             plugin["name"], plugin_ui_path
@@ -534,7 +548,9 @@ def render_chat_page():
             )
             st.stop()
 
-        logger.info(f"User '{st.session_state.username}' input: {sanitized_prompt[:100]}...")
+        logger.info(
+            f"User '{st.session_state.username}' input: {sanitized_prompt[:100]}..."
+        )
         st.session_state.messages.append({"role": "user", "content": sanitized_prompt})
         with st.chat_message("user"):
             st.markdown(sanitized_prompt)
@@ -558,7 +574,9 @@ def render_chat_page():
                         "trace": response_data["trace"],
                     }
                 )
-                logger.info(f"Agent response generated for user '{st.session_state.username}'.")
+                logger.info(
+                    f"Agent response generated for user '{st.session_state.username}'."
+                )
             except Exception as e:
                 logger.error(
                     f"Agent prediction failed for user '{st.session_state.username}': {e}",
@@ -612,7 +630,9 @@ def render_specs_page():
         "SUPPORTED_SPEC_FORMATS",
         ["markdown", "gherkin", "json", "yaml", "user_story"],
     )
-    spec_format = st.selectbox("Specification Format", options=supported_spec_formats, index=0)
+    spec_format = st.selectbox(
+        "Specification Format", options=supported_spec_formats, index=0
+    )
 
     if st.button(t("generate_spec_button"), use_container_width=True):
         logger.info(
@@ -645,7 +665,9 @@ def render_specs_page():
                     )
                 else:
                     st.error(t("spec_generated_fail"))
-                    logger.error(f"Failed to generate spec for user '{st.session_state.username}'.")
+                    logger.error(
+                        f"Failed to generate spec for user '{st.session_state.username}'."
+                    )
                     if PROMETHEUS_AVAILABLE:
                         APP_ERRORS_TOTAL.labels(
                             component="generate_spec", error_type="GenerationFailed"
@@ -700,15 +722,23 @@ def render_collab_page():
                 msg.get("role", "user"),
                 avatar="🧑‍💻" if msg.get("role") == "user" else "🤖",
             ):
-                st.write(f"**{msg.get('username', 'Unknown')}**: {msg.get('content', '')}")
+                st.write(
+                    f"**{msg.get('username', 'Unknown')}**: {msg.get('content', '')}"
+                )
     except Exception as e:
-        logger.error(f"Error retrieving collaboration history from Redis: {e}", exc_info=True)
+        logger.error(
+            f"Error retrieving collaboration history from Redis: {e}", exc_info=True
+        )
         if PROMETHEUS_AVAILABLE:
-            APP_ERRORS_TOTAL.labels(component="collab_history", error_type=type(e).__name__).inc()
+            APP_ERRORS_TOTAL.labels(
+                component="collab_history", error_type=type(e).__name__
+            ).inc()
         st.warning("Could not load collaboration history.")
 
     MAX_COLLAB_INPUT_LENGTH = 1000
-    if collab_prompt := st.chat_input(t("collab_send_message"), max_chars=MAX_COLLAB_INPUT_LENGTH):
+    if collab_prompt := st.chat_input(
+        t("collab_send_message"), max_chars=MAX_COLLAB_INPUT_LENGTH
+    ):
         sanitized_collab_prompt = re.sub(r"<[^>]*>", "", collab_prompt).strip()
         if not sanitized_collab_prompt:
             st.warning("Please enter a non-empty message.")
@@ -736,7 +766,9 @@ def render_collab_page():
         except Exception as e:
             logger.error(f"Failed to send collaboration message: {e}", exc_info=True)
             if PROMETHEUS_AVAILABLE:
-                APP_ERRORS_TOTAL.labels(component="collab_send", error_type=type(e).__name__).inc()
+                APP_ERRORS_TOTAL.labels(
+                    component="collab_send", error_type=type(e).__name__
+                ).inc()
             st.error("Failed to send message. Please try again.")
         st.rerun()
 
@@ -758,10 +790,14 @@ def render_plugins_page():
         for plugin in enabled_plugins:
             try:
                 cfg = Config()
-                plugin_ui_path = os.path.join(cfg.PLUGINS_DIR, plugin["name"], "web_ui.py")
+                plugin_ui_path = os.path.join(
+                    cfg.PLUGINS_DIR, plugin["name"], "web_ui.py"
+                )
                 if os.path.exists(plugin_ui_path):
                     with st.container(border=True):
-                        st.subheader(f"Plugin: {plugin['name'].replace('_', ' ').title()}")
+                        st.subheader(
+                            f"Plugin: {plugin['name'].replace('_', ' ').title()}"
+                        )
                         spec = importlib.util.spec_from_file_location(
                             plugin["name"], plugin_ui_path
                         )
@@ -861,7 +897,9 @@ except Exception as e:
     current = page if isinstance(page, str) else "unknown"
     logger.error(f"Error on {current} page: {e}", exc_info=True)
     if PROMETHEUS_AVAILABLE:
-        APP_ERRORS_TOTAL.labels(component=f"{current}_page", error_type=type(e).__name__).inc()
+        APP_ERRORS_TOTAL.labels(
+            component=f"{current}_page", error_type=type(e).__name__
+        ).inc()
     st.error(f"An unexpected error occurred on the {current} page: {e}")
 
 

@@ -25,8 +25,8 @@ except ImportError:
 
 try:
     from fastapi import FastAPI, Form, Request  # Web form (fastapi req)
-    from starlette.responses import HTMLResponse
     from starlette.exceptions import HTTPException
+    from starlette.responses import HTMLResponse
 
     HAS_FASTAPI = True
 except ImportError:
@@ -39,7 +39,9 @@ try:
     HAS_SPEECH_RECOGNITION = True
 except ImportError:
     HAS_SPEECH_RECOGNITION = False
-    logging.warning("Speech Recognition (VoicePrompt) not found. VoicePrompt will be unavailable.")
+    logging.warning(
+        "Speech Recognition (VoicePrompt) not found. VoicePrompt will be unavailable."
+    )
 
 
 from cryptography.fernet import InvalidToken  # Encrypt (cryptography req)
@@ -49,7 +51,7 @@ from pydantic import BaseModel  # Config (pydantic req)
 
 # --- FIX: Import from the module that defines the utilities (clarifier) to break circular dependency ---
 # OLD: from . import get_logger, get_fernet, get_config
-from .clarifier import get_logger, get_fernet, get_config
+from .clarifier import get_config, get_fernet, get_logger
 
 # --- RUNNER FOUNDATION IMPORTS ---
 try:
@@ -65,7 +67,9 @@ try:
 except ImportError:
 
     def detect_language(text):
-        logging.warning("Dummy detect_language used: Runner language utils not available.")
+        logging.warning(
+            "Dummy detect_language used: Runner language utils not available."
+        )
         return "en"
 
 
@@ -76,7 +80,9 @@ try:
 except ImportError:
 
     def redact_sensitive(text):
-        logging.warning("Dummy redact_sensitive used: Runner security utils not available.")
+        logging.warning(
+            "Dummy redact_sensitive used: Runner security utils not available."
+        )
         return text
 
 
@@ -117,22 +123,36 @@ def _get_channel_configs_lazy():
         cfg = _get_config_lazy()
         _channel_configs_cache = {
             "EMAIL_SERVER": (
-                cfg.CLARIFIER_EMAIL_SERVER if hasattr(cfg, "CLARIFIER_EMAIL_SERVER") else None
+                cfg.CLARIFIER_EMAIL_SERVER
+                if hasattr(cfg, "CLARIFIER_EMAIL_SERVER")
+                else None
             ),
             "EMAIL_PORT": (
-                int(cfg.CLARIFIER_EMAIL_PORT) if hasattr(cfg, "CLARIFIER_EMAIL_PORT") else 587
+                int(cfg.CLARIFIER_EMAIL_PORT)
+                if hasattr(cfg, "CLARIFIER_EMAIL_PORT")
+                else 587
             ),
             "EMAIL_USER": (
-                cfg.CLARIFIER_EMAIL_USER if hasattr(cfg, "CLARIFIER_EMAIL_USER") else None
+                cfg.CLARIFIER_EMAIL_USER
+                if hasattr(cfg, "CLARIFIER_EMAIL_USER")
+                else None
             ),
             "EMAIL_PASS": (
-                cfg.CLARIFIER_EMAIL_PASS if hasattr(cfg, "CLARIFIER_EMAIL_PASS") else None
+                cfg.CLARIFIER_EMAIL_PASS
+                if hasattr(cfg, "CLARIFIER_EMAIL_PASS")
+                else None
             ),
             "SLACK_WEBHOOK": (
-                cfg.CLARIFIER_SLACK_WEBHOOK if hasattr(cfg, "CLARIFIER_SLACK_WEBHOOK") else None
+                cfg.CLARIFIER_SLACK_WEBHOOK
+                if hasattr(cfg, "CLARIFIER_SLACK_WEBHOOK")
+                else None
             ),
-            "SMS_API": (cfg.CLARIFIER_SMS_API if hasattr(cfg, "CLARIFIER_SMS_API") else None),
-            "SMS_KEY": (cfg.CLARIFIER_SMS_KEY if hasattr(cfg, "CLARIFIER_SMS_KEY") else None),
+            "SMS_API": (
+                cfg.CLARIFIER_SMS_API if hasattr(cfg, "CLARIFIER_SMS_API") else None
+            ),
+            "SMS_KEY": (
+                cfg.CLARIFIER_SMS_KEY if hasattr(cfg, "CLARIFIER_SMS_KEY") else None
+            ),
         }
     return _channel_configs_cache
 
@@ -213,7 +233,9 @@ PROMPT_ERRORS = Counter(
 USER_ENGAGEMENT = Gauge(
     "clarifier_user_engagement_score", "Engagement score (0-1) per user", ["user_id"]
 )
-FEEDBACK_RATINGS = Histogram("clarifier_feedback_ratings", "User feedback ratings (0-1)")
+FEEDBACK_RATINGS = Histogram(
+    "clarifier_feedback_ratings", "User feedback ratings (0-1)"
+)
 COMPLIANCE_QUESTIONS_ASKED = Counter(
     "clarifier_compliance_questions_asked_total",
     "Total compliance questions asked",
@@ -252,7 +274,9 @@ def load_profile(user_id: str) -> UserProfile:
                 data.pop("user_id", None)  # FIX: Remove duplicate user_id
                 return UserProfile(user_id=user_id, **data)
         except json.JSONDecodeError as e:
-            logger.error(f"Error loading profile for {user_id}: {e}. Creating new profile.")
+            logger.error(
+                f"Error loading profile for {user_id}: {e}. Creating new profile."
+            )
             PROMPT_ERRORS.labels(channel="system", type="profile_load_corrupt").inc()
             return UserProfile(user_id=user_id)
         except Exception as e:
@@ -291,7 +315,9 @@ class UserPromptChannel(ABC):
         if self.target_language != dest:
             try:
                 translated = self.translator.translate(text, dest=dest).text
-                logger.debug(f"Translated '{text[:30]}...' to '{dest}': '{translated[:30]}...'")
+                logger.debug(
+                    f"Translated '{text[:30]}...' to '{dest}': '{translated[:30]}...'"
+                )
                 return translated
             except Exception as e:
                 logger.warning(
@@ -310,8 +336,12 @@ class UserPromptChannel(ABC):
         try:
             return get_fernet().encrypt(answer.encode("utf-8")).decode("utf-8")
         except Exception as e:
-            logger.error(f"Encryption failed for answer: {e}. Returning unencrypted (DANGER!).")
-            PROMPT_ERRORS.labels(channel=self.__class__.__name__, type="encryption_failed").inc()
+            logger.error(
+                f"Encryption failed for answer: {e}. Returning unencrypted (DANGER!)."
+            )
+            PROMPT_ERRORS.labels(
+                channel=self.__class__.__name__, type="encryption_failed"
+            ).inc()
             return answer
 
     def _decrypt_answer(self, encrypted_answer: str) -> str:
@@ -325,11 +355,15 @@ class UserPromptChannel(ABC):
                 "Failed to decrypt answer: Invalid token.",
                 extra={"operation": "decrypt_answer_failed"},
             )
-            PROMPT_ERRORS.labels(channel=self.__class__.__name__, type="decryption_failed").inc()
+            PROMPT_ERRORS.labels(
+                channel=self.__class__.__name__, type="decryption_failed"
+            ).inc()
             return "[DECRYPTION_FAILED]"
         except Exception as e:
             logger.error(f"Unexpected error during decryption: {e}.")
-            PROMPT_ERRORS.labels(channel=self.__class__.__name__, type=type(e).__name__).inc()
+            PROMPT_ERRORS.labels(
+                channel=self.__class__.__name__, type=type(e).__name__
+            ).inc()
             return "[DECRYPTION_ERROR]"
 
     @abstractmethod
@@ -386,7 +420,11 @@ class CLIPrompt(UserPromptChannel):
         current_language = target_language or profile.language
 
         answers = []
-        print(self._translate_text("\nClarification needed (answer each one):", current_language))
+        print(
+            self._translate_text(
+                "\nClarification needed (answer each one):", current_language
+            )
+        )
         for i, q in enumerate(questions):
             translated_q = self._translate_text(q, current_language)
 
@@ -435,7 +473,9 @@ class CLIPrompt(UserPromptChannel):
 
         duration = time.perf_counter() - start_time
         PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
-        log_interaction(user_id, channel_name, questions, answers, duration, current_language)
+        log_interaction(
+            user_id, channel_name, questions, answers, duration, current_language
+        )
         return answers
 
     async def get_feedback(
@@ -466,11 +506,15 @@ class CLIPrompt(UserPromptChannel):
                 f"Invalid feedback rating from CLI: {e}. Defaulting to 0.5.",
                 exc_info=True,
             )
-            PROMPT_ERRORS.labels(channel=self.__class__.__name__, type="invalid_feedback").inc()
+            PROMPT_ERRORS.labels(
+                channel=self.__class__.__name__, type="invalid_feedback"
+            ).inc()
             return 0.5
         except Exception as e:
             logger.error(f"Error getting feedback from CLI: {e}", exc_info=True)
-            PROMPT_ERRORS.labels(channel=self.__class__.__name__, type=type(e).__name__).inc()
+            PROMPT_ERRORS.labels(
+                channel=self.__class__.__name__, type=type(e).__name__
+            ).inc()
             return 0.5
 
     async def ask_compliance_questions(
@@ -482,7 +526,11 @@ class CLIPrompt(UserPromptChannel):
         channel_name = self.__class__.__name__
         current_language = target_language or load_profile(user_id).language
 
-        print(self._translate_text("\n--- Compliance and Privacy Questions ---", current_language))
+        print(
+            self._translate_text(
+                "\n--- Compliance and Privacy Questions ---", current_language
+            )
+        )
         print(
             self._translate_text(
                 "Please answer these questions to ensure compliance with relevant regulations.",
@@ -501,7 +549,9 @@ class CLIPrompt(UserPromptChannel):
             while answer is None:
                 try:
                     if question_type == "boolean":
-                        raw_answer = input(f"{question_text} (yes/no): ").strip().lower()
+                        raw_answer = (
+                            input(f"{question_text} (yes/no): ").strip().lower()
+                        )
                         if raw_answer in ["yes", "y"]:
                             answer = True
                         elif raw_answer in ["no", "n"]:
@@ -541,8 +591,14 @@ class CLIPrompt(UserPromptChannel):
                 elif answer == "[UNSUPPORTED_TYPE]":
                     break
                 else:
-                    print(self._translate_text("Please provide a valid answer.", current_language))
-        print(self._translate_text("--- End Compliance Questions ---", current_language))
+                    print(
+                        self._translate_text(
+                            "Please provide a valid answer.", current_language
+                        )
+                    )
+        print(
+            self._translate_text("--- End Compliance Questions ---", current_language)
+        )
 
 
 class GUIPrompt(UserPromptChannel):
@@ -568,7 +624,9 @@ class GUIPrompt(UserPromptChannel):
         class PromptApp(textual.app.App):
             BINDINGS = [("q", "quit", "Quit")]
 
-            def __init__(self, questions_to_ask: List[str], target_lang: str, *args, **kwargs):
+            def __init__(
+                self, questions_to_ask: List[str], target_lang: str, *args, **kwargs
+            ):
                 super().__init__(*args, **kwargs)
                 self.questions_to_ask = questions_to_ask
                 self.answers: List[str] = []
@@ -586,16 +644,22 @@ class GUIPrompt(UserPromptChannel):
                 yield textual.widgets.Input(
                     placeholder=self._translate("Your answer here"), id="answer_input"
                 )
-                yield textual.widgets.Button(self._translate("Submit"), id="submit_button")
+                yield textual.widgets.Button(
+                    self._translate("Submit"), id="submit_button"
+                )
 
             def _translate(self, text: str) -> str:
                 if self.target_lang != "en":
                     return self.translator.translate(text, dest=self.target_lang).text
                 return text
 
-            async def on_button_pressed(self, event: textual.widgets.Button.Pressed) -> None:
+            async def on_button_pressed(
+                self, event: textual.widgets.Button.Pressed
+            ) -> None:
                 if event.button.id == "submit_button":
-                    input_widget = self.query_one("#answer_input", textual.widgets.Input)
+                    input_widget = self.query_one(
+                        "#answer_input", textual.widgets.Input
+                    )
                     answer = input_widget.value.strip()
 
                     if answer and self.target_lang != "en":
@@ -607,7 +671,9 @@ class GUIPrompt(UserPromptChannel):
 
                     if self.current_question_idx < len(self.questions_to_ask):
                         self.query_one("#question_label", textual.widgets.Label).update(
-                            self._translate(self.questions_to_ask[self.current_question_idx])
+                            self._translate(
+                                self.questions_to_ask[self.current_question_idx]
+                            )
                         )
                         input_widget.focus()
                     else:
@@ -687,12 +753,16 @@ class GUIPrompt(UserPromptChannel):
                     self._translate("Compliance Questions"), id="title_label"
                 )
                 yield textual.widgets.Label(
-                    self._translate(self.questions_data[self.current_question_idx]["text"]),
+                    self._translate(
+                        self.questions_data[self.current_question_idx]["text"]
+                    ),
                     id="question_label",
                 )
                 if self.questions_data[self.current_question_idx]["type"] == "boolean":
                     yield textual.widgets.RadioSet(
-                        textual.widgets.RadioButton(self._translate("Yes"), value="yes"),
+                        textual.widgets.RadioButton(
+                            self._translate("Yes"), value="yes"
+                        ),
                         textual.widgets.RadioButton(self._translate("No"), value="no"),
                         id="boolean_input",
                     )
@@ -701,30 +771,40 @@ class GUIPrompt(UserPromptChannel):
                         placeholder=self._translate("Your answer here"),
                         id="answer_input",
                     )
-                yield textual.widgets.Button(self._translate("Submit"), id="submit_button")
+                yield textual.widgets.Button(
+                    self._translate("Submit"), id="submit_button"
+                )
 
             def _translate(self, text: str) -> str:
                 if self.target_lang != "en":
                     return self.translator.translate(text, dest=self.target_lang).text
                 return text
 
-            async def on_button_pressed(self, event: textual.widgets.Button.Pressed) -> None:
+            async def on_button_pressed(
+                self, event: textual.widgets.Button.Pressed
+            ) -> None:
                 if event.button.id == "submit_button":
                     q_data = self.questions_data[self.current_question_idx]
                     question_id = q_data["id"]
                     answer = None
 
                     if q_data["type"] == "boolean":
-                        radio_set = self.query_one("#boolean_input", textual.widgets.RadioSet)
+                        radio_set = self.query_one(
+                            "#boolean_input", textual.widgets.RadioSet
+                        )
                         selected_value = (
-                            radio_set.pressed_button.value if radio_set.pressed_button else None
+                            radio_set.pressed_button.value
+                            if radio_set.pressed_button
+                            else None
                         )
                         if selected_value == "yes":
                             answer = True
                         elif selected_value == "no":
                             answer = False
                     else:
-                        input_widget = self.query_one("#answer_input", textual.widgets.Input)
+                        input_widget = self.query_one(
+                            "#answer_input", textual.widgets.Input
+                        )
                         answer = input_widget.value.strip()
 
                     if answer is not None:
@@ -733,15 +813,22 @@ class GUIPrompt(UserPromptChannel):
                         store_compliance_answer(self.user_id, question_id, answer)
                         self.current_question_idx += 1
                         if self.current_question_idx < len(self.questions_data):
-                            self.query_one("#question_label", textual.widgets.Label).update(
+                            self.query_one(
+                                "#question_label", textual.widgets.Label
+                            ).update(
                                 self._translate(
-                                    self.questions_data[self.current_question_idx]["text"]
+                                    self.questions_data[self.current_question_idx][
+                                        "text"
+                                    ]
                                 )
                             )
                             await self.query_one(
                                 "textual.widgets.Input, textual.widgets.RadioSet"
                             ).remove()
-                            if self.questions_data[self.current_question_idx]["type"] == "boolean":
+                            if (
+                                self.questions_data[self.current_question_idx]["type"]
+                                == "boolean"
+                            ):
                                 await self.mount(
                                     textual.widgets.RadioSet(
                                         textual.widgets.RadioButton(
@@ -778,7 +865,9 @@ class GUIPrompt(UserPromptChannel):
             target_lang=target_language or self.target_language,
         )
         await app.run_async()
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via GUI.")
+        logger.info(
+            f"Compliance questions asked and answers stored for user {user_id} via GUI."
+        )
 
 
 class WebPrompt(UserPromptChannel):
@@ -796,8 +885,13 @@ class WebPrompt(UserPromptChannel):
         async def submit_answers(session_id: str, request: Request):
             try:
                 form_data = await request.form()
-                questions_for_session = WebPrompt._web_question_cache.get(session_id, [])
-                answers = [form_data.get(f"answer_{i}") for i in range(len(questions_for_session))]
+                questions_for_session = WebPrompt._web_question_cache.get(
+                    session_id, []
+                )
+                answers = [
+                    form_data.get(f"answer_{i}")
+                    for i in range(len(questions_for_session))
+                ]
                 await WebPrompt._web_prompt_queue[session_id].put(answers)
                 return {"status": "success", "message": "Answers submitted."}
             except Exception as e:
@@ -805,7 +899,9 @@ class WebPrompt(UserPromptChannel):
                     f"Error submitting answers for session {session_id}: {e}",
                     exc_info=True,
                 )
-                PROMPT_ERRORS.labels(channel="WebPrompt", type="submit_answers_error").inc()
+                PROMPT_ERRORS.labels(
+                    channel="WebPrompt", type="submit_answers_error"
+                ).inc()
                 raise HTTPException(status_code=500, detail="Failed to submit answers.")
 
         @app.get("/prompt_form/{session_id}")
@@ -877,8 +973,12 @@ class WebPrompt(UserPromptChannel):
                     f"Error submitting compliance answers for session {session_id}: {e}",
                     exc_info=True,
                 )
-                PROMPT_ERRORS.labels(channel="WebPrompt", type="submit_compliance_error").inc()
-                raise HTTPException(status_code=500, detail="Failed to submit compliance answers.")
+                PROMPT_ERRORS.labels(
+                    channel="WebPrompt", type="submit_compliance_error"
+                ).inc()
+                raise HTTPException(
+                    status_code=500, detail="Failed to submit compliance answers."
+                )
 
         @app.get("/compliance_form/{session_id}")
         async def get_compliance_form(session_id: str):
@@ -961,7 +1061,9 @@ class WebPrompt(UserPromptChannel):
         start_time = time.perf_counter()
 
         if not HAS_FASTAPI:
-            logger.error("FastAPI not found. WebPrompt cannot function. Falling back to CLI dummy.")
+            logger.error(
+                "FastAPI not found. WebPrompt cannot function. Falling back to CLI dummy."
+            )
             PROMPT_ERRORS.labels(channel=channel_name, type="FastAPINotInstalled").inc()
             return await CLIPrompt(target_language=target_language).prompt(
                 questions, context, target_language
@@ -970,12 +1072,11 @@ class WebPrompt(UserPromptChannel):
         user_id = context.get("user_id", "anonymous")
         session_id = str(uuid.uuid4())
         WebPrompt._web_question_cache[session_id] = [
-            self._translate_text(q, target_language or self.target_language) for q in questions
+            self._translate_text(q, target_language or self.target_language)
+            for q in questions
         ]
 
-        prompt_url = (
-            f"http://localhost:{os.getenv('WEB_PROMPT_PORT', '8000')}/prompt_form/{session_id}"
-        )
+        prompt_url = f"http://localhost:{os.getenv('WEB_PROMPT_PORT', '8000')}/prompt_form/{session_id}"
         print(
             self._translate_text(
                 f"Please visit the following URL in your browser to answer the questions: {prompt_url}",
@@ -991,7 +1092,9 @@ class WebPrompt(UserPromptChannel):
                 answers = [self._translate_text(ans, "en") for ans in answers]
 
         except asyncio.TimeoutError:
-            answers = [self._translate_text("[NO_ANSWER_WEB_TIMEOUT]", "en")] * len(questions)
+            answers = [self._translate_text("[NO_ANSWER_WEB_TIMEOUT]", "en")] * len(
+                questions
+            )
             logger.warning(f"WebPrompt for session {session_id} timed out.")
             PROMPT_ERRORS.labels(channel=channel_name, type="timeout").inc()
         finally:
@@ -1047,11 +1150,11 @@ class WebPrompt(UserPromptChannel):
             )
             translated_compliance_questions.append(translated_q_data)
 
-        WebPrompt._web_compliance_questions_cache[session_id] = translated_compliance_questions
-
-        compliance_url = (
-            f"http://localhost:{os.getenv('WEB_PROMPT_PORT', '8000')}/compliance_form/{session_id}"
+        WebPrompt._web_compliance_questions_cache[session_id] = (
+            translated_compliance_questions
         )
+
+        compliance_url = f"http://localhost:{os.getenv('WEB_PROMPT_PORT', '8000')}/compliance_form/{session_id}"
         print(
             self._translate_text(
                 f"Please visit the following URL in your browser to answer the compliance questions: {compliance_url}",
@@ -1064,7 +1167,9 @@ class WebPrompt(UserPromptChannel):
                 WebPrompt._web_compliance_queue[session_id].get(), timeout=300
             )
             for q_id, answer in answers_dict.items():
-                if (target_language or self.target_language) != "en" and isinstance(answer, str):
+                if (target_language or self.target_language) != "en" and isinstance(
+                    answer, str
+                ):
                     answers_dict[q_id] = self._translate_text(answer, "en")
                 store_compliance_answer(user_id, q_id, answers_dict[q_id])
         except asyncio.TimeoutError:
@@ -1073,7 +1178,9 @@ class WebPrompt(UserPromptChannel):
         finally:
             WebPrompt._web_compliance_questions_cache.pop(session_id, None)
             WebPrompt._web_compliance_queue.pop(session_id, None)
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via Web.")
+        logger.info(
+            f"Compliance questions asked and answers stored for user {user_id} via Web."
+        )
 
 
 class SlackPrompt(UserPromptChannel):
@@ -1091,28 +1198,43 @@ class SlackPrompt(UserPromptChannel):
             logger.error(
                 "Slack webhook not configured. SlackPrompt cannot function. Falling back to CLI dummy."
             )
-            PROMPT_ERRORS.labels(channel=channel_name, type="SlackWebhookNotConfigured").inc()
+            PROMPT_ERRORS.labels(
+                channel=channel_name, type="SlackWebhookNotConfigured"
+            ).inc()
             return await CLIPrompt(target_language=target_language).prompt(
                 questions, context, target_language
             )
 
         translated_questions = [
-            self._translate_text(q, target_language or self.target_language) for q in questions
+            self._translate_text(q, target_language or self.target_language)
+            for q in questions
         ]
-        payload = {"text": "\n".join([f"Q{i+1}: {q}" for i, q in enumerate(translated_questions)])}
+        payload = {
+            "text": "\n".join(
+                [f"Q{i+1}: {q}" for i, q in enumerate(translated_questions)]
+            )
+        }
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(_get_channel_config("SLACK_WEBHOOK"), json=payload) as resp:
+                async with session.post(
+                    _get_channel_config("SLACK_WEBHOOK"), json=payload
+                ) as resp:
                     resp.raise_for_status()
-            logger.info(f"Questions sent to Slack via webhook for user {context.get('user_id')}.")
+            logger.info(
+                f"Questions sent to Slack via webhook for user {context.get('user_id')}."
+            )
             await asyncio.sleep(30)
-            answers = [self._translate_text("Mocked Slack Answer", "en")] * len(questions)
+            answers = [self._translate_text("Mocked Slack Answer", "en")] * len(
+                questions
+            )
 
         except Exception as e:
             logger.error(f"Failed to send questions to Slack: {e}", exc_info=True)
             PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-            answers = [self._translate_text("[NO_ANSWER_SLACK_ERROR]", "en")] * len(questions)
+            answers = [self._translate_text("[NO_ANSWER_SLACK_ERROR]", "en")] * len(
+                questions
+            )
 
         duration = time.perf_counter() - start_time
         PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
@@ -1178,7 +1300,9 @@ class SlackPrompt(UserPromptChannel):
                         f"Error posting compliance question to Slack: {e}",
                         exc_info=True,
                     )
-                    PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
+                    PROMPT_ERRORS.labels(
+                        channel=channel_name, type=type(e).__name__
+                    ).inc()
 
 
 class EmailPrompt(UserPromptChannel):
@@ -1220,7 +1344,8 @@ class EmailPrompt(UserPromptChannel):
             )
 
         translated_questions = [
-            self._translate_text(q, target_language or self.target_language) for q in questions
+            self._translate_text(q, target_language or self.target_language)
+            for q in questions
         ]
         email_body = (
             "\n".join([f"Q{i+1}: {q}" for i, q in enumerate(translated_questions)])
@@ -1241,17 +1366,25 @@ class EmailPrompt(UserPromptChannel):
                 _get_channel_config("EMAIL_SERVER"), _get_channel_config("EMAIL_PORT")
             ) as server:
                 server.starttls(context=context_ssl)
-                server.login(_get_channel_config("EMAIL_USER"), _get_channel_config("EMAIL_PASS"))
-                server.sendmail(_get_channel_config("EMAIL_USER"), user_email, msg.as_string())
+                server.login(
+                    _get_channel_config("EMAIL_USER"), _get_channel_config("EMAIL_PASS")
+                )
+                server.sendmail(
+                    _get_channel_config("EMAIL_USER"), user_email, msg.as_string()
+                )
             logger.info(f"Questions sent via email to {user_email}.")
 
             await asyncio.sleep(60)
-            answers = [self._translate_text("Mocked Email Answer", "en")] * len(questions)
+            answers = [self._translate_text("Mocked Email Answer", "en")] * len(
+                questions
+            )
 
         except Exception as e:
             logger.error(f"Failed to send email: {e}", exc_info=True)
             PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-            answers = [self._translate_text("[NO_ANSWER_EMAIL_ERROR]", "en")] * len(questions)
+            answers = [self._translate_text("[NO_ANSWER_EMAIL_ERROR]", "en")] * len(
+                questions
+            )
 
         duration = time.perf_counter() - start_time
         PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
@@ -1339,8 +1472,12 @@ class EmailPrompt(UserPromptChannel):
                 _get_channel_config("EMAIL_SERVER"), _get_channel_config("EMAIL_PORT")
             ) as server:
                 server.starttls(context=context_ssl)
-                server.login(_get_channel_config("EMAIL_USER"), _get_channel_config("EMAIL_PASS"))
-                server.sendmail(_get_channel_config("EMAIL_USER"), user_email, msg.as_string())
+                server.login(
+                    _get_channel_config("EMAIL_USER"), _get_channel_config("EMAIL_PASS")
+                )
+                server.sendmail(
+                    _get_channel_config("EMAIL_USER"), user_email, msg.as_string()
+                )
             logger.info(f"Compliance questions sent via email to {user_email}.")
 
             await asyncio.sleep(60)
@@ -1352,9 +1489,13 @@ class EmailPrompt(UserPromptChannel):
                 store_compliance_answer(user_id, q_data["id"], answer_value)
 
         except Exception as e:
-            logger.error(f"Failed to send compliance questions via email: {e}", exc_info=True)
+            logger.error(
+                f"Failed to send compliance questions via email: {e}", exc_info=True
+            )
             PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via Email.")
+        logger.info(
+            f"Compliance questions asked and answers stored for user {user_id} via Email."
+        )
 
 
 class SMSPrompt(UserPromptChannel):
@@ -1388,9 +1529,9 @@ class SMSPrompt(UserPromptChannel):
                 questions, context, target_language
             )
 
-        translated_q = self._translate_text(questions[0], target_language or self.target_language)[
-            :150
-        ]
+        translated_q = self._translate_text(
+            questions[0], target_language or self.target_language
+        )[:150]
         sms_body = f"Q: {translated_q}"
 
         try:
@@ -1409,7 +1550,9 @@ class SMSPrompt(UserPromptChannel):
         except Exception as e:
             logger.error(f"Failed to send SMS: {e}", exc_info=True)
             PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-            answers = [self._translate_text("[NO_ANSWER_SMS_ERROR]", "en")] * len(questions)
+            answers = [self._translate_text("[NO_ANSWER_SMS_ERROR]", "en")] * len(
+                questions
+            )
 
         duration = time.perf_counter() - start_time
         PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
@@ -1483,9 +1626,13 @@ class SMSPrompt(UserPromptChannel):
                     answer_value = answer_value.lower() == "yes"
                 store_compliance_answer(user_id, q_data["id"], answer_value)
             except Exception as e:
-                logger.error(f"Failed to send compliance Q{i+1} via SMS: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send compliance Q{i+1} via SMS: {e}", exc_info=True
+                )
                 PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via SMS.")
+        logger.info(
+            f"Compliance questions asked and answers stored for user {user_id} via SMS."
+        )
 
 
 class VoicePrompt(UserPromptChannel):
@@ -1503,7 +1650,9 @@ class VoicePrompt(UserPromptChannel):
             logger.error(
                 "Speech Recognition library not found. VoicePrompt cannot function. Falling back to CLI dummy."
             )
-            PROMPT_ERRORS.labels(channel=channel_name, type="SpeechRecognitionNotInstalled").inc()
+            PROMPT_ERRORS.labels(
+                channel=channel_name, type="SpeechRecognitionNotInstalled"
+            ).inc()
             return await CLIPrompt(target_language=target_language).prompt(
                 questions, context, target_language
             )
@@ -1512,7 +1661,9 @@ class VoicePrompt(UserPromptChannel):
         r = sr.Recognizer()
 
         for q in questions:
-            translated_q = self._translate_text(q, target_language or self.target_language)
+            translated_q = self._translate_text(
+                q, target_language or self.target_language
+            )
             print(translated_q)
 
             with sr.Microphone() as source:
@@ -1527,26 +1678,44 @@ class VoicePrompt(UserPromptChannel):
                         answer = self._translate_text(answer, "en")
                     answers.append(answer)
                 except sr.WaitTimeoutError:
-                    answers.append(self._translate_text("[NO_ANSWER_VOICE_TIMEOUT]", "en"))
+                    answers.append(
+                        self._translate_text("[NO_ANSWER_VOICE_TIMEOUT]", "en")
+                    )
                     logger.warning("Voice input timed out.")
                     PROMPT_ERRORS.labels(channel=channel_name, type="timeout").inc()
                 except sr.UnknownValueError:
-                    answers.append(self._translate_text("[NO_ANSWER_VOICE_UNKNOWN]", "en"))
-                    logger.warning("Google Speech Recognition could not understand audio.")
-                    PROMPT_ERRORS.labels(channel=channel_name, type="unknown_value").inc()
+                    answers.append(
+                        self._translate_text("[NO_ANSWER_VOICE_UNKNOWN]", "en")
+                    )
+                    logger.warning(
+                        "Google Speech Recognition could not understand audio."
+                    )
+                    PROMPT_ERRORS.labels(
+                        channel=channel_name, type="unknown_value"
+                    ).inc()
                 except sr.RequestError as e:
-                    answers.append(self._translate_text(f"[NO_ANSWER_VOICE_ERROR_{e}]", "en"))
+                    answers.append(
+                        self._translate_text(f"[NO_ANSWER_VOICE_ERROR_{e}]", "en")
+                    )
                     logger.error(
                         f"Could not request results from Google Speech Recognition service; {e}",
                         exc_info=True,
                     )
-                    PROMPT_ERRORS.labels(channel=channel_name, type="request_error").inc()
+                    PROMPT_ERRORS.labels(
+                        channel=channel_name, type="request_error"
+                    ).inc()
                 except Exception as e:
                     answers.append(
-                        self._translate_text(f"[NO_ANSWER_VOICE_UNEXPECTED_ERROR_{e}]", "en")
+                        self._translate_text(
+                            f"[NO_ANSWER_VOICE_UNEXPECTED_ERROR_{e}]", "en"
+                        )
                     )
-                    logger.error(f"Unexpected error during voice prompt: {e}", exc_info=True)
-                    PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
+                    logger.error(
+                        f"Unexpected error during voice prompt: {e}", exc_info=True
+                    )
+                    PROMPT_ERRORS.labels(
+                        channel=channel_name, type=type(e).__name__
+                    ).inc()
 
         duration = time.perf_counter() - start_time
         PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
@@ -1583,7 +1752,9 @@ class VoicePrompt(UserPromptChannel):
             logger.error(
                 "Speech Recognition library not found. VoicePrompt cannot ask compliance questions. Falling back to CLI dummy."
             )
-            PROMPT_ERRORS.labels(channel=channel_name, type="SpeechRecognitionNotInstalled").inc()
+            PROMPT_ERRORS.labels(
+                channel=channel_name, type="SpeechRecognitionNotInstalled"
+            ).inc()
             await CLIPrompt(target_language=target_language).ask_compliance_questions(
                 user_id, context, target_language
             )
@@ -1637,9 +1808,9 @@ class VoicePrompt(UserPromptChannel):
                         answer = raw_answer
 
                     if answer is not None:
-                        if (target_language or self.target_language) != "en" and isinstance(
-                            answer, str
-                        ):
+                        if (
+                            target_language or self.target_language
+                        ) != "en" and isinstance(answer, str):
                             answer = self._translate_text(answer, "en")
                         store_compliance_answer(user_id, q_data["id"], answer)
                     else:
@@ -1672,12 +1843,18 @@ class VoicePrompt(UserPromptChannel):
                         f"Unexpected error during voice compliance prompt: {e}",
                         exc_info=True,
                     )
-                    PROMPT_ERRORS.labels(channel=channel_name, type=type(e).__name__).inc()
-        logger.info(f"Compliance questions asked and answers stored for user {user_id} via Voice.")
+                    PROMPT_ERRORS.labels(
+                        channel=channel_name, type=type(e).__name__
+                    ).inc()
+        logger.info(
+            f"Compliance questions asked and answers stored for user {user_id} via Voice."
+        )
 
 
 # Channel registry
-def get_channel(channel_type: str, target_language: Optional[str] = None) -> UserPromptChannel:
+def get_channel(
+    channel_type: str, target_language: Optional[str] = None
+) -> UserPromptChannel:
     """Factory function to get a UserPromptChannel instance, with language setting."""
     lang = target_language or "en"
 
@@ -1715,7 +1892,9 @@ def get_channel(channel_type: str, target_language: Optional[str] = None) -> Use
             raise ValueError("Speech Recognition not available for VoicePrompt.")
         return VoicePrompt(target_language=lang)
 
-    raise ValueError(f"Unsupported channel type: {channel_type}. Available: {CHANNEL_TYPES}")
+    raise ValueError(
+        f"Unsupported channel type: {channel_type}. Available: {CHANNEL_TYPES}"
+    )
 
 
 # Smart Input Handling
@@ -1745,7 +1924,9 @@ def update_profile_from_feedback(user_id: str, rating: float, question_id: str):
     profile.feedback_scores[question_id] = rating
 
     if profile.feedback_scores:
-        engagement = sum(profile.feedback_scores.values()) / len(profile.feedback_scores)
+        engagement = sum(profile.feedback_scores.values()) / len(
+            profile.feedback_scores
+        )
         USER_ENGAGEMENT.labels(user_id=user_id).set(engagement)
     else:
         USER_ENGAGEMENT.labels(user_id=user_id).set(0.0)
@@ -1775,7 +1956,9 @@ def store_compliance_answer(user_id: str, question_id: str, answer: Any):
     profile = load_profile(user_id)
     profile.compliance_preferences[question_id] = answer
     save_profile(user_id, profile)
-    COMPLIANCE_ANSWERS_RECEIVED.labels(question_id=question_id, answer_value=str(answer)).inc()
+    COMPLIANCE_ANSWERS_RECEIVED.labels(
+        question_id=question_id, answer_value=str(answer)
+    ).inc()
     log_action(
         "Compliance Question Answered",
         {"user_id": user_id, "question_id": question_id, "answer": str(answer)},
@@ -1794,11 +1977,19 @@ async def recover_error(
     Provides error recovery/help for a failed prompt.
     """
     recovery_question_text = f"There was an issue processing your previous answer for: '{question}'. Error: {error_message}. Please try again, or type 'SKIP' to skip this question."
-    PROMPT_ERRORS.labels(channel=channel.__class__.__name__, type="recovery_prompt").inc()
+    PROMPT_ERRORS.labels(
+        channel=channel.__class__.__name__, type="recovery_prompt"
+    ).inc()
 
-    retried_answers = await channel.prompt([recovery_question_text], context, target_language)
+    retried_answers = await channel.prompt(
+        [recovery_question_text], context, target_language
+    )
 
-    if retried_answers and retried_answers[0] and retried_answers[0].strip().upper() == "SKIP":
+    if (
+        retried_answers
+        and retried_answers[0]
+        and retried_answers[0].strip().upper() == "SKIP"
+    ):
         return "[SKIPPED_BY_USER]"
 
     return retried_answers[0] if retried_answers and retried_answers[0] else ""
@@ -1828,8 +2019,12 @@ def log_interaction(
             "answers_provided_count": len([a for a in answers if a and a.strip()]),
             "duration_seconds": duration,
             "language_used": language,
-            "questions_hashes": [hashlib.sha256(q.encode()).hexdigest() for q in anon_questions],
-            "answers_hashes": [hashlib.sha256(a.encode()).hexdigest() for a in anon_answers],
+            "questions_hashes": [
+                hashlib.sha256(q.encode()).hexdigest() for q in anon_questions
+            ],
+            "answers_hashes": [
+                hashlib.sha256(a.encode()).hexdigest() for a in anon_answers
+            ],
         },
     )
 

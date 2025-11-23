@@ -1,30 +1,30 @@
-import os
 import asyncio
-import time
+import gzip
+import hashlib
+import hmac
+import importlib.metadata
 import json
 import logging
-import socket
+import os
 import random
-import hmac
-import hashlib
-import importlib.metadata
 import re
-import gzip
-import sys
+import socket
 import ssl
-from typing import Dict, Any, Optional, List, Callable, Awaitable, Protocol
-from contextlib import asynccontextmanager
+import sys
+import time
 from collections import deque
+from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
 
-import aiohttp
 import aiofiles
-from pydantic import BaseModel, ValidationError, Field, field_validator
+import aiohttp
+import psutil
+from cryptography.fernet import Fernet
+from prometheus_client import Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pythonjsonlogger import jsonlogger
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
-from cryptography.fernet import Fernet
-import psutil
 
 # Import custom exceptions from parent module
 from self_fixing_engineer.exceptions import AnalyzerCriticalError
@@ -34,9 +34,9 @@ PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
 # --- Core Integrations (shared for all plugins/gateways) ---
 try:
-    from core_utils import alert_operator
     from core_audit import audit_logger
     from core_secrets import SECRETS_MANAGER
+    from core_utils import alert_operator
 except ImportError:
     import logging
 
@@ -119,7 +119,9 @@ except Exception as e:
     )
 
 audit_log_handler.setFormatter(
-    AuditJsonFormatter("%(timestamp)s %(hostname)s %(service_name)s %(levelname)s %(message)s")
+    AuditJsonFormatter(
+        "%(timestamp)s %(hostname)s %(service_name)s %(levelname)s %(message)s"
+    )
 )
 if not audit_logger.handlers:
     audit_logger.setLevel(logging.INFO)
@@ -130,7 +132,9 @@ main_logger = logging.getLogger("siem_gateway")
 if not main_logger.handlers:
     main_logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
     log_handler = logging.StreamHandler()
-    log_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    log_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     log_handler.setFormatter(log_formatter)
     main_logger.addHandler(log_handler)
 
@@ -141,20 +145,22 @@ TraceContextTextMapPropagator = None
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.context import get_current
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
     from opentelemetry.propagate import set_global_textmap
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.trace.sampling import ProbabilitySampler
     from opentelemetry.trace.propagation.tracecontext import (
         TraceContextTextMapPropagator,
     )
-    from opentelemetry.context import get_current
-    from opentelemetry.sdk.trace.sampling import ProbabilitySampler
 
     resource = Resource(
-        attributes={SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "siem-gateway-service")}
+        attributes={
+            SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "siem-gateway-service")
+        }
     )
     trace_provider = TracerProvider(sampler=ProbabilitySampler(0.1), resource=resource)
     trace_exporter = OTLPSpanExporter(
@@ -182,7 +188,9 @@ except ImportError:
     tracer = MockTracer()
     TraceContextTextMapPropagator = None
     OPENTELEMETRY_AVAILABLE = False
-    main_logger.warning("OpenTelemetry SDK not found. Distributed tracing will be disabled.")
+    main_logger.warning(
+        "OpenTelemetry SDK not found. Distributed tracing will be disabled."
+    )
 except Exception as e:
     main_logger.critical(f"Failed to initialize OpenTelemetry: {e}. Exiting.")
     alert_operator(f"Failed to initialize OpenTelemetry: {e}", "CRITICAL")
@@ -207,7 +215,9 @@ class SIEMTarget(BaseSettings):
             if PROD_MODE:
                 raise ValueError("In production, SIEM target URLs must use HTTPS.")
             else:
-                main_logger.warning(f"Using non-HTTPS URL {v}. This is not secure for production.")
+                main_logger.warning(
+                    f"Using non-HTTPS URL {v}. This is not secure for production."
+                )
         return v
 
 
@@ -264,7 +274,9 @@ class SIEMGatewaySettings(BaseSettings):
     @classmethod
     def validate_admin_api_host(cls, v: str) -> str:
         if PROD_MODE and v not in ["127.0.0.1", "localhost"]:
-            raise ValueError("In production, the admin API must only be exposed on localhost.")
+            raise ValueError(
+                "In production, the admin API must only be exposed on localhost."
+            )
         return v
 
     @classmethod
@@ -272,13 +284,21 @@ class SIEMGatewaySettings(BaseSettings):
         main_logger.info("Loading secrets and configuration from secure vault...")
         try:
             settings_dict = {
-                "signing_secret": SECRETS_MANAGER.get_secret("SIEM_GATEWAY_SIGNING_SECRET"),
-                "admin_api_key": SECRETS_MANAGER.get_secret("SIEM_GATEWAY_ADMIN_API_KEY"),
+                "signing_secret": SECRETS_MANAGER.get_secret(
+                    "SIEM_GATEWAY_SIGNING_SECRET"
+                ),
+                "admin_api_key": SECRETS_MANAGER.get_secret(
+                    "SIEM_GATEWAY_ADMIN_API_KEY"
+                ),
                 "encryption_key": SECRETS_MANAGER.get_secret(
                     "SIEM_GATEWAY_ENCRYPTION_KEY", required=False
                 ),
-                "cert_path": SECRETS_MANAGER.get_secret("SIEM_GATEWAY_API_CERT", required=False),
-                "key_path": SECRETS_MANAGER.get_secret("SIEM_GATEWAY_API_KEY", required=False),
+                "cert_path": SECRETS_MANAGER.get_secret(
+                    "SIEM_GATEWAY_API_CERT", required=False
+                ),
+                "key_path": SECRETS_MANAGER.get_secret(
+                    "SIEM_GATEWAY_API_KEY", required=False
+                ),
             }
 
             for key in [
@@ -303,7 +323,9 @@ class SIEMGatewaySettings(BaseSettings):
                         )
                     settings_dict[key] = os.environ[env_key]
 
-            targets_json = SECRETS_MANAGER.get_secret("SIEM_GATEWAY_TARGETS", required=False)
+            targets_json = SECRETS_MANAGER.get_secret(
+                "SIEM_GATEWAY_TARGETS", required=False
+            )
             if targets_json:
                 settings_dict["targets"] = [
                     SIEMTarget.model_validate(t) for t in json.loads(targets_json)
@@ -312,7 +334,9 @@ class SIEMGatewaySettings(BaseSettings):
             settings = cls.model_validate(settings_dict)
 
             if PROD_MODE and settings.encryption_key is None:
-                raise ValueError("In production, encryption is mandatory for compliance.")
+                raise ValueError(
+                    "In production, encryption is mandatory for compliance."
+                )
 
             return settings
         except (KeyError, json.JSONDecodeError, ValidationError) as e:
@@ -383,7 +407,9 @@ class SIEMMetrics:
     )
 
     SYSTEM_CPU_USAGE = Gauge("siem_system_cpu_usage_percent", "CPU usage percentage.")
-    SYSTEM_MEMORY_USAGE = Gauge("siem_system_memory_usage_bytes", "Memory usage in bytes.")
+    SYSTEM_MEMORY_USAGE = Gauge(
+        "siem_system_memory_usage_bytes", "Memory usage in bytes."
+    )
 
     def update_system_metrics(self):
         self.SYSTEM_CPU_USAGE.set(psutil.cpu_percent())
@@ -471,7 +497,9 @@ class JsonHecSerializer:
                         "source": event.source,
                         "sourcetype": event.sourcetype,
                         "index": event.index or default_index,
-                        "event": event.model_dump(exclude={"signature", "enqueue_time"}),
+                        "event": event.model_dump(
+                            exclude={"signature", "enqueue_time"}
+                        ),
                         "signature": event.signature,
                     }
                 )
@@ -531,13 +559,19 @@ class PersistentWALQueue(EventQueue):
             os.chmod(self._dir, 0o700)
         self._mem_queue = asyncio.Queue(maxsize=max_in_memory_size)
         self._write_lock = asyncio.Lock()
-        self._current_write_log: Optional[aiofiles.threadpool.binary.AsyncBufferedIOBase] = None
+        self._current_write_log: Optional[
+            aiofiles.threadpool.binary.AsyncBufferedIOBase
+        ] = None
         self._current_log_path: Optional[str] = None
 
     async def startup(self):
         try:
             log_files = sorted(
-                [f for f in os.listdir(self._dir) if f.startswith("events.") and f.endswith(".log")]
+                [
+                    f
+                    for f in os.listdir(self._dir)
+                    if f.startswith("events.") and f.endswith(".log")
+                ]
             )
             for log_file in log_files:
                 path = os.path.join(self._dir, log_file)
@@ -568,8 +602,12 @@ class PersistentWALQueue(EventQueue):
                                 event = SIEMEvent.model_validate_json(decrypted_line)
                                 await self._mem_queue.put(event)
                             except Exception as e:
-                                main_logger.critical(f"Failed to process WAL entry: {e}. Aborting.")
-                                raise AnalyzerCriticalError(f"Failed to process WAL entry: {e}.")
+                                main_logger.critical(
+                                    f"Failed to process WAL entry: {e}. Aborting."
+                                )
+                                raise AnalyzerCriticalError(
+                                    f"Failed to process WAL entry: {e}."
+                                )
             main_logger.info(
                 f"Loaded {self._mem_queue.qsize()} events from disk for target {os.path.basename(self._dir)}."
             )
@@ -587,7 +625,9 @@ class PersistentWALQueue(EventQueue):
                 f"Failed to load WAL from disk: {e}. Exiting.",
                 extra={"context": {"target": os.path.basename(self._dir)}},
             )
-            raise RuntimeError("Critical startup failure: WAL could not be loaded.") from e
+            raise RuntimeError(
+                "Critical startup failure: WAL could not be loaded."
+            ) from e
         await self._open_next_log_segment()
 
     async def _open_next_log_segment(self):
@@ -598,7 +638,9 @@ class PersistentWALQueue(EventQueue):
                 self._current_log_path = os.path.join(
                     self._dir, f"events.{time.strftime('%Y%m%d_%H%M%S')}.log"
                 )
-                self._current_write_log = await aiofiles.open(self._current_log_path, "ab")
+                self._current_write_log = await aiofiles.open(
+                    self._current_log_path, "ab"
+                )
                 os.chmod(self._current_log_path, 0o600)
                 self._last_rotation_time = time.time()
             except OSError as e:
@@ -614,7 +656,8 @@ class PersistentWALQueue(EventQueue):
         async with self._write_lock:
             if (
                 not self._current_write_log
-                or await aiofiles.os.stat(self._current_log_path).st_size > self._max_log_size
+                or await aiofiles.os.stat(self._current_log_path).st_size
+                > self._max_log_size
                 or time.time() - self._last_rotation_time > self._log_rotation_interval
             ):
                 await self._open_next_log_segment()
@@ -624,7 +667,9 @@ class PersistentWALQueue(EventQueue):
                 line = self._cipher.encrypt(line)
 
             signature = hmac.new(self._hmac_key, line, hashlib.sha256).hexdigest()
-            await self._current_write_log.write(f"{signature}:{line.decode()}\n".encode())
+            await self._current_write_log.write(
+                f"{signature}:{line.decode()}\n".encode()
+            )
             await self._current_write_log.flush()
         await self._mem_queue.put(item)
 
@@ -646,7 +691,9 @@ class PersistentWALQueue(EventQueue):
                 "shutdown_timeout",
                 extra={"context": {"remaining_events": self._mem_queue.qsize()}},
             )
-            alert_operator("CRITICAL: Shutdown timeout exceeded. Events may be lost.", "CRITICAL")
+            alert_operator(
+                "CRITICAL: Shutdown timeout exceeded. Events may be lost.", "CRITICAL"
+            )
 
     async def shutdown(self):
         await self.flush()
@@ -660,18 +707,26 @@ class PersistentWALQueue(EventQueue):
 
 # ---- 5. Advanced Resilience Patterns ----
 class CircuitBreaker:
-    def __init__(self, threshold: int, reset_seconds: int, metrics: SIEMMetrics, target_name: str):
+    def __init__(
+        self, threshold: int, reset_seconds: int, metrics: SIEMMetrics, target_name: str
+    ):
         self._threshold, self._reset_seconds = threshold, reset_seconds
         self._metrics, self._target_name = metrics, target_name
         self._failure_count, self._is_open, self._last_failure_time = 0, False, 0.0
-        self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(0)
+        self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(
+            0
+        )
 
     def check(self):
         if self._is_open:
             jitter = random.uniform(0, self._reset_seconds * 0.1)
-            if time.monotonic() - self._last_failure_time > (self._reset_seconds + jitter):
+            if time.monotonic() - self._last_failure_time > (
+                self._reset_seconds + jitter
+            ):
                 self._is_open, self._failure_count = False, 0
-                self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(0)
+                self._metrics.CIRCUIT_BREAKER_STATUS.labels(
+                    target_name=self._target_name
+                ).set(0)
                 main_logger.warning(
                     "Circuit breaker has been reset.",
                     extra={"context": {"target": self._target_name}},
@@ -681,13 +736,17 @@ class CircuitBreaker:
                     extra={"context": {"target": self._target_name}},
                 )
             else:
-                raise ConnectionAbortedError(f"Circuit breaker for {self._target_name} is open.")
+                raise ConnectionAbortedError(
+                    f"Circuit breaker for {self._target_name} is open."
+                )
 
     def record_failure(self):
         self._failure_count += 1
         if self._failure_count >= self._threshold and not self._is_open:
             self._is_open, self._last_failure_time = True, time.monotonic()
-            self._metrics.CIRCUIT_BREAKER_STATUS.labels(target_name=self._target_name).set(1)
+            self._metrics.CIRCUIT_BREAKER_STATUS.labels(
+                target_name=self._target_name
+            ).set(1)
             main_logger.critical(
                 "Circuit breaker tripped. Escalating.",
                 extra={"context": {"target": self._target_name}},
@@ -716,7 +775,9 @@ class CircuitBreaker:
 
 
 class TokenBucket:
-    def __init__(self, rate: float, capacity: float, metrics: SIEMMetrics, target_name: str):
+    def __init__(
+        self, rate: float, capacity: float, metrics: SIEMMetrics, target_name: str
+    ):
         self._rate, self._capacity = rate, capacity
         self._metrics, self._target_name = metrics, target_name
         self._tokens, self._last_refill = capacity, time.monotonic()
@@ -784,12 +845,16 @@ class SIEMGateway:
             global_settings.max_queue_size,
             encryption_key=global_settings.encryption_key,
         )
-        self._fallback_queue: EventQueue = asyncio.Queue(maxsize=global_settings.max_queue_size)
+        self._fallback_queue: EventQueue = asyncio.Queue(
+            maxsize=global_settings.max_queue_size
+        )
 
         self._workers: List[asyncio.Task] = []
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock = asyncio.Lock()
-        self._concurrency_limiter = asyncio.Semaphore(global_settings.max_concurrent_requests)
+        self._concurrency_limiter = asyncio.Semaphore(
+            global_settings.max_concurrent_requests
+        )
         self._hostname = socket.gethostname()
         self._health_stats = {"processed_count": 0, "last_processed_time": 0.0}
         self._is_paused = False
@@ -805,10 +870,14 @@ class SIEMGateway:
             len(self._workers)
         )
         self._heartbeat_task = asyncio.create_task(self._heartbeat())
-        main_logger.info(f"SIEM Gateway started for target '{self.target_config.name}'.")
+        main_logger.info(
+            f"SIEM Gateway started for target '{self.target_config.name}'."
+        )
 
     async def shutdown(self):
-        main_logger.info(f"Initiating graceful shutdown for target '{self.target_config.name}'.")
+        main_logger.info(
+            f"Initiating graceful shutdown for target '{self.target_config.name}'."
+        )
         self._shutdown_event.set()
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
@@ -818,14 +887,17 @@ class SIEMGateway:
                 pass
         await asyncio.gather(*self._workers, return_exceptions=True)
         await self._event_queue.flush(
-            timeout=self.global_settings.max_queue_size / self.global_settings.worker_batch_size
+            timeout=self.global_settings.max_queue_size
+            / self.global_settings.worker_batch_size
             + 10
         )
         await self._event_queue.shutdown()
         async with self._session_lock:
             if self._session and not self._session.closed:
                 await self._session.close()
-        main_logger.info(f"Graceful shutdown complete for target '{self.target_config.name}'.")
+        main_logger.info(
+            f"Graceful shutdown complete for target '{self.target_config.name}'."
+        )
 
     def pause(self):
         self._is_paused = True
@@ -845,7 +917,9 @@ class SIEMGateway:
                         self.global_settings.cert_path, self.global_settings.key_path
                     )
 
-                timeout = aiohttp.ClientTimeout(total=self.global_settings.retry_backoff_factor * 5)
+                timeout = aiohttp.ClientTimeout(
+                    total=self.global_settings.retry_backoff_factor * 5
+                )
                 self._session = aiohttp.ClientSession(
                     timeout=timeout, ssl=ssl_context if PROD_MODE else False
                 )
@@ -871,7 +945,9 @@ class SIEMGateway:
             except Exception as e:
                 main_logger.error(
                     "Dead-letter hook failed.",
-                    extra={"context": {"error": str(e), "target": self.target_config.name}},
+                    extra={
+                        "context": {"error": str(e), "target": self.target_config.name}
+                    },
                 )
 
     async def publish(self, event: SIEMEvent):
@@ -1001,7 +1077,9 @@ class SIEMGateway:
                                 retry_after = int(resp.headers.get("Retry-After", "5"))
                                 main_logger.warning(
                                     f"Rate limited by API. Backing off for {retry_after} seconds.",
-                                    extra={"context": {"target": self.target_config.name}},
+                                    extra={
+                                        "context": {"target": self.target_config.name}
+                                    },
                                 )
                                 await asyncio.sleep(retry_after)
                                 continue
@@ -1017,7 +1095,9 @@ class SIEMGateway:
                                     },
                                 )
                                 for event in deduped_batch:
-                                    await self._handle_dead_letter(event, "client_error")
+                                    await self._handle_dead_letter(
+                                        event, "client_error"
+                                    )
                                 self.metrics.EVENTS_FAILED_PERMANENTLY.labels(
                                     target_name=self.target_config.name,
                                     reason=f"client_error_{resp.status}",
@@ -1038,7 +1118,9 @@ class SIEMGateway:
                         if attempt + 1 >= self.global_settings.max_retries:
                             self.circuit_breaker.record_failure()
                             for event in deduped_batch:
-                                await self._handle_dead_letter(event, "service_unavailable")
+                                await self._handle_dead_letter(
+                                    event, "service_unavailable"
+                                )
                             self.metrics.EVENTS_FAILED_PERMANENTLY.labels(
                                 target_name=self.target_config.name,
                                 reason="service_unavailable",
@@ -1046,14 +1128,20 @@ class SIEMGateway:
                             return False
                 attempt += 1
                 if attempt < self.global_settings.max_retries:
-                    await asyncio.sleep(self.global_settings.retry_backoff_factor**attempt)
+                    await asyncio.sleep(
+                        self.global_settings.retry_backoff_factor**attempt
+                    )
             return False
 
     async def _worker(self, worker_id: int):
-        main_logger.info(f"Starting worker {worker_id} for target {self.target_config.name}")
+        main_logger.info(
+            f"Starting worker {worker_id} for target {self.target_config.name}"
+        )
         audit_logger.info(
             "worker_started",
-            extra={"context": {"target": self.target_config.name, "worker_id": worker_id}},
+            extra={
+                "context": {"target": self.target_config.name, "worker_id": worker_id}
+            },
         )
         while not self._shutdown_event.is_set():
             try:
@@ -1071,9 +1159,9 @@ class SIEMGateway:
                     await self._event_queue.put(None)
                     break
 
-                self.metrics.QUEUE_LATENCY.labels(target_name=self.target_config.name).observe(
-                    time.time() - first_event.enqueue_time
-                )
+                self.metrics.QUEUE_LATENCY.labels(
+                    target_name=self.target_config.name
+                ).observe(time.time() - first_event.enqueue_time)
                 batch.append(first_event)
                 while len(batch) < self.global_settings.worker_batch_size:
                     try:
@@ -1115,10 +1203,14 @@ class SIEMGateway:
 
             except Exception as e:
                 raise AnalyzerCriticalError(f"Unhandled exception in SIEM worker: {e}.")
-        main_logger.info(f"Stopping worker {worker_id} for target {self.target_config.name}")
+        main_logger.info(
+            f"Stopping worker {worker_id} for target {self.target_config.name}"
+        )
         audit_logger.info(
             "worker_stopped",
-            extra={"context": {"target": self.target_config.name, "worker_id": worker_id}},
+            extra={
+                "context": {"target": self.target_config.name, "worker_id": worker_id}
+            },
         )
 
     async def _worker_manager(self):
@@ -1139,7 +1231,8 @@ class SIEMGateway:
 
             # Scale up
             if (
-                avg_queue > self.global_settings.queue_size_per_worker * len(active_workers)
+                avg_queue
+                > self.global_settings.queue_size_per_worker * len(active_workers)
                 and len(active_workers) < self.global_settings.max_workers
                 and cpu_usage < 80
             ):
@@ -1211,7 +1304,9 @@ class SIEMGateway:
                 self.circuit_breaker.record_success()
             except Exception as e:
                 self.circuit_breaker.record_failure()
-                main_logger.warning(f"Heartbeat failed for {self.target_config.name}: {e}")
+                main_logger.warning(
+                    f"Heartbeat failed for {self.target_config.name}: {e}"
+                )
             await asyncio.sleep(30)
 
 
@@ -1262,7 +1357,9 @@ class SIEMGatewayManager:
         if self.settings.admin_api_enabled and self._http_server_task is None:
             self._http_server_task = asyncio.create_task(self._run_admin_api_server())
 
-        self._system_metrics_task = asyncio.create_task(self._run_system_metrics_collector())
+        self._system_metrics_task = asyncio.create_task(
+            self._run_system_metrics_collector()
+        )
 
     async def _run_system_metrics_collector(self):
         while self._http_server_task is None or not self._http_server_task.done():
@@ -1373,10 +1470,14 @@ class SIEMGatewayManager:
             await asyncio.gather(*(gw.shutdown() for gw in old_gateways.values()))
             main_logger.info("Old gateways drained and shut down.")
 
-    def publish(self, target_name: str, event_name: str, details: Dict[str, Any], **kwargs):
+    def publish(
+        self, target_name: str, event_name: str, details: Dict[str, Any], **kwargs
+    ):
         gateway = self._gateways.get(target_name)
         if not gateway:
-            main_logger.warning(f"Publish to unknown target '{target_name}'. Event dropped.")
+            main_logger.warning(
+                f"Publish to unknown target '{target_name}'. Event dropped."
+            )
             audit_logger.warning(
                 "publish_to_unknown_target",
                 extra={"context": {"target": target_name, "event_name": event_name}},
@@ -1385,7 +1486,9 @@ class SIEMGatewayManager:
 
         scrubbed_details = SIEMEvent.scrub_sensitive_details(details)
         if scrubbed_details != details:
-            main_logger.error("Sensitive data detected in event payload. Event dropped.")
+            main_logger.error(
+                "Sensitive data detected in event payload. Event dropped."
+            )
             return
 
         seq_id = self._sequence_counters.get(target_name, 0) + 1
@@ -1439,7 +1542,9 @@ class SIEMGatewayManager:
                     "paused"
                     if gw._is_paused
                     else (
-                        "healthy" if not gw.circuit_breaker._is_open else "unhealthy_circuit_open"
+                        "healthy"
+                        if not gw.circuit_breaker._is_open
+                        else "unhealthy_circuit_open"
                     )
                 ),
             }
@@ -1456,7 +1561,10 @@ class SIEMGatewayManager:
         async def auth_middleware(request, handler):
             if request.path.startswith("/admin"):
                 auth_header = request.headers.get("Authorization")
-                if not auth_header or auth_header != f"Bearer {self.settings.admin_api_key}":
+                if (
+                    not auth_header
+                    or auth_header != f"Bearer {self.settings.admin_api_key}"
+                ):
                     audit_logger.warning(
                         "unauthorized_admin_api_access",
                         extra={
@@ -1479,7 +1587,9 @@ class SIEMGatewayManager:
 
         async def handle_reload(request):
             await self.reload_config(self.settings)
-            audit_logger.info("api_reload_config", extra={"context": {"source_ip": request.remote}})
+            audit_logger.info(
+                "api_reload_config", extra={"context": {"source_ip": request.remote}}
+            )
             return web.Response(text="Configuration reload initiated.")
 
         async def handle_pause(request):
@@ -1488,7 +1598,9 @@ class SIEMGatewayManager:
                 gw.pause()
                 audit_logger.info(
                     "api_pause_target",
-                    extra={"context": {"target": target_name, "source_ip": request.remote}},
+                    extra={
+                        "context": {"target": target_name, "source_ip": request.remote}
+                    },
                 )
                 return web.Response(text=f"Target '{target_name}' paused.")
             return web.Response(status=404, text="Target not found.")
@@ -1499,7 +1611,9 @@ class SIEMGatewayManager:
                 gw.resume()
                 audit_logger.info(
                     "api_resume_target",
-                    extra={"context": {"target": target_name, "source_ip": request.remote}},
+                    extra={
+                        "context": {"target": target_name, "source_ip": request.remote}
+                    },
                 )
                 return web.Response(text=f"Target '{target_name}' resumed.")
             return web.Response(status=404, text="Target not found.")
@@ -1517,7 +1631,9 @@ class SIEMGatewayManager:
         if self.settings.cert_path and self.settings.key_path:
             ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             try:
-                ssl_context.load_cert_chain(self.settings.cert_path, self.settings.key_path)
+                ssl_context.load_cert_chain(
+                    self.settings.cert_path, self.settings.key_path
+                )
             except FileNotFoundError as e:
                 raise AnalyzerCriticalError(f"SSL certificate/key not found: {e}")
 
@@ -1567,7 +1683,9 @@ async def dead_letter_to_file(event: SIEMEvent, reason: str):
             "timestamp": time.time(),
         }
     )
-    filepath = os.path.join(DEAD_LETTER_DIR, f"siem_dead_letters.{time.strftime('%Y%m%d')}.log")
+    filepath = os.path.join(
+        DEAD_LETTER_DIR, f"siem_dead_letters.{time.strftime('%Y%m%d')}.log"
+    )
 
     encryption_key = SECRETS_MANAGER.get_secret(
         "SIEM_GATEWAY_DEAD_LETTER_ENCRYPTION_KEY", required=False
@@ -1597,7 +1715,9 @@ async def app_lifecycle():
                 signing_secret=os.environ.get(
                     "SIEM_GATEWAY_SIGNING_SECRET", "non-prod-signing-secret"
                 ),
-                admin_api_key=os.environ.get("SIEM_GATEWAY_ADMIN_API_KEY", "non-prod-admin-key"),
+                admin_api_key=os.environ.get(
+                    "SIEM_GATEWAY_ADMIN_API_KEY", "non-prod-admin-key"
+                ),
                 targets=[
                     SIEMTarget(
                         name="security",
@@ -1626,7 +1746,9 @@ async def app_lifecycle():
         yield
     except (ValidationError, RuntimeError, KeyError, AnalyzerCriticalError) as e:
         main_logger.critical(f"Critical initialization failure. Exiting. Error: {e}")
-        alert_operator(f"Critical initialization failure. Exiting. Error: {e}", "CRITICAL")
+        alert_operator(
+            f"Critical initialization failure. Exiting. Error: {e}", "CRITICAL"
+        )
         sys.exit(1)
     finally:
         if siem_gateway_manager:

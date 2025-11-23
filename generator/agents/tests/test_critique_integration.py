@@ -1,14 +1,12 @@
-import os
 import inspect
+import os
+
 import pytest
 
 os.environ.setdefault("TESTING", "1")
 
-from agents.critique_agent import (  # type: ignore
-    orchestrate_critique_pipeline,
-    CritiqueConfig,
-)
 import agents.critique_agent.critique_agent as core  # for monkeypatch targets
+from agents.critique_agent import CritiqueConfig, orchestrate_critique_pipeline  # type: ignore
 
 
 @pytest.mark.asyncio
@@ -45,7 +43,9 @@ async def test_orchestrate_critique_pipeline_happy_path(monkeypatch, tmp_path):
         return {"content": '{"verdict": "pass", "score": 0.99}'}
 
     # Patch internals of critique_agent orchestrator
-    monkeypatch.setattr(core, "build_semantic_critique_prompt", fake_build_prompt, raising=False)
+    monkeypatch.setattr(
+        core, "build_semantic_critique_prompt", fake_build_prompt, raising=False
+    )
     monkeypatch.setattr(core, "run_all_lints_and_checks", fake_run_lints, raising=False)
     monkeypatch.setattr(core, "apply_auto_fixes", fake_apply_auto_fixes, raising=False)
     monkeypatch.setattr(core, "runner_run_tests", fake_runner_run_tests, raising=False)

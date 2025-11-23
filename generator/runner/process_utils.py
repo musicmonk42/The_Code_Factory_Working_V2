@@ -22,6 +22,7 @@ It provides:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import subprocess
 import time
@@ -29,7 +30,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import backoff
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ UTIL_SELF_HEAL = _NullMetric()
 # Here we wire them defensively so this file is safe in isolation.
 
 try:  # pragma: no cover
-    from runner.errors import error_codes, RunnerError  # type: ignore
+    from runner.errors import RunnerError, error_codes  # type: ignore
 except Exception:  # pragma: no cover
 
     class RunnerError(RuntimeError):
@@ -101,7 +101,9 @@ def _noop_redact_secrets(
     return value
 
 
-def _noop_add_provenance(data: Dict[str, Any], action: Optional[str] = None) -> Dict[str, Any]:
+def _noop_add_provenance(
+    data: Dict[str, Any], action: Optional[str] = None
+) -> Dict[str, Any]:
     if "provenance" not in data:
         data["provenance"] = {
             "source": "process_utils",
@@ -111,14 +113,18 @@ def _noop_add_provenance(data: Dict[str, Any], action: Optional[str] = None) -> 
 
 
 try:  # pragma: no cover
-    from runner.observability import detect_anomaly, collect_feedback, add_provenance  # type: ignore
+    from runner.observability import (  # type: ignore
+        add_provenance,
+        collect_feedback,
+        detect_anomaly,
+    )
 except Exception:  # pragma: no cover
     detect_anomaly = _noop_detect_anomaly
     collect_feedback = _noop_collect_feedback
     add_provenance = _noop_add_provenance
 
 try:  # pragma: no cover
-    from runner.security import redact_secrets, encrypt_data, decrypt_data  # type: ignore
+    from runner.security import decrypt_data, encrypt_data, redact_secrets  # type: ignore
 except Exception:  # pragma: no cover
     redact_secrets = _noop_redact_secrets
 
@@ -279,7 +285,9 @@ async def _run_subprocess_once(
     )
 
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            process.communicate(), timeout=timeout
+        )
         returncode = process.returncode
     except asyncio.TimeoutError:
         process.kill()
@@ -462,7 +470,9 @@ async def distributed_subprocess(
         - Increments metrics on failure.
     """
     if not _HAS_RUNNER:
-        logger.error("distributed_subprocess requested but runner infrastructure is not available.")
+        logger.error(
+            "distributed_subprocess requested but runner infrastructure is not available."
+        )
         raise RuntimeError("Distributed runner infrastructure is not available")
 
     selected_backend = backend or getattr(config, "backend", None)
@@ -470,7 +480,9 @@ async def distributed_subprocess(
         raise ValueError("No backend specified for distributed_subprocess")
 
     if selected_backend not in BACKENDS:
-        raise ValueError(f"Unknown backend '{selected_backend}' for distributed_subprocess")
+        raise ValueError(
+            f"Unknown backend '{selected_backend}' for distributed_subprocess"
+        )
 
     if not hasattr(runner_backends, "BACKEND_REGISTRY"):
         raise RuntimeError("runner_backends.BACKEND_REGISTRY not available")

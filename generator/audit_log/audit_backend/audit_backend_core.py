@@ -3,16 +3,16 @@ import abc
 import asyncio
 import base64
 import datetime
+import functools  # <-- ADDED
 import json
 import logging
 import os
 import time
 import uuid
-import zlib
 import warnings  # <-- ADDED
-import functools  # <-- ADDED
+import zlib
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Type, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, Optional, Type
 
 import boto3  # For KMS
 import botocore  # <-- ADDED
@@ -20,11 +20,11 @@ import botocore.exceptions
 import zstandard as zstd
 from cryptography.fernet import (
     Fernet,
-    MultiFernet,
     InvalidToken,
+    MultiFernet,
 )  # <-- FIX: ADD InvalidToken HERE
-from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import REGISTRY  # <-- ADDED
+from prometheus_client import Counter, Gauge, Histogram
 
 # OpenTelemetry imports (guarded)
 try:
@@ -105,7 +105,7 @@ def safe_counter(name, description, labelnames=()):
 
 # Configuration management
 from dynaconf import Dynaconf
-from dynaconf.validator import Validator, ValidationError  # <-- ADDED ValidationError
+from dynaconf.validator import ValidationError, Validator  # <-- ADDED ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,9 @@ settings = Dynaconf(
 
 def _is_test_or_dev_mode() -> bool:
     # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag
-    return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true")
+    return bool(
+        os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
+    )
 
 
 # ---- Import-time validation with test/dev fallback ----
@@ -354,15 +356,21 @@ TAMPER_DETECTION_ENABLED = _as_bool("TAMPER_DETECTION_ENABLED", True)
 # === END FIX 2 ===
 
 # --- Metrics ---
-BACKEND_WRITES = safe_counter("audit_backend_writes_total", "Total writes to backend", ["backend"])
-BACKEND_READS = safe_counter("audit_backend_reads_total", "Total reads from backend", ["backend"])
+BACKEND_WRITES = safe_counter(
+    "audit_backend_writes_total", "Total writes to backend", ["backend"]
+)
+BACKEND_READS = safe_counter(
+    "audit_backend_reads_total", "Total reads from backend", ["backend"]
+)
 BACKEND_QUERIES = safe_metric(
     "Histogram", "audit_backend_queries_seconds", "Query time", ["backend"]
 )
 BACKEND_APPEND_LATENCY = safe_metric(
     "Histogram", "audit_backend_append_latency_seconds", "Append time", ["backend"]
 )
-BACKEND_HEALTH = safe_metric("Gauge", "audit_backend_health", "Health (1=up)", ["backend"])
+BACKEND_HEALTH = safe_metric(
+    "Gauge", "audit_backend_health", "Health (1=up)", ["backend"]
+)
 BACKEND_ERRORS = safe_counter(
     "audit_backend_errors_total", "Total errors per backend", ["backend", "type"]
 )
@@ -540,7 +548,9 @@ class LogBackend(abc.ABC):
 
     def _validate_params(self) -> None:
         """Override in subclasses to validate self.params."""
-        raise NotImplementedError(f"{self.__class__.__name__} must implement _validate_params.")
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _validate_params."
+        )
 
     def _compress(self, data: str) -> bytes:
         """Compresses data using the configured algorithm and compression level."""
@@ -620,13 +630,17 @@ class LogBackend(abc.ABC):
         # --- END FIX ---
 
         # Compute hash for tamper detection
-        entry_json_str = json.dumps(entry, sort_keys=True)  # Sort keys for consistent hashing
+        entry_json_str = json.dumps(
+            entry, sort_keys=True
+        )  # Sort keys for consistent hashing
         entry_hash = compute_hash(entry_json_str.encode("utf-8"))
         entry["_audit_hash"] = entry_hash  # Embed hash in the original entry
 
         if HAS_OPENTELEMETRY:
             with tracer.start_as_current_span(f"{backend_name}.append") as span:
-                span.set_attribute("audit.entry_type", entry.get("event_type", "unknown"))
+                span.set_attribute(
+                    "audit.entry_type", entry.get("event_type", "unknown")
+                )
                 span.set_attribute("audit.entry_id", entry["entry_id"])
 
                 async with self.batch_lock:
@@ -654,7 +668,9 @@ class LogBackend(abc.ABC):
         async def perform_flush():
             start_time = time.perf_counter()
             if HAS_OPENTELEMETRY:
-                with tracer.start_as_current_span(f"{backend_name}.flush_batch") as span:
+                with tracer.start_as_current_span(
+                    f"{backend_name}.flush_batch"
+                ) as span:
                     span.set_attribute("batch.size", len(batch_copy))
                     span.set_attribute("backend.type", backend_name)
                     try:
@@ -666,8 +682,12 @@ class LogBackend(abc.ABC):
                         )
                         span.set_status(_STATUS_OK)
                     except Exception as e:
-                        BACKEND_ERRORS.labels(backend=backend_name, type=type(e).__name__).inc()
-                        logger.error(f"Batch flush failed for {backend_name}: {e}", exc_info=True)
+                        BACKEND_ERRORS.labels(
+                            backend=backend_name, type=type(e).__name__
+                        ).inc()
+                        logger.error(
+                            f"Batch flush failed for {backend_name}: {e}", exc_info=True
+                        )
                         span.set_status(_STATUS_ERROR, description=str(e))
                         asyncio.create_task(
                             send_alert(
@@ -687,7 +707,9 @@ class LogBackend(abc.ABC):
         # New: allow backends to disable core-level retries
         use_core_retries = getattr(self, "core_retries_enabled", True)
         if use_core_retries:
-            await retry_operation(perform_flush, backend_name=backend_name, op_name="flush_batch")
+            await retry_operation(
+                perform_flush, backend_name=backend_name, op_name="flush_batch"
+            )
         else:
             # Single attempt; backend handles its own transactional/queue semantics
             await perform_flush()
@@ -714,9 +736,9 @@ class LogBackend(abc.ABC):
                 "_audit_hash": entry["_audit_hash"],
             }
             prepared_entries.append(prepared_entry)
-            BACKEND_THROUGHPUT_BYTES.labels(backend=self.__class__.__name__, operation="write").inc(
-                len(base64_data)
-            )
+            BACKEND_THROUGHPUT_BYTES.labels(
+                backend=self.__class__.__name__, operation="write"
+            ).inc(len(base64_data))
 
         # Pass the prepared entries to the backend's atomic context
         async with self._atomic_context(prepared_entries=prepared_entries):
@@ -730,7 +752,9 @@ class LogBackend(abc.ABC):
             try:
                 await self.flush_batch()
             except asyncio.CancelledError:
-                logger.info(f"Periodic batch flush for {self.__class__.__name__} cancelled.")
+                logger.info(
+                    f"Periodic batch flush for {self.__class__.__name__} cancelled."
+                )
                 break
             except Exception as e:
                 logger.error(f"Periodic batch flush failed: {e}", exc_info=True)
@@ -746,13 +770,17 @@ class LogBackend(abc.ABC):
 
     @asynccontextmanager
     @abc.abstractmethod
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         """
         Backend-specific atomic context. Receives a list of prepared entries to write.
         """
         yield
 
-    async def query(self, filters: Dict[str, Any], limit: int = 100) -> List[Dict[str, Any]]:
+    async def query(
+        self, filters: Dict[str, Any], limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """Queries backend with decryption, decompression, and tamper detection."""
         backend_name = self.__class__.__name__
         start_time = time.perf_counter()
@@ -785,13 +813,18 @@ class LogBackend(abc.ABC):
             BACKEND_ERRORS.labels(backend=backend_name, type=type(e).__name__).inc()
             logger.error(f"Query failed for {backend_name}: {e}", exc_info=True)
             asyncio.create_task(
-                send_alert(f"Audit log query failed for {backend_name}: {e}", severity="high")
+                send_alert(
+                    f"Audit log query failed for {backend_name}: {e}", severity="high"
+                )
             )
             return []
 
         # --- Post-Query Processing (Decryption, Tamper Check) ---
         BACKEND_THROUGHPUT_BYTES.labels(backend=backend_name, operation="read").inc(
-            sum(len(r.get("encrypted_data", "").encode("utf-8")) for r in raw_stored_entries)
+            sum(
+                len(r.get("encrypted_data", "").encode("utf-8"))
+                for r in raw_stored_entries
+            )
         )
         BACKEND_READS.labels(backend=backend_name).inc(len(raw_stored_entries))
 
@@ -818,7 +851,9 @@ class LogBackend(abc.ABC):
                         logger.warning(
                             f"Audit hash missing from storage for entry_id {stored_entry_id} in {backend_name}. Cannot verify integrity."
                         )
-                        BACKEND_TAMPER_DETECTION_FAILURES.labels(backend=backend_name).inc()
+                        BACKEND_TAMPER_DETECTION_FAILURES.labels(
+                            backend=backend_name
+                        ).inc()
                         asyncio.create_task(
                             send_alert(
                                 f"Audit hash missing from storage for entry_id {stored_entry_id} in {backend_name}.",
@@ -838,7 +873,9 @@ class LogBackend(abc.ABC):
                             logger.error(
                                 f"Tamper detected for entry_id {stored_entry_id} in {backend_name}! Stored hash: {stored_hash}, Recomputed hash: {recomputed_hash}"
                             )
-                            BACKEND_TAMPER_DETECTION_FAILURES.labels(backend=backend_name).inc()
+                            BACKEND_TAMPER_DETECTION_FAILURES.labels(
+                                backend=backend_name
+                            ).inc()
                             asyncio.create_task(
                                 send_alert(
                                     f"Tamper detected for entry_id {stored_entry_id} in {backend_name}!",
@@ -867,7 +904,9 @@ class LogBackend(abc.ABC):
                     f"Failed to decode/decrypt/decompress entry (ID: {stored_entry_id}) from {backend_name}: {decode_error}",
                     exc_info=True,
                 )
-                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="DecodeError").inc()
+                BACKEND_ERRORS.labels(
+                    backend=self.__class__.__name__, type="DecodeError"
+                ).inc()
                 asyncio.create_task(
                     send_alert(
                         f"Failed to process log entry from {backend_name}. Entry ID: {stored_entry_id}",
@@ -882,11 +921,15 @@ class LogBackend(abc.ABC):
                     f"Unexpected error processing entry (ID: {stored_entry_id}) from {backend_name}: {e}",
                     exc_info=True,
                 )
-                BACKEND_ERRORS.labels(backend=self.__class__.__name__, type="DecodeLoopError").inc()
+                BACKEND_ERRORS.labels(
+                    backend=self.__class__.__name__, type="DecodeLoopError"
+                ).inc()
                 continue
             # --- END FIX ---
 
-        BACKEND_QUERIES.labels(backend=backend_name).observe(time.perf_counter() - start_time)
+        BACKEND_QUERIES.labels(backend=backend_name).observe(
+            time.perf_counter() - start_time
+        )
         return entries
 
     async def read_last_n(self, limit: int) -> List[str]:
@@ -896,11 +939,19 @@ class LogBackend(abc.ABC):
         # Note: We must fetch raw entries from the source first (no decryption)
         raw_stored_entries = await self._query_single({}, limit)
         # Return only the base64 encrypted payload
-        return [e.get("encrypted_data") for e in raw_stored_entries if e.get("encrypted_data")]
+        return [
+            e.get("encrypted_data")
+            for e in raw_stored_entries
+            if e.get("encrypted_data")
+        ]
 
-    async def range_query(self, start_time: str, end_time: str, limit: int) -> List[Dict[str, Any]]:
+    async def range_query(
+        self, start_time: str, end_time: str, limit: int
+    ) -> List[Dict[str, Any]]:
         """Queries entries within a timestamp range."""
-        return await self.query({"timestamp >=": start_time, "timestamp <=": end_time}, limit)
+        return await self.query(
+            {"timestamp >=": start_time, "timestamp <=": end_time}, limit
+        )
 
     async def text_search(self, keyword: str, limit: int) -> List[Dict[str, Any]]:
         """Text search across entries (inefficient for unindexed backends)."""
@@ -915,7 +966,9 @@ class LogBackend(abc.ABC):
         while True:
             health_status = False
             if HAS_OPENTELEMETRY:
-                with tracer.start_as_current_span(f"{backend_name}.health_check") as span:
+                with tracer.start_as_current_span(
+                    f"{backend_name}.health_check"
+                ) as span:
                     try:
                         health_status = await self._health_check()
                         span.set_attribute("health.status", health_status)
@@ -926,7 +979,9 @@ class LogBackend(abc.ABC):
                             f"Health check for {backend_name} failed: {e}",
                             exc_info=True,
                         )
-                        BACKEND_ERRORS.labels(backend=backend_name, type="HealthCheckError").inc()
+                        BACKEND_ERRORS.labels(
+                            backend=backend_name, type="HealthCheckError"
+                        ).inc()
                         asyncio.create_task(
                             send_alert(
                                 f"Health check failed for {backend_name}: {e}",
@@ -937,8 +992,12 @@ class LogBackend(abc.ABC):
                 try:
                     health_status = await self._health_check()
                 except Exception as e:
-                    logger.error(f"Health check for {backend_name} failed: {e}", exc_info=True)
-                    BACKEND_ERRORS.labels(backend=backend_name, type="HealthCheckError").inc()
+                    logger.error(
+                        f"Health check for {backend_name} failed: {e}", exc_info=True
+                    )
+                    BACKEND_ERRORS.labels(
+                        backend=backend_name, type="HealthCheckError"
+                    ).inc()
                     asyncio.create_task(
                         send_alert(
                             f"Health check failed for {backend_name}: {e}",
@@ -960,7 +1019,9 @@ class LogBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         """
         Backend-specific query. This method should return raw stored entries.
         Returned entries should be dicts containing at least 'encrypted_data', 'entry_id', 'schema_version', '_audit_hash'.
@@ -1058,7 +1119,9 @@ class InMemoryBackend(LogBackend):
             )
 
     @asynccontextmanager
-    async def _atomic_context(self, prepared_entries: List[Dict[str, Any]]) -> AsyncIterator[None]:
+    async def _atomic_context(
+        self, prepared_entries: List[Dict[str, Any]]
+    ) -> AsyncIterator[None]:
         # Atomic write for in-memory is trivial: extend the list.
         # This implementation simply trusts the flush to work, and if it fails, the entries
         # remain in the prepared_entries list which is GC'd.
@@ -1069,7 +1132,9 @@ class InMemoryBackend(LogBackend):
         # Batching handles storage, so single append is effectively no-op in this implementation
         raise NotImplementedError
 
-    async def _query_single(self, filters: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
+    async def _query_single(
+        self, filters: Dict[str, Any], limit: int
+    ) -> List[Dict[str, Any]]:
         # In-memory storage returns the raw stored dictionary objects
         return self.storage[-limit:]
 
@@ -1108,7 +1173,9 @@ def register_backend(name: str, backend_cls: Type[LogBackend]) -> None:
     Registers a concrete LogBackend class with the factory.
     """
     if not issubclass(backend_cls, LogBackend):
-        raise TypeError(f"Backend class {backend_cls.__name__} must inherit from LogBackend.")
+        raise TypeError(
+            f"Backend class {backend_cls.__name__} must inherit from LogBackend."
+        )
     _REGISTRY[name.lower()] = backend_cls
     logger.info(f"Registered audit backend: {name.lower()} -> {backend_cls.__name__}")
 
@@ -1139,7 +1206,9 @@ def get_backend(kind: str, params: Dict[str, Any]) -> LogBackend:
             f"Failed to initialize backend {kind_lower} with params {params}: {e}",
             exc_info=True,
         )
-        raise CryptoInitializationError(f"Failed to initialize backend {kind_lower}: {e}") from e
+        raise CryptoInitializationError(
+            f"Failed to initialize backend {kind_lower}: {e}"
+        ) from e
 
 
 # --- Default Backend Registration ---

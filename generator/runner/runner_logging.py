@@ -3,42 +3,33 @@
 # Provides structured, redaction, encrypted, and cryptographically signed logs,
 # with pluggable handlers and real-time streaming capabilities.
 
+import asyncio
+import base64
+import contextlib  # [NEW] Added for stop_logging_services
+import getpass
+import hashlib
+import json
 import logging
 import logging.handlers
-import json
-import uuid
-import re
-import time
-import asyncio
-import sys
-import aiohttp
-import psutil
-import contextlib  # [NEW] Added for stop_logging_services
-from opentelemetry import trace
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import (
-    Dict,
-    Any,
-    Optional,
-    Union,
-    List,
-    Callable,
-    Deque,
-    TYPE_CHECKING,
-)
-from collections import deque
-import traceback
-from functools import wraps
-import backoff
-import getpass
-import queue
 
 # [FIX] Patch: Safer crypto import block
 import os
-import hashlib
-import base64
-import logging
+import queue
+import re
+import sys
+import time
+import traceback
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from functools import wraps
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Deque, Dict, List, Optional, Union
+
+import aiohttp
+import backoff
+import psutil
+from opentelemetry import trace
 
 # --- Global OpenTelemetry tracer for external callers (e.g., agents, testgen) ---
 # This provides a stable symbol that other modules can import as:
@@ -54,8 +45,8 @@ try:
     if SIGNING_ENABLED:
         # NOTE: Assuming generator.audit_log is installed and available in the environment
         from generator.audit_log.audit_crypto.audit_crypto_ops import (
-            safe_sign,
             compute_hash,
+            safe_sign,
         )
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             CryptoOperationError,
@@ -170,11 +161,11 @@ if TYPE_CHECKING:
 
 # --- FIX: Import utility metrics from runner_metrics.py ---
 from runner.runner_metrics import (
-    UTIL_LATENCY,
-    UTIL_ERRORS,
-    UTIL_SELF_HEAL,
-    DASHBOARD_QUEUE_SIZE,
     ANOMALY_DETECTED_TOTAL,
+    DASHBOARD_QUEUE_SIZE,
+    UTIL_ERRORS,
+    UTIL_LATENCY,
+    UTIL_SELF_HEAL,
 )
 
 # --- END FIX ---
@@ -185,7 +176,9 @@ LOG_HISTORY: Deque[Dict[str, Any]] = deque(maxlen=10000)
 
 # PII/Secrets redaction patterns - these are the regex ones.
 PII_PATTERNS = [
-    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", re.IGNORECASE),  # Emails
+    re.compile(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", re.IGNORECASE
+    ),  # Emails
     re.compile(r"\b(?:\d{3}[- ]?\d{2}[- ]?\d{4})\b"),  # SSN (basic format)
     re.compile(
         r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|6(?:011|5[0-9]{2})[0-9]{12}|(?:2131|1800|35[0-9]{3})[0-9]{11})\b"
@@ -196,7 +189,9 @@ PII_PATTERNS = [
     re.compile(
         r"(?i)\b(api_key|password|token|secret|auth_token|bearer)=[^& ]+"
     ),  # Common API keys/tokens
-    re.compile(r"\b(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b"),  # Phone numbers (US/Canada formats)
+    re.compile(
+        r"\b(?:\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})\b"
+    ),  # Phone numbers (US/Canada formats)
 ]
 
 # [NEW] Gated the over-broad PII regex.
@@ -310,7 +305,9 @@ async def send_alert(
             )
             UTIL_ERRORS.labels(func="send_alert", type="webhook_fail").inc()
         except Exception as e:
-            logger.error(f"Unexpected error sending alert via webhook: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error sending alert via webhook: {e}", exc_info=True
+            )
             UTIL_ERRORS.labels(func="send_alert", type="unexpected_webhook_error").inc()
 
     if recipients:
@@ -322,7 +319,9 @@ async def send_alert(
         )
         UTIL_ERRORS.labels(func="send_alert", type="email_fail").inc()
     else:
-        logger.warning(f"No alert recipients or webhook. Alert for '{subject}' not dispatched.")
+        logger.warning(
+            f"No alert recipients or webhook. Alert for '{subject}' not dispatched."
+        )
         UTIL_ERRORS.labels(func="send_alert", type="no_recipient").inc()
 
 
@@ -344,7 +343,8 @@ async def start_logging_services():
     # 2. Start Dashboard Streamer
     if (
         (_dashboard_stream_task is None or _dashboard_stream_task.done())
-        and os.getenv("DISABLE_DASHBOARD_STREAMING", "").lower() not in ("true", "1", "yes")
+        and os.getenv("DISABLE_DASHBOARD_STREAMING", "").lower()
+        not in ("true", "1", "yes")
         and not os.getenv("PYTEST_CURRENT_TEST")
     ):
 
@@ -352,7 +352,9 @@ async def start_logging_services():
         if (
             dashboard_url and dashboard_url != "ws://localhost:8080/logs"
         ):  # Don't start if it's the default
-            _dashboard_stream_task = asyncio.create_task(_stream_to_dashboard(dashboard_url))
+            _dashboard_stream_task = asyncio.create_task(
+                _stream_to_dashboard(dashboard_url)
+            )
             logger.info("Dashboard streaming service started.")
         else:
             logger.info(
@@ -391,10 +393,10 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
     # --- FIX: Lazy import metrics and security functions to break circular dependencies ---
     try:
-        from runner.runner_metrics import (
-            PROVENANCE_LOG_ENTRIES,
+        from runner.runner_metrics import (  # Use only specific metrics
             ANOMALY_DETECTED_TOTAL,
-        )  # Use only specific metrics
+            PROVENANCE_LOG_ENTRIES,
+        )
     except ImportError:
 
         class DummyMetric:
@@ -416,7 +418,9 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
     if not _DEFAULT_AUDIT_KEY_ID:
         # This check is now critical and should have been caught at startup,
         # but we double-check to prevent unsigned logs.
-        if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv("PYTEST_CURRENT_TEST"):
+        if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv(
+            "PYTEST_CURRENT_TEST"
+        ):
             logger.critical(
                 f"FATAL: log_audit_event called for '{action}' but no signing key is configured and not in DEV_MODE. This should have been caught at startup.",
                 extra={"action": action, "reason": "key_id_missing_in_prod"},
@@ -464,7 +468,9 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
             # 4. Log the complete, signed event to the 'runner.audit' logger
             audit_logger = logging.getLogger("runner.audit")
-            audit_logger.info(json.dumps(final_audit_log))  # Log as a single JSON string
+            audit_logger.info(
+                json.dumps(final_audit_log)
+            )  # Log as a single JSON string
 
             # 5. Update the chain's state with the hash of the *signed content*
             entry_for_hash_calc = entry_to_sign.copy()
@@ -472,7 +478,9 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             entry_for_hash_calc.pop("signature", None)
             entry_for_hash_calc.pop("key_id", None)
 
-            data_that_was_signed = json.dumps(entry_for_hash_calc, sort_keys=True).encode("utf-8")
+            data_that_was_signed = json.dumps(
+                entry_for_hash_calc, sort_keys=True
+            ).encode("utf-8")
             _LAST_AUDIT_HASH = compute_hash(data_that_was_signed)
 
             logger.debug(
@@ -491,7 +499,9 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
                 exc_info=True,
                 extra={"action": action, "error_type": "CryptoOperationError"},
             )
-            ANOMALY_DETECTED_TOTAL.labels(type="audit_signing_failure", severity="critical").inc()
+            ANOMALY_DETECTED_TOTAL.labels(
+                type="audit_signing_failure", severity="critical"
+            ).inc()
         except Exception as e:
             logger.critical(
                 f"CRITICAL: Unexpected error during audit event logging for '{action}'. Error: {e}",
@@ -670,7 +680,9 @@ async def _stream_to_dashboard(url: str):
                             ).inc()
                         finally:
                             DASHBOARD_QUEUE.task_done()
-                safe_log("info", "Dashboard WebSocket disconnected. Retrying in 5 seconds...")
+                safe_log(
+                    "info", "Dashboard WebSocket disconnected. Retrying in 5 seconds..."
+                )
                 UTIL_ERRORS.labels(func="dashboard_stream", type="disconnected").inc()
         except aiohttp.ClientConnectorError as e:
             safe_log(
@@ -709,7 +721,9 @@ def stream_log_record_to_dashboard_queue(record: logging.LogRecord):
             and not isinstance(v, (logging.Logger, logging.Handler, logging.Formatter))
         }
         if "exc_info" in record_dict and record_dict["exc_info"]:
-            record_dict["exc_info"] = traceback.format_exception(*record_dict["exc_info"])
+            record_dict["exc_info"] = traceback.format_exception(
+                *record_dict["exc_info"]
+            )
 
         sensitive_keys = [
             "message",
@@ -781,8 +795,12 @@ def util_decorator(func: Callable):
             span.set_attribute("func.module", func.__module__)
 
             try:
-                span.set_attribute("func.args_preview", f"{len(args)} positional arg(s)")
-                span.set_attribute("func.kwargs_keys", ",".join(sorted(map(str, kwargs.keys()))))
+                span.set_attribute(
+                    "func.args_preview", f"{len(args)} positional arg(s)"
+                )
+                span.set_attribute(
+                    "func.kwargs_keys", ",".join(sorted(map(str, kwargs.keys())))
+                )
             except Exception:
                 pass
 
@@ -808,11 +826,15 @@ def util_decorator(func: Callable):
                     },
                 )
 
-                logger.info(f"{func_name} executed successfully (duration: {duration:.4f}s)")
+                logger.info(
+                    f"{func_name} executed successfully (duration: {duration:.4f}s)"
+                )
 
                 for hook in METRICS_HOOKS:
                     try:
-                        hook(func_name, duration, {"result": result, "status": "success"})
+                        hook(
+                            func_name, duration, {"result": result, "status": "success"}
+                        )
                     except Exception as hook_e:
                         logger.error(
                             f"Error in metrics hook '{hook.__name__}' for {func_name}: {hook_e}",
@@ -1008,9 +1030,9 @@ class StructuredJSONFormatter(logging.Formatter):
             pass
 
         log_data = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(
-                timespec="milliseconds"
-            )
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(timespec="milliseconds")
             + "Z",
             "level": record.levelname,
             "message": record.getMessage(),
@@ -1341,10 +1363,12 @@ def get_handler(
                 handler = logging.NullHandler()
         elif sink_type == "gcloud":
             try:
-                from google.cloud.logging.handlers import CloudLoggingHandler
                 import google.cloud.logging
+                from google.cloud.logging.handlers import CloudLoggingHandler
 
-                client = google.cloud.logging.Client(project=config.get("gcp_project_id"))
+                client = google.cloud.logging.Client(
+                    project=config.get("gcp_project_id")
+                )
                 handler = CloudLoggingHandler(client, name=config.get("name", "runner"))
             except ImportError as ie:
                 logging.getLogger(__name__).error(
@@ -1362,7 +1386,9 @@ def get_handler(
                 from elasticsearch import Elasticsearch
 
                 class CustomESHandler(logging.Handler):
-                    def __init__(self, hosts: List[str], index_prefix: str = "runner-logs-"):
+                    def __init__(
+                        self, hosts: List[str], index_prefix: str = "runner-logs-"
+                    ):
                         super().__init__()
                         self.es = Elasticsearch(hosts)
                         self.index_prefix = index_prefix
@@ -1386,7 +1412,9 @@ def get_handler(
                                 document=json.loads(log_entry_json_str),
                             )
                         except Exception as e:
-                            sys.stderr.write(f"Error sending log to Elasticsearch: {e}\n")
+                            sys.stderr.write(
+                                f"Error sending log to Elasticsearch: {e}\n"
+                            )
                             logging.getLogger(__name__).error(
                                 f"Error sending log to Elasticsearch: {e}",
                                 exc_info=True,
@@ -1410,13 +1438,15 @@ def get_handler(
 
         elif sink_type == "datadog":
             try:
-                from datadog_api_client.v2.api import logs_api
                 from datadog_api_client.configuration import (
                     Configuration as DatadogConfiguration,
                 )
+                from datadog_api_client.v2.api import logs_api
 
                 class DatadogLogHandler(_HttpHandlerBase):
-                    def __init__(self, api_key: str, site: str = "datadoghq.com", **kwargs):
+                    def __init__(
+                        self, api_key: str, site: str = "datadoghq.com", **kwargs
+                    ):
                         host_url = f"http-intake.logs.{site}"
                         headers = {
                             "DD-API-KEY": api_key,
@@ -1480,7 +1510,9 @@ def get_handler(
                                 file=sys.stderr,
                             )
 
-                datadog_api_key = config.get("datadog_api_key", os.getenv("DATADOG_API_KEY"))
+                datadog_api_key = config.get(
+                    "datadog_api_key", os.getenv("DATADOG_API_KEY")
+                )
                 if isinstance(datadog_api_key, SecretStr):
                     datadog_api_key = datadog_api_key.get_secret_value()
 
@@ -1545,10 +1577,13 @@ def get_handler(
 
         elif sink_type == "newrelic":
             try:
-                from newrelic.agent import NewRelicContextFormatter
                 import logging.handlers as stdlib_handlers
 
-                nr_license_key = config.get("license_key", os.getenv("NEW_RELIC_LICENSE_KEY"))
+                from newrelic.agent import NewRelicContextFormatter
+
+                nr_license_key = config.get(
+                    "license_key", os.getenv("NEW_RELIC_LICENSE_KEY")
+                )
                 if isinstance(nr_license_key, SecretStr):
                     nr_license_key = nr_license_key.get_secret_value()
 
@@ -1635,7 +1670,9 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     else:
         _DEFAULT_AUDIT_KEY_ID = ""
         # [NEW] Fail-closed logic
-        if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv("PYTEST_CURRENT_TEST"):
+        if not os.getenv("DEV_MODE", "0") == "1" and not os.getenv(
+            "PYTEST_CURRENT_TEST"
+        ):
             logger.critical(
                 "CRITICAL: No 'audit_signing_key_id' found in RunnerConfig. Audit logging is required in non-DEV_MODE. Aborting."
             )
@@ -1790,7 +1827,9 @@ def log_action(
     action_logger.info(log_payload, extra={"run_id": run_id})
 
 
-def search_logs(query: str, limit: int = 100, run_id: Optional[str] = None) -> List[Dict]:
+def search_logs(
+    query: str, limit: int = 100, run_id: Optional[str] = None
+) -> List[Dict]:
     """
     Searches the in-memory log history.
     """
@@ -1818,7 +1857,9 @@ def search_logs(query: str, limit: int = 100, run_id: Optional[str] = None) -> L
 logger = logging.getLogger("runner")
 if not logger.handlers:
     initial_handler = logging.StreamHandler(sys.stdout)
-    initial_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    initial_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     initial_handler.setFormatter(initial_formatter)
     logger.addHandler(initial_handler)
     logger.setLevel(logging.INFO)
@@ -1828,13 +1869,13 @@ logging.getLogger("runner.audit").propagate = False
 
 # --- Test/Example usage ---
 if __name__ == "__main__":
-    from unittest.mock import patch, AsyncMock, MagicMock
-
-    # FIX: Import RunnerConfig from the correct location for the __main__ block
-    from runner.runner_config import RunnerConfig
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # from runner.runner_errors import RunnerError as ActualRunnerError # Cannot import this due to circle
     from pydantic import SecretStr
+
+    # FIX: Import RunnerConfig from the correct location for the __main__ block
+    from runner.runner_config import RunnerConfig
 
     # Mock the necessary parts for the test block
     class MockRunnerConfig(RunnerConfig):
@@ -1922,7 +1963,9 @@ if __name__ == "__main__":
         with patch(
             "runner.runner_security_utils.encrypt_data",
             new=MagicMock(
-                side_effect=lambda d, *a, **k: base64.b64encode(json.dumps(d).encode()).decode()
+                side_effect=lambda d, *a, **k: base64.b64encode(
+                    json.dumps(d).encode()
+                ).decode()
             ),
         ), patch(
             "runner.runner_security_utils.redact_secrets",
@@ -1941,10 +1984,14 @@ if __name__ == "__main__":
 
     print("\n--- Sending Test Log Messages ---")
     logger.info("This is a standard info message.")
-    logger.debug({"key": "value", "sensitive_info": "api_key=123xyz", "email": "dev@example.com"})
+    logger.debug(
+        {"key": "value", "sensitive_info": "api_key=123xyz", "email": "dev@example.com"}
+    )
     logger.warning("This is a warning with PII: Jane Doe, SSN 999-88-7777.")
     try:
-        raise ValueError("This is a test exception with sensitive data: token=abc123def456")
+        raise ValueError(
+            "This is a test exception with sensitive data: token=abc123def456"
+        )
     except ValueError:
         logger.error(
             "An error occurred during process execution!",
@@ -2001,7 +2048,9 @@ if __name__ == "__main__":
         # [NEW] Start the logging services
         await start_logging_services()
 
-        with patch("runner.runner_logging.safe_sign", new=AsyncMock(side_effect=mock_safe_sign)):
+        with patch(
+            "runner.runner_logging.safe_sign", new=AsyncMock(side_effect=mock_safe_sign)
+        ):
             with patch(
                 "runner.runner_logging.compute_hash",
                 new=MagicMock(return_value="mock-hash-12345"),
@@ -2011,9 +2060,13 @@ if __name__ == "__main__":
                     new=AsyncMock(side_effect=mock_http_post),
                 ):
 
-                    await log_audit_event("TestAudit", {"test_data": "value"}, run_id=test_run_id)
+                    await log_audit_event(
+                        "TestAudit", {"test_data": "value"}, run_id=test_run_id
+                    )
 
-                    print("\n--- Waiting for async log handlers to flush (simulated) ---")
+                    print(
+                        "\n--- Waiting for async log handlers to flush (simulated) ---"
+                    )
                     await asyncio.sleep(1)
 
         print("\n--- Searching logs ---")
@@ -2026,7 +2079,10 @@ if __name__ == "__main__":
         audit_message_data = json.loads(audit_search[0]["message"])
         assert audit_message_data["action"] == "TestAudit"
         assert "signature" in audit_message_data
-        assert audit_message_data["signature"] == base64.b64encode(b"signed(TestAudit)").decode()
+        assert (
+            audit_message_data["signature"]
+            == base64.b64encode(b"signed(TestAudit)").decode()
+        )
         assert audit_message_data["key_id"] == "software-key-uuid-12345"
         print(json.dumps(audit_search[0], indent=2))
 

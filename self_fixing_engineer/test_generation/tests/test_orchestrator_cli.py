@@ -1,15 +1,16 @@
-import pytest
+import signal
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
+
+import pytest
+from test_generation.orchestrator import orchestrator as orchestrator_module
 from test_generation.orchestrator.cli import (
-    main,
+    _check_disk_space,
+    _check_writable,
     _make_run_id,
     graceful_shutdown,
-    _check_writable,
-    _check_disk_space,
+    main,
 )
-import signal
-from test_generation.orchestrator import orchestrator as orchestrator_module
 
 # Corrected import name for the orchestrator
 from test_generation.orchestrator.orchestrator import GenerationOrchestrator
@@ -59,10 +60,14 @@ async def test_main_config_loading(project: Path, monkeypatch):
     (project / "atco_config.json").write_text("{}")
 
     mock_monitor = AsyncMock(return_value=[])
-    monkeypatch.setattr("test_generation.utils.monitor_and_prioritize_uncovered_code", mock_monitor)
+    monkeypatch.setattr(
+        "test_generation.utils.monitor_and_prioritize_uncovered_code", mock_monitor
+    )
 
     mock_orchestrator = Mock()
-    mock_orchestrator.return_value.generate_tests_for_targets = AsyncMock(return_value={})
+    mock_orchestrator.return_value.generate_tests_for_targets = AsyncMock(
+        return_value={}
+    )
     mock_orchestrator.return_value.integrate_and_validate_generated_tests = AsyncMock(
         return_value={"summary": {}}
     )
@@ -152,7 +157,7 @@ async def test_cli_args(monkeypatch):
     """
     Verifies that command-line arguments are correctly parsed and used.
     """
-    from test_generation.orchestrator.cli import main, argparse
+    from test_generation.orchestrator.cli import argparse, main
 
     # Mock the command-line arguments and other dependencies
     mock_args = argparse.Namespace(
@@ -171,7 +176,9 @@ async def test_cli_args(monkeypatch):
 
     # Mock the orchestrator to prevent the full pipeline from running, isolating the CLI logic.
     mock_orchestrator = Mock()
-    mock_orchestrator.return_value.run_pipeline = AsyncMock(return_value={"summary": {}})
+    mock_orchestrator.return_value.run_pipeline = AsyncMock(
+        return_value={"summary": {}}
+    )
     monkeypatch.setattr(
         "test_generation.orchestrator.cli.GenerationOrchestrator", mock_orchestrator
     )

@@ -3,31 +3,32 @@ Test suite for omnicore_engine/security_utils.py
 Tests enterprise security utilities including crypto, auth, and validation.
 """
 
-import pytest
-import os
-import time
-import json
 import base64
-from unittest.mock import Mock, patch
+import json
+import os
 
 # Add the parent directory to path for imports
 import sys
+import time
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.security_utils import (
-    SecurityException,
     AuthenticationError,
     AuthorizationError,
-    EncryptionError,
-    ValidationError,
-    RateLimitError,
-    HashAlgorithm,
     EncryptionAlgorithm,
+    EncryptionError,
     EnterpriseSecurityUtils,
+    HashAlgorithm,
     RateLimiter,
+    RateLimitError,
     SecureSessionManager,
     SecurityAuditLogger,
+    SecurityException,
+    ValidationError,
     get_security_utils,
     require_authentication,
     require_authorization,
@@ -295,13 +296,17 @@ class TestEnterpriseSecurityUtils:
         mock_magic.from_buffer.return_value = "application/pdf"
 
         # Valid file type
-        is_valid, mime_type = security_utils.validate_file_type("document.pdf", b"PDF content")
+        is_valid, mime_type = security_utils.validate_file_type(
+            "document.pdf", b"PDF content"
+        )
         assert is_valid == True
         assert mime_type == "application/pdf"
 
         # Invalid file type
         mock_magic.from_buffer.return_value = "application/x-executable"
-        is_valid, mime_type = security_utils.validate_file_type("malware.exe", b"EXE content")
+        is_valid, mime_type = security_utils.validate_file_type(
+            "malware.exe", b"EXE content"
+        )
         assert is_valid == False
 
     def test_sanitize_sql_identifier(self, security_utils):
@@ -379,7 +384,9 @@ class TestSecureSessionManager:
         """Test session verification"""
         manager = SecureSessionManager()
 
-        session_id = manager.create_session("user123", {"user_agent": "TestBrowser/1.0"})
+        session_id = manager.create_session(
+            "user123", {"user_agent": "TestBrowser/1.0"}
+        )
 
         # Valid session
         session_data = manager.verify_session(session_id)
@@ -399,7 +406,9 @@ class TestSecureSessionManager:
         manager.sessions[session_id]["user_id"] = "hacker"
 
         # Should detect tampering
-        with patch("omnicore_engine.security_utils.security_violations") as mock_violations:
+        with patch(
+            "omnicore_engine.security_utils.security_violations"
+        ) as mock_violations:
             result = manager.verify_session(session_id)
             assert result is None
             mock_violations.labels.assert_called()
@@ -410,7 +419,9 @@ class TestSecurityAuditLogger:
 
     def test_log_event(self):
         """Test audit event logging"""
-        with patch("omnicore_engine.security_utils.logging.getLogger") as mock_get_logger:
+        with patch(
+            "omnicore_engine.security_utils.logging.getLogger"
+        ) as mock_get_logger:
             mock_logger = Mock()
             mock_get_logger.return_value = mock_logger
 
@@ -494,11 +505,11 @@ class TestUtilityFunctions:
     def test_convenience_functions(self):
         """Test convenience function exports"""
         from omnicore_engine.security_utils import (
+            decrypt,
+            encrypt,
+            generate_token,
             hash_password,
             verify_password,
-            generate_token,
-            encrypt,
-            decrypt,
         )
 
         # These should be callable

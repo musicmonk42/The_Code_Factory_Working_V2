@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 import json
 import sys
 import threading
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -17,11 +18,11 @@ from arbiter.otel_config import get_tracer
 tracer = get_tracer(__name__)
 
 from codebase_analyzer import (
-    CodebaseAnalyzer,
-    logger,
-    app,
-    RADON_AVAILABLE,
     MYPY_AVAILABLE,
+    RADON_AVAILABLE,
+    CodebaseAnalyzer,
+    app,
+    logger,
 )
 
 
@@ -34,9 +35,11 @@ def temp_dir(tmp_path):
 # Fixture for mock logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(logger, "info") as mock_info, patch.object(
-        logger, "warning"
-    ) as mock_warning, patch.object(logger, "error") as mock_error:
+    with (
+        patch.object(logger, "info") as mock_info,
+        patch.object(logger, "warning") as mock_warning,
+        patch.object(logger, "error") as mock_error,
+    ):
         yield mock_info, mock_warning, mock_error
 
 
@@ -57,9 +60,10 @@ def mock_config_file(temp_dir):
 # Mock the Prometheus metrics
 @pytest.fixture(autouse=True)
 def mock_metrics():
-    with patch("codebase_analyzer.analyzer_ops_total") as mock_ops, patch(
-        "codebase_analyzer.analyzer_errors_total"
-    ) as mock_errors:
+    with (
+        patch("codebase_analyzer.analyzer_ops_total") as mock_ops,
+        patch("codebase_analyzer.analyzer_errors_total") as mock_errors,
+    ):
         mock_ops.labels.return_value.inc = MagicMock()
         mock_errors.labels.return_value.inc = MagicMock()
         yield mock_ops, mock_errors
@@ -311,7 +315,9 @@ def test_cli_scan():
 
         # Capture output to avoid file closing issues
         with patch("sys.stdout"), patch("sys.stderr"):
-            result = runner.invoke(app, ["scan", "--root-dir", ".", "--output-format", "json"])
+            result = runner.invoke(
+                app, ["scan", "--root-dir", ".", "--output-format", "json"]
+            )
             # Just check it didn't error
             assert result.exit_code == 0
 

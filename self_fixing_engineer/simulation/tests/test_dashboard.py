@@ -1,9 +1,10 @@
-import pytest
-import os
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
-import tempfile
+import os
 import shutil
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 # Mock Streamlit to prevent it from running the app during tests
@@ -70,9 +71,11 @@ def render_main_component(main):
 @pytest.fixture
 def mock_onboarding_backends():
     """Mocks backend-related imports for the onboarding wizard."""
-    with patch("simulation.dashboard.ONBOARDING_BACKENDS_AVAILABLE", True), patch(
-        "simulation.dashboard.MeshPubSub"
-    ) as MockMeshPubSub, patch("simulation.dashboard.CheckpointManager") as MockCheckpointManager:
+    with (
+        patch("simulation.dashboard.ONBOARDING_BACKENDS_AVAILABLE", True),
+        patch("simulation.dashboard.MeshPubSub") as MockMeshPubSub,
+        patch("simulation.dashboard.CheckpointManager") as MockCheckpointManager,
+    ):
 
         MockMeshPubSub.supported_backends.return_value = ["redis", "local"]
         MockMeshPubSub.return_value.healthcheck = AsyncMock(
@@ -82,7 +85,9 @@ def mock_onboarding_backends():
         MockMeshPubSub.return_value.close = AsyncMock()
 
         MockCheckpointManager._BACKENDS = {"fs": None}
-        MockCheckpointManager.return_value.load = AsyncMock(return_value={"status": "healthy"})
+        MockCheckpointManager.return_value.load = AsyncMock(
+            return_value={"status": "healthy"}
+        )
         MockCheckpointManager.return_value.save = AsyncMock()
         MockCheckpointManager.return_value.delete = AsyncMock()
 
@@ -120,7 +125,9 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
     Test that a plugin with a dangerous name is skipped for security reasons.
     """
     # Create a dummy plugin file with a dangerous name
-    dangerous_plugin_path = os.path.join(mock_plugin_and_result_dirs.PLUGINS_DIR, "os.py")
+    dangerous_plugin_path = os.path.join(
+        mock_plugin_and_result_dirs.PLUGINS_DIR, "os.py"
+    )
     with open(dangerous_plugin_path, "w") as f:
         f.write("def register_my_dashboard_panels(register_func): pass")
 
@@ -129,7 +136,9 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
     dashboard.load_plugin_dashboard_panels_cached()
 
     panels = dashboard.get_registered_dashboard_panels()
-    assert len(panels) == 1  # The original plugin should still load, but 'os.py' should not
+    assert (
+        len(panels) == 1
+    )  # The original plugin should still load, but 'os.py' should not
 
 
 def test_is_version_compatible():
@@ -146,7 +155,9 @@ def test_is_version_compatible():
 # ==============================================================================
 
 
-def test_display_onboarding_wizard_config_generation(mock_streamlit, mock_plugin_and_result_dirs):
+def test_display_onboarding_wizard_config_generation(
+    mock_streamlit, mock_plugin_and_result_dirs
+):
     """Test that the onboarding wizard correctly generates config and plugins."""
     from simulation import dashboard
 
@@ -164,7 +175,9 @@ def test_display_onboarding_wizard_config_generation(mock_streamlit, mock_plugin
     assert os.path.exists(config_path)
 
     # Check if demo plugin was created
-    plugin_dir = os.path.join(mock_plugin_and_result_dirs.PLUGINS_DIR, "demo_python_plugin")
+    plugin_dir = os.path.join(
+        mock_plugin_and_result_dirs.PLUGINS_DIR, "demo_python_plugin"
+    )
     assert os.path.exists(plugin_dir)
     assert os.path.exists(os.path.join(plugin_dir, "manifest.json"))
 
@@ -210,7 +223,9 @@ def test_load_all_simulation_results(mock_plugin_and_result_dirs):
     """Test that results are loaded and sorted correctly."""
     from simulation import dashboard
 
-    results = dashboard.load_all_simulation_results(mock_plugin_and_result_dirs.RESULTS_DIR)
+    results = dashboard.load_all_simulation_results(
+        mock_plugin_and_result_dirs.RESULTS_DIR
+    )
 
     assert len(results) == 1
     assert "status" in results[0]
@@ -219,13 +234,17 @@ def test_load_all_simulation_results(mock_plugin_and_result_dirs):
 
 def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_dirs):
     """Test that invalid JSON files are skipped without crashing."""
-    invalid_json_path = os.path.join(mock_plugin_and_result_dirs.RESULTS_DIR, "corrupted.json")
+    invalid_json_path = os.path.join(
+        mock_plugin_and_result_dirs.RESULTS_DIR, "corrupted.json"
+    )
     with open(invalid_json_path, "w") as f:
         f.write("{'key': 'invalid_json'")
 
     from simulation import dashboard
 
-    results = dashboard.load_all_simulation_results(mock_plugin_and_result_dirs.RESULTS_DIR)
+    results = dashboard.load_all_simulation_results(
+        mock_plugin_and_result_dirs.RESULTS_DIR
+    )
     assert len(results) == 1  # Only the valid one should be loaded
 
 

@@ -1,34 +1,36 @@
 # simulation/plugins/dlt_clients/dlt_simple_clients.py
 
 import asyncio
+import hashlib  # For chain state checksum
 import json
+import os
 import time
 import uuid
-import hashlib  # For chain state checksum
-from typing import Any, Dict, List, Optional, Tuple, Union, Final
-from pydantic import BaseModel, Field, ValidationError, validator
-import os
-from datetime import datetime
 from collections import OrderedDict
+from datetime import datetime
+from typing import Any, Dict, Final, List, Optional, Tuple, Union
+
+from pydantic import BaseModel, Field, ValidationError, validator
 
 from .dlt_base import (
-    BaseDLTClient,
-    BaseOffChainClient,
-    DLTClientConfigurationError,
-    DLTClientError,
-    DLTClientTransactionError,
-    DLTClientQueryError,
-    DLTClientValidationError,
-    DLTClientCircuitBreakerError,
-    async_retry,
-    TRACER,
-    Status,
-    StatusCode,
-    alert_operator,
     AUDIT,
     PRODUCTION_MODE,
+    TRACER,
+    BaseDLTClient,
+    BaseOffChainClient,
+    DLTClientCircuitBreakerError,
+    DLTClientConfigurationError,
+    DLTClientError,
+    DLTClientQueryError,
+    DLTClientTransactionError,
+    DLTClientValidationError,
+    Status,
+    StatusCode,
+    _base_logger,
+    alert_operator,
+    async_retry,
+    scrub_secrets,
 )
-from .dlt_base import _base_logger, scrub_secrets
 
 # Specific SimpleDLT metrics
 try:
@@ -52,7 +54,9 @@ try:
         ),
     }
 except ImportError:
-    _base_logger.warning("Prometheus client not available for SimpleDLT specific metrics.")
+    _base_logger.warning(
+        "Prometheus client not available for SimpleDLT specific metrics."
+    )
     SIMPLE_DLT_METRICS = {}  # Dummy if not available
 
 
@@ -90,7 +94,9 @@ class SimpleDLTClient(BaseDLTClient):
                 exclude_unset=True
             )
         except ValidationError as e:
-            _base_logger.critical(f"CRITICAL: Invalid SimpleDLT client configuration: {e}.")
+            _base_logger.critical(
+                f"CRITICAL: Invalid SimpleDLT client configuration: {e}."
+            )
             try:
                 asyncio.get_running_loop().create_task(
                     alert_operator(
@@ -143,7 +149,9 @@ class SimpleDLTClient(BaseDLTClient):
             )
             try:
                 await self.load_chain(self._chain_state_path)
-                self._format_log("info", "Chain state loaded and validated successfully.")
+                self._format_log(
+                    "info", "Chain state loaded and validated successfully."
+                )
             except Exception as e:
                 _base_logger.critical(
                     f"CRITICAL: Failed to load or validate chain state from {self._chain_state_path}: {e}."
@@ -187,7 +195,9 @@ class SimpleDLTClient(BaseDLTClient):
         except RuntimeError:
             self._cleanup_task = None
 
-    def _format_log(self, level: str, message: str, extra: Dict[str, Any] = None) -> None:
+    def _format_log(
+        self, level: str, message: str, extra: Dict[str, Any] = None
+    ) -> None:
         """
         Formats logs as JSON or text based on configuration.
         """
@@ -209,7 +219,9 @@ class SimpleDLTClient(BaseDLTClient):
             # Log to AUDIT manager for critical events
             if level.upper() in ["ERROR", "CRITICAL"]:
                 try:
-                    serialized_extra = json.dumps(extra, sort_keys=True, ensure_ascii=False)
+                    serialized_extra = json.dumps(
+                        extra, sort_keys=True, ensure_ascii=False
+                    )
                     asyncio.get_running_loop().create_task(
                         AUDIT.log_event(
                             f"simpledlt_client_error.{level.lower()}",
@@ -223,7 +235,9 @@ class SimpleDLTClient(BaseDLTClient):
             getattr(self.logger, level.lower())(message, extra=extra)
             if level.upper() in ["ERROR", "CRITICAL"]:
                 try:
-                    serialized_extra = json.dumps(extra, sort_keys=True, ensure_ascii=False)
+                    serialized_extra = json.dumps(
+                        extra, sort_keys=True, ensure_ascii=False
+                    )
                     asyncio.get_running_loop().create_task(
                         AUDIT.log_event(
                             f"simpledlt_client_error.{level.lower()}",
@@ -241,10 +255,15 @@ class SimpleDLTClient(BaseDLTClient):
                 current_time = time.time()
                 for temp_file_path in list(self._temp_files.keys()):
                     creation_time = self._temp_files.get(temp_file_path)
-                    if creation_time and current_time - creation_time > self._temp_file_ttl:
+                    if (
+                        creation_time
+                        and current_time - creation_time > self._temp_file_ttl
+                    ):
                         try:
                             os.unlink(temp_file_path)
-                            self._temp_files.pop(temp_file_path, None)  # Remove from tracking
+                            self._temp_files.pop(
+                                temp_file_path, None
+                            )  # Remove from tracking
                             _base_logger.info(
                                 f"Cleaned up expired temporary file: {temp_file_path}"
                             )
@@ -265,7 +284,9 @@ class SimpleDLTClient(BaseDLTClient):
 
     def _calculate_chain_checksum(self, chain_data: Dict[str, Any]) -> str:
         """Calculates a SHA-256 checksum of the chain state for integrity validation."""
-        chain_json = json.dumps(chain_data, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        chain_json = json.dumps(chain_data, sort_keys=True, ensure_ascii=False).encode(
+            "utf-8"
+        )
         return hashlib.sha256(chain_json).hexdigest()
 
     async def load_chain(self, path: str, correlation_id: Optional[str] = None) -> None:
@@ -364,9 +385,9 @@ class SimpleDLTClient(BaseDLTClient):
                             status="success",
                             error_code="NONE",
                         ).inc()
-                        SIMPLE_DLT_METRICS["chain_size"].labels(client_type=self.client_type).set(
-                            sum(len(v) for v in self.chain.values())
-                        )
+                        SIMPLE_DLT_METRICS["chain_size"].labels(
+                            client_type=self.client_type
+                        ).set(sum(len(v) for v in self.chain.values()))
 
                     span.set_status(Status(StatusCode.OK))
                     self._format_log(
@@ -547,7 +568,9 @@ class SimpleDLTClient(BaseDLTClient):
                     {"correlation_id": correlation_id},
                 )
                 if hasattr(self.off_chain_client, "_rotate_credentials"):
-                    await self.off_chain_client._rotate_credentials(correlation_id=correlation_id)
+                    await self.off_chain_client._rotate_credentials(
+                        correlation_id=correlation_id
+                    )
                     self._format_log(
                         "info",
                         "Off-chain client credentials rotated successfully",
@@ -618,7 +641,9 @@ class SimpleDLTClient(BaseDLTClient):
                     correlation_id=correlation_id,
                 )
 
-    async def health_check(self, correlation_id: Optional[str] = None) -> Dict[str, Any]:
+    async def health_check(
+        self, correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Checks the health of the SimpleDLT client and its off-chain client.
         """
@@ -682,7 +707,9 @@ class SimpleDLTClient(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Health check failed: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Health check failed: {e}")
+                )
                 span.record_exception(e)
                 self._format_log(
                     "error",
@@ -788,7 +815,9 @@ class SimpleDLTClient(BaseDLTClient):
                 )
 
             try:
-                self._format_log("info", "Acquiring chain lock", {"correlation_id": correlation_id})
+                self._format_log(
+                    "info", "Acquiring chain lock", {"correlation_id": correlation_id}
+                )
                 async with self._chain_lock:  # Ensure atomic write to chain state
                     self._format_log(
                         "info",
@@ -796,9 +825,7 @@ class SimpleDLTClient(BaseDLTClient):
                         {"correlation_id": correlation_id},
                     )
                     version = len(self.chain.get(checkpoint_name, [])) + 1
-                    tx_id = (
-                        f"{checkpoint_name}-tx{version}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-                    )
+                    tx_id = f"{checkpoint_name}-tx{version}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
                     off_chain_id = await self.off_chain_client.save_blob(
                         checkpoint_name, payload_blob, correlation_id=correlation_id
                     )
@@ -826,11 +853,13 @@ class SimpleDLTClient(BaseDLTClient):
                         {"correlation_id": correlation_id},
                     )
 
-                self._format_log("info", "Chain lock released", {"correlation_id": correlation_id})
+                self._format_log(
+                    "info", "Chain lock released", {"correlation_id": correlation_id}
+                )
                 if SIMPLE_DLT_METRICS:
-                    SIMPLE_DLT_METRICS["chain_size"].labels(client_type=self.client_type).set(
-                        sum(len(v) for v in self.chain.values())
-                    )
+                    SIMPLE_DLT_METRICS["chain_size"].labels(
+                        client_type=self.client_type
+                    ).set(sum(len(v) for v in self.chain.values()))
 
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
@@ -988,7 +1017,9 @@ class SimpleDLTClient(BaseDLTClient):
                                 "error_code": "SIMPLE_DLT_VERSION_NOT_FOUND",
                             },
                         )
-                        raise FileNotFoundError(f"No DLT checkpoint for {name} version {version}")
+                        raise FileNotFoundError(
+                            f"No DLT checkpoint for {name} version {version}"
+                        )
 
                 payload_blob = await self.off_chain_client.get_blob(
                     entry["off_chain_ref"], correlation_id=correlation_id
@@ -1026,7 +1057,9 @@ class SimpleDLTClient(BaseDLTClient):
             except DLTClientCircuitBreakerError:
                 raise
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, description=f"Read checkpoint error: {e}"))
+                span.set_status(
+                    Status(StatusCode.ERROR, description=f"Read checkpoint error: {e}")
+                )
                 span.record_exception(e)
                 if SIMPLE_DLT_METRICS:
                     SIMPLE_DLT_METRICS["chain_operation"].labels(
@@ -1075,7 +1108,9 @@ class SimpleDLTClient(BaseDLTClient):
             },
         ) as span:
             try:
-                result = await self.read_checkpoint(name, version, correlation_id=correlation_id)
+                result = await self.read_checkpoint(
+                    name, version, correlation_id=correlation_id
+                )
                 self._format_log(
                     "info",
                     f"SimpleDLT version transaction retrieved: {name} v{version}",
@@ -1137,7 +1172,9 @@ class SimpleDLTClient(BaseDLTClient):
                     correlation_id=correlation_id,
                 )
 
-    @async_retry(catch_exceptions=(DLTClientTransactionError, DLTClientCircuitBreakerError))
+    @async_retry(
+        catch_exceptions=(DLTClientTransactionError, DLTClientCircuitBreakerError)
+    )
     async def rollback_checkpoint(
         self, name: str, rollback_hash: str, correlation_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -1191,7 +1228,9 @@ class SimpleDLTClient(BaseDLTClient):
                 )
 
             try:
-                async with self._chain_lock:  # Ensure atomic modification of chain state
+                async with (
+                    self._chain_lock
+                ):  # Ensure atomic modification of chain state
                     chain = self.chain.get(name, [])
                     entry_to_rollback_to = next(
                         (e for e in chain if e["hash"] == rollback_hash), None
@@ -1223,9 +1262,7 @@ class SimpleDLTClient(BaseDLTClient):
                         )
 
                     new_version = len(chain) + 1
-                    tx_id = (
-                        f"{name}-rollback-tx{new_version}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-                    )
+                    tx_id = f"{name}-rollback-tx{new_version}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
                     off_chain_id = entry_to_rollback_to["off_chain_ref"]
 
                     new_entry = {
@@ -1248,9 +1285,9 @@ class SimpleDLTClient(BaseDLTClient):
                         )  # Dump on every rollback
 
                     if SIMPLE_DLT_METRICS:
-                        SIMPLE_DLT_METRICS["chain_size"].labels(client_type=self.client_type).set(
-                            sum(len(v) for v in self.chain.values())
-                        )
+                        SIMPLE_DLT_METRICS["chain_size"].labels(
+                            client_type=self.client_type
+                        ).set(sum(len(v) for v in self.chain.values()))
 
                 span.set_status(Status(StatusCode.OK))
                 self._format_log(
@@ -1282,7 +1319,9 @@ class SimpleDLTClient(BaseDLTClient):
                 raise
             except Exception as e:
                 span.set_status(
-                    Status(StatusCode.ERROR, description=f"Rollback checkpoint error: {e}")
+                    Status(
+                        StatusCode.ERROR, description=f"Rollback checkpoint error: {e}"
+                    )
                 )
                 span.record_exception(e)
                 if SIMPLE_DLT_METRICS:
@@ -1332,7 +1371,9 @@ class SimpleDLTClient(BaseDLTClient):
 
             if self._chain_state_path:
                 try:
-                    await self.dump_chain(self._chain_state_path)  # Ensure final state is dumped
+                    await self.dump_chain(
+                        self._chain_state_path
+                    )  # Ensure final state is dumped
                 except Exception as e:
                     self._format_log(
                         "warning",
@@ -1341,7 +1382,9 @@ class SimpleDLTClient(BaseDLTClient):
                     )
 
             self.chain.clear()
-            self._format_log("info", "SimpleDLTClient closed", {"client_type": self.client_type})
+            self._format_log(
+                "info", "SimpleDLTClient closed", {"client_type": self.client_type}
+            )
         except Exception as e:
             self._format_log(
                 "warning",
@@ -1367,7 +1410,7 @@ class SimpleDLTClient(BaseDLTClient):
 
 # Assuming a plugin manager is available for registration
 try:
-    from simulation.framework.plugin_system import plugin_manager, PluginManager
+    from simulation.framework.plugin_system import PluginManager, plugin_manager
 except ImportError:
     # This allows the file to be imported standalone without the full framework
     plugin_manager = None

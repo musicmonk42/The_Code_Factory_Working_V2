@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 # Mock the modules before importing
@@ -19,7 +20,9 @@ sys.modules["simulation.plugins.siem_aws_clients"] = MagicMock()
 
 # Create mock classes and exceptions
 class SIEMClientError(Exception):
-    def __init__(self, message, client_type, original_exception=None, correlation_id=None):
+    def __init__(
+        self, message, client_type, original_exception=None, correlation_id=None
+    ):
         self.message = message
         self.client_type = client_type
         self.original_exception = original_exception
@@ -115,7 +118,9 @@ class AwsCloudWatchClient:
     async def health_check(self):
         client = await self._get_aws_client()
         try:
-            response = client.describe_log_groups(logGroupNamePrefix=self.log_group_name, limit=1)
+            response = client.describe_log_groups(
+                logGroupNamePrefix=self.log_group_name, limit=1
+            )
             if "logGroups" in response:
                 return True, "Successfully connected to AWS CloudWatch Logs."
             raise SIEMClientResponseError(
@@ -286,7 +291,9 @@ def mock_boto3_client():
     )
     client.describe_log_streams = MagicMock(
         return_value={
-            "logStreams": [{"logStreamName": "test-stream", "uploadSequenceToken": "token123"}]
+            "logStreams": [
+                {"logStreamName": "test-stream", "uploadSequenceToken": "token123"}
+            ]
         }
     )
     client.create_log_group = MagicMock(return_value={})
@@ -423,7 +430,9 @@ class TestCoreFunctionality:
     async def test_query_timeout(self, cloudwatch_client):
         """Test query timeout handling."""
         cloudwatch_client.timeout = 0.1
-        cloudwatch_client._cw_logs_client.get_query_results.return_value = {"status": "Running"}
+        cloudwatch_client._cw_logs_client.get_query_results.return_value = {
+            "status": "Running"
+        }
 
         with pytest.raises(SIEMClientQueryError) as exc:
             await cloudwatch_client.query_logs("fields @message", "5m", 10)
@@ -433,7 +442,9 @@ class TestCoreFunctionality:
     async def test_log_group_auto_creation(self, cloudwatch_client):
         """Test automatic log group creation."""
         cloudwatch_client.auto_create_log_group = True
-        cloudwatch_client._cw_logs_client.describe_log_groups.side_effect = Exception("Not found")
+        cloudwatch_client._cw_logs_client.describe_log_groups.side_effect = Exception(
+            "Not found"
+        )
 
         await cloudwatch_client._ensure_log_group_and_stream()
 
@@ -469,7 +480,9 @@ class TestErrorHandling:
                 super().__init__("Access denied")
 
         # Make describe_log_groups raise the exception when called
-        cloudwatch_client._cw_logs_client.describe_log_groups.side_effect = MockClientError()
+        cloudwatch_client._cw_logs_client.describe_log_groups.side_effect = (
+            MockClientError()
+        )
 
         # Now test that our health_check properly catches and re-raises as SIEMClientAuthError
         with pytest.raises(SIEMClientAuthError):
@@ -534,7 +547,9 @@ class TestConcurrency:
             query_id_counter["count"] += 1
             return {"queryId": f"query-{query_id_counter['count']}"}
 
-        cloudwatch_client._cw_logs_client.start_query.side_effect = start_query_side_effect
+        cloudwatch_client._cw_logs_client.start_query.side_effect = (
+            start_query_side_effect
+        )
 
         async def query_task(i):
             return await cloudwatch_client.query_logs(f"filter id = {i}", "5m", 10)

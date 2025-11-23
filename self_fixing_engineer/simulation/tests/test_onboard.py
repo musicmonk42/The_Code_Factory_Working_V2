@@ -1,25 +1,26 @@
 # tests/test_onboard.py
 
-import pytest
-import os
-import json
-import tempfile
 import argparse
+import json
+import os
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from cryptography.fernet import Fernet
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the onboard module from the correct path
 import simulation.plugins.onboard as onboard_module
+from cryptography.fernet import Fernet
 from simulation.plugins.onboard import (
-    onboard,
-    _get_user_input,
     _generate_secure_config,
+    _get_user_input,
     _load_secure_config,
-    _run_health_checks,
-    _run_basic_onboarding_tests,
-    _safe_mode_profile,
     _reset_to_safe_mode,
+    _run_basic_onboarding_tests,
+    _run_health_checks,
+    _safe_mode_profile,
+    onboard,
 )
 
 # ==============================================================================
@@ -43,7 +44,9 @@ def mock_external_dependencies():
 
     mock_checkpoint_manager = MagicMock()
     mock_checkpoint_manager.return_value.save = AsyncMock()
-    mock_checkpoint_manager.return_value.load = AsyncMock(return_value={"status": "healthy"})
+    mock_checkpoint_manager.return_value.load = AsyncMock(
+        return_value={"status": "healthy"}
+    )
     mock_checkpoint_manager.return_value.delete = AsyncMock()
     mock_checkpoint_manager._BACKENDS = {"fs": None}
 
@@ -70,7 +73,9 @@ def mock_external_dependencies():
         patch("simulation.plugins.onboard.crypto_available", True),
         patch("simulation.plugins.onboard.prometheus_available", True),
         patch("simulation.plugins.onboard.tenacity_available", True),
-        patch("simulation.plugins.onboard.aiofiles_available", False),  # Use sync file operations
+        patch(
+            "simulation.plugins.onboard.aiofiles_available", False
+        ),  # Use sync file operations
         patch("simulation.plugins.onboard.requests.post"),
         (
             patch("simulation.plugins.onboard.hvac.Client")
@@ -94,8 +99,12 @@ def mock_external_dependencies():
     mock_requests_post.return_value.raise_for_status = MagicMock()
 
     mock_hvac_client = started_patches[8] if len(started_patches) > 8 else MagicMock()
-    mock_subprocess_run = started_patches[9] if len(started_patches) > 9 else MagicMock()
-    mock_webbrowser_open = started_patches[10] if len(started_patches) > 10 else MagicMock()
+    mock_subprocess_run = (
+        started_patches[9] if len(started_patches) > 9 else MagicMock()
+    )
+    mock_webbrowser_open = (
+        started_patches[10] if len(started_patches) > 10 else MagicMock()
+    )
 
     yield {
         "mock_requests_post": mock_requests_post,
@@ -129,16 +138,19 @@ def mock_filesystem():
         os.makedirs(results_dir, exist_ok=True)
         os.makedirs(ci_dir, exist_ok=True)
 
-        with patch("simulation.plugins.onboard.script_dir", temp_path), patch(
-            "simulation.plugins.onboard.CONFIG_DIR", configs_dir
-        ), patch("simulation.plugins.onboard.PLUGINS_DIR", plugins_dir), patch(
-            "simulation.plugins.onboard.RESULTS_DIR", results_dir
-        ), patch(
-            "simulation.plugins.onboard.CI_DIR", ci_dir
-        ), patch(
-            "simulation.plugins.onboard.SECURE_CONFIG_PATH", configs_dir / "secure.json"
-        ), patch(
-            "simulation.plugins.onboard.SECURE_KEY_PATH", configs_dir / "secure.key"
+        with (
+            patch("simulation.plugins.onboard.script_dir", temp_path),
+            patch("simulation.plugins.onboard.CONFIG_DIR", configs_dir),
+            patch("simulation.plugins.onboard.PLUGINS_DIR", plugins_dir),
+            patch("simulation.plugins.onboard.RESULTS_DIR", results_dir),
+            patch("simulation.plugins.onboard.CI_DIR", ci_dir),
+            patch(
+                "simulation.plugins.onboard.SECURE_CONFIG_PATH",
+                configs_dir / "secure.json",
+            ),
+            patch(
+                "simulation.plugins.onboard.SECURE_KEY_PATH", configs_dir / "secure.key"
+            ),
         ):
 
             yield {
@@ -176,12 +188,11 @@ async def test_onboarding_wizard_full_flow(
     """
     Test the entire interactive onboarding wizard workflow.
     """
-    with patch("builtins.input", side_effect=mock_user_input), patch(
-        "simulation.plugins.onboard.print_status"
-    ) as mock_print_status, patch(
-        "simulation.plugins.onboard._non_interactive", return_value=False
-    ), patch(
-        "simulation.plugins.onboard._check_existing_configs"
+    with (
+        patch("builtins.input", side_effect=mock_user_input),
+        patch("simulation.plugins.onboard.print_status") as mock_print_status,
+        patch("simulation.plugins.onboard._non_interactive", return_value=False),
+        patch("simulation.plugins.onboard._check_existing_configs"),
     ):
 
         args = argparse.Namespace(
@@ -202,9 +213,13 @@ async def test_onboarding_wizard_full_flow(
 
         # Verify that all key files were created
         assert (mock_filesystem["temp_path"] / "configs" / "config.json").exists()
-        assert (mock_filesystem["temp_path"] / "plugins" / "demo_python_plugin.py").exists()
+        assert (
+            mock_filesystem["temp_path"] / "plugins" / "demo_python_plugin.py"
+        ).exists()
         assert (mock_filesystem["temp_path"] / "results" / "README.md").exists()
-        assert (mock_filesystem["temp_path"] / ".github" / "workflows" / "ci.yaml").exists()
+        assert (
+            mock_filesystem["temp_path"] / ".github" / "workflows" / "ci.yaml"
+        ).exists()
 
         # Verify health checks were called
         mock_external_dependencies["MockMeshPubSub"].assert_called()
@@ -215,7 +230,9 @@ async def test_onboarding_wizard_full_flow(
 
 
 @pytest.mark.asyncio
-async def test_safe_mode_profile_generation(mock_filesystem, mock_external_dependencies):
+async def test_safe_mode_profile_generation(
+    mock_filesystem, mock_external_dependencies
+):
     """Test the --safe mode to ensure local-only config is generated."""
     with patch("simulation.plugins.onboard.print_status"):
         await _safe_mode_profile()
@@ -235,7 +252,9 @@ async def test_safe_mode_profile_generation(mock_filesystem, mock_external_depen
 
 
 @pytest.mark.asyncio
-async def test_run_health_checks_with_failures(mock_external_dependencies, mock_filesystem):
+async def test_run_health_checks_with_failures(
+    mock_external_dependencies, mock_filesystem
+):
     """Test that health checks correctly report failures."""
     # Mock one health check to fail
     mock_external_dependencies["MockMeshPubSub"].return_value.healthcheck = AsyncMock(
@@ -251,7 +270,9 @@ async def test_run_health_checks_with_failures(mock_external_dependencies, mock_
         await _run_health_checks(mock_config)
 
         # Verify that an error message was printed for the failed check
-        mock_print_status.assert_any_call("Pub/Sub Health: ERROR - Mocked failure", "err")
+        mock_print_status.assert_any_call(
+            "Pub/Sub Health: ERROR - Mocked failure", "err"
+        )
         mock_print_status.assert_any_call(
             "Checkpoint Health: OK (saved and loaded test data successfully for fs).",
             "ok",
@@ -265,8 +286,9 @@ async def test_reset_to_safe_mode(mock_filesystem, mock_external_dependencies):
     dummy_config = mock_filesystem["temp_path"] / "configs" / "dummy.json"
     dummy_config.write_text("{}")
 
-    with patch("simulation.plugins.onboard.print_status"), patch(
-        "simulation.plugins.onboard._non_interactive", return_value=True
+    with (
+        patch("simulation.plugins.onboard.print_status"),
+        patch("simulation.plugins.onboard._non_interactive", return_value=True),
     ):
         await _reset_to_safe_mode()
 
@@ -283,13 +305,16 @@ async def test_reset_to_safe_mode(mock_filesystem, mock_external_dependencies):
 # ==============================================================================
 
 
-def test_generate_secure_config_local_encrypted(mock_filesystem, mock_external_dependencies):
+def test_generate_secure_config_local_encrypted(
+    mock_filesystem, mock_external_dependencies
+):
     """Test local secret encryption and storage."""
-    with patch("simulation.plugins.onboard.print_status"), patch(
-        "simulation.plugins.onboard.crypto_available", True
-    ), patch("simulation.plugins.onboard.Fernet") as mock_fernet, patch(
-        "simulation.plugins.onboard._read_or_create_key"
-    ) as mock_read_key:
+    with (
+        patch("simulation.plugins.onboard.print_status"),
+        patch("simulation.plugins.onboard.crypto_available", True),
+        patch("simulation.plugins.onboard.Fernet") as mock_fernet,
+        patch("simulation.plugins.onboard._read_or_create_key") as mock_read_key,
+    ):
 
         # Mock Fernet to return a predictable encrypted value
         mock_fernet_instance = MagicMock()
@@ -313,7 +338,9 @@ def test_generate_secure_config_local_encrypted(mock_filesystem, mock_external_d
         assert data["secrets"]["API_KEY"] == "encrypted_value"
 
 
-def test_load_secure_config_local_decrypted(mock_filesystem, mock_external_dependencies):
+def test_load_secure_config_local_decrypted(
+    mock_filesystem, mock_external_dependencies
+):
     """Test local secret decryption and loading."""
     # First, generate an encrypted file
     key = Fernet.generate_key()
@@ -336,8 +363,9 @@ def test_load_secure_config_local_decrypted(mock_filesystem, mock_external_depen
     with open(secure_key_path, "wb") as f:
         f.write(key)
 
-    with patch("simulation.plugins.onboard.crypto_available", True), patch(
-        "simulation.plugins.onboard.print_status"
+    with (
+        patch("simulation.plugins.onboard.crypto_available", True),
+        patch("simulation.plugins.onboard.print_status"),
     ):
         loaded_secrets = _load_secure_config()
         assert loaded_secrets["TEST_SECRET"] == "my-test-secret"

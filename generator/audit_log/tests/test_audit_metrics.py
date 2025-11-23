@@ -74,15 +74,17 @@ if str(REPO_ROOT) not in sys.path:
 # 2. Import the module under test (now safe with AWS env vars set)
 # --------------------------------------------------------------------------- #
 from generator.audit_log.audit_metrics import (
-    audit_metrics,
-    LOG_WRITES,
-    ERROR_TYPES,
-    PLUGIN_INVOCATIONS,
+    VULN_COUNT,
+)  # Import VULN_COUNT to reset its state
+from generator.audit_log.audit_metrics import (
     CRYPTO_FAILURES,
+    ERROR_TYPES,
+    LOG_WRITES,
     PERF_SCORE,
-    update_vulnerability_count,
+    PLUGIN_INVOCATIONS,
+    audit_metrics,
     update_performance_score,
-    VULN_COUNT,  # Import VULN_COUNT to reset its state
+    update_vulnerability_count,
 )
 
 # Initialize faker for test data generation
@@ -144,7 +146,9 @@ async def mock_opentelemetry():
     with patch("generator.audit_log.audit_metrics.trace") as mock_trace:
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
         mock_trace.get_tracer.return_value = mock_tracer
         yield mock_tracer, mock_span
 
@@ -188,11 +192,19 @@ class TestAuditMetrics:
             PERF_SCORE.set(85.5)
 
         # Verify metrics in Prometheus registry
-        assert REGISTRY.get_sample_value("audit_log_writes_total", {"action": "user_login"}) == 1.0
+        assert (
+            REGISTRY.get_sample_value(
+                "audit_log_writes_total", {"action": "user_login"}
+            )
+            == 1.0
+        )
         # LOG_ERRORS is an unlabeled counter, its total value is accessible directly.
         # This assert relies on LOG_ERRORS being 0 from cleanup and not being incremented here.
         assert (
-            REGISTRY.get_sample_value("audit_error_types_total", {"type": "network_issue"}) == 1.0
+            REGISTRY.get_sample_value(
+                "audit_error_types_total", {"type": "network_issue"}
+            )
+            == 1.0
         )
         assert (
             REGISTRY.get_sample_value(
@@ -200,7 +212,12 @@ class TestAuditMetrics:
             )
             == 1.0
         )
-        assert REGISTRY.get_sample_value("audit_crypto_failures_total", {"op": "sign_fail"}) == 1.0
+        assert (
+            REGISTRY.get_sample_value(
+                "audit_crypto_failures_total", {"op": "sign_fail"}
+            )
+            == 1.0
+        )
         assert REGISTRY.get_sample_value("audit_system_performance_score") == 85.5
 
     @pytest.mark.asyncio
@@ -230,7 +247,9 @@ class TestAuditMetrics:
         mock_response.status = 200
         # Mock the synchronous requests.post call inside _send_slack_alert
         with patch("requests.post") as mock_post:
-            mock_post.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+            mock_post.return_value = MagicMock(
+                status_code=200, raise_for_status=MagicMock()
+            )
 
             try:
                 # FIX 2: Removed unexpected 'severity' keyword argument
@@ -396,7 +415,9 @@ class TestAuditMetrics:
             "audit_security_vulnerability_count", {"level": "critical"}
         )
         assert value == 5.0
-        value = REGISTRY.get_sample_value("audit_security_vulnerability_count", {"level": "high"})
+        value = REGISTRY.get_sample_value(
+            "audit_security_vulnerability_count", {"level": "high"}
+        )
         assert value == 10.0
 
     @pytest.mark.asyncio

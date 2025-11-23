@@ -19,23 +19,22 @@ Author: SFE Platform Team
 
 import asyncio
 import logging
-import time
 import os
-from typing import List, Dict, Any, Optional, Type, Union, Tuple
+import time
 from datetime import datetime
-from pydantic import BaseModel, Field, ValidationError, validator
-
-from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 # Import centralized OpenTelemetry configuration
 from arbiter.otel_config import get_tracer
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from pydantic import BaseModel, Field, ValidationError, validator
 
 # Import tenacity for retries with exponential backoff
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 # Import cryptography for encryption
@@ -108,7 +107,9 @@ logger.setLevel(
 )  # Allow log level to be configured via env var
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 # Get tracer using centralized configuration
@@ -131,7 +132,9 @@ def _get_or_create_metric(
     """
     try:
         if buckets:
-            return metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+            return metric_class(
+                name, documentation, labelnames=labelnames, buckets=buckets
+            )
         return metric_class(name, documentation, labelnames=labelnames)
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
@@ -174,12 +177,16 @@ class MetaLearningRecord(BaseModel):
     experiment_id: str = Field(
         ..., description="Unique identifier for the meta-learning experiment."
     )
-    task_type: str = Field(..., description="Type of ML task (classification, regression, etc.)")
+    task_type: str = Field(
+        ..., description="Type of ML task (classification, regression, etc.)"
+    )
     dataset_name: str = Field(..., description="Name of the dataset used.")
     meta_features: Dict[str, Any] = Field(
         ..., description="Meta-features extracted from the dataset."
     )
-    hyperparameters: Dict[str, Any] = Field(..., description="Hyperparameters/settings used.")
+    hyperparameters: Dict[str, Any] = Field(
+        ..., description="Hyperparameters/settings used."
+    )
     metrics: Dict[str, float] = Field(..., description="Evaluation metrics/results.")
     model_artifact_uri: Optional[str] = Field(
         None, description="URI/path to the trained model artifact (can be encrypted)."
@@ -253,7 +260,9 @@ class BaseMetaLearningDataStore:
     async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    async def add_record(self, record: Union[MetaLearningRecord, Dict[str, Any]]) -> str:
+    async def add_record(
+        self, record: Union[MetaLearningRecord, Dict[str, Any]]
+    ) -> str:
         raise NotImplementedError
 
     async def get_record(self, experiment_id: str) -> MetaLearningRecord:
@@ -276,14 +285,18 @@ class BaseMetaLearningDataStore:
         if not data or not CRYPTOGRAPHY_AVAILABLE:
             return data
 
-        REQUIRE_ENCRYPTION = os.getenv("MLDS_ENCRYPTION_REQUIRED", "false").lower() == "true"
+        REQUIRE_ENCRYPTION = (
+            os.getenv("MLDS_ENCRYPTION_REQUIRED", "false").lower() == "true"
+        )
         key = os.getenv("MLDS_ENCRYPTION_KEY")
         if not key:
             if REQUIRE_ENCRYPTION:
                 raise MetaLearningEncryptionError(
                     "Encryption key not set and encryption is required."
                 )
-            logger.warning("MLDS_ENCRYPTION_KEY not set. Sensitive fields will not be encrypted.")
+            logger.warning(
+                "MLDS_ENCRYPTION_KEY not set. Sensitive fields will not be encrypted."
+            )
             return data
 
         try:
@@ -299,7 +312,9 @@ class BaseMetaLearningDataStore:
         try:
             key = os.getenv("MLDS_ENCRYPTION_KEY")
             if not key:
-                logger.warning("MLDS_ENCRYPTION_KEY not set. Cannot decrypt sensitive fields.")
+                logger.warning(
+                    "MLDS_ENCRYPTION_KEY not set. Cannot decrypt sensitive fields."
+                )
                 return data
             f = Fernet(key.encode("utf-8"))
             return f.decrypt(data.encode("utf-8")).decode("utf-8")
@@ -332,7 +347,9 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         retry=retry_if_exception_type(TRANSIENT_ERRORS),
         reraise=True,
     )
-    async def add_record(self, record: Union[MetaLearningRecord, Dict[str, Any]]) -> str:
+    async def add_record(
+        self, record: Union[MetaLearningRecord, Dict[str, Any]]
+    ) -> str:
         op = "add_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
@@ -343,7 +360,9 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
 
                 # Encrypt sensitive fields
                 if record.model_artifact_uri:
-                    record.model_artifact_uri = await self._encrypt_field(record.model_artifact_uri)
+                    record.model_artifact_uri = await self._encrypt_field(
+                        record.model_artifact_uri
+                    )
 
                 async with self._lock:
                     if record.experiment_id in self._store:
@@ -401,12 +420,16 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
 
                 # Decrypt sensitive fields
                 if record.model_artifact_uri:
-                    record.model_artifact_uri = await self._decrypt_field(record.model_artifact_uri)
+                    record.model_artifact_uri = await self._decrypt_field(
+                        record.model_artifact_uri
+                    )
 
                 MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
                 return record
             except (MetaLearningRecordNotFound, MetaLearningEncryptionError) as e:
-                logger.error(f"Error getting record {experiment_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error getting record {experiment_id}: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except Exception as e:
@@ -530,7 +553,9 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
                 MetaLearningRecordNotFound,
                 MetaLearningEncryptionError,
             ) as e:
-                logger.error(f"Error updating record {experiment_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error updating record {experiment_id}: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except Exception as e:
@@ -566,7 +591,9 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
                     logger.info(f"Deleted meta-learning record: {experiment_id}")
                     MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
             except MetaLearningRecordNotFound as e:
-                logger.error(f"Error deleting record {experiment_id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error deleting record {experiment_id}: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except Exception as e:
@@ -590,12 +617,16 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
     def __init__(self):
         super().__init__()
         if not REDIS_AVAILABLE:
-            raise ImportError("redis.asyncio is not installed. Cannot use Redis backend.")
+            raise ImportError(
+                "redis.asyncio is not installed. Cannot use Redis backend."
+            )
 
         self.redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self._redis = redis.from_url(self.redis_url, decode_responses=True)
         self.redis_hash_key = os.getenv("REDIS_HASH_KEY", "meta_learning_records")
-        self.max_records = int(os.getenv("MLDS_MAX_RECORDS", "100000"))  # Higher limit for Redis
+        self.max_records = int(
+            os.getenv("MLDS_MAX_RECORDS", "100000")
+        )  # Higher limit for Redis
         self._backend_label = "redis"
         logger.info(
             f"RedisMetaLearningDataStore initialized with URL: {self.redis_url}, Hash Key: {self.redis_hash_key}"
@@ -625,7 +656,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         retry=retry_if_exception_type(TRANSIENT_ERRORS),
         reraise=True,
     )
-    async def add_record(self, record: Union[MetaLearningRecord, Dict[str, Any]]) -> str:
+    async def add_record(
+        self, record: Union[MetaLearningRecord, Dict[str, Any]]
+    ) -> str:
         op = "add_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
@@ -636,7 +669,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
 
                 # Encrypt sensitive fields
                 if record.model_artifact_uri:
-                    record.model_artifact_uri = await self._encrypt_field(record.model_artifact_uri)
+                    record.model_artifact_uri = await self._encrypt_field(
+                        record.model_artifact_uri
+                    )
 
                 record_json = record.json()
 
@@ -656,7 +691,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                     )
 
                 MLDS_DATA_SIZE.labels(backend=self._backend_label).inc()
-                logger.info(f"Added meta-learning record to Redis: {record.experiment_id}")
+                logger.info(
+                    f"Added meta-learning record to Redis: {record.experiment_id}"
+                )
                 span.set_attribute("mlds.experiment_id", record.experiment_id)
                 MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
                 return record.experiment_id
@@ -669,11 +706,15 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except ConnectionError as e:
-                logger.error(f"Redis connection error during add_record: {e}", exc_info=True)
+                logger.error(
+                    f"Redis connection error during add_record: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningBackendError(f"Redis operation failed: {e}") from e
             except Exception as e:
-                logger.error(f"Unexpected error adding record to Redis: {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error adding record to Redis: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningDataStoreError(f"Failed to add record: {e}") from e
             finally:
@@ -702,7 +743,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
 
                 # Decrypt sensitive fields
                 if record.model_artifact_uri:
-                    record.model_artifact_uri = await self._decrypt_field(record.model_artifact_uri)
+                    record.model_artifact_uri = await self._decrypt_field(
+                        record.model_artifact_uri
+                    )
 
                 MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
                 return record
@@ -714,7 +757,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except ConnectionError as e:
-                logger.error(f"Redis connection error during get_record: {e}", exc_info=True)
+                logger.error(
+                    f"Redis connection error during get_record: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningBackendError(f"Redis operation failed: {e}") from e
             except Exception as e:
@@ -794,11 +839,15 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
                 return filtered_records
             except ConnectionError as e:
-                logger.error(f"Redis connection error during list_records: {e}", exc_info=True)
+                logger.error(
+                    f"Redis connection error during list_records: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningBackendError(f"Redis operation failed: {e}") from e
             except Exception as e:
-                logger.error(f"Unexpected error listing records from Redis: {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error listing records from Redis: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningDataStoreError(f"Failed to list records: {e}") from e
             finally:
@@ -819,7 +868,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
             MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
-                existing_record_json = await self._redis.hget(self.redis_hash_key, experiment_id)
+                existing_record_json = await self._redis.hget(
+                    self.redis_hash_key, experiment_id
+                )
                 if not existing_record_json:
                     raise MetaLearningRecordNotFound(
                         f"Experiment ID {experiment_id} not found in Redis for update."
@@ -828,13 +879,19 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 base_record = MetaLearningRecord.parse_raw(existing_record_json)
 
                 # Only decrypt the URI if it's not being updated, to avoid unnecessary work
-                if "model_artifact_uri" not in updates and base_record.model_artifact_uri:
+                if (
+                    "model_artifact_uri" not in updates
+                    and base_record.model_artifact_uri
+                ):
                     base_record.model_artifact_uri = await self._decrypt_field(
                         base_record.model_artifact_uri
                     )
 
                 # Encrypt new model_artifact_uri if provided in updates
-                if "model_artifact_uri" in updates and updates["model_artifact_uri"] is not None:
+                if (
+                    "model_artifact_uri" in updates
+                    and updates["model_artifact_uri"] is not None
+                ):
                     updates["model_artifact_uri"] = await self._encrypt_field(
                         updates["model_artifact_uri"]
                     )
@@ -844,12 +901,17 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 updated_record = MetaLearningRecord(**updated_record.model_dump())
 
                 # Re-encrypt for storage if it was decrypted for update logic
-                if updated_record.model_artifact_uri and "model_artifact_uri" not in updates:
+                if (
+                    updated_record.model_artifact_uri
+                    and "model_artifact_uri" not in updates
+                ):
                     updated_record.model_artifact_uri = await self._encrypt_field(
                         updated_record.model_artifact_uri
                     )
 
-                await self._redis.hset(self.redis_hash_key, experiment_id, updated_record.json())
+                await self._redis.hset(
+                    self.redis_hash_key, experiment_id, updated_record.json()
+                )
                 logger.info(f"Updated meta-learning record in Redis: {experiment_id}")
 
                 # Decrypt for return value
@@ -872,7 +934,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except ConnectionError as e:
-                logger.error(f"Redis connection error during update_record: {e}", exc_info=True)
+                logger.error(
+                    f"Redis connection error during update_record: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningBackendError(f"Redis operation failed: {e}") from e
             except Exception as e:
@@ -915,7 +979,9 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise e
             except ConnectionError as e:
-                logger.error(f"Redis connection error during delete_record: {e}", exc_info=True)
+                logger.error(
+                    f"Redis connection error during delete_record: {e}", exc_info=True
+                )
                 MLDS_OPS_TOTAL.labels(operation=op, status="failure").inc()
                 raise MetaLearningBackendError(f"Redis operation failed: {e}") from e
             except Exception as e:
@@ -945,7 +1011,9 @@ def get_meta_learning_data_store(
         return InMemoryMetaLearningDataStore()
     elif backend == "redis":
         if not REDIS_AVAILABLE:
-            raise ImportError("Redis backend requested but redis.asyncio is not installed.")
+            raise ImportError(
+                "Redis backend requested but redis.asyncio is not installed."
+            )
         logger.info("Initializing RedisMetaLearningDataStore.")
         return RedisMetaLearningDataStore()
     else:
@@ -1042,7 +1110,9 @@ async def main():
     if REDIS_AVAILABLE:
         logger.info("\n--- Testing Redis Backend ---")
         os.environ["MLDS_BACKEND"] = "redis"
-        os.environ["REDIS_URL"] = "redis://localhost:6379/1"  # Use a different DB for testing
+        os.environ["REDIS_URL"] = (
+            "redis://localhost:6379/1"  # Use a different DB for testing
+        )
         os.environ["MLDS_MAX_RECORDS"] = "10"  # Set a small limit for testing Redis
 
         redis_store: Optional[RedisMetaLearningDataStore] = None
@@ -1072,9 +1142,13 @@ async def main():
                 assert (
                     rec_redis.model_artifact_uri == "s3://models/boston/v2"
                 )  # Should be decrypted
-                logger.info(f"Redis record added and retrieved: {rec_redis.experiment_id}")
+                logger.info(
+                    f"Redis record added and retrieved: {rec_redis.experiment_id}"
+                )
 
-                await redis_store.update_record(exp_id_redis, {"metrics": {"rmse": 4.2}})
+                await redis_store.update_record(
+                    exp_id_redis, {"metrics": {"rmse": 4.2}}
+                )
                 updated_rec_redis = await redis_store.get_record(exp_id_redis)
                 assert updated_rec_redis.metrics["rmse"] == 4.2
                 logger.info(f"Redis record updated: {updated_rec_redis.experiment_id}")
@@ -1111,7 +1185,9 @@ async def main():
                             metrics={},
                         )
                     )
-                    assert False, "Should have raised MetaLearningDataStoreError for Redis limit"
+                    assert (
+                        False
+                    ), "Should have raised MetaLearningDataStoreError for Redis limit"
                 except MetaLearningDataStoreError as e:
                     logger.info(f"Successfully caught expected Redis limit error: {e}")
 
@@ -1122,7 +1198,9 @@ async def main():
         except Exception as e:
             logger.error(f"Redis backend test failed: {e}", exc_info=True)
     else:
-        logger.warning("\n--- Skipping Redis Backend Tests (redis.asyncio not installed) ---")
+        logger.warning(
+            "\n--- Skipping Redis Backend Tests (redis.asyncio not installed) ---"
+        )
 
     print("\nMetaLearningDataStore E2E tests finished.")
 

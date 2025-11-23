@@ -156,7 +156,9 @@ def _init_metrics():
         STARTUP_ATTEMPTS = Counter(
             "sfe_startup_attempts_total", "Total SFE startup attempts", ["mode"]
         )
-        STARTUP_LATENCY = Histogram("sfe_startup_latency_seconds", "SFE startup latency", ["mode"])
+        STARTUP_LATENCY = Histogram(
+            "sfe_startup_latency_seconds", "SFE startup latency", ["mode"]
+        )
         STARTUP_FAILURES = Counter(
             "sfe_startup_failures_total", "Total SFE startup failures", ["mode"]
         )
@@ -166,7 +168,9 @@ def _init_metrics():
         return _DummyMetric(), _DummyMetric(), _DummyMetric(), (lambda _port: None)
 
 
-STARTUP_ATTEMPTS, STARTUP_LATENCY, STARTUP_FAILURES, _start_http_server = _init_metrics()
+STARTUP_ATTEMPTS, STARTUP_LATENCY, STARTUP_FAILURES, _start_http_server = (
+    _init_metrics()
+)
 
 
 # -------------------------
@@ -261,9 +265,9 @@ def _init_simulation_module():
     """Initialize the UnifiedSimulationModule for the SFE platform."""
     try:
         from simulation.simulation_module import (
-            UnifiedSimulationModule,
             Database,
             ShardedMessageBus,
+            UnifiedSimulationModule,
         )
 
         # Create stub dependencies (simulation module provides its own stubs)
@@ -298,7 +302,9 @@ async def _initialize_simulation_module():
             await _simulation_module.initialize()
             logger.info("Simulation module async initialization complete")
         except Exception as e:
-            logger.error("Failed to async initialize simulation module: %s", e, exc_info=True)
+            logger.error(
+                "Failed to async initialize simulation module: %s", e, exc_info=True
+            )
 
 
 async def _shutdown_simulation_module():
@@ -395,7 +401,9 @@ async def _test_generation_health_check() -> dict:
             if hasattr(_test_generation_orchestrator, "policy_engine"):
                 # Try to access the policy engine to ensure it's functional
                 pe = _test_generation_orchestrator.policy_engine
-                components_status["policy_engine"] = "initialized" if pe is not None else "missing"
+                components_status["policy_engine"] = (
+                    "initialized" if pe is not None else "missing"
+                )
             else:
                 components_status["policy_engine"] = "missing"
         except Exception as e:
@@ -404,7 +412,9 @@ async def _test_generation_health_check() -> dict:
         try:
             if hasattr(_test_generation_orchestrator, "event_bus"):
                 eb = _test_generation_orchestrator.event_bus
-                components_status["event_bus"] = "initialized" if eb is not None else "missing"
+                components_status["event_bus"] = (
+                    "initialized" if eb is not None else "missing"
+                )
             else:
                 components_status["event_bus"] = "missing"
         except Exception as e:
@@ -422,7 +432,9 @@ async def _test_generation_health_check() -> dict:
             components_status["security_scanner"] = f"error: {str(e)}"
 
         # Determine overall status
-        initialized_count = sum(1 for v in components_status.values() if v == "initialized")
+        initialized_count = sum(
+            1 for v in components_status.values() if v == "initialized"
+        )
 
         if initialized_count == 3:
             status = "ok"
@@ -550,7 +562,9 @@ async def _arbiter_health_check() -> dict:
         try:
             if hasattr(_arbiter_instance, "db_client"):
                 db = _arbiter_instance.db_client
-                components_status["database"] = "initialized" if db is not None else "missing"
+                components_status["database"] = (
+                    "initialized" if db is not None else "missing"
+                )
             else:
                 components_status["database"] = "missing"
         except Exception as e:
@@ -559,7 +573,9 @@ async def _arbiter_health_check() -> dict:
         try:
             if hasattr(_arbiter_instance, "state_manager"):
                 sm = _arbiter_instance.state_manager
-                components_status["state_manager"] = "initialized" if sm is not None else "missing"
+                components_status["state_manager"] = (
+                    "initialized" if sm is not None else "missing"
+                )
             else:
                 components_status["state_manager"] = "missing"
         except Exception as e:
@@ -568,7 +584,9 @@ async def _arbiter_health_check() -> dict:
         try:
             if hasattr(_arbiter_instance, "feedback"):
                 fb = _arbiter_instance.feedback
-                components_status["feedback"] = "initialized" if fb is not None else "missing"
+                components_status["feedback"] = (
+                    "initialized" if fb is not None else "missing"
+                )
             else:
                 components_status["feedback"] = "missing"
         except Exception as e:
@@ -577,7 +595,9 @@ async def _arbiter_health_check() -> dict:
         try:
             # Check if engines are connected
             if hasattr(_arbiter_instance, "engines") and _arbiter_instance.engines:
-                components_status["engines"] = f"{len(_arbiter_instance.engines)} engines"
+                components_status["engines"] = (
+                    f"{len(_arbiter_instance.engines)} engines"
+                )
             else:
                 components_status["engines"] = "none"
         except Exception as e:
@@ -585,7 +605,9 @@ async def _arbiter_health_check() -> dict:
 
         # Determine overall status
         initialized_count = sum(
-            1 for v in components_status.values() if v == "initialized" or "engines" in str(v)
+            1
+            for v in components_status.values()
+            if v == "initialized" or "engines" in str(v)
         )
 
         if initialized_count >= 2:
@@ -672,11 +694,15 @@ async def startup_validation():
             # In production, enforce presence of critical fields
             env = os.getenv("APP_ENV", "development").lower()
             required = (
-                ["REDIS_URL", "AUDIT_LOG_PATH"] if env == "production" else ["AUDIT_LOG_PATH"]
+                ["REDIS_URL", "AUDIT_LOG_PATH"]
+                if env == "production"
+                else ["AUDIT_LOG_PATH"]
             )
             missing = [f for f in required if not getattr(cfg, f, None)]
             if missing:
-                raise ValueError(f"Missing required config fields: {', '.join(missing)}")
+                raise ValueError(
+                    f"Missing required config fields: {', '.join(missing)}"
+                )
 
             await audit_logger.add_entry(
                 event_category="system",
@@ -703,7 +729,9 @@ async def startup_validation():
             logger.error("Startup validation failed: %s", e, exc_info=True)
             STARTUP_FAILURES.labels(mode="startup").inc()
             try:
-                _tracer.start_as_current_span("startup_validation_failed").record_exception(
+                _tracer.start_as_current_span(
+                    "startup_validation_failed"
+                ).record_exception(
                     e
                 )  # fire-and-forget
             except Exception:
@@ -741,9 +769,9 @@ def start_metrics_server(metrics_port: Optional[int] = None):
 # -------------------------
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
 
 
@@ -792,8 +820,8 @@ async def run_api(
     STARTUP_ATTEMPTS.labels(mode="api").inc()
     try:
         import uvicorn  # type: ignore
-        from fastapi import FastAPI, APIRouter  # type: ignore
         from api import create_app as create_fastapi_app  # type: ignore
+        from fastapi import APIRouter, FastAPI  # type: ignore
     except Exception as e:
         logger.error("API deps unavailable: %s", e, exc_info=True)
         raise
@@ -851,7 +879,8 @@ async def run_api(
         simulation_health = await _simulation_health_check()
         sim_status = simulation_health.get("status")
         simulation_ok = sim_status in ("ok", "healthy") or (
-            sim_status == "not_initialized" and simulation_health.get("available") is False
+            sim_status == "not_initialized"
+            and simulation_health.get("available") is False
         )
 
         # Check test generation orchestrator health
@@ -871,7 +900,9 @@ async def run_api(
         )
 
         overall_status = (
-            "ok" if (redis_ok and simulation_ok and testgen_ok and arbiter_ok) else "degraded"
+            "ok"
+            if (redis_ok and simulation_ok and testgen_ok and arbiter_ok)
+            else "degraded"
         )
 
         return {
@@ -891,8 +922,8 @@ async def run_api(
     # Optional in-app metrics exposure
     if _env_bool("EXPOSE_METRICS_IN_API", False):
         try:
-            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST  # type: ignore
             from fastapi.responses import Response  # type: ignore
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest  # type: ignore
 
             @router.get("/__sfe/metrics")
             async def _metrics():
@@ -912,7 +943,9 @@ async def run_api(
         logger.info("Starting SFE FastAPI application")
         yield
         logger.info("Shutting down SFE FastAPI application")
-        STARTUP_LATENCY.labels(mode="api").observe((datetime.now() - start).total_seconds())
+        STARTUP_LATENCY.labels(mode="api").observe(
+            (datetime.now() - start).total_seconds()
+        )
 
     try:
         app.router.lifespan_context = lifespan  # type: ignore[attr-defined]
@@ -989,14 +1022,20 @@ async def main():
     _maybe_enable_uvloop()
     _windows_event_loop_policy_fix()
 
-    parser = argparse.ArgumentParser(description="Self-Fixing Engineer (SFE) Entrypoint")
+    parser = argparse.ArgumentParser(
+        description="Self-Fixing Engineer (SFE) Entrypoint"
+    )
     parser.add_argument("--mode", choices=["cli", "api", "web"], default="cli")
     parser.add_argument("--host", default=os.getenv("SFE_API_HOST", "0.0.0.0"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("SFE_API_PORT", "8000")))
+    parser.add_argument(
+        "--port", type=int, default=int(os.getenv("SFE_API_PORT", "8000"))
+    )
     parser.add_argument("--reload", action="store_true")
     parser.add_argument("--root-path", default=os.getenv("API_ROOT_PATH", ""))
     parser.add_argument("--log-json", action="store_true", default=_pre_args.log_json)
-    parser.add_argument("--metrics-port", type=int, default=None, help="Override METRICS_PORT env")
+    parser.add_argument(
+        "--metrics-port", type=int, default=None, help="Override METRICS_PORT env"
+    )
     args = parser.parse_args()
 
     if args.log_json != _pre_args.log_json:

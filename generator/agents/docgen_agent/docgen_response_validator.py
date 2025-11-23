@@ -23,60 +23,65 @@ STRICT FAILURE ENFORCEMENT:
 """
 
 import asyncio
-import logging
+import importlib.util
 import json
+import logging
 import os
 import re
-import time  # *** FIX: Added missing import ***
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-from abc import ABC, abstractmethod
-from pathlib import Path
-import importlib.util
-import sys
 import subprocess
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import sys
+import time  # *** FIX: Added missing import ***
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # --- Format/Tooling Dependencies ---
 import docutils.core  # For RST validation
-from bs4 import BeautifulSoup  # For HTML validation
 import nltk  # For GOAT NLP metrics
+from bs4 import BeautifulSoup  # For HTML validation
 from nltk.sentiment import SentimentIntensityAnalyzer  # For sentiment analysis
 from nltk.tokenize import sent_tokenize
 
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 try:
     from plantuml import PlantUML
 except ImportError:
     PlantUML = None
-    logging.warning("PlantUML library not found. Diagram generation in enrichment will be skipped.")
+    logging.warning(
+        "PlantUML library not found. Diagram generation in enrichment will be skipped."
+    )
+
+import unittest  # For tests in __main__
+
+import uvicorn  # For running FastAPI in __main__
 
 # --- Async/API/CLI Dependencies ---
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import uvicorn  # For running FastAPI in __main__
-import unittest  # For tests in __main__
-
-# --- CENTRAL RUNNER FOUNDATION ---
-from runner import tracer
-from runner.llm_client import call_ensemble_api
-from runner.runner_logging import logger
-from runner.runner_file_utils import get_commits  # For changelog enrichment
 from opentelemetry.trace.status import (
     Status,
     StatusCode,
 )  # *** FIX: Added missing import ***
 
-# -----------------------------------
-
 # --- Local Prometheus Metrics (Internal Stats Only) ---
 # LLM-related metrics are IMPORTED from the runner.
 # These metrics track the internal operations of this specific service.
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
+from pydantic import BaseModel
+
+# --- CENTRAL RUNNER FOUNDATION ---
+from runner import tracer
+from runner.llm_client import call_ensemble_api
+from runner.runner_file_utils import get_commits  # For changelog enrichment
+from runner.runner_logging import logger
+
+# -----------------------------------
+
 
 process_calls_total = Counter(
     "docgen_validator_calls_total",
@@ -568,7 +573,9 @@ class PluginRegistry(FileSystemEventHandler):
 
         for plugin_file in self.plugin_dir.glob("*.py"):
             try:
-                spec = importlib.util.spec_from_file_location(plugin_file.stem, plugin_file)
+                spec = importlib.util.spec_from_file_location(
+                    plugin_file.stem, plugin_file
+                )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
 
@@ -653,7 +660,9 @@ class ResponseValidator:
 
             # Sentiment analysis
             sentiment_scores = self.sentiment_analyzer.polarity_scores(content)
-            sentiment_score = max(0, sentiment_scores["compound"] + 1) * 50  # Normalize to 0-100
+            sentiment_score = (
+                max(0, sentiment_scores["compound"] + 1) * 50
+            )  # Normalize to 0-100
 
             # Coherence (simple proxy based on repeated key terms)
             words = content.lower().split()
@@ -662,7 +671,9 @@ class ResponseValidator:
                 word_freq[word] = word_freq.get(word, 0) + 1
 
             # Coherence based on term repetition and structure
-            coherence_score = min(100, len([w for w, c in word_freq.items() if c > 1]) * 2)
+            coherence_score = min(
+                100, len([w for w, c in word_freq.items() if c > 1]) * 2
+            )
 
             # Completeness (based on schema requirements)
             required_sections = self.schema.get("sections", [])
@@ -737,15 +748,13 @@ class ResponseValidator:
                             f"\n\n## Recent Changes\n\n```\n{changelog_content}\n```\n"
                         )
                     elif output_format == "rst":
-                        changelog_section = (
-                            f"\n\nRecent Changes\n--------------\n\n::\n\n    {changelog_content}\n"
-                        )
+                        changelog_section = f"\n\nRecent Changes\n--------------\n\n::\n\n    {changelog_content}\n"
                     elif output_format == "html":
-                        changelog_section = (
-                            f"\n<h2>Recent Changes</h2>\n<pre>{changelog_content}</pre>\n"
-                        )
+                        changelog_section = f"\n<h2>Recent Changes</h2>\n<pre>{changelog_content}</pre>\n"
                     else:
-                        changelog_section = f"\n\nRecent Changes:\n{changelog_content}\n"
+                        changelog_section = (
+                            f"\n\nRecent Changes:\n{changelog_content}\n"
+                        )
 
                     content += changelog_section
             except Exception as e:
@@ -792,7 +801,9 @@ class ResponseValidator:
                 try:
                     parsed_response = parse_llm_response(raw_response)
                     content = parsed_response["content"]
-                    provenance["rationale_steps"].append("Parsed LLM response successfully")
+                    provenance["rationale_steps"].append(
+                        "Parsed LLM response successfully"
+                    )
                 except Exception as e:
                     span.set_status(Status(StatusCode.ERROR, str(e)))
                     process_errors_total.labels(
@@ -810,7 +821,9 @@ class ResponseValidator:
                     )
                 except Exception as e:
                     logger.warning(f"Security scrubbing failed: {e}")
-                    provenance["rationale_steps"].append(f"Security scrubbing failed: {e}")
+                    provenance["rationale_steps"].append(
+                        f"Security scrubbing failed: {e}"
+                    )
 
                 # Step 3: Format-specific validation
                 try:
@@ -826,11 +839,15 @@ class ResponseValidator:
                         operation="validate",
                         error_type="plugin_error",
                     ).inc()
-                    raise ValueError(f"Validation failed for format '{output_format}': {e}")
+                    raise ValueError(
+                        f"Validation failed for format '{output_format}': {e}"
+                    )
 
                 # Step 4: Quality assessment (GOAT upgrade)
                 quality_metrics = self.assess_quality(content)
-                provenance["rationale_steps"].append("Performed NLP-based quality assessment")
+                provenance["rationale_steps"].append(
+                    "Performed NLP-based quality assessment"
+                )
 
                 # Step 5: Security scanning
                 security_findings = self._detect_security_issues(content)
@@ -855,12 +872,16 @@ Return only the corrected documentation content.
                         corrected_content = correction_response["content"]
 
                         # Re-validate corrected content
-                        corrected_validation = plugin.validate(corrected_content, self.schema)
+                        corrected_validation = plugin.validate(
+                            corrected_content, self.schema
+                        )
                         if corrected_validation["valid"]:
                             content = corrected_content
                             is_valid = True
                             validation_result = corrected_validation
-                            provenance["rationale_steps"].append("Auto-corrected document via LLM")
+                            provenance["rationale_steps"].append(
+                                "Auto-corrected document via LLM"
+                            )
                         else:
                             provenance["rationale_steps"].append(
                                 "Auto-correction attempted but failed"
@@ -868,7 +889,9 @@ Return only the corrected documentation content.
 
                     except Exception as e:
                         logger.error(f"Auto-correction failed: {e}")
-                        provenance["rationale_steps"].append(f"Auto-correction failed: {e}")
+                        provenance["rationale_steps"].append(
+                            f"Auto-correction failed: {e}"
+                        )
 
                 # Step 7: Content enrichment
                 content = self._enrich_content(content, output_format, repo_path)
@@ -877,14 +900,20 @@ Return only the corrected documentation content.
                 # Step 8: Final formatting
                 try:
                     content = plugin.format(content)
-                    provenance["rationale_steps"].append("Applied format-specific formatting")
+                    provenance["rationale_steps"].append(
+                        "Applied format-specific formatting"
+                    )
                 except Exception as e:
                     logger.warning(f"Formatting failed: {e}")
 
                 # Update section status metrics
                 for section in self.schema.get("sections", []):
                     section_present = (
-                        1 if re.search(rf"\b{re.escape(section)}\b", content, re.IGNORECASE) else 0
+                        1
+                        if re.search(
+                            rf"\b{re.escape(section)}\b", content, re.IGNORECASE
+                        )
+                        else 0
                     )
                     section_status_gauge.labels(
                         output_format=output_format, section_name=section
@@ -910,10 +939,12 @@ Return only the corrected documentation content.
                 }
 
                 # Update metrics
-                process_calls_total.labels(format=output_format, operation="validate").inc()
-                process_latency_seconds.labels(format=output_format, operation="validate").observe(
-                    time.time() - start_time
-                )
+                process_calls_total.labels(
+                    format=output_format, operation="validate"
+                ).inc()
+                process_latency_seconds.labels(
+                    format=output_format, operation="validate"
+                ).observe(time.time() - start_time)
 
                 if not is_valid:
                     process_errors_total.labels(
@@ -1044,7 +1075,9 @@ if __name__ == "__main__":
         default=test_repo_path,
         help="Path to the repository for context.",
     )
-    parser.add_argument("--server", action="store_true", help="Start the FastAPI server.")
+    parser.add_argument(
+        "--server", action="store_true", help="Start the FastAPI server."
+    )
     parser.add_argument("--host", default="0.0.0.0", help="Host for the API server.")
     parser.add_argument(
         "--port", type=int, default=8084, help="Port for the API server (merged port)."
@@ -1177,7 +1210,9 @@ if __name__ == "__main__":
             with open(args.raw_response_file, "r", encoding="utf-8") as f:
                 raw_response_data = json.load(f)
         except Exception as e:
-            logger.error(f"Failed to read raw response file {args.raw_response_file}: {e}")
+            logger.error(
+                f"Failed to read raw response file {args.raw_response_file}: {e}"
+            )
             sys.exit(1)
 
         async def run_cli_mode():

@@ -24,18 +24,18 @@ import os
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiofiles
 import pytest
 import pytest_asyncio
-from faker import Faker
-import aiofiles
-from freezegun import freeze_time
-
 from agents.generator_plugin_wrapper import (
-    run_generator_workflow,
-    WorkflowOutput,
     GeneratorPluginError,
     WorkflowError,
+    WorkflowOutput,
+    run_generator_workflow,
 )
+from faker import Faker
+from freezegun import freeze_time
 
 # Initialize faker for test data generation
 fake = Faker()
@@ -99,7 +99,9 @@ async def mock_plugin_registry():
             return_value={"requirements": "A Flask web service with a single endpoint."}
         )
         mock_codegen = AsyncMock(
-            return_value={"code_files": {"main.py": "def hello(): return 'Hello, World!'"}}
+            return_value={
+                "code_files": {"main.py": "def hello(): return 'Hello, World!'"}
+            }
         )
         mock_critique = AsyncMock(return_value={"issues": [], "suggestions": []})
         mock_testgen = AsyncMock(
@@ -117,7 +119,9 @@ async def mock_plugin_registry():
             }
         )
         mock_docgen = AsyncMock(
-            return_value={"documentation": "# Updated README\nGenerated Flask app documentation."}
+            return_value={
+                "documentation": "# Updated README\nGenerated Flask app documentation."
+            }
         )
         mock_registry.get.side_effect = {
             "clarifier": mock_clarifier,
@@ -187,7 +191,9 @@ async def mock_opentelemetry():
     with patch("agents.generator_plugin_wrapper.trace") as mock_trace:
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
         mock_trace.get_tracer.return_value = mock_tracer
         yield mock_tracer, mock_span
 
@@ -251,7 +257,8 @@ class TestGeneratorPluginWrapper:
         assert output.status == "failed"
         assert len(output.errors) > 0
         assert (
-            "validation" in output.errors[0].lower() or "requirements" in output.errors[0].lower()
+            "validation" in output.errors[0].lower()
+            or "requirements" in output.errors[0].lower()
         )
 
     @pytest.mark.asyncio
@@ -288,10 +295,14 @@ class TestGeneratorPluginWrapper:
 
         assert output.status == "failed"
         assert len(output.errors) > 0
-        assert "Plugin failed" in output.errors[0] or "error" in output.errors[0].lower()
+        assert (
+            "Plugin failed" in output.errors[0] or "error" in output.errors[0].lower()
+        )
 
     @pytest.mark.asyncio
-    async def test_concurrent_workflows(self, test_repository, mock_plugin_registry, mock_metrics):
+    async def test_concurrent_workflows(
+        self, test_repository, mock_plugin_registry, mock_metrics
+    ):
         """Test concurrent execution of multiple workflows."""
         requirements = {"description": "A Flask web service."}
         config = {"language": "python", "framework": "flask"}
@@ -314,7 +325,9 @@ class TestGeneratorPluginWrapper:
             assert output.status == "success"
 
     @pytest.mark.asyncio
-    async def test_pii_sanitization(self, test_repository, mock_plugin_registry, mock_metrics):
+    async def test_pii_sanitization(
+        self, test_repository, mock_plugin_registry, mock_metrics
+    ):
         """Test PII sanitization in workflow inputs."""
         requirements = {
             "description": "Contact: test@example.com, Phone: 555-123-4567, SSN: 123-45-6789"
@@ -336,7 +349,9 @@ class TestGeneratorPluginWrapper:
         # This test currently just verifies the workflow completes
 
     @pytest.mark.asyncio
-    async def test_retry_logic(self, test_repository, mock_plugin_registry, mock_metrics):
+    async def test_retry_logic(
+        self, test_repository, mock_plugin_registry, mock_metrics
+    ):
         """Test that WorkflowError results in failed status (retry doesn't work when exceptions are caught)."""
         # Create a mock that always fails with WorkflowError
         call_count = {"count": 0}

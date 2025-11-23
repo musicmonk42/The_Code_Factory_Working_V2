@@ -14,9 +14,9 @@ Industry-grade test suite for runner_errors.py (2025 refactor).
 import json
 import uuid
 from typing import Any, Dict
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 # --------------------------------------------------------------------------- #
 # Import the module under test – use aliases to avoid pytest collection warnings
@@ -24,19 +24,19 @@ from unittest.mock import patch
 # --- FIX: Import ExecutionError and alias it for the test ---
 from runner.runner_errors import (
     ERROR_CODE_REGISTRY,
-    register_error_code,
-    RunnerError,
     BackendError,
-    FrameworkError,
+    ConfigurationError,
+    DistributedError,
     ExecutionError,
+    ExporterError,
+    FrameworkError,
+    LLMError,
+    PersistenceError,
+    RunnerError,
     SetupError,
     TimeoutError,
-    DistributedError,
-    PersistenceError,
-    ConfigurationError,
     ValidationError,
-    LLMError,
-    ExporterError,
+    register_error_code,
 )
 
 # --- END FIX ---
@@ -133,6 +133,7 @@ def test_no_op_tracer_when_ot_missing():
     with patch("runner.runner_errors.trace", side_effect=ImportError("No OT")):
         # Force reload so the except-block runs
         import importlib
+
         import runner.runner_errors as err_mod  # Use runner_errors
 
         importlib.reload(err_mod)
@@ -156,7 +157,9 @@ async def test_runner_error_basic(clean_state, run_id):
         register_error_code("BASE_ERR", "Base error")
 
     with patch("runner.runner_errors.redact_secrets", new=lambda s: s):
-        exc = RunnerError(error_code="BASE_ERR", detail="Something went wrong", task_id=run_id)
+        exc = RunnerError(
+            error_code="BASE_ERR", detail="Something went wrong", task_id=run_id
+        )
         d = error_dict(exc)
 
     assert d["error_type"] == "RunnerError"

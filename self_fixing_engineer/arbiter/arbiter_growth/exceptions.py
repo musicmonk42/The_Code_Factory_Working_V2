@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 # Configure a logger for this module.
 logger = logging.getLogger(__name__)
@@ -25,7 +25,9 @@ class ArbiterGrowthError(Exception):
         super().__init__(message)
         self.message = message
         self.details = details or {}
-        logger.error("Exception raised: %s, Details: %s", self.__class__.__name__, self.details)
+        logger.error(
+            "Exception raised: %s, Details: %s", self.__class__.__name__, self.details
+        )
 
     def __str__(self) -> str:
         """Returns a string representation of the exception, including details."""

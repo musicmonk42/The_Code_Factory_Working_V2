@@ -1,8 +1,9 @@
-import pytest
-import os
 import asyncio
+import os
 from functools import wraps
-from unittest.mock import MagicMock, patch, AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from werkzeug.exceptions import TooManyRequests
 
 # Fix: Import all necessary components for mocking from api.py
@@ -15,9 +16,7 @@ with patch.dict(
         "CORS_ORIGINS": "",
     },
 ):
-    from test_generation.gen_agent.api import (
-        create_app,
-    )
+    from test_generation.gen_agent.api import create_app
 
 
 async def _mock_invoke_graph(graph, state, config=None, progress_callback=None):
@@ -92,9 +91,13 @@ def mock_dependencies(monkeypatch):
 
         return decorator
 
-    monkeypatch.setattr("test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator)
+    monkeypatch.setattr(
+        "test_generation.gen_agent.api.jwt_required", mock_jwt_required_decorator
+    )
 
-    monkeypatch.setattr("test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1")
+    monkeypatch.setattr(
+        "test_generation.gen_agent.api.get_remote_address", lambda: "127.0.0.1"
+    )
 
     return {
         "limiter": mock_limiter,
@@ -205,9 +208,10 @@ class TestSecurity:
 
     def test_jwt_required_when_enabled(self, client, mock_dependencies):
         """Unauthorized requests should return 401 when JWT is enabled."""
-        with patch("test_generation.gen_agent.api.JWT_AVAILABLE", True), patch(
-            "test_generation.gen_agent.api.jwt_required"
-        ) as mock_jwt_required:
+        with (
+            patch("test_generation.gen_agent.api.JWT_AVAILABLE", True),
+            patch("test_generation.gen_agent.api.jwt_required") as mock_jwt_required,
+        ):
 
             def mock_decorator_return():
                 def decorator(f):
@@ -223,7 +227,9 @@ class TestSecurity:
             # The decorator itself is called, which returns another decorator
             mock_jwt_required.return_value = mock_decorator_return()
 
-            app_with_jwt = create_app({"SECRET_KEY": "test-key", "JWT_SECRET_KEY": "test-jwt-key"})
+            app_with_jwt = create_app(
+                {"SECRET_KEY": "test-key", "JWT_SECRET_KEY": "test-jwt-key"}
+            )
             app_with_jwt.testing = True
 
             response = app_with_jwt.test_client().post(
@@ -253,7 +259,9 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
     monkeypatch.setattr("test_generation.gen_agent.api.build_graph", MagicMock())
 
     if env == "prod" and not jwt_available:
-        with pytest.raises(RuntimeError, match="JWT authentication is required in production"):
+        with pytest.raises(
+            RuntimeError, match="JWT authentication is required in production"
+        ):
             create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
     else:
         # Should not raise an error
@@ -261,8 +269,9 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
 
     def test_owasp_headers_in_prod(self, client):
         """Verify OWASP headers are set in production mode."""
-        with patch.dict(os.environ, {"ENV": "prod"}), patch(
-            "test_generation.gen_agent.api.serve_api"
+        with (
+            patch.dict(os.environ, {"ENV": "prod"}),
+            patch("test_generation.gen_agent.api.serve_api"),
         ):
             app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
             app.testing = True
@@ -283,9 +292,10 @@ def test_production_jwt_requirement(monkeypatch, env, jwt_available):
 class TestOperational:
     def test_rate_limiting_enforced(self, client, mock_dependencies):
         """Verify rate limiting returns a 429 status code."""
-        with patch("test_generation.gen_agent.api.LIMITER_AVAILABLE", True), patch(
-            "test_generation.gen_agent.api.Limiter"
-        ) as mock_limiter_class:
+        with (
+            patch("test_generation.gen_agent.api.LIMITER_AVAILABLE", True),
+            patch("test_generation.gen_agent.api.Limiter") as mock_limiter_class,
+        ):
 
             mock_limiter_instance = Mock()
             mock_limiter_class.return_value = mock_limiter_instance
@@ -312,7 +322,9 @@ class TestOperational:
                 "framework": "pytest",
                 "spec_format": "gherkin",
             }
-            response = app_with_limiter.test_client().post("/generate-tests", json=payload)
+            response = app_with_limiter.test_client().post(
+                "/generate-tests", json=payload
+            )
 
             assert response.status_code == 429
             data = response.get_json()
@@ -320,9 +332,10 @@ class TestOperational:
 
     def test_cors_headers_applied_correctly(self, client, mock_dependencies):
         """Verify CORS headers are set based on environment variable."""
-        with patch.dict(os.environ, {"CORS_ORIGINS": "https://test-origin.com"}), patch(
-            "test_generation.gen_agent.api.CORS"
-        ) as mock_cors:
+        with (
+            patch.dict(os.environ, {"CORS_ORIGINS": "https://test-origin.com"}),
+            patch("test_generation.gen_agent.api.CORS") as mock_cors,
+        ):
             app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
             app.testing = True
 
@@ -347,12 +360,16 @@ class TestFailurePath:
             "test_generation.gen_agent.api.runtime_init_llm",
             side_effect=Exception("LLM connection failed."),
         ):
-            with patch("test_generation.gen_agent.api.logging.Logger.error") as mock_log:
+            with patch(
+                "test_generation.gen_agent.api.logging.Logger.error"
+            ) as mock_log:
                 # The create_app call must be inside the patch block
                 app = create_app({"SECRET_KEY": "a", "JWT_SECRET_KEY": "b"})
                 app.testing = True
 
-                mock_log.assert_called_with("LLM init failed at startup: LLM connection failed.")
+                mock_log.assert_called_with(
+                    "LLM init failed at startup: LLM connection failed."
+                )
                 assert app.config["_GRAPH"] is None
 
             payload = {

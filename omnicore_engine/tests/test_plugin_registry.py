@@ -3,34 +3,35 @@ Test suite for omnicore_engine/plugin_registry.py
 Tests plugin registration, execution, versioning, and security features.
 """
 
-import pytest
+import hashlib
+import hmac
 import os
 import sys
 import tempfile
-import hashlib
-import hmac
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.plugin_registry import (
-    PluginRegistry,
-    PluginMeta,
     Plugin,
-    PlugInKind,
-    SecurityError,
-    safe_exec_plugin,
-    verify_plugin_signature,
-    validate_plugin_path,
-    PluginPerformanceTracker,
-    PluginVersionManager,
     PluginDependencyGraph,
+    PlugInKind,
     PluginMarketplace,
-    plugin,
-    _is_picklable,
+    PluginMeta,
+    PluginPerformanceTracker,
+    PluginRegistry,
+    PluginVersionManager,
+    SecurityError,
     _all_picklable,
+    _is_picklable,
+    plugin,
+    safe_exec_plugin,
+    validate_plugin_path,
+    verify_plugin_signature,
 )
 
 
@@ -357,7 +358,9 @@ class TestPluginVersionManager:
     async def test_register_version(self, version_manager):
         """Test registering a plugin version"""
         plugin = Mock()
-        plugin.meta = Mock(description="test", safe=True, source="local", params_schema={})
+        plugin.meta = Mock(
+            description="test", safe=True, source="local", params_schema={}
+        )
         plugin.fn = lambda: "test"
 
         await version_manager.register_version("execution", "test", plugin, "1.0.0")

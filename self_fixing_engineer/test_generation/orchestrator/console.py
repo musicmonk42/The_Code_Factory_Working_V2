@@ -1,14 +1,14 @@
 # test_generation/orchestrator/console.py
-import sys
-import os
+import io
 import logging
 import logging.config
+import os
+import sys
 import threading
 import traceback
-import io
 from contextlib import contextmanager
-from importlib.metadata import version, PackageNotFoundError
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from importlib.metadata import PackageNotFoundError, version
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from unittest.mock import Mock
 
 # ---------------- Rich availability (warn, but don't hard-disable) ----------------
@@ -35,21 +35,23 @@ else:
 # This makes them valid, importable names from this module.
 if RICH_AVAILABLE:
     try:
+        from rich.columns import Columns
+        from rich.panel import Panel
         from rich.progress import (
-            Progress,
             BarColumn,
+            Progress,
+            TextColumn,
             TimeElapsedColumn,
             TimeRemainingColumn,
-            TextColumn,
         )
         from rich.table import Table
-        from rich.panel import Panel
         from rich.text import Text
-        from rich.columns import Columns
     except ImportError:
         # Downgrade availability if import fails
         RICH_AVAILABLE = False
-        Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (Mock(),) * 5
+        Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (
+            Mock(),
+        ) * 5
 
         # Use simple dummy classes so isinstance(...) is always safe
         class _Dummy:
@@ -102,7 +104,9 @@ else:
             output = " ".join(str(arg) for arg in args)
             self.buf.write(output + "\n")
 
-    Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (Mock(),) * 5
+    Progress, BarColumn, TimeElapsedColumn, TimeRemainingColumn, TextColumn = (
+        Mock(),
+    ) * 5
 
     class _Dummy:
         pass
@@ -341,7 +345,10 @@ def configure_logging(
             raise ValueError("Invalid logging_config schema: missing 'handlers'.")
 
         handlers = logging_config["handlers"]
-        if audit_handler_name in handlers and "filename" in handlers[audit_handler_name]:
+        if (
+            audit_handler_name in handlers
+            and "filename" in handlers[audit_handler_name]
+        ):
             audit_log_dir = os.path.dirname(audit_log_file)
             if audit_log_dir:
                 os.makedirs(audit_log_dir, exist_ok=True)

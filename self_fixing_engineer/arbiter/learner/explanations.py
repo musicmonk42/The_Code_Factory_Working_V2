@@ -1,16 +1,16 @@
 # arbiter/learner/explanations.py
 
+import asyncio
 import json
 import os
 import time
-import asyncio
-import structlog
-from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
-from prometheus_client import Counter, Histogram
-from opentelemetry import trace
+from typing import Any, Dict, List, Optional
 
+import structlog
+from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 # Structured logging setup
 structlog.configure(
@@ -52,12 +52,16 @@ explanation_llm_failure_total = Counter(
 )
 
 # Cache configuration
-EXPLANATION_CACHE_REDIS_TTL = int(os.getenv("EXPLANATION_CACHE_REDIS_TTL", 86400))  # 24 hours
+EXPLANATION_CACHE_REDIS_TTL = int(
+    os.getenv("EXPLANATION_CACHE_REDIS_TTL", 86400)
+)  # 24 hours
 EXPLANATION_PROMPT_TEMPLATE_PATH = os.getenv(
     "EXPLANATION_PROMPT_TEMPLATE_PATH",
     os.path.join(os.path.dirname(__file__), "templates/explanation_prompt.json"),
 )
-EXPLANATION_LLM_TIMEOUT_SECONDS = float(os.getenv("EXPLANATION_LLM_TIMEOUT_SECONDS", 30.0))
+EXPLANATION_LLM_TIMEOUT_SECONDS = float(
+    os.getenv("EXPLANATION_LLM_TIMEOUT_SECONDS", 30.0)
+)
 EXPLANATION_PROMPT_TEMPLATES = {}
 
 
@@ -161,11 +165,15 @@ async def _generate_text_with_retry(client: Any, prompt: str) -> str:
         return result
     except asyncio.TimeoutError:
         logger.error("LLM call timed out", timeout=EXPLANATION_LLM_TIMEOUT_SECONDS)
-        explanation_llm_failure_total.labels(domain="explanation", error_type="timeout").inc()
+        explanation_llm_failure_total.labels(
+            domain="explanation", error_type="timeout"
+        ).inc()
         raise
     except Exception as e:
         logger.error("LLM call failed", error=str(e))
-        explanation_llm_failure_total.labels(domain="explanation", error_type="client_error").inc()
+        explanation_llm_failure_total.labels(
+            domain="explanation", error_type="client_error"
+        ).inc()
         raise
 
 
@@ -226,16 +234,22 @@ async def generate_explanation(
             "domain": domain,
             "key": key,
             "new_value": json.dumps(new_value, default=str),
-            "old_value": (json.dumps(old_value, default=str) if old_value is not None else ""),
+            "old_value": (
+                json.dumps(old_value, default=str) if old_value is not None else ""
+            ),
             "diff": json.dumps(diff, default=str) if diff else "",
             "kg_insights": "",
         }
 
         prompt_template = ""
         if old_value is None:
-            template = EXPLANATION_PROMPT_TEMPLATES.get("new_fact", "New fact: {new_value}.")
+            template = EXPLANATION_PROMPT_TEMPLATES.get(
+                "new_fact", "New fact: {new_value}."
+            )
             # Ensure we have a string template, not a dict or other type
-            prompt_template = template if isinstance(template, str) else "New fact: {new_value}."
+            prompt_template = (
+                template if isinstance(template, str) else "New fact: {new_value}."
+            )
         elif diff:
             template = EXPLANATION_PROMPT_TEMPLATES.get(
                 "updated_fact", "Updated fact. Old: {old_value}. New: {new_value}."
@@ -256,20 +270,25 @@ async def generate_explanation(
             )
 
         # Integrate knowledge graph insights
-        if hasattr(learner.arbiter, "knowledge_graph") and learner.arbiter.knowledge_graph:
+        if (
+            hasattr(learner.arbiter, "knowledge_graph")
+            and learner.arbiter.knowledge_graph
+        ):
             try:
-                related_facts = await learner.arbiter.knowledge_graph.find_related_facts(
-                    domain, key, new_value
+                related_facts = (
+                    await learner.arbiter.knowledge_graph.find_related_facts(
+                        domain, key, new_value
+                    )
                 )
                 kg_consistency_issue = "No immediate consistency issues were found."
                 if hasattr(learner.arbiter.knowledge_graph, "check_consistency"):
-                    consistency_issue = await learner.arbiter.knowledge_graph.check_consistency(
-                        domain, key, new_value
+                    consistency_issue = (
+                        await learner.arbiter.knowledge_graph.check_consistency(
+                            domain, key, new_value
+                        )
                     )
                     if consistency_issue:
-                        kg_consistency_issue = (
-                            f"A potential consistency issue was detected: {consistency_issue}."
-                        )
+                        kg_consistency_issue = f"A potential consistency issue was detected: {consistency_issue}."
                 kg_insights = f"This fact is related to: {', '.join(related_facts or [])}. {kg_consistency_issue}"
                 prompt_data["kg_insights"] = kg_insights
                 span.set_attribute("knowledge_graph_insights", True)
@@ -297,7 +316,9 @@ async def generate_explanation(
         try:
             full_prompt = prompt_template.format(**sanitized_prompt_data)
         except KeyError as e:
-            logger.error("Invalid prompt template", error=str(e), template=prompt_template)
+            logger.error(
+                "Invalid prompt template", error=str(e), template=prompt_template
+            )
             explanation_llm_failure_total.labels(
                 domain="explanation", error_type="template_error"
             ).inc()
@@ -330,7 +351,9 @@ async def generate_explanation(
                 key=key,
                 error=str(e),
             )
-            explanation_llm_failure_total.labels(domain=domain, error_type="retry_exhausted").inc()
+            explanation_llm_failure_total.labels(
+                domain=domain, error_type="retry_exhausted"
+            ).inc()
             span.set_attribute("llm_success", False)
             return "Failed to generate detailed explanation after multiple retries. Please review the raw fact data."
         except Exception as e:
@@ -340,7 +363,9 @@ async def generate_explanation(
                 key=key,
                 error=str(e),
             )
-            explanation_llm_failure_total.labels(domain=domain, error_type="unexpected").inc()
+            explanation_llm_failure_total.labels(
+                domain=domain, error_type="unexpected"
+            ).inc()
             span.set_attribute("llm_success", False)
             span.record_exception(e)
             return "Failed to generate detailed explanation due to an unexpected error."
@@ -373,7 +398,9 @@ async def record_explanation_quality(
         # Validate score
         if not isinstance(score, int) or score < 1 or score > 5:
             logger.error("Invalid explanation quality score", score=score)
-            explanation_llm_failure_total.labels(domain=domain, error_type="invalid_score").inc()
+            explanation_llm_failure_total.labels(
+                domain=domain, error_type="invalid_score"
+            ).inc()
             raise ValueError(f"Score must be an integer between 1 and 5, got {score}")
 
         feedback_entry = {
@@ -403,7 +430,9 @@ async def record_explanation_quality(
             logger.debug("Audited explanation quality feedback", domain=domain, key=key)
         except Exception as e:
             logger.error("Failed to audit explanation quality feedback", error=str(e))
-            explanation_llm_failure_total.labels(domain=domain, error_type="audit_failure").inc()
+            explanation_llm_failure_total.labels(
+                domain=domain, error_type="audit_failure"
+            ).inc()
             span.record_exception(e)
 
 
@@ -421,7 +450,9 @@ def get_explanation_quality_report(
     with tracer.start_as_current_span("get_explanation_quality_report") as span:
         span.set_attribute("domain", domain or "all")
         filtered_logs = [
-            e for e in learner.explanation_feedback_log if domain is None or e["domain"] == domain
+            e
+            for e in learner.explanation_feedback_log
+            if domain is None or e["domain"] == domain
         ]
         logger.info(
             "Generated explanation quality report",

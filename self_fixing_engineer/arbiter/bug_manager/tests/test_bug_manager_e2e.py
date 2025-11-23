@@ -2,27 +2,26 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
 import aioresponses
-from prometheus_client import REGISTRY
+import pytest
 
 # Import all necessary components from the application modules
 from arbiter.bug_manager.bug_manager import (
+    BUG_AUTO_FIX_ATTEMPT,
+    BUG_AUTO_FIX_SUCCESS,
     BugManager,
+    RateLimitExceededError,
     Settings,
     Severity,
-    RateLimitExceededError,
-    BUG_AUTO_FIX_SUCCESS,
-    BUG_AUTO_FIX_ATTEMPT,
 )
+from arbiter.bug_manager.notifications import NotificationService
 from arbiter.bug_manager.remediations import (
     BugFixerRegistry,
     RemediationPlaybook,
     RemediationStep,
 )
 from arbiter.bug_manager.utils import SecretStr
-from arbiter.bug_manager.notifications import NotificationService
-
+from prometheus_client import REGISTRY
 
 # --- Fixtures ---
 
@@ -168,21 +167,28 @@ async def test_e2e_bug_report_with_failed_fix_and_notifications(tmp_path):
         RemediationStep.register_action("e2e_restart_cache_service", mock_action)
         playbook = RemediationPlaybook(
             name="RestartCacheService",
-            steps=[RemediationStep(name="RestartCache", action_name="e2e_restart_cache_service")],
+            steps=[
+                RemediationStep(
+                    name="RestartCache", action_name="e2e_restart_cache_service"
+                )
+            ],
         )
         BugFixerRegistry.register_playbook(playbook, location="data.cache_service")
 
         # We will patch the notification service's dispatch methods directly
         # This avoids mocking low-level network calls (aiohttp, aiosmtplib)
-        with patch.object(
-            NotificationService,
-            "_notify_slack_with_decorators",
-            AsyncMock(return_value=True),
-        ) as mock_notify_slack, patch.object(
-            NotificationService,
-            "_notify_email_with_decorators",
-            AsyncMock(return_value=True),
-        ) as mock_notify_email:
+        with (
+            patch.object(
+                NotificationService,
+                "_notify_slack_with_decorators",
+                AsyncMock(return_value=True),
+            ) as mock_notify_slack,
+            patch.object(
+                NotificationService,
+                "_notify_email_with_decorators",
+                AsyncMock(return_value=True),
+            ) as mock_notify_email,
+        ):
 
             bm = BugManager(settings)
             try:

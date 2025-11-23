@@ -4,25 +4,25 @@ Unit tests for llm_client.py with >=90% coverage.
 Tests all public APIs, classes, methods, branches, and edge cases.
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import os
 import hashlib
+import os
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from runner.runner_errors import LLMError, ConfigurationError
-from runner.runner_config import RunnerConfig
+import pytest
 
 # FIX: Import the module itself to fix the namespace conflict
 import runner.llm_client as llm_client
-from runner.llm_client import (
-    LLMClient,
-    SecretsManager,
+from runner.llm_client import (  # <-- Removed _async_client from this import
     CacheManager,
     DistributedRateLimiter,
+    LLMClient,
+    SecretsManager,
     call_llm_api,
     shutdown_llm_client,
-)  # <-- Removed _async_client from this import
+)
+from runner.runner_config import RunnerConfig
+from runner.runner_errors import ConfigurationError, LLMError
 
 # Note: Global client cleanup is handled by conftest.py session fixture
 
@@ -32,7 +32,9 @@ def mock_imports(event_loop):
     """Mocks external dependencies used by LLMClient."""
     with patch(
         "runner.llm_client.aioredis.from_url", new_callable=MagicMock
-    ) as mock_redis_from_url, patch("runner.llm_client.tiktoken") as mock_tiktoken, patch(
+    ) as mock_redis_from_url, patch(
+        "runner.llm_client.tiktoken"
+    ) as mock_tiktoken, patch(
         "runner.llm_client.aiohttp"
     ) as mock_aiohttp, patch(
         "runner.llm_client.load_dotenv"
@@ -56,21 +58,33 @@ def mock_imports(event_loop):
 
         # Mock metrics
         mock_metrics.LLM_CALLS_TOTAL = MagicMock()
-        mock_metrics.LLM_CALLS_TOTAL.labels = MagicMock(return_value=MagicMock(inc=MagicMock()))
+        mock_metrics.LLM_CALLS_TOTAL.labels = MagicMock(
+            return_value=MagicMock(inc=MagicMock())
+        )
         mock_metrics.LLM_ERRORS_TOTAL = MagicMock()
-        mock_metrics.LLM_ERRORS_TOTAL.labels = MagicMock(return_value=MagicMock(inc=MagicMock()))
+        mock_metrics.LLM_ERRORS_TOTAL.labels = MagicMock(
+            return_value=MagicMock(inc=MagicMock())
+        )
         mock_metrics.LLM_LATENCY_SECONDS = MagicMock()
         mock_metrics.LLM_LATENCY_SECONDS.labels = MagicMock(
             return_value=MagicMock(observe=MagicMock())
         )
         mock_metrics.LLM_TOKENS_INPUT = MagicMock()
-        mock_metrics.LLM_TOKENS_INPUT.labels = MagicMock(return_value=MagicMock(inc=MagicMock()))
+        mock_metrics.LLM_TOKENS_INPUT.labels = MagicMock(
+            return_value=MagicMock(inc=MagicMock())
+        )
         mock_metrics.LLM_TOKENS_OUTPUT = MagicMock()
-        mock_metrics.LLM_TOKENS_OUTPUT.labels = MagicMock(return_value=MagicMock(inc=MagicMock()))
+        mock_metrics.LLM_TOKENS_OUTPUT.labels = MagicMock(
+            return_value=MagicMock(inc=MagicMock())
+        )
         mock_metrics.LLM_PROVIDER_HEALTH = MagicMock()
-        mock_metrics.LLM_PROVIDER_HEALTH.labels = MagicMock(return_value=MagicMock(set=MagicMock()))
+        mock_metrics.LLM_PROVIDER_HEALTH.labels = MagicMock(
+            return_value=MagicMock(set=MagicMock())
+        )
         mock_metrics.LLM_CIRCUIT_STATE = MagicMock()
-        mock_metrics.LLM_CIRCUIT_STATE.labels = MagicMock(return_value=MagicMock(set=MagicMock()))
+        mock_metrics.LLM_CIRCUIT_STATE.labels = MagicMock(
+            return_value=MagicMock(set=MagicMock())
+        )
         mock_metrics.LLM_RATE_LIMIT_EXCEEDED = MagicMock()
         mock_metrics.LLM_RATE_LIMIT_EXCEEDED.labels = MagicMock(
             return_value=MagicMock(inc=MagicMock())
@@ -113,8 +127,12 @@ def mock_provider(mock_imports):
     # Default token count to prevent exceptions
     mock_provider_instance.count_tokens = AsyncMock(return_value=10)
 
-    mock_imports["plugin_manager"].return_value.get_provider.return_value = mock_provider_instance
-    mock_imports["plugin_manager"].return_value.list_providers.return_value = ["mock_provider"]
+    mock_imports["plugin_manager"].return_value.get_provider.return_value = (
+        mock_provider_instance
+    )
+    mock_imports["plugin_manager"].return_value.list_providers.return_value = [
+        "mock_provider"
+    ]
 
     # Note: _load_task is now set up in mock_imports fixture
 
@@ -210,7 +228,9 @@ class TestLLMClient:
         assert client.manager is not None
 
     @pytest.mark.asyncio
-    async def test_call_llm_api_non_stream(self, initialized_client, mock_provider, mock_imports):
+    async def test_call_llm_api_non_stream(
+        self, initialized_client, mock_provider, mock_imports
+    ):
         mock_provider.call.return_value = {"content": "test_response"}
         mock_provider.count_tokens.return_value = 10
         initialized_client.rate_limiter.acquire = AsyncMock(return_value=True)
@@ -224,7 +244,9 @@ class TestLLMClient:
         mock_imports["audit"].assert_awaited_once()  # Check audit log was called
 
     @pytest.mark.asyncio
-    async def test_call_llm_api_stream(self, initialized_client, mock_provider, mock_imports):
+    async def test_call_llm_api_stream(
+        self, initialized_client, mock_provider, mock_imports
+    ):
         async def mock_gen():
             yield "chunk1"
             yield "chunk2"
@@ -270,7 +292,9 @@ class TestLLMClient:
                 {"provider": "p3", "model": "m3"},
             ]
 
-            result = await initialized_client.call_ensemble_api("prompt", models, "majority")
+            result = await initialized_client.call_ensemble_api(
+                "prompt", models, "majority"
+            )
 
             assert mock_internal_call.call_count == 3
             assert result["content"] == "consensus_response"
@@ -286,7 +310,9 @@ class TestLLMClient:
                 {"content": "p3_res"},
             ]
 
-            result = await initialized_client.call_ensemble_api("prompt", models, "majority")
+            result = await initialized_client.call_ensemble_api(
+                "prompt", models, "majority"
+            )
 
             assert mock_internal_call.call_count == 3
             assert result["content"] == "p2_res"
@@ -319,7 +345,9 @@ async def test_call_llm_api_cache_hit(initialized_client, mock_provider):
     cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
 
     # Mock cache hit with the expected dictionary
-    initialized_client.cache.get = AsyncMock(return_value={"content": "cached_response"})
+    initialized_client.cache.get = AsyncMock(
+        return_value={"content": "cached_response"}
+    )
 
     result = await initialized_client.call_llm_api(prompt, model, provider=provider)
 
@@ -370,18 +398,24 @@ async def test_call_llm_api_no_provider_found(initialized_client, mock_provider)
 @pytest.mark.asyncio
 async def test_call_llm_api_provider_raises_llmerror(initialized_client, mock_provider):
     # The provider raises an LLMError (e.g., from error translation)
-    mock_provider.call.side_effect = LLMError("API key invalid", provider="mock_provider")
+    mock_provider.call.side_effect = LLMError(
+        "API key invalid", provider="mock_provider"
+    )
 
     with pytest.raises(LLMError) as exc:
         await initialized_client.call_llm_api("prompt", provider="mock_provider")
 
     assert "API key invalid" in str(exc.value)
     mock_provider.call.assert_awaited_once()
-    initialized_client.circuit_breaker.record_failure.assert_called_once_with("mock_provider")
+    initialized_client.circuit_breaker.record_failure.assert_called_once_with(
+        "mock_provider"
+    )
 
 
 @pytest.mark.asyncio
-async def test_call_llm_api_provider_raises_generic_exception(initialized_client, mock_provider):
+async def test_call_llm_api_provider_raises_generic_exception(
+    initialized_client, mock_provider
+):
     # The provider raises a generic Exception (e.g., unexpected network failure)
     mock_provider.call.side_effect = Exception("network error")
 
@@ -392,17 +426,23 @@ async def test_call_llm_api_provider_raises_generic_exception(initialized_client
     assert "LLM call failed: network error" in str(exc.value)
     mock_provider.call.assert_awaited_once()
     # The client must still record the failure
-    initialized_client.circuit_breaker.record_failure.assert_called_once_with("mock_provider")
+    initialized_client.circuit_breaker.record_failure.assert_called_once_with(
+        "mock_provider"
+    )
 
 
 @pytest.mark.asyncio
 async def test_call_llm_api_token_counting(initialized_client, mock_provider):
     # Mock the LLMClient's count_tokens method (not the provider's)
-    initialized_client.count_tokens = AsyncMock(side_effect=[15, 25])  # Input tokens, Output tokens
+    initialized_client.count_tokens = AsyncMock(
+        side_effect=[15, 25]
+    )  # Input tokens, Output tokens
     mock_provider.call.return_value = {"content": "response"}
     initialized_client.rate_limiter.acquire = AsyncMock(return_value=True)
 
-    await initialized_client.call_llm_api("prompt", "test_model", provider="mock_provider")
+    await initialized_client.call_llm_api(
+        "prompt", "test_model", provider="mock_provider"
+    )
 
     # count_tokens is called twice: once for input, once for output
     assert initialized_client.count_tokens.call_count == 2
@@ -416,7 +456,9 @@ class TestGlobalFunctions:
     async def test_global_call_llm_api(self, MockLLMClient, mock_config, mock_imports):
         MockLLMClient.return_value._is_initialized = asyncio.Future()
         MockLLMClient.return_value._is_initialized.set_result(True)
-        MockLLMClient.return_value.call_llm_api = AsyncMock(return_value={"content": "global"})
+        MockLLMClient.return_value.call_llm_api = AsyncMock(
+            return_value={"content": "global"}
+        )
 
         result = await call_llm_api(
             "global_prompt", "global_model", False, "global_provider", mock_config
@@ -428,7 +470,9 @@ class TestGlobalFunctions:
 
     @pytest.mark.asyncio
     @patch("runner.llm_client.LLMClient")
-    async def test_global_shutdown_llm_client(self, MockLLMClient, mock_config, mock_imports):
+    async def test_global_shutdown_llm_client(
+        self, MockLLMClient, mock_config, mock_imports
+    ):
         # Create mock instance with close method
         mock_instance = AsyncMock()
         mock_instance.close = AsyncMock()

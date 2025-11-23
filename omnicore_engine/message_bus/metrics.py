@@ -21,13 +21,13 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
-from typing import Optional, Any, List, Tuple, Dict, TypeVar, Generic
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
 
 # --- Optional Prometheus Metrics Import ---
 try:
-    from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram
     from prometheus_client.registry import CollectorRegistry
 
     _PROMETHEUS_AVAILABLE = True

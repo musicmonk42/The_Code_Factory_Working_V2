@@ -1,13 +1,15 @@
 # test_clarifier_prompt.py
 
-import unittest
-import sys
-import os
 import base64
-from unittest.mock import patch, AsyncMock, MagicMock
+import os
+import sys
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+)
 
 # --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
 
@@ -88,7 +90,9 @@ patcher_get_circuit_breaker = patch(
     "generator.clarifier.clarifier_prompt.get_circuit_breaker",
     return_value=mock_circuit_breaker,
 )
-patcher_log_action = patch("generator.clarifier.clarifier_prompt.log_action", return_value=None)
+patcher_log_action = patch(
+    "generator.clarifier.clarifier_prompt.log_action", return_value=None
+)
 patcher_send_alert = patch(
     "generator.clarifier.clarifier_prompt.send_alert", new_callable=AsyncMock
 )
@@ -128,9 +132,9 @@ MockGetChannel.return_value = mock_channel
 
 # Import after mocking
 from generator.clarifier.clarifier_prompt import (
-    PromptClarifier,
     CLARIFIER_CYCLES,
     CLARIFIER_ERRORS,
+    PromptClarifier,
 )
 
 
@@ -178,16 +182,22 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         ambiguities = ["ambiguous term"]
         user_context = {"user_id": "test_user"}
 
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Verify documentation format question was asked
         mock_channel.prompt.assert_awaited()
 
         # Verify compliance questions were asked
-        mock_channel.ask_compliance_questions.assert_awaited_with("test_user", user_context)
+        mock_channel.ask_compliance_questions.assert_awaited_with(
+            "test_user", user_context
+        )
 
         # Verify delegation to core clarifier
-        mock_core_clarifier.get_clarifications.assert_awaited_once_with(ambiguities, requirements)
+        mock_core_clarifier.get_clarifications.assert_awaited_once_with(
+            ambiguities, requirements
+        )
 
         # Verify result
         self.assertIsInstance(result, dict)
@@ -226,7 +236,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         # Mock prompt to return specific formats
         mock_channel.prompt = AsyncMock(return_value=["Markdown, PDF, HTML"])
 
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Note: The actual implementation stores in requirements before passing to core_clarifier
         # We need to check what was passed
@@ -246,7 +258,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         # Mock prompt to return empty answer
         mock_channel.prompt = AsyncMock(return_value=[""])
 
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Should complete successfully
         self.assertIsInstance(result, dict)
@@ -262,7 +276,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         delattr(mock_channel, "ask_compliance_questions")
 
         # Should complete without error
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
         self.assertIsInstance(result, dict)
 
         # Re-add the method for other tests
@@ -278,7 +294,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         mock_circuit_breaker.is_open.return_value = True
 
         with self.assertRaises(Exception) as context:
-            await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+            await self.clarifier.get_clarifications(
+                ambiguities, requirements, user_context
+            )
 
         self.assertIn("Circuit breaker", str(context.exception))
 
@@ -299,7 +317,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         mock_channel.prompt = AsyncMock(side_effect=Exception("Prompt failed"))
 
         # Should complete despite doc formats failure
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Should still delegate to core clarifier
         mock_core_clarifier.get_clarifications.assert_awaited()
@@ -320,7 +340,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         )
 
         # Should complete despite compliance failure
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Should still delegate to core clarifier
         mock_core_clarifier.get_clarifications.assert_awaited()
@@ -341,12 +363,16 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(Exception) as context:
-            await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+            await self.clarifier.get_clarifications(
+                ambiguities, requirements, user_context
+            )
 
         self.assertIn("Core clarifier failed", str(context.exception))
 
         # Error should be logged
-        error_metric = CLARIFIER_ERRORS.labels("prompt_clarification_cycle_failed")._value.get()
+        error_metric = CLARIFIER_ERRORS.labels(
+            "prompt_clarification_cycle_failed"
+        )._value.get()
         self.assertGreater(error_metric, 0)
 
     async def test_translation(self):
@@ -374,7 +400,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, text)
 
         # Reset for other tests
-        MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(text=text)
+        MockTranslatorInstance.translate.side_effect = lambda text, dest: MagicMock(
+            text=text
+        )
 
     async def test_retry_mechanism(self):
         """Test retry mechanism."""
@@ -415,7 +443,9 @@ class TestPromptClarifier(unittest.IsolatedAsyncioTestCase):
         ambiguities = ["ambiguous term"]
         user_context = {"user_id": "test_user"}
 
-        result = await self.clarifier.get_clarifications(ambiguities, requirements, user_context)
+        result = await self.clarifier.get_clarifications(
+            ambiguities, requirements, user_context
+        )
 
         # Verify span operations were called
         mock_tracer.start_span.assert_called()
@@ -436,9 +466,13 @@ class TestPluginEntrypoint(unittest.IsolatedAsyncioTestCase):
         ambiguities = ["ambiguous term"]
         user_context = {"user_id": "test_user"}
 
-        with patch("generator.clarifier.clarifier_prompt.PromptClarifier") as MockPromptClarifier:
+        with patch(
+            "generator.clarifier.clarifier_prompt.PromptClarifier"
+        ) as MockPromptClarifier:
             mock_instance = MagicMock()
-            mock_instance.get_clarifications = AsyncMock(return_value={"features": ["updated"]})
+            mock_instance.get_clarifications = AsyncMock(
+                return_value={"features": ["updated"]}
+            )
             mock_instance.core_clarifier = MagicMock()
             mock_instance.core_clarifier.graceful_shutdown = AsyncMock()
             MockPromptClarifier.return_value = mock_instance
@@ -456,9 +490,13 @@ class TestPluginEntrypoint(unittest.IsolatedAsyncioTestCase):
         requirements = {"features": ["feature1"]}
         ambiguities = ["ambiguous term"]
 
-        with patch("generator.clarifier.clarifier_prompt.PromptClarifier") as MockPromptClarifier:
+        with patch(
+            "generator.clarifier.clarifier_prompt.PromptClarifier"
+        ) as MockPromptClarifier:
             mock_instance = MagicMock()
-            mock_instance.get_clarifications = AsyncMock(return_value={"features": ["updated"]})
+            mock_instance.get_clarifications = AsyncMock(
+                return_value={"features": ["updated"]}
+            )
             mock_instance.core_clarifier = MagicMock()
             mock_instance.core_clarifier.graceful_shutdown = AsyncMock()
             MockPromptClarifier.return_value = mock_instance

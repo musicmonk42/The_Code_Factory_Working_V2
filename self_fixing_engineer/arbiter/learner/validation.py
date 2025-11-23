@@ -1,16 +1,18 @@
 # arbiter/learner/validation.py
 
-import os
-import json
-import structlog
 import asyncio
+import json
+import os
 import time
-from typing import Any, Dict, Optional, Callable, Union, Coroutine
+from typing import Any, Callable, Coroutine, Dict, Optional, Union
+
 import jsonschema
-from jsonschema.exceptions import SchemaError, ValidationError as JsonValidationError
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Counter, Histogram
+import structlog
+from jsonschema.exceptions import SchemaError
+from jsonschema.exceptions import ValidationError as JsonValidationError
 from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .encryption import ArbiterConfig
 
@@ -97,11 +99,15 @@ async def validate_data(learner: Any, domain: str, value: Any) -> Dict[str, Any]
         # Input validation
         if not isinstance(domain, str) or not domain:
             logger.error("Invalid domain", domain=domain)
-            validation_failure_total.labels(domain="unknown", reason_code="invalid_domain").inc()
+            validation_failure_total.labels(
+                domain="unknown", reason_code="invalid_domain"
+            ).inc()
             raise ValueError(f"Invalid domain: {domain}")
         if value is None:
             logger.error("Value is None", domain=domain)
-            validation_failure_total.labels(domain=domain, reason_code="null_value").inc()
+            validation_failure_total.labels(
+                domain=domain, reason_code="null_value"
+            ).inc()
             raise ValueError("Value cannot be None")
 
         try:
@@ -110,7 +116,9 @@ async def validate_data(learner: Any, domain: str, value: Any) -> Dict[str, Any]
 
             if not schema_info and not hook:
                 logger.warning("No schema or hook found", domain=domain)
-                validation_failure_total.labels(domain=domain, reason_code="domain_not_found").inc()
+                validation_failure_total.labels(
+                    domain=domain, reason_code="domain_not_found"
+                ).inc()
                 raise DomainNotFoundError(
                     f"No validation schema or hook found for domain: {domain}"
                 )
@@ -124,7 +132,9 @@ async def validate_data(learner: Any, domain: str, value: Any) -> Dict[str, Any]
                         version=schema_info["version"],
                     )
                 except JsonValidationError as e:
-                    logger.error("Schema validation failed", domain=domain, error=e.message)
+                    logger.error(
+                        "Schema validation failed", domain=domain, error=e.message
+                    )
                     validation_failure_total.labels(
                         domain=domain, reason_code="schema_validation_failed"
                     ).inc()
@@ -144,7 +154,9 @@ async def validate_data(learner: Any, domain: str, value: Any) -> Dict[str, Any]
                         "reason": f"Invalid schema: {str(e)}",
                     }
                 except Exception as e:
-                    logger.exception("Unexpected schema validation error", domain=domain)
+                    logger.exception(
+                        "Unexpected schema validation error", domain=domain
+                    )
                     validation_failure_total.labels(
                         domain=domain, reason_code="schema_validation_error"
                     ).inc()
@@ -157,7 +169,9 @@ async def validate_data(learner: Any, domain: str, value: Any) -> Dict[str, Any]
             if hook:
                 try:
                     is_valid = (
-                        await hook(value) if asyncio.iscoroutinefunction(hook) else hook(value)
+                        await hook(value)
+                        if asyncio.iscoroutinefunction(hook)
+                        else hook(value)
                     )
                     if not is_valid:
                         logger.warning("Custom validation failed", domain=domain)
@@ -211,7 +225,9 @@ def register_validation_hook(
 
         if not callable(hook_func):
             logger.error("Invalid hook_func", type=type(hook_func))
-            validation_failure_total.labels(domain="registration", reason_code="invalid_hook").inc()
+            validation_failure_total.labels(
+                domain="registration", reason_code="invalid_hook"
+            ).inc()
             raise TypeError("Validation hook must be a callable.")
 
         # Validate hook signature
@@ -224,14 +240,21 @@ def register_validation_hook(
                 validation_failure_total.labels(
                     domain=domain, reason_code="invalid_hook_signature"
                 ).inc()
-                raise TypeError("Async validation hook must accept exactly one argument (value).")
+                raise TypeError(
+                    "Async validation hook must accept exactly one argument (value)."
+                )
         else:
-            if not hasattr(hook_func, "__code__") or hook_func.__code__.co_argcount != 1:
+            if (
+                not hasattr(hook_func, "__code__")
+                or hook_func.__code__.co_argcount != 1
+            ):
                 logger.error("Invalid sync hook signature", domain=domain)
                 validation_failure_total.labels(
                     domain=domain, reason_code="invalid_hook_signature"
                 ).inc()
-                raise TypeError("Sync validation hook must accept exactly one argument (value).")
+                raise TypeError(
+                    "Sync validation hook must accept exactly one argument (value)."
+                )
 
         learner.validation_hooks[domain] = hook_func
         logger.info("Registered validation hook", domain=domain)
@@ -305,13 +328,19 @@ async def reload_schemas(learner: Any, directory: Optional[str] = None) -> None:
                         file=filename,
                     )
                 except json.JSONDecodeError as e:
-                    logger.error("Invalid JSON schema file", file=filename, error=str(e))
+                    logger.error(
+                        "Invalid JSON schema file", file=filename, error=str(e)
+                    )
                     schema_reload_total.labels(status="invalid_json").inc()
                 except SchemaError as e:
-                    logger.error("Invalid schema structure", file=filename, error=str(e))
+                    logger.error(
+                        "Invalid schema structure", file=filename, error=str(e)
+                    )
                     schema_reload_total.labels(status="invalid_schema").inc()
                 except Exception as e:
-                    logger.error("Unexpected error loading schema", file=filename, error=str(e))
+                    logger.error(
+                        "Unexpected error loading schema", file=filename, error=str(e)
+                    )
                     schema_reload_total.labels(status="load_error").inc()
 
         learner.validation_schemas = new_schemas
@@ -334,7 +363,9 @@ async def reload_schemas(learner: Any, directory: Optional[str] = None) -> None:
             await learner.redis.setex(
                 redis_cache_key, SCHEMA_CACHE_TTL_SECONDS, json.dumps(new_schemas)
             )
-            logger.debug("Cached reloaded schemas in Redis", ttl=SCHEMA_CACHE_TTL_SECONDS)
+            logger.debug(
+                "Cached reloaded schemas in Redis", ttl=SCHEMA_CACHE_TTL_SECONDS
+            )
         except Exception as e:
             logger.warning("Failed to cache schemas in Redis", error=str(e))
 

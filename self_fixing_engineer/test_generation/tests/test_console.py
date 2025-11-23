@@ -11,6 +11,7 @@ Covers:
 """
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import logging
@@ -23,7 +24,6 @@ import time
 import types
 from unittest.mock import Mock, patch
 
-import importlib
 import pytest
 
 # FIX: Import LOGGING_CONFIG to resolve NameError
@@ -87,7 +87,9 @@ class TestLoggingInitialization:
         console = importlib.reload(console)
 
         with caplog.at_level(logging.INFO):
-            console.configure_logging({}, audit_log_file=str(MODULE_ROOT / "tmp" / "audit.log"))
+            console.configure_logging(
+                {}, audit_log_file=str(MODULE_ROOT / "tmp" / "audit.log")
+            )
             # Test a level that produces a glyph to check for parity
             console.log("hello", level="SUCCESS")
 
@@ -99,7 +101,9 @@ class TestLoggingInitialization:
             )
             assert "[OK] hello" in text  # Check for ASCII success glyph
 
-    def test_plain_vs_rich_toggles(self, monkeypatch: pytest.MonkeyPatch, reload_console, caplog):
+    def test_plain_vs_rich_toggles(
+        self, monkeypatch: pytest.MonkeyPatch, reload_console, caplog
+    ):
         # Reload the module to get a fresh state
         console = reload_console()
 
@@ -139,7 +143,9 @@ class TestLoggingInitialization:
         monkeypatch.setattr(console, "console", mock_instance)
 
         # We also need to mock `_ensure_console` to return our mock instance
-        monkeypatch.setattr(console, "_ensure_console", Mock(return_value=mock_instance))
+        monkeypatch.setattr(
+            console, "_ensure_console", Mock(return_value=mock_instance)
+        )
 
         console.set_rich_logging(True)
 
@@ -195,7 +201,9 @@ class TestAuditHandler:
 
 
 class TestThreadSafety:
-    def test_backend_switch_is_thread_safe(self, monkeypatch: pytest.MonkeyPatch, reload_console):
+    def test_backend_switch_is_thread_safe(
+        self, monkeypatch: pytest.MonkeyPatch, reload_console
+    ):
         console = reload_console()
 
         monkeypatch.setattr(
@@ -225,13 +233,17 @@ class TestThreadSafety:
 
 
 class TestGlyphMapping:
-    def test_ascii_vs_utf8_glyphs_via_reload(self, monkeypatch: pytest.MonkeyPatch, caplog):
+    def test_ascii_vs_utf8_glyphs_via_reload(
+        self, monkeypatch: pytest.MonkeyPatch, caplog
+    ):
         # First: ASCII console → expect ASCII glyphs
         ascii_out = types.SimpleNamespace(
             encoding="ascii", write=sys.__stdout__.write, flush=lambda: None
         )
         monkeypatch.setattr(sys, "stdout", ascii_out)
-        console = importlib.reload(importlib.import_module("test_generation.orchestrator.console"))
+        console = importlib.reload(
+            importlib.import_module("test_generation.orchestrator.console")
+        )
 
         console.fallback_to_basic_logging()
         with caplog.at_level(logging.INFO):
@@ -245,7 +257,9 @@ class TestGlyphMapping:
             encoding="utf-8", write=sys.__stdout__.write, flush=lambda: None
         )
         monkeypatch.setattr(sys, "stdout", utf_out)
-        console = importlib.reload(importlib.import_module("test_generation.orchestrator.console"))
+        console = importlib.reload(
+            importlib.import_module("test_generation.orchestrator.console")
+        )
 
         console.fallback_to_basic_logging()
         with caplog.at_level(logging.INFO):
@@ -269,7 +283,9 @@ class TestProgressReporting:
 
         mock_progress_cls = Mock(return_value=mock_progress_instance)
 
-        monkeypatch.setattr(f"{console.__name__}.Progress", mock_progress_cls, raising=False)
+        monkeypatch.setattr(
+            f"{console.__name__}.Progress", mock_progress_cls, raising=False
+        )
         monkeypatch.setattr("rich.progress.Progress", mock_progress_cls, raising=False)
 
         tasks = [("Task 1", 10), ("Task 2", 20)]
@@ -286,7 +302,9 @@ class TestProgressReporting:
 
             task_for_task1 = progress_map["Task 1"]
             task_for_task1.update(advance=5)
-            mock_progress_instance.update.assert_called_with(task_for_task1.task_id, advance=5)
+            mock_progress_instance.update.assert_called_with(
+                task_for_task1.task_id, advance=5
+            )
 
         mock_progress_instance.__exit__.assert_called_once()
 

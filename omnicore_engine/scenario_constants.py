@@ -1,10 +1,11 @@
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
-from collections.abc import Mapping
-from pydantic import BaseModel, Field, validator
 import logging
+from collections.abc import Mapping
 from multiprocessing import (
     Lock as ProcessSafeLock,
 )  # To avoid name collision with standard Lock
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, validator
 
 if TYPE_CHECKING:
     try:
@@ -17,7 +18,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 
@@ -29,7 +32,9 @@ class ScenarioMetric(BaseModel):
     default_value: float = Field(..., description="Default value as a float")
     unit: str = Field(..., description="Unit of measurement")
     range: List[float] = Field(..., description="Valid range as a list of floats")
-    aggregation_method: str = Field(..., description="Aggregation method for multiverse")
+    aggregation_method: str = Field(
+        ..., description="Aggregation method for multiverse"
+    )
 
     @validator("range")
     def validate_range(cls, v):
@@ -49,7 +54,9 @@ class ScenarioTemplate(BaseModel):
     label: str = Field(..., description="Human-readable label")
     active: bool = Field(..., description="Whether the scenario is active")
     description: str = Field(..., description="Detailed description")
-    priority: float = Field(..., ge=0.0, le=1.0, description="Priority for DecisionOptimizer")
+    priority: float = Field(
+        ..., ge=0.0, le=1.0, description="Priority for DecisionOptimizer"
+    )
 
 
 class TrackedDict(Mapping):
@@ -65,7 +72,9 @@ class TrackedDict(Mapping):
     _metrics_counter: Optional["Counter"] = None
     _templates_counter: Optional["Counter"] = None
     _lock = ProcessSafeLock()  # Process-safe lock for Counter initialization
-    _counter_class: type = None  # Injectable Counter class, defaults to app.metrics.Counter
+    _counter_class: type = (
+        None  # Injectable Counter class, defaults to app.metrics.Counter
+    )
 
     @classmethod
     def set_counter_class(cls, counter_class: type) -> None:

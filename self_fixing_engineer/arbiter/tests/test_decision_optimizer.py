@@ -1,10 +1,11 @@
 # test_decision_optimizer.py
 
-import sys
 import os
-from unittest.mock import MagicMock, AsyncMock, patch
-import pytest
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
+import pytest
 from cryptography.fernet import Fernet
 
 # Mock modules before imports
@@ -14,7 +15,9 @@ sys.modules["envs.evolution"] = MagicMock()
 # Mock ArrayBackend
 mock_array_backend = MagicMock()
 mock_array_backend.array = lambda x: np.array(x)
-mock_array_backend.asnumpy = lambda x: (np.array(x) if not isinstance(x, np.ndarray) else x)
+mock_array_backend.asnumpy = lambda x: (
+    np.array(x) if not isinstance(x, np.ndarray) else x
+)
 sys.modules["arbiter.arbiter_array_backend"] = MagicMock()
 sys.modules["arbiter.arbiter_array_backend"].ConcreteArrayBackend = MagicMock(
     return_value=mock_array_backend
@@ -22,11 +25,11 @@ sys.modules["arbiter.arbiter_array_backend"].ConcreteArrayBackend = MagicMock(
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from arbiter.decision_optimizer import DecisionOptimizer, Task, Agent, safe_serialize
+from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
 
 # Mock all dependencies
 from arbiter.config import ArbiterConfig
-from arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
+from arbiter.decision_optimizer import Agent, DecisionOptimizer, Task, safe_serialize
 
 
 @pytest.fixture
@@ -50,7 +53,9 @@ def optimizer(mock_dependencies):
     """Create optimizer without background tasks."""
     settings, plugin_registry, logger = mock_dependencies
 
-    opt = DecisionOptimizer(plugin_registry=plugin_registry, settings=settings, logger=logger)
+    opt = DecisionOptimizer(
+        plugin_registry=plugin_registry, settings=settings, logger=logger
+    )
 
     # Disable background tasks
     opt._refresh_task = None
@@ -142,7 +147,9 @@ async def test_allocate_resources_simple(optimizer):
     optimizer.human_in_loop = None
 
     agents = [Agent(id="a1", skills={"python"}, max_compute=10.0, current_load=0.0)]
-    tasks = [Task(id="t1", priority=1.0, required_skills={"python"}, estimated_compute=2.0)]
+    tasks = [
+        Task(id="t1", priority=1.0, required_skills={"python"}, estimated_compute=2.0)
+    ]
 
     with patch(
         "arbiter.decision_optimizer.get_system_metrics_async",

@@ -1,9 +1,9 @@
 # test_clarifier_user_prompt.py - FIXED VERSION
 
-import unittest
-import os
 import base64
-from unittest.mock import patch, AsyncMock, MagicMock
+import os
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # --- Mock Configuration and Core Utilities (MUST RUN BEFORE IMPORTS) ---
 
@@ -42,10 +42,12 @@ mock_config_instance.TARGET_LANGUAGE = "en"
 
 TEST_FERNET_KEY = base64.urlsafe_b64encode(b"\x00" * 32)
 mock_fernet_instance_test = MagicMock()
-mock_fernet_instance_test.encrypt.side_effect = lambda data: base64.b64encode(b"ENCRYPTED_" + data)
-mock_fernet_instance_test.decrypt.side_effect = lambda data: base64.b64decode(data).replace(
-    b"ENCRYPTED_", b""
+mock_fernet_instance_test.encrypt.side_effect = lambda data: base64.b64encode(
+    b"ENCRYPTED_" + data
 )
+mock_fernet_instance_test.decrypt.side_effect = lambda data: base64.b64decode(
+    data
+).replace(b"ENCRYPTED_", b"")
 
 # Start critical patches
 patcher_load_config = patch(
@@ -57,7 +59,7 @@ patcher_sys_exit = patch("generator.clarifier.clarifier.sys.exit")
 patcher_sys_exit.start()
 
 try:
-    from generator.clarifier.clarifier import get_logger, get_fernet, get_config
+    from generator.clarifier.clarifier import get_config, get_fernet, get_logger
 except ImportError:
 
     def get_logger():
@@ -107,22 +109,21 @@ MockTranslatorInstance.translate.side_effect = lambda text, dest, src="en": Magi
 
 # Import the module
 from generator.clarifier.clarifier_user_prompt import (
-    UserProfile,
-    load_profile,
-    save_profile,
-    update_profile_from_feedback,
-    store_compliance_answer,
-    get_channel,
+    COMPLIANCE_ANSWERS_RECEIVED,
+    COMPLIANCE_QUESTIONS_ASKED,
+    HAS_FASTAPI,
+    HAS_SPEECH_RECOGNITION,
+    HAS_TEXTUAL,
     PROMPT_CYCLES,
     PROMPT_ERRORS,
     USER_ENGAGEMENT,
-    HAS_TEXTUAL,
-    HAS_FASTAPI,
-    HAS_SPEECH_RECOGNITION,
-    COMPLIANCE_QUESTIONS_ASKED,
-    COMPLIANCE_ANSWERS_RECEIVED,
+    UserProfile,
+    get_channel,
+    load_profile,
+    save_profile,
+    store_compliance_answer,
+    update_profile_from_feedback,
 )
-
 
 _HAS_TEXTUAL = HAS_TEXTUAL
 _HAS_FASTAPI = HAS_FASTAPI
@@ -149,7 +150,9 @@ class TestUserProfileAndUtilities(unittest.TestCase):
 
     def test_load_save_profile(self):
         # Test 1: Save and Load
-        profile = UserProfile(user_id=self.user_id, preferred_channel="web", language="es")
+        profile = UserProfile(
+            user_id=self.user_id, preferred_channel="web", language="es"
+        )
         profile.compliance_preferences["gdpr_apply"] = True
         save_profile(self.user_id, profile)
 
@@ -230,7 +233,9 @@ class TestCLIPrompt(unittest.IsolatedAsyncioTestCase):
         answers = await self.channel.prompt(questions, self.context)
 
         self.assertEqual(answers, ["[NO_ANSWER_EOF]"])
-        metric_value = PROMPT_ERRORS.labels(channel="CLIPrompt", type="eof")._value.get()
+        metric_value = PROMPT_ERRORS.labels(
+            channel="CLIPrompt", type="eof"
+        )._value.get()
         self.assertEqual(metric_value, 1)
 
 
@@ -391,7 +396,9 @@ class TestSMSPrompt(unittest.IsolatedAsyncioTestCase):
             mock_session.post.assert_called_once()
 
 
-@unittest.skipUnless(_HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed.")
+@unittest.skipUnless(
+    _HAS_SPEECH_RECOGNITION, "Speech Recognition library not installed."
+)
 class TestVoicePrompt(unittest.IsolatedAsyncioTestCase):
     _user_id = "test_voice"
     context = {"user_id": _user_id}
@@ -416,7 +423,9 @@ class TestVoicePrompt(unittest.IsolatedAsyncioTestCase):
         side_effect=["Voice Answer 1", "Voice Answer 2"],
     )
     @patch("speech_recognition.Microphone", new_callable=MagicMock)
-    async def test_voice_prompt_success(self, mock_mic, mock_recognize_google, mock_listen):
+    async def test_voice_prompt_success(
+        self, mock_mic, mock_recognize_google, mock_listen
+    ):
         mock_mic.return_value.__enter__.return_value = mock_mic.return_value
 
         questions = ["Voice Q1?", "Voice Q2?"]

@@ -16,25 +16,21 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
 
 # --------------------------------------------------------------------------- #
 # Import module under test
 # --------------------------------------------------------------------------- #
-from runner.runner_parsers import (
+from runner.runner_parsers import (  # FIX: Add imports for RunnerError, register_test_parser, and parser_wrapper; FIX: Import the correct registry name
+    _PARSER_REGISTRY,
     CoverageReportSchema,
     ParserInfo,
+    RunnerError,
     TestCaseResult,
     TestReportSchema,
-    # FIX: Add imports for RunnerError, register_test_parser, and parser_wrapper
-    RunnerError,
-    register_test_parser,
-    parser_wrapper,
-    # FIX: Import the correct registry name
-    _PARSER_REGISTRY,
     parse_behave_junit,
     parse_coverage_xml,
     parse_go_coverprofile,
@@ -46,6 +42,8 @@ from runner.runner_parsers import (
     parse_robot_xml,
     parse_surefire_xml,
     parse_unittest_output,
+    parser_wrapper,
+    register_test_parser,
 )
 
 # Setup logging for tests

@@ -1,11 +1,12 @@
 # test_encryption.py
 
-import unittest
 import base64
 import sys
-from pathlib import Path
-from cryptography.fernet import Fernet, InvalidToken
 import time
+import unittest
+from pathlib import Path
+
+from cryptography.fernet import Fernet, InvalidToken
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -197,7 +198,8 @@ class TestFernetEncryption(unittest.TestCase):
         # Run concurrent operations
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
-                executor.submit(encrypt_decrypt, i, data) for i, data in enumerate(data_samples)
+                executor.submit(encrypt_decrypt, i, data)
+                for i, data in enumerate(data_samples)
             ]
             concurrent.futures.wait(futures)
 

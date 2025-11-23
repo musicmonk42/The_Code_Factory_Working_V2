@@ -3,13 +3,14 @@ Test suite for omnicore_engine/scenario_constants.py
 Tests scenario models and tracked dictionary functionality.
 """
 
-import pytest
-from unittest.mock import Mock, patch
-import threading
+import os
 
 # Add the parent directory to path for imports
 import sys
-import os
+import threading
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -83,7 +84,9 @@ class TestScenarioMetric:
 
     def test_range_validation_invalid_order(self):
         """Test range validation with min > max"""
-        with pytest.raises(ValueError, match="Range must be a list of two floats where min <= max"):
+        with pytest.raises(
+            ValueError, match="Range must be a list of two floats where min <= max"
+        ):
             ScenarioMetric(
                 description="Test",
                 default_value=0.5,
@@ -126,7 +129,10 @@ class TestScenarioTemplate:
         assert template.impact == 0.8
         assert template.label == "High Impact Scenario"
         assert template.active == True
-        assert template.description == "A scenario with significant impact on system performance"
+        assert (
+            template.description
+            == "A scenario with significant impact on system performance"
+        )
         assert template.priority == 0.9
 
     def test_priority_validation_valid(self):
@@ -202,7 +208,9 @@ class TestTrackedDict:
 
     def test_getitem_existing_key(self, sample_data):
         """Test accessing existing keys"""
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -219,7 +227,9 @@ class TestTrackedDict:
 
     def test_getitem_nonexistent_key(self, sample_data):
         """Test accessing non-existent keys raises KeyError"""
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -231,7 +241,9 @@ class TestTrackedDict:
 
     def test_metrics_counter_initialization(self, sample_data):
         """Test metrics counter is initialized once"""
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -251,7 +263,9 @@ class TestTrackedDict:
 
     def test_templates_counter_initialization(self, sample_data):
         """Test templates counter is initialized correctly"""
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -289,7 +303,9 @@ class TestTrackedDict:
         # Original data modification shouldn't affect TrackedDict
         sample_data["metric1"] = 999
 
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -303,7 +319,9 @@ class TestTrackedDict:
 
     def test_thread_safety(self, sample_data):
         """Test that counter initialization is thread-safe"""
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -359,7 +377,9 @@ class TestIntegration:
             ).dict(),
         }
 
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter
@@ -393,7 +413,9 @@ class TestIntegration:
             ).dict(),
         }
 
-        with patch("omnicore_engine.scenario_constants.get_or_create_counter") as mock_get_counter:
+        with patch(
+            "omnicore_engine.scenario_constants.get_or_create_counter"
+        ) as mock_get_counter:
             mock_counter = Mock()
             mock_counter.labels.return_value = Mock(inc=Mock())
             mock_get_counter.return_value = mock_counter

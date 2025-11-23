@@ -8,30 +8,31 @@ observability (metrics, logging, tracing), and security (redaction)
 are handled by the llm_client.py manager that calls this plugin.
 """
 
-import os
-import logging
-import uuid
-import time
-import json
-import yaml
 import asyncio
-from typing import Union, Dict, Any, AsyncGenerator, Callable, List
+import json
+import logging
+import os
+import time
+import uuid
+from typing import Any, AsyncGenerator, Callable, Dict, List, Union
+
 import aiohttp
 import tiktoken
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+import yaml
 
 # ---- Runner foundation imports ------------------------------------------------
 from runner.llm_provider_base import LLMProvider
-from runner.runner_errors import LLMError, ConfigurationError
 from runner.runner_config import load_config  # For loading API key in get_provider
+from runner.runner_errors import ConfigurationError, LLMError
 
 # --- FIX: Update import to point to central metrics module ---
-from runner.runner_metrics import stream_chunks_total, stream_chunk_latency
+from runner.runner_metrics import stream_chunk_latency, stream_chunks_total
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 # --- END FIX ---
 # -------------------------------------------------------------------------------
@@ -89,9 +90,13 @@ class GrokProvider(LLMProvider):
         else:
             raise ValueError("Unsupported config format. Use YAML or JSON.")
         for model_name, details in config.get("models", {}).items():
-            self.register_custom_model(model_name, details["endpoint"], details.get("headers", {}))
+            self.register_custom_model(
+                model_name, details["endpoint"], details.get("headers", {})
+            )
 
-    def register_custom_model(self, model_name: str, endpoint: str, headers: Dict[str, str] = None):
+    def register_custom_model(
+        self, model_name: str, endpoint: str, headers: Dict[str, str] = None
+    ):
         """
         Register a custom model with alternative endpoint and headers for extensibility.
         """
@@ -227,15 +232,21 @@ class GrokProvider(LLMProvider):
                                 if "choices" in chunk_data and chunk_data["choices"][0][
                                     "delta"
                                 ].get("content"):
-                                    chunk_text = chunk_data["choices"][0]["delta"]["content"]
+                                    chunk_text = chunk_data["choices"][0]["delta"][
+                                        "content"
+                                    ]
                                     yield chunk_text
                                     partial_response += chunk_text
 
                                     # Keep local, plugin-specific stream metrics
-                                    chunk_output_tokens = await self.count_tokens(chunk_text, model)
+                                    chunk_output_tokens = await self.count_tokens(
+                                        chunk_text, model
+                                    )
                                     output_tokens += chunk_output_tokens
                                     chunk_latency = time.time() - chunk_start
-                                    stream_chunk_latency.labels(model=model).observe(chunk_latency)
+                                    stream_chunk_latency.labels(model=model).observe(
+                                        chunk_latency
+                                    )
                                     stream_chunks_total.labels(model=model).inc()
                                     chunk_start = time.time()
                     except Exception as e:
@@ -265,7 +276,9 @@ class GrokProvider(LLMProvider):
                 raise  # Re-raise errors we've already translated
             else:
                 # Wrap unexpected errors
-                raise LLMError(detail=f"Unexpected error in call: {e}", provider=self.name) from e
+                raise LLMError(
+                    detail=f"Unexpected error in call: {e}", provider=self.name
+                ) from e
 
     async def count_tokens(self, text: str, model: str) -> int:
         """

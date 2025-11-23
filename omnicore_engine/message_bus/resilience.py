@@ -1,9 +1,8 @@
 # message_bus/resilience.py
 
+import logging
 import threading
 import time
-import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,9 @@ class CircuitBreaker:
                 and (time.time() - self.last_failure_time) > self.recovery_timeout
             ):
                 self.state = "half-open"
-                logger.info("Circuit breaker moved to half-open state for trial attempt.")
+                logger.info(
+                    "Circuit breaker moved to half-open state for trial attempt."
+                )
                 return True
 
             return False

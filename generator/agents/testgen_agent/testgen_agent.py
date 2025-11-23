@@ -24,39 +24,54 @@ Features:
 - Comprehensive provenance tracking.
 """
 
-import asyncio
-import json
-import time
 import argparse
-import os
-import uuid
+import asyncio
 import hashlib
-from pathlib import Path
-from typing import Dict, Any, List, Tuple
-from dataclasses import dataclass, field
-import aiofiles  # For asynchronous file operations
-
-# --- FIX: Import AsyncRetrying ---
-from tenacity import (
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-    AsyncRetrying,
-)  # For robust retries
-from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
-import sys  # For sys.exit in CLI
-from datetime import datetime  # For timestamps
-import subprocess  # For running external commands like git
-import aiohttp  # For potential client errors from aiohttp
 import importlib  # For CLI dependency checks
+import json
+import os
+import subprocess  # For running external commands like git
+import sys  # For sys.exit in CLI
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime  # For timestamps
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
-# --- CENTRAL RUNNER FOUNDATION ---
-from runner.runner_logging import (
-    tracer,
-)  # FIX: Corrected import path to runner.runner_logging
-from runner.runner_logging import logger, add_provenance
+import aiofiles  # For asynchronous file operations
+import aiohttp  # For potential client errors from aiohttp
+
+# Tokenizer: REQUIRED for token counting.
+import tiktoken
+from opentelemetry.trace import Status, StatusCode  # For OpenTelemetry tracing
+
+# Presidio: REQUIRED for PII/secret scrubbing.
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
 from runner.llm_client import call_ensemble_api
 from runner.runner_errors import LLMError
+
+# --- CENTRAL RUNNER FOUNDATION ---
+from runner.runner_logging import (  # FIX: Corrected import path to runner.runner_logging
+    add_provenance,
+    logger,
+    tracer,
+)
+
+# --- FIX: Import AsyncRetrying ---
+from tenacity import (  # For robust retries
+    AsyncRetrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+# Test generation specific components: REQUIRED.
+# FIXED: Changed to relative imports
+from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
+from .testgen_response_handler import parse_llm_response
+from .testgen_validator import validate_test_quality
 
 # -----------------------------------
 
@@ -66,9 +81,6 @@ from runner.runner_errors import LLMError
 # If any of these fail to import (e.g., module not found), the program will
 # terminate at this point, enforcing a strict hard-fail.
 
-# Presidio: REQUIRED for PII/secret scrubbing.
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
 
 # Main LLM orchestration layer: REMOVED (Replaced by runner.llm_client)
 # from deploy_llm_call import DeployLLMOrchestrator
@@ -76,21 +88,15 @@ from presidio_anonymizer import AnonymizerEngine
 # Audit logging: REMOVED (Replaced by runner.runner_logging)
 # from audit_log import log_action
 
-# Test generation specific components: REQUIRED.
-# FIXED: Changed to relative imports
-from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
-from .testgen_response_handler import parse_llm_response
-from .testgen_validator import validate_test_quality
-
-# Tokenizer: REQUIRED for token counting.
-import tiktoken
 
 # PlantUML (Optional visual dependency for reports): Handled gracefully if not present.
 try:
     from plantuml import PlantUML
 except ImportError:
     PlantUML = None
-    logger.warning("PlantUML library not found. Diagram generation in report will be skipped.")
+    logger.warning(
+        "PlantUML library not found. Diagram generation in report will be skipped."
+    )
 
 # Optional: Sentry/External Error Reporting Client
 try:
@@ -159,7 +165,9 @@ def scrub_text(text: str) -> str:
         return scrubbed_content
 
     except Exception as e:
-        logger.error(f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True)
+        logger.error(
+            f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True
+        )
         raise RuntimeError(
             f"Critical error during sensitive data scrubbing with Presidio: {e}"
         ) from e
@@ -224,11 +232,17 @@ def validate_policy(policy_dict: Dict[str, Any]) -> None:
         isinstance(v, str) for v in policy_dict["validation_suite"]
     ):
         raise ValueError("validation_suite must be a list of strings.")
-    if not isinstance(policy_dict["max_refinements"], int) or policy_dict["max_refinements"] < 0:
+    if (
+        not isinstance(policy_dict["max_refinements"], int)
+        or policy_dict["max_refinements"] < 0
+    ):
         raise ValueError(
             f"Invalid max_refinements '{policy_dict['max_refinements']}'. Must be a non-negative integer."
         )
-    if not isinstance(policy_dict["llm_retries"], int) or policy_dict["llm_retries"] < 1:
+    if (
+        not isinstance(policy_dict["llm_retries"], int)
+        or policy_dict["llm_retries"] < 1
+    ):
         raise ValueError(
             f"Invalid llm_retries '{policy_dict['llm_retries']}'. Must be a positive integer."
         )
@@ -267,7 +281,9 @@ class TestGenAgent:
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
         if not self.repo_path.exists() or not self.repo_path.is_dir():
-            raise ValueError(f"Repository path does not exist or is not a directory: {repo_path}")
+            raise ValueError(
+                f"Repository path does not exist or is not a directory: {repo_path}"
+            )
 
         # REFACTORED: Removed self.llm_orchestrator
         logger.info(f"Initializing TestGenAgent for repository: {self.repo_path}")
@@ -279,7 +295,9 @@ class TestGenAgent:
             logger.error(f"Failed to initialize codebase for RAG: {e}", exc_info=True)
             if sentry_sdk:
                 sentry_sdk.capture_exception(e)
-            raise RuntimeError(f"Codebase initialization for RAG failed critically: {e}")
+            raise RuntimeError(
+                f"Codebase initialization for RAG failed critically: {e}"
+            )
 
     async def _load_code_files(self, target_files: List[str]) -> Dict[str, str]:
         """
@@ -296,7 +314,9 @@ class TestGenAgent:
                     content = await f.read()
                     return fp, scrub_text(content)
             except Exception as e:
-                raise ValueError(f"Error reading or scrubbing file {full_path}: {e}") from e
+                raise ValueError(
+                    f"Error reading or scrubbing file {full_path}: {e}"
+                ) from e
 
         tasks = [read_and_scrub_file(fp) for fp in target_files]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -317,7 +337,9 @@ class TestGenAgent:
                 f"Critical error: Failed to load some code files. Details: {'; '.join(errors_found)}"
             )
         if not code_files_content and target_files:
-            raise ValueError("No code files were successfully loaded from specified target_files.")
+            raise ValueError(
+                "No code files were successfully loaded from specified target_files."
+            )
 
         return code_files_content
 
@@ -357,7 +379,9 @@ class TestGenAgent:
                             f"Validation type '{v_type}' failed critically: {e}"
                         ) from e
 
-            validation_tasks = [limited_validate(v_type) for v_type in policy.validation_suite]
+            validation_tasks = [
+                limited_validate(v_type) for v_type in policy.validation_suite
+            ]
             results = await asyncio.gather(*validation_tasks, return_exceptions=True)
 
             aggregated_report: Dict[str, Any] = {}
@@ -420,7 +444,9 @@ class TestGenAgent:
             action = step_data.get("action", "Unknown Action")
             validation_report = step_data.get("validation_report", {})
             primary_metric_name = (
-                history[0].get("policy", {}).get("primary_metric", "coverage_percentage")
+                history[0]
+                .get("policy", {})
+                .get("primary_metric", "coverage_percentage")
             )
             # Safely navigate the nested dict structure
             coverage = (
@@ -502,7 +528,9 @@ Agent --> Dev : Deliver Report
 """
             try:
                 diagram_url = plantuml_client.get_url(diagram_uml_code)
-                report_parts.append(f"\n## Workflow Diagram\n![TestGen Workflow]({diagram_url})\n")
+                report_parts.append(
+                    f"\n## Workflow Diagram\n![TestGen Workflow]({diagram_url})\n"
+                )
             except Exception as e:
                 logger.warning(
                     f"Failed to generate PlantUML diagram: {e}. Skipping diagram.",
@@ -621,7 +649,9 @@ Agent --> Dev : Deliver Report
                     "output_tokens": completion_tokens,
                     "cost_estimate": response.get("cost_usd", "N/A"),
                     "prompt_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
-                    "response_hash": hashlib.sha256(response_content.encode("utf-8")).hexdigest(),
+                    "response_hash": hashlib.sha256(
+                        response_content.encode("utf-8")
+                    ).hexdigest(),
                 }
                 add_provenance(provenance_data, **log_extra)
 
@@ -636,7 +666,9 @@ Agent --> Dev : Deliver Report
                 if isinstance(e, (aiohttp.ClientError, asyncio.TimeoutError, LLMError)):
                     raise  # These are already in the retry list for the external AsyncRetrying
                 # Wrap other exceptions in RuntimeError
-                raise RuntimeError(f"LLM call failed for '{purpose}' failed: {e}") from e
+                raise RuntimeError(
+                    f"LLM call failed for '{purpose}' failed: {e}"
+                ) from e
 
         # Define the retry strategy using self.policy (which is available here)
         # This correctly passes *numbers* to min and max.
@@ -719,7 +751,9 @@ Agent --> Dev : Deliver Report
                     llm_response_from_generation: Dict[str, Any] = {}
                     step_action = "initial_generation" if attempt == 0 else "refinement"
                     step_model = (
-                        policy.generation_llm_model if attempt == 0 else policy.refinement_llm_model
+                        policy.generation_llm_model
+                        if attempt == 0
+                        else policy.refinement_llm_model
                     )
 
                     if attempt == 0:
@@ -727,7 +761,9 @@ Agent --> Dev : Deliver Report
                         generation_prompt = build_agentic_prompt(
                             "generation", language=language, code_files=code_files
                         )
-                        logger.info("Calling LLM for initial test generation.", extra=log_extra)
+                        logger.info(
+                            "Calling LLM for initial test generation.", extra=log_extra
+                        )
                         llm_response_from_generation = await self._call_llm_with_retry(
                             generation_prompt,
                             language,
@@ -736,12 +772,16 @@ Agent --> Dev : Deliver Report
                             "generation",
                         )
                     else:
-                        span.add_event(f"Building refinement prompt for attempt {attempt}.")
+                        span.add_event(
+                            f"Building refinement prompt for attempt {attempt}."
+                        )
                         last_step_in_history = history[-1]
                         last_critique_content = last_step_in_history.get(
                             "critique_response", {}
                         ).get("content", "No specific critique provided.")
-                        last_validation_report = last_step_in_history.get("validation_report", {})
+                        last_validation_report = last_step_in_history.get(
+                            "validation_report", {}
+                        )
                         last_generated_tests_content = last_step_in_history.get(
                             "generated_tests_content", {}
                         )
@@ -782,7 +822,9 @@ Agent --> Dev : Deliver Report
                             language=language,
                         )
                         if not generated_tests_this_attempt:
-                            raise ValueError("Parsed tests are empty after generation/refinement.")
+                            raise ValueError(
+                                "Parsed tests are empty after generation/refinement."
+                            )
                     except ValueError as e:
                         logger.warning(
                             f"Failed to parse LLM generated tests ({e}). Attempting self-healing.",
@@ -793,7 +835,9 @@ Agent --> Dev : Deliver Report
                         self_heal_prompt = build_agentic_prompt(
                             "self_heal",
                             language=language,
-                            generated_tests=llm_response_from_generation.get("content", ""),
+                            generated_tests=llm_response_from_generation.get(
+                                "content", ""
+                            ),
                             error_message=str(e),
                         )
 
@@ -810,7 +854,9 @@ Agent --> Dev : Deliver Report
                                 language=language,
                             )
                             if not generated_tests_this_attempt:
-                                raise ValueError("Parsed tests are still empty after self-healing.")
+                                raise ValueError(
+                                    "Parsed tests are still empty after self-healing."
+                                )
                             add_provenance(
                                 {
                                     "action": "self_heal_success",
@@ -831,7 +877,9 @@ Agent --> Dev : Deliver Report
                                 f"Failed to generate valid tests even after self-healing: {he}"
                             ) from he
 
-                    history[-1]["generated_tests_content"] = generated_tests_this_attempt
+                    history[-1][
+                        "generated_tests_content"
+                    ] = generated_tests_this_attempt
                     history[-1]["llm_response_raw"] = llm_response_from_generation
 
                     span.add_event("Running validation suite.")
@@ -891,7 +939,9 @@ Agent --> Dev : Deliver Report
                                 policy.primary_metric.split("_")[0]
                             ]["metrics"][policy.primary_metric]
                         except KeyError:
-                            best_metric_so_far = -1.0  # Ensure first valid report becomes the best
+                            best_metric_so_far = (
+                                -1.0
+                            )  # Ensure first valid report becomes the best
 
                         if current_metric_value > best_metric_so_far:
                             best_tests = generated_tests_this_attempt
@@ -991,12 +1041,16 @@ Agent --> Dev : Deliver Report
                 }
 
             except (FileNotFoundError, PermissionError) as e:
-                logger.error(f"File operation error: {e}", exc_info=True, extra=log_extra)
+                logger.error(
+                    f"File operation error: {e}", exc_info=True, extra=log_extra
+                )
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 if sentry_sdk:
                     sentry_sdk.capture_exception(e)
-                raise RuntimeError(f"Agent run failed due to file operation error: {e}") from e
+                raise RuntimeError(
+                    f"Agent run failed due to file operation error: {e}"
+                ) from e
             except ValueError as e:
                 logger.error(
                     f"Configuration, validation, or parsing error: {e}",
@@ -1033,7 +1087,9 @@ Agent --> Dev : Deliver Report
                 span.record_exception(e)
                 if sentry_sdk:
                     sentry_sdk.capture_exception(e)
-                raise RuntimeError(f"Agent run failed due to unexpected critical error: {e}") from e
+                raise RuntimeError(
+                    f"Agent run failed due to unexpected critical error: {e}"
+                ) from e
 
 
 async def main():
@@ -1077,7 +1133,9 @@ async def main():
         required=True,
         help="The programming language of the files (e.g., python, javascript).",
     )
-    parser.add_argument("--repo-path", default=".", help="The root path of the code repository.")
+    parser.add_argument(
+        "--repo-path", default=".", help="The root path of the code repository."
+    )
 
     # Policy overrides
     parser.add_argument(
@@ -1090,7 +1148,9 @@ async def main():
         type=int,
         help="Override: Maximum number of refinement attempts.",
     )
-    parser.add_argument("--primary-metric", help="Override: Primary metric for quality assessment.")
+    parser.add_argument(
+        "--primary-metric", help="Override: Primary metric for quality assessment."
+    )
     parser.add_argument(
         "--validation_suite",
         nargs="+",
@@ -1099,9 +1159,15 @@ async def main():
     parser.add_argument(
         "--generation_llm_model", help="Override: LLM model for initial generation."
     )
-    parser.add_argument("--critique_llm_model", help="Override: LLM model for critique.")
-    parser.add_argument("--refinement_llm_model", help="Override: LLM model for refinement.")
-    parser.add_argument("--self_heal_llm_model", help="Override: LLM model for self-healing.")
+    parser.add_argument(
+        "--critique_llm_model", help="Override: LLM model for critique."
+    )
+    parser.add_argument(
+        "--refinement_llm_model", help="Override: LLM model for refinement."
+    )
+    parser.add_argument(
+        "--self_heal_llm_model", help="Override: LLM model for self-healing."
+    )
     parser.add_argument(
         "--llm_retries", type=int, help="Override: Number of retries for LLM calls."
     )
@@ -1116,7 +1182,9 @@ async def main():
         "--config",
         help="Path to a JSON config file for policy settings (CLI args override this).",
     )
-    parser.add_argument("--output-file", help="Optional file path to save the JSON results.")
+    parser.add_argument(
+        "--output-file", help="Optional file path to save the JSON results."
+    )
 
     args = parser.parse_args()
 

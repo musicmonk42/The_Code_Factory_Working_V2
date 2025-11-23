@@ -1,26 +1,27 @@
-import logging
-import uuid
-import json
-import hashlib
-import threading
 import asyncio
+import hashlib
+import json
+import logging
+import threading
 import time
-from typing import Dict, Any, List, Optional, Coroutine, Union
-from circuitbreaker import circuit
-from omnicore_engine.retry_compat import retry
-from cryptography.fernet import Fernet, InvalidToken
+import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field, ValidationError, SecretStr
+from typing import Any, Coroutine, Dict, List, Optional, Union
 
 from arbiter.config import ArbiterConfig
+from circuitbreaker import circuit
+from cryptography.fernet import Fernet, InvalidToken
+from pydantic import BaseModel, Field, SecretStr, ValidationError
+
+from omnicore_engine.retry_compat import retry
 
 settings = ArbiterConfig()
 try:
     from omnicore_engine.plugin_registry import (
         PLUGIN_REGISTRY,
         PluginPerformanceTracker,
-        ShadowDeployManager,
         PluginVersionManager,
+        ShadowDeployManager,
     )
 except ImportError:
     PLUGIN_REGISTRY = None
@@ -32,10 +33,10 @@ try:
 except ImportError:
     Database = None
 from omnicore_engine.metrics import (
-    AUDIT_RECORDS,
-    AUDIT_ERRORS,
-    AUDIT_RECORDS_PROCESSED_TOTAL,
     AUDIT_BUFFER_SIZE_CURRENT,
+    AUDIT_ERRORS,
+    AUDIT_RECORDS,
+    AUDIT_RECORDS_PROCESSED_TOTAL,
 )
 
 try:
@@ -113,7 +114,9 @@ class ExplanationRationale(BaseModel):
 
 
 class SimulationOutcome(BaseModel):
-    scenario_name: str = Field(..., description="Name or identifier of the simulation scenario.")
+    scenario_name: str = Field(
+        ..., description="Name or identifier of the simulation scenario."
+    )
     metrics: Dict[str, Any] = Field(
         default_factory=dict, description="Key metrics from the simulation outcome."
     )
@@ -146,7 +149,9 @@ class ExplainRecord:
             "name": name,
             "detail": detail,
             "sim_id": sim_id,
-            "agent_id": (hashlib.sha256(agent_id.encode()).hexdigest() if agent_id else None),
+            "agent_id": (
+                hashlib.sha256(agent_id.encode()).hexdigest() if agent_id else None
+            ),
             "error": error,
             "context": context,
             "custom_attributes": custom_attributes,
@@ -169,7 +174,9 @@ class ExplainRecord:
             if data_to_hash.get(key) is None:
                 data_to_hash[key] = ""
         return hashlib.sha256(
-            json.dumps(data_to_hash, sort_keys=True, default=safe_serialize).encode("utf-8")
+            json.dumps(data_to_hash, sort_keys=True, default=safe_serialize).encode(
+                "utf-8"
+            )
         ).hexdigest()
 
     def model_dump(self, exclude=None) -> Dict[str, Any]:
@@ -237,9 +244,15 @@ class EnhancedExplainRecord(ExplainRecord):
 class AuditRecordSchema(BaseModel):
     kind: str = Field(..., description="The category or type of the audit event.")
     name: str = Field(..., description="The name or identifier of the entity involved.")
-    detail: str = Field(..., description="Encrypted string of detailed event information.")
-    sim_id: Optional[str] = Field(None, description="Optional ID of a related simulation.")
-    agent_id: Optional[str] = Field(None, description="Hashed identifier of the agent/component.")
+    detail: str = Field(
+        ..., description="Encrypted string of detailed event information."
+    )
+    sim_id: Optional[str] = Field(
+        None, description="Optional ID of a related simulation."
+    )
+    agent_id: Optional[str] = Field(
+        None, description="Hashed identifier of the agent/component."
+    )
     error: Optional[str] = Field(
         None, description="Brief error message if the event was a failure."
     )
@@ -267,7 +280,9 @@ class AuditRecordSchema(BaseModel):
         None, description="Merkle root hash for integrity verification."
     )
     uuid: str = Field(..., description="Unique identifier for the audit record.")
-    ts: float = Field(..., description="Timestamp (epoch seconds) of when the record was created.")
+    ts: float = Field(
+        ..., description="Timestamp (epoch seconds) of when the record was created."
+    )
     hash: str = Field(..., description="SHA256 hash of the record data for integrity.")
 
 
@@ -299,7 +314,9 @@ class CryptoValidator:
                 "Attempted to encrypt data with an invalid Fernet key. Encryption skipped."
             )
             raise ValueError("Encryption key is invalid.")
-        return Fernet(settings.ENCRYPTION_KEY.get_secret_value().encode("utf-8")).encrypt(data)
+        return Fernet(
+            settings.ENCRYPTION_KEY.get_secret_value().encode("utf-8")
+        ).encrypt(data)
 
     def decrypt_data(self, data: bytes) -> bytes:
         if not self.is_key_valid:
@@ -307,7 +324,9 @@ class CryptoValidator:
                 "Attempted to decrypt data with an invalid Fernet key. Decryption skipped."
             )
             raise ValueError("Encryption key is invalid.")
-        return Fernet(settings.ENCRYPTION_KEY.get_secret_value().encode("utf-8")).decrypt(data)
+        return Fernet(
+            settings.ENCRYPTION_KEY.get_secret_value().encode("utf-8")
+        ).decrypt(data)
 
 
 class KafkaAuditStreamer:
@@ -320,9 +339,13 @@ class KafkaAuditStreamer:
                 self.producer = Producer({"bootstrap.servers": bootstrap_servers})
                 self.logger.info("Kafka producer initialized")
             except Exception as e:
-                self.logger.warning(f"Kafka initialization failed: {e}; falling back to logging")
+                self.logger.warning(
+                    f"Kafka initialization failed: {e}; falling back to logging"
+                )
         else:
-            self.logger.warning("confluent_kafka not available; Kafka streaming disabled.")
+            self.logger.warning(
+                "confluent_kafka not available; Kafka streaming disabled."
+            )
 
     async def stream_event(self, record: Dict[str, Any]):
         try:
@@ -345,14 +368,18 @@ class KafkaAuditStreamer:
                 self.producer.poll(0)
                 logger.info(f"Queued audit event for Kafka: {record.get('uuid')}")
             else:
-                logger.info(f"Kafka unavailable; audit event logged locally: {record.get('uuid')}")
+                logger.info(
+                    f"Kafka unavailable; audit event logged locally: {record.get('uuid')}"
+                )
         except Exception as e:
             logger.error(f"Failed to stream audit event: {e}", exc_info=True)
             AUDIT_ERRORS.labels(operation="kafka_stream").inc()
 
 
 class AuditProofExporter:
-    def __init__(self, db: Database, encrypter: Optional[Fernet], merkle_tree: Optional[Any]):
+    def __init__(
+        self, db: Database, encrypter: Optional[Fernet], merkle_tree: Optional[Any]
+    ):
         self.db = db
         self.encrypter = encrypter
         self.merkle_tree = merkle_tree
@@ -367,10 +394,14 @@ class AuditProofExporter:
                 "Audit", "export_proof_bundle", user_id, {"tenant_id": tenant_id}
             )
             if not allowed:
-                self.logger.warning(f"Export proof bundle denied for user {user_id}: {reason}")
+                self.logger.warning(
+                    f"Export proof bundle denied for user {user_id}: {reason}"
+                )
                 raise ValueError(f"Policy denied: {reason}")
 
-            hashed_tenant_id = hashlib.sha256(tenant_id.encode()).hexdigest() if tenant_id else None
+            hashed_tenant_id = (
+                hashlib.sha256(tenant_id.encode()).hexdigest() if tenant_id else None
+            )
             filters = {"tenant_id": hashed_tenant_id} if hashed_tenant_id else {}
 
             records = await self.db.query_audit_records(filters=filters)
@@ -379,11 +410,17 @@ class AuditProofExporter:
             if self.merkle_tree:
                 merkle_root_hex = self.merkle_tree.get_merkle_root()
 
-            decryption_key_value = settings.ENCRYPTION_KEY.get_secret_value() if allowed else None
+            decryption_key_value = (
+                settings.ENCRYPTION_KEY.get_secret_value() if allowed else None
+            )
 
             bundle = {
                 "records": [
-                    (r.model_dump() if isinstance(r, (ExplainRecord, EnhancedExplainRecord)) else r)
+                    (
+                        r.model_dump()
+                        if isinstance(r, (ExplainRecord, EnhancedExplainRecord))
+                        else r
+                    )
                     for r in records
                 ],
                 "merkle_root": merkle_root_hex,
@@ -408,12 +445,18 @@ class AuditSecurityGuard:
             if isinstance(data, dict):
                 sanitized_dict = {}
                 for k, v in data.items():
-                    if "password" in k.lower() or "token" in k.lower() or "key" in k.lower():
+                    if (
+                        "password" in k.lower()
+                        or "token" in k.lower()
+                        or "key" in k.lower()
+                    ):
                         sanitized_dict[k] = "[REDACTED]"
                     elif isinstance(v, (dict, list)):
                         sanitized_dict[k] = self.sanitize_data(v)
                     else:
-                        sanitized_dict[k] = str(v)[:50] + ("..." if len(str(v)) > 50 else "")
+                        sanitized_dict[k] = str(v)[:50] + (
+                            "..." if len(str(v)) > 50 else ""
+                        )
                 return f"[Sanitized Dict: {json.dumps(sanitized_dict, default=safe_serialize)}]"
             elif isinstance(data, list):
                 sanitized_list = [self.sanitize_data(item) for item in data[:5]]
@@ -438,11 +481,15 @@ class AuditHookManager:
         self.shadow_deploy_manager = shadow_deploy_manager
         self.logger = logger
 
-    async def capture_ab_shadow_results(self, kind: str, name: str, version: str) -> Dict[str, Any]:
+    async def capture_ab_shadow_results(
+        self, kind: str, name: str, version: str
+    ) -> Dict[str, Any]:
         try:
             active_plugin = PLUGIN_REGISTRY.get(kind, name)
 
-            results = await self.performance_tracker.get_performance_history(kind, name, version)
+            results = await self.performance_tracker.get_performance_history(
+                kind, name, version
+            )
 
             active_history = []
             if active_plugin:
@@ -450,17 +497,19 @@ class AuditHookManager:
                     kind, name, active_plugin.meta.version
                 )
 
-            shadow_error_rate = sum(h.get("error_rate", 0) for h in results) / max(1, len(results))
-            shadow_exec_time_avg = sum(h.get("execution_time", 0) for h in results) / max(
+            shadow_error_rate = sum(h.get("error_rate", 0) for h in results) / max(
                 1, len(results)
             )
+            shadow_exec_time_avg = sum(
+                h.get("execution_time", 0) for h in results
+            ) / max(1, len(results))
 
-            active_error_rate = sum(h.get("error_rate", 0) for h in active_history) / max(
-                1, len(active_history)
-            )
-            active_exec_time_avg = sum(h.get("execution_time", 0) for h in active_history) / max(
-                1, len(active_history)
-            )
+            active_error_rate = sum(
+                h.get("error_rate", 0) for h in active_history
+            ) / max(1, len(active_history))
+            active_exec_time_avg = sum(
+                h.get("execution_time", 0) for h in active_history
+            ) / max(1, len(active_history))
 
             results_dict = {
                 "plugin_id": f"{kind}:{name}:{version}",
@@ -565,7 +614,9 @@ class ExplainAudit:
         if WEB3_AVAILABLE:
             try:
                 if self.config.WEB3_PROVIDER_URL:
-                    self.web3 = Web3(Web3.HTTPProvider(str(self.config.WEB3_PROVIDER_URL)))
+                    self.web3 = Web3(
+                        Web3.HTTPProvider(str(self.config.WEB3_PROVIDER_URL))
+                    )
                     if not self.web3.is_connected():
                         logger.warning("Web3 provider not connected at init.")
                         self.safe_create_task(
@@ -671,9 +722,13 @@ class ExplainAudit:
             try:
                 asyncio.run(coro)
             except Exception as ex:
-                logger.error(f"Failed to run task with asyncio.run: {ex}", exc_info=True)
+                logger.error(
+                    f"Failed to run task with asyncio.run: {ex}", exc_info=True
+                )
         except Exception as e:
-            logger.error(f"Unexpected error when trying to create/run task: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error when trying to create/run task: {e}", exc_info=True
+            )
 
     def add_entry(
         self,
@@ -691,7 +746,9 @@ class ExplainAudit:
         explanation_id: Optional[str] = None,
         root_merkle_hash: Optional[str] = None,
     ):
-        logger.warning("Using deprecated add_entry; prefer add_entry_async for async contexts.")
+        logger.warning(
+            "Using deprecated add_entry; prefer add_entry_async for async contexts."
+        )
         AUDIT_RECORDS.labels(operation="add_entry").inc()
 
         user_id_for_policy = agent_id if agent_id else "system"
@@ -734,7 +791,9 @@ class ExplainAudit:
             )
 
         if not allowed:
-            logger.warning(f"Audit record denied by policy: {reason}. Record: {kind}:{name}.")
+            logger.warning(
+                f"Audit record denied by policy: {reason}. Record: {kind}:{name}."
+            )
             self.safe_create_task(
                 self.feedback_manager.record_feedback(
                     user_id="system",
@@ -758,7 +817,9 @@ class ExplainAudit:
 
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
-                    current_merkle_root = self.system_audit_merkle_tree.get_merkle_root()
+                    current_merkle_root = (
+                        self.system_audit_merkle_tree.get_merkle_root()
+                    )
 
                 if kind in {
                     "plugin_hot_swap",
@@ -821,7 +882,9 @@ class ExplainAudit:
                 self.buffer.append(record)
                 AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
 
-                self.safe_create_task(self.kafka_streamer.stream_event(record.model_dump()))
+                self.safe_create_task(
+                    self.kafka_streamer.stream_event(record.model_dump())
+                )
 
                 if len(self.buffer) >= self.buffer_size:
                     self.safe_create_task(self._flush_buffer())
@@ -877,7 +940,9 @@ class ExplainAudit:
         if kind.startswith("arbiter"):
             async with aiohttp.ClientSession() as session:
                 try:
-                    await session.post(self.config.ARBITTER_URL + "/audit", json=record_data)
+                    await session.post(
+                        self.config.ARBITTER_URL + "/audit", json=record_data
+                    )
                     logger.info(f"Audit event sent to arbiter: {kind}")
                 except Exception as e:
                     logger.error(f"Failed to send audit event to arbiter: {e}")
@@ -894,7 +959,9 @@ class ExplainAudit:
             user_id_for_policy, action_for_policy, metadata_for_policy
         )
         if not allowed:
-            logger.warning(f"Audit record denied by policy: {reason}. Record: {kind}:{name}.")
+            logger.warning(
+                f"Audit record denied by policy: {reason}. Record: {kind}:{name}."
+            )
             self.safe_create_task(
                 self.feedback_manager.record_feedback(
                     user_id="system",
@@ -919,7 +986,9 @@ class ExplainAudit:
 
                 current_merkle_root = None
                 if self.system_audit_merkle_tree:
-                    current_merkle_root = self.system_audit_merkle_tree.get_merkle_root()
+                    current_merkle_root = (
+                        self.system_audit_merkle_tree.get_merkle_root()
+                    )
 
                 if kind in {
                     "plugin_hot_swap",
@@ -1094,11 +1163,19 @@ class ExplainAudit:
             logger.info(
                 f"Flushed {len(records_to_flush)} audit records to DB/KG/Blockchain (if enabled)."
             )
-            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="success").inc(len(records_to_flush))
-            AUDIT_RECORDS.labels(operation="flush_buffer_success").observe(time.time() - start_time)
+            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="success").inc(
+                len(records_to_flush)
+            )
+            AUDIT_RECORDS.labels(operation="flush_buffer_success").observe(
+                time.time() - start_time
+            )
         except Exception as e:
-            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="failed").inc(len(records_to_flush))
-            AUDIT_ERRORS.labels(operation="flush_buffer").observe(time.time() - start_time)
+            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="failed").inc(
+                len(records_to_flush)
+            )
+            AUDIT_ERRORS.labels(operation="flush_buffer").observe(
+                time.time() - start_time
+            )
             logger.error(
                 f"Audit buffer flush failed: {self.security_guard.sanitize_data([r.model_dump() for r in records_to_flush])}: {e}",
                 exc_info=True,
@@ -1138,7 +1215,9 @@ class ExplainAudit:
                 raise ValueError(f"Policy denied: {reason}")
 
             if filters and "tenant_id" in filters and filters["tenant_id"] is not None:
-                filters["tenant_id"] = hashlib.sha256(filters["tenant_id"].encode()).hexdigest()
+                filters["tenant_id"] = hashlib.sha256(
+                    filters["tenant_id"].encode()
+                ).hexdigest()
 
             result_from_db = await self._db_client.query_audit_records(
                 filters=filters, use_dream_mode=False
@@ -1148,7 +1227,9 @@ class ExplainAudit:
                 try:
                     record_to_process = record_data.copy()
 
-                    record_to_process["detail"] = self.decrypt_str(record_to_process.get("detail"))
+                    record_to_process["detail"] = self.decrypt_str(
+                        record_to_process.get("detail")
+                    )
                     record_to_process["context"] = self.decrypt_str(
                         record_to_process.get("context")
                     )
@@ -1226,14 +1307,18 @@ class ExplainAudit:
                 raise ValueError(f"Policy denied: {reason}")
 
             db_filters = {"sim_id": sim_id, "ts_start": start_time, "ts_end": end_time}
-            records_to_replay_raw = await self._db_client.query_audit_records(db_filters)
+            records_to_replay_raw = await self._db_client.query_audit_records(
+                db_filters
+            )
 
             replayed_results = []
 
             for record_data in records_to_replay_raw:
                 try:
                     record_to_process = record_data.copy()
-                    record_to_process["detail"] = self.decrypt_str(record_to_process.get("detail"))
+                    record_to_process["detail"] = self.decrypt_str(
+                        record_to_process.get("detail")
+                    )
                     record_to_process["rationale"] = self.decrypt_str(
                         record_to_process.get("rationale")
                     )
@@ -1281,7 +1366,9 @@ class ExplainAudit:
             )
             return replayed_results
         except Exception as e:
-            AUDIT_ERRORS.labels(operation="replay_events").observe(time.time() - start_time_op)
+            AUDIT_ERRORS.labels(operation="replay_events").observe(
+                time.time() - start_time_op
+            )
             logger.error(
                 f"Replay failed: {self.security_guard.sanitize_data(db_filters)}: {e}",
                 exc_info=True,
@@ -1294,7 +1381,9 @@ class ExplainAudit:
                         "type": "audit_error",
                         "operation": "replay_events",
                         "error": str(e),
-                        "filters_sanitized": self.security_guard.sanitize_data(db_filters),
+                        "filters_sanitized": self.security_guard.sanitize_data(
+                            db_filters
+                        ),
                     },
                 )
             )
@@ -1321,7 +1410,9 @@ class ExplainAudit:
             for record_data in all_records_data:
                 try:
                     record_to_process = record_data.copy()
-                    record_to_process["detail"] = self.decrypt_str(record_to_process.get("detail"))
+                    record_to_process["detail"] = self.decrypt_str(
+                        record_to_process.get("detail")
+                    )
                     record_to_process["rationale"] = self.decrypt_str(
                         record_to_process.get("rationale")
                     )
@@ -1366,7 +1457,9 @@ class ExplainAudit:
                 user_id,
                 {
                     "records_count": len(validated_records),
-                    "snapshot_size_bytes": len(encrypted_records_snapshot.encode("utf-8")),
+                    "snapshot_size_bytes": len(
+                        encrypted_records_snapshot.encode("utf-8")
+                    ),
                 },
             )
             return snapshot_id
@@ -1395,7 +1488,9 @@ class ExplainAudit:
                 try:
                     await self._flush_buffer()
                 except Exception as e:
-                    logger.error(f"Error during periodic audit flush: {e}", exc_info=True)
+                    logger.error(
+                        f"Error during periodic audit flush: {e}", exc_info=True
+                    )
 
         try:
             loop = asyncio.get_event_loop()
@@ -1411,7 +1506,9 @@ class ExplainAudit:
                 "No running event loop found at init; periodic audit flush task will not start automatically. Buffer relies on size threshold."
             )
 
-    async def _log_audit(self, event: str, sim_id: str, user_id: str, details: Dict[str, Any]):
+    async def _log_audit(
+        self, event: str, sim_id: str, user_id: str, details: Dict[str, Any]
+    ):
         try:
             if self.system_audit_merkle_tree:
                 AUDIT_RECORDS.labels(operation="log_audit_merkle").inc()
@@ -1425,9 +1522,9 @@ class ExplainAudit:
                         "sim_id": sim_id,
                         "user_id_hash": hashed_user_id,
                         "details_hash": hashlib.sha256(
-                            json.dumps(details, sort_keys=True, default=safe_serialize).encode(
-                                "utf-8"
-                            )
+                            json.dumps(
+                                details, sort_keys=True, default=safe_serialize
+                            ).encode("utf-8")
                         ).hexdigest(),
                     },
                     sort_keys=True,

@@ -3,11 +3,12 @@
 Test suite for the DLT Network Config Manager module.
 """
 
+import json
 import os
 import sys
-import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -147,7 +148,9 @@ class TestDLTNetworkConfig:
         }
         config = dlt_module.DLTNetworkConfig.load_and_validate(config_data)
         assert config.evm.chain_id == 1
-        assert config.evm.contract_address == "0x1234567890abcdef1234567890abcdef12345678"
+        assert (
+            config.evm.contract_address == "0x1234567890abcdef1234567890abcdef12345678"
+        )
 
     def test_evm_invalid_contract_address(self):
         """Test EVM invalid contract address validation."""

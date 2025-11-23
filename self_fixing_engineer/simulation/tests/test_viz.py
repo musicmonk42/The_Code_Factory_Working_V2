@@ -1,7 +1,7 @@
 # simulation/tests/test_viz.py
 
-import sys
 import os
+import sys
 
 # Add the simulation/plugins directory to the path
 current_file = os.path.abspath(__file__)
@@ -13,23 +13,23 @@ plugins_dir = os.path.join(simulation_dir, "plugins")
 if plugins_dir not in sys.path:
     sys.path.insert(0, plugins_dir)
 
-# Now import viz directly since we added plugins dir to path
-import viz
-
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+# Now import viz directly since we added plugins dir to path
+import viz
 from viz import (
     _load_config,
     _scrub_metadata,
-    validate_panel_id,
-    plot_flakiness_trend,
-    plot_coverage_history,
-    plot_metric_trend,
     batch_export_panels,
     get_registered_viz_panels,
+    plot_coverage_history,
+    plot_flakiness_trend,
+    plot_metric_trend,
+    validate_panel_id,
 )
 
 # ==============================================================================
@@ -188,15 +188,21 @@ def test_get_panels_for_role():
     """Test role-based panel filtering."""
 
     # Register panels with different roles
-    @viz.register_viz_panel(panel_id="test_role_admin", title="Admin Panel", roles=["admin"])
+    @viz.register_viz_panel(
+        panel_id="test_role_admin", title="Admin Panel", roles=["admin"]
+    )
     def admin_panel():
         pass
 
-    @viz.register_viz_panel(panel_id="test_role_user", title="User Panel", roles=["user", "admin"])
+    @viz.register_viz_panel(
+        panel_id="test_role_user", title="User Panel", roles=["user", "admin"]
+    )
     def user_panel():
         pass
 
-    @viz.register_viz_panel(panel_id="test_role_public", title="Public Panel", roles=None)
+    @viz.register_viz_panel(
+        panel_id="test_role_public", title="Public Panel", roles=None
+    )
     def public_panel():
         pass
 
@@ -249,7 +255,9 @@ async def test_batch_export_panels(mock_matplotlib, mock_filesystem):
     try:
         with patch.object(viz.CONFIG, "default_plot_format", "png"):
             with patch.object(viz.CONFIG, "redis_cache_url", None):
-                result = await batch_export_panels(panel_ids=["test_export"], format="png")
+                result = await batch_export_panels(
+                    panel_ids=["test_export"], format="png"
+                )
 
                 assert "test_export" in result
                 assert result["test_export"] is not None
@@ -296,7 +304,9 @@ def test_post_plot_hooks():
 
     mock_plot = MagicMock()
     test_metadata = {"original": "metadata"}
-    result_plot, result_metadata = viz.post_plot_hook("plotly", mock_plot, test_metadata)
+    result_plot, result_metadata = viz.post_plot_hook(
+        "plotly", mock_plot, test_metadata
+    )
 
     assert result_plot == mock_plot
     assert result_metadata["original"] == "metadata"

@@ -16,7 +16,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict
 
-
 # Absolute path per your message; also support running in CI on non-Windows.
 CONFIG_PATHS = [
     Path(r"D:\Code_Factory\self_fixing_engineer\arbiter\arbiter_config.json"),
@@ -28,7 +27,9 @@ def _load_config_text() -> str:
     for p in CONFIG_PATHS:
         if p.exists():
             return p.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"Could not find arbiter_config.json in any of: {CONFIG_PATHS}")
+    raise FileNotFoundError(
+        f"Could not find arbiter_config.json in any of: {CONFIG_PATHS}"
+    )
 
 
 # --- Env placeholder expansion (${VAR} and ${VAR:-default}) with type coercion ---
@@ -144,7 +145,9 @@ def test_security_regex_is_valid_and_sane():
     pat = cfg["security"]["valid_domain_pattern"]
     rx = re.compile(pat)
     assert rx.fullmatch("abc_123-XYZ")
-    assert not rx.fullmatch("invalid.domain.com")  # dots are disallowed by this pattern (by design)
+    assert not rx.fullmatch(
+        "invalid.domain.com"
+    )  # dots are disallowed by this pattern (by design)
 
 
 def test_data_explorer_defaults_and_ranges(monkeypatch):
@@ -156,7 +159,9 @@ def test_data_explorer_defaults_and_ranges(monkeypatch):
     assert dx["enabled"] is True
     assert isinstance(dx["max_depth"], int) and dx["max_depth"] >= 0
     assert isinstance(dx["max_pages"], int) and dx["max_pages"] > 0
-    assert isinstance(dx["rate_limit_per_second"], int) and dx["rate_limit_per_second"] > 0
+    assert (
+        isinstance(dx["rate_limit_per_second"], int) and dx["rate_limit_per_second"] > 0
+    )
     assert isinstance(dx["allowed_domains"], list) and dx["allowed_domains"]
     assert isinstance(dx["compliance_flags"], dict)
     for flag in ("gdpr", "ccpa", "finra_rule_2210"):
@@ -212,7 +217,9 @@ def test_pagerduty_enabled_requires_routing_key(monkeypatch):
 
     pd = expanded["third_party_integrations"]["pagerduty"]
     assert pd["enabled"] is True
-    assert isinstance(pd["api_timeout_seconds"], float) and pd["api_timeout_seconds"] > 0
+    assert (
+        isinstance(pd["api_timeout_seconds"], float) and pd["api_timeout_seconds"] > 0
+    )
     assert pd["routing_key"] == "rkey"
 
 
@@ -226,7 +233,9 @@ def test_llm_api_key_required(monkeypatch):
     expanded = _expand_env(cfg, dict(os.environ))
 
     # Must still contain placeholder if not provided
-    assert expanded["llm"]["api_key"] == "${OPENAI_API_KEY}"  # unresolved means missing required
+    assert (
+        expanded["llm"]["api_key"] == "${OPENAI_API_KEY}"
+    )  # unresolved means missing required
 
 
 def test_app_encryption_key_required(monkeypatch):
@@ -237,4 +246,6 @@ def test_app_encryption_key_required(monkeypatch):
     monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     expanded = _expand_env(cfg, dict(os.environ))
-    assert expanded["app_settings"]["encryption_key"] == "${ENCRYPTION_KEY}"  # unresolved
+    assert (
+        expanded["app_settings"]["encryption_key"] == "${ENCRYPTION_KEY}"
+    )  # unresolved

@@ -4,15 +4,16 @@ Tests all features including genetic optimization, caching, sandboxing,
 parallel evaluation, and checkpoint persistence.
 """
 
-import pytest
 import json
-import tempfile
 import os
-import sys
-import threading
 import subprocess
-from unittest.mock import Mock, patch
+import sys
+import tempfile
+import threading
 from typing import List
+from unittest.mock import Mock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -347,7 +348,9 @@ class TestGeneticOptimizer:
 
         optimizer = GeneticOptimizer(basic_config_space, config)
 
-        best_config = optimizer.evolve(test_function=simple_test_function, verbose=False)
+        best_config = optimizer.evolve(
+            test_function=simple_test_function, verbose=False
+        )
 
         assert best_config is not None
         assert optimizer.best_fitness > float("-inf")
@@ -441,7 +444,9 @@ class TestGeneticOptimizer:
 
             assert new_optimizer.best_fitness == original_fitness
             assert new_optimizer.best_individual == original_individual
-            assert len(new_optimizer.evolution_history) == len(optimizer.evolution_history)
+            assert len(new_optimizer.evolution_history) == len(
+                optimizer.evolution_history
+            )
 
         finally:
             os.unlink(checkpoint_path)
@@ -450,7 +455,9 @@ class TestGeneticOptimizer:
         """Test parallel fitness evaluation"""
         # Note: Current implementation doesn't actually parallelize
         # This test verifies that evaluation works correctly
-        config = EvolutionConfig(generations=2, population_size=10, max_parallel_evaluations=4)
+        config = EvolutionConfig(
+            generations=2, population_size=10, max_parallel_evaluations=4
+        )
 
         evaluation_count = 0
 
@@ -526,7 +533,9 @@ class TestSandboxing:
     def test_sandboxed_subprocess_check(self):
         """Test that sandboxed evaluation checks environment"""
         # Get the correct path to evolution.py
-        evolution_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "evolution.py")
+        evolution_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "evolution.py"
+        )
 
         result = subprocess.run(
             [sys.executable, evolution_path, "run_test"], capture_output=True, text=True
@@ -541,7 +550,9 @@ class TestSandboxing:
         config = {"max_connections": 500, "timeout_sec": 5}
 
         # Get the correct path to evolution.py
-        evolution_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "evolution.py")
+        evolution_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "evolution.py"
+        )
 
         process = subprocess.Popen(
             [sys.executable, evolution_path, "run_test"],
@@ -683,7 +694,9 @@ class TestIntegration:
         assert "dropout" in best_config
 
         # Best config should be close to optimal (relaxed bounds for stochastic optimization)
-        assert 0.001 < best_config["learning_rate"] < 0.025  # Further relaxed from 0.005-0.02
+        assert (
+            0.001 < best_config["learning_rate"] < 0.025
+        )  # Further relaxed from 0.005-0.02
         assert 40 < best_config["batch_size"] < 88  # Relaxed from 48-80
         assert 0.1 < best_config["dropout"] < 0.3
 

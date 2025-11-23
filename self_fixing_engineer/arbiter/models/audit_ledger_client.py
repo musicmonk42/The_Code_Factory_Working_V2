@@ -1,14 +1,23 @@
 import asyncio
-import logging
+import hashlib
 import json
+import logging
 import os
+import re
 import time
 import uuid
-import re
-import hashlib
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Type, Final, Set
 from collections import OrderedDict
+from datetime import datetime, timezone
+from typing import Any, Dict, Final, List, Optional, Set, Type, Union
+
+# Import tenacity for retries with exponential backoff
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 # requirements.txt (create separately):
 # web3==7.13.0
@@ -25,29 +34,21 @@ from collections import OrderedDict
 # postgres_client.py # Assumed to be available from SFE codebase
 # fabric_sdk_py==0.9.0 # Optional for Hyperledger Fabric
 
-# Import tenacity for retries with exponential backoff
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential_jitter,
-    retry_if_exception_type,
-    before_sleep_log,
-)
 
 # Web3.py for Ethereum/EVM integration
 try:
     # Use AsyncWebsocketProvider for real-time updates and more efficient polling
+    from eth_account import Account
+    from eth_utils import to_checksum_address
     from web3 import AsyncWeb3
-    from web3.providers.async_websocket import AsyncWebsocketProvider
-    from web3.middleware import geth_poa_middleware
     from web3.exceptions import (
-        TransactionNotFound,
         ContractCustomError,
         ContractLogicError,
         TimeExhausted,
+        TransactionNotFound,
     )
-    from eth_account import Account
-    from eth_utils import to_checksum_address
+    from web3.middleware import geth_poa_middleware
+    from web3.providers.async_websocket import AsyncWebsocketProvider
 
     ETHEREUM_AVAILABLE: Final[bool] = True
     Account.enable_unaudited_hdwallet_features()
@@ -137,22 +138,22 @@ if not HYPERLEDGER_FABRIC_AVAILABLE:
         "Hyperledger Fabric SDK is not supported in this version. Operations will raise NotImplementedError."
     )
 
-# Prometheus Metrics
-from prometheus_client import Counter, Gauge, Histogram
-
-# OpenTelemetry Tracing - Use centralized configuration
-from opentelemetry.trace import Status, StatusCode
-from arbiter.otel_config import get_tracer
-
-# Pydantic for input validation
-from pydantic import BaseModel, Field, constr, field_validator, model_validator
-
 # AWS SDK for Secrets Manager
 import boto3
-from botocore.exceptions import ClientError
 
 # Sentry for Error Reporting
 import sentry_sdk
+from arbiter.otel_config import get_tracer
+from botocore.exceptions import ClientError
+
+# OpenTelemetry Tracing - Use centralized configuration
+from opentelemetry.trace import Status, StatusCode
+
+# Prometheus Metrics
+from prometheus_client import Counter, Gauge, Histogram
+
+# Pydantic for input validation
+from pydantic import BaseModel, Field, constr, field_validator, model_validator
 
 # Logger initialization
 logger = logging.getLogger(__name__)
@@ -236,7 +237,8 @@ class SecretScrubber(logging.Filter):
         # Redact dictionary values
         if isinstance(record.args, dict):
             record.args = {
-                k: ("<redacted>" if "key" in str(k).lower() else v) for k, v in record.args.items()
+                k: ("<redacted>" if "key" in str(k).lower() else v)
+                for k, v in record.args.items()
             }
         # Redact hex strings that look like private keys
         record.msg = re.sub(r"0x[a-fA-F0-9]{64}", "<redacted_key>", str(record.msg))
@@ -272,16 +274,23 @@ class AuditEvent(BaseModel):
         """Validates that the JSON-serialized details payload is within size limits."""
         # Canonicalize JSON for deterministic size calculation
         if (
-            len(json.dumps(v, sort_keys=True, default=str, separators=(",", ":"))) > 10240
+            len(json.dumps(v, sort_keys=True, default=str, separators=(",", ":")))
+            > 10240
         ):  # 10 KB limit
             raise ValueError("Details JSON payload exceeds the 10KB size limit.")
         return v
 
     @model_validator(mode="before")
     def hash_pii(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "details" in data and "user_id" in data["details"]:
+        if (
+            isinstance(data, dict)
+            and "details" in data
+            and "user_id" in data["details"]
+        ):
             details = data["details"]
-            details["user_id_hash"] = hashlib.sha256(str(details["user_id"]).encode()).hexdigest()
+            details["user_id_hash"] = hashlib.sha256(
+                str(details["user_id"]).encode()
+            ).hexdigest()
             del details["user_id"]
             data["details"] = details
         return data
@@ -352,12 +361,16 @@ class AuditLedgerClient:
             os.getenv("BLOCK_POLL_INTERVAL_SEC", "1.0")
         )
         self.max_parallel_tx: Final[int] = int(os.getenv("MAX_PARALLEL_TX", "1"))
-        self.default_gas_limit: Final[int] = int(os.getenv("DEFAULT_GAS_LIMIT", "300000"))
+        self.default_gas_limit: Final[int] = int(
+            os.getenv("DEFAULT_GAS_LIMIT", "300000")
+        )
         self.base_fee_gwei_cap: Final[int] = int(os.getenv("BASE_FEE_GWEI_CAP", "500"))
         self.enable_multisig: Final[bool] = (
             os.getenv("ENABLE_GNOSIS_SAFE", "false").lower() == "true"
         )
-        self.details_field: Final[str] = os.getenv("CONTRACT_DETAILS_FIELD", "detailsJson")
+        self.details_field: Final[str] = os.getenv(
+            "CONTRACT_DETAILS_FIELD", "detailsJson"
+        )
 
         self.tracer = tracer
 
@@ -407,7 +420,9 @@ class AuditLedgerClient:
         self.contract = None
         self.account = None
         self._is_connected = False  # Internal state for connection status
-        self.semaphore = asyncio.Semaphore(self.max_parallel_tx)  # Limit concurrent transactions
+        self.semaphore = asyncio.Semaphore(
+            self.max_parallel_tx
+        )  # Limit concurrent transactions
 
         # Initialize OmniCore's ExplainAudit client
         self.explain_audit = ExplainAudit(dlt_client=self)
@@ -436,17 +451,25 @@ class AuditLedgerClient:
             )
             try:
                 session = boto3.session.Session()
-                client = session.client(service_name="secretsmanager", region_name=region_name)
-                get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+                client = session.client(
+                    service_name="secretsmanager", region_name=region_name
+                )
+                get_secret_value_response = client.get_secret_value(
+                    SecretId=secret_name
+                )
                 secret = get_secret_value_response.get("SecretString")
 
                 if not secret:
-                    raise ValueError("SecretString is empty in AWS Secrets Manager response.")
+                    raise ValueError(
+                        "SecretString is empty in AWS Secrets Manager response."
+                    )
 
                 # Try to parse JSON to handle different secret formats
                 try:
                     maybe_json = json.loads(secret)
-                    secret = maybe_json.get("private_key") or maybe_json.get("ETHEREUM_PRIVATE_KEY")
+                    secret = maybe_json.get("private_key") or maybe_json.get(
+                        "ETHEREUM_PRIVATE_KEY"
+                    )
                     if not secret:
                         raise ValueError(
                             "Neither 'private_key' nor 'ETHEREUM_PRIVATE_KEY' found in secret JSON"
@@ -455,7 +478,9 @@ class AuditLedgerClient:
                     # Treat as plain string
                     pass
 
-                logger.info("Successfully retrieved private key from AWS Secrets Manager.")
+                logger.info(
+                    "Successfully retrieved private key from AWS Secrets Manager."
+                )
                 return secret
             except ClientError as e:
                 with sentry_sdk.push_scope() as scope:
@@ -488,13 +513,17 @@ class AuditLedgerClient:
                 "Key rotation not supported for env var fallback. Use Secrets Manager for production."
             )
             return
-        secret_name = os.getenv("ETHEREUM_PRIVATE_KEY_SECRET_NAME", "ethereum/audit_private_key")
+        secret_name = os.getenv(
+            "ETHEREUM_PRIVATE_KEY_SECRET_NAME", "ethereum/audit_private_key"
+        )
         region_name = os.getenv("AWS_REGION", "us-east-1")
         try:
             # Generate new key using eth-account for offline generation
             new_key = Account.create().key.hex()
             session = boto3.session.Session()
-            client = session.client(service_name="secretsmanager", region_name=region_name)
+            client = session.client(
+                service_name="secretsmanager", region_name=region_name
+            )
             # Update the secret value
             client.put_secret_value(SecretId=secret_name, SecretString=new_key)
             self.private_key = new_key
@@ -595,7 +624,9 @@ class AuditLedgerClient:
 
                     # Normalize address to checksummed format
                     addr = to_checksum_address(self.contract_address)
-                    self.contract = self.web3.eth.contract(address=addr, abi=self.contract_abi)
+                    self.contract = self.web3.eth.contract(
+                        address=addr, abi=self.contract_abi
+                    )
                     logger.info(f"Ethereum contract loaded: {self.contract_address}")
 
                     self.account = Account.from_key(self.private_key)
@@ -606,7 +637,9 @@ class AuditLedgerClient:
                         f"Successfully connected to Ethereum DLT at {self.audit_ledger_url}"
                     )
                 elif self.dlt_type == "hyperledger_fabric":
-                    raise DLTUnsupportedError("Hyperledger Fabric is not supported in this build.")
+                    raise DLTUnsupportedError(
+                        "Hyperledger Fabric is not supported in this build."
+                    )
                 else:
                     raise ValueError(f"Unsupported DLT type: {self.dlt_type}")
 
@@ -646,7 +679,9 @@ class AuditLedgerClient:
                     f"Failed to connect to DLT {self.dlt_type} at {self.audit_ledger_url}: {e}",
                     exc_info=logger.isEnabledFor(logging.DEBUG),
                 )
-                raise DLTConnectionError(f"Failed to connect to {self.dlt_type} DLT: {e}") from e
+                raise DLTConnectionError(
+                    f"Failed to connect to {self.dlt_type} DLT: {e}"
+                ) from e
             except Exception as e:
                 with sentry_sdk.push_scope() as scope:
                     scope.set_tag("dlt_type", self.dlt_type)
@@ -688,7 +723,9 @@ class AuditLedgerClient:
                 logger.debug(f"{self.dlt_type} client is not connected.")
             return
 
-        with self.tracer.start_as_current_span(f"{self.dlt_type}_dlt_disconnect") as span:
+        with self.tracer.start_as_current_span(
+            f"{self.dlt_type}_dlt_disconnect"
+        ) as span:
             start_time = time.monotonic()
             DLT_CALLS_TOTAL.labels(
                 dlt_type=self.dlt_type,
@@ -731,7 +768,9 @@ class AuditLedgerClient:
                 ).inc()
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Failed to disconnect: {e}"))
-                logger.error(f"Failed to disconnect from DLT {self.dlt_type}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to disconnect from DLT {self.dlt_type}: {e}", exc_info=True
+                )
                 raise DLTConnectionError(
                     f"Failed to disconnect from {self.dlt_type} DLT: {e}"
                 ) from e
@@ -813,7 +852,9 @@ class AuditLedgerClient:
                 self._recent_ids.popitem(last=False)
 
         async with self.semaphore:
-            with self.tracer.start_as_current_span(f"{self.dlt_type}_dlt_log_event") as span:
+            with self.tracer.start_as_current_span(
+                f"{self.dlt_type}_dlt_log_event"
+            ) as span:
                 span.set_attribute("dlt.event_type", event.event_type)
                 span.set_attribute("dlt.operator", event.operator)
                 span.set_attribute(
@@ -829,7 +870,9 @@ class AuditLedgerClient:
                     status="attempt",
                     **self.metric_labels,
                 ).inc()
-                DLT_TRANSACTIONS_PENDING.labels(dlt_type=self.dlt_type, **self.metric_labels).inc()
+                DLT_TRANSACTIONS_PENDING.labels(
+                    dlt_type=self.dlt_type, **self.metric_labels
+                ).inc()
 
                 tx_hash = ""  # Default mock hash
                 try:
@@ -876,13 +919,17 @@ class AuditLedgerClient:
                         latest_block = await self.web3.eth.get_block("latest")
                         base_fee_per_gas = latest_block["baseFeePerGas"]
 
-                        if base_fee_per_gas > self.web3.to_wei(self.base_fee_gwei_cap, "gwei"):
+                        if base_fee_per_gas > self.web3.to_wei(
+                            self.base_fee_gwei_cap, "gwei"
+                        ):
                             raise DLTTransactionError(
                                 f"Base fee ({self.web3.from_wei(base_fee_per_gas, 'gwei')} gwei) exceeds configured cap ({self.base_fee_gwei_cap} gwei)."
                             )
 
                         max_priority_fee_per_gas = await self.web3.eth.max_priority_fee
-                        suggested_max_fee = (2 * base_fee_per_gas) + max_priority_fee_per_gas
+                        suggested_max_fee = (
+                            2 * base_fee_per_gas
+                        ) + max_priority_fee_per_gas
                         max_fee_per_gas = min(
                             suggested_max_fee,
                             self.web3.to_wei(self.gas_cap_gwei, "gwei"),
@@ -945,7 +992,9 @@ class AuditLedgerClient:
                         # Wait for transaction to be mined and confirmed
                         await self.wait_for_confirmations(tx_hash)
 
-                        logger.info(f"Ethereum DLT event logged and confirmed. Tx Hash: {tx_hash}.")
+                        logger.info(
+                            f"Ethereum DLT event logged and confirmed. Tx Hash: {tx_hash}."
+                        )
                         span.set_attribute("dlt.tx_hash", tx_hash)
 
                         receipt = await self.web3.eth.get_transaction_receipt(tx_hash)
@@ -962,7 +1011,9 @@ class AuditLedgerClient:
                         )
 
                     else:
-                        raise ValueError(f"Unsupported DLT type for logging: {self.dlt_type}")
+                        raise ValueError(
+                            f"Unsupported DLT type for logging: {self.dlt_type}"
+                        )
 
                     DLT_CALLS_TOTAL.labels(
                         dlt_type=self.dlt_type,
@@ -1024,7 +1075,9 @@ class AuditLedgerClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Transaction timeout/not found: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Transaction timeout/not found: {e}")
+                    )
                     logger.warning(
                         f"DLT Transaction Error (timeout/not found) for event {event.event_type} to {self.dlt_type}. Tenacity will retry: {e}"
                     )
@@ -1055,7 +1108,9 @@ class AuditLedgerClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to log event: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to log event: {e}")
+                    )
                     logger.error(
                         f"Failed to log DLT event {event.event_type} to {self.dlt_type}: {e}",
                         exc_info=logger.isEnabledFor(logging.DEBUG),
@@ -1082,7 +1137,9 @@ class AuditLedgerClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to log event: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to log event: {e}")
+                    )
                     logger.error(
                         f"An unexpected error occurred logging DLT event {event.event_type} to {self.dlt_type}: {e}",
                         exc_info=True,
@@ -1126,7 +1183,9 @@ class AuditLedgerClient:
             raise DLTUnsupportedError("Batch logging not supported by the contract ABI")
 
         async with self.semaphore:
-            with self.tracer.start_as_current_span(f"{self.dlt_type}_dlt_batch_log_events") as span:
+            with self.tracer.start_as_current_span(
+                f"{self.dlt_type}_dlt_batch_log_events"
+            ) as span:
                 span.set_attribute("batch_size", len(events))
                 start_time = time.monotonic()
                 DLT_CALLS_TOTAL.labels(
@@ -1135,14 +1194,17 @@ class AuditLedgerClient:
                     status="attempt",
                     **self.metric_labels,
                 ).inc()
-                DLT_TRANSACTIONS_PENDING.labels(dlt_type=self.dlt_type, **self.metric_labels).inc()
+                DLT_TRANSACTIONS_PENDING.labels(
+                    dlt_type=self.dlt_type, **self.metric_labels
+                ).inc()
                 try:
                     # Prepare batch arrays for contract call
                     event_types = [e.event_type for e in events]
                     operators = [e.operator for e in events]
                     correlation_ids = [e.correlation_id or "" for e in events]
                     details_jsons = [
-                        json.dumps(e.details, sort_keys=True, default=str) for e in events
+                        json.dumps(e.details, sort_keys=True, default=str)
+                        for e in events
                     ]
 
                     nonce = await self.web3.eth.get_transaction_count(
@@ -1152,13 +1214,17 @@ class AuditLedgerClient:
                     latest_block = await self.web3.eth.get_block("latest")
                     base_fee_per_gas = latest_block["baseFeePerGas"]
 
-                    if base_fee_per_gas > self.web3.to_wei(self.base_fee_gwei_cap, "gwei"):
+                    if base_fee_per_gas > self.web3.to_wei(
+                        self.base_fee_gwei_cap, "gwei"
+                    ):
                         raise DLTTransactionError(
                             f"Base fee ({self.web3.from_wei(base_fee_per_gas, 'gwei')} gwei) exceeds configured cap ({self.base_fee_gwei_cap} gwei)."
                         )
 
                     max_priority_fee_per_gas = await self.web3.eth.max_priority_fee
-                    suggested_max_fee = (2 * base_fee_per_gas) + max_priority_fee_per_gas
+                    suggested_max_fee = (
+                        2 * base_fee_per_gas
+                    ) + max_priority_fee_per_gas
                     max_fee_per_gas = min(
                         suggested_max_fee, self.web3.to_wei(self.gas_cap_gwei, "gwei")
                     )
@@ -1182,7 +1248,9 @@ class AuditLedgerClient:
                         gas_limit = self.default_gas_limit
                         span.set_attribute("dlt.gas_estimate_failed", True)
 
-                    gas_buffer = 1.1 if chain_id not in {10, 42161} else 1.05  # L2 optimization
+                    gas_buffer = (
+                        1.1 if chain_id not in {10, 42161} else 1.05
+                    )  # L2 optimization
                     transaction_dict["gas"] = int(gas_limit * gas_buffer)
 
                     built_txn = self.contract.functions.logEvents(
@@ -1211,7 +1279,9 @@ class AuditLedgerClient:
                             f"Batch transaction reverted. Tx Hash: {tx_hash}. Receipt: {receipt}"
                         )
 
-                    logger.info(f"Batch event logged to {self.dlt_type}. Transaction ID: {tx_hash}")
+                    logger.info(
+                        f"Batch event logged to {self.dlt_type}. Transaction ID: {tx_hash}"
+                    )
                     DLT_CALLS_TOTAL.labels(
                         dlt_type=self.dlt_type,
                         operation="batch_log_events",
@@ -1272,7 +1342,9 @@ class AuditLedgerClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Transaction timeout/not found: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Transaction timeout/not found: {e}")
+                    )
                     raise DLTTransactionError(
                         f"Failed to batch log events (transaction timeout/not found): {e}"
                     ) from e
@@ -1295,7 +1367,9 @@ class AuditLedgerClient:
                         **self.metric_labels,
                     ).inc()
                     span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, f"Failed to batch log events: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Failed to batch log events: {e}")
+                    )
                     logger.error(
                         f"Failed to batch log events to {self.dlt_type}: {e}",
                         exc_info=True,
@@ -1332,13 +1406,17 @@ class AuditLedgerClient:
             # Return the arguments of the first event log found
             return logs[0]["args"]
         except TransactionNotFound as e:
-            logger.warning(f"Could not find transaction or logs for hash {tx_hash}: {e}")
+            logger.warning(
+                f"Could not find transaction or logs for hash {tx_hash}: {e}"
+            )
             raise
         except Exception as e:
             with sentry_sdk.push_scope() as scope:
                 scope.set_tag("tx_hash", tx_hash)
                 sentry_sdk.capture_exception(e)
-            logger.error(f"Error retrieving event for tx_hash {tx_hash}: {e}", exc_info=True)
+            logger.error(
+                f"Error retrieving event for tx_hash {tx_hash}: {e}", exc_info=True
+            )
             raise DLTTransactionError(f"Failed to retrieve event data: {e}") from e
 
     async def get_events_by_type(
@@ -1367,12 +1445,16 @@ class AuditLedgerClient:
         try:
             current_block = start_block
             final_block = (
-                await self.web3.eth.block_number if end_block == "latest" else int(end_block)
+                await self.web3.eth.block_number
+                if end_block == "latest"
+                else int(end_block)
             )
 
             while current_block <= final_block:
                 chunk_end = min(current_block + chunk_size, final_block)
-                logger.debug("Fetching logs from block %s to %s...", current_block, chunk_end)
+                logger.debug(
+                    "Fetching logs from block %s to %s...", current_block, chunk_end
+                )
 
                 event_filter_params = {
                     "fromBlock": current_block,
@@ -1380,7 +1462,9 @@ class AuditLedgerClient:
                     "argument_filters": {"eventType": event_type},
                 }
 
-                logs = await self.contract.events.LogEvent.get_logs(**event_filter_params)
+                logs = await self.contract.events.LogEvent.get_logs(
+                    **event_filter_params
+                )
 
                 all_logs.extend([log["args"] for log in logs])
                 current_block = chunk_end + 1
@@ -1393,10 +1477,16 @@ class AuditLedgerClient:
                 scope.set_tag("start_block", start_block)
                 scope.set_tag("end_block", end_block)
                 sentry_sdk.capture_exception(e)
-            logger.error(f"Error retrieving events by type '{event_type}': {e}", exc_info=True)
-            raise DLTTransactionError(f"Failed to retrieve event data by type: {e}") from e
+            logger.error(
+                f"Error retrieving events by type '{event_type}': {e}", exc_info=True
+            )
+            raise DLTTransactionError(
+                f"Failed to retrieve event data by type: {e}"
+            ) from e
 
-    async def verify_event(self, tx_hash: str, expected_details: Dict[str, Any]) -> bool:
+    async def verify_event(
+        self, tx_hash: str, expected_details: Dict[str, Any]
+    ) -> bool:
         """
         Verifies that an on-chain event's details payload matches an expected dictionary.
         """
@@ -1418,7 +1508,9 @@ class AuditLedgerClient:
         without altering the immutable blockchain record.
         """
         if not POSTGRES_CLIENT_AVAILABLE:
-            logger.warning("Postgres client not available. Cannot flag event for redaction.")
+            logger.warning(
+                "Postgres client not available. Cannot flag event for redaction."
+            )
             return
 
         # Simple length validation for sanity
@@ -1439,13 +1531,17 @@ class AuditLedgerClient:
                     },
                     id_field="id",
                 )
-            logger.info(f"Flagged tx {tx_hash} for redaction: {reason}. Hash: {details_hash}")
+            logger.info(
+                f"Flagged tx {tx_hash} for redaction: {reason}. Hash: {details_hash}"
+            )
         except Exception as e:
             with sentry_sdk.push_scope() as scope:
                 scope.set_tag("tx_hash", tx_hash)
                 scope.set_tag("operation", "flag_redaction")
                 sentry_sdk.capture_exception(e)
-            logger.error(f"Failed to flag event {tx_hash} for redaction: {e}", exc_info=True)
+            logger.error(
+                f"Failed to flag event {tx_hash} for redaction: {e}", exc_info=True
+            )
             raise DLTError(f"Failed to flag event for redaction: {e}") from e
 
     async def wait_for_confirmations(self, tx_hash: str) -> None:
@@ -1453,7 +1549,9 @@ class AuditLedgerClient:
         Waits for a specified number of block confirmations for a transaction to mitigate reorg risk.
         Uses polling for new blocks.
         """
-        logger.debug(f"Waiting for {self.confirmations} confirmations for tx {tx_hash}...")
+        logger.debug(
+            f"Waiting for {self.confirmations} confirmations for tx {tx_hash}..."
+        )
 
         try:
             # First, wait for the transaction to be included in a block
@@ -1475,13 +1573,17 @@ class AuditLedgerClient:
                 await asyncio.sleep(self.block_poll_interval_sec)
 
         except TransactionNotFound:
-            raise DLTTransactionError(f"Transaction {tx_hash} was not found, likely reorged.")
+            raise DLTTransactionError(
+                f"Transaction {tx_hash} was not found, likely reorged."
+            )
 
     async def is_connected(self) -> bool:
         """
         Performs a health check to determine if the client is connected to the DLT.
         """
-        with self.tracer.start_as_current_span(f"{self.dlt_type}_dlt_is_connected") as span:
+        with self.tracer.start_as_current_span(
+            f"{self.dlt_type}_dlt_is_connected"
+        ) as span:
             start_time = time.monotonic()
             DLT_CALLS_TOTAL.labels(
                 dlt_type=self.dlt_type,
@@ -1496,17 +1598,23 @@ class AuditLedgerClient:
                 if self.dlt_type == "ethereum":
                     connected = await self.web3.is_connected()
                     if not connected:
-                        self._is_connected = False  # Update internal state if connection dropped
+                        self._is_connected = (
+                            False  # Update internal state if connection dropped
+                        )
                     DLT_CALLS_TOTAL.labels(
                         dlt_type=self.dlt_type,
                         operation="is_connected",
                         status="success" if connected else "failure",
                         **self.metric_labels,
                     ).inc()
-                    span.set_status(Status(StatusCode.OK if connected else StatusCode.ERROR))
+                    span.set_status(
+                        Status(StatusCode.OK if connected else StatusCode.ERROR)
+                    )
                     return connected
                 elif self.dlt_type == "hyperledger_fabric":
-                    raise DLTUnsupportedError("Hyperledger Fabric is not supported in this build.")
+                    raise DLTUnsupportedError(
+                        "Hyperledger Fabric is not supported in this build."
+                    )
                 else:
                     return False  # For unsupported types, assume not connected
             except DLTUnsupportedError as e:
@@ -1593,7 +1701,9 @@ async def main() -> None:
         logger.warning(f"Skipping Ethereum tests due to missing configuration: {e}.")
         ethereum_client = None
     except DLTError as e:
-        logger.warning(f"Skipping Ethereum tests due to production config enforcement: {e}")
+        logger.warning(
+            f"Skipping Ethereum tests due to production config enforcement: {e}"
+        )
         ethereum_client = None
 
     # --- Test Clients ---
@@ -1684,7 +1794,9 @@ async def main() -> None:
                 await asyncio.sleep(0.1)
 
             async def flag_for_redaction(self, tx_hash: str, reason: str) -> None:
-                logger.info(f"Mock flagging tx {tx_hash} for redaction. Reason: {reason}")
+                logger.info(
+                    f"Mock flagging tx {tx_hash} for redaction. Reason: {reason}"
+                )
                 await asyncio.sleep(0.01)
 
         clients.append(MockAuditLedgerClient())
@@ -1693,7 +1805,9 @@ async def main() -> None:
         logger.info(f"\n--- Testing {client.dlt_type} DLT Client ---")
         async with client:
             if not await client.is_connected():
-                logger.error(f"Client {client.dlt_type} failed to connect. Skipping tests.")
+                logger.error(
+                    f"Client {client.dlt_type} failed to connect. Skipping tests."
+                )
                 continue
 
             try:
@@ -1704,14 +1818,20 @@ async def main() -> None:
                     "file": "main.py",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
-                tx_hash = await client.log_event("agent:code_update", event_details, "sfe_system")
-                logger.info(f"Logged event to {client.dlt_type}. Transaction ID: {tx_hash}")
+                tx_hash = await client.log_event(
+                    "agent:code_update", event_details, "sfe_system"
+                )
+                logger.info(
+                    f"Logged event to {client.dlt_type}. Transaction ID: {tx_hash}"
+                )
 
                 # Test idempotency
                 idempotent_tx_hash = await client.log_event(
                     "agent:code_update", event_details, "sfe_system"
                 )
-                logger.info(f"Second log with same payload returned: {idempotent_tx_hash}")
+                logger.info(
+                    f"Second log with same payload returned: {idempotent_tx_hash}"
+                )
                 assert "duplicate_local" in idempotent_tx_hash
 
                 # Test Pydantic validation failure
@@ -1735,13 +1855,17 @@ async def main() -> None:
                     if hasattr(client, "batch_log_events"):
                         logger.info("Testing batch logging...")
                         batch_events = [
-                            AuditEvent(event_type="test:batch", details={"id": i}).model_dump()
+                            AuditEvent(
+                                event_type="test:batch", details={"id": i}
+                            ).model_dump()
                             for i in range(5)
                         ]
                         batch_tx_hash = await client.batch_log_events(
                             [AuditEvent(**e) for e in batch_events]
                         )
-                        logger.info(f"Batch logged successfully. Tx ID: {batch_tx_hash}")
+                        logger.info(
+                            f"Batch logged successfully. Tx ID: {batch_tx_hash}"
+                        )
                 except DLTUnsupportedError as e:
                     logger.info(f"Batch logging not supported: {e}")
 

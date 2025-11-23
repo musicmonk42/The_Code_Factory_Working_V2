@@ -1,24 +1,25 @@
 from __future__ import annotations
-import logging
-import json
-import os
+
 import asyncio
-import shutil
-import re
-import sys
-import tempfile
-import traceback
-import time
+import functools
 import hashlib
 import html
-from typing import Dict, Any, TypedDict, Optional, Callable, Awaitable
-from datetime import datetime, timezone
-from pathlib import Path
-import functools
 import importlib.util
-import warnings
 import inspect
+import json
+import logging
+import os
+import re
+import shutil
+import sys
+import tempfile
+import time
+import traceback
+import warnings
+from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, Optional, TypedDict
 
 # --- Optional Dependency Guards and Fallbacks ---
 # Consolidate imports and provide robust fallbacks
@@ -49,9 +50,9 @@ except ImportError:
 try:
     import tenacity
 except ImportError:
-    import types
-    import functools
     import asyncio
+    import functools
+    import types
 
     def _retry_noop(**_kwargs):
         # behaves like @retry(...): returns a decorator
@@ -89,7 +90,7 @@ except ImportError:
 
 # --- BEGIN: metrics fallbacks ---
 try:
-    from prometheus_client import Counter, Histogram, REGISTRY  # type: ignore
+    from prometheus_client import REGISTRY, Counter, Histogram  # type: ignore
 
     _PROM_AVAILABLE = True
 except Exception:
@@ -97,7 +98,9 @@ except Exception:
     Histogram = None  # type: ignore
     REGISTRY = None
     _PROM_AVAILABLE = False
-    warnings.warn("prometheus_client not available. Metrics will be disabled.", RuntimeWarning)
+    warnings.warn(
+        "prometheus_client not available. Metrics will be disabled.", RuntimeWarning
+    )
 
 
 class _NoopTimerCtx:
@@ -163,15 +166,15 @@ if _al is None or not hasattr(_al, "log_event"):
 
 # --- Cross-Module Imports ---
 from .runtime import (
-    redact_sensitive,
     AIOFILES_AVAILABLE,
-    PYTEST_AVAILABLE,
-    COVERAGE_AVAILABLE,
-    BANDIT_AVAILABLE,
-    LOCUST_AVAILABLE,
     AUDIT_LOGGER_AVAILABLE,
-    audit_logger as real_audit_logger_from_runtime,
+    BANDIT_AVAILABLE,
+    COVERAGE_AVAILABLE,
+    LOCUST_AVAILABLE,
+    PYTEST_AVAILABLE,
 )
+from .runtime import audit_logger as real_audit_logger_from_runtime
+from .runtime import redact_sensitive
 
 _AIOFILES_OK = AIOFILES_AVAILABLE
 
@@ -267,7 +270,9 @@ def _param_profile(func):
     """Inspects a function's signature and caches the result."""
     sig = inspect.signature(func)
     params = sig.parameters
-    accepts_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    accepts_var_kw = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+    )
     names = set(params.keys())
     return names, accepts_var_kw
 
@@ -314,7 +319,9 @@ def _sanitize_input(text: str) -> str:
     if not _BLEACH_OK:
         # Fix: Use html.escape as a fallback when bleach is not available.
         if not _BLEACH_WARNED:
-            logger.warning("Bleach is not installed. Falling back to html.escape for sanitization.")
+            logger.warning(
+                "Bleach is not installed. Falling back to html.escape for sanitization."
+            )
             # We must log a critical audit event here as sanitization is a critical security control.
             if AUDIT_LOGGER_AVAILABLE:
                 try:
@@ -323,7 +330,9 @@ def _sanitize_input(text: str) -> str:
                         audit_logger.log_event(
                             kind="agent",
                             name="sanitization_failed",
-                            detail={"reason": "bleach not installed, using html.escape"},
+                            detail={
+                                "reason": "bleach not installed, using html.escape"
+                            },
                             agent_id="test_gen_agent",
                             critical=True,
                         )
@@ -414,7 +423,9 @@ def _get_test_run_timeout(config: Optional[Dict] = None) -> float:
         The timeout in seconds.
     """
     try:
-        return float((config or {}).get("TEST_RUN_TIMEOUT", os.getenv("TEST_RUN_TIMEOUT", "120")))
+        return float(
+            (config or {}).get("TEST_RUN_TIMEOUT", os.getenv("TEST_RUN_TIMEOUT", "120"))
+        )
     except (TypeError, ValueError):
         logger.warning("Invalid value for TEST_RUN_TIMEOUT, defaulting to 120.0.")
         return 120.0
@@ -630,7 +641,9 @@ Output only the JSON object."""
                 kind="agent",
                 name="planner",
                 detail={
-                    "spec_hash": hashlib.sha256(state.get("spec", "").encode()).hexdigest(),
+                    "spec_hash": hashlib.sha256(
+                        state.get("spec", "").encode()
+                    ).hexdigest(),
                     "plan": redact_sensitive(state["plan"]),
                 },
                 agent_id="test_gen_agent",
@@ -663,7 +676,9 @@ Output only the JSON object."""
                 critical=True,
             )
         except Exception as audit_e:
-            logger.warning("Failed to log audit event for error: %s", audit_e, exc_info=True)
+            logger.warning(
+                "Failed to log audit event for error: %s", audit_e, exc_info=True
+            )
 
         _metric_labels(agent_runs_total, agent_name="planner", status="failure").inc()
         logger.info("Planner agent failed")
@@ -730,9 +745,13 @@ Code:
         else:
             logger.warning("LLM returned empty code. Using a placeholder.")
             if lang == "python":
-                state["test_code"] = "import pytest\n\ndef test_placeholder():\n    assert True\n"
+                state["test_code"] = (
+                    "import pytest\n\ndef test_placeholder():\n    assert True\n"
+                )
             elif lang in ("javascript", "typescript"):
-                state["test_code"] = "test('placeholder', () => { expect(true).toBe(true); });\n"
+                state["test_code"] = (
+                    "test('placeholder', () => { expect(true).toBe(true); });\n"
+                )
             elif lang == "rust":
                 state["test_code"] = "#[test]\nfn placeholder() { assert!(true); }\n"
             else:
@@ -742,7 +761,9 @@ Code:
             await audit_logger.log_event(
                 kind="agent",
                 name="generator",
-                detail={"test_code": redact_sensitive(_truncate_log(state["test_code"]))},
+                detail={
+                    "test_code": redact_sensitive(_truncate_log(state["test_code"]))
+                },
                 agent_id="test_gen_agent",
             )
         except Exception as audit_e:
@@ -763,7 +784,9 @@ Code:
                 critical=True,
             )
         except Exception as audit_e:
-            logger.warning("Failed to log audit event for error: %s", audit_e, exc_info=True)
+            logger.warning(
+                "Failed to log audit event for error: %s", audit_e, exc_info=True
+            )
 
         _metric_labels(agent_runs_total, agent_name="generator", status="failure").inc()
         logger.info("Generator agent failed")
@@ -790,7 +813,9 @@ async def refiner_agent(
 
     max_repairs = int((config or {}).get("MAX_REPAIRS", os.getenv("MAX_REPAIRS", "3")))
     if int(state.get("repair_attempts", 0)) >= max_repairs:
-        logger.warning("Max refinement attempts (%s) reached. Skipping refinement.", max_repairs)
+        logger.warning(
+            "Max refinement attempts (%s) reached. Skipping refinement.", max_repairs
+        )
         return state
 
     if not _is_llm_available(llm):
@@ -837,7 +862,9 @@ Output only the complete, refined test code.
             await audit_logger.log_event(
                 kind="agent",
                 name="refiner",
-                detail={"refined_code": redact_sensitive(_truncate_log(state["test_code"]))},
+                detail={
+                    "refined_code": redact_sensitive(_truncate_log(state["test_code"]))
+                },
                 agent_id="test_gen_agent",
             )
         except Exception as audit_e:
@@ -856,7 +883,9 @@ Output only the complete, refined test code.
                 critical=True,
             )
         except Exception as audit_e:
-            logger.warning("Failed to log audit event for error: %s", audit_e, exc_info=True)
+            logger.warning(
+                "Failed to log audit event for error: %s", audit_e, exc_info=True
+            )
 
         _metric_labels(agent_runs_total, agent_name="refiner", status="failure").inc()
         logger.info("Refiner agent failed")
@@ -1028,7 +1057,9 @@ async def adaptive_test_executor_agent(
                 if AIOFILES_AVAILABLE:
                     if "aiofiles" not in globals():
                         import aiofiles
-                    async with aiofiles.open(code_file_path, "w", encoding="utf-8") as f:
+                    async with aiofiles.open(
+                        code_file_path, "w", encoding="utf-8"
+                    ) as f:
                         await f.write(state.get("code_under_test", ""))
                 else:
                     with open(code_file_path, "w", encoding="utf-8") as f:
@@ -1072,7 +1103,11 @@ async def adaptive_test_executor_agent(
                     "language": lang,
                 },
                 agent_id="test_gen_agent",
-                critical=(False if state["execution_results"].get("status") == "PASS" else True),
+                critical=(
+                    False
+                    if state["execution_results"].get("status") == "PASS"
+                    else True
+                ),
             )
         except Exception as audit_e:
             logger.warning("Failed to log audit event: %s", audit_e, exc_info=True)
@@ -1205,7 +1240,9 @@ async def run_pytest(
         result["output"] = output
     except Exception as e:
         logger.error("[pytest] Pytest execution failed: %s", e, exc_info=True)
-        result.update({"output": str(e), "status": "error", "reason": "Pytest execution failed"})
+        result.update(
+            {"output": str(e), "status": "error", "reason": "Pytest execution failed"}
+        )
     finally:
         result["duration_sec"] = time.perf_counter() - start_time
         if not code_path and tmpdir.exists():
@@ -1289,7 +1326,9 @@ async def run_jest(
                 s,
             )
             # side-effect: import 'code_to_test'
-            s = re.sub(r"(\bimport\s+)(['\"])code_to_test\2", r"\1\2./code_to_test\2", s)
+            s = re.sub(
+                r"(\bimport\s+)(['\"])code_to_test\2", r"\1\2./code_to_test\2", s
+            )
             # re-exports: export * from 'code_to_test'
             s = re.sub(
                 r"(\bexport\s+\*\s+from\s+)(['\"])code_to_test\2",
@@ -1391,7 +1430,9 @@ async def run_jest(
                     result["coverage"] = float(pct)
 
         except asyncio.TimeoutError:
-            logger.warning("[jest] Test run timed out after %s seconds. Killing process.", timeout)
+            logger.warning(
+                "[jest] Test run timed out after %s seconds. Killing process.", timeout
+            )
             try:
                 proc.terminate()
                 await asyncio.wait_for(proc.wait(), timeout=5)
@@ -1404,7 +1445,9 @@ async def run_jest(
             result["reason"] = "Test run timed out"
 
         except Exception as e:
-            logger.warning("[jest] JSON parsing failed, using exit code fallback: %s", e)
+            logger.warning(
+                "[jest] JSON parsing failed, using exit code fallback: %s", e
+            )
             # If the process exited successfully, treat as PASS; otherwise FAIL.
             result["status"] = "PASS" if proc.returncode == 0 else "FAIL"
             result["reason"] = "JSON parsing failed"
@@ -1414,7 +1457,9 @@ async def run_jest(
             result["output"] = output
     except Exception as e:
         logger.error("[jest] Jest execution failed: %s", e, exc_info=True)
-        result.update({"output": str(e), "status": "error", "reason": "Jest execution failed"})
+        result.update(
+            {"output": str(e), "status": "error", "reason": "Jest execution failed"}
+        )
     finally:
         result["duration_sec"] = time.perf_counter() - start_time
         if not code_path and tmpdir.exists():
@@ -1512,7 +1557,9 @@ async def run_cargo_test(
             output = (stdout + stderr).decode()
             result["status"] = "PASS" if proc.returncode == 0 else "FAIL"
         except asyncio.TimeoutError:
-            logger.warning("[cargo] Test run timed out after %s seconds. Killing process.", timeout)
+            logger.warning(
+                "[cargo] Test run timed out after %s seconds. Killing process.", timeout
+            )
             try:
                 proc.terminate()
                 await asyncio.wait_for(proc.wait(), timeout=5)
@@ -1527,7 +1574,9 @@ async def run_cargo_test(
         result["output"] = output
     except Exception as e:
         logger.error("[cargo] Cargo test failed: %s", e, exc_info=True)
-        result.update({"output": str(e), "status": "error", "reason": "Cargo test failed"})
+        result.update(
+            {"output": str(e), "status": "error", "reason": "Cargo test failed"}
+        )
     finally:
         result["duration_sec"] = time.perf_counter() - start_time
         if not code_path and tmpdir.exists():
@@ -1618,7 +1667,9 @@ async def security_agent(
                 }
 
             if stderr_decoded.strip():
-                logger.warning("Bandit produced stderr output: %s", _truncate_log(stderr_decoded))
+                logger.warning(
+                    "Bandit produced stderr output: %s", _truncate_log(stderr_decoded)
+                )
 
             state.setdefault("artifacts", {})["security_full"] = stdout_decoded
 
@@ -1630,19 +1681,25 @@ async def security_agent(
                         kind="agent",
                         name="security",
                         detail={
-                            "report": redact_sensitive(_truncate_log(str(state["security_report"])))
+                            "report": redact_sensitive(
+                                _truncate_log(str(state["security_report"]))
+                            )
                         },
                         agent_id="test_gen_agent",
                     )
             except Exception as audit_e:
                 logger.warning("Failed to log audit event: %s", audit_e, exc_info=True)
 
-            _metric_labels(agent_runs_total, agent_name="security", status="success").inc()
+            _metric_labels(
+                agent_runs_total, agent_name="security", status="success"
+            ).inc()
             return state
         except Exception as e:
             logger.error("Security agent failed: %s", e, exc_info=True)
             state["security_report"] = {"status": "error", "reason": str(e)}
-            _metric_labels(agent_runs_total, agent_name="security", status="failure").inc()
+            _metric_labels(
+                agent_runs_total, agent_name="security", status="failure"
+            ).inc()
             raise
 
 
@@ -1670,16 +1727,22 @@ async def performance_agent(
             "reason": "Locust package not installed or executable not found.",
             "report": "No report available due to missing dependency.",
         }
-        _metric_labels(agent_runs_total, agent_name="performance", status="skipped").inc()
+        _metric_labels(
+            agent_runs_total, agent_name="performance", status="skipped"
+        ).inc()
         return state
 
-    if (state.get("language") or "").lower() != "python" or not state.get("code_under_test"):
+    if (state.get("language") or "").lower() != "python" or not state.get(
+        "code_under_test"
+    ):
         state["performance_report"] = {
             "status": "skipped",
             "reason": "Language is not Python or no code provided.",
             "report": "No report available due to unsupported language or missing code.",
         }
-        _metric_labels(agent_runs_total, agent_name="performance", status="skipped").inc()
+        _metric_labels(
+            agent_runs_total, agent_name="performance", status="skipped"
+        ).inc()
         return state
 
     code_under_test = state.get("code_under_test", "")
@@ -1694,9 +1757,13 @@ async def performance_agent(
         tasks_code += f"    @task\n    def test_route_{safe_route_name}(self):\n        self.client.get('{route}')\n\n"
 
     if not tasks_code.strip():
-        logger.warning("No application routes found in code. Generating a default '/' test.")
+        logger.warning(
+            "No application routes found in code. Generating a default '/' test."
+        )
         tasks_code = "    # The following is a fallback as no application routes were detected in the code.\n"
-        tasks_code += "    @task\n    def hello_world(self):\n        self.client.get('/')\n"
+        tasks_code += (
+            "    @task\n    def hello_world(self):\n        self.client.get('/')\n"
+        )
 
     locust_script = (
         "from locust import HttpUser, task, between\n\n"
@@ -1708,14 +1775,18 @@ async def performance_agent(
     try:
         report_output = await _run_locust(locust_script, language="python")
         state["performance_report"] = {"status": "completed", "report": report_output}
-        _metric_labels(agent_runs_total, agent_name="performance", status="success").inc()
+        _metric_labels(
+            agent_runs_total, agent_name="performance", status="success"
+        ).inc()
     except Exception as e:
         state["performance_report"] = {
             "status": "error",
             "reason": str(e),
             "report": "An exception occurred during performance testing.",
         }
-        _metric_labels(agent_runs_total, agent_name="performance", status="failure").inc()
+        _metric_labels(
+            agent_runs_total, agent_name="performance", status="failure"
+        ).inc()
 
     try:
         await audit_logger.log_event(

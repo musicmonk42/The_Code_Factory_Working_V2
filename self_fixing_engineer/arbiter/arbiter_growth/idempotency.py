@@ -1,12 +1,12 @@
-import os
 import logging
+import os
 from typing import Optional, Union
 
 import redis.asyncio as redis
-from redis.asyncio.cluster import RedisCluster
-from redis.exceptions import RedisError
 from opentelemetry import trace
 from prometheus_client import Counter
+from redis.asyncio.cluster import RedisCluster
+from redis.exceptions import RedisError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Configure logging
@@ -122,13 +122,17 @@ class IdempotencyStore:
                 if result:
                     # Cache miss - key was set successfully
                     span.set_attribute("idempotency.hit", False)
-                    IDEMPOTENCY_HITS_TOTAL.labels(arbiter=self.arbiter_name, hit="false").inc()
+                    IDEMPOTENCY_HITS_TOTAL.labels(
+                        arbiter=self.arbiter_name, hit="false"
+                    ).inc()
                     logger.debug("Idempotency key set successfully: %s", namespaced_key)
                     return True
                 else:
                     # Cache hit - key already existed
                     span.set_attribute("idempotency.hit", True)
-                    IDEMPOTENCY_HITS_TOTAL.labels(arbiter=self.arbiter_name, hit="true").inc()
+                    IDEMPOTENCY_HITS_TOTAL.labels(
+                        arbiter=self.arbiter_name, hit="true"
+                    ).inc()
                     logger.debug("Idempotency key hit (duplicate): %s", namespaced_key)
                     return False
 
@@ -143,7 +147,9 @@ class IdempotencyStore:
                     f"Failed to check/set idempotency key '{namespaced_key}'"
                 ) from e
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=10), reraise=True)
+    @retry(
+        stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=10), reraise=True
+    )
     async def start(self):
         """
         Initializes the Redis client, connects to Redis, and verifies the connection.
@@ -162,7 +168,9 @@ class IdempotencyStore:
             # The `from_url` method transparently handles connection pooling.
             # It also supports SSL/TLS via 'rediss://' protocol and authentication.
             if self.cluster_mode:
-                self.redis = RedisCluster.from_url(self._redis_url, decode_responses=True)
+                self.redis = RedisCluster.from_url(
+                    self._redis_url, decode_responses=True
+                )
             else:
                 self.redis = redis.from_url(self._redis_url, decode_responses=True)
 
@@ -170,7 +178,9 @@ class IdempotencyStore:
             logger.debug("Ping successful.")
             logger.info("Successfully connected to IdempotencyStore Redis.")
         except (RedisError, Exception) as e:
-            logger.error("Failed to connect to IdempotencyStore Redis on attempt: %s", e)
+            logger.error(
+                "Failed to connect to IdempotencyStore Redis on attempt: %s", e
+            )
             # Ensure redis client is reset to None on failure to allow retry logic to work correctly
             self.redis = None
             raise IdempotencyStoreError("Failed to connect to Redis") from e

@@ -1,10 +1,12 @@
 import time
+
 import pytest
+from cryptography.fernet import Fernet
+
 from omnicore_engine.audit import ExplainAudit
 from omnicore_engine.database import Database
-from omnicore_engine.message_bus.resilience import RetryPolicy, CircuitBreaker
 from omnicore_engine.message_bus.encryption import FernetEncryption
-from cryptography.fernet import Fernet
+from omnicore_engine.message_bus.resilience import CircuitBreaker, RetryPolicy
 
 
 @pytest.mark.asyncio

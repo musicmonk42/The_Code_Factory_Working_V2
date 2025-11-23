@@ -1,27 +1,28 @@
 # test_generation/orchestrator/cli.py
-import os
-import sys
-import asyncio
-from datetime import datetime, timezone
-import traceback
 import argparse
-import signal
-import shutil
-from pathlib import Path
-import uuid
+import asyncio
 import inspect
+import os
+import shutil
+import signal
+import sys
+import traceback
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Union
-
-# --- Internal Module Imports ---
-from .config import CONFIG, LOGGING_CONFIG, load_config
-from .console import log, configure_logging, init_console_and_styles
 
 # New module import for monkeypatching
 from test_generation import utils as atco_utils
-from .orchestrator import GenerationOrchestrator
-from . import audit as audit_mod
-from .reporting import HTMLReporter
 from test_generation.policy_and_audit import EventBus
+
+from . import audit as audit_mod
+
+# --- Internal Module Imports ---
+from .config import CONFIG, LOGGING_CONFIG, load_config
+from .console import configure_logging, init_console_and_styles, log
+from .orchestrator import GenerationOrchestrator
+from .reporting import HTMLReporter
 from .venvs import sanitize_path
 
 # --- CLI Exit Codes ---
@@ -163,7 +164,9 @@ def _build_parser() -> argparse.ArgumentParser:
     reporting_group.add_argument(
         "--coverage-xml",
         type=str,
-        default=os.getenv("ATCO_COVERAGE_XML", "atco_artifacts/coverage_reports/coverage.xml"),
+        default=os.getenv(
+            "ATCO_COVERAGE_XML", "atco_artifacts/coverage_reports/coverage.xml"
+        ),
         help="Path to coverage XML output. Can be set with ATCO_COVERAGE_XML env var.",
     )
     reporting_group.add_argument(
@@ -250,7 +253,11 @@ async def _amain(
         CONFIG.get("generated_output_dir"),
         CONFIG.get("sarif_export_dir"),
         CONFIG.get("coverage_reports_dir"),
-        (os.path.dirname(CONFIG.get("audit_log_file")) if CONFIG.get("audit_log_file") else None),
+        (
+            os.path.dirname(CONFIG.get("audit_log_file"))
+            if CONFIG.get("audit_log_file")
+            else None
+        ),
         CONFIG.get("venv_temp_dir", ""),
     ]
 
@@ -306,8 +313,10 @@ async def _amain(
             generation_results = await orchestrator.generate_tests_for_targets(
                 targets, CONFIG.get("generated_output_dir", "atco_artifacts/generated")
             )
-            integration_results = await orchestrator.integrate_and_validate_generated_tests(
-                generation_results
+            integration_results = (
+                await orchestrator.integrate_and_validate_generated_tests(
+                    generation_results
+                )
             )
 
         integration_results = normalize_results(integration_results)

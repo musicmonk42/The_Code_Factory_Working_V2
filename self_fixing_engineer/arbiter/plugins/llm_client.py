@@ -1,45 +1,51 @@
 # D:\SFE\self_fixing_engineer\arbiter\plugins\llm_client.py
 import asyncio
-import logging
-import time
-import itertools  # For round-robin iteration
 import atexit  # For cleanup of shared resources
-import threading  # For thread-safe metric creation
+import hashlib  # For prompt hashing
+import itertools  # For round-robin iteration
+import json
+import logging
+import os
 import re  # For PII masking
+import threading  # For thread-safe metric creation
+import time
 from typing import (
-    Optional,
-    Dict,
     Any,
     AsyncGenerator,
-    List,
-    Tuple,
-    Union,
     Awaitable,
     Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
     Type,
+    Union,
 )
-import os
-import hashlib  # For prompt hashing
 
-from opentelemetry import trace
-from prometheus_client import Histogram, REGISTRY, Counter, Gauge, Summary
-import openai
-from openai import AsyncOpenAI
+import aiohttp
 import anthropic
-from anthropic import AsyncAnthropic
 import google.api_core.exceptions as google_exceptions
 import google.generativeai as genai
-import aiohttp
-import json
-from prometheus_client import start_http_server
+import openai
+from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
+from opentelemetry import trace
+from prometheus_client import (
+    REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    Summary,
+    start_http_server,
+)
 
 # Tenacity for retries
 from tenacity import (
     retry,
+    retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    retry_if_exception,
 )
 
 # Logger setup
@@ -47,7 +53,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     logger.addHandler(handler)
 
 # OpenTelemetry tracer
@@ -133,7 +141,9 @@ def get_or_create_metric(
         # Prometheus client handles duplicate registrations internally
         try:
             if buckets and metric_class in (Histogram, Summary):
-                return metric_class(name, documentation, labelnames=labelnames, buckets=buckets)
+                return metric_class(
+                    name, documentation, labelnames=labelnames, buckets=buckets
+                )
             return metric_class(name, documentation, labelnames=labelnames)
         except ValueError as e:
             # Metric already exists - try to retrieve it
@@ -182,7 +192,9 @@ class LLMClient:
     """Unified async client for LLM providers (OpenAI, Anthropic, Gemini, Ollama)."""
 
     _client_sessions: Dict[str, aiohttp.ClientSession] = {}
-    _session_lock = threading.Lock()  # Protects _client_sessions for atexit registration
+    _session_lock = (
+        threading.Lock()
+    )  # Protects _client_sessions for atexit registration
 
     def __init__(
         self,
@@ -215,7 +227,10 @@ class LLMClient:
             raise InputValidationError("Timeout must be a positive number.")
         if not isinstance(retry_attempts, int) or retry_attempts < 0:
             raise InputValidationError("Retry attempts must be a non-negative integer.")
-        if not isinstance(retry_backoff_factor, (int, float)) or retry_backoff_factor < 1.0:
+        if (
+            not isinstance(retry_backoff_factor, (int, float))
+            or retry_backoff_factor < 1.0
+        ):
             raise InputValidationError("Retry backoff factor must be 1.0 or greater.")
 
         self.provider = provider
@@ -255,9 +270,13 @@ class LLMClient:
 
         # Initialize provider-specific clients
         if provider == "openai":
-            self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=self.timeout)
+            self.client = AsyncOpenAI(
+                api_key=api_key, base_url=base_url, timeout=self.timeout
+            )
         elif provider == "anthropic":
-            self.client = AsyncAnthropic(api_key=api_key, base_url=base_url, timeout=self.timeout)
+            self.client = AsyncAnthropic(
+                api_key=api_key, base_url=base_url, timeout=self.timeout
+            )
         elif provider == "gemini":
             genai.configure(api_key=api_key)
             try:
@@ -272,7 +291,9 @@ class LLMClient:
             # Register atexit cleanup for Ollama's aiohttp session only once
             with LLMClient._session_lock:
                 if "ollama" not in LLMClient._client_sessions:
-                    atexit.register(lambda: asyncio.run(self._close_ollama_session_atexit()))
+                    atexit.register(
+                        lambda: asyncio.run(self._close_ollama_session_atexit())
+                    )
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -315,16 +336,24 @@ class LLMClient:
     async def _get_ollama_session(cls) -> aiohttp.ClientSession:
         """Manages a single aiohttp.ClientSession for Ollama connection pooling."""
         with cls._session_lock:
-            if "ollama" not in cls._client_sessions or cls._client_sessions["ollama"].closed:
+            if (
+                "ollama" not in cls._client_sessions
+                or cls._client_sessions["ollama"].closed
+            ):
                 timeout_obj = aiohttp.ClientTimeout(total=300)
-                cls._client_sessions["ollama"] = aiohttp.ClientSession(timeout=timeout_obj)
+                cls._client_sessions["ollama"] = aiohttp.ClientSession(
+                    timeout=timeout_obj
+                )
             return cls._client_sessions["ollama"]
 
     @classmethod
     async def _close_ollama_session_atexit(cls):
         """Closes the shared Ollama aiohttp session when the program exits."""
         with cls._session_lock:
-            if "ollama" in cls._client_sessions and not cls._client_sessions["ollama"].closed:
+            if (
+                "ollama" in cls._client_sessions
+                and not cls._client_sessions["ollama"].closed
+            ):
                 await cls._client_sessions["ollama"].close()
                 logger.info("Ollama aiohttp client session closed via atexit.")
                 del cls._client_sessions["ollama"]
@@ -393,16 +422,26 @@ class LLMClient:
             stop=stop_after_attempt(self.retry_attempts),
             wait=wait_exponential(multiplier=self.retry_backoff_factor, min=1, max=10),
             retry=retry_if_exception_type(transient_errors)
-            | retry_if_exception_type(openai.RateLimitError)  # OpenAI specific rate limit error
-            | retry_if_exception(is_anthropic_transient)  # Anthropic specific transient errors
-            | retry_if_exception(is_google_transient)  # Google specific transient errors
-            | retry_if_exception(is_aiohttp_transient),  # aiohttp specific transient errors
+            | retry_if_exception_type(
+                openai.RateLimitError
+            )  # OpenAI specific rate limit error
+            | retry_if_exception(
+                is_anthropic_transient
+            )  # Anthropic specific transient errors
+            | retry_if_exception(
+                is_google_transient
+            )  # Google specific transient errors
+            | retry_if_exception(
+                is_aiohttp_transient
+            ),  # aiohttp specific transient errors
         )
         async def _call_with_retry():
             with tracer.start_as_current_span(f"llm_api_call_{self.provider}") as span:
                 span.set_attribute("provider", self.provider)
                 span.set_attribute("model", self.model)
-                span.set_attribute("correlation_id", correlation_id if correlation_id else "none")
+                span.set_attribute(
+                    "correlation_id", correlation_id if correlation_id else "none"
+                )
                 span.set_attribute(
                     "llm.call_type", "streaming" if is_streaming else "non_streaming"
                 )
@@ -432,7 +471,9 @@ class LLMClient:
                     status_code = getattr(
                         e, "status_code", getattr(e, "code", getattr(e, "status", None))
                     )
-                    log_message = f"LLM call failed for {self.provider}/{self.model}: {e}"
+                    log_message = (
+                        f"LLM call failed for {self.provider}/{self.model}: {e}"
+                    )
                     if status_code:
                         log_message += f" (Status: {status_code})"
 
@@ -485,7 +526,9 @@ class LLMClient:
                         ).inc()
                         span.record_exception(e)
                         span.set_status(
-                            trace.Status(trace.StatusCode.ERROR, f"Transient Error: {str(e)}")
+                            trace.Status(
+                                trace.StatusCode.ERROR, f"Transient Error: {str(e)}"
+                            )
                         )
                         logger.warning(
                             f"{log_message} [Transient, Retrying] [{correlation_id}]",
@@ -503,9 +546,7 @@ class LLMClient:
                 "status_code",
                 getattr(final_e, "code", getattr(final_e, "status", None)),
             )
-            final_log_message = (
-                f"LLM call {self.provider}/{self.model} ultimately failed after retries: {final_e}"
-            )
+            final_log_message = f"LLM call {self.provider}/{self.model} ultimately failed after retries: {final_e}"
             if status_code:
                 final_log_message += f" (Status: {status_code})"
 
@@ -556,7 +597,9 @@ class LLMClient:
         }
 
         for pii_type, pattern in pii_patterns.items():
-            sanitized_prompt = re.sub(pattern, f"[{pii_type.upper()}_MASKED]", sanitized_prompt)
+            sanitized_prompt = re.sub(
+                pattern, f"[{pii_type.upper()}_MASKED]", sanitized_prompt
+            )
 
         return sanitized_prompt
 
@@ -617,7 +660,9 @@ class LLMClient:
         if not isinstance(max_tokens, int) or max_tokens <= 0:
             raise InputValidationError("max_tokens must be a positive integer.")
         if not isinstance(temperature, (int, float)) or not (0.0 <= temperature <= 2.0):
-            raise InputValidationError("Temperature must be between 0.0 and 2.0 (inclusive).")
+            raise InputValidationError(
+                "Temperature must be between 0.0 and 2.0 (inclusive)."
+            )
 
         # PII Masking
         sanitized_prompt = self._sanitize_prompt(prompt)
@@ -681,7 +726,9 @@ class LLMClient:
                 full_response_text = ""
                 async for line in resp.content:
                     try:
-                        full_response_text += json.loads(line.decode("utf-8")).get("response", "")
+                        full_response_text += json.loads(line.decode("utf-8")).get(
+                            "response", ""
+                        )
                     except json.JSONDecodeError as e:
                         logger.debug(f"Skipping non-JSON line in Ollama response: {e}")
                         pass
@@ -722,7 +769,9 @@ class LLMClient:
         if not isinstance(max_tokens, int) or max_tokens <= 0:
             raise InputValidationError("max_tokens must be a positive integer.")
         if not isinstance(temperature, (int, float)) or not (0.0 <= temperature <= 2.0):
-            raise InputValidationError("Temperature must be between 0.0 and 2.0 (inclusive).")
+            raise InputValidationError(
+                "Temperature must be between 0.0 and 2.0 (inclusive)."
+            )
 
         # PII Masking
         sanitized_prompt = self._sanitize_prompt(prompt)
@@ -730,7 +779,9 @@ class LLMClient:
 
         async def _stream_coro_producer():
             # This inner async generator is what _handle_llm_call will retry
-            async for chunk in self._stream_core(messages_for_llm, max_tokens, temperature):
+            async for chunk in self._stream_core(
+                messages_for_llm, max_tokens, temperature
+            ):
                 yield chunk
 
         # _handle_llm_call expects a callable that returns an awaitable (coroutine)
@@ -928,7 +979,9 @@ class LoadBalancedLLMClient:
             LLMClientError: If no healthy provider can be found after multiple attempts.
         """
         attempt_count = 0
-        max_selection_attempts = len(self.providers) * 2  # Limit attempts to avoid infinite loops
+        max_selection_attempts = (
+            len(self.providers) * 2
+        )  # Limit attempts to avoid infinite loops
 
         while attempt_count < max_selection_attempts:
             selected_provider = next(self._provider_cycle)
@@ -945,8 +998,12 @@ class LoadBalancedLLMClient:
                     time.monotonic() - status_info["last_error_time"]
                     > self.QUARANTINE_DURATION_SECONDS
                 ):
-                    logger.info(f"Attempting to re-enable quarantined provider {provider_name}.")
-                    status_info["status"] = "ok"  # Transition to half-open implicitly by marking ok
+                    logger.info(
+                        f"Attempting to re-enable quarantined provider {provider_name}."
+                    )
+                    status_info["status"] = (
+                        "ok"  # Transition to half-open implicitly by marking ok
+                    )
                     status_info["consecutive_failures"] = 0
                     status_info["last_selection_penalty_time"] = None
                     return selected_provider
@@ -1006,7 +1063,10 @@ class LoadBalancedLLMClient:
                 )
             else:
                 status_info["consecutive_failures"] += 1
-                if status_info["consecutive_failures"] >= self.FAILURE_QUARANTINE_THRESHOLD:
+                if (
+                    status_info["consecutive_failures"]
+                    >= self.FAILURE_QUARANTINE_THRESHOLD
+                ):
                     status_info["status"] = "unavailable"
                     logger.error(
                         f"Provider {provider_name} quarantined after {status_info['consecutive_failures']} consecutive non-retryable failures."
@@ -1303,7 +1363,9 @@ async def main():
         ):
             full_stream_response_s += chunk
             print(chunk, end="", flush=True)
-        print(f"\nFull Streamed Response Length ({corr_id_s}): {len(full_stream_response_s)}")
+        print(
+            f"\nFull Streamed Response Length ({corr_id_s}): {len(full_stream_response_s)}"
+        )
     except Exception as e:
         print(f"Streaming failed ({corr_id_s}): {e}")
         logger.error(f"Streaming test failed ({corr_id_s}): {e}", exc_info=True)

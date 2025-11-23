@@ -1,26 +1,27 @@
-import os
-import json
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
+import json
 import logging
+import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Import the module under test - only import what actually exists
 from intent_capture.autocomplete import (
-    JsonFormatter,
     AutocompleteState,
-    CommandRegistry,
     CommandCompleter,
+    CommandRegistry,
     FernetEncryptor,
+    JsonFormatter,
     add_to_history,
-    handle_command_not_found,
-    get_ai_suggestions,
-    fuzzy_matches,
-    execute_macro,
-    setup_autocomplete,
-    log_audit_event,
-    is_toxic,
     anonymize_pii,
+    execute_macro,
+    fuzzy_matches,
+    get_ai_suggestions,
+    handle_command_not_found,
+    is_toxic,
+    log_audit_event,
+    setup_autocomplete,
 )
 
 
@@ -116,7 +117,9 @@ def test_anonymize_pii():
 @pytest.mark.asyncio
 async def test_autocomplete_state_singleton():
     """Test AutocompleteState singleton pattern."""
-    with patch.object(AutocompleteState, "_initialize_dependencies", new_callable=AsyncMock):
+    with patch.object(
+        AutocompleteState, "_initialize_dependencies", new_callable=AsyncMock
+    ):
         state1 = await AutocompleteState.instance()
         state2 = await AutocompleteState.instance()
         assert state1 is state2
@@ -440,7 +443,9 @@ def test_log_audit_event():
         },
     ):
         with patch("intent_capture.autocomplete.boto3.client") as mock_boto:
-            with patch("intent_capture.autocomplete.os.getlogin", return_value="testuser"):
+            with patch(
+                "intent_capture.autocomplete.os.getlogin", return_value="testuser"
+            ):
                 mock_s3 = MagicMock()
                 mock_boto.return_value = mock_s3
 

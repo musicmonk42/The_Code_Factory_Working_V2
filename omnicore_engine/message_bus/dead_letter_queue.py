@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 # Conditional imports
 try:
@@ -13,13 +13,14 @@ except ImportError:
     KafkaProducer = None
     KAFKA_AVAILABLE = False
 
-# Relative imports from the new modular structure
-from .message_types import Message
+from arbiter.config import ArbiterConfig
 
 # External project imports
 from omnicore_engine.core import safe_serialize
 from omnicore_engine.database.database import Database
-from arbiter.config import ArbiterConfig
+
+# Relative imports from the new modular structure
+from .message_types import Message
 
 settings = ArbiterConfig()
 
@@ -55,7 +56,9 @@ class DeadLetterQueue:
             error=full_error,
         )
 
-        await self.queue.put((message, full_error, 0))  # Add message, error, and retry count
+        await self.queue.put(
+            (message, full_error, 0)
+        )  # Add message, error, and retry count
 
         try:
             # Persist message to database as a form of non-volatile storage
@@ -70,7 +73,9 @@ class DeadLetterQueue:
                     "idempotency_key": message.idempotency_key,
                 },
             )
-            logger.debug("DLQ message persisted to database.", trace_id=message.trace_id)
+            logger.debug(
+                "DLQ message persisted to database.", trace_id=message.trace_id
+            )
         except Exception as e:
             logger.error(
                 f"Failed to persist DLQ message to database: {e}",

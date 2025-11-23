@@ -1,26 +1,24 @@
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 import asyncio
-import threading
 import random
+import threading
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from prometheus_client import Counter, REGISTRY
+import pytest
 
 # Fixed imports - using the actual metric names from feedback.py
-from arbiter.feedback import (
-    FeedbackManager,
-    logger,
-    _get_or_create_metric,
-    SQLiteClient,  # Import SQLiteClient for testing
-)
+from arbiter.feedback import SQLiteClient  # Import SQLiteClient for testing
+from arbiter.feedback import FeedbackManager, _get_or_create_metric, logger
+from prometheus_client import REGISTRY, Counter
 
 
 # Fixture to mock logger
 @pytest.fixture
 def mock_logger():
-    with patch.object(logger, "info") as mock_info, patch.object(
-        logger, "warning"
-    ) as mock_warning, patch.object(logger, "error") as mock_error:
+    with (
+        patch.object(logger, "info") as mock_info,
+        patch.object(logger, "warning") as mock_warning,
+        patch.object(logger, "error") as mock_error,
+    ):
         yield mock_info, mock_warning, mock_error
 
 
@@ -209,7 +207,9 @@ async def test_get_summary():
             [{"error": "Error 1"}],  # errors
             [{"feedback": "Good"}],  # user feedback
             [{"decision_id": "1", "status": "pending"}],  # approval requests
-            [{"decision_id": "1", "response": {"approved": True}}],  # approval responses
+            [
+                {"decision_id": "1", "response": {"approved": True}}
+            ],  # approval responses
         ]
     )
 
@@ -265,7 +265,9 @@ async def test_get_approval_stats():
         ]
     )
 
-    stats = await fm.get_approval_stats(group_by_reviewer=True, group_by_decision_type=True)
+    stats = await fm.get_approval_stats(
+        group_by_reviewer=True, group_by_decision_type=True
+    )
 
     assert "by_reviewer" in stats
     assert "user1" in stats["by_reviewer"]
@@ -285,7 +287,9 @@ async def test_start_async_services():
     fm = FeedbackManager()
 
     # Mock the loop method to prevent actual execution
-    with patch.object(fm, "_purge_metrics_and_sync_loop", new_callable=AsyncMock) as mock_loop:
+    with patch.object(
+        fm, "_purge_metrics_and_sync_loop", new_callable=AsyncMock
+    ) as mock_loop:
         mock_loop.return_value = None
         await fm.start_async_services()
         assert fm._purge_task is not None

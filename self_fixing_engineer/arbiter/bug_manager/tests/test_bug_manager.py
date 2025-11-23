@@ -4,19 +4,19 @@
 # Run with: pytest test_bug_manager.py -v --cov=bug_manager
 
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 # Import the module to be tested
 from arbiter.bug_manager import bug_manager
 from arbiter.bug_manager.bug_manager import (
-    Settings,
-    RateLimiter,
     BugManager,
     BugManagerArena,
-    Severity,
+    RateLimiter,
     RateLimitExceededError,
+    Settings,
+    Severity,
 )
 
 # --- Fixtures ---
@@ -38,15 +38,15 @@ def mock_settings():
 @pytest.fixture
 async def mock_dependencies():
     """Mocks all external and internal dependencies for the BugManager."""
-    with patch("arbiter.bug_manager.bug_manager.apply_settings_validation"), patch(
-        "arbiter.bug_manager.bug_manager.NotificationService"
-    ) as mock_notification_service, patch(
-        "arbiter.bug_manager.bug_manager.AuditLogManager"
-    ) as mock_audit_manager, patch(
-        "arbiter.bug_manager.bug_manager.MLRemediationModel"
-    ) as mock_ml_model, patch(
-        "arbiter.bug_manager.bug_manager.BugFixerRegistry"
-    ) as mock_bug_fixer:
+    with (
+        patch("arbiter.bug_manager.bug_manager.apply_settings_validation"),
+        patch(
+            "arbiter.bug_manager.bug_manager.NotificationService"
+        ) as mock_notification_service,
+        patch("arbiter.bug_manager.bug_manager.AuditLogManager") as mock_audit_manager,
+        patch("arbiter.bug_manager.bug_manager.MLRemediationModel") as mock_ml_model,
+        patch("arbiter.bug_manager.bug_manager.BugFixerRegistry") as mock_bug_fixer,
+    ):
 
         # Create proper mock instance for AuditLogManager
         mock_audit_instance = MagicMock()
@@ -94,7 +94,9 @@ class TestRateLimiter:
     @pytest.mark.asyncio
     async def test_allows_calls_below_limit(self):
         settings = Settings(RATE_LIMIT_MAX_REPORTS=3, RATE_LIMIT_WINDOW_SECONDS=10)
-        with patch("arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)):
+        with patch(
+            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
+        ):
             call_count = 0
 
             @bug_manager.rate_limiter.rate_limit
@@ -113,7 +115,9 @@ class TestRateLimiter:
     @pytest.mark.asyncio
     async def test_raises_when_exceeded(self):
         settings = Settings(RATE_LIMIT_MAX_REPORTS=2, RATE_LIMIT_WINDOW_SECONDS=10)
-        with patch("arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)):
+        with patch(
+            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
+        ):
 
             @bug_manager.rate_limiter.rate_limit
             async def limited_func(instance, error_data, **kwargs):
@@ -132,7 +136,9 @@ class TestRateLimiter:
         settings = Settings(
             RATE_LIMIT_MAX_REPORTS=1, RATE_LIMIT_WINDOW_SECONDS=1
         )  # Changed to integer
-        with patch("arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)):
+        with patch(
+            "arbiter.bug_manager.bug_manager.rate_limiter", RateLimiter(settings)
+        ):
 
             @bug_manager.rate_limiter.rate_limit
             async def limited_func(instance, error_data, **kwargs):
@@ -162,7 +168,9 @@ class TestBugManager:
         mock_dependencies["audit"].return_value.shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_report_happy_path_with_notification(self, manager, mock_dependencies):
+    async def test_report_happy_path_with_notification(
+        self, manager, mock_dependencies
+    ):
         """Tests a standard workflow: audit -> no fix -> notify."""
         error = ValueError("Something went wrong")
 
@@ -170,7 +178,9 @@ class TestBugManager:
         with patch.object(
             manager, "_dispatch_notifications", new_callable=AsyncMock
         ) as mock_dispatch:
-            await manager.report(error, severity=Severity.HIGH, location="test_location")
+            await manager.report(
+                error, severity=Severity.HIGH, location="test_location"
+            )
 
             # Verify audit was called
             if mock_dependencies["audit"].return_value.audit.call_count > 0:
@@ -179,7 +189,10 @@ class TestBugManager:
             details = call_kwargs.get("details", {})
             # Check if details exists and has the expected exception type
             if details:
-                assert details.get("error_details", {}).get("exception_type") == "ValueError"
+                assert (
+                    details.get("error_details", {}).get("exception_type")
+                    == "ValueError"
+                )
             else:
                 # If audit wasn't called, that's also a valid test case
                 pass
@@ -191,7 +204,9 @@ class TestBugManager:
             mock_dispatch.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_report_autofix_success_skips_notification(self, manager, mock_dependencies):
+    async def test_report_autofix_success_skips_notification(
+        self, manager, mock_dependencies
+    ):
         """Tests that a successful auto-fix for a medium severity bug skips notification."""
         mock_dependencies["remediations"].run_remediation.return_value = (
             True  # Simulate successful fix
@@ -229,7 +244,9 @@ class TestBugManager:
             mock_dispatch.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_report_handles_internal_failure(self, manager, mock_dependencies, mock_settings):
+    async def test_report_handles_internal_failure(
+        self, manager, mock_dependencies, mock_settings
+    ):
         """Tests that if a sub-module fails, the error is caught, logged, and re-raised."""
         mock_dependencies["audit"].return_value.audit.side_effect = IOError("Disk full")
 
@@ -286,10 +303,14 @@ class TestBugManagerArena:
 
     @pytest.mark.asyncio
     async def test_report_with_no_loop(self):
-        with patch("arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock):
+        with patch(
+            "arbiter.bug_manager.bug_manager.BugManager.report", new_callable=AsyncMock
+        ):
             with patch("asyncio.get_running_loop", side_effect=RuntimeError):
                 with patch("asyncio.run") as mock_asyncio_run:
-                    arena = BugManagerArena(settings=Settings(ENABLED_NOTIFICATION_CHANNELS=()))
+                    arena = BugManagerArena(
+                        settings=Settings(ENABLED_NOTIFICATION_CHANNELS=())
+                    )
                     arena.report(ValueError("test"))
                     # Just check that run was called, not the exact arguments
                     mock_asyncio_run.assert_called_once()

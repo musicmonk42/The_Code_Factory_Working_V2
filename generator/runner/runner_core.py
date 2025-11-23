@@ -5,75 +5,74 @@
 
 import asyncio
 import concurrent.futures
-import heapq
-import tempfile
-import shutil
-import traceback
-import time
-import os
-import json
+import contextlib  # [NEW] Added for shutdown
 import hashlib
-import aiofiles
+import heapq
+import json
+import os
+import shutil
+import tempfile
+import time
+import traceback
+import uuid  # Explicitly import uuid for clarity
 from abc import ABC
-from collections import deque, defaultdict  # Import defaultdict
-from typing import Any, Dict, List, Optional, Union
+from collections import defaultdict, deque  # Import defaultdict
+from contextlib import asynccontextmanager  # [NEW] Added for lifespan
 from functools import partial
 from pathlib import Path
-import uuid  # Explicitly import uuid for clarity
-import contextlib  # [NEW] Added for shutdown
-from contextlib import asynccontextmanager  # [NEW] Added for lifespan
+from typing import Any, Dict, List, Optional, Union
 
+import aiofiles
 import aiohttp
 import opentelemetry.trace as trace  # Explicitly import trace for consistency
+
+# [CHANGE A] Add direct import for runtime patching
+import runner.runner_parsers as runner_parsers
 from opentelemetry.trace import (
     Status,
     StatusCode,
 )  # Explicitly import Status and StatusCode
+from runner.runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
 
 # Import project-specific modules
 from runner.runner_config import RunnerConfig, load_config
-from runner.runner_backends import BACKEND_REGISTRY as ALL_BACKENDS
-
-# Gold Standard: Import parser output schemas for strong typing
-from runner.runner_parsers import (
-    parse_junit_xml,
-    parse_coverage_xml,
-    parse_unittest_output,
-    parse_behave_junit,
-    parse_robot_xml,
-    parse_jest_json,
-    parse_go_test_json,
-    parse_surefire_xml,
-    parse_jacoco_xml,
-    parse_istanbul_json,
-    parse_go_coverprofile,
-    TestReportSchema,
-    CoverageReportSchema,
-)
-
-# [CHANGE A] Add direct import for runtime patching
-import runner.runner_parsers as runner_parsers
-from runner.runner_security_utils import redact_secrets
-from runner.runner_logging import logger, log_audit_event
-from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
 from runner.runner_contracts import (
+    BatchTaskPayload,
     TaskPayload,
     TaskResult,
-    BatchTaskPayload,
 )  # NEW: Contracts
 
 # --- FIX: Import 'ExecutionError' and alias it to 'TestExecutionError' ---
+from runner.runner_errors import BackendError, DistributedError
+from runner.runner_errors import ExecutionError as TestExecutionError
 from runner.runner_errors import (
-    RunnerError,
-    BackendError,
     FrameworkError,
-    ExecutionError as TestExecutionError,
     ParsingError,
+    RunnerError,
     SetupError,
     TimeoutError,
-    DistributedError,
     error_codes,
 )
+from runner.runner_logging import log_audit_event, logger
+from runner.runner_metrics import *  # Ensure all metrics are imported explicitly
+
+# Gold Standard: Import parser output schemas for strong typing
+from runner.runner_parsers import (
+    CoverageReportSchema,
+    TestReportSchema,
+    parse_behave_junit,
+    parse_coverage_xml,
+    parse_go_coverprofile,
+    parse_go_test_json,
+    parse_istanbul_json,
+    parse_jacoco_xml,
+    parse_jest_json,
+    parse_junit_xml,
+    parse_robot_xml,
+    parse_surefire_xml,
+    parse_unittest_output,
+)
+from runner.runner_security_utils import redact_secrets
 
 # --- REFACTOR FIX: Import subprocess_wrapper from process_utils ---
 
@@ -82,11 +81,9 @@ from runner.runner_errors import (
 
 # Optional imports for mutation/fuzzing
 try:
-    from runner.runner_mutation import (
-        mutation_test as _mutation_test_func,
-        detect_language as _detect_mutation_lang,
-        fuzz_test as _fuzz_test_func,
-    )
+    from runner.runner_mutation import detect_language as _detect_mutation_lang
+    from runner.runner_mutation import fuzz_test as _fuzz_test_func
+    from runner.runner_mutation import mutation_test as _mutation_test_func
 
     HAS_MUTATION_MODULE = True
 except ImportError:
@@ -175,7 +172,10 @@ FRAMEWORKS: Dict[str, Dict[str, Any]] = {
         "coverage_parser": parse_istanbul_json,
         "output_files": ["results.json", "coverage", "jest-junit.xml"],
         "detect": lambda files: "jest" in files.get("package.json", "")
-        or any(f.endswith((".test.js", ".spec.js", ".test.ts", ".spec.ts")) for f in files.keys()),
+        or any(
+            f.endswith((".test.js", ".spec.js", ".test.ts", ".spec.ts"))
+            for f in files.keys()
+        ),
     },
     "mocha": {
         "cmd": [
@@ -231,7 +231,9 @@ FRAMEWORKS: Dict[str, Dict[str, Any]] = {
         "parser": parse_junit_xml,  # Often integrates with Pytest JUnit output
         "coverage_parser": None,
         "output_files": ["results.xml"],
-        "detect": lambda files: any("selenium" in content.lower() for content in files.values()),
+        "detect": lambda files: any(
+            "selenium" in content.lower() for content in files.values()
+        ),
     },
 }
 
@@ -241,7 +243,8 @@ DOC_FRAMEWORKS = {
         "cmd": ["sphinx-build", "-b", "html", ".", "_build"],
         "validator_cmd": ["sphinx-build", "-b", "linkcheck", ".", "_build"],
         "output_dir": "_build/html",
-        "detect": lambda files: "conf.py" in files.keys() or "docs/conf.py" in files.keys(),
+        "detect": lambda files: "conf.py" in files.keys()
+        or "docs/conf.py" in files.keys(),
     },
     "mkdocs": {
         "cmd": ["mkdocs", "build"],
@@ -455,7 +458,9 @@ async def run_stress_tests(
 
         # Calculate metrics
         avg_response_time = (
-            sum(response_times) / len(response_times) if response_times else float("inf")
+            sum(response_times) / len(response_times)
+            if response_times
+            else float("inf")
         )
         error_rate = (errors / iterations) * 100 if iterations > 0 else 100.0
         crashes_detected = crashes > 0
@@ -665,7 +670,8 @@ class Runner(ABC):
                 test_results: TaskResult = await self.run_tests(dummy_task_payload)
 
             if test_results.status != "completed" or not (
-                test_results.results and test_results.results.get("dry_run_result", False)
+                test_results.results
+                and test_results.results.get("dry_run_result", False)
             ):
                 raise TestExecutionError(
                     error_codes["TEST_EXECUTION_FAILED"],
@@ -676,11 +682,17 @@ class Runner(ABC):
 
             span.add_event("Dry-run test successful")
 
-            HEALTH_STATUS.labels(component_name="overall", instance_id=self.instance_id).set(1)
-            logger.info("Runner self-test PASSED: Backend healthy and dummy test run successful.")
+            HEALTH_STATUS.labels(
+                component_name="overall", instance_id=self.instance_id
+            ).set(1)
+            logger.info(
+                "Runner self-test PASSED: Backend healthy and dummy test run successful."
+            )
             RUNNER_CONFIG_VERSION.labels(version=str(self.config.version)).set(1)
         except RunnerError as e:
-            HEALTH_STATUS.labels(component_name="overall", instance_id=self.instance_id).set(0)
+            HEALTH_STATUS.labels(
+                component_name="overall", instance_id=self.instance_id
+            ).set(0)
             logger.critical(
                 json.dumps(
                     {
@@ -691,11 +703,15 @@ class Runner(ABC):
                 ),
                 exc_info=True,
             )
-            span.set_status(Status(StatusCode.ERROR, f"Self-test failed: {e.error_code}"))
+            span.set_status(
+                Status(StatusCode.ERROR, f"Self-test failed: {e.error_code}")
+            )
             span.record_exception(e)
             raise
         except Exception as e:
-            HEALTH_STATUS.labels(component_name="overall", instance_id=self.instance_id).set(0)
+            HEALTH_STATUS.labels(
+                component_name="overall", instance_id=self.instance_id
+            ).set(0)
             logger.critical(
                 json.dumps(
                     {
@@ -706,7 +722,9 @@ class Runner(ABC):
                 ),
                 exc_info=True,
             )
-            span.set_status(Status(StatusCode.ERROR, f"Self-test failed unexpectedly: {e}"))
+            span.set_status(
+                Status(StatusCode.ERROR, f"Self-test failed unexpectedly: {e}")
+            )
             span.record_exception(e)
             raise
 
@@ -715,7 +733,9 @@ class Runner(ABC):
         while True:
             try:
                 # [FIX] Provide required labels for the RUN_QUEUE gauge
-                RUN_QUEUE.labels(framework="all", instance_id=self.instance_id).set(len(self.queue))
+                RUN_QUEUE.labels(framework="all", instance_id=self.instance_id).set(
+                    len(self.queue)
+                )
 
                 status_counts: Dict[str, int] = defaultdict(
                     int
@@ -754,7 +774,9 @@ class Runner(ABC):
 
     async def _distributed_worker(self) -> None:
         """Worker to send tasks to a distributed runner endpoint."""
-        logger.info(f"Distributed worker started, sending tasks to: {self.config.dist_url}")
+        logger.info(
+            f"Distributed worker started, sending tasks to: {self.config.dist_url}"
+        )
         if not self.config.dist_url:
             logger.warning(
                 "Distributed worker enabled but 'dist_url' is not configured. Disabling distributed worker."
@@ -765,7 +787,9 @@ class Runner(ABC):
 
         while True:
             try:
-                async with reloading_lock:  # Acquire lock to prevent reconfig during send
+                async with (
+                    reloading_lock
+                ):  # Acquire lock to prevent reconfig during send
                     if not self.queue:
                         await asyncio.sleep(self.config.dist_poll_interval_seconds)
                         continue
@@ -787,7 +811,9 @@ class Runner(ABC):
                             {
                                 "event": "distributed_batch_send_attempt",
                                 "count": len(tasks_to_send),
-                                "task_ids": [t.task_id for t in tasks_to_send if t.task_id],
+                                "task_ids": [
+                                    t.task_id for t in tasks_to_send if t.task_id
+                                ],
                                 "endpoint": self.config.dist_url,
                             }
                         )
@@ -798,7 +824,9 @@ class Runner(ABC):
                     try:
                         start_dist_latency = time.time()
                         # FIX: Use getattr
-                        timeout_val = getattr(self.config, "dist_send_timeout_seconds", 30)
+                        timeout_val = getattr(
+                            self.config, "dist_send_timeout_seconds", 30
+                        )
                         async with session.post(
                             self.config.dist_url + "/enqueue_test_task_batch",
                             json=BatchTaskPayload(tasks=tasks_to_send).model_dump(),
@@ -808,14 +836,16 @@ class Runner(ABC):
                             dist_response = await resp.json()
 
                             dist_latency = time.time() - start_dist_latency
-                            DISTRIBUTED_LATENCY.labels(instance_id=self.instance_id).observe(
-                                dist_latency
-                            )
+                            DISTRIBUTED_LATENCY.labels(
+                                instance_id=self.instance_id
+                            ).observe(dist_latency)
                             logger.info(
                                 json.dumps(
                                     {
                                         "event": "distributed_batch_send_success",
-                                        "response_status": dist_response.get("status", "N/A"),
+                                        "response_status": dist_response.get(
+                                            "status", "N/A"
+                                        ),
                                         "task_ids": dist_response.get("task_ids", []),
                                         "latency_ms": dist_latency * 1000,
                                     }
@@ -824,7 +854,9 @@ class Runner(ABC):
 
                             span.add_event(
                                 "Distributed batch sent",
-                                attributes={"response_status": dist_response.get("status")},
+                                attributes={
+                                    "response_status": dist_response.get("status")
+                                },
                             )
 
                             if (
@@ -843,7 +875,9 @@ class Runner(ABC):
                                             "detail": error_detail,
                                             "response": dist_response,
                                             "task_ids": [
-                                                t.task_id for t in tasks_to_send if t.task_id
+                                                t.task_id
+                                                for t in tasks_to_send
+                                                if t.task_id
                                             ],
                                         }
                                     )
@@ -853,14 +887,20 @@ class Runner(ABC):
                                     backend="dist_api_failure",
                                     instance_id=self.instance_id,
                                 ).inc()
-                                span.set_status(Status(StatusCode.ERROR, "Remote enqueue failed"))
+                                span.set_status(
+                                    Status(StatusCode.ERROR, "Remote enqueue failed")
+                                )
                                 for task in tasks_to_send:
-                                    heapq.heappush(self.queue, PrioritizedTask(task.priority, task))
+                                    heapq.heappush(
+                                        self.queue, PrioritizedTask(task.priority, task)
+                                    )
                                     self._update_task_status(
                                         task.task_id,
                                         "pending",
                                         error=DistributedError(
-                                            error_codes["DISTRIBUTED_COMMUNICATION_ERROR"],
+                                            error_codes[
+                                                "DISTRIBUTED_COMMUNICATION_ERROR"
+                                            ],
                                             detail="Remote enqueue rejected by API",
                                             endpoint=self.config.dist_url,
                                             cause=None,
@@ -872,7 +912,9 @@ class Runner(ABC):
                                 {
                                     "event": "distributed_batch_send_network_error",
                                     "detail": str(e),
-                                    "task_ids": [t.task_id for t in tasks_to_send if t.task_id],
+                                    "task_ids": [
+                                        t.task_id for t in tasks_to_send if t.task_id
+                                    ],
                                 }
                             ),
                             exc_info=True,
@@ -886,7 +928,9 @@ class Runner(ABC):
                         span.record_exception(e)
                         await self.backend.recover()
                         for task in tasks_to_send:
-                            heapq.heappush(self.queue, PrioritizedTask(task.priority, task))
+                            heapq.heappush(
+                                self.queue, PrioritizedTask(task.priority, task)
+                            )
                             self._update_task_status(
                                 task.task_id,
                                 "pending",
@@ -899,13 +943,17 @@ class Runner(ABC):
                             )
                     except asyncio.TimeoutError:
                         # FIX: Use getattr
-                        timeout_val = getattr(self.config, "dist_send_timeout_seconds", 30)
+                        timeout_val = getattr(
+                            self.config, "dist_send_timeout_seconds", 30
+                        )
                         logger.error(
                             json.dumps(
                                 {
                                     "event": "distributed_batch_send_timeout",
                                     "timeout_seconds": timeout_val,
-                                    "task_ids": [t.task_id for t in tasks_to_send if t.task_id],
+                                    "task_ids": [
+                                        t.task_id for t in tasks_to_send if t.task_id
+                                    ],
                                 }
                             )
                         )
@@ -916,7 +964,9 @@ class Runner(ABC):
                         ).inc()
                         span.set_status(Status(StatusCode.ERROR, "Send timeout"))
                         for task in tasks_to_send:
-                            heapq.heappush(self.queue, PrioritizedTask(task.priority, task))
+                            heapq.heappush(
+                                self.queue, PrioritizedTask(task.priority, task)
+                            )
                             self._update_task_status(
                                 task.task_id,
                                 "pending",
@@ -932,7 +982,9 @@ class Runner(ABC):
                                 {
                                     "event": "distributed_worker_unexpected_error",
                                     "detail": str(e),
-                                    "task_ids": [t.task_id for t in tasks_to_send if t.task_id],
+                                    "task_ids": [
+                                        t.task_id for t in tasks_to_send if t.task_id
+                                    ],
                                 }
                             ),
                             exc_info=True,
@@ -942,10 +994,14 @@ class Runner(ABC):
                             backend="unexpected_error",
                             instance_id=self.instance_id,
                         ).inc()
-                        span.set_status(Status(StatusCode.ERROR, f"Unexpected error: {e}"))
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"Unexpected error: {e}")
+                        )
                         span.record_exception(e)
                         for task in tasks_to_send:
-                            heapq.heappush(self.queue, PrioritizedTask(task.priority, task))
+                            heapq.heappush(
+                                self.queue, PrioritizedTask(task.priority, task)
+                            )
                             self._update_task_status(
                                 task.task_id,
                                 "pending",
@@ -956,7 +1012,9 @@ class Runner(ABC):
                                 ).as_dict(),
                             )
 
-                await asyncio.sleep(self.config.dist_poll_interval_seconds)  # Wait outside the lock
+                await asyncio.sleep(
+                    self.config.dist_poll_interval_seconds
+                )  # Wait outside the lock
             except asyncio.CancelledError:
                 logger.info("Distributed worker task cancelled.")
                 break
@@ -969,7 +1027,9 @@ class Runner(ABC):
             await session.close()
             logger.info("Distributed worker aiohttp session closed.")
 
-    async def _add_provenance(self, entry_data: Dict[str, Any], task_id: str) -> Dict[str, Any]:
+    async def _add_provenance(
+        self, entry_data: Dict[str, Any], task_id: str
+    ) -> Dict[str, Any]:
         """
         Creates a secure, chained audit log event for a task result.
         This refactored method calls the centralized log_audit_event function
@@ -995,7 +1055,9 @@ class Runner(ABC):
                 "config_hash_at_run": config_hash,
                 "backend_used": self.backend.__class__.__name__,
                 "framework_used": (
-                    self.framework_info.get("cmd", "N/A") if self.framework_info else "N/A"
+                    self.framework_info.get("cmd", "N/A")
+                    if self.framework_info
+                    else "N/A"
                 ),
                 "instance_id": self.instance_id,
                 # Log a summary, not the full (potentially huge) data blob
@@ -1017,8 +1079,12 @@ class Runner(ABC):
             summary = audit_data_payload["result_summary"]
             summary["pass_rate"] = sanitized_entry_data.get("pass_rate")
             summary["total_tests"] = sanitized_entry_data.get("total_tests")
-            summary["coverage_percentage"] = sanitized_entry_data.get("coverage_percentage")
-            summary["mutation_survival_rate"] = sanitized_entry_data.get("mutation_survival_rate")
+            summary["coverage_percentage"] = sanitized_entry_data.get(
+                "coverage_percentage"
+            )
+            summary["mutation_survival_rate"] = sanitized_entry_data.get(
+                "mutation_survival_rate"
+            )
 
             # Call the V2 centralized audit logger
             # This function (from runner_logging) handles its own hashing, signing, and chaining
@@ -1052,7 +1118,9 @@ class Runner(ABC):
 
         self.feedback_scores.append(score)
         RUN_PASS_RATE.set(
-            sum(self.feedback_scores) / len(self.feedback_scores) if self.feedback_scores else 0.0
+            sum(self.feedback_scores) / len(self.feedback_scores)
+            if self.feedback_scores
+            else 0.0
         )
 
         if self.current_strategy not in self.feedback_model:
@@ -1083,10 +1151,14 @@ class Runner(ABC):
             return
 
         # FIX: Use getattr
-        min_feedback_points = getattr(self.config, "min_feedback_points_for_strategy_adj", 5)
+        min_feedback_points = getattr(
+            self.config, "min_feedback_points_for_strategy_adj", 5
+        )
 
         eligible_strategies = {
-            k: v for k, v in self.feedback_model.items() if len(v) >= min_feedback_points
+            k: v
+            for k, v in self.feedback_model.items()
+            if len(v) >= min_feedback_points
         }
 
         if not eligible_strategies:
@@ -1119,7 +1191,9 @@ class Runner(ABC):
 
             if new_strategy_settings:
                 if "parallel_workers" in new_strategy_settings:
-                    self.config.parallel_workers = new_strategy_settings["parallel_workers"]
+                    self.config.parallel_workers = new_strategy_settings[
+                        "parallel_workers"
+                    ]
                 if "timeout" in new_strategy_settings:
                     self.config.timeout = new_strategy_settings["timeout"]
                 if "backend" in new_strategy_settings:
@@ -1208,7 +1282,9 @@ class Runner(ABC):
         while self.queue:
             prio_task = heapq.heappop(self.queue)
             # *** FIX: Call model_dump() on the .task attribute ***
-            tasks_list.append({"priority": prio_task.priority, "task": prio_task.task.model_dump()})
+            tasks_list.append(
+                {"priority": prio_task.priority, "task": prio_task.task.model_dump()}
+            )
             tmp_queue.append(prio_task)
 
         for pt in tmp_queue:
@@ -1253,7 +1329,9 @@ class Runner(ABC):
                 if os.path.exists(queue_file):
                     os.remove(queue_file)
 
-    def _update_task_status_sync(self, task_id: str, status: str, **kwargs: Any) -> None:
+    def _update_task_status_sync(
+        self, task_id: str, status: str, **kwargs: Any
+    ) -> None:
         """Synchronous wrapper for _update_task_status for backwards compatibility."""
         try:
             asyncio.get_running_loop()
@@ -1263,7 +1341,9 @@ class Runner(ABC):
             # No running loop, call synchronously without lock (acceptable for single-threaded use)
             self._update_task_status_unlocked(task_id, status, **kwargs)
 
-    def _update_task_status_unlocked(self, task_id: str, status: str, **kwargs: Any) -> None:
+    def _update_task_status_unlocked(
+        self, task_id: str, status: str, **kwargs: Any
+    ) -> None:
         """Internal implementation without lock for sync contexts."""
         if task_id not in self.task_status_map:
             explicit_started_at = kwargs.pop("started_at", None)
@@ -1271,7 +1351,11 @@ class Runner(ABC):
             if status == "running":
                 started_at = explicit_started_at or time.time()
             else:
-                started_at = explicit_started_at if explicit_started_at is not None else time.time()
+                started_at = (
+                    explicit_started_at
+                    if explicit_started_at is not None
+                    else time.time()
+                )
 
             self.task_status_map[task_id] = TaskResult(
                 task_id=task_id,
@@ -1313,7 +1397,9 @@ class Runner(ABC):
                 if hasattr(task_result, k):
                     setattr(task_result, k, v)
 
-    async def _update_task_status(self, task_id: str, status: str, **kwargs: Any) -> None:
+    async def _update_task_status(
+        self, task_id: str, status: str, **kwargs: Any
+    ) -> None:
         """Updates the status of a task in the in-memory map and emits a metric (async with lock)."""
         async with self._status_lock:
             self._update_task_status_unlocked(task_id, status, **kwargs)
@@ -1324,7 +1410,9 @@ class Runner(ABC):
                     "event": "task_status_update",
                     "task_id": task_id,
                     "status": status,
-                    "details": {k: v for k, v in kwargs.items() if k not in ["results", "error"]},
+                    "details": {
+                        k: v for k, v in kwargs.items() if k not in ["results", "error"]
+                    },
                 }
             )
         )
@@ -1400,7 +1488,9 @@ class Runner(ABC):
             return task_result
 
         timeout: int = (
-            task_payload.timeout if task_payload.timeout is not None else self.config.timeout
+            task_payload.timeout
+            if task_payload.timeout is not None
+            else self.config.timeout
         )
 
         temp_dir_obj: Optional[tempfile.TemporaryDirectory] = None
@@ -1478,8 +1568,12 @@ class Runner(ABC):
                 tests_sub_dir = temp_dir_path / "tests"
 
                 # Use the new helper to write files
-                await self._save_files_to_temp_dir(task_payload.code_files, code_sub_dir)
-                await self._save_files_to_temp_dir(task_payload.test_files, tests_sub_dir)
+                await self._save_files_to_temp_dir(
+                    task_payload.code_files, code_sub_dir
+                )
+                await self._save_files_to_temp_dir(
+                    task_payload.test_files, tests_sub_dir
+                )
                 span.add_event("Code and test files saved to temporary directory.")
             except Exception as e:
                 # _save_files_to_temp_dir raises SetupError
@@ -1617,7 +1711,9 @@ class Runner(ABC):
                     if cov_file.exists():
                         coverage_report = await coverage_parser(cov_file)
                     else:
-                        logger.debug("No coverage file found; skipping coverage parsing.")
+                        logger.debug(
+                            "No coverage file found; skipping coverage parsing."
+                        )
 
                     if coverage_report:
                         logger.debug(
@@ -1629,9 +1725,12 @@ class Runner(ABC):
                                 }
                             )
                         )
-                        parsed_results["coverage_percentage"] = coverage_report.coverage_percentage
+                        parsed_results["coverage_percentage"] = (
+                            coverage_report.coverage_percentage
+                        )
                         parsed_results["coverage_details"] = {
-                            k: v.model_dump() for k, v in coverage_report.coverage_details.items()
+                            k: v.model_dump()
+                            for k, v in coverage_report.coverage_details.items()
                         }  # Convert CoverageDetail to dict
                         RUN_COVERAGE_PERCENT.set(parsed_results["coverage_percentage"])
                 except RunnerError as e:  # Catch structured errors from coverage parser
@@ -1684,14 +1783,18 @@ class Runner(ABC):
                         parallel=getattr(self.config, "mutation_parallel", True),
                         distributed=getattr(self.config, "mutation_distributed", False),
                     )
-                    parsed_results["mutation_survival_rate"] = mut_results.get("survival_rate", 0.0)
+                    parsed_results["mutation_survival_rate"] = mut_results.get(
+                        "survival_rate", 0.0
+                    )
                     RUN_MUTATION_SURVIVAL.set(parsed_results["mutation_survival_rate"])
                     logger.info(
                         json.dumps(
                             {
                                 "event": "mutation_test_completed",
                                 "task_id": task_id,
-                                "survival_rate": parsed_results["mutation_survival_rate"],
+                                "survival_rate": parsed_results[
+                                    "mutation_survival_rate"
+                                ],
                             }
                         )
                     )
@@ -1712,7 +1815,9 @@ class Runner(ABC):
                         instance_id=self.instance_id,
                     ).inc()
                     span.set_status(
-                        Status(StatusCode.ERROR, f"Mutation testing failed: {e.error_code}")
+                        Status(
+                            StatusCode.ERROR, f"Mutation testing failed: {e.error_code}"
+                        )
                     )
                     span.record_exception(e)
                 except Exception as e:
@@ -1731,7 +1836,9 @@ class Runner(ABC):
                         backend=self.config.backend,
                         instance_id=self.instance_id,
                     ).inc()
-                    span.set_status(Status(StatusCode.ERROR, f"Mutation testing failed: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Mutation testing failed: {e}")
+                    )
                     span.record_exception(e)
             elif getattr(self.config, "mutation", False):
                 logger.warning(
@@ -1753,7 +1860,9 @@ class Runner(ABC):
                     fuzz_results: Dict[str, Any] = await _fuzz_test_func(
                         temp_dir_path, self.config, task_payload.code_files
                     )
-                    parsed_results["fuzz_discoveries"] = fuzz_results.get("discoveries", 0)
+                    parsed_results["fuzz_discoveries"] = fuzz_results.get(
+                        "discoveries", 0
+                    )
                     RUN_FUZZ_DISCOVERIES.inc(parsed_results["fuzz_discoveries"])
                     logger.info(
                         json.dumps(
@@ -1800,7 +1909,9 @@ class Runner(ABC):
                         backend=self.config.backend,
                         instance_id=self.instance_id,
                     ).inc()
-                    span.set_status(Status(StatusCode.ERROR, f"Fuzz testing failed: {e}"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, f"Fuzz testing failed: {e}")
+                    )
                     span.record_exception(e)
             elif getattr(self.config, "fuzz", False):
                 logger.warning(
@@ -1825,7 +1936,9 @@ class Runner(ABC):
             if actual_doc_framework_name == "auto":
                 detected_doc_fw = None
                 for df_name, df_info in DOC_FRAMEWORKS.items():
-                    if df_info.get("detect") and df_info["detect"](task_payload.code_files):
+                    if df_info.get("detect") and df_info["detect"](
+                        task_payload.code_files
+                    ):
                         detected_doc_fw = df_name
                         break
                 if detected_doc_fw:
@@ -1840,7 +1953,10 @@ class Runner(ABC):
                     span.add_event("Doc validation skipped: no framework detected")
                     parsed_results["doc_validation"] = doc_validation_status_dict
 
-            if actual_doc_framework_name != "auto" and actual_doc_framework_name is not None:
+            if (
+                actual_doc_framework_name != "auto"
+                and actual_doc_framework_name is not None
+            ):
                 doc_framework_info = DOC_FRAMEWORKS.get(actual_doc_framework_name)
                 if doc_framework_info:
                     span.add_event(
@@ -1928,7 +2044,9 @@ class Runner(ABC):
                                 doc_framework_name=actual_doc_framework_name,
                                 instance_id=self.instance_id,
                             ).inc()
-                    except RunnerError as e:  # Catch structured errors from backend.execute
+                    except (
+                        RunnerError
+                    ) as e:  # Catch structured errors from backend.execute
                         doc_validation_status_dict = {
                             "status": "error",
                             "error": e.as_dict(),
@@ -1989,11 +2107,15 @@ class Runner(ABC):
                 for file_in_temp in temp_dir_path.rglob(out_file_pattern):
                     if file_in_temp.is_file():
                         target_path = (
-                            output_path_actual / "results" / file_in_temp.relative_to(temp_dir_path)
+                            output_path_actual
+                            / "results"
+                            / file_in_temp.relative_to(temp_dir_path)
                         )
                         target_path.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy(file_in_temp, target_path)
-                        logger.debug(f"Copied output file: {file_in_temp} to {target_path}")
+                        logger.debug(
+                            f"Copied output file: {file_in_temp} to {target_path}"
+                        )
                         span.add_event(f"Output file copied: {file_in_temp.name}")
 
             # Copy generated documentation output
@@ -2002,7 +2124,9 @@ class Runner(ABC):
                 and doc_validation_status_dict["status"] in ["passed", "failed"]
                 and doc_framework_info
             ):
-                final_doc_output_source_dir = temp_dir_path / doc_framework_info["output_dir"]
+                final_doc_output_source_dir = (
+                    temp_dir_path / doc_framework_info["output_dir"]
+                )
                 if final_doc_output_source_dir.exists():
                     doc_output_dest_dir = output_path_actual / "documentation"
                     shutil.copytree(
@@ -2041,17 +2165,25 @@ class Runner(ABC):
             self._update_task_status(
                 task_id, "timed_out", error=e.as_dict(), finished_at=time.time()
             )
-            logger.error(f"Test run for task {task_id} timed out: {e.detail}", exc_info=True)
-            span.set_status(Status(StatusCode.ERROR, f"Test run timed out: {e.error_code}"))
+            logger.error(
+                f"Test run for task {task_id} timed out: {e.detail}", exc_info=True
+            )
+            span.set_status(
+                Status(StatusCode.ERROR, f"Test run timed out: {e.error_code}")
+            )
             span.record_exception(e)
             return self.task_status_map[task_id]
         except RunnerError as e:  # Catch all other structured Runner errors
-            self._update_task_status(task_id, "failed", error=e.as_dict(), finished_at=time.time())
+            self._update_task_status(
+                task_id, "failed", error=e.as_dict(), finished_at=time.time()
+            )
             logger.error(
                 f"Test run for task {task_id} failed with RunnerError: {e.as_dict()}",
                 exc_info=True,
             )
-            span.set_status(Status(StatusCode.ERROR, f"Test run failed: {e.error_code}"))
+            span.set_status(
+                Status(StatusCode.ERROR, f"Test run failed: {e.error_code}")
+            )
             span.record_exception(e)
             return self.task_status_map[task_id]
         except Exception as e:
@@ -2061,7 +2193,9 @@ class Runner(ABC):
                 task_id=task_id,
                 cause=e,
             ).as_dict()
-            self._update_task_status(task_id, "failed", error=error_dict, finished_at=time.time())
+            self._update_task_status(
+                task_id, "failed", error=error_dict, finished_at=time.time()
+            )
             logger.error(
                 f"Test run for task {task_id} failed with unexpected error: {error_dict}",
                 exc_info=True,
@@ -2082,7 +2216,9 @@ class Runner(ABC):
             elif temp_dir_path and temp_dir_path.exists():
                 try:
                     shutil.rmtree(temp_dir_path, ignore_errors=True)
-                    logger.debug(f"Cleaned up temporary directory (fallback): {temp_dir_path}")
+                    logger.debug(
+                        f"Cleaned up temporary directory (fallback): {temp_dir_path}"
+                    )
                 except Exception as cleanup_e:
                     logger.warning(
                         f"Failed to cleanup temporary directory (fallback) {temp_dir_path}: {cleanup_e}",
@@ -2114,7 +2250,9 @@ class Runner(ABC):
             )
         )
         self._persist_queue()
-        return self.task_status_map[task_payload.task_id]  # Return the initial TaskResult
+        return self.task_status_map[
+            task_payload.task_id
+        ]  # Return the initial TaskResult
 
 
 # --- Async Function for Parallel Runs ---
@@ -2143,7 +2281,9 @@ async def parallel_runs(
     while True:
         all_tasks_processed = True
         for enq_task_result in enqueued_task_results:
-            if enq_task_result.task_id in completed_task_results_ids:  # Already processed
+            if (
+                enq_task_result.task_id in completed_task_results_ids
+            ):  # Already processed
                 continue
 
             current_status = runner.get_task_status(enq_task_result.task_id)
@@ -2174,7 +2314,9 @@ async def parallel_runs(
 
     final_results: List[TaskResult] = []
     for enq_task_result in enqueued_task_results:
-        final_results.append(runner.get_task_status(enq_task_result.task_id) or enq_task_result)
+        final_results.append(
+            runner.get_task_status(enq_task_result.task_id) or enq_task_result
+        )
 
     logger.info("Parallel runs execution finished. Final status collected.")
     return final_results
@@ -2191,7 +2333,9 @@ def _on_config_reload_callback(
     This needs to be implemented carefully to avoid race conditions with active runs.
     """
     target_runner = (
-        runner_instance_ref if runner_instance_ref is not None else globals().get("runner_instance")
+        runner_instance_ref
+        if runner_instance_ref is not None
+        else globals().get("runner_instance")
     )
 
     if target_runner:
@@ -2228,7 +2372,9 @@ def _on_config_reload_callback(
                             logger.error(
                                 f"New backend '{new_config.backend}' is not registered or unavailable. Keeping old backend."
                             )
-                    except RunnerError as e:  # Catch structured errors from backend init
+                    except (
+                        RunnerError
+                    ) as e:  # Catch structured errors from backend init
                         logger.error(
                             f"Failed to re-initialize backend to {new_config.backend}: {e.as_dict()}. Keeping old backend.",
                             exc_info=True,
@@ -2255,7 +2401,9 @@ def _on_config_reload_callback(
 
         asyncio.create_task(_apply_config_update())
     else:
-        logger.warning("Config reload callback triggered but runner_instance is not initialized.")
+        logger.warning(
+            "Config reload callback triggered but runner_instance is not initialized."
+        )
 
 
 # --- API Setup (Requires FastAPI and uvicorn) ---
@@ -2263,13 +2411,15 @@ def _on_config_reload_callback(
 # For running, you would typically uncomment the necessary imports and define these objects.
 
 try:
-    from fastapi import FastAPI, Body, HTTPException, status
-    from uvicorn import run as uvicorn_run
     import click
+    from fastapi import Body, FastAPI, HTTPException, status
+    from uvicorn import run as uvicorn_run
 
     API_AVAILABLE = True
 except ImportError:
-    logger.info("FastAPI or Click not installed. API/CLI endpoints will not be defined.")
+    logger.info(
+        "FastAPI or Click not installed. API/CLI endpoints will not be defined."
+    )
 
     # Define dummies to prevent NameErrors if __name__ == "__main__" is used
     class DummyFastAPI:
@@ -2314,7 +2464,9 @@ if API_AVAILABLE:
 
             config_watcher = ConfigWatcher(
                 "runner.yaml",
-                partial(_on_config_reload_callback, runner_instance_ref=runner_instance),
+                partial(
+                    _on_config_reload_callback, runner_instance_ref=runner_instance
+                ),
             )
             asyncio.create_task(config_watcher.start())
             logger.info("ConfigWatcher started for API server.")
@@ -2324,7 +2476,9 @@ if API_AVAILABLE:
                 f"Failed to initialize Runner or ConfigWatcher on startup: {e}",
                 exc_info=True,
             )
-            raise RuntimeError("API startup failed due to Runner initialization error.") from e
+            raise RuntimeError(
+                "API startup failed due to Runner initialization error."
+            ) from e
 
     # @api.on_event("shutdown") # DECORATOR REMOVED
     async def shutdown_event():
@@ -2384,7 +2538,9 @@ if API_AVAILABLE:
                 json.dumps({"event": "api_run_task_failed", "error": e.as_dict()}),
                 exc_info=True,
             )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict())
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict()
+            )
         except Exception as e:
             error_dict = RunnerError(
                 error_codes["UNEXPECTED_ERROR"],
@@ -2416,7 +2572,11 @@ if API_AVAILABLE:
         if payload.task_id is None:
             payload.task_id = f"api_enq_task_{uuid.uuid4()}"
 
-        logger.info(json.dumps({"event": "api_enqueue_task_received", "task_id": payload.task_id}))
+        logger.info(
+            json.dumps(
+                {"event": "api_enqueue_task_received", "task_id": payload.task_id}
+            )
+        )
 
         try:
             task_result = await runner_instance.enqueue(payload)
@@ -2426,7 +2586,9 @@ if API_AVAILABLE:
                 json.dumps({"event": "api_enqueue_task_failed", "error": e.as_dict()}),
                 exc_info=True,
             )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict())
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict()
+            )
         except Exception as e:
             error_dict = RunnerError(
                 error_codes["UNEXPECTED_ERROR"],
@@ -2459,9 +2621,7 @@ if API_AVAILABLE:
         try:
             for task_payload in batch_payload.tasks:
                 if task_payload.task_id is None:
-                    task_payload.task_id = (
-                        f"api_batch_task_{runner_instance.instance_id}_{str(uuid.uuid4())[:8]}"
-                    )
+                    task_payload.task_id = f"api_batch_task_{runner_instance.instance_id}_{str(uuid.uuid4())[:8]}"
                 await runner_instance.enqueue(task_payload)
                 enqueued_task_ids.append(task_payload.task_id)
 
@@ -2484,7 +2644,9 @@ if API_AVAILABLE:
                 json.dumps({"event": "api_batch_enqueue_failed", "error": e.as_dict()}),
                 exc_info=True,
             )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict())
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=e.as_dict()
+            )
         except Exception as e:
             error_dict = RunnerError(
                 error_codes["UNEXPECTED_ERROR"],
@@ -2539,8 +2701,9 @@ if API_AVAILABLE:
         return get_metrics_dict()
 
     # --- CLI (Requires Click) ---
-    import click
     import sys
+
+    import click
 
     @click.group()
     def cli():
@@ -2589,10 +2752,14 @@ if API_AVAILABLE:
             await runner.start_services()  # [FIX] Start services
 
             test_file_contents = {
-                f.name: f.read_text(encoding="utf-8") for f in test_dir.iterdir() if f.is_file()
+                f.name: f.read_text(encoding="utf-8")
+                for f in test_dir.iterdir()
+                if f.is_file()
             }
             code_file_contents = {
-                f.name: f.read_text(encoding="utf-8") for f in code_dir.iterdir() if f.is_file()
+                f.name: f.read_text(encoding="utf-8")
+                for f in code_dir.iterdir()
+                if f.is_file()
             }
 
             output_path.mkdir(parents=True, exist_ok=True)
@@ -2669,10 +2836,14 @@ if API_AVAILABLE:
             await runner.start_services()  # [FIX] Start services (needed for workers)
 
             test_file_contents = {
-                f.name: f.read_text(encoding="utf-8") for f in test_dir.iterdir() if f.is_file()
+                f.name: f.read_text(encoding="utf-8")
+                for f in test_dir.iterdir()
+                if f.is_file()
             }
             code_file_contents = {
-                f.name: f.read_text(encoding="utf-8") for f in code_dir.iterdir() if f.is_file()
+                f.name: f.read_text(encoding="utf-8")
+                for f in code_dir.iterdir()
+                if f.is_file()
             }
 
             output_path.mkdir(parents=True, exist_ok=True)
@@ -2688,7 +2859,9 @@ if API_AVAILABLE:
             )
             try:
                 await runner.enqueue(task_payload)
-                click.echo(f"Task {task_payload.task_id} enqueued with priority {priority}.")
+                click.echo(
+                    f"Task {task_payload.task_id} enqueued with priority {priority}."
+                )
             except RunnerError as e:
                 click.echo(f"Error: {json.dumps(e.as_dict(), indent=2)}", err=True)
                 sys.exit(1)
@@ -2721,7 +2894,9 @@ if API_AVAILABLE:
 
     @cli.command(name="api-server", help="Start the Runner API server.")
     @click.option("--host", default="0.0.0.0", help="Host to bind the API server to.")
-    @click.option("--port", default=8000, type=int, help="Port to run the API server on.")
+    @click.option(
+        "--port", default=8000, type=int, help="Port to run the API server on."
+    )
     def cli_api_server(host: str, port: int):
         try:
             from uvicorn import run as uvicorn_run

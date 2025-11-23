@@ -1,13 +1,14 @@
 import asyncio
-import logging
-import uuid
 import json
-import time
+import logging
 import random
+import time
 import traceback
-import torch
+import uuid
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+
 import numpy as np
-from typing import Dict, Any, List, Optional, Callable, Union, Set
+import torch
 
 try:
     from aiolimiter import AsyncLimiter
@@ -33,15 +34,16 @@ except Exception:
 
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
 )
-from omnicore_engine.metrics import (
+
+from omnicore_engine.metrics import (  # Import new metrics
+    API_REQUESTS,
     get_plugin_metrics,
     get_test_metrics,
-    API_REQUESTS,
-)  # Import new metrics
+)
 
 try:
     from omnicore_engine.plugin_registry import PLUGIN_REGISTRY
@@ -72,13 +74,15 @@ try:
     )
 except ImportError:
     ExplainableReasonerPlugin = None
-from redis.asyncio import redis, RedisError
+from redis.asyncio import RedisError, redis
 
 logger = logging.getLogger("MetaSupervisor")
 # Ensure logger is configured
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -287,9 +291,13 @@ class MetaSupervisor:
         )
         self.policy_engine = PolicyEngine(settings=settings) if PolicyEngine else None
         self.explainer = (
-            ExplainableReasonerPlugin(settings=settings) if ExplainableReasonerPlugin else None
+            ExplainableReasonerPlugin(settings=settings)
+            if ExplainableReasonerPlugin
+            else None
         )
-        self.knowledge_graph = KnowledgeGraph(settings=settings) if KnowledgeGraph else None
+        self.knowledge_graph = (
+            KnowledgeGraph(settings=settings) if KnowledgeGraph else None
+        )
         # REMOVED: self.multiverse_simulation_coordinator_ultra = MultiverseSimulationCoordinatorUltra(...)
         # REMOVED: self.dream_mode_plugin = DreamModePlugin(...)
         self.db: Optional[Database] = None  # Will be initialized in async initialize
@@ -339,7 +347,9 @@ class MetaSupervisor:
                 "MetaSupervisor initialized successfully and background tasks started."
             )
         except Exception as e:
-            self.logger.critical(f"MetaSupervisor initialization failed: {e}", exc_info=True)
+            self.logger.critical(
+                f"MetaSupervisor initialization failed: {e}", exc_info=True
+            )
             raise  # Re-raise to prevent run loop from starting if init fails
 
     async def _record_audit_event(self, kind: str, name: str, details: Dict):
@@ -359,7 +369,9 @@ class MetaSupervisor:
                 torch.nn.ReLU(),
                 torch.nn.Linear(64, 32),
                 torch.nn.ReLU(),
-                torch.nn.Linear(32, 3),  # Output size (example: adjustments for 3 thresholds)
+                torch.nn.Linear(
+                    32, 3
+                ),  # Output size (example: adjustments for 3 thresholds)
             )
         self.logger.info("RL model not initialized: backend mode is not 'torch'.")
         return None
@@ -373,7 +385,9 @@ class MetaSupervisor:
         if self.backend.mode == "torch":
             self.logger.debug("Initializing prediction model for PyTorch backend.")
             return torch.nn.Sequential(
-                torch.nn.Linear(20, 128),  # Input size (example: plugin/test metrics features)
+                torch.nn.Linear(
+                    20, 128
+                ),  # Input size (example: plugin/test metrics features)
                 torch.nn.ReLU(),
                 torch.nn.Linear(128, 64),
                 torch.nn.ReLU(),
@@ -424,7 +438,8 @@ class MetaSupervisor:
                 # Use db.get_preferences as the source for config changes if a dedicated table isn't present
                 # Assuming 'config_changes' are stored as preferences under a specific user_id like "system_config_changes"
                 self.cached_config_changes = await self._rate_limited_operation(
-                    lambda: self.db.get_preferences(user_id="recent_config_changes") or {}
+                    lambda: self.db.get_preferences(user_id="recent_config_changes")
+                    or {}
                 ).get(
                     "changes", []
                 )  # Expects a dict like {"changes": [...]}
@@ -449,7 +464,9 @@ class MetaSupervisor:
                 self.logger.debug("Publishing meta status...")
                 await self.publish_meta_status()
             except Exception as ex:
-                self.logger.exception("MetaSupervisor main loop encountered an error: %s", ex)
+                self.logger.exception(
+                    "MetaSupervisor main loop encountered an error: %s", ex
+                )
                 await self._rate_limited_operation(
                     lambda: self._record_audit_event(
                         "supervisor_run_loop_error",
@@ -466,7 +483,9 @@ class MetaSupervisor:
             )
             await asyncio.wait([self._stopped.wait()], timeout=sleep_duration)
 
-    async def _rate_limited_operation(self, operation: Callable, *args, **kwargs) -> Any:
+    async def _rate_limited_operation(
+        self, operation: Callable, *args, **kwargs
+    ) -> Any:
         """
         Executes an asynchronous or synchronous operation with rate limiting and exponential backoff retries.
         This ensures external calls (DB, Redis) don't overload services and handle transient failures.
@@ -491,7 +510,9 @@ class MetaSupervisor:
                 wait=wait_exponential(
                     multiplier=settings.DB_RETRY_DELAY, max=10
                 ),  # Use settings for retry delay
-                retry=retry_if_exception_type((RedisError, sqlalchemy.exc.SQLAlchemyError)),
+                retry=retry_if_exception_type(
+                    (RedisError, sqlalchemy.exc.SQLAlchemyError)
+                ),
             )
             async def execute_with_retry():
                 return (
@@ -518,7 +539,8 @@ class MetaSupervisor:
             # Prepare features for the prediction model
             # Assuming _extract_plugin_features returns a numpy array for each plugin's stats
             features_list = [
-                self._extract_plugin_features(stats) for stats in plugin_metrics.values()
+                self._extract_plugin_features(stats)
+                for stats in plugin_metrics.values()
             ]
             if not features_list:
                 self.logger.info("No extractable features from plugin metrics.")
@@ -533,13 +555,19 @@ class MetaSupervisor:
                 try:
                     if self.backend.mode == "torch":
                         failure_probs = (
-                            self.prediction_model(features_tensor).detach().cpu().numpy().flatten()
+                            self.prediction_model(features_tensor)
+                            .detach()
+                            .cpu()
+                            .numpy()
+                            .flatten()
                         )
                     else:  # For NumPy/other backends, assume direct function call
                         failure_probs = np.array(
                             [self.prediction_model(f) for f in features_list]
                         ).flatten()
-                    self.logger.debug(f"Predicted failure probabilities: {failure_probs.tolist()}")
+                    self.logger.debug(
+                        f"Predicted failure probabilities: {failure_probs.tolist()}"
+                    )
                 except Exception as pred_e:
                     self.logger.error(
                         f"Prediction model inference failed: {pred_e}. Skipping proactive hot-swaps based on prediction.",
@@ -558,7 +586,10 @@ class MetaSupervisor:
                 )  # Default to 0 if no prediction
 
                 # Proactive Hot-Swap based on Prediction
-                if current_failure_prob > settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD:
+                if (
+                    current_failure_prob
+                    > settings.PROACTIVE_HOT_SWAP_PREDICTION_THRESHOLD
+                ):
                     self.logger.warning(
                         f"Proactive hot-swap triggered for plugin {plugin_id}: Predicted failure probability is high ({current_failure_prob:.2f})."
                     )
@@ -659,7 +690,9 @@ class MetaSupervisor:
                     )
 
                     # Spawn a sub-supervisor for focused test optimization
-                    sub_supervisor_id = await self.spawn_supervisor(focused_task="tests")
+                    sub_supervisor_id = await self.spawn_supervisor(
+                        focused_task="tests"
+                    )
                     self.logger.info(
                         f"Spawned sub-supervisor {sub_supervisor_id} for test optimization."
                     )
@@ -718,7 +751,9 @@ class MetaSupervisor:
                     for _ in range(3)
                 ]
 
-            config_changes_raw = await self._rate_limited_operation(mock_get_recent_config_changes)
+            config_changes_raw = await self._rate_limited_operation(
+                mock_get_recent_config_changes
+            )
             self.cached_config_changes = [
                 c for c in config_changes_raw if c
             ]  # Filter out empty dicts
@@ -807,9 +842,7 @@ class MetaSupervisor:
             return False
         except Exception as e:
             self.logger.error(f"Ethical drift check failed: {e}", exc_info=True)
-            return (
-                False  # Default to no drift on error to avoid false positives/unnecessary rollbacks
-            )
+            return False  # Default to no drift on error to avoid false positives/unnecessary rollbacks
 
     async def optimize_thresholds(self):
         """
@@ -818,18 +851,26 @@ class MetaSupervisor:
         This is a proactive optimization hook.
         """
         if self.rl_model is None:
-            self.logger.info("RL model not initialized, skipping threshold optimization.")
+            self.logger.info(
+                "RL model not initialized, skipping threshold optimization."
+            )
             return
         self.logger.info("Optimizing operational thresholds using RL model.")
         try:
-            state = await self._get_system_state()  # Current system state (input to RL model)
+            state = (
+                await self._get_system_state()
+            )  # Current system state (input to RL model)
             validated_state = validate_model_input(state.astype(np.float32))
-            state_tensor = self.backend.array(validated_state)  # Ensure float32 for torch
+            state_tensor = self.backend.array(
+                validated_state
+            )  # Ensure float32 for torch
 
             # RL model predicts optimal adjustments (actions)
             # Assuming RL model outputs adjustments directly or logits to be converted
             if self.backend.mode == "torch":
-                adjustments = self.rl_model(state_tensor).detach().cpu().numpy().flatten()
+                adjustments = (
+                    self.rl_model(state_tensor).detach().cpu().numpy().flatten()
+                )
             else:  # For NumPy/other backends
                 adjustments = np.array(
                     [float(val) for val in self.rl_model(state)]
@@ -876,7 +917,9 @@ class MetaSupervisor:
                         filters={"kind": "meta_supervisor"}, limit=2000
                     )  # Get more data
                 )
-                test_metrics = get_test_metrics()  # Current test metrics for reward signal
+                test_metrics = (
+                    get_test_metrics()
+                )  # Current test metrics for reward signal
 
                 validated_audit_records = validate_training_data(audit_records)
 
@@ -892,7 +935,9 @@ class MetaSupervisor:
 
                 if self.backend.mode == "torch":
                     features_tensor = self.backend.array(features.astype(np.float32))
-                    targets_tensor = self.backend.array(targets.astype(np.float32)).unsqueeze(
+                    targets_tensor = self.backend.array(
+                        targets.astype(np.float32)
+                    ).unsqueeze(
                         1
                     )  # Ensure target is (N, 1)
 
@@ -916,12 +961,16 @@ class MetaSupervisor:
 
                     if self.rl_model:
                         self.logger.debug("Retraining RL model.")
-                        optimizer_rl = torch.optim.Adam(self.rl_model.parameters(), lr=0.001)
+                        optimizer_rl = torch.optim.Adam(
+                            self.rl_model.parameters(), lr=0.001
+                        )
                         for epoch in range(settings.MODEL_RETRAIN_EPOCHS):
                             optimizer_rl.zero_grad()
                             actions = self.rl_model(features_tensor)
                             reward = self._compute_rl_reward(actions, test_metrics)
-                            loss = -reward.mean()  # Maximize reward by minimizing negative reward
+                            loss = (
+                                -reward.mean()
+                            )  # Maximize reward by minimizing negative reward
                             loss.backward()
                             optimizer_rl.step()
                         self.logger.info(
@@ -932,7 +981,9 @@ class MetaSupervisor:
                         self.save_models
                     )  # Save models after successful retraining
                 else:
-                    self.logger.info("Skipping model retraining: backend is not 'torch'.")
+                    self.logger.info(
+                        "Skipping model retraining: backend is not 'torch'."
+                    )
 
                 explanation = await self.explainer.explain(
                     {
@@ -949,7 +1000,9 @@ class MetaSupervisor:
             except Exception as e:
                 self.logger.error(f"Model retraining failed: {e}", exc_info=True)
 
-            self.logger.debug("Model retraining cycle completed. Waiting for next interval.")
+            self.logger.debug(
+                "Model retraining cycle completed. Waiting for next interval."
+            )
 
     async def save_models(self):
         """
@@ -1003,7 +1056,9 @@ class MetaSupervisor:
                 model_data = None
                 if version:
                     model_data = await self._rate_limited_operation(
-                        lambda: self.db.get_preferences(user_id=f"meta_supervisor_models_{version}")
+                        lambda: self.db.get_preferences(
+                            user_id=f"meta_supervisor_models_{version}"
+                        )
                     )
                 else:
                     # Logic to retrieve the latest model version from preferences
@@ -1026,7 +1081,9 @@ class MetaSupervisor:
                     import io
 
                     rl_buffer = io.BytesIO(bytes.fromhex(model_data["rl_model"]))
-                    pred_buffer = io.BytesIO(bytes.fromhex(model_data["prediction_model"]))
+                    pred_buffer = io.BytesIO(
+                        bytes.fromhex(model_data["prediction_model"])
+                    )
 
                     self.rl_model.load_state_dict(torch.load(rl_buffer))
                     self.prediction_model.load_state_dict(torch.load(pred_buffer))
@@ -1123,12 +1180,15 @@ class MetaSupervisor:
         Returns:
             str: The unique ID of the newly spawned sub-supervisor.
         """
-        self.logger.info(f"Attempting to spawn a sub-supervisor focused on '{focused_task}'.")
+        self.logger.info(
+            f"Attempting to spawn a sub-supervisor focused on '{focused_task}'."
+        )
         try:
             supervisor_id = f"sub_{focused_task}_{uuid.uuid4().hex[:8]}"
             # Create a new MetaSupervisor instance for the sub-supervisor
             sub_supervisor = MetaSupervisor(
-                interval=self.interval // 2,  # Sub-supervisors might run more frequently
+                interval=self.interval
+                // 2,  # Sub-supervisors might run more frequently
                 backend_mode=self.backend.mode,
                 use_quantum=self.backend.use_quantum,
                 use_neuromorphic=self.backend.use_neuromorphic,
@@ -1138,7 +1198,9 @@ class MetaSupervisor:
             await sub_supervisor.load_models()  # Inherit latest model state from main supervisor's DB
 
             # Start the sub-supervisor's main loop as a new asyncio task
-            self.sub_supervisors[supervisor_id] = asyncio.create_task(sub_supervisor.run())
+            self.sub_supervisors[supervisor_id] = asyncio.create_task(
+                sub_supervisor.run()
+            )
             self.logger.info(
                 f"Successfully spawned sub-supervisor {supervisor_id} for '{focused_task}'."
             )
@@ -1171,13 +1233,17 @@ class MetaSupervisor:
                 )
             )
             if not allowed:
-                self.logger.warning(f"Meta-policy setting denied for user {user_id}: {reason}.")
+                self.logger.warning(
+                    f"Meta-policy setting denied for user {user_id}: {reason}."
+                )
                 return False
 
             # Update internal meta-policies and persist them to DB
             self.meta_policies.update(policy)
             await self._rate_limited_operation(
-                lambda: self.db.save_preferences(user_id="meta_policies", value=self.meta_policies)
+                lambda: self.db.save_preferences(
+                    user_id="meta_policies", value=self.meta_policies
+                )
             )
 
             explanation = await self.explainer.explain(
@@ -1193,7 +1259,9 @@ class MetaSupervisor:
             self.logger.info(f"Meta-policy successfully set for user {user_id}.")
             return True
         except Exception as e:
-            self.logger.error(f"Failed to set meta-policy for user {user_id}: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to set meta-policy for user {user_id}: {e}", exc_info=True
+            )
             return False
 
     async def _generate_mentor_reports_periodically(self):
@@ -1216,7 +1284,9 @@ class MetaSupervisor:
                         f"Published mentor report: {report.get('summary', 'No summary')}."
                     )
                 else:
-                    self.logger.warning("Generated empty mentor report. Skipping publish.")
+                    self.logger.warning(
+                        "Generated empty mentor report. Skipping publish."
+                    )
             except Exception as e:
                 self.logger.error(
                     f"Mentor report generation and publishing failed: {e}",
@@ -1233,7 +1303,9 @@ class MetaSupervisor:
             # Query relevant audit records to inform the report
             audit_records = await self._rate_limited_operation(
                 lambda: self.db.query_audit_records(
-                    filters={"kind": ["meta_supervisor", "config_rollback", "policy_denial"]},
+                    filters={
+                        "kind": ["meta_supervisor", "config_rollback", "policy_denial"]
+                    },
                     limit=500,
                 )
             )
@@ -1267,7 +1339,9 @@ class MetaSupervisor:
                     .find(goal_key.lower().replace("_weight", ""))
                     > -1
                 )
-                policy_progress[goal_key] = progress_count  # Simple count or could be ratio
+                policy_progress[goal_key] = (
+                    progress_count  # Simple count or could be ratio
+                )
 
             report = {
                 "summary": f"Processed {len(audit_records)} relevant audit records. Detected {len(ethical_divergences)} ethical divergences.",
@@ -1562,7 +1636,9 @@ class MetaSupervisor:
         # Ensure consistent feature vector length and order
         features = [
             stats.get("error_rate", 0.0),
-            stats.get("execution_time_avg", 0.0),  # Use _avg from Histogram in metrics.py
+            stats.get(
+                "execution_time_avg", 0.0
+            ),  # Use _avg from Histogram in metrics.py
             # Add other relevant stats as features (e.g., memory usage, CPU usage)
         ]
         return np.array(features, dtype=np.float32)
@@ -1578,12 +1654,18 @@ class MetaSupervisor:
         test_metrics = get_test_metrics()
 
         # Aggregate plugin metrics
-        total_plugin_errors = sum(m.get("error_rate", 0) for m in plugin_metrics_raw.values())
-        total_plugin_executions = sum(m.get("executions", 0) for m in plugin_metrics_raw.values())
+        total_plugin_errors = sum(
+            m.get("error_rate", 0) for m in plugin_metrics_raw.values()
+        )
+        total_plugin_executions = sum(
+            m.get("executions", 0) for m in plugin_metrics_raw.values()
+        )
         avg_plugin_error_rate = total_plugin_errors / max(1, total_plugin_executions)
 
         # Test metrics
-        test_failure_rate = test_metrics.get("failures", 0) / max(1, test_metrics.get("total", 1))
+        test_failure_rate = test_metrics.get("failures", 0) / max(
+            1, test_metrics.get("total", 1)
+        )
 
         # Configuration changes (using cached data)
         num_config_changes = len(self.cached_config_changes)
@@ -1634,7 +1716,9 @@ class MetaSupervisor:
             ):
                 try:
                     # Extract features from plugin stats recorded in the audit event
-                    extracted_features = self._extract_plugin_features(record["detail"]["stats"])
+                    extracted_features = self._extract_plugin_features(
+                        record["detail"]["stats"]
+                    )
                     features.append(extracted_features)
 
                     # Define target: 1 if the action was a successful remediation (e.g., hot-swap that fixed an error), else 0
@@ -1653,12 +1737,16 @@ class MetaSupervisor:
                     )
 
         if not features:
-            self.logger.warning("No valid features prepared from audit records for training.")
+            self.logger.warning(
+                "No valid features prepared from audit records for training."
+            )
             return np.array([]), np.array([])
 
         return np.array(features, dtype=np.float32), np.array(targets, dtype=np.float32)
 
-    def _compute_rl_reward(self, actions_tensor: torch.Tensor, test_metrics: Dict) -> torch.Tensor:
+    def _compute_rl_reward(
+        self, actions_tensor: torch.Tensor, test_metrics: Dict
+    ) -> torch.Tensor:
         """
         Computes the reward signal for the Reinforcement Learning (RL) model based on system performance
         and how well the taken actions (threshold adjustments) align with meta-policies.
@@ -1673,7 +1761,9 @@ class MetaSupervisor:
         self.logger.debug("Computing RL reward.")
         # Base reward: positive if tests are passing, negative if failing badly
         base_reward = (
-            1.0 if test_metrics.get("failures", 0) < self.thresholds["test_failure"] else -1.0
+            1.0
+            if test_metrics.get("failures", 0) < self.thresholds["test_failure"]
+            else -1.0
         )
 
         # Penalize if thresholds are too extreme (e.g., making plugin_error very high makes system fragile)
@@ -1749,7 +1839,9 @@ class MetaSupervisor:
                     "action": "status_publish",
                     "current_system_state_summary": {
                         "plugin_errors_summary": status_report["plugins_status"],
-                        "test_failures": status_report["tests_status"].get("failures", 0),
+                        "test_failures": status_report["tests_status"].get(
+                            "failures", 0
+                        ),
                         "thresholds": status_report["current_thresholds"],
                     },
                 }
@@ -1758,13 +1850,17 @@ class MetaSupervisor:
                 "explanation", "No explanation provided."
             )  # Add AI explanation to report
 
-            API_REQUESTS.labels(endpoint="meta_supervisor_status").inc()  # Increment API metrics
+            API_REQUESTS.labels(
+                endpoint="meta_supervisor_status"
+            ).inc()  # Increment API metrics
             self.logger.debug(
                 f"MetaSupervisor status report: {json.dumps(status_report, default=safe_serialize, indent=2)}"
             )
 
             async with self.rate_limiter:
-                async with redis.from_url(settings.REDIS_URL, decode_responses=True) as client:
+                async with redis.from_url(
+                    settings.REDIS_URL, decode_responses=True
+                ) as client:
                     await client.publish(
                         "meta_supervisor_status",
                         json.dumps(status_report, default=safe_serialize),
@@ -1801,7 +1897,9 @@ class MetaSupervisor:
                     )
             self.sub_supervisors.pop(supervisor_id, None)  # Remove from dictionary
 
-        await self._rate_limited_operation(self.save_models)  # Save models before final stop
+        await self._rate_limited_operation(
+            self.save_models
+        )  # Save models before final stop
         self.logger.info("MetaSupervisor and all sub-supervisors stopped.")
 
 
@@ -1838,12 +1936,12 @@ if __name__ == "__main__":
                 # REMOVED: ENABLE_PROACTIVE_TEST_SYNTHESIS = True # Enable for example
                 # Merkle Tree settings (mocked for standalone)
                 MERKLE_TREE_BRANCHING_FACTOR = 2
-                MERKLE_TREE_PRIVATE_KEY = (
-                    "dummy_private_key_for_testing"  # Should be SecretStr in real settings
-                )
+                MERKLE_TREE_PRIVATE_KEY = "dummy_private_key_for_testing"  # Should be SecretStr in real settings
 
             settings = DummySettings()
-            logger.warning("Using dummy settings for standalone meta_supervisor.py execution.")
+            logger.warning(
+                "Using dummy settings for standalone meta_supervisor.py execution."
+            )
 
             # Dummy implementations for core dependencies needed by MetaSupervisor.
             # In a real setup, these would be proper instances.
@@ -1863,7 +1961,7 @@ if __name__ == "__main__":
                 from omnicore_engine.plugin_registry import (
                     PLUGIN_REGISTRY as DummyPluginRegistry,
                 )
-                from omnicore_engine.plugin_registry import PluginMeta, PlugInKind
+                from omnicore_engine.plugin_registry import PlugInKind, PluginMeta
             except ImportError:
                 pass
             try:
@@ -1873,9 +1971,9 @@ if __name__ == "__main__":
             except ImportError:
                 pass
             from sqlalchemy.ext.asyncio import (
-                create_async_engine,
                 AsyncSession,
                 async_sessionmaker,
+                create_async_engine,
             )
             from sqlalchemy.ext.declarative import declarative_base
 
@@ -1907,7 +2005,9 @@ if __name__ == "__main__":
                 def __init__(self, db_path: str, system_audit_merkle_tree: Any = None):
                     # Override engine creation for mock database behavior
                     # Use actual create_async_engine but ensure it's in-memory for testing
-                    self.engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+                    self.engine = create_async_engine(
+                        "sqlite+aiosqlite:///:memory:", echo=False
+                    )
                     self.AsyncSessionLocal = async_sessionmaker(
                         bind=self.engine, class_=AsyncSession, expire_on_commit=False
                     )
@@ -1930,18 +2030,24 @@ if __name__ == "__main__":
                         await conn.run_sync(Base.metadata.create_all)
                     self.logger.info("Mock Database tables created (in-memory).")
 
-                async def get_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+                async def get_preferences(
+                    self, user_id: str
+                ) -> Optional[Dict[str, Any]]:
                     self.logger.debug(f"Mock DB: get_preferences for {user_id}")
                     return self._data_store["preferences"].get(user_id)
 
                 async def save_preferences(self, user_id: str, value: Dict[str, Any]):
-                    self.logger.debug(f"Mock DB: save_preferences for {user_id}: {value}")
+                    self.logger.debug(
+                        f"Mock DB: save_preferences for {user_id}: {value}"
+                    )
                     self._data_store["preferences"][user_id] = value
 
                 async def query_audit_records(
                     self, filters: Dict[str, Any] = None, use_dream_mode: bool = False
                 ) -> List[Dict[str, Any]]:
-                    self.logger.debug(f"Mock DB: query_audit_records with filters {filters}")
+                    self.logger.debug(
+                        f"Mock DB: query_audit_records with filters {filters}"
+                    )
                     # Return mock audit records for training data
                     return [
                         {
@@ -1949,7 +2055,9 @@ if __name__ == "__main__":
                             "kind": "meta_supervisor",
                             "name": "plugin_hot_swap",
                             "error": None,
-                            "detail": {"stats": {"error_rate": 0.1, "execution_time_avg": 0.01}},
+                            "detail": {
+                                "stats": {"error_rate": 0.1, "execution_time_avg": 0.01}
+                            },
                         },
                         {
                             "uuid": str(uuid.uuid4()),
@@ -1965,7 +2073,9 @@ if __name__ == "__main__":
                         },
                     ]
 
-                async def snapshot_audit_state(self, snapshot_id: str, state: str, user_id: str):
+                async def snapshot_audit_state(
+                    self, snapshot_id: str, state: str, user_id: str
+                ):
                     self.logger.debug(f"Mock DB: snapshot_audit_state {snapshot_id}")
                     self._data_store["audit_snapshots"][snapshot_id] = {
                         "state": state,
@@ -1982,14 +2092,18 @@ if __name__ == "__main__":
             from unittest.mock import AsyncMock, MagicMock
 
             mock_plugin_registry = MagicMock()
-            mock_plugin_registry.hot_swap_manager = MagicMock()  # Mock the hot_swap_manager
+            mock_plugin_registry.hot_swap_manager = (
+                MagicMock()
+            )  # Mock the hot_swap_manager
             mock_plugin_registry.hot_swap_manager.hot_swap_plugin = AsyncMock(
                 return_value=True
             )  # Mock this interaction
             mock_plugin_registry.get_plugins_by_kind = MagicMock(
                 return_value=[
                     MagicMock(
-                        fn=MagicMock(_wrapped=MagicMock(_array_backend=MagicMock(mode="torch")))
+                        fn=MagicMock(
+                            _wrapped=MagicMock(_array_backend=MagicMock(mode="torch"))
+                        )
                     )
                 ]
             )
@@ -2019,7 +2133,9 @@ if __name__ == "__main__":
             global omnicore_engine_global_instance
             omnicore_engine_global_instance = MagicMock()
             omnicore_engine_global_instance.orchestrator = MagicMock()
-            omnicore_engine_global_instance.orchestrator.live_reload_manager = MagicMock()
+            omnicore_engine_global_instance.orchestrator.live_reload_manager = (
+                MagicMock()
+            )
             omnicore_engine_global_instance.orchestrator.live_reload_manager.hot_swap_manager = (
                 MagicMock()
             )
@@ -2038,7 +2154,9 @@ if __name__ == "__main__":
 
         else:
             # Running in a larger app context where settings are already configured
-            supervisor = MetaSupervisor(interval=300, backend_mode="torch", use_quantum=True)
+            supervisor = MetaSupervisor(
+                interval=300, backend_mode="torch", use_quantum=True
+            )
             await supervisor.initialize()
             task = asyncio.create_task(supervisor.run())
             await asyncio.sleep(3600)  # Run for an hour in real app

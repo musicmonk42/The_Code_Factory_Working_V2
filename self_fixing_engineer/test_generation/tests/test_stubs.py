@@ -1,13 +1,13 @@
-import pytest
-
 # Fix: Added missing import
 import logging
+
+import pytest
 from test_generation.orchestrator.stubs import (
-    DummyPolicyEngine,
     DummyEventBus,
-    DummySecurityScanner,
-    DummyPRCreator,
     DummyMutationTester,
+    DummyPolicyEngine,
+    DummyPRCreator,
+    DummySecurityScanner,
     DummyTestEnricher,
 )
 

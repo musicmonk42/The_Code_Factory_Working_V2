@@ -3,24 +3,25 @@ Test suite for omnicore_engine/security_config.py
 Tests enterprise security configuration and compliance validation.
 """
 
-import pytest
 import os
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
 
 # Add the parent directory to path for imports
 import sys
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from omnicore_engine.security_config import (
-    SecurityLevel,
     ComplianceFramework,
     EnterpriseSecurityConfig,
-    get_security_config,
-    validate_compliance,
+    SecurityLevel,
     get_encryption_key_age,
+    get_security_config,
     is_ip_allowed,
+    validate_compliance,
 )
 
 
@@ -146,7 +147,9 @@ class TestComplianceValidation:
         assert config.AUDIT_LOG_RETENTION_DAYS >= 2190
 
         # Invalid HIPAA configuration - insufficient retention
-        with pytest.raises(ValueError, match="HIPAA requires 6\\+ years audit retention"):
+        with pytest.raises(
+            ValueError, match="HIPAA requires 6\\+ years audit retention"
+        ):
             EnterpriseSecurityConfig(
                 COMPLIANCE_FRAMEWORKS=[ComplianceFramework.HIPAA],
                 AUDIT_LOG_RETENTION_DAYS=365,  # Only 1 year
@@ -164,7 +167,9 @@ class TestComplianceValidation:
 
         # Invalid PCI-DSS configuration - password expiry too long
         # In Pydantic V2, validation errors have different format
-        with pytest.raises(ValueError, match="less than or equal to 90|PASSWORD_EXPIRY_DAYS"):
+        with pytest.raises(
+            ValueError, match="less than or equal to 90|PASSWORD_EXPIRY_DAYS"
+        ):
             EnterpriseSecurityConfig(
                 COMPLIANCE_FRAMEWORKS=[ComplianceFramework.PCI_DSS],
                 PASSWORD_EXPIRY_DAYS=91,
@@ -220,7 +225,9 @@ class TestValidators:
     def test_ip_range_validator(self):
         """Test IP range validation"""
         # Valid IP ranges
-        config = EnterpriseSecurityConfig(ALLOWED_IP_RANGES=["192.168.1.0/24", "10.0.0.0/8"])
+        config = EnterpriseSecurityConfig(
+            ALLOWED_IP_RANGES=["192.168.1.0/24", "10.0.0.0/8"]
+        )
         assert "192.168.1.0/24" in config.ALLOWED_IP_RANGES
 
         # Invalid IP range

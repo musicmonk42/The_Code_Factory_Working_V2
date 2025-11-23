@@ -1,15 +1,15 @@
-import aiofiles
+import asyncio
+import datetime
 import hashlib
 import json
 import logging
 import os
-import uuid
-import asyncio
-import datetime
 import time
+import uuid
+from typing import Any, Dict, Tuple
+
+import aiofiles
 import cryptography.exceptions
-from typing import Dict, Any, Tuple
-from prometheus_client import Counter, Histogram
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -18,8 +18,9 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
     load_pem_public_key,
 )
-from tenacity import retry, stop_after_attempt, wait_exponential
+from prometheus_client import Counter, Histogram
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Configuration from environment variables
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "./audit_log.jsonl")
@@ -45,7 +46,9 @@ ML_AUDIT_SIGNATURE_MISMATCH = Counter(
     "ml_audit_signature_mismatch_total",
     "Total number of audit signature mismatches detected, indicating potential tampering.",
 )
-ML_AUDIT_ROTATIONS_TOTAL = Counter("ml_audit_rotations_total", "Total log rotations performed")
+ML_AUDIT_ROTATIONS_TOTAL = Counter(
+    "ml_audit_rotations_total", "Total log rotations performed"
+)
 ML_AUDIT_CRYPTO_ERRORS = Counter(
     "ml_audit_crypto_errors_total",
     "Total cryptographic errors (sign/verify/encrypt/decrypt)",
@@ -94,7 +97,9 @@ class AuditUtils:
 
         # Encryption setup
         self.encryption_key = AUDIT_ENCRYPTION_KEY
-        self.fernet = Fernet(self.encryption_key.encode()) if self.encryption_key else None
+        self.fernet = (
+            Fernet(self.encryption_key.encode()) if self.encryption_key else None
+        )
         if not self.fernet:
             logger.warning(
                 "AUDIT_ENCRYPTION_KEY is not set. Audit log details will not be encrypted."
@@ -105,7 +110,9 @@ class AuditUtils:
         try:
             self.curve = getattr(ec, curve_name)()
         except AttributeError:
-            logger.error(f"Invalid ECDSA curve {curve_name}. Falling back to SECP256R1.")
+            logger.error(
+                f"Invalid ECDSA curve {curve_name}. Falling back to SECP256R1."
+            )
             self.curve = ec.SECP256R1()
         logger.info(f"Using ECDSA curve: {self.curve.name}")
 
@@ -115,7 +122,9 @@ class AuditUtils:
             private_pem = os.getenv("AUDIT_SIGNING_PRIVATE_KEY")
             public_pem = os.getenv("AUDIT_SIGNING_PUBLIC_KEY")
             if private_pem:
-                self.private_key = load_pem_private_key(private_pem.encode(), password=None)
+                self.private_key = load_pem_private_key(
+                    private_pem.encode(), password=None
+                )
             if public_pem:
                 self.public_key = load_pem_public_key(public_pem.encode())
 
@@ -145,7 +154,9 @@ class AuditUtils:
                 )
                 self.loop.create_task(self.kafka_producer.start())
             except ImportError:
-                logger.error("aiokafka not installed. Falling back to file-based logging.")
+                logger.error(
+                    "aiokafka not installed. Falling back to file-based logging."
+                )
                 self.kafka_producer = None
             except Exception as e:
                 logger.error(
@@ -188,8 +199,13 @@ class AuditUtils:
             cutoff_time = time.time() - (AUDIT_RETENTION_DAYS * 86400)
             for i in range(1, self.max_files + 1):
                 backup_path = f"{self.log_path}.{i}"
-                if os.path.exists(backup_path) and os.path.getmtime(backup_path) < cutoff_time:
-                    logger.info(f"Deleting old backup due to retention policy: {backup_path}")
+                if (
+                    os.path.exists(backup_path)
+                    and os.path.getmtime(backup_path) < cutoff_time
+                ):
+                    logger.info(
+                        f"Deleting old backup due to retention policy: {backup_path}"
+                    )
                     os.remove(backup_path)
 
         # Size-based rotation check
@@ -221,7 +237,9 @@ class AuditUtils:
         ML_AUDIT_ROTATIONS_TOTAL.inc()
         logger.info(f"Log rotation complete. New file created at {self.log_path}")
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10))
+    @retry(
+        stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10)
+    )
     async def _write_audit_event(self, event: Dict[str, Any]):
         await self._rotate_log()
         async with aiofiles.open(self.log_path, "a", encoding="utf-8") as f:
@@ -230,9 +248,13 @@ class AuditUtils:
 
     async def _send_to_kafka(self, event: Dict[str, Any]):
         try:
-            await self.kafka_producer.send_and_wait(KAFKA_TOPIC, json.dumps(event).encode("utf-8"))
+            await self.kafka_producer.send_and_wait(
+                KAFKA_TOPIC, json.dumps(event).encode("utf-8")
+            )
         except Exception as e:
-            logger.error(f"Kafka send failed: {e}. Falling back to file.", exc_info=True)
+            logger.error(
+                f"Kafka send failed: {e}. Falling back to file.", exc_info=True
+            )
             async with self._lock:
                 await self._write_audit_event(event)
 
@@ -265,7 +287,9 @@ class AuditUtils:
                 await consumer.seek(tp, end_offset - 1)
                 msg = await consumer.getone()
                 await consumer.stop()
-                return json.loads(msg.value.decode("utf-8")).get("event_hash", "genesis_hash")
+                return json.loads(msg.value.decode("utf-8")).get(
+                    "event_hash", "genesis_hash"
+                )
             except Exception as e:
                 logger.error(
                     f"Failed to get last hash from Kafka: {e}. Using genesis.",
@@ -298,7 +322,9 @@ class AuditUtils:
                 logger.error(f"Could not read last hash from file: {e}", exc_info=True)
                 return "genesis_hash"
 
-    def hash_event(self, event_data: Dict[str, Any], prev_hash: str) -> Tuple[str, bytes]:
+    def hash_event(
+        self, event_data: Dict[str, Any], prev_hash: str
+    ) -> Tuple[str, bytes]:
         """
         Computes a SHA256 hash for an event, including the previous event's hash.
         Returns (hex_digest_string, raw_digest_bytes) for storage and signing efficiency.
@@ -314,7 +340,9 @@ class AuditUtils:
             logger.warning("No private key configured. Audit event will not be signed.")
             return ""
         try:
-            signature = self.private_key.sign(digest, ec.ECDSA(Prehashed(hashes.SHA256())))
+            signature = self.private_key.sign(
+                digest, ec.ECDSA(Prehashed(hashes.SHA256()))
+            )
             return signature.hex()
         except Exception as e:
             logger.error(f"Failed to sign event digest: {e}", exc_info=True)
@@ -357,7 +385,9 @@ class AuditUtils:
         encrypted_details = details
         if self.fernet:
             try:
-                encrypted_details = self.fernet.encrypt(json.dumps(details).encode()).decode()
+                encrypted_details = self.fernet.encrypt(
+                    json.dumps(details).encode()
+                ).decode()
             except Exception as e:
                 logger.error(
                     f"Failed to encrypt details for event {event_id}: {e}",
@@ -435,12 +465,19 @@ class AuditUtils:
                             "event_id": event["event_id"],
                             "timestamp": event["timestamp"],
                             "event_type": event["event_type"],
-                            "details": event["details"],  # Use as-stored (encrypted if applicable)
+                            "details": event[
+                                "details"
+                            ],  # Use as-stored (encrypted if applicable)
                         }
 
-                        expected_hash, expected_digest = self.hash_event(event_for_hash, prev_hash)
+                        expected_hash, expected_digest = self.hash_event(
+                            event_for_hash, prev_hash
+                        )
 
-                        if event["event_hash"] != expected_hash or event["prev_hash"] != prev_hash:
+                        if (
+                            event["event_hash"] != expected_hash
+                            or event["prev_hash"] != prev_hash
+                        ):
                             logger.critical(
                                 f"AUDIT CHAIN TAMPERED! Hash mismatch at line {line_number}."
                             )
@@ -451,7 +488,9 @@ class AuditUtils:
                             report["is_valid"] = False
                             break
 
-                        if not self._verify_signature(expected_digest, event["signature"]):
+                        if not self._verify_signature(
+                            expected_digest, event["signature"]
+                        ):
                             logger.critical(
                                 f"AUDIT CHAIN TAMPERED! Invalid signature at line {line_number}."
                             )
@@ -544,19 +583,30 @@ class AuditUtils:
                     "event_id": event["event_id"],
                     "timestamp": event["timestamp"],
                     "event_type": event["event_type"],
-                    "details": event["details"],  # Use as-stored (encrypted if applicable)
+                    "details": event[
+                        "details"
+                    ],  # Use as-stored (encrypted if applicable)
                 }
 
-                expected_hash, expected_digest = self.hash_event(event_for_hash, prev_hash)
+                expected_hash, expected_digest = self.hash_event(
+                    event_for_hash, prev_hash
+                )
 
-                if event["event_hash"] != expected_hash or event["prev_hash"] != prev_hash:
-                    report["mismatches"].append({"offset": offset, "type": "hash_mismatch"})
+                if (
+                    event["event_hash"] != expected_hash
+                    or event["prev_hash"] != prev_hash
+                ):
+                    report["mismatches"].append(
+                        {"offset": offset, "type": "hash_mismatch"}
+                    )
                     ML_AUDIT_HASH_MISMATCH.inc()
                     report["is_valid"] = False
                     break
 
                 if not self._verify_signature(expected_digest, event["signature"]):
-                    report["mismatches"].append({"offset": offset, "type": "signature_mismatch"})
+                    report["mismatches"].append(
+                        {"offset": offset, "type": "signature_mismatch"}
+                    )
                     ML_AUDIT_SIGNATURE_MISMATCH.inc()
                     report["is_valid"] = False
                     break

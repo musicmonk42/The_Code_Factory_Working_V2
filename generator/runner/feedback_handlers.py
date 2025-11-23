@@ -16,19 +16,19 @@ from __future__ import annotations
 
 import json
 import logging
+
+# --- STDLIBS FOR FIXES ---
+import os
 import queue
 import threading
 import time
+import uuid
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional, TextIO
-
-# --- STDLIBS FOR FIXES ---
-import os
-import uuid
-import warnings
 from urllib import request
 
 # Import canonical Severity from arbiter
@@ -101,7 +101,9 @@ class FeedbackEvent:
     def __post_init__(self):
         """Add post-init validation for severity."""
         if not isinstance(self.severity, Severity):
-            warnings.warn(f"Invalid severity '{self.severity}'. Defaulting to INFO.", UserWarning)
+            warnings.warn(
+                f"Invalid severity '{self.severity}'. Defaulting to INFO.", UserWarning
+            )
             # Bypass frozen=True to correct the value
             object.__setattr__(self, "severity", Severity.INFO)
 
@@ -193,7 +195,8 @@ class FeedbackRegistry:
                 sink.emit(event)
             except Exception as e:
                 logger.error(
-                    f"Sink {type(sink).__name__} failed to emit " f"event {event.event_id}: {e}",
+                    f"Sink {type(sink).__name__} failed to emit "
+                    f"event {event.event_id}: {e}",
                     exc_info=True,
                 )
                 success = False
@@ -250,7 +253,9 @@ class FileSink(FeedbackSink):
             self._fh.flush()  # Ensure it hits disk immediately
         except Exception as e:
             # Log and suppress: FileSink must never raise
-            logger.warning(f"FileSink write to '{self.filepath}' failed: {e}", exc_info=True)
+            logger.warning(
+                f"FileSink write to '{self.filepath}' failed: {e}", exc_info=True
+            )
             # Close and reset file handle on error to prevent leaked handles
             if self._fh:
                 try:
@@ -272,7 +277,9 @@ class FileSink(FeedbackSink):
                 self._fh.close()
                 self._fh = None
         except Exception as e:
-            logger.warning(f"FileSink close for '{self.filepath}' failed: {e}", exc_info=True)
+            logger.warning(
+                f"FileSink close for '{self.filepath}' failed: {e}", exc_info=True
+            )
 
 
 class HttpSink(FeedbackSink):
@@ -296,7 +303,9 @@ class HttpSink(FeedbackSink):
 
         try:
             data = event.serialize().encode("utf-8")
-            req = request.Request(self.endpoint, data=data, headers=self.headers, method="POST")
+            req = request.Request(
+                self.endpoint, data=data, headers=self.headers, method="POST"
+            )
             with request.urlopen(req, timeout=5.0) as response:
                 if response.status < 200 or response.status >= 300:
                     logger.warning(
@@ -379,7 +388,9 @@ def _ensure_worker_started() -> None:
     global _worker_thread
     if _worker_thread is None or not _worker_thread.is_alive():
         _worker_stop.clear()
-        _worker_thread = threading.Thread(target=_worker_loop, daemon=True, name="FeedbackWorker")
+        _worker_thread = threading.Thread(
+            target=_worker_loop, daemon=True, name="FeedbackWorker"
+        )
         _worker_thread.start()
 
 
@@ -436,7 +447,9 @@ def collect_feedback(
         # FIX: Call _ensure_worker_started() *after* the sink is guaranteed to exist
         _ensure_worker_started()  # This call will now correctly start the thread
 
-        event = FeedbackEvent(event_type=event_type, data=data, source=source, severity=severity)
+        event = FeedbackEvent(
+            event_type=event_type, data=data, source=source, severity=severity
+        )
 
         # Increment collected counter before validation
         _registry.events_collected += 1
@@ -445,7 +458,8 @@ def collect_feedback(
         error = event.validate()
         if error:
             logger.error(
-                f"Invalid feedback event dropped: {error}. " f"Type: {event_type}, Data: {data}"
+                f"Invalid feedback event dropped: {error}. "
+                f"Type: {event_type}, Data: {data}"
             )
             _registry.events_failed += 1
             return  # Do not enqueue invalid event

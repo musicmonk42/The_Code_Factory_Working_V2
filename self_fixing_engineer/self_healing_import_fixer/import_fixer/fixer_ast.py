@@ -6,16 +6,17 @@ specifically targeting circular dependencies and dynamic imports.
 """
 
 import ast
-import os
-import logging
-import networkx as nx  # For graph operations in CycleHealer
-import sys  # For sys.exit
 import asyncio  # For running async methods in a sync context
 import hashlib
-from typing import List, Set, Optional, Tuple, Any
-from ast import NodeTransformer
+import logging
+import os
+import sys  # For sys.exit
 import threading
+from ast import NodeTransformer
 from pathlib import Path
+from typing import Any, List, Optional, Set, Tuple
+
+import networkx as nx  # For graph operations in CycleHealer
 
 # --- Guard POSIX-only imports ---
 try:
@@ -30,15 +31,17 @@ logger = logging.getLogger(__name__)
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from self_healing_import_fixer.import_fixer.compat_core import (
-        alert_operator,
-        scrub_secrets,
-        audit_logger,
-        SECRETS_MANAGER,
-    )
     from self_healing_import_fixer.import_fixer.cache_layer import get_cache
+    from self_healing_import_fixer.import_fixer.compat_core import (
+        SECRETS_MANAGER,
+        alert_operator,
+        audit_logger,
+        scrub_secrets,
+    )
 except ImportError as e:
-    logger.critical(f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup.")
+    logger.critical(
+        f"CRITICAL: Missing core dependency for fixer_ast: {e}. Aborting startup."
+    )
     try:
         alert_operator(
             f"CRITICAL: AST healing missing core dependency: {e}. Aborting.",
@@ -82,10 +85,10 @@ class NonCriticalError(Exception):
 # For now, we'll assume `get_ai_refactoring_suggestion_real` is the trusted source.
 try:
     from self_healing_import_fixer.import_fixer.fixer_ai import (
-        get_ai_suggestions as get_ai_suggestions_real,
+        get_ai_patch as get_ai_patch_real,
     )
     from self_healing_import_fixer.import_fixer.fixer_ai import (
-        get_ai_patch as get_ai_patch_real,
+        get_ai_suggestions as get_ai_suggestions_real,
     )
 except ImportError as e:
     logger.critical(
@@ -142,11 +145,15 @@ def get_ai_refactoring_suggestion(context: str) -> str:
     """Wrapper to call the real AI suggestion function."""
     # Secret Scrubbing: All code/context sent to AI for suggestions must be scrubbed of secrets.
     scrubbed_context = scrub_secrets(context)
-    audit_logger.log_event("ai_suggestion_request", context_snippet=scrubbed_context[:200])
+    audit_logger.log_event(
+        "ai_suggestion_request", context_snippet=scrubbed_context[:200]
+    )
     try:
         suggestion = get_ai_suggestions_real(scrubbed_context)
         suggestion_str = "\n".join(suggestion)
-        audit_logger.log_event("ai_suggestion_response", suggestion_snippet=suggestion_str[:200])
+        audit_logger.log_event(
+            "ai_suggestion_response", suggestion_snippet=suggestion_str[:200]
+        )
         return suggestion_str
     except Exception as e:
         logger.error(f"Error getting AI refactoring suggestion: {e}", exc_info=True)
@@ -202,7 +209,9 @@ class ImportResolver(NodeTransformer):
         self.whitelisted_paths = whitelisted_paths
         self.root_package_names = root_package_names
         self.modified = False
-        logger.debug(f"ImportResolver initialized for module: {self.current_module_path}")
+        logger.debug(
+            f"ImportResolver initialized for module: {self.current_module_path}"
+        )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         """
@@ -211,7 +220,8 @@ class ImportResolver(NodeTransformer):
         """
         # Ensure the current file's path is within whitelisted directories
         current_file_path = (
-            os.path.join(self.project_root, *self.current_module_path.split(".")) + ".py"
+            os.path.join(self.project_root, *self.current_module_path.split("."))
+            + ".py"
         )
         if not any(current_file_path.startswith(wp) for wp in self.whitelisted_paths):
             logger.critical(
@@ -247,10 +257,14 @@ class ImportResolver(NodeTransformer):
                     break
 
             if not is_under_root and self.root_package_names:
-                candidate_module_path = f"{self.root_package_names[0]}.{new_module_path}".strip(".")
+                candidate_module_path = (
+                    f"{self.root_package_names[0]}.{new_module_path}".strip(".")
+                )
                 for root_name in self.root_package_names:
                     if candidate_module_path.startswith(f"{root_name}.{root_name}."):
-                        candidate_module_path = candidate_module_path[len(root_name) + 1 :]
+                        candidate_module_path = candidate_module_path[
+                            len(root_name) + 1 :
+                        ]
                 new_module_path = candidate_module_path
 
             logger.debug(
@@ -284,9 +298,14 @@ class CycleHealer:
         self.whitelisted_paths = whitelisted_paths
 
         if not Path(self.file_path).is_file():
-            raise AnalyzerCriticalError(f"File not found for CycleHealer: {self.file_path}.")
+            raise AnalyzerCriticalError(
+                f"File not found for CycleHealer: {self.file_path}."
+            )
 
-        if not any(Path(self.file_path).is_relative_to(wp) for wp in map(Path, whitelisted_paths)):
+        if not any(
+            Path(self.file_path).is_relative_to(wp)
+            for wp in map(Path, whitelisted_paths)
+        ):
             logger.critical(
                 f"CRITICAL: Attempted to heal file '{self.file_path}' which is outside whitelisted paths: {whitelisted_paths}. Aborting operation."
             )
@@ -330,7 +349,9 @@ class CycleHealer:
                 self.original_code = cached_content
                 self.tree = ast.parse(self.original_code)
                 logger.debug(f"Loaded AST from cache for {self.file_path}")
-                self.current_module_name = self._get_module_name_from_path(self.file_path)
+                self.current_module_name = self._get_module_name_from_path(
+                    self.file_path
+                )
                 return
 
         try:
@@ -397,7 +418,9 @@ class CycleHealer:
         next_mod_name_in_cycle = None
         try:
             current_mod_index = self.cycle.index(self.current_module_name)
-            next_mod_name_in_cycle = self.cycle[(current_mod_index + 1) % len(self.cycle)]
+            next_mod_name_in_cycle = self.cycle[
+                (current_mod_index + 1) % len(self.cycle)
+            ]
         except ValueError:
             logger.error(
                 f"Current module '{self.current_module_name}' not found in cycle {self.cycle}."
@@ -413,7 +436,8 @@ class CycleHealer:
                 for alias in node.names:
                     if (
                         alias.name == next_mod_name_in_cycle
-                        or alias.name.split(".")[0] == next_mod_name_in_cycle.split(".")[0]
+                        or alias.name.split(".")[0]
+                        == next_mod_name_in_cycle.split(".")[0]
                     ):
                         imported_names = {a.asname or a.name for a in node.names}
                         logger.debug(
@@ -447,7 +471,9 @@ class CycleHealer:
         it consults AI for refactoring suggestions.
         """
         if not os.access(self.file_path, os.W_OK):
-            raise AnalyzerCriticalError(f"No write access to {self.file_path}. Aborting healing.")
+            raise AnalyzerCriticalError(
+                f"No write access to {self.file_path}. Aborting healing."
+            )
 
         audit_logger.log_event(
             "cycle_heal_attempt", file=self.file_path, cycle=scrub_secrets(self.cycle)
@@ -559,7 +585,9 @@ class CycleHealer:
             suggestion = get_ai_refactoring_suggestion(context)
             return suggestion
         except Exception as e:
-            logger.error(f"Error getting AI suggestion for splitting module: {e}", exc_info=True)
+            logger.error(
+                f"Error getting AI suggestion for splitting module: {e}", exc_info=True
+            )
             return f"AI features failed: {e}"
 
     class MoveImportIntoFunction(NodeTransformer):
@@ -596,7 +624,10 @@ class CycleHealer:
                 # Check if any of the imported names are used within this function's body
                 # This is a heuristic and might need refinement for complex usage patterns.
                 for sub_node in ast.walk(node):
-                    if isinstance(sub_node, ast.Name) and sub_node.id in self.usage_names:
+                    if (
+                        isinstance(sub_node, ast.Name)
+                        and sub_node.id in self.usage_names
+                    ):
                         logger.info(
                             f"Moving cycle-causing import into function '{node.name}' in file."
                         )
@@ -633,7 +664,10 @@ class DynamicImportHealer:
                 f"File not found for DynamicImportHealer: {self.file_path}."
             )
 
-        if not any(Path(self.file_path).is_relative_to(wp) for wp in map(Path, whitelisted_paths)):
+        if not any(
+            Path(self.file_path).is_relative_to(wp)
+            for wp in map(Path, whitelisted_paths)
+        ):
             logger.critical(
                 f"CRITICAL: Attempted to analyze file '{self.file_path}' which is outside whitelisted paths: {whitelisted_paths}. Aborting operation."
             )
@@ -718,7 +752,9 @@ class DynamicImportHealer:
         for node in self.dynamic_nodes:
             suggestion = ""
             if node.func.id == "__import__":
-                if len(node.args) > 0 and isinstance(node.args[0], (ast.Constant, ast.Str)):
+                if len(node.args) > 0 and isinstance(
+                    node.args[0], (ast.Constant, ast.Str)
+                ):
                     mod_name = node.args[0].value
                     suggestion = (
                         f"Consider replacing `__import__('{mod_name}')` with "
@@ -770,7 +806,9 @@ class DynamicImportHealer:
 if __name__ == "__main__":
     import shutil
 
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.setLevel(logging.DEBUG)  # Set this module's logger to DEBUG
 
     # Dummy core_utils and core_secrets for testing
@@ -807,10 +845,10 @@ if __name__ == "__main__":
     # Overwrite imports with dummy implementations
     try:
         from self_healing_import_fixer.import_fixer.compat_core import (
-            alert_operator,
-            scrub_secrets,
-            audit_logger,
             SECRETS_MANAGER,
+            alert_operator,
+            audit_logger,
+            scrub_secrets,
         )
     except ImportError:
         pass  # The outer try-except block has handled this
@@ -827,16 +865,22 @@ if __name__ == "__main__":
     # Create a dummy project structure for testing
     test_project_root = "test_ast_healing_project"
     os.makedirs(test_project_root, exist_ok=True)
-    os.makedirs(os.path.join(test_project_root, "my_package", "sub_module"), exist_ok=True)
+    os.makedirs(
+        os.path.join(test_project_root, "my_package", "sub_module"), exist_ok=True
+    )
 
     # Test file for ImportResolver
-    resolver_file = os.path.join(test_project_root, "my_package", "sub_module", "analyzer.py")
+    resolver_file = os.path.join(
+        test_project_root, "my_package", "sub_module", "analyzer.py"
+    )
     with open(resolver_file, "w") as f:
         f.write("from .. import utils\n")
         f.write("from . import helper\n")
         f.write("from ...another_package import feature\n")
         f.write("import os\n")  # Absolute import
-        f.write("from my_package.sub_module import config\n")  # Absolute import within same root
+        f.write(
+            "from my_package.sub_module import config\n"
+        )  # Absolute import within same root
 
     # Test file for CycleHealer
     cycle_file_a = os.path.join(test_project_root, "module_a.py")
@@ -947,8 +991,12 @@ if __name__ == "__main__":
             whitelisted_paths,
         )
 
-        print(f"Original {os.path.basename(cycle_file_a)}:\n{cycle_healer_a.original_code}\n")
-        print(f"Original {os.path.basename(cycle_file_b)}:\n{cycle_healer_b.original_code}\n")
+        print(
+            f"Original {os.path.basename(cycle_file_a)}:\n{cycle_healer_a.original_code}\n"
+        )
+        print(
+            f"Original {os.path.basename(cycle_file_b)}:\n{cycle_healer_b.original_code}\n"
+        )
 
         # Attempt to heal module_a
         healed_code_a = await cycle_healer_a.heal()  # Await the async heal method
@@ -984,7 +1032,9 @@ if __name__ == "__main__":
 
     # --- Test DynamicImportHealer ---
     print("\n--- Testing DynamicImportHealer ---")
-    dynamic_healer = DynamicImportHealer(dynamic_file, test_project_root, whitelisted_paths)
+    dynamic_healer = DynamicImportHealer(
+        dynamic_file, test_project_root, whitelisted_paths
+    )
     dynamic_fixes = dynamic_healer.heal()
     if dynamic_fixes:
         print(f"Dynamic imports found in {os.path.basename(dynamic_file)}:")
@@ -1002,7 +1052,9 @@ if __name__ == "__main__":
 
         DynamicImportHealer(syntax_error_file, test_project_root, whitelisted_paths)
     except AnalyzerCriticalError:
-        print("Caught expected AnalyzerCriticalError for syntax error in DynamicImportHealer.")
+        print(
+            "Caught expected AnalyzerCriticalError for syntax error in DynamicImportHealer."
+        )
     except Exception as e:
         print(f"Caught unexpected exception: {e}")
     finally:

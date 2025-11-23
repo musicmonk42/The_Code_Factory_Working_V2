@@ -3,10 +3,10 @@
 Fixed E2E Test Suite - Works without external dependencies
 """
 
-import sys
 import asyncio
-from unittest.mock import AsyncMock, patch
+import sys
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pytest_asyncio import fixture

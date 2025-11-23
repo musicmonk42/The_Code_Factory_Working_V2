@@ -1,10 +1,11 @@
 # arbiter/learner/__init__.py
 
+import importlib.metadata
 import logging
 import os
-import importlib.metadata
-import structlog  # Install: pip install structlog
 import warnings
+
+import structlog  # Install: pip install structlog
 
 __version__ = "0.0.1"  # Requires pyproject.toml with [tool.poetry] or setup.py
 
@@ -30,7 +31,9 @@ required_envs = [
 ]  # Add more as needed
 missing = [var for var in required_envs if not os.getenv(var)]
 if missing:
-    warnings.warn(f"Missing env vars: {', '.join(missing)}. Using defaults for testing.")
+    warnings.warn(
+        f"Missing env vars: {', '.join(missing)}. Using defaults for testing."
+    )
     for var in missing:
         os.environ[var] = "test_default"
 
@@ -40,8 +43,8 @@ def setup_module():
     logger.info("arbiter.learner module initialized", version=__version__)
 
 
-from .core import Learner, should_auto_learn
 from .audit import CircuitBreaker
+from .core import Learner, should_auto_learn
 from .encryption import ArbiterConfig
 
 __all__ = [

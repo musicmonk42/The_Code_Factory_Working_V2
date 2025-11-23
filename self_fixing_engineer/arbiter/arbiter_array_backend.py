@@ -25,37 +25,34 @@ USAGE:
     data = await backend.get()
 """
 
-import json
-import os
-import time
-import logging
 import asyncio
+import json
+import logging
+import os
 import threading
-from typing import List, Any, Optional, Dict, Union, Callable
+import time
+from abc import ABCMeta, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from abc import abstractmethod, ABCMeta
-from prometheus_client import (
-    Counter as PCounter,
-    Histogram as PHistogram,
-    Summary as PSummary,
-    Gauge as PGauge,
-    REGISTRY,
-)
-from prometheus_client.metrics import (
-    Counter as _Counter,
-    Histogram as _Histogram,
-    Summary as _Summary,
-    Gauge as _Gauge,
-)
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-import aiofiles
 from pathlib import Path
-from cryptography.fernet import Fernet, InvalidToken
-from arbiter.otel_config import get_tracer
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import aiofiles
 
 # ---------- FIX: Added missing critical imports ----------
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
+from arbiter.otel_config import get_tracer
+from cryptography.fernet import Fernet, InvalidToken
+from prometheus_client import REGISTRY
+from prometheus_client import Counter as PCounter
+from prometheus_client import Gauge as PGauge
+from prometheus_client import Histogram as PHistogram
+from prometheus_client import Summary as PSummary
+from prometheus_client.metrics import Counter as _Counter
+from prometheus_client.metrics import Gauge as _Gauge
+from prometheus_client.metrics import Histogram as _Histogram
+from prometheus_client.metrics import Summary as _Summary
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 # ---------- end FIX ----------
 
@@ -207,7 +204,9 @@ logger = logging.getLogger("arbiter.array_backend")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
     handler.addFilter(PIIRedactorFilter())
     logger.addHandler(handler)
 
@@ -372,7 +371,8 @@ class ConcreteArrayBackend(ArrayBackend):
         self._meta = ArrayMeta(
             name=name,
             size_limit=int(os.getenv("ARRAY_MAX_SIZE", 100000)),
-            encryption_enabled=os.getenv("ARRAY_ENCRYPTION_ENABLED", "false").lower() == "true",
+            encryption_enabled=os.getenv("ARRAY_ENCRYPTION_ENABLED", "false").lower()
+            == "true",
         )
         self._fernet = (
             Fernet(self.config.ENCRYPTION_KEY.get_secret_value().encode())
@@ -432,7 +432,9 @@ class ConcreteArrayBackend(ArrayBackend):
                         try:
                             self._redis = aioredis.from_url(
                                 self.config.REDIS_URL,
-                                max_connections=max(self.config.REDIS_MAX_CONNECTIONS, 50),
+                                max_connections=max(
+                                    self.config.REDIS_MAX_CONNECTIONS, 50
+                                ),
                             )
                             await self._redis.ping()
                             logger.info(
@@ -482,10 +484,12 @@ class ConcreteArrayBackend(ArrayBackend):
                         )
 
                     await self._load_from_storage()
-                    array_ops_total.labels(backend_name=self.name, operation="initialize").inc()
-                    array_op_time.labels(backend_name=self.name, operation="initialize").observe(
-                        time.time() - start_time
-                    )
+                    array_ops_total.labels(
+                        backend_name=self.name, operation="initialize"
+                    ).inc()
+                    array_op_time.labels(
+                        backend_name=self.name, operation="initialize"
+                    ).observe(time.time() - start_time)
                     array_size.labels(backend_name=self.name).set(len(self._data))
                 except Exception as e:
                     logger.error(
@@ -501,7 +505,9 @@ class ConcreteArrayBackend(ArrayBackend):
                         error_type="initialize",
                         backend=self.storage_type,
                     ).inc()
-                    raise StorageError(f"Failed to initialize array backend: {e}") from e
+                    raise StorageError(
+                        f"Failed to initialize array backend: {e}"
+                    ) from e
 
     async def close(self) -> None:
         """Closes storage connections."""
@@ -515,11 +521,15 @@ class ConcreteArrayBackend(ArrayBackend):
                 if self._sqlite_pool:
                     await self._sqlite_pool.close()
                     self._sqlite_pool = None
-                    logger.info({"event": "sqlite_connection_closed", "name": self.name})
+                    logger.info(
+                        {"event": "sqlite_connection_closed", "name": self.name}
+                    )
                 if self._postgres_client:
                     await self._postgres_client.disconnect()
                     self._postgres_client = None
-                    logger.info({"event": "postgres_connection_closed", "name": self.name})
+                    logger.info(
+                        {"event": "postgres_connection_closed", "name": self.name}
+                    )
                 array_ops_total.labels(backend_name=self.name, operation="close").inc()
                 array_op_time.labels(backend_name=self.name, operation="close").observe(
                     time.time() - start_time
@@ -560,7 +570,8 @@ class ConcreteArrayBackend(ArrayBackend):
             data_to_save = self._data
             if self._meta.encryption_enabled and self._fernet:
                 data_to_save = [
-                    self._fernet.encrypt(json.dumps(item).encode()).decode() for item in self._data
+                    self._fernet.encrypt(json.dumps(item).encode()).decode()
+                    for item in self._data
                 ]
             if self.storage_type == "redis" and self._redis:
                 await self._redis.set(f"array:{self.name}", json.dumps(data_to_save))
@@ -586,10 +597,14 @@ class ConcreteArrayBackend(ArrayBackend):
                 async with aiofiles.open(tmp_path, "w") as f:
                     await f.write(json.dumps(data_to_save))
                     await f.flush()
-                    await asyncio.get_running_loop().run_in_executor(None, os.fsync, f.fileno())
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, os.fsync, f.fileno()
+                    )
                 os.replace(tmp_path, self.storage_path)
                 os.chmod(self.storage_path, 0o600)  # Restrict file permissions
-            logger.info({"event": "array_save", "name": self.name, "size": len(self._data)})
+            logger.info(
+                {"event": "array_save", "name": self.name, "size": len(self._data)}
+            )
         except Exception as e:
             logger.error(
                 {"event": "array_save_error", "name": self.name, "error": str(e)},
@@ -658,15 +673,19 @@ class ConcreteArrayBackend(ArrayBackend):
 
             if self._meta.encryption_enabled and self._fernet:
                 self._data = [
-                    json.loads(self._fernet.decrypt(item.encode()).decode()) for item in loaded_data
+                    json.loads(self._fernet.decrypt(item.encode()).decode())
+                    for item in loaded_data
                 ]
             else:
                 self._data = [
-                    json.loads(item) if isinstance(item, str) else item for item in loaded_data
+                    json.loads(item) if isinstance(item, str) else item
+                    for item in loaded_data
                 ]
 
             self._meta.modified_at = time.time()
-            logger.info({"event": "array_load", "name": self.name, "size": len(self._data)})
+            logger.info(
+                {"event": "array_load", "name": self.name, "size": len(self._data)}
+            )
         except Exception as e:
             logger.error(
                 {"event": "array_load_error", "name": self.name, "error": str(e)},
@@ -704,9 +723,9 @@ class ConcreteArrayBackend(ArrayBackend):
                 self._meta.modified_at = time.time()
                 await self._save_to_storage()
                 array_ops_total.labels(backend_name=self.name, operation="append").inc()
-                array_op_time.labels(backend_name=self.name, operation="append").observe(
-                    time.time() - start_time
-                )
+                array_op_time.labels(
+                    backend_name=self.name, operation="append"
+                ).observe(time.time() - start_time)
                 array_size.labels(backend_name=self.name).set(len(self._data))
                 logger.info(
                     {
@@ -783,9 +802,9 @@ class ConcreteArrayBackend(ArrayBackend):
                 self._meta.modified_at = time.time()
                 await self._save_to_storage()
                 array_ops_total.labels(backend_name=self.name, operation="update").inc()
-                array_op_time.labels(backend_name=self.name, operation="update").observe(
-                    time.time() - start_time
-                )
+                array_op_time.labels(
+                    backend_name=self.name, operation="update"
+                ).observe(time.time() - start_time)
                 logger.info(
                     {
                         "event": "array_update",
@@ -820,17 +839,23 @@ class ConcreteArrayBackend(ArrayBackend):
                             f"Index {index} out of range for array of size {len(self._data)}"
                         )
                     del self._data[index]
-                    array_ops_total.labels(backend_name=self.name, operation="delete").inc()
-                    logger.info({"event": "array_delete", "name": self.name, "index": index})
+                    array_ops_total.labels(
+                        backend_name=self.name, operation="delete"
+                    ).inc()
+                    logger.info(
+                        {"event": "array_delete", "name": self.name, "index": index}
+                    )
                 else:
                     self._data.clear()
-                    array_ops_total.labels(backend_name=self.name, operation="clear").inc()
+                    array_ops_total.labels(
+                        backend_name=self.name, operation="clear"
+                    ).inc()
                     logger.info({"event": "array_clear", "name": self.name})
                 self._meta.modified_at = time.time()
                 await self._save_to_storage()
-                array_op_time.labels(backend_name=self.name, operation="delete").observe(
-                    time.time() - start_time
-                )
+                array_op_time.labels(
+                    backend_name=self.name, operation="delete"
+                ).observe(time.time() - start_time)
                 array_size.labels(backend_name=self.name).set(len(self._data))
 
     async def query(self, condition: Callable[[Any], bool]) -> List[Any]:
@@ -896,7 +921,8 @@ class ConcreteArrayBackend(ArrayBackend):
                 raw_data = await self._load_raw_from_storage()
                 # 1. Decrypt all data in memory with old key
                 decrypted_data = [
-                    json.loads(old_fernet.decrypt(item.encode()).decode()) for item in raw_data
+                    json.loads(old_fernet.decrypt(item.encode()).decode())
+                    for item in raw_data
                 ]
 
                 # 2. Update in-memory data to decrypted state
@@ -905,7 +931,9 @@ class ConcreteArrayBackend(ArrayBackend):
                 # 3. Save the newly encrypted data to storage (save will handle re-encryption)
                 await self._save_to_storage()
 
-                array_ops_total.labels(backend_name=self.name, operation="key_rotation").inc()
+                array_ops_total.labels(
+                    backend_name=self.name, operation="key_rotation"
+                ).inc()
                 logger.info({"event": "array_key_rotation", "name": self.name})
             except Exception as e:
                 logger.error(
@@ -935,7 +963,9 @@ class ConcreteArrayBackend(ArrayBackend):
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
         elif self.storage_type == "postgres":
-            rows = await self._postgres_client.execute("SELECT data FROM array_data ORDER BY id")
+            rows = await self._postgres_client.execute(
+                "SELECT data FROM array_data ORDER BY id"
+            )
             return [row[0] for row in rows]
         else:
             storage_path = Path(self.storage_path)

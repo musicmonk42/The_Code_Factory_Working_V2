@@ -1,15 +1,16 @@
 # arbiter/learner/fuzzy.py
 
-import os
-import json
-import time
-import structlog
-import hashlib
 import asyncio
-from typing import List, Dict, Any, Optional, Protocol, TYPE_CHECKING
-from tenacity import retry, stop_after_attempt, wait_exponential
-from prometheus_client import Counter, Histogram
+import hashlib
+import json
+import os
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
+
+import structlog
 from opentelemetry import trace
+from prometheus_client import Counter, Histogram
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .metrics import learn_error_counter
 
@@ -90,7 +91,9 @@ def load_parser_priorities() -> None:
         )
         PARSER_PRIORITIES = {}  # Default: equal priority
     except json.JSONDecodeError as e:
-        logger.error("Failed to decode parser priority JSON", file=priority_file, error=str(e))
+        logger.error(
+            "Failed to decode parser priority JSON", file=priority_file, error=str(e)
+        )
         raise
     except Exception as e:
         logger.error(
@@ -162,7 +165,9 @@ async def process_unstructured_data(
                 type=type(text),
                 length=len(text) if isinstance(text, str) else None,
             )
-            fuzzy_parser_failure_total.labels(parser_name="none", error_type="invalid_text").inc()
+            fuzzy_parser_failure_total.labels(
+                parser_name="none", error_type="invalid_text"
+            ).inc()
             raise ValueError("Text must be a non-empty string")
         if context is not None and not isinstance(context, dict):
             logger.error("Invalid context", type=type(context))
@@ -174,7 +179,9 @@ async def process_unstructured_data(
         # Check for registered parsers
         if not getattr(learner, "fuzzy_parser_hooks", None):
             logger.warning("No fuzzy parsers registered")
-            fuzzy_parser_failure_total.labels(parser_name="none", error_type="no_parsers").inc()
+            fuzzy_parser_failure_total.labels(
+                parser_name="none", error_type="no_parsers"
+            ).inc()
             result = [
                 {
                     "status": "failed",
@@ -236,10 +243,12 @@ async def process_unstructured_data(
                         ).inc()
                         return []
                     fuzzy_parser_success_total.labels(parser_name=parser_name).inc()
-                    fuzzy_parser_latency_seconds.labels(parser_name=parser_name).observe(
-                        time.perf_counter() - start_time
+                    fuzzy_parser_latency_seconds.labels(
+                        parser_name=parser_name
+                    ).observe(time.perf_counter() - start_time)
+                    logger.info(
+                        "Extracted facts", parser=parser_name, fact_count=len(facts)
                     )
-                    logger.info("Extracted facts", parser=parser_name, fact_count=len(facts))
                     return facts
                 except asyncio.TimeoutError:
                     logger.error(
@@ -253,7 +262,9 @@ async def process_unstructured_data(
                     span.set_attribute(f"parser.{parser_name}.timeout", True)
                     return []
                 except Exception as e:
-                    logger.error("Parser execution failed", parser=parser_name, error=str(e))
+                    logger.error(
+                        "Parser execution failed", parser=parser_name, error=str(e)
+                    )
                     fuzzy_parser_failure_total.labels(
                         parser_name=parser_name, error_type="execution_error"
                     ).inc()
@@ -266,7 +277,9 @@ async def process_unstructured_data(
         for i, result in enumerate(results):
             parser_name = parsers[i].__class__.__name__
             if isinstance(result, Exception):
-                logger.error("Parser task failed", parser=parser_name, error=str(result))
+                logger.error(
+                    "Parser task failed", parser=parser_name, error=str(result)
+                )
                 fuzzy_parser_failure_total.labels(
                     parser_name=parser_name, error_type="task_error"
                 ).inc()
@@ -303,7 +316,9 @@ async def process_unstructured_data(
 
         # Learn extracted facts
         try:
-            results = await _learn_batch_with_retry(learner, extracted_facts, user_id, source)
+            results = await _learn_batch_with_retry(
+                learner, extracted_facts, user_id, source
+            )
             try:
                 await learner.audit_logger.log_event(
                     component="fuzzy_parser",
@@ -343,7 +358,9 @@ async def process_unstructured_data(
             ]
 
 
-def register_fuzzy_parser_hook(learner: "Learner", parser: FuzzyParser, priority: int = 0) -> None:
+def register_fuzzy_parser_hook(
+    learner: "Learner", parser: FuzzyParser, priority: int = 0
+) -> None:
     """
     Register a fuzzy parser with an optional priority.
     Args:
@@ -354,9 +371,13 @@ def register_fuzzy_parser_hook(learner: "Learner", parser: FuzzyParser, priority
         TypeError: If parser does not implement FuzzyParser protocol.
     """
     with tracer.start_as_current_span("register_fuzzy_parser_hook"):
-        if not hasattr(parser, "parse") or not asyncio.iscoroutinefunction(parser.parse):
+        if not hasattr(parser, "parse") or not asyncio.iscoroutinefunction(
+            parser.parse
+        ):
             logger.error("Invalid parser", parser_type=type(parser).__name__)
-            raise TypeError("Parser must implement FuzzyParser protocol with async parse method")
+            raise TypeError(
+                "Parser must implement FuzzyParser protocol with async parse method"
+            )
         learner.fuzzy_parser_hooks.append(parser)
         PARSER_PRIORITIES[parser.__class__.__name__] = priority
         logger.info(
@@ -388,9 +409,13 @@ async def register_fuzzy_parser_hook_async(
         TypeError: If parser does not implement FuzzyParser protocol.
     """
     with tracer.start_as_current_span("register_fuzzy_parser_hook_async"):
-        if not hasattr(parser, "parse") or not asyncio.iscoroutinefunction(parser.parse):
+        if not hasattr(parser, "parse") or not asyncio.iscoroutinefunction(
+            parser.parse
+        ):
             logger.error("Invalid parser", parser_type=type(parser).__name__)
-            raise TypeError("Parser must implement FuzzyParser protocol with async parse method")
+            raise TypeError(
+                "Parser must implement FuzzyParser protocol with async parse method"
+            )
         learner.fuzzy_parser_hooks.append(parser)
         PARSER_PRIORITIES[parser.__class__.__name__] = priority
         logger.info(

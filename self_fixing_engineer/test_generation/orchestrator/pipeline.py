@@ -18,26 +18,27 @@ Production‑readiness extras:
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import inspect
+import json
 import logging
+import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Import paths that tests patch; keep module paths stable.
-from .venvs import sanitize_path as venv_sanitize_path
-from .orchestrator import GenerationOrchestrator
-from test_generation.backends import BackendRegistry
-from test_generation.orchestrator.reporting import HTMLReporter
-from test_generation.orchestrator.audit import AuditLogger
-from test_generation import utils
 import test_generation.compliance_mapper as compliance_mapper
+from test_generation import utils
+from test_generation.backends import BackendRegistry
 from test_generation.orchestrator import orchestrator as orch_mod
 from test_generation.orchestrator import venvs as venvs_mod
+from test_generation.orchestrator.audit import AuditLogger
+from test_generation.orchestrator.reporting import HTMLReporter
 
+from .orchestrator import GenerationOrchestrator
+
+# Import paths that tests patch; keep module paths stable.
+from .venvs import sanitize_path as venv_sanitize_path
 
 # --------------------------- Utilities ---------------------------
 # Suppress noisy AsyncMock warnings only when running under pytest
@@ -103,11 +104,15 @@ class PipelineConfig:
     coverage_reports_dir: str = "atco_artifacts/coverage_reports"
     venv_dir: str = "atco_artifacts/venv"  # FIX: Add venv directory to config
     suite_dir: str = "tests"
-    python_venv_deps: List[str] = field(default_factory=lambda: ["pytest", "pytest-cov"])
+    python_venv_deps: List[str] = field(
+        default_factory=lambda: ["pytest", "pytest-cov"]
+    )
     backend_timeouts: Dict[str, int] = field(default_factory=lambda: {"pynguin": 60})
     test_exec_timeout_seconds: int = 30
     mutation_testing: Dict[str, Any] = field(default_factory=lambda: {"enabled": False})
-    compliance_reporting: Dict[str, Any] = field(default_factory=lambda: {"enabled": True})
+    compliance_reporting: Dict[str, Any] = field(
+        default_factory=lambda: {"enabled": True}
+    )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineConfig":
@@ -191,7 +196,9 @@ async def _process_target(
         await _maybe_await(utils.SecurityScanner.scan_test_file(test_path))
     except Exception as exc:
         # Non‑blocking: log and continue
-        await audit.log_event("security_scan_error", {"file": test_path, "error": str(exc)})
+        await audit.log_event(
+            "security_scan_error", {"file": test_path, "error": str(exc)}
+        )
 
     # Hash / compare / optional backup (all patched in tests)
     try:
@@ -221,7 +228,9 @@ async def _run_reporting(
 
     try:
         _ = await _maybe_await(
-            HTMLReporter.generate_html_report("sarif", "html", {"files": generated_paths})
+            HTMLReporter.generate_html_report(
+                "sarif", "html", {"files": generated_paths}
+            )
         )
     except Exception as exc:
         await audit.log_event("html_report_error", {"error": str(exc)})

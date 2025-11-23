@@ -1,18 +1,19 @@
-import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Pattern
-from collections import defaultdict
-from pydantic import BaseModel, Field
 import asyncio
-import threading
+import importlib.util
 import inspect
+import logging
+import os
+import sys
+import threading
 import traceback
+from collections import defaultdict
+from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+
+from pydantic import BaseModel, Field
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from enum import Enum
-import importlib.util
-import sys
-import os
 
 # --- BEGIN SOLUTION (Corrected Path) ---
 # Force Python to find the local 'self_fixing_engineer' package
@@ -23,32 +24,30 @@ if _arbiter_path.exists() and str(_arbiter_path) not in sys.path:
     sys.path.insert(0, str(_arbiter_path))
 # --- END SOLUTION ---
 
+import ast
+import importlib
 import multiprocessing as mp
+import pickle
+import pkgutil
+import time
 import uuid
 from datetime import datetime
-import pkgutil
-import importlib
-import time
-import pickle
-import ast
 
 try:
     import resource
 except ImportError:
     resource = None
-import signal
-import platform
-import hmac
 import hashlib
+import hmac
+import platform
+import signal
 
 # Corrected imports to use centralized config and new package structure
 try:
-    from arbiter.config import ArbiterConfig
     from arbiter import __path__ as assistant_pkg_path
-    from arbiter_plugin_registry import (
-        PlugInKind as ArbiterPlugInKind,
-        PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY,
-    )
+    from arbiter.config import ArbiterConfig
+    from arbiter_plugin_registry import PLUGIN_REGISTRY as ARBITER_PLUGIN_REGISTRY
+    from arbiter_plugin_registry import PlugInKind as ArbiterPlugInKind
 except ImportError:
 
     class ArbiterConfig:
@@ -88,10 +87,10 @@ except ImportError:
 
 try:
     from omnicore_engine.message_bus import (
-        ShardedMessageBus,
-        PluginMessageBusAdapter,
-        MessageFilter,
         Message,
+        MessageFilter,
+        PluginMessageBusAdapter,
+        ShardedMessageBus,
     )
 except ImportError:
     ShardedMessageBus = None
@@ -101,7 +100,7 @@ except ImportError:
     print("omnicore_engine.message_bus not found. Message bus functionality disabled.")
 
 try:
-    from intent_capture.agent_core import CollaborativeAgent, AgentTeam
+    from intent_capture.agent_core import AgentTeam, CollaborativeAgent
 except ImportError:
     CollaborativeAgent = None
     AgentTeam = None
@@ -110,8 +109,8 @@ except ImportError:
 try:
     from self_healing_import_fixer.import_fixer.fixer_ai import AIManager
     from self_healing_import_fixer.import_fixer.import_fixer_engine import (
-        create_import_fixer_engine,
         ImportFixerEngine,
+        create_import_fixer_engine,
     )
 except ImportError:
     AIManager = None
@@ -127,7 +126,7 @@ except Exception as e:
     print(f"test_generation.backends not available ({e}); skipping.")
 
 try:
-    from self_fixing_engineer.simulation.runners import MyCustomRunner, MyBetterRunner
+    from self_fixing_engineer.simulation.runners import MyBetterRunner, MyCustomRunner
 except Exception as e:
     MyCustomRunner = None
     MyBetterRunner = None
@@ -168,7 +167,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(getattr(settings, "log_level", "INFO").upper())
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -300,7 +301,9 @@ def safe_exec_plugin(code: str, filename: str):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 if node.func.id in ["eval", "exec", "__import__", "compile", "open"]:
-                    raise SecurityError(f"Dangerous function {node.func.id} not allowed")
+                    raise SecurityError(
+                        f"Dangerous function {node.func.id} not allowed"
+                    )
 
     restricted_globals = {"__builtins__": SAFE_BUILTINS}
 
@@ -394,7 +397,9 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
 
 def verify_plugin_signature(plugin_code: bytes, signature: str) -> bool:
     """Verifies the HMAC signature of plugin code."""
-    signing_key = getattr(settings, "PLUGIN_SIGNING_KEY", "insecure_default_key").encode()
+    signing_key = getattr(
+        settings, "PLUGIN_SIGNING_KEY", "insecure_default_key"
+    ).encode()
     expected_sig = hmac.new(signing_key, plugin_code, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected_sig, signature)
 
@@ -427,7 +432,9 @@ class PluginPerformanceTracker:
         self.audit_client = audit_client
         self.logger = logging.getLogger("PluginPerformanceTracker")
 
-    async def record_performance(self, kind: str, name: str, version: str, metrics: Dict[str, Any]):
+    async def record_performance(
+        self, kind: str, name: str, version: str, metrics: Dict[str, Any]
+    ):
         """Records performance metrics for a plugin version in the database."""
         try:
             record = {
@@ -439,9 +446,13 @@ class PluginPerformanceTracker:
             }
             if self.db:
                 await self.db.save_audit_record(record)
-                self.logger.info(f"Recorded performance for plugin {kind}:{name}:{version}.")
+                self.logger.info(
+                    f"Recorded performance for plugin {kind}:{name}:{version}."
+                )
             else:
-                self.logger.warning("Database not initialized. Skipping performance record.")
+                self.logger.warning(
+                    "Database not initialized. Skipping performance record."
+                )
         except Exception as e:
             self.logger.error(
                 f"Failed to record performance for plugin {kind}:{name}:{version}: {e}",
@@ -509,7 +520,9 @@ class Plugin:
         self.kind = meta.kind
         self.message_bus_adapter: Optional[PluginMessageBusAdapter] = None
         self.subscriptions_to_register: List[
-            Tuple[Union[str, Pattern], Callable[[Message], Any], Optional[MessageFilter]]
+            Tuple[
+                Union[str, Pattern], Callable[[Message], Any], Optional[MessageFilter]
+            ]
         ] = []
         self.performance_tracker = performance_tracker
 
@@ -549,10 +562,16 @@ class Plugin:
                         execute_with_limits, executable_fn, *args, **kwargs
                     )
             elif self.meta.safe and is_coroutine:
-                self.logger.warning("Async safe plugin — not sandboxed; enforcing timeout.")
-                result = await asyncio.wait_for(executable_fn(*args, **kwargs), timeout=timeout)
+                self.logger.warning(
+                    "Async safe plugin — not sandboxed; enforcing timeout."
+                )
+                result = await asyncio.wait_for(
+                    executable_fn(*args, **kwargs), timeout=timeout
+                )
             elif not self.meta.safe and is_coroutine:
-                result = await asyncio.wait_for(executable_fn(*args, **kwargs), timeout=timeout)
+                result = await asyncio.wait_for(
+                    executable_fn(*args, **kwargs), timeout=timeout
+                )
             else:
                 result = executable_fn(*args, **kwargs)
 
@@ -563,7 +582,9 @@ class Plugin:
         except Exception as e:
             error_occurred = True
             error_type = type(e).__name__
-            self.logger.error(f"Error executing plugin '{self.meta.name}': {e}", exc_info=True)
+            self.logger.error(
+                f"Error executing plugin '{self.meta.name}': {e}", exc_info=True
+            )
             raise
         finally:
             end_time = time.time()
@@ -624,7 +645,9 @@ class PluginRegistry:
                             and MessageFilter is not None
                         ):
                             filter_obj = MessageFilter(
-                                lambda p, f=filter_dict: all(p.get(k) == v for k, v in f.items())
+                                lambda p, f=filter_dict: all(
+                                    p.get(k) == v for k, v in f.items()
+                                )
                             )
                     else:
                         topic_to_subscribe = topic_info
@@ -704,10 +727,14 @@ class PluginRegistry:
                     MyBackend(),
                     performance_tracker=self.performance_tracker,
                 )
-                self.register(PlugInKind.EXECUTION.value, backend_name, backend_plugin_instance)
+                self.register(
+                    PlugInKind.EXECUTION.value, backend_name, backend_plugin_instance
+                )
                 self.logger.info(f"Registered test generation backend: {backend_name}")
             except Exception as e:
-                self.logger.error(f"Failed to register test generation backend: {e}", exc_info=True)
+                self.logger.error(
+                    f"Failed to register test generation backend: {e}", exc_info=True
+                )
         else:
             self.logger.info("MyBackend not available; skipping.")
 
@@ -757,7 +784,9 @@ class PluginRegistry:
                     better_runner_name,
                     better_runner_plugin,
                 )
-                self.logger.info(f"Registered new simulation runner: {better_runner_name}")
+                self.logger.info(
+                    f"Registered new simulation runner: {better_runner_name}"
+                )
             except Exception as e:
                 self.logger.error(
                     f"Failed to register new simulation runner {better_runner_name}: {e}",
@@ -783,7 +812,9 @@ class PluginRegistry:
             )
             self.logger.info("Registered simulation registry plugin.")
         else:
-            self.logger.info("SIM_REGISTRY not available; skipping simulation_registry plugin.")
+            self.logger.info(
+                "SIM_REGISTRY not available; skipping simulation_registry plugin."
+            )
 
         # Register AI Import Fixer as a Plugin
         try:
@@ -800,9 +831,9 @@ class PluginRegistry:
         # -- Make SFE Test Generation available via the registry (no new files) -------
         try:
             if os.getenv("SFE_ENABLED", "true").lower() == "true":
-                from test_generation.orchestrator.orchestrator import (
+                from test_generation.orchestrator.orchestrator import (  # local import to avoid cost when unused
                     GenerationOrchestrator,
-                )  # local import to avoid cost when unused
+                )
 
                 async def _sfe_generate_tests(
                     *,
@@ -821,7 +852,9 @@ class PluginRegistry:
                     _targets = []
                     for t in targets or []:
                         if isinstance(t, str):
-                            _targets.append({"identifier": t, "language": (language or "python")})
+                            _targets.append(
+                                {"identifier": t, "language": (language or "python")}
+                            )
                         else:
                             _targets.append(t)
 
@@ -836,7 +869,9 @@ class PluginRegistry:
                         },
                     }
                     _project_root = project_root or os.getcwd()
-                    _suite_dir = suite_dir or os.path.join(_project_root, "tests", "generated")
+                    _suite_dir = suite_dir or os.path.join(
+                        _project_root, "tests", "generated"
+                    )
 
                     async def _call_maybe_async(fn, *a, **kw):
                         return (
@@ -877,7 +912,9 @@ class PluginRegistry:
             else:
                 self.logger.info("SFE_ENABLED=false — skipping SFE registration.")
         except Exception as e:
-            self.logger.error(f"Failed to register 'sfe.generate_tests': {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to register 'sfe.generate_tests': {e}", exc_info=True
+            )
         # -----------------------------------------------------------------------------
         self._is_initialized = True
         self.logger.info("PluginRegistry initialization complete.")
@@ -964,7 +1001,9 @@ class PluginRegistry:
             del self.plugins[kind_str][name]
             self.logger.info(f"Unregistered plugin '{name}' of kind '{kind_str}'.")
             return True
-        self.logger.warning(f"Plugin '{name}' of kind '{kind_str}' not found for unregistration.")
+        self.logger.warning(
+            f"Plugin '{name}' of kind '{kind_str}' not found for unregistration."
+        )
         return False
 
     def get(self, kind: str, name: str) -> Optional[Plugin]:
@@ -1009,29 +1048,39 @@ class PluginRegistry:
                     security.sanitize_filename(file_path.name)
                     with open(file_path, "rb") as f:
                         content = f.read()
-                        is_valid, mime_type = security.validate_file_type(str(file_path), content)
+                        is_valid, mime_type = security.validate_file_type(
+                            str(file_path), content
+                        )
                         if not is_valid:
                             raise SecurityError(f"Invalid file type: {mime_type}")
                     # End new security validation
 
-                    spec = importlib.util.spec_from_file_location(module_name, str(file_path))
+                    spec = importlib.util.spec_from_file_location(
+                        module_name, str(file_path)
+                    )
                     if spec and spec.loader:
                         module = importlib.util.module_from_spec(spec)
                         if module_name in sys.modules:
                             importlib.reload(sys.modules[module_name])
-                            self.logger.debug(f"Reloaded existing module: {module_name}")
+                            self.logger.debug(
+                                f"Reloaded existing module: {module_name}"
+                            )
                         else:
                             sys.modules[module_name] = module
                             spec.loader.exec_module(module)
                             self.logger.debug(f"Loaded new module: {module_name}")
 
-                        self.logger.info(f"Finished processing plugin file: {item.name}")
+                        self.logger.info(
+                            f"Finished processing plugin file: {item.name}"
+                        )
                     else:
                         self.logger.error(
                             f"Could not get spec/loader for module {module_name} from {file_path}."
                         )
                 except Exception as e:
-                    self.logger.error(f"Error loading plugin from {file_path}: {e}", exc_info=True)
+                    self.logger.error(
+                        f"Error loading plugin from {file_path}: {e}", exc_info=True
+                    )
                     if self.audit_client:
                         await self.audit_client.add_entry_async(
                             "plugin_load_failed",
@@ -1058,11 +1107,17 @@ class PluginRegistry:
             try:
                 if full_module_name in sys.modules:
                     importlib.reload(sys.modules[full_module_name])
-                    self.logger.debug(f"Reloaded AI assistant module: {full_module_name}")
+                    self.logger.debug(
+                        f"Reloaded AI assistant module: {full_module_name}"
+                    )
                 else:
                     importlib.import_module(full_module_name)
-                    self.logger.debug(f"Imported AI assistant module: {full_module_name}")
-                self.logger.info(f"Successfully loaded AI assistant module: {full_module_name}")
+                    self.logger.debug(
+                        f"Imported AI assistant module: {full_module_name}"
+                    )
+                self.logger.info(
+                    f"Successfully loaded AI assistant module: {full_module_name}"
+                )
             except Exception as e:
                 self.logger.error(
                     f"Error loading AI assistant plugin from {full_module_name}: {e}",
@@ -1145,7 +1200,9 @@ def plugin(
             params_schema=params_schema if params_schema is not None else {},
             signature=signature,
         )
-        plugin_instance = Plugin(meta, fn, performance_tracker=PLUGIN_REGISTRY.performance_tracker)
+        plugin_instance = Plugin(
+            meta, fn, performance_tracker=PLUGIN_REGISTRY.performance_tracker
+        )
         if subscriptions is not None:
             plugin_instance.subscriptions_to_register = subscriptions
         if PLUGIN_REGISTRY is None:
@@ -1187,8 +1244,12 @@ def plugin(
                         "description": description,
                         "safe": safe,
                         "source": source,
-                        "params_schema": (params_schema if params_schema is not None else {}),
-                        "code": (inspect.getsource(fn) if not isinstance(fn, str) else fn),
+                        "params_schema": (
+                            params_schema if params_schema is not None else {}
+                        ),
+                        "code": (
+                            inspect.getsource(fn) if not isinstance(fn, str) else fn
+                        ),
                     }
                 )
             )
@@ -1204,15 +1265,21 @@ def plugin(
 class PluginVersionManager:
     """Manages versioning of plugins, enabling A/B testing and rollback capabilities."""
 
-    def __init__(self, registry: PluginRegistry, db: Database, audit_client: Optional[Any] = None):
+    def __init__(
+        self, registry: PluginRegistry, db: Database, audit_client: Optional[Any] = None
+    ):
         self.registry = registry
         self.db = db
         self.audit_client = audit_client
         self.logger = logging.getLogger("PluginVersionManager")
-        self.versions: Dict[str, Dict[str, List[Plugin]]] = defaultdict(lambda: defaultdict(list))
+        self.versions: Dict[str, Dict[str, List[Plugin]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         self.registry.version_manager = self  # Inject self into the registry
 
-    async def register_version(self, kind: str, name: str, plugin_instance: Plugin, version: str):
+    async def register_version(
+        self, kind: str, name: str, plugin_instance: Plugin, version: str
+    ):
         """Register a specific version of a plugin."""
         try:
             kind_str = kind if isinstance(kind, str) else kind.value
@@ -1241,8 +1308,12 @@ class PluginVersionManager:
                     }
                 )
             else:
-                self.logger.warning("Database not initialized. Cannot persist plugin version.")
-            self.logger.info(f"Registered version {version} of plugin {kind_str}:{name}")
+                self.logger.warning(
+                    "Database not initialized. Cannot persist plugin version."
+                )
+            self.logger.info(
+                f"Registered version {version} of plugin {kind_str}:{name}"
+            )
         except Exception as e:
             self.logger.error(
                 f"Failed to register version {version} of plugin {name}: {e}",
@@ -1271,7 +1342,9 @@ class PluginVersionManager:
                     return plugin_inst
 
             if not self.db:
-                self.logger.warning("Database not initialized. Cannot retrieve plugins from DB.")
+                self.logger.warning(
+                    "Database not initialized. Cannot retrieve plugins from DB."
+                )
                 return None
 
             plugin_data = await self.db.get_plugin_legacy(name=name, kind=kind_str)
@@ -1311,9 +1384,13 @@ class PluginVersionManager:
                             sys.modules[temp_module_name] = module
                             spec.loader.exec_module(module)
 
-                            if hasattr(module, "execute") and callable(getattr(module, "execute")):
+                            if hasattr(module, "execute") and callable(
+                                getattr(module, "execute")
+                            ):
                                 loaded_fn = getattr(module, "execute")
-                            elif hasattr(module, name) and callable(getattr(module, name)):
+                            elif hasattr(module, name) and callable(
+                                getattr(module, name)
+                            ):
                                 loaded_fn = getattr(module, name)
                             else:
                                 self.logger.warning(
@@ -1364,7 +1441,9 @@ class PluginVersionManager:
                 if loaded_fn is None:
 
                     def loaded_fn(*args, **kwargs):
-                        return {"error": "Plugin function not available or load failed."}
+                        return {
+                            "error": "Plugin function not available or load failed."
+                        }
 
                 plugin_instance = Plugin(
                     meta=meta,
@@ -1375,9 +1454,9 @@ class PluginVersionManager:
                     plugin_instance.message_bus_adapter = PluginMessageBusAdapter(
                         self.registry.message_bus, f"{kind_str}:{name}"
                     )
-                    if hasattr(plugin_instance, "subscriptions_to_register") and isinstance(
-                        plugin_instance.subscriptions_to_register, list
-                    ):
+                    if hasattr(
+                        plugin_instance, "subscriptions_to_register"
+                    ) and isinstance(plugin_instance.subscriptions_to_register, list):
                         for topic_info in plugin_instance.subscriptions_to_register:
                             topic_to_subscribe: Union[str, Pattern]
                             filter_obj: Optional[MessageFilter] = None
@@ -1449,7 +1528,9 @@ class PluginSelfOptimizer:
             try:
                 from arbiter.policy.core import PolicyEngine
             except Exception as e:
-                self.logger.info(f"Policy engine unavailable; skipping optimization. {e}")
+                self.logger.info(
+                    f"Policy engine unavailable; skipping optimization. {e}"
+                )
                 return
 
             policy_engine = PolicyEngine(settings=settings)
@@ -1578,7 +1659,9 @@ class PluginDependencyGraph:
                 raise ValueError("Cyclic dependency detected.")
         else:
             graph_copy = {k: set(v) for k, v in self.graph.items()}
-            nodes = set(graph_copy.keys()) | {n for vs in graph_copy.values() for n in vs}
+            nodes = set(graph_copy.keys()) | {
+                n for vs in graph_copy.values() for n in vs
+            }
             in_degree = defaultdict(int)
             for u, vs in graph_copy.items():
                 for v in vs:
@@ -1597,7 +1680,9 @@ class PluginDependencyGraph:
                         queue.append(v)
 
             if len(resolved) != len(nodes):
-                self.logger.error("Cyclic dependency detected in plugin graph (simple fallback).")
+                self.logger.error(
+                    "Cyclic dependency detected in plugin graph (simple fallback)."
+                )
                 raise ValueError("Cyclic dependency detected.")
 
             return resolved
@@ -1617,7 +1702,9 @@ class PluginEventHandler(FileSystemEventHandler):
         if event.src_path.endswith(".py") and self.registry._loop:
             self.logger.info(f"File modified: {event.src_path}. Reloading plugin...")
             self.registry._loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(self.registry.load_from_directory(self.directory))
+                lambda: asyncio.create_task(
+                    self.registry.load_from_directory(self.directory)
+                )
             )
 
     def on_created(self, event):
@@ -1626,7 +1713,9 @@ class PluginEventHandler(FileSystemEventHandler):
         if event.src_path.endswith(".py") and self.registry._loop:
             self.logger.info(f"File created: {event.src_path}. Loading new plugin...")
             self.registry._loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(self.registry.load_from_directory(self.directory))
+                lambda: asyncio.create_task(
+                    self.registry.load_from_directory(self.directory)
+                )
             )
 
     def on_deleted(self, event):
@@ -1641,7 +1730,9 @@ class PluginEventHandler(FileSystemEventHandler):
 
 
 class PluginRollbackHandler:
-    def __init__(self, registry: "PluginRegistry", version_manager: "PluginVersionManager"):
+    def __init__(
+        self, registry: "PluginRegistry", version_manager: "PluginVersionManager"
+    ):
         self.registry = registry
         self.version_manager = version_manager
         self.logger = logging.getLogger("PluginRollbackHandler")
@@ -1684,9 +1775,7 @@ class PluginMarketplace:
 
     async def install_plugin(self, kind: str, name: str, version: str):
         self.logger.info(f"Installing plugin {kind}:{name}:{version}...")
-        mock_plugin_code = (
-            f"def my_plugin_function(*args, **kwargs): return 'Hello from {name} v{version}'"
-        )
+        mock_plugin_code = f"def my_plugin_function(*args, **kwargs): return 'Hello from {name} v{version}'"
 
         try:
             if self.db:
@@ -1703,7 +1792,9 @@ class PluginMarketplace:
                         "code": mock_plugin_code,
                     }
                 )
-                self.logger.info(f"Plugin {kind}:{name}:{version} installed successfully.")
+                self.logger.info(
+                    f"Plugin {kind}:{name}:{version} installed successfully."
+                )
             else:
                 self.logger.warning("Database not initialized. Cannot install plugin.")
         except Exception as e:
@@ -1748,11 +1839,17 @@ class PluginMarketplace:
                     },
                     encrypt=True,
                 )
-                self.logger.info(f"Rating for plugin {kind}:{name}:{version} saved successfully.")
+                self.logger.info(
+                    f"Rating for plugin {kind}:{name}:{version} saved successfully."
+                )
             else:
-                self.logger.warning("Database not initialized. Cannot save plugin rating.")
+                self.logger.warning(
+                    "Database not initialized. Cannot save plugin rating."
+                )
         except Exception as e:
-            self.logger.error(f"Failed to rate plugin {kind}:{name}:{version}: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to rate plugin {kind}:{name}:{version}: {e}", exc_info=True
+            )
             if self.audit_client:
                 await self.audit_client.add_entry_async(
                     "plugin_marketplace_rating_failed",

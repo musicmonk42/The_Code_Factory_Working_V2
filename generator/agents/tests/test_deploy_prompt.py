@@ -3,21 +3,18 @@ test_deploy_prompt.py
 Comprehensive tests for deploy_prompt module (prompt building and templating).
 """
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # FIX: Add missing Jinja2 imports
 from jinja2 import Environment, FileSystemLoader
 
 # Import the module under test
-from generator.agents.deploy_agent.deploy_prompt import (
-    DeployPromptAgent,
-    scrub_text,
-)
-
+from generator.agents.deploy_agent.deploy_prompt import DeployPromptAgent, scrub_text
 
 # ============================================================================
 # FIXTURES
@@ -96,7 +93,9 @@ if __name__ == '__main__':
         )
 
         (repo_path / "requirements.txt").write_text("flask==2.0.1\nrequests==2.26.0")
-        (repo_path / "README.md").write_text("# Test Application\n\nA simple Flask app.")
+        (repo_path / "README.md").write_text(
+            "# Test Application\n\nA simple Flask app."
+        )
         (repo_path / ".git").mkdir()
 
         yield repo_path
@@ -130,7 +129,9 @@ def sample_context():
 @pytest.fixture
 def agent(temp_repo):
     """Fixture to create a DeployPromptAgent pointed at the temp repo's dirs."""
-    with patch("os.path.exists", return_value=True), patch("watchdog.observers.Observer"):
+    with patch("os.path.exists", return_value=True), patch(
+        "watchdog.observers.Observer"
+    ):
         agent = DeployPromptAgent(few_shot_dir=str(temp_repo / "few_shot_examples"))
         # Point the agent's template registry to the temp template dir
         agent.template_registry = MagicMock()
@@ -154,7 +155,9 @@ class TestDeployPromptAgentInit:
 
     def test_init_with_valid_dirs(self, temp_repo):
         """Test initializing agent with valid dirs."""
-        with patch("os.path.exists", return_value=True), patch("watchdog.observers.Observer"):
+        with patch("os.path.exists", return_value=True), patch(
+            "watchdog.observers.Observer"
+        ):
             agent = DeployPromptAgent(few_shot_dir=str(temp_repo / "few_shot_examples"))
 
             assert agent.template_registry is not None
@@ -174,7 +177,9 @@ class TestDeployPromptAgentInit:
                 "os.makedirs"
             ), patch("watchdog.observers.Observer"):
 
-                agent = DeployPromptAgent(few_shot_dir=str(Path(tmpdir) / "missing_examples"))
+                agent = DeployPromptAgent(
+                    few_shot_dir=str(Path(tmpdir) / "missing_examples")
+                )
                 assert agent is not None
                 assert agent.few_shot_examples == []
 
@@ -249,7 +254,9 @@ class TestPromptBuilding:
         assert "python" in prompt.lower()
 
     @pytest.mark.asyncio
-    async def test_build_prompt_different_variants(self, temp_repo, agent, mock_model_info):
+    async def test_build_prompt_different_variants(
+        self, temp_repo, agent, mock_model_info
+    ):
         """Test building prompts with different variants."""
 
         agent.gather_context_for_prompt = AsyncMock(return_value={})
@@ -327,7 +334,9 @@ class TestPromptBuilding:
         assert mock_llm.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_build_prompt_with_missing_files(self, temp_repo, agent, mock_model_info):
+    async def test_build_prompt_with_missing_files(
+        self, temp_repo, agent, mock_model_info
+    ):
         """Test building prompt when specified files don't exist."""
 
         agent.retrieve_few_shot = AsyncMock(return_value=[])
@@ -375,14 +384,18 @@ class TestFewShotLearning:
         assert all("query" in ex and "example" in ex for ex in examples)
 
     @pytest.mark.asyncio
-    async def test_few_shot_integration_in_prompt(self, temp_repo, agent, mock_model_info):
+    async def test_few_shot_integration_in_prompt(
+        self, temp_repo, agent, mock_model_info
+    ):
         """Test that few-shot examples are integrated into prompts."""
 
         agent.gather_context_for_prompt = AsyncMock(return_value={})
         agent.optimize_prompt_with_feedback = AsyncMock(side_effect=lambda s, *args: s)
 
         # FIX: Mock retrieve_few_shot to return a known example
-        agent.retrieve_few_shot = AsyncMock(return_value=["FROM python:FEW_SHOT_EXAMPLE"])
+        agent.retrieve_few_shot = AsyncMock(
+            return_value=["FROM python:FEW_SHOT_EXAMPLE"]
+        )
 
         with patch(
             "generator.agents.deploy_agent.deploy_prompt.optimize_deployment_prompt_text",
@@ -748,9 +761,13 @@ class TestErrorHandling:
     """Tests for error handling scenarios."""
 
     @pytest.mark.asyncio
-    async def test_build_prompt_with_llm_failure(self, temp_repo, agent, mock_model_info):
+    async def test_build_prompt_with_llm_failure(
+        self, temp_repo, agent, mock_model_info
+    ):
         """Test handling LLM failure during optimization."""
-        with patch("generator.agents.deploy_agent.deploy_prompt.call_llm_api") as mock_llm:
+        with patch(
+            "generator.agents.deploy_agent.deploy_prompt.call_llm_api"
+        ) as mock_llm:
             mock_llm.side_effect = Exception("LLM API Error")
 
             agent.gather_context_for_prompt = AsyncMock(return_value={})

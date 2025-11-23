@@ -5,18 +5,17 @@ Uses import hooks to properly isolate the module from its dependencies
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import random
-import importlib.util
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
+from sqlalchemy.orm import sessionmaker
 
 # ===========================
 # SECTION 1: Import agent_state with mocked dependencies
@@ -100,7 +99,9 @@ def load_agent_state_module():
         raise FileNotFoundError(f"Cannot find agent_state.py at {agent_state_path}")
 
     # Create module spec
-    spec = importlib.util.spec_from_file_location("agent_state_test", str(agent_state_path))
+    spec = importlib.util.spec_from_file_location(
+        "agent_state_test", str(agent_state_path)
+    )
     module = importlib.util.module_from_spec(spec)
 
     # Mock the imports and load the module
@@ -395,7 +396,9 @@ class TestRepresentations:
 
     def test_agent_state_repr(self):
         """Test AgentState __repr__ method."""
-        agent = AgentState(id=1, name="TestAgent", x=10.0, y=20.0, energy=50.0, world_size=100)
+        agent = AgentState(
+            id=1, name="TestAgent", x=10.0, y=20.0, energy=50.0, world_size=100
+        )
         repr_str = repr(agent)
         # Check that key components are present
         assert "AgentState" in repr_str

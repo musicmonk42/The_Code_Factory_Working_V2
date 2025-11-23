@@ -1,23 +1,23 @@
 # test_validation.py
 
-import pytest
 import asyncio
 import json
 import os
 import tempfile
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from jsonschema.exceptions import SchemaError
-from tenacity import RetryError
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pytest
 from arbiter.learner.validation import (
+    SCHEMA_CACHE_TTL_SECONDS,
     DomainNotFoundError,
-    validate_data,
     register_validation_hook,
     reload_schemas,
-    validation_failure_total,
     schema_reload_total,
-    SCHEMA_CACHE_TTL_SECONDS,
+    validate_data,
+    validation_failure_total,
 )
+from jsonschema.exceptions import SchemaError
+from tenacity import RetryError
 
 
 class TestValidateData:
@@ -53,7 +53,9 @@ class TestValidateData:
         with patch("arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
-            result = await validate_data(mock_learner, "TestDomain", {"name": "John", "age": 30})
+            result = await validate_data(
+                mock_learner, "TestDomain", {"name": "John", "age": 30}
+            )
 
             assert result["is_valid"] is True
             assert result["reason_code"] == "success"
@@ -125,7 +127,9 @@ class TestValidateData:
             assert result["is_valid"] is True
 
     @pytest.mark.asyncio
-    async def test_validate_with_both_schema_and_hook(self, mock_learner, sample_schema):
+    async def test_validate_with_both_schema_and_hook(
+        self, mock_learner, sample_schema
+    ):
         """Test validation with both schema and hook."""
 
         def custom_validator(value):
@@ -140,12 +144,16 @@ class TestValidateData:
             mock_time.perf_counter.side_effect = [1.0, 2.0, 3.0, 4.0]
 
             # Passes schema but fails hook (age < 18)
-            result = await validate_data(mock_learner, "TestDomain", {"name": "John", "age": 15})
+            result = await validate_data(
+                mock_learner, "TestDomain", {"name": "John", "age": 15}
+            )
             assert result["is_valid"] is False
             assert result["reason_code"] == "custom_validation_failed"
 
             # Passes both
-            result = await validate_data(mock_learner, "TestDomain", {"name": "Jane", "age": 25})
+            result = await validate_data(
+                mock_learner, "TestDomain", {"name": "Jane", "age": 25}
+            )
             assert result["is_valid"] is True
 
     @pytest.mark.asyncio
@@ -169,7 +177,9 @@ class TestValidateData:
         with patch("arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
-            with pytest.raises(DomainNotFoundError, match="No validation schema or hook found"):
+            with pytest.raises(
+                DomainNotFoundError, match="No validation schema or hook found"
+            ):
                 await validate_data(mock_learner, "UnknownDomain", {"data": "test"})
 
     @pytest.mark.asyncio
@@ -185,8 +195,12 @@ class TestValidateData:
         with patch("arbiter.learner.validation.time") as mock_time:
             mock_time.perf_counter.side_effect = [1.0, 2.0]
 
-            with patch("jsonschema.validate", side_effect=SchemaError("Invalid schema")):
-                result = await validate_data(mock_learner, "TestDomain", {"data": "test"})
+            with patch(
+                "jsonschema.validate", side_effect=SchemaError("Invalid schema")
+            ):
+                result = await validate_data(
+                    mock_learner, "TestDomain", {"data": "test"}
+                )
 
                 assert result["is_valid"] is False
                 assert result["reason_code"] == "invalid_schema"
@@ -387,7 +401,9 @@ class TestReloadSchemas:
                 mock_metric.return_value = mock_labels
 
                 # Disable permission check so it reaches the exists check
-                with patch("arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", False):
+                with patch(
+                    "arbiter.learner.validation.SCHEMA_DIR_PERMISSION_CHECK", False
+                ):
                     with patch("os.path.exists", return_value=False):
                         # When directory doesn't exist, function should return normally
                         await reload_schemas(mock_learner, "/non/existent/directory")

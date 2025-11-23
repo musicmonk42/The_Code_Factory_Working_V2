@@ -1,28 +1,31 @@
-import os
+import hashlib
 import json
 import logging
-import hashlib
-from typing import Dict, Any, List, Optional, Annotated, Literal
+import os
+from pathlib import Path
+from typing import Annotated, Any, Dict, List, Literal, Optional
+
 from pydantic import (
-    BaseModel,
-    Field,
-    ValidationError,
-    model_validator,
-    ConfigDict,
-    RootModel,
-    PlainSerializer,
     AnyUrl,
-    field_validator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    RootModel,
+    ValidationError,
     ValidationInfo,
+    field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pathlib import Path
 
 # --- Robustness for environs Failure ---
 try:
     from environs import Env
 except ImportError:
-    logging.warning("environs package not found. Using os.getenv for environment variables.")
+    logging.warning(
+        "environs package not found. Using os.getenv for environment variables."
+    )
 
     class Env:
         def read_env(self):
@@ -41,7 +44,9 @@ env.read_env()
 # --- Secure Key Management Utilities ---
 # This is an enhanced SensitiveValue that uses a Pydantic RootModel for a clean representation
 # while ensuring the actual value is redacted during serialization.
-SensitiveString = Annotated[str, PlainSerializer(lambda x: "[SENSITIVE]", return_type=str)]
+SensitiveString = Annotated[
+    str, PlainSerializer(lambda x: "[SENSITIVE]", return_type=str)
+]
 
 
 class SensitiveValue(RootModel[str]):
@@ -154,7 +159,9 @@ class MetaLearningConfig(BaseSettings):
 
     # Additional fields expected by tests
     DEFAULT_PROVIDER: str = Field(default="openai", description="Default LLM provider")
-    DEFAULT_LLM_MODEL: str = Field(default="gpt-3.5-turbo", description="Default LLM model")
+    DEFAULT_LLM_MODEL: str = Field(
+        default="gpt-3.5-turbo", description="Default LLM model"
+    )
     DEFAULT_TEMP: float = Field(default=0.7, description="Default temperature for LLM")
     MEMORY_WINDOW: int = Field(default=5, description="Conversation memory window size")
     MAX_META_LEARNING_CORRECTIONS: int = Field(
@@ -163,15 +170,23 @@ class MetaLearningConfig(BaseSettings):
     MAX_CORRECTION_ENTRY_SIZE: int = Field(
         default=10000, description="Maximum size of correction entry"
     )
-    FALLBACK_PROVIDER: str = Field(default="anthropic", description="Fallback LLM provider")
+    FALLBACK_PROVIDER: str = Field(
+        default="anthropic", description="Fallback LLM provider"
+    )
     FALLBACK_LLM_CONFIG: dict = Field(
         default={"model": "claude-2", "temperature": 0.7},
         description="Fallback LLM configuration",
     )
-    MAX_MM_DATA_SIZE_MB: int = Field(default=100, description="Maximum multimodal data size in MB")
+    MAX_MM_DATA_SIZE_MB: int = Field(
+        default=100, description="Maximum multimodal data size in MB"
+    )
     GDPR_MODE: bool = Field(default=True, description="Enable GDPR mode")
-    CACHE_EXPIRATION_SECONDS: int = Field(default=3600, description="Cache expiration in seconds")
-    POSTGRES_DB_URL: Optional[str] = Field(default=None, description="PostgreSQL database URL")
+    CACHE_EXPIRATION_SECONDS: int = Field(
+        default=3600, description="Cache expiration in seconds"
+    )
+    POSTGRES_DB_URL: Optional[str] = Field(
+        default=None, description="PostgreSQL database URL"
+    )
     LLM_ERRORS_TOTAL: Optional[str] = Field(
         default=None, description="LLM errors total metric name"
     )
@@ -249,10 +264,14 @@ class MetaLearningConfig(BaseSettings):
     DEPLOYMENT_RETRY_DELAY_SECONDS: int = Field(
         default=60, ge=1, description="Delay between deployment retries in seconds."
     )
-    DATA_RETENTION_DAYS: int = Field(default=30, ge=1, description="Number of days to retain data.")
+    DATA_RETENTION_DAYS: int = Field(
+        default=30, ge=1, description="Number of days to retain data."
+    )
 
     # PII Redaction
-    REDACT_PII_IN_LOGS: bool = Field(default=True, description="Enable PII redaction in logs.")
+    REDACT_PII_IN_LOGS: bool = Field(
+        default=True, description="Enable PII redaction in logs."
+    )
     PII_SENSITIVE_KEYS: List[str] = Field(
         default=["email", "password", "name", "ssn", "credit_card", "api_key"],
         description="List of keys to redact as PII in logs and data.",
@@ -283,7 +302,9 @@ class MetaLearningConfig(BaseSettings):
         description="Etcd prefix for configuration keys.",
     )
 
-    @field_validator("DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before")
+    @field_validator(
+        "DATA_LAKE_PATH", "LOCAL_AUDIT_LOG_PATH", "CONFIG_FILE_PATH", mode="before"
+    )
     def validate_file_paths(cls, v, info: ValidationInfo):
         """Ensures that file paths are valid and their parent directories exist."""
         if v:
@@ -298,7 +319,9 @@ class MetaLearningConfig(BaseSettings):
                 if not path.exists() and field_name != "CONFIG_FILE_PATH":
                     path.touch()
             except Exception as e:
-                raise ValueError(f"Invalid file path or cannot create directory/file for {v}: {e}")
+                raise ValueError(
+                    f"Invalid file path or cannot create directory/file for {v}: {e}"
+                )
             return str(path)  # Return as string since we changed the type
         return v
 
@@ -316,7 +339,9 @@ class MetaLearningConfig(BaseSettings):
     @model_validator(mode="after")
     def validate_kafka_settings(self):
         """Ensures Kafka bootstrap servers are not empty if Kafka is enabled."""
-        if (self.USE_KAFKA_INGESTION or self.USE_KAFKA_AUDIT) and not self.KAFKA_BOOTSTRAP_SERVERS:
+        if (
+            self.USE_KAFKA_INGESTION or self.USE_KAFKA_AUDIT
+        ) and not self.KAFKA_BOOTSTRAP_SERVERS:
             raise ValueError(
                 "KAFKA_BOOTSTRAP_SERVERS must be set if Kafka ingestion/audit is enabled."
             )
@@ -354,7 +379,9 @@ class MetaLearningConfig(BaseSettings):
                 new_config = MetaLearningConfig(**new_config_data)
                 # Update current instance with new values
                 self.__dict__.update(new_config.model_dump())
-                logger.info(f"Configuration reloaded from file: {self.CONFIG_FILE_PATH}")
+                logger.info(
+                    f"Configuration reloaded from file: {self.CONFIG_FILE_PATH}"
+                )
             except ValidationError as e:
                 logger.error(
                     f"Failed to reload config from file due to validation error. Path: {self.CONFIG_FILE_PATH}, Error: {str(e)}"
@@ -389,7 +416,9 @@ def load_persona_dict() -> Dict[str, str]:
                     raise ValueError("Persona file must contain a dictionary")
                 return personas
         else:
-            logger.warning(f"Persona file not found: {persona_file}. Using default personas.")
+            logger.warning(
+                f"Persona file not found: {persona_file}. Using default personas."
+            )
             return {"default": "You are a helpful AI assistant."}
     except Exception as e:
         logger.error(f"Failed to load personas: {str(e)}", exc_info=True)

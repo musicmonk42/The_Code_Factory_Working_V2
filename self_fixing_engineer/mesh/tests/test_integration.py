@@ -12,11 +12,11 @@ an event after a state change.
 """
 
 import os
-import time
-import tempfile
 import shutil
+import tempfile
+import time
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -48,14 +48,16 @@ for key, value in TEST_ENV.items():
 # --- Fixtures ---
 
 # Import modules after setting the environment
-from mesh import event_bus, mesh_policy, checkpoint_manager
+from mesh import checkpoint_manager, event_bus, mesh_policy
 
 
 @pytest_asyncio.fixture(scope="module")
 async def policy_enforcer():
     """Fixture for a configured MeshPolicyEnforcer."""
     backend = mesh_policy.MeshPolicyBackend(backend_type="local")
-    enforcer = mesh_policy.MeshPolicyEnforcer(policy_id="integration_policy", backend=backend)
+    enforcer = mesh_policy.MeshPolicyEnforcer(
+        policy_id="integration_policy", backend=backend
+    )
 
     # Pre-load a policy for the tests - include required fields
     await backend.save(
@@ -103,7 +105,9 @@ class TestPolicyAndEvents:
             event_data = {"status": "approved", "timestamp": time.time()}
 
             # Mock the event bus to avoid real Redis dependency
-            with patch.object(event_bus, "publish_event", new=AsyncMock()) as mock_publish:
+            with patch.object(
+                event_bus, "publish_event", new=AsyncMock()
+            ) as mock_publish:
                 await event_bus.publish_event(event_type, event_data)
                 mock_publish.assert_called_once_with(event_type, event_data)
 

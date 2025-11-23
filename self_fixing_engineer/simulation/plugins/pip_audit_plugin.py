@@ -1,23 +1,25 @@
 # plugins/pip_audit_plugin.py
 
-import os
-import sys
 import asyncio
+import hashlib
 import json
 import logging
+import os
+import subprocess
+import sys
 import time
 import uuid
-import hashlib
-from typing import Dict, Any, Optional, Tuple, Callable, List, Union
 from pathlib import Path
-import subprocess
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # --- Logger Setup (First!) ---
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
@@ -31,25 +33,29 @@ except ImportError:
 
 try:
     # Prometheus client (with access to REGISTRY for metric reuse)
-    from prometheus_client import Counter, Histogram, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Histogram
 
     prometheus_available = True
 except ImportError:
     prometheus_available = False
-    logger.warning("Prometheus client not found. Metrics for pip-audit plugin will be disabled.")
+    logger.warning(
+        "Prometheus client not found. Metrics for pip-audit plugin will be disabled."
+    )
 
 try:
     from tenacity import (
         retry,
+        retry_if_exception_type,
         stop_after_attempt,
         wait_exponential,
-        retry_if_exception_type,
     )
 
     tenacity_available = True
 except ImportError:
     tenacity_available = False
-    logger.warning("tenacity not found. Retry/backoff for pip-audit plugin will be disabled.")
+    logger.warning(
+        "tenacity not found. Retry/backoff for pip-audit plugin will be disabled."
+    )
 
     def retry(*args, **kwargs):  # type: ignore
         return lambda f: f
@@ -84,7 +90,9 @@ if pydantic_available:
 
     class PipAuditConfig(BaseModel):
         pip_audit_cli_path: str = Field(default="pip-audit")
-        default_scan_method: str = Field(default="installed", pattern="^(installed|requirements)$")
+        default_scan_method: str = Field(
+            default="installed", pattern="^(installed|requirements)$"
+        )
         default_timeout_seconds: int = Field(default=300, ge=1)
         retry_attempts: int = Field(default=2, ge=0)
         retry_backoff_factor: float = Field(default=2.0, ge=0)
@@ -282,9 +290,9 @@ else:
         def labels(self, *args, **kwargs):
             return self
 
-    PIP_AUDIT_SCANS_TOTAL = PIP_AUDIT_VULNERABILITIES_DETECTED = PIP_AUDIT_LATENCY_SECONDS = (
-        PIP_AUDIT_ERRORS_TOTAL
-    ) = DEPENDENCIES_SCANNED = DummyMetric()
+    PIP_AUDIT_SCANS_TOTAL = PIP_AUDIT_VULNERABILITIES_DETECTED = (
+        PIP_AUDIT_LATENCY_SECONDS
+    ) = PIP_AUDIT_ERRORS_TOTAL = DEPENDENCIES_SCANNED = DummyMetric()
 
 
 PLUGIN_MANIFEST = {
@@ -520,7 +528,9 @@ def _validate_safe_args(args: List[str]) -> List[str]:
     safe_args = []
     for arg in args:
         if any(c in arg for c in ["\x00", "\n", "\r"]):
-            raise ValueError(f"Invalid control character in pip-audit argument: {arg!r}")
+            raise ValueError(
+                f"Invalid control character in pip-audit argument: {arg!r}"
+            )
         safe_args.append(arg)
     return safe_args
 
@@ -558,7 +568,9 @@ async def _cache_scan_result(cache_key: str, result: Dict[str, Any]):
         slim = dict(result)
         slim["raw_output"] = None
         redis = Redis.from_url(PIP_AUDIT_CONFIG.redis_cache_url, decode_responses=True)
-        await redis.set(cache_key, json.dumps(slim), ex=PIP_AUDIT_CONFIG.redis_cache_ttl)
+        await redis.set(
+            cache_key, json.dumps(slim), ex=PIP_AUDIT_CONFIG.redis_cache_ttl
+        )
         logger.info(f"Cached result for key: {cache_key}")
     except Exception as e:
         logger.error(f"Failed to set Redis cache: {e}", exc_info=True)
@@ -592,7 +604,9 @@ def _trim_and_optionally_scrub(stdout_data: str, stderr_data: str) -> Tuple[str,
 
 @retry(
     stop=stop_after_attempt(PIP_AUDIT_CONFIG.retry_attempts),
-    wait=wait_exponential(multiplier=PIP_AUDIT_CONFIG.retry_backoff_factor, min=1, max=10),
+    wait=wait_exponential(
+        multiplier=PIP_AUDIT_CONFIG.retry_backoff_factor, min=1, max=10
+    ),
     retry=(
         retry_if_exception_type((TransientScanError, asyncio.TimeoutError))
         if tenacity_available
@@ -689,7 +703,9 @@ async def scan_dependencies(
         if not target_path_obj.exists():
             error_msg = f"Requirements file or directory not found at: {target_path}"
             logger.error(f"[{scan_id}] {error_msg}")
-            PIP_AUDIT_ERRORS_TOTAL.labels(error_type="requirements_file_not_found").inc()
+            PIP_AUDIT_ERRORS_TOTAL.labels(
+                error_type="requirements_file_not_found"
+            ).inc()
             PIP_AUDIT_SCANS_TOTAL.labels(
                 status="failed", reason="requirements_not_found", method=scan_method
             ).inc()
@@ -711,7 +727,9 @@ async def scan_dependencies(
             if not candidate.exists():
                 error_msg = f"No requirements.txt found in directory: {target_path}"
                 logger.error(f"[{scan_id}] {error_msg}")
-                PIP_AUDIT_ERRORS_TOTAL.labels(error_type="requirements_file_not_found_in_dir").inc()
+                PIP_AUDIT_ERRORS_TOTAL.labels(
+                    error_type="requirements_file_not_found_in_dir"
+                ).inc()
                 PIP_AUDIT_SCANS_TOTAL.labels(
                     status="failed",
                     reason="requirements_not_found_in_dir",
@@ -732,7 +750,9 @@ async def scan_dependencies(
         cmd.extend(["--requirements", str(final_requirements_file)])
         cmd.extend(final_pip_audit_args)
         cwd = (
-            final_requirements_file.parent if final_requirements_file.is_file() else target_path_obj
+            final_requirements_file.parent
+            if final_requirements_file.is_file()
+            else target_path_obj
         )
 
         try:
@@ -765,7 +785,9 @@ async def scan_dependencies(
     cache_key = _build_cache_key(cache_payload)
     cached_result = await _get_cached_result(cache_key)
     if cached_result:
-        PIP_AUDIT_SCANS_TOTAL.labels(status="success", reason="cached", method=scan_method).inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="success", reason="cached", method=scan_method
+        ).inc()
         cached_result.setdefault("scan_id", scan_id)
         return cached_result
 
@@ -828,12 +850,16 @@ async def scan_dependencies(
                     }
                 )
         except json.JSONDecodeError as e:
-            logger.error(f"[{scan_id}] Failed to parse pip-audit JSON output: {e}", exc_info=True)
+            logger.error(
+                f"[{scan_id}] Failed to parse pip-audit JSON output: {e}", exc_info=True
+            )
             stderr_data += "\nJSON_PARSE_ERROR: " + str(e)
             # Consider JSON parse failure transient (retriable) if tenacity is enabled
             raise TransientScanError("Failed to parse JSON output from pip-audit")
         except Exception as e:
-            logger.error(f"[{scan_id}] Error processing pip-audit output: {e}", exc_info=True)
+            logger.error(
+                f"[{scan_id}] Error processing pip-audit output: {e}", exc_info=True
+            )
             stderr_data += "\nPROCESSING_ERROR: " + str(e)
             scan_process_success = False
 
@@ -857,7 +883,9 @@ async def scan_dependencies(
         trimmed_out, trimmed_err = _trim_and_optionally_scrub(stdout_data, stderr_data)
         result = {
             "success": scan_process_success,
-            "reason": ("Scan completed." if scan_process_success else "Scan process failed."),
+            "reason": (
+                "Scan completed." if scan_process_success else "Scan process failed."
+            ),
             "vulnerabilities_found": vulnerabilities_found,
             "vulnerability_count": len(parsed_vulnerabilities),
             "vulnerabilities": parsed_vulnerabilities,
@@ -869,7 +897,9 @@ async def scan_dependencies(
             "pip_audit_version": version_str,
         }
 
-        PIP_AUDIT_LATENCY_SECONDS.labels(method=scan_method).observe(time.monotonic() - start_time)
+        PIP_AUDIT_LATENCY_SECONDS.labels(method=scan_method).observe(
+            time.monotonic() - start_time
+        )
         if result["success"]:
             PIP_AUDIT_SCANS_TOTAL.labels(
                 status="success", reason="completed", method=scan_method
@@ -880,9 +910,13 @@ async def scan_dependencies(
                 )
                 for vuln in parsed_vulnerabilities:
                     detected_severity = vuln.get("severity", "UNKNOWN")
-                    PIP_AUDIT_VULNERABILITIES_DETECTED.labels(severity=detected_severity).inc()
+                    PIP_AUDIT_VULNERABILITIES_DETECTED.labels(
+                        severity=detected_severity
+                    ).inc()
             else:
-                logger.info(f"[{scan_id}] pip-audit scan completed: No vulnerabilities found.")
+                logger.info(
+                    f"[{scan_id}] pip-audit scan completed: No vulnerabilities found."
+                )
         else:
             PIP_AUDIT_SCANS_TOTAL.labels(
                 status="failed", reason="process_error", method=scan_method
@@ -933,16 +967,18 @@ async def scan_dependencies(
             "scan_id": scan_id,
         }
     except asyncio.TimeoutError:
-        error_msg = (
-            f"pip-audit CLI timed out after {PIP_AUDIT_CONFIG.default_timeout_seconds} seconds."
-        )
+        error_msg = f"pip-audit CLI timed out after {PIP_AUDIT_CONFIG.default_timeout_seconds} seconds."
         logger.error(f"[{scan_id}] {error_msg}")
         PIP_AUDIT_ERRORS_TOTAL.labels(error_type="timeout").inc()
-        PIP_AUDIT_SCANS_TOTAL.labels(status="failed", reason="timeout", method=scan_method).inc()
+        PIP_AUDIT_SCANS_TOTAL.labels(
+            status="failed", reason="timeout", method=scan_method
+        ).inc()
         # Let tenacity retry on TimeoutError (decorator covers it)
         raise
     except TransientScanError as e:
-        logger.warning(f"[{scan_id}] Transient scan error: {e}. Will retry if configured.")
+        logger.warning(
+            f"[{scan_id}] Transient scan error: {e}. Will retry if configured."
+        )
         PIP_AUDIT_ERRORS_TOTAL.labels(error_type="transient").inc()
         # Re-raise to trigger tenacity retry
         raise
@@ -981,20 +1017,24 @@ if __name__ == "__main__":
     import argparse
 
     try:
+        import uvicorn
         from fastapi import FastAPI, HTTPException, status
         from pydantic import BaseModel as _ApiBaseModel
-        import uvicorn
 
         FASTAPI_AVAILABLE_FOR_MAIN = True
     except ImportError:
         FASTAPI_AVAILABLE_FOR_MAIN = False
 
-    parser = argparse.ArgumentParser(description="Run pip-audit plugin in standalone mode.")
+    parser = argparse.ArgumentParser(
+        description="Run pip-audit plugin in standalone mode."
+    )
     parser.add_argument("--api", action="store_true", help="Run as FastAPI API server.")
     parser.add_argument("--host", default="0.0.0.0", help="Host for API server.")
     parser.add_argument("--port", type=int, default=8000, help="Port for API server.")
     parser.add_argument("--scan", action="store_true", help="Run a direct CLI scan.")
-    parser.add_argument("--target-path", help="Path to project or requirements.txt (for --scan).")
+    parser.add_argument(
+        "--target-path", help="Path to project or requirements.txt (for --scan)."
+    )
     parser.add_argument(
         "--scan-method",
         default="installed",
@@ -1036,7 +1076,9 @@ if __name__ == "__main__":
                 )
                 return result
             except Exception as e:
-                logger.error(f"API call to scan_dependencies failed: {e}", exc_info=True)
+                logger.error(
+                    f"API call to scan_dependencies failed: {e}", exc_info=True
+                )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
                 )

@@ -1,24 +1,25 @@
 # tests/test_jest_runner_plugin.py
 
-import pytest
 import asyncio
+import json
 import os
 import sys
 import tempfile
-import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+
+import pytest
 
 # Add parent directory to path to import the plugin
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import the plugin - now using the correct module path
 from simulation.plugins.jest_runner_plugin import (
-    plugin_health,
-    run_jest_tests,
-    _which,
     _detect_package_manager,
     _get_package_version,
+    _which,
+    plugin_health,
+    run_jest_tests,
 )
 
 # ==============================================================================
@@ -29,12 +30,12 @@ from simulation.plugins.jest_runner_plugin import (
 @pytest.fixture
 def mock_node_in_path():
     """Mocks the `which`/`where` command to find Node and package managers."""
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
-    ) as mock_which, patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+        ) as mock_which,
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
     ):  # Assume files exist
 
         # Configure _which to return paths for Node and npx/npm
@@ -113,7 +114,9 @@ async def test_plugin_health_success(mock_node_in_path):
 @pytest.mark.asyncio
 async def test_plugin_health_npx_not_found():
     """Test `plugin_health` returns 'degraded' when npx is not found."""
-    with patch("simulation.plugins.jest_runner_plugin._which", new=AsyncMock()) as mock_which:
+    with patch(
+        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+    ) as mock_which:
 
         async def which_side_effect(cmd):
             if cmd == "npx":
@@ -128,7 +131,9 @@ async def test_plugin_health_npx_not_found():
 
         mock_which.side_effect = which_side_effect
 
-        with patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess:
+        with patch(
+            "asyncio.create_subprocess_exec", new=AsyncMock()
+        ) as mock_subprocess:
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"v18.12.0", b""))
             mock_process.returncode = 0
@@ -142,7 +147,9 @@ async def test_plugin_health_npx_not_found():
 @pytest.mark.asyncio
 async def test_detect_package_manager():
     """Test `_detect_package_manager` correctly finds available managers."""
-    with patch("simulation.plugins.jest_runner_plugin._which", new=AsyncMock()) as mock_which:
+    with patch(
+        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock()
+    ) as mock_which:
 
         async def which_async(cmd):
             if cmd == "npx":
@@ -171,23 +178,23 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
     """
     Test the complete successful workflow of `run_jest_tests` using a mock project.
     """
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which",
-        new=AsyncMock(return_value="/usr/bin/npx"),
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._get_package_version",
-        new=AsyncMock(return_value="29.5.0"),
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
-        "shutil.copy2"
-    ) as mock_copy2, patch(
-        "shutil.copyfile"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._copytree_compat"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._install_packages",
-        new=AsyncMock(return_value=(True, "")),
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value="/usr/bin/npx"),
+        ),
+        patch(
+            "simulation.plugins.jest_runner_plugin._get_package_version",
+            new=AsyncMock(return_value="29.5.0"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("shutil.copy2") as mock_copy2,
+        patch("shutil.copyfile"),
+        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch(
+            "simulation.plugins.jest_runner_plugin._install_packages",
+            new=AsyncMock(return_value=(True, "")),
+        ),
     ):
 
         # Mock Jest subprocess output for a successful run
@@ -245,21 +252,26 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
                 # Create coverage data with the actual temp project path that was created
                 if temp_jest_dir:
                     # The target file in temp project will be at temp_jest_dir/src/sum.js
-                    coverage_data = {str(temp_jest_dir / "src" / "sum.js"): {"lines": {"pct": 100}}}
+                    coverage_data = {
+                        str(temp_jest_dir / "src" / "sum.js"): {"lines": {"pct": 100}}
+                    }
                     return mock_open(read_data=json.dumps(coverage_data))()
                 return mock_open(read_data="{}")()
             else:
                 return mock_open(read_data='{"test": "data"}')()
 
-        with patch.object(Path, "exists", mock_path_exists), patch(
-            "builtins.open", side_effect=mock_open_handler
+        with (
+            patch.object(Path, "exists", mock_path_exists),
+            patch("builtins.open", side_effect=mock_open_handler),
         ):
 
             result = await run_jest_tests(
                 test_file_path="tests/sum.test.js",
                 target_identifier=os.path.join("src", "sum.js"),
                 project_root=mock_temp_jest_project,
-                temp_coverage_report_path_relative=os.path.join("atco_artifacts", "coverage.json"),
+                temp_coverage_report_path_relative=os.path.join(
+                    "atco_artifacts", "coverage.json"
+                ),
             )
 
             assert result["success"] is True
@@ -275,31 +287,29 @@ async def test_run_jest_tests_success_full_workflow(mock_temp_jest_project):
 @pytest.mark.asyncio
 async def test_run_jest_tests_test_failure(mock_temp_jest_project):
     """Test `run_jest_tests` when the Jest report indicates a test failure."""
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which",
-        new=AsyncMock(return_value="/usr/bin/npx"),
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._get_package_version",
-        new=AsyncMock(return_value="29.5.0"),
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
-    ), patch(
-        "os.makedirs"
-    ), patch(
-        "shutil.copy2"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._copytree_compat"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._install_packages",
-        new=AsyncMock(
-            return_value=(
-                False,
-                "Failed to setup Jest environment: Failed to install packages",
-            )
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value="/usr/bin/npx"),
+        ),
+        patch(
+            "simulation.plugins.jest_runner_plugin._get_package_version",
+            new=AsyncMock(return_value="29.5.0"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
+        patch("os.makedirs"),
+        patch("shutil.copy2"),
+        patch("shutil.copyfile"),
+        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch(
+            "simulation.plugins.jest_runner_plugin._install_packages",
+            new=AsyncMock(
+                return_value=(
+                    False,
+                    "Failed to setup Jest environment: Failed to install packages",
+                )
+            ),
         ),
     ):
 
@@ -313,14 +323,16 @@ async def test_run_jest_tests_test_failure(mock_temp_jest_project):
 
         jest_output = {"success": False, "numFailedTests": 1}
 
-        with patch("builtins.open", mock_open(read_data='{"test": "data"}')), patch(
-            "json.load", return_value=jest_output
+        with (
+            patch("builtins.open", mock_open(read_data='{"test": "data"}')),
+            patch("json.load", return_value=jest_output),
         ):
 
             # Temporarily remove package.json to force temp project creation
             with patch(
                 "os.path.exists",
-                side_effect=lambda p: p != os.path.join(mock_temp_jest_project, "package.json"),
+                side_effect=lambda p: p
+                != os.path.join(mock_temp_jest_project, "package.json"),
             ):
                 result = await run_jest_tests(
                     test_file_path="tests/sum.test.js",
@@ -337,10 +349,13 @@ async def test_run_jest_tests_test_failure(mock_temp_jest_project):
 @pytest.mark.asyncio
 async def test_run_jest_tests_file_not_found():
     """Test that `run_jest_tests` returns an error if the test file is not found."""
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which",
-        new=AsyncMock(return_value="/usr/bin/npx"),
-    ), patch("os.path.exists", return_value=False):
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value="/usr/bin/npx"),
+        ),
+        patch("os.path.exists", return_value=False),
+    ):
 
         result = await run_jest_tests(
             test_file_path="nonexistent/sum.test.js",
@@ -356,25 +371,24 @@ async def test_run_jest_tests_file_not_found():
 @pytest.mark.asyncio
 async def test_run_jest_tests_timeout():
     """Test that `run_jest_tests` handles timeouts properly."""
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which",
-        new=AsyncMock(return_value="/usr/bin/npx"),
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._get_package_version",
-        new=AsyncMock(return_value="29.5.0"),
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
-        "os.makedirs"
-    ), patch(
-        "shutil.copy2"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._copytree_compat"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._install_packages",
-        new=AsyncMock(return_value=(True, "")),
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value="/usr/bin/npx"),
+        ),
+        patch(
+            "simulation.plugins.jest_runner_plugin._get_package_version",
+            new=AsyncMock(return_value="29.5.0"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.makedirs"),
+        patch("shutil.copy2"),
+        patch("shutil.copyfile"),
+        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch(
+            "simulation.plugins.jest_runner_plugin._install_packages",
+            new=AsyncMock(return_value=(True, "")),
+        ),
     ):
 
         # Need to mock the actual implementation that _bound_search_for_package_json uses
@@ -384,13 +398,17 @@ async def test_run_jest_tests_timeout():
             path_str = str(self)
             # The search starts from /mock/project/tests and goes up
             # We need package.json to exist at /mock/project but not at /mock/project/tests
-            if path_str.endswith(os.path.join("mock", "project", "tests", "package.json")):
+            if path_str.endswith(
+                os.path.join("mock", "project", "tests", "package.json")
+            ):
                 return False
             elif path_str.endswith(os.path.join("mock", "project", "package.json")):
                 return True
             elif path_str.endswith(os.path.join("mock", "project", "node_modules")):
                 return True
-            elif path_str.endswith(os.path.join("mock", "project", "tests", "sum.test.js")):
+            elif path_str.endswith(
+                os.path.join("mock", "project", "tests", "sum.test.js")
+            ):
                 return True
             elif path_str.endswith(os.path.join("mock", "project", "src", "sum.js")):
                 return True
@@ -403,8 +421,9 @@ async def test_run_jest_tests_timeout():
         mock_process.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
         mock_subprocess.return_value = mock_process
 
-        with patch.object(Path, "exists", mock_path_exists), patch(
-            "builtins.open", mock_open(read_data='{"test": "data"}')
+        with (
+            patch.object(Path, "exists", mock_path_exists),
+            patch("builtins.open", mock_open(read_data='{"test": "data"}')),
         ):
 
             result = await run_jest_tests(
@@ -416,7 +435,10 @@ async def test_run_jest_tests_timeout():
             )
 
         assert result["success"] is False
-        assert "timeout" in result["reason"].lower() or "timed out" in result["raw_log"].lower()
+        assert (
+            "timeout" in result["reason"].lower()
+            or "timed out" in result["raw_log"].lower()
+        )
 
 
 @pytest.mark.asyncio
@@ -426,16 +448,18 @@ async def test_get_package_version():
     package_json_content = '{"devDependencies": {"jest": "^29.5.0"}}'
 
     # Need to mock os.path.exists to return True for the package.json file
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", mock_open(read_data=package_json_content)
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", mock_open(read_data=package_json_content)),
     ):
         version = await _get_package_version("/mock/project", "jest")
         assert version == "29.5.0"
 
     # Test with missing package
     package_json_no_jest = '{"devDependencies": {}}'
-    with patch("os.path.exists", return_value=True), patch(
-        "builtins.open", mock_open(read_data=package_json_no_jest)
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", mock_open(read_data=package_json_no_jest)),
     ):
         version = await _get_package_version("/mock/project", "jest")
         assert version is None
@@ -445,12 +469,15 @@ async def test_get_package_version():
 async def test_which_command():
     """Test `_which` command detection on different platforms."""
     # Mock _shutil_which to return None so it falls back to subprocess
-    with patch("simulation.plugins.jest_runner_plugin._shutil_which", return_value=None):
+    with patch(
+        "simulation.plugins.jest_runner_plugin._shutil_which", return_value=None
+    ):
 
         # Test on Windows
-        with patch("os.name", "nt"), patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_exec:
+        with (
+            patch("os.name", "nt"),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_exec,
+        ):
 
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(
@@ -463,9 +490,10 @@ async def test_which_command():
             assert result == "C:\\Program Files\\nodejs\\node.exe"
 
         # Test on Unix
-        with patch("os.name", "posix"), patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_exec:
+        with (
+            patch("os.name", "posix"),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_exec,
+        ):
 
             mock_process = MagicMock()
             mock_process.communicate = AsyncMock(return_value=(b"/usr/bin/node\n", b""))
@@ -476,12 +504,15 @@ async def test_which_command():
             assert result == "/usr/bin/node"
 
         # Test command not found
-        with patch("os.name", "posix"), patch(
-            "asyncio.create_subprocess_exec", new=AsyncMock()
-        ) as mock_exec:
+        with (
+            patch("os.name", "posix"),
+            patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_exec,
+        ):
 
             mock_process = MagicMock()
-            mock_process.communicate = AsyncMock(return_value=(b"", b"command not found"))
+            mock_process.communicate = AsyncMock(
+                return_value=(b"", b"command not found")
+            )
             mock_process.returncode = 1
             mock_exec.return_value = mock_process
 
@@ -512,9 +543,13 @@ async def test_run_jest_tests_no_npx():
             return True
         return True
 
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which", new=AsyncMock(return_value=None)
-    ), patch.object(Path, "exists", mock_path_exists):
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(Path, "exists", mock_path_exists),
+    ):
 
         result = await run_jest_tests(
             test_file_path="tests/sum.test.js",
@@ -530,27 +565,25 @@ async def test_run_jest_tests_no_npx():
 @pytest.mark.asyncio
 async def test_run_jest_tests_with_extra_args(mock_temp_jest_project):
     """Test run_jest_tests with extra Jest arguments."""
-    with patch(
-        "simulation.plugins.jest_runner_plugin._which",
-        new=AsyncMock(return_value="/usr/bin/npx"),
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._get_package_version",
-        new=AsyncMock(return_value="29.5.0"),
-    ), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_subprocess, patch(
-        "os.path.exists", return_value=True
-    ), patch(
-        "os.makedirs"
-    ), patch(
-        "shutil.copy2"
-    ), patch(
-        "shutil.copyfile"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._copytree_compat"
-    ), patch(
-        "simulation.plugins.jest_runner_plugin._install_packages",
-        new=AsyncMock(return_value=(True, "")),
+    with (
+        patch(
+            "simulation.plugins.jest_runner_plugin._which",
+            new=AsyncMock(return_value="/usr/bin/npx"),
+        ),
+        patch(
+            "simulation.plugins.jest_runner_plugin._get_package_version",
+            new=AsyncMock(return_value="29.5.0"),
+        ),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_subprocess,
+        patch("os.path.exists", return_value=True),
+        patch("os.makedirs"),
+        patch("shutil.copy2"),
+        patch("shutil.copyfile"),
+        patch("simulation.plugins.jest_runner_plugin._copytree_compat"),
+        patch(
+            "simulation.plugins.jest_runner_plugin._install_packages",
+            new=AsyncMock(return_value=(True, "")),
+        ),
     ):
 
         # Mock successful Jest execution
@@ -584,9 +617,11 @@ async def test_run_jest_tests_with_extra_args(mock_temp_jest_project):
                 return True
             return True
 
-        with patch.object(Path, "exists", mock_path_exists), patch(
-            "builtins.open", mock_open(read_data='{"test": "data"}')
-        ), patch("json.load", return_value={"success": True, "numFailedTests": 0}):
+        with (
+            patch.object(Path, "exists", mock_path_exists),
+            patch("builtins.open", mock_open(read_data='{"test": "data"}')),
+            patch("json.load", return_value={"success": True, "numFailedTests": 0}),
+        ):
 
             result = await run_jest_tests(
                 test_file_path="tests/sum.test.js",

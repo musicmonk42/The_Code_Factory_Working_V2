@@ -1,18 +1,18 @@
 # audit_utils.py
 import base64
+import copy  # FIX: Added import for deepcopy in redaction logic
 import datetime
 import hashlib
 import json
 import logging
 import os
 import re
-import time
 import threading
-from typing import Any, Callable, Dict, List, Optional, Union, NamedTuple
-import copy  # FIX: Added import for deepcopy in redaction logic
+import time
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 from dotenv import load_dotenv
 
 # Optional Imports used globally for mocking purposes in tests (FIX)
@@ -42,9 +42,13 @@ def _lazy_log_action(*args, **kwargs):
                 "LOG_ACTION missing from audit_log module for secure_log."
             )
     except ImportError:
-        logging.getLogger("audit_utils").info(f"LOG_ACTION DUMMY: {args[1]} (ImportError fallback)")
+        logging.getLogger("audit_utils").info(
+            f"LOG_ACTION DUMMY: {args[1]} (ImportError fallback)"
+        )
     except Exception as e:
-        logging.getLogger("audit_utils").error(f"LOG_ACTION LAZY FAIL: {e}", exc_info=True)
+        logging.getLogger("audit_utils").error(
+            f"LOG_ACTION LAZY FAIL: {e}", exc_info=True
+        )
 
 
 # Expose a placeholder function that calls the lazy loader. This is what the secure_log function will use.
@@ -150,9 +154,13 @@ if DEFAULT_HASH_ALGO not in SUPPORTED_HASH_ALGOS:
 # Redaction Patterns with more common secrets and international PII
 REDACTION_PATTERNS = [
     re.compile(r"(?i)api[-_]?key\s*=\s*['\"]?[\w-]{20,}['\"]?"),  # API keys
-    re.compile(r"(?i)bearer\s+['\"]?[\w-]+\.[\w-]+\.[\w-]+['\"]?"),  # Bearer tokens (JWTs)
+    re.compile(
+        r"(?i)bearer\s+['\"]?[\w-]+\.[\w-]+\.[\w-]+['\"]?"
+    ),  # Bearer tokens (JWTs)
     re.compile(r"(?i)oauth\s+['\"]?[\w-]{30,}['\"]?"),  # OAuth tokens
-    re.compile(r"(?i)(?:private|secret)[-_]key\s*['\"]?[^'\"]+['\"]?"),  # Private/secret keys
+    re.compile(
+        r"(?i)(?:private|secret)[-_]key\s*['\"]?[^'\"]+['\"]?"
+    ),  # Private/secret keys
     re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),  # Emails
     re.compile(r"\b(?:\d{3}[-.]?){2}\d{4}\b"),  # US phones
     re.compile(
@@ -164,14 +172,24 @@ REDACTION_PATTERNS = [
     ),  # Credit card numbers
     re.compile(r"\b\d{3}[- ]?\d{2}[- ]?\d{4}\b"),  # US SSN
     re.compile(r"\b[A-Z]{1,2}[0-9]{6}[A-Z]\b"),  # UK National Insurance Number
-    re.compile(r"(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)"),  # Basic JWT detection
+    re.compile(
+        r"(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)"
+    ),  # Basic JWT detection
 ]
 
 # --- Metrics ---
-HASH_OPERATIONS = Counter("audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"])
-HASH_LATENCY = Histogram("audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"])
-REDACTION_COUNTS = Counter("audit_utils_redactions_total", "Total redacted items", ["pattern_type"])
-PROVENANCE_CHAINS = Gauge("audit_utils_provenance_length", "Current cryptographic chain length")
+HASH_OPERATIONS = Counter(
+    "audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"]
+)
+HASH_LATENCY = Histogram(
+    "audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"]
+)
+REDACTION_COUNTS = Counter(
+    "audit_utils_redactions_total", "Total redacted items", ["pattern_type"]
+)
+PROVENANCE_CHAINS = Gauge(
+    "audit_utils_provenance_length", "Current cryptographic chain length"
+)
 SELF_TEST_RESULTS = Gauge("audit_utils_self_test_pass", "Self-test status", ["test"])
 LANG_TAGGED_LOGS = Counter(
     "audit_utils_lang_tagged_logs_total", "Logs tagged with language", ["language"]
@@ -189,7 +207,9 @@ def lock_registries():
     global _registries_locked
     with registry_lock:
         _registries_locked = True
-        logger.info("Audit registries are now locked. No further algorithms can be registered.")
+        logger.info(
+            "Audit registries are now locked. No further algorithms can be registered."
+        )
 
 
 def check_registry_locked(name: str):
@@ -220,16 +240,22 @@ def register_hash_algo(name: str, func: Callable[[bytes, str], str]):
                     f"Cannot overwrite custom hash algorithm '{name}' in production mode."
                 )
         elif name in hash_registry:
-            logger.warning(f"Overwriting existing hash algorithm '{name}' with a new function.")
+            logger.warning(
+                f"Overwriting existing hash algorithm '{name}' with a new function."
+            )
 
         if not callable(func):
-            raise TypeError(f"Registered hash algorithm '{name}' must be a callable function.")
+            raise TypeError(
+                f"Registered hash algorithm '{name}' must be a callable function."
+            )
 
         try:
             # The test function needs to pass the algo name because default_hash_impl requires it.
             test_hash = func(b"test_data", DEFAULT_HASH_ALGO)
             if not isinstance(test_hash, str) or len(test_hash) == 0:
-                raise ValueError("Registered hash function must return a non-empty string.")
+                raise ValueError(
+                    "Registered hash function must return a non-empty string."
+                )
         except Exception as e:
             # Provide descriptive error handling for the argument mismatch
             if "missing 1 required positional argument: 'algo_name'" in str(
@@ -243,7 +269,11 @@ def register_hash_algo(name: str, func: Callable[[bytes, str], str]):
 
         # FIX: The test function needs to pass the algo name because default_hash_impl requires it.
         # Reworked weak algorithm check to use the correct signature
-        if IS_PRODUCTION and name not in SUPPORTED_HASH_ALGOS and name != "default_internal":
+        if (
+            IS_PRODUCTION
+            and name not in SUPPORTED_HASH_ALGOS
+            and name != "default_internal"
+        ):
             if len(func(b"test", DEFAULT_HASH_ALGO).encode()) * 4 < 256:
                 raise ValueError(
                     f"Attempted to register weak hash algorithm '{name}' in production mode."
@@ -253,7 +283,9 @@ def register_hash_algo(name: str, func: Callable[[bytes, str], str]):
         logger.info(f"Registered custom hash algorithm: '{name}'.")
 
 
-def register_provenance_logic(name: str, func: Callable[[List[str], Dict[str, Any], bool], str]):
+def register_provenance_logic(
+    name: str, func: Callable[[List[str], Dict[str, Any], bool], str]
+):
     """
     Registers custom provenance chaining logic.
     Args:
@@ -275,10 +307,14 @@ def register_provenance_logic(name: str, func: Callable[[List[str], Dict[str, An
                     f"Cannot overwrite custom provenance logic '{name}' in production mode."
                 )
         elif name in provenance_registry:
-            logger.warning(f"Overwriting existing provenance logic '{name}' with a new function.")
+            logger.warning(
+                f"Overwriting existing provenance logic '{name}' with a new function."
+            )
 
         if not callable(func):
-            raise TypeError(f"Registered provenance logic '{name}' must be a callable function.")
+            raise TypeError(
+                f"Registered provenance logic '{name}' must be a callable function."
+            )
 
         try:
             # FIX (from prior step): Add 'key_id' to the test dictionary
@@ -286,7 +322,9 @@ def register_provenance_logic(name: str, func: Callable[[List[str], Dict[str, An
             if not isinstance(test_result, str):
                 raise ValueError("Registered provenance function must return a string.")
         except Exception as e:
-            raise ValueError(f"Test for registered provenance logic '{name}' failed: {e}")
+            raise ValueError(
+                f"Test for registered provenance logic '{name}' failed: {e}"
+            )
 
         provenance_registry[name] = func
         logger.info(f"Registered custom provenance logic: '{name}'.")
@@ -330,7 +368,9 @@ def default_hash_impl(data: bytes, algo_name: str, mode: str = "post_redaction")
 
     if METRICS_AVAILABLE:
         # Use the actual algorithm name for metrics, not 'default_internal'
-        metric_algo = algo_name if algo_name != "default_internal" else DEFAULT_HASH_ALGO
+        metric_algo = (
+            algo_name if algo_name != "default_internal" else DEFAULT_HASH_ALGO
+        )
         HASH_LATENCY.labels(algo=metric_algo, mode=mode).observe(time.time() - start)
         HASH_OPERATIONS.labels(algo=metric_algo, mode=mode).inc()
     return hash_val
@@ -340,7 +380,9 @@ def compute_hash(
     data: Union[str, bytes, Dict[str, Any]],
     algo: str = "default_internal",
     language: Optional[str] = None,
-    redaction_mode: HashingModes = HashingModes(pre_redaction=False, post_redaction=True),
+    redaction_mode: HashingModes = HashingModes(
+        pre_redaction=False, post_redaction=True
+    ),
 ) -> str:
     """
     Computes a cryptographic hash of the input data.
@@ -448,11 +490,16 @@ def redact_sensitive_data(data: Any) -> Any:
                 data = new_data
 
         # ML-based redaction (opt-in/configurable)
-        if PRESIDIO_AVAILABLE and os.getenv("ML_REDACTION_ENABLED", "False").lower() == "true":
+        if (
+            PRESIDIO_AVAILABLE
+            and os.getenv("ML_REDACTION_ENABLED", "False").lower() == "true"
+        ):
             try:
                 # Use Presidio to analyze and anonymize
                 results = analyzer.analyze(text=data, language="en")
-                new_data = anonymizer.anonymize(text=data, analyzer_results=results).text
+                new_data = anonymizer.anonymize(
+                    text=data, analyzer_results=results
+                ).text
                 if new_data != data:
                     logger.debug("ML-based redaction applied.")
                     data = new_data
@@ -500,7 +547,9 @@ def redact_sensitive_data(data: Any) -> Any:
 
 
 # --- Logging Helper (Redaction Before Logging) ---
-def secure_log(logger_obj: logging.Logger, message: str, level: int = logging.INFO, **kwargs: Any):
+def secure_log(
+    logger_obj: logging.Logger, message: str, level: int = logging.INFO, **kwargs: Any
+):
     """
     A helper function to redact sensitive data from log messages before they are processed.
     Args:
@@ -532,7 +581,9 @@ _actual_sign_entry_ref: Optional[Callable[[Dict[str, Any], str], bytes]] = None
 _is_real_signer_set = False
 
 
-def _set_sign_entry_func(func: Callable[[Dict[str, Any], str], bytes], is_real: bool = False):
+def _set_sign_entry_func(
+    func: Callable[[Dict[str, Any], str], bytes], is_real: bool = False
+):
     """
     Sets the function for signing entries.
     This should only be called once by the main `AuditLog` class.
@@ -544,7 +595,9 @@ def _set_sign_entry_func(func: Callable[[Dict[str, Any], str], bytes], is_real: 
     _actual_sign_entry_ref = func
     _is_real_signer_set = is_real
     if IS_PRODUCTION and not is_real:
-        raise RuntimeError("Production mode requires a real, cryptographically secure signer.")
+        raise RuntimeError(
+            "Production mode requires a real, cryptographically secure signer."
+        )
     if is_real:
         logger.info("A real cryptographic signer has been registered.")
 
@@ -568,7 +621,9 @@ def sign_entry(data: Dict[str, Any], key_id: str) -> bytes:
             # FIX: Add a clear warning that this is NOT a cryptographic signature
             # This is intentionally insecure for dev/test environments only
             # A real HMAC or digital signature MUST be used in production
-            dummy_hash = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).digest()
+            dummy_hash = hashlib.sha256(
+                json.dumps(data, sort_keys=True).encode()
+            ).digest()
             # Prepend marker to indicate this is NOT a real signature
             return b"INSECURE_DEV_ONLY:" + dummy_hash
 
@@ -604,7 +659,9 @@ def default_provenance_chain_impl(
         redaction_mode=HashingModes(pre_redaction=False, post_redaction=True),
     )
 
-    chain_link_data_for_hash = f"{prev_hash}{current_entry_content_hash}".encode("utf-8")
+    chain_link_data_for_hash = f"{prev_hash}{current_entry_content_hash}".encode(
+        "utf-8"
+    )
     chain_hash = default_hash_impl(
         chain_link_data_for_hash, DEFAULT_HASH_ALGO, mode="pre_redaction"
     )
@@ -624,8 +681,8 @@ def default_provenance_chain_impl(
             try:
                 # Use imported rfc3161ng
                 from rfc3161ng.errors import (
-                    TSARequestError,
                     TSADataError,
+                    TSARequestError,
                     TSATimeout,
                     TSAVerificationError,
                 )
@@ -647,7 +704,9 @@ def default_provenance_chain_impl(
                             "TSA_CA_BUNDLE missing for non-production environment"
                         )  # Trigger fallback status
 
-                tsa_request = rfc3161ng.TSPRequest(message_hash=chain_hash.encode("utf-8"))
+                tsa_request = rfc3161ng.TSPRequest(
+                    message_hash=chain_hash.encode("utf-8")
+                )
                 tsa_response = rfc3161ng.get_trusted_tsa(tsa_request, TSA_URL)
 
                 rfc3161ng.verify_tsq_response(
@@ -671,9 +730,7 @@ def default_provenance_chain_impl(
                 TSATimeout,
                 TSAVerificationError,
             ) as e:
-                error_message = (
-                    f"TSA request/verification failed for chain hash {chain_hash[:10]}...: {e}"
-                )
+                error_message = f"TSA request/verification failed for chain hash {chain_hash[:10]}...: {e}"
                 logger.critical(error_message, exc_info=True)
                 if IS_PRODUCTION:
                     raise RuntimeError(error_message)
@@ -691,7 +748,9 @@ def default_provenance_chain_impl(
 
     key_id = entry.get("key_id") or entry.get("signing_key_id")
     if not key_id:
-        raise ValueError("Cannot generate provenance chain: 'key_id' is missing from the entry.")
+        raise ValueError(
+            "Cannot generate provenance chain: 'key_id' is missing from the entry."
+        )
 
     # Sign the dictionary containing the chain hash components
     sig_bytes = sign_entry(signed_chain_link_data, key_id)
@@ -730,7 +789,9 @@ def generate_provenance_chain(
             else:
                 return default_provenance_chain_impl(chain, entry, tsa)
 
-    logger.warning(f"Provenance logic '{logic}' not registered. Falling back to 'default'.")
+    logger.warning(
+        f"Provenance logic '{logic}' not registered. Falling back to 'default'."
+    )
     return default_provenance_chain_impl(chain, entry, tsa)
 
 
@@ -864,7 +925,9 @@ def self_test_provenance() -> bool:
     Mocks the `sign_entry` function for isolated testing.
     """
     if IS_PRODUCTION and not _is_real_signer_set:
-        logger.critical("Cannot run provenance self-test: No real signer set in production mode.")
+        logger.critical(
+            "Cannot run provenance self-test: No real signer set in production mode."
+        )
         # The metric update for SELF_TEST_RESULTS is moved to the run_self_tests summary
         return False
 
@@ -919,7 +982,9 @@ if not os.getenv("RUNNING_TESTS", "False").lower() == "true":
     # FIX: Use the correct lambda that accepts both arguments
     register_hash_algo(
         "default_internal",
-        lambda data, algo_name: default_hash_impl(data, "default_internal", mode="post_redaction"),
+        lambda data, algo_name: default_hash_impl(
+            data, "default_internal", mode="post_redaction"
+        ),
     )
     register_provenance_logic("default", default_provenance_chain_impl)
 
@@ -928,7 +993,9 @@ if not os.getenv("RUNNING_TESTS", "False").lower() == "true":
         and os.getenv("ML_REDACTION_REQUIRED", "False").lower() == "true"
         and not PRESIDIO_AVAILABLE
     ):
-        raise RuntimeError("ML_REDACTION_REQUIRED is true, but Presidio is not available.")
+        raise RuntimeError(
+            "ML_REDACTION_REQUIRED is true, but Presidio is not available."
+        )
     run_self_tests(on_demand=False)
     # Lock registries after initial setup in production
     if IS_PRODUCTION:

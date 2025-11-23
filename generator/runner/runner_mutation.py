@@ -4,18 +4,18 @@
 # robust execution, and comprehensive observability with elite-tier safeguards.
 
 import asyncio
-import subprocess
-import json
-import re
-import inspect
-import sys
+import contextlib
 import importlib
-import random
+import inspect
+import json
 import logging
+import random
+import re
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any, Callable, Optional, Union, Awaitable
-import contextlib
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 # FIX: Import partial for run_in_executor
 
@@ -49,19 +49,16 @@ except ImportError:
 # Assume RunnerConfig and metrics are available
 # FIX: Correct imports to use the canonical runner.runner_* names
 from runner.runner_config import RunnerConfig
-from runner.runner_metrics import prom
-from runner.runner_logging import logger
-
-# Gold Standard: Import contracts and structured errors
 
 # FIX: Removed TestExecutionError as it's not in the user's runner_errors.py
 from runner.runner_errors import (
-    RunnerError,
-    TimeoutError,
-)  # Import specific errors
-from runner.runner_errors import (
     ERROR_CODE_REGISTRY as error_codes,
 )  # Import error codes
+from runner.runner_errors import RunnerError, TimeoutError  # Import specific errors
+from runner.runner_logging import logger
+from runner.runner_metrics import prom
+
+# Gold Standard: Import contracts and structured errors
 
 
 # OpenTelemetry Tracing Setup (Gold Standard: Safe Fallback)
@@ -82,7 +79,9 @@ try:
         if _tracer:
 
             def wrapper(*args, **kwargs):
-                with _tracer.start_as_current_span(f"{func.__module__}.{func.__name__}") as span:
+                with _tracer.start_as_current_span(
+                    f"{func.__module__}.{func.__name__}"
+                ) as span:
                     try:
                         result = func(*args, **kwargs)
                         if asyncio.iscoroutine(result):
@@ -91,7 +90,9 @@ try:
                     except Exception as e:
                         if span.is_recording():
                             span.set_status(
-                                trace_status.Status(trace_status.StatusCode.ERROR, str(e))
+                                trace_status.Status(
+                                    trace_status.StatusCode.ERROR, str(e)
+                                )
                             )
                             span.record_exception(e)
                         raise
@@ -101,7 +102,9 @@ try:
 
 except ImportError:
     _tracer = None
-    logger.warning("OpenTelemetry not installed. Tracing will be disabled in runner_mutation.")
+    logger.warning(
+        "OpenTelemetry not installed. Tracing will be disabled in runner_mutation."
+    )
 
     def trace_method_decorator(func):
         return func
@@ -110,16 +113,19 @@ except ImportError:
 # FIX: Correctly import metrics from runner.runner_metrics if available
 # Assuming the metrics module itself is safe to import, and 'prom' is the prometheus_client
 from runner.runner_metrics import (
-    MUTATION_TOTAL,
+    COVERAGE_GAPS,
+    MUTATION_ERROR,
     MUTATION_KILLED,
     MUTATION_SURVIVED,
     MUTATION_TIMEOUT,
-    MUTATION_ERROR,
-    RUN_MUTATION_SURVIVAL as MUTATION_SURVIVAL_RATE,  # Use 'as' to alias
-    RUN_FUZZ_DISCOVERIES as FUZZ_DISCOVERIES,  # Use 'as' to alias
-    COVERAGE_GAPS,
+    MUTATION_TOTAL,
 )
-
+from runner.runner_metrics import (
+    RUN_FUZZ_DISCOVERIES as FUZZ_DISCOVERIES,
+)  # Use 'as' to alias
+from runner.runner_metrics import (
+    RUN_MUTATION_SURVIVAL as MUTATION_SURVIVAL_RATE,  # Use 'as' to alias
+)
 
 # --- Plug-in Registration ---
 _MUTATOR_REGISTRY: Dict[str, Dict[str, Any]] = defaultdict(dict)
@@ -201,7 +207,9 @@ async def _run_subprocess_safe(
         )
     except FileNotFoundError:
         first_arg = cmd_list[0]
-        logger.error(f"Command not found: '{first_arg}'. Ensure tool is installed and in PATH.")
+        logger.error(
+            f"Command not found: '{first_arg}'. Ensure tool is installed and in PATH."
+        )
         # FIX: Changed from TestExecutionError to RunnerError
         raise RunnerError(
             error_codes["TEST_EXECUTION_FAILED"],
@@ -626,11 +634,15 @@ async def mutation_test(
     # Gold Standard: Config Validation for mutation parameters
     # FIX: Replaced config.get() with getattr()
     configured_tool_name: Optional[str] = getattr(config, "mutation_tool_name", None)
-    if configured_tool_name and configured_tool_name not in _MUTATOR_REGISTRY.get(language, {}):
+    if configured_tool_name and configured_tool_name not in _MUTATOR_REGISTRY.get(
+        language, {}
+    ):
         logger.error(
             f"Configured mutation tool '{configured_tool_name}' for language '{language}' is not registered. Skipping mutation test."
         )
-        MUTATION_ERROR.labels(language, strategy, configured_tool_name, instance_id).inc()
+        MUTATION_ERROR.labels(
+            language, strategy, configured_tool_name, instance_id
+        ).inc()
         if span and span.is_recording():
             span.set_status(
                 trace_status.Status(
@@ -723,7 +735,9 @@ async def mutation_test(
     # --- Strategy Selection / Execution ---
     if strategy == "property":
         if language == "python" and HAS_HYPOTHESIS:
-            logger.info("Using property-based testing as a mutation strategy (Python/Hypothesis).")
+            logger.info(
+                "Using property-based testing as a mutation strategy (Python/Hypothesis)."
+            )
             # This calls property_based_test directly, which has a different return shape
             return await property_based_test(temp_dir, config, code_files)
         else:
@@ -745,7 +759,9 @@ async def mutation_test(
             test_file_paths: List[Path] = list((temp_dir / "tests").rglob("*"))
             mutator_info["setup_config"](temp_dir, code_file_paths, test_file_paths)
         except Exception as e:
-            logger.error(f"Failed to set up mutator config for '{tool_name}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to set up mutator config for '{tool_name}': {e}", exc_info=True
+            )
             MUTATION_ERROR.labels(language, strategy, tool_name, instance_id).inc()
             if span and span.is_recording():
                 span.set_status(
@@ -767,7 +783,9 @@ async def mutation_test(
 
     # --- Prepare mutation run parameters (Gold Standard: Expose params via config) ---
     # FIX: Replaced config.get() with getattr()
-    mutation_timeout: int = getattr(config, "mutation_timeout", getattr(config, "timeout", 300) * 2)
+    mutation_timeout: int = getattr(
+        config, "mutation_timeout", getattr(config, "timeout", 300) * 2
+    )
     mutation_random_percent: float = getattr(
         config, "mutation_random_percent", 0.1
     )  # For random strategy
@@ -789,7 +807,9 @@ async def mutation_test(
         if distributed and getattr(config, "distributed", False):
             if span and span.is_recording():
                 span.add_event("Sending mutation task to distributed runner")
-            logger.info(f"Sending mutation task to distributed runner for language '{language}'.")
+            logger.info(
+                f"Sending mutation task to distributed runner for language '{language}'."
+            )
             await asyncio.sleep(1)  # Simulate network delay
             raw_result = {
                 "stdout": '{"totalMutants": 10, "killed": 5, "survived": 5}',
@@ -841,12 +861,16 @@ async def mutation_test(
             if span and span.is_recording():
                 span.add_event("Running mutation test in single process")
             logger.info("Running mutation test in single process.")
-            raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
+            raw_result = await mutator_info["run"](
+                temp_dir, strategy, mutation_run_params
+            )
         else:
             if span and span.is_recording():
                 span.add_event("Running mutation test in single process")
             logger.info("Running mutation test in single process.")
-            raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
+            raw_result = await mutator_info["run"](
+                temp_dir, strategy, mutation_run_params
+            )
 
     except Exception as e:
         # FIX: Catch exceptions from the 'run' step and return the error dictionary
@@ -854,7 +878,9 @@ async def mutation_test(
         logger.error(error_message, exc_info=True)
         MUTATION_ERROR.labels(language, strategy, tool_name, instance_id).inc()
         if span and span.is_recording():
-            span.set_status(trace_status.Status(trace_status.StatusCode.ERROR, error_message))
+            span.set_status(
+                trace_status.Status(trace_status.StatusCode.ERROR, error_message)
+            )
         return {
             "survival_rate": 1.0,
             "total": 0,
@@ -885,7 +911,9 @@ async def mutation_test(
     MUTATION_SURVIVED.labels(language, strategy, tool_name, instance_id).inc(survived)
     MUTATION_TIMEOUT.labels(language, strategy, tool_name, instance_id).inc(timeout)
     MUTATION_ERROR.labels(language, strategy, tool_name, instance_id).inc(error)
-    MUTATION_SURVIVAL_RATE.labels(language, strategy, tool_name, instance_id).set(survival_rate)
+    MUTATION_SURVIVAL_RATE.labels(language, strategy, tool_name, instance_id).set(
+        survival_rate
+    )
 
     gaps: List[Any] = []
     COVERAGE_GAPS.labels(language, instance_id).inc(len(gaps))
@@ -904,10 +932,14 @@ async def mutation_test(
         "tool": tool_name,
         "tool_version": tool_version,
         "stdout_snippet": (
-            raw_result.get("stdout", "")[:500] + "..." if raw_result.get("stdout") else ""
+            raw_result.get("stdout", "")[:500] + "..."
+            if raw_result.get("stdout")
+            else ""
         ),
         "stderr_snippet": (
-            raw_result.get("stderr", "")[:500] + "..." if raw_result.get("stderr") else ""
+            raw_result.get("stderr", "")[:500] + "..."
+            if raw_result.get("stderr")
+            else ""
         ),
         "returncode": raw_result.get("returncode", "N/A"),
     }
@@ -949,7 +981,9 @@ async def property_based_test(
         FUZZ_DISCOVERIES.labels("python", "property", instance_id).inc(0)
         if span and span.is_recording():
             span.set_status(
-                trace_status.Status(trace_status.StatusCode.ERROR, "Hypothesis not installed")
+                trace_status.Status(
+                    trace_status.StatusCode.ERROR, "Hypothesis not installed"
+                )
             )
         return {"status": "skipped", "message": "Hypothesis not available"}
 
@@ -996,7 +1030,9 @@ async def property_based_test(
                 span.add_event("No fuzzable functions found")
             return {
                 "status": "skipped",
-                "message": "No property-based fuzz targets found (e.g., " "fuzz_..." ")",
+                "message": "No property-based fuzz targets found (e.g., "
+                "fuzz_..."
+                ")",
             }
 
         logger.info(
@@ -1018,7 +1054,8 @@ async def property_based_test(
 
                 # Check if it's already a hypothesis test decorated with @given
                 is_hypothesis_decorated = (
-                    hasattr(func_to_test, "is_hypothesis_test") and func_to_test.is_hypothesis_test
+                    hasattr(func_to_test, "is_hypothesis_test")
+                    and func_to_test.is_hypothesis_test
                 )
                 if not is_hypothesis_decorated:
                     is_hypothesis_decorated = hasattr(
@@ -1085,7 +1122,9 @@ async def property_based_test(
                 logger.warning(
                     f"Hypothesis health check failed for {func_to_test.__name__}. Data generation issue? {e}"
                 )
-                test_failures.append(f"Healthcheck failed for {func_to_test.__name__}: {e}")
+                test_failures.append(
+                    f"Healthcheck failed for {func_to_test.__name__}: {e}"
+                )
                 discoveries += 1
             except hypothesis.errors.InvalidContract as e:
                 logger.warning(
@@ -1096,15 +1135,21 @@ async def property_based_test(
                 )
                 discoveries += 1
             except hypothesis.errors.FalsifyingExample as e:
-                logger.info(f"Falsifying example found for {func_to_test.__name__}: {e.example}.")
-                test_failures.append(f"Falsifying example for {func_to_test.__name__}: {e.example}")
+                logger.info(
+                    f"Falsifying example found for {func_to_test.__name__}: {e.example}."
+                )
+                test_failures.append(
+                    f"Falsifying example for {func_to_test.__name__}: {e.example}"
+                )
                 discoveries += 1
             except Exception as e:
                 logger.error(
                     f"Property test for {func_to_test.__name__} failed unexpectedly: {e}",
                     exc_info=True,
                 )
-                test_failures.append(f"Unexpected error for {func_to_test.__name__}: {e}")
+                test_failures.append(
+                    f"Unexpected error for {func_to_test.__name__}: {e}"
+                )
                 discoveries += 1
 
     except Exception as e:
@@ -1122,14 +1167,20 @@ async def property_based_test(
         if module_name:
             try:
                 for mod_name in list(sys.modules.keys()):
-                    if mod_name == module_name or mod_name.startswith(f"{module_name}."):
+                    if mod_name == module_name or mod_name.startswith(
+                        f"{module_name}."
+                    ):
                         del sys.modules[mod_name]
             except Exception as e:
-                logger.warning(f"Failed to cleanup dynamically loaded module {module_name}: {e}")
+                logger.warning(
+                    f"Failed to cleanup dynamically loaded module {module_name}: {e}"
+                )
 
     FUZZ_DISCOVERIES.labels("python", "property", instance_id).inc(discoveries)
     if discoveries > 0:
-        logger.info(f"Property-based testing completed. Discovered {discoveries} issues.")
+        logger.info(
+            f"Property-based testing completed. Discovered {discoveries} issues."
+        )
     else:
         logger.info("Property-based testing completed. No issues discovered.")
 
@@ -1248,14 +1299,14 @@ if __name__ == "__main__":
     def reset_mutation_metrics():
         # FIX: Access the global metric objects directly
         from runner.runner_metrics import (
-            MUTATION_TOTAL,
+            COVERAGE_GAPS,
+            FUZZ_DISCOVERIES,
+            MUTATION_ERROR,
             MUTATION_KILLED,
+            MUTATION_SURVIVAL_RATE,
             MUTATION_SURVIVED,
             MUTATION_TIMEOUT,
-            MUTATION_ERROR,
-            MUTATION_SURVIVAL_RATE,
-            FUZZ_DISCOVERIES,
-            COVERAGE_GAPS,
+            MUTATION_TOTAL,
         )
 
         for metric in [
@@ -1311,7 +1362,9 @@ if __name__ == "__main__":
             await test_func()
             logger.info(f"--- Test Case: {name} PASSED ---")
         except Exception as e:
-            logger.error(f"--- Test Case: {name} FAILED with error: {e} ---", exc_info=True)
+            logger.error(
+                f"--- Test Case: {name} FAILED with error: {e} ---", exc_info=True
+            )
 
     # Test Case 1: Python Mutation Testing (mutmut)
     async def test_python_mutation():
@@ -1322,7 +1375,9 @@ if __name__ == "__main__":
             fuzz=False,
             instance_id="py_mut_instance",
         )
-        code_files = {"my_code.py": "def add(a, b): return a + b\ndef sub(a, b): return a - b"}
+        code_files = {
+            "my_code.py": "def add(a, b): return a + b\ndef sub(a, b): return a - b"
+        }
         test_files = {
             "test_my_code.py": "import unittest\nfrom my_code import add, sub\nclass TestMyCode(unittest.TestCase):\n def test_add(self): self.assertEqual(add(1,1),2)\n def test_sub(self): self.assertEqual(sub(2,1),1)"
         }
@@ -1332,7 +1387,9 @@ if __name__ == "__main__":
             (temp_dir / "code").mkdir()
             (temp_dir / "tests").mkdir()
             (temp_dir / "code" / "my_code.py").write_text(code_files["my_code.py"])
-            (temp_dir / "tests" / "test_my_code.py").write_text(test_files["test_my_code.py"])
+            (temp_dir / "tests" / "test_my_code.py").write_text(
+                test_files["test_my_code.py"]
+            )
 
             async def mock_mutmut_subprocess(
                 cmd: Union[str, List[str]], cwd: Path, timeout: int
@@ -1347,7 +1404,7 @@ if __name__ == "__main__":
                 return {"stdout": "", "stderr": "", "returncode": 0}
 
             # FIX: Patch the necessary functions and access the updated metrics
-            from runner.runner_metrics import MUTATION_TOTAL, MUTATION_SURVIVAL_RATE
+            from runner.runner_metrics import MUTATION_SURVIVAL_RATE, MUTATION_TOTAL
 
             # FIX: Correct patch path
             with patch(
@@ -1409,7 +1466,9 @@ if __name__ == "__main__":
             (temp_dir / "tests").mkdir()
             (temp_dir / "code" / "index.js").write_text(code_files["index.js"])
             (temp_dir / "code" / "package.json").write_text(code_files["package.json"])
-            (temp_dir / "tests" / "index.test.js").write_text(test_files["index.test.js"])
+            (temp_dir / "tests" / "index.test.js").write_text(
+                test_files["index.test.js"]
+            )
 
             async def mock_stryker_subprocess(
                 cmd: Union[str, List[str]], cwd: Path, timeout: int
@@ -1424,7 +1483,7 @@ if __name__ == "__main__":
                 return {"stdout": "", "stderr": "", "returncode": 0}
 
             # FIX: Patch the necessary functions and access the updated metrics
-            from runner.runner_metrics import MUTATION_TOTAL, MUTATION_SURVIVAL_RATE
+            from runner.runner_metrics import MUTATION_SURVIVAL_RATE, MUTATION_TOTAL
 
             # FIX: Correct patch path
             with patch(
@@ -1486,7 +1545,9 @@ if __name__ == "__main__":
             temp_dir = Path(temp_dir_str)
             (temp_dir / "code").mkdir()
             # FIX: Write the file to the code directory
-            (temp_dir / "code" / "my_prop_code.py").write_text(code_files["my_prop_code.py"])
+            (temp_dir / "code" / "my_prop_code.py").write_text(
+                code_files["my_prop_code.py"]
+            )
 
             # FIX: Correct patch path
             with patch(
@@ -1499,7 +1560,6 @@ if __name__ == "__main__":
 
                 # NOTE: The original test block's patching strategy is flawed for Hypothesis internals.
                 # Reverting to the simpler mock that checks the final discovery count.
-
                 # Mock running the function to simulate 3 failures out of 10 examples
 
                 class MockFalsifyingException(Exception):
@@ -1545,7 +1605,9 @@ if __name__ == "__main__":
                     assert stats["tool_version"] == HYPOTHESIS_VERSION
 
                     assert (
-                        FUZZ_DISCOVERIES.labels("python", "property", "prop_test_instance")._value
+                        FUZZ_DISCOVERIES.labels(
+                            "python", "property", "prop_test_instance"
+                        )._value
                         == 3
                     )
 
@@ -1565,7 +1627,9 @@ if __name__ == "__main__":
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             (temp_dir / "code").mkdir()
-            (temp_dir / "code" / "my_fuzz_code.py").write_text(code_files["my_fuzz_code.py"])
+            (temp_dir / "code" / "my_fuzz_code.py").write_text(
+                code_files["my_fuzz_code.py"]
+            )
 
             # FIX: Access the updated metric
             from runner.runner_metrics import FUZZ_DISCOVERIES
@@ -1586,7 +1650,9 @@ if __name__ == "__main__":
                     assert stats["iterations"] == 10
                     assert stats["tool_version"] == "1.0"
                     assert (
-                        FUZZ_DISCOVERIES.labels("python", "general", "gen_fuzz_instance")._value
+                        FUZZ_DISCOVERIES.labels(
+                            "python", "general", "gen_fuzz_instance"
+                        )._value
                         == 4
                     )
 
@@ -1597,7 +1663,7 @@ if __name__ == "__main__":
         await run_test_case_async("Property-Based Testing", test_property_based_testing)
         await run_test_case_async("General Fuzzing", test_general_fuzzing)
 
-    from unittest.mock import patch, MagicMock, AsyncMock
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Ensure Prometheus HTTP server is mocked to avoid conflicts
     # FIX: Patch the correct prometheus server start function
