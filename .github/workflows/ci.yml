@@ -82,11 +82,25 @@ jobs:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir black ruff flake8 mypy
+          pip install --no-cache-dir black==25.1.0 ruff flake8 mypy
           
       - name: Run Black formatter check
         run: |
-          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/
+          echo "Black version:"
+          python -m pip show black || true
+          echo "Running Black check (will fail if files need formatting)..."
+          black --check --diff generator/ omnicore_engine/ self_fixing_engineer/ || {
+            echo ""
+            echo "Black found files that need formatting."
+            echo "To fix locally run:"
+            echo "  pip install black==25.1.0"
+            echo "  black generator/ omnicore_engine/ self_fixing_engineer/"
+            echo ""
+            echo "Files that would be changed by black:"
+            git --no-pager status --porcelain || true
+            echo ""
+            exit 1
+          }
           
       - name: Run Ruff linter
         run: |
