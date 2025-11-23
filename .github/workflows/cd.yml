@@ -61,8 +61,8 @@ jobs:
           # Clear other caches (be careful not to remove files in use)
           find /tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
           find /var/tmp -maxdepth 1 -type f -mtime +1 -delete 2>/dev/null || true
-          # Aggressively prune Docker
-          docker system prune -af --volumes || true
+          # Aggressively prune Docker (but preserve volumes that might be needed)
+          docker system prune -af || true
           # Clear BuildKit cache
           docker buildx prune -af || true
           echo "=== Disk space after cleanup ==="
