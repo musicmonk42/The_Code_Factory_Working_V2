@@ -272,7 +272,7 @@ policy_last_reload_timestamp = get_or_create_metric(
 )
 # Get settings safely with defaults
 decision_optimizer_settings = getattr(
-    config_instance, "DECISION_OPTIMIZER_SETTINGS", None
+    _config_instance, "DECISION_OPTIMIZER_SETTINGS", None
 )
 if decision_optimizer_settings is None:
     decision_optimizer_settings = {}

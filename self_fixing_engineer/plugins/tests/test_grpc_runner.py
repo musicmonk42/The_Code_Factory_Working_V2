@@ -240,7 +240,7 @@ def test_production_mode_block(
     """Test that certain operations abort in PRODUCTION_MODE."""
     set_env({"PRODUCTION_MODE": "true"})
     with pytest.raises(SystemExit) as exc:
-        importlib.reload(grpc_runner)
+        importlib.reload(grpc_runner)  # noqa: F821 - module under test
     assert exc.value.code == 1
     # Verify critical logs and alerts (though reload might not fully execute, test the intent)
     mock_alert_operator.assert_called()  # Ensure alert is triggered in prod checks
@@ -468,7 +468,7 @@ async def test_run_method_timeout(mock_grpc_channel):
     mock_method = AsyncMock(side_effect=asyncio.TimeoutError)
     stub = MagicMock()
     setattr(stub, "test_method", mock_method)
-    with pytest.raises(NonCriticalError):
+    with pytest.raises(NonCriticalError):  # noqa: F821 - defined in test module
         await run_method(stub, "test_method", "request", timeout=1.0)
 
 
@@ -672,4 +672,4 @@ def cleanup_env(monkeypatch):
             monkeypatch.delenv(key, raising=False)
     # Reload the module to its original state to avoid side effects between tests
     # This might not be necessary depending on the structure, but is a safe practice.
-    importlib.reload(grpc_runner)
+    importlib.reload(grpc_runner)  # noqa: F821 - module under test

@@ -71,6 +71,7 @@ from omnicore_engine.metrics import API_ERRORS, API_REQUESTS
 try:
     # Updated imports to reflect the new arbiter package structure
     import sqlalchemy
+    from arbiter.agent_state import ArbiterConfig
     from arbiter.arbiter import Arbiter
     from arbiter.arena import ArbiterArena
     from arbiter.explainable_reasoner import ExplainableReasonerPlugin

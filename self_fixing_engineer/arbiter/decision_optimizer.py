@@ -60,7 +60,7 @@ class SFECoreEngine:
 
     database: Database
     feedback_manager: FeedbackManager
-    knowledge_graph: "KnowledgeGraph"
+    knowledge_graph: "KnowledgeGraph"  # noqa: F821 - forward reference
     explainable_reasoner: ExplainableReasoner
     policy_engine: PolicyEngine
     bug_manager: BugManager
@@ -344,7 +344,7 @@ class DecisionOptimizer:
             if sfe_core_engine and hasattr(sfe_core_engine, "feedback_manager")
             else None
         )
-        self.knowledge_graph: Optional["KnowledgeGraph"] = (
+        self.knowledge_graph: Optional["KnowledgeGraph"] = (  # noqa: F821 - forward reference
             sfe_core_engine.knowledge_graph
             if sfe_core_engine and hasattr(sfe_core_engine, "knowledge_graph")
             else None

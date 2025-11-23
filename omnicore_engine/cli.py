@@ -657,7 +657,7 @@ def main():
             help="Commands for interacting with the message bus (publish, monitor, etc.)",
         )
         message_bus_subparser.set_defaults(
-            func=message_bus_cli_runner
+            func=message_bus_cli_runner  # noqa: F821 - defined later in main()
         )  # Set a default function to call
 
     args = parser.parse_args()

@@ -359,11 +359,12 @@ async def test_metrics_health_server(valid_config):
 
     mock_runner = AsyncMock()
     mock_site = AsyncMock()
+    mock_site_class = MagicMock(return_value=mock_site)
 
     # Patch all the web-related classes before instantiation
     with patch("aiohttp.web.Application", return_value=mock_app):
         with patch("aiohttp.web.AppRunner", return_value=mock_runner):
-            with patch("aiohttp.web.TCPSite", return_value=mock_site):
+            with patch("aiohttp.web.TCPSite", mock_site_class):
                 # Now create the server with mocked dependencies
                 server = MetricsAndHealthServer(valid_config)
 

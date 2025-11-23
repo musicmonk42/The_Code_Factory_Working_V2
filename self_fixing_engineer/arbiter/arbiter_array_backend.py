@@ -622,7 +622,7 @@ class ConcreteArrayBackend(ArrayBackend):
             (
                 IOError,
                 aiosqlite.Error,
-                redis.RedisError,
+                RedisError,
                 json.JSONDecodeError,
                 InvalidToken,
             )
