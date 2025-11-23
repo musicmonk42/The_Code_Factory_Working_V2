@@ -61,13 +61,15 @@ def _create_fallback_settings():
         enable_array_backend_benchmarking=False,
     )
 
+
 def _get_settings():
     """Lazy import + defensive instantiation of settings."""
     try:
         from arbiter.config import ArbiterConfig  # type: ignore
     except Exception as e:
         logging.warning(
-            "Could not import arbiter.config; using fallback settings. Import error: %s", e
+            "Could not import arbiter.config; using fallback settings. Import error: %s",
+            e,
         )
         return _create_fallback_settings()
 
@@ -80,8 +82,10 @@ def _get_settings():
         )
         return _create_fallback_settings()
 
+
 # Module-wide settings are accessed via this variable; evaluate lazily when needed
 _settings: Optional[Any] = None
+
 
 def settings():
     """Get settings instance, creating it lazily on first access."""
@@ -89,6 +93,7 @@ def settings():
     if _settings is None:
         _settings = _get_settings()
     return _settings
+
 
 try:
     from omnicore_engine.message_bus import ShardedMessageBus, MessageFilter, Message
@@ -152,6 +157,7 @@ except ImportError:
 _using_structlog = False
 _logger: Optional[Any] = None
 
+
 def get_logger():
     """Get logger instance, creating it lazily on first access."""
     global _logger, _using_structlog
@@ -161,6 +167,7 @@ def get_logger():
     # Try to bind to core logger lazily (avoid importing at module import time)
     try:
         from omnicore_engine.core import logger as core_logger  # local import
+
         _logger = core_logger.bind(module="ArrayBackend")
         _using_structlog = True
         return _logger
@@ -190,6 +197,7 @@ def _log_debug(msg: str, **kwargs) -> None:
         log.debug(msg, **kwargs)
     else:
         log.debug(f"{msg} {' '.join(f'{k}={v}' for k, v in kwargs.items())}")
+
 
 # --------------------------------------------------------------------------- #
 #  Optional Prometheus
@@ -306,6 +314,7 @@ class _ArrayBackend:
 # --------------------------------------------------------------------------- #
 _backend_instance: Optional[_ArrayBackend] = None
 
+
 def get_backend() -> _ArrayBackend:
     """Get backend instance, creating it lazily on first access."""
     global _backend_instance
@@ -313,20 +322,25 @@ def get_backend() -> _ArrayBackend:
         _backend_instance = _ArrayBackend()
     return _backend_instance
 
+
 # Note: cp is already defined at line 99 for test patching
+
 
 # Provide xp and is_gpu accessors rather than fixed values at import time
 def get_xp():
     """Get the array processing module (numpy or cupy)."""
     return get_backend().xp
 
+
 def get_is_gpu():
     """Check if GPU backend is being used."""
     return get_backend().is_gpu
 
+
 # Older code might rely on `xp` at import time; keep xp defined but None until backend created
 xp = None
 is_gpu = False
+
 
 # Provide a function to refresh module-level xp/is_gpu if you need them updated:
 def refresh_backend_globals():
@@ -336,16 +350,19 @@ def refresh_backend_globals():
     xp = b.xp
     is_gpu = b.is_gpu
 
+
 # For backward compatibility, expose backend as a property-like accessor
 # but don't create it at import time
 class _BackendProxy:
     """Proxy to lazily access backend singleton."""
+
     def __getattr__(self, name):
         return getattr(get_backend(), name)
-    
+
     def __bool__(self):
         # Always return True for backward compatibility with truthiness checks
         return True
+
 
 backend = _BackendProxy()
 
@@ -430,7 +447,7 @@ class BackendBenchmarker:
         self.results: Dict[str, List[float]] = defaultdict(list)
         # Handle logger binding safely
         log = get_logger()
-        if _using_structlog and hasattr(log, 'bind'):
+        if _using_structlog and hasattr(log, "bind"):
             self.logger = log.bind(sub_module="BackendBenchmarker")
         else:
             self.logger = log

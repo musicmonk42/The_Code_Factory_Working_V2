@@ -68,7 +68,7 @@ try:
 except Exception:
     # Minimal fallback so tests and import-time code can patch/instantiate FeedbackManager.
     from enum import Enum
-    
+
     class FeedbackType(Enum):
         BUG_REPORT = "bug_report"
         GENERAL = "general"
@@ -82,6 +82,7 @@ except Exception:
         async def record_feedback(self, *args, **kwargs):
             return None
 
+
 try:
     from omnicore_engine.policy import PolicyEngine
 except Exception:
@@ -94,6 +95,7 @@ except Exception:
         async def should_auto_learn(self, *args, **kwargs):
             # default to allowing operations during tests / when real policy engine not present
             return True, ""
+
 
 logger = logging.getLogger(__name__)
 

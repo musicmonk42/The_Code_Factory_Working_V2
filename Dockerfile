@@ -36,9 +36,10 @@ WORKDIR /app
 COPY requirements.txt* master_requirements.txt* ./
 
 # Copy subdirectory requirements if they exist for better layer caching
-# generator doesn't have requirements.txt, omnicore and sfe do
-COPY omnicore_engine/requirements.txt omnicore_engine/requirements.txt
-COPY self_fixing_engineer/requirements.txt self_fixing_engineer/requirements.txt
+# Use wildcards to make these optional - if file doesn't exist, Docker won't fail
+COPY generator/requirements.tx[t] generator/ 
+COPY omnicore_engine/requirements.tx[t] omnicore_engine/
+COPY self_fixing_engineer/requirements.tx[t] self_fixing_engineer/
 
 # Upgrade packaging tools and install dependencies if found
 # Try with SSL verification first; if it fails due to proxy/MITM, retry with trusted hosts

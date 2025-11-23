@@ -14,7 +14,7 @@ try:
 except Exception:
     # Simple fallback AsyncLimiter for test / dev environments where aiolimiter isn't installed.
     import asyncio
-    
+
     class AsyncLimiter:
         def __init__(self, max_rate=1, time_period=1):
             # use a Semaphore to emulate simple rate-limit gating
@@ -29,6 +29,7 @@ except Exception:
 
         # compatibility: code uses `async with self.rate_limiter:` and does not call other API in many places.
         # If other aiolimiter methods are expected in tests, add them here.
+
 
 from tenacity import (
     retry,

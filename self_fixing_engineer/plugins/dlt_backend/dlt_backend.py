@@ -49,6 +49,7 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
     OPENTELEMETRY_AVAILABLE = False
@@ -143,7 +144,8 @@ else:
         )
         if alert_operator:
             alert_operator(
-                "CRITICAL: OpenTelemetry missing. DLT backend aborted.", level="CRITICAL"
+                "CRITICAL: OpenTelemetry missing. DLT backend aborted.",
+                level="CRITICAL",
             )
         sys.exit(1)
     else:
