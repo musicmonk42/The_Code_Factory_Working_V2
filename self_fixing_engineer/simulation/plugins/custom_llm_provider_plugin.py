@@ -175,6 +175,25 @@ except ImportError as e:
 
     LANGCHAIN_AVAILABLE = False
 
+# aiohttp for HTTP client
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+    logger.warning("aiohttp not found. HTTP functionality will be limited.")
+    # Create stub classes for type checking
+    import types
+    aiohttp = types.SimpleNamespace(
+        ClientError=Exception,
+        ClientResponseError=Exception,
+        ClientPayloadError=Exception,
+        ContentTypeError=Exception,
+        ClientTimeout=lambda **kwargs: None,
+        TCPConnector=lambda **kwargs: None,
+        ClientSession=lambda **kwargs: None,
+    )
+
 # Tenacity imports for optional retry logic
 try:
     from tenacity import (

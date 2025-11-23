@@ -6,7 +6,7 @@ import tempfile
 import uuid
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, Mock
 
 import pytest
 from click.testing import CliRunner

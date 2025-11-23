@@ -1,7 +1,7 @@
 import pytest
 
 # Fix: Added missing imports
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import logging
 
 from test_generation.orchestrator.metrics import (
