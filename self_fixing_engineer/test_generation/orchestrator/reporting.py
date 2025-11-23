@@ -31,8 +31,8 @@ from test_generation.utils import atomic_write, maybe_await
 from pathlib import Path
 
 
-# Initialize module exports
-__all__ = []
+# Initialize module exports - DummyMetric will be added after its definition
+__all__ = ["DummyMetric"]
 
 
 # ---- test helper: DummyMetric (exported) ------------------------------------
@@ -87,10 +87,7 @@ class DummyMetric:
         return self._Timer().__exit__(exc_type, exc, tb)
 
 
-try:
-    __all__.append("DummyMetric")
-except Exception:
-    __all__ = ["DummyMetric"]
+# DummyMetric is already in __all__ at module initialization
 # -----------------------------------------------------------------------------
 
 # --- Metrics Integration ---
